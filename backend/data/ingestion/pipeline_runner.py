@@ -50,8 +50,12 @@ async def _scheduler_loop() -> None:
     global _should_stop
 
     logger.info("Pipeline scheduler started")
-    last_morning: str | None = None
-    last_afternoon: str | None = None
+    # Load last run state from Redis (survives container restarts)
+    from core.redis import cache_get, cache_set
+
+    state = await cache_get("pipeline:scheduler_state") or {}
+    last_morning: str | None = state.get("last_morning")
+    last_afternoon: str | None = state.get("last_afternoon")
 
     while not _should_stop:
         try:
@@ -67,6 +71,7 @@ async def _scheduler_loop() -> None:
                 ):
                     logger.info("Triggering morning pipeline run")
                     last_morning = today
+                    await cache_set("pipeline:scheduler_state", {"last_morning": last_morning, "last_afternoon": last_afternoon}, ttl_seconds=86400)
                     try:
                         await run_daily_pipeline()
                     except Exception as e:
@@ -79,6 +84,7 @@ async def _scheduler_loop() -> None:
                 ):
                     logger.info("Triggering afternoon position check")
                     last_afternoon = today
+                    await cache_set("pipeline:scheduler_state", {"last_morning": last_morning, "last_afternoon": last_afternoon}, ttl_seconds=86400)
                     try:
                         await run_position_check()
                     except Exception as e:
