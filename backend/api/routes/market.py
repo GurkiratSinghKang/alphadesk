@@ -88,6 +88,44 @@ _DEMO_VOLATILITY: dict[str, float] = {
 }
 _DEFAULT_VOLATILITY = 0.012
 
+# ---------------------------------------------------------------------------
+# Valid symbols for demo fallback — only generate fake data for known tickers.
+# Includes S&P 500 / top US stocks plus major ETFs and indices.
+# ---------------------------------------------------------------------------
+_VALID_DEMO_SYMBOLS: set[str] = {
+    # -- Mega-cap / top holdings --
+    "AAPL", "ABBV", "ABT", "ACN", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AIG",
+    "AMAT", "AMD", "AMGN", "AMZN", "ANET", "ANSS", "AON", "APD", "APH", "AVGO",
+    "AXP", "BA", "BAC", "BDX", "BKNG", "BLK", "BMY", "BRK.B", "BSX", "C",
+    "CAT", "CB", "CDNS", "CEG", "CHTR", "CI", "CL", "CMCSA", "CME", "COF",
+    "COP", "COST", "CRM", "CRWD", "CSCO", "CTAS", "CVS", "CVX", "D", "DASH",
+    "DE", "DHR", "DIS", "DUK", "DXCM", "EA", "ECL", "EL", "EMR", "ENPH",
+    "EOG", "EQR", "EW", "EXPE", "F", "FAST", "FDX", "FERG", "FI", "FICO",
+    "FTNT", "GD", "GE", "GILD", "GM", "GOOG", "GOOGL", "GPN", "GS", "HCA",
+    "HD", "HLT", "HON", "IBM", "ICE", "IDXX", "ILMN", "INTC", "INTU", "ISRG",
+    "ITW", "JNJ", "JPM", "KDP", "KHC", "KLAC", "KO", "LIN", "LLY", "LMT",
+    "LOW", "LRCX", "LULU", "MA", "MAR", "MCD", "MCHP", "MCO", "MDLZ", "MDT",
+    "MET", "META", "MMC", "MMM", "MNST", "MO", "MPC", "MRVL", "MS", "MSCI",
+    "MSFT", "MSI", "MU", "NEE", "NFLX", "NKE", "NOC", "NOW", "NSC", "NVDA",
+    "NXPI", "ODFL", "ON", "ORCL", "ORLY", "OXY", "PANW", "PAYX", "PCAR",
+    "PEP", "PFE", "PG", "PGR", "PH", "PLTR", "PM", "PNC", "PSA", "PSX",
+    "PYPL", "QCOM", "REGN", "ROP", "ROST", "RTX", "SBUX", "SCHW", "SHW",
+    "SLB", "SMCI", "SNPS", "SO", "SPGI", "SRE", "SYK", "SYY", "T", "TDG",
+    "TGT", "TJX", "TMO", "TMUS", "TRV", "TSLA", "TT", "TXN", "UNH", "UNP",
+    "UPS", "URI", "USB", "V", "VICI", "VLO", "VRSK", "VRTX", "VZ", "WBA",
+    "WBD", "WDAY", "WEC", "WELL", "WFC", "WM", "WMT", "XEL", "XOM", "ZS",
+    "ZTS",
+    # -- Major ETFs / indices --
+    "DIA", "EEM", "EFA", "GLD", "HYG", "IVV", "IWM", "LQD", "QQQ", "SLV",
+    "SPY", "TLT", "VEA", "VNQ", "VOO", "VTI", "VWO", "XLB", "XLE", "XLF",
+    "XLI", "XLK", "XLP", "XLU", "XLV", "XLY",
+}
+
+
+def _is_valid_demo_symbol(symbol: str) -> bool:
+    """Return True if the symbol is in the known valid set for demo data."""
+    return symbol.upper() in _VALID_DEMO_SYMBOLS
+
 
 def _symbol_seed(symbol: str) -> int:
     return int(hashlib.md5(symbol.upper().encode()).hexdigest()[:8], 16)
@@ -336,7 +374,9 @@ async def get_quote(symbol: str) -> Quote:
         except Exception:
             pass  # fall through to demo
 
-    # --- 3. Demo fallback ---
+    # --- 3. Demo fallback (only for known symbols) ---
+    if not _is_valid_demo_symbol(symbol):
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
     return _demo_quote(symbol)
 
 
@@ -435,7 +475,9 @@ async def get_bars(
         except Exception:
             pass  # fall through to demo
 
-    # --- 3. Demo fallback ---
+    # --- 3. Demo fallback (only for known symbols) ---
+    if not _is_valid_demo_symbol(symbol):
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
     return _demo_bars(symbol, timeframe.value, limit, start, end)
 
 
@@ -541,7 +583,9 @@ async def get_snapshot(symbol: str) -> Snapshot:
         except Exception:
             pass  # fall through to demo
 
-    # --- 3. Demo fallback ---
+    # --- 3. Demo fallback (only for known symbols) ---
+    if not _is_valid_demo_symbol(symbol):
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
     return _demo_snapshot(symbol)
 
 

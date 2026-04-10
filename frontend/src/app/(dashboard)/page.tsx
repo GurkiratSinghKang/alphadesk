@@ -19,6 +19,7 @@ import {
   Radio,
   RefreshCw,
   ExternalLink,
+  Briefcase,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,8 +36,10 @@ import {
   getMarketSectors,
   getPipelineStatus,
   getPipelineHistory,
+  getPositions,
   type PipelineStatus,
 } from "@/lib/api";
+import type { Position } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -577,6 +580,59 @@ function SectorHeatmap({ sectors }: { sectors: SectorData[] }) {
   );
 }
 
+// ─── Positions Summary ──────────────────────────────────────
+
+function PositionsSummary() {
+  const [positions, setPositions] = useState<Position[]>([]);
+  useEffect(() => {
+    getPositions().then(setPositions).catch(() => {});
+  }, []);
+
+  if (positions.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Briefcase className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
+            Open Positions
+          </h2>
+        </div>
+        <span className="text-xs text-muted-foreground">{positions.length} position{positions.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div className="divide-y divide-border">
+        {positions.map((pos) => {
+          const pnlPct = pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost) * 100 : 0;
+          const positive = pos.unrealizedPnl >= 0;
+          return (
+            <div key={pos.symbol} className="flex items-center justify-between gap-4 px-4 py-2.5">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-sm font-semibold text-foreground">{pos.symbol}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{pos.quantity} shares</span>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="text-right">
+                  <p className="text-sm tabular-nums text-foreground">{formatCurrency(pos.currentPrice)}</p>
+                  <p className="text-[11px] tabular-nums text-muted-foreground">avg {formatCurrency(pos.avgCost)}</p>
+                </div>
+                <div className="text-right min-w-[80px]">
+                  <p className={cn("text-sm font-semibold tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                    {positive ? "+" : ""}{formatCurrency(pos.unrealizedPnl)}
+                  </p>
+                  <p className={cn("text-[11px] tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                    {positive ? "+" : ""}{pnlPct.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -963,7 +1019,7 @@ function CommandCenter() {
         {/* ─── Sections 2 & 3: Activity Feed + Strategy Grid ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Activity Feed (left ~60%) */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
             <div className="rounded-xl border border-border bg-[var(--panel)]">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -979,11 +1035,11 @@ function CommandCenter() {
                   {feedItems.length} event{feedItems.length !== 1 ? "s" : ""}
                 </span>
               </div>
-              <ScrollArea className="h-[500px]">
+              <ScrollArea className={feedItems.length <= 3 ? "max-h-[200px]" : "h-[320px]"}>
                 <div className="space-y-1 p-3">
                   {feedItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                      <Info className="h-8 w-8 mb-2 opacity-40" />
+                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                      <Info className="h-6 w-6 mb-2 opacity-40" />
                       <p className="text-sm">No activity yet today</p>
                       <p className="text-xs mt-1">Events will appear as the pipeline runs</p>
                     </div>
@@ -995,6 +1051,9 @@ function CommandCenter() {
                 </div>
               </ScrollArea>
             </div>
+
+            {/* ─── Positions Summary (below feed) ─────────── */}
+            <PositionsSummary />
           </div>
 
           {/* Strategy Grid (right ~40%) */}
@@ -1011,18 +1070,16 @@ function CommandCenter() {
                   {strategies.filter((s) => s.status === "active").length} active
                 </span>
               </div>
-              <ScrollArea className="h-[500px]">
-                <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                  {strategies.map((strategy) => (
-                    <StrategyCard
-                      key={strategy.id}
-                      strategy={strategy}
-                      regimeLabel={regime?.label ?? "unknown"}
-                      onClick={() => router.push(`/strategies/${strategy.id}`)}
-                    />
-                  ))}
-                </div>
-              </ScrollArea>
+              <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {strategies.map((strategy) => (
+                  <StrategyCard
+                    key={strategy.id}
+                    strategy={strategy}
+                    regimeLabel={regime?.label ?? "unknown"}
+                    onClick={() => router.push(`/strategies/${strategy.id}`)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1096,38 +1153,75 @@ function CommandCenter() {
               )}
             </div>
 
-            {/* Headlines */}
+            {/* Headlines or P&L Calendar */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Headlines
-              </h3>
-              <div className="space-y-2.5">
-                {news.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No headlines available</p>
-                ) : (
-                  news.slice(0, 3).map((article, i) => (
-                    <a
-                      key={i}
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-start gap-2 rounded-md p-1.5 -mx-1.5 transition-colors hover:bg-[var(--panel)]"
-                    >
-                      <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
-                          {article.title}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {article.source}
-                          {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
-                        </p>
-                      </div>
-                      <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </a>
-                  ))
-                )}
-              </div>
+              {news.length > 0 ? (
+                <>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Headlines
+                  </h3>
+                  <div className="space-y-2.5">
+                    {news.slice(0, 3).map((article, i) => (
+                      <a
+                        key={i}
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-start gap-2 rounded-md p-1.5 -mx-1.5 transition-colors hover:bg-[var(--panel)]"
+                      >
+                        <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
+                            {article.title}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {article.source}
+                            {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
+                          </p>
+                        </div>
+                        <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Account Overview
+                  </h3>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Cash</span>
+                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.cash)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Buying Power</span>
+                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.buyingPower)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Market Value</span>
+                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.totalMarketValue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Positions</span>
+                      <span className="text-sm tabular-nums text-foreground">{summary.positionsCount}</span>
+                    </div>
+                    <Separator className="bg-border" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Unrealized P&L</span>
+                      <span className={cn("text-sm font-semibold tabular-nums", summary.unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                        {summary.unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(summary.unrealizedPnl)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Realized Today</span>
+                      <span className={cn("text-sm font-semibold tabular-nums", summary.realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                        {summary.realizedPnlToday >= 0 ? "+" : ""}{formatCurrency(summary.realizedPnlToday)}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
