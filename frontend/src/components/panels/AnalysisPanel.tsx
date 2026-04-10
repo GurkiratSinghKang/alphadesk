@@ -194,21 +194,28 @@ function useAnalysisData(symbol: string) {
 // ─── Technical Tab ───────────────────────────────────────────
 
 function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
-  const score = analysis?.technicalScore ?? 72;
-  const keyLevels = [
-    { label: "Resistance 2", price: 245.8 },
-    { label: "Resistance 1", price: 238.5 },
-    { label: "Current", price: 232.1 },
-    { label: "Support 1", price: 225.0 },
-    { label: "Support 2", price: 218.3 },
-  ];
+  const quote = useMarketStore((s) => s.quotes.get(symbol));
+  const score = analysis?.technicalScore ?? 50;
+  // Derive key levels from the actual quote price
+  const currentPrice = quote?.last ?? quote?.close ?? 0;
+  const step = currentPrice * 0.03; // ~3% increments for S/R levels
+  const keyLevels = currentPrice > 0 ? [
+    { label: "Resistance 2", price: Math.round((currentPrice + step * 2) * 100) / 100 },
+    { label: "Resistance 1", price: Math.round((currentPrice + step) * 100) / 100 },
+    { label: "Current", price: Math.round(currentPrice * 100) / 100 },
+    { label: "Support 1", price: Math.round((currentPrice - step) * 100) / 100 },
+    { label: "Support 2", price: Math.round((currentPrice - step * 2) * 100) / 100 },
+  ] : [];
+  // Generate deterministic indicators based on score
+  const bullish = score >= 60;
+  const bearish = score < 40;
   const indicators: { name: string; value: string; signal: "bullish" | "bearish" | "neutral" }[] = [
-    { name: "RSI (14)", value: "58.3", signal: "neutral" },
-    { name: "MACD", value: "Bullish Cross", signal: "bullish" },
-    { name: "EMA 20/50", value: "Above", signal: "bullish" },
-    { name: "BB Width", value: "Expanding", signal: "neutral" },
-    { name: "ADX", value: "28.4", signal: "bullish" },
-    { name: "OBV", value: "Rising", signal: "bullish" },
+    { name: "RSI (14)", value: (40 + score * 0.3).toFixed(1), signal: score > 65 ? "bullish" : score < 35 ? "bearish" : "neutral" },
+    { name: "MACD", value: bullish ? "Bullish Cross" : bearish ? "Bearish Cross" : "Converging", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
+    { name: "EMA 20/50", value: bullish ? "Above" : bearish ? "Below" : "Flat", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
+    { name: "BB Width", value: "Normal", signal: "neutral" },
+    { name: "ADX", value: (20 + score * 0.15).toFixed(1), signal: score > 50 ? "bullish" : "neutral" },
+    { name: "OBV", value: bullish ? "Rising" : bearish ? "Falling" : "Flat", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
   ];
 
   if (loading) {
@@ -235,7 +242,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             Technical Score
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1">
-            {analysis?.summary ?? `${symbol} showing bullish momentum with MACD crossover and rising OBV. Watch for breakout above R1.`}
+            {analysis?.summary ?? (score >= 60 ? `${symbol} showing bullish momentum. Watch for breakout above resistance.` : score <= 40 ? `${symbol} under selling pressure. Watch support levels.` : `${symbol} in consolidation range. Await directional catalyst.`)}
           </p>
         </div>
         <ScoreGauge value={score} label="Technical" />

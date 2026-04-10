@@ -25,7 +25,7 @@ logger = logging.getLogger("alphadesk.news")
 router = APIRouter()
 
 NEWSDATA_BASE = "https://newsdata.io/api/1/latest"
-NEWS_CACHE_TTL = 300  # 5 minutes
+NEWS_CACHE_TTL = 900  # 15 minutes (avoid newsdata.io rate limits)
 
 
 # ---------------------------------------------------------------------------
@@ -89,11 +89,19 @@ def _company_query(symbol: str) -> str:
 # newsdata.io fetcher
 # ---------------------------------------------------------------------------
 
+_rate_limited_until: float = 0  # timestamp until which we skip requests
+
 async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
     """Fetch articles from newsdata.io. Returns raw article dicts."""
+    import time
+
     api_key = settings.NEWSDATA_API_KEY
     if not api_key:
         return []
+
+    global _rate_limited_until
+    if time.time() < _rate_limited_until:
+        return []  # skip silently during cooldown
 
     params = {
         "apikey": api_key,
@@ -107,7 +115,8 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(NEWSDATA_BASE, params=params)
             if resp.status_code == 429:
-                logger.warning("newsdata.io rate limit hit")
+                _rate_limited_until = time.time() + 900  # back off 15 minutes
+                logger.warning("newsdata.io rate limit hit, backing off 15m")
                 return []
             resp.raise_for_status()
             data = resp.json()

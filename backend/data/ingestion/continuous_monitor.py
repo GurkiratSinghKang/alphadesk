@@ -144,7 +144,7 @@ async def _run_monitor() -> None:
     """Main monitoring loop -- runs during market hours."""
     global _should_stop, _last_eval_slot
 
-    news_interval = 60  # seconds
+    news_interval = 600  # 10 minutes (avoid newsdata.io rate limiting)
     price_interval = 300  # 5 minutes
     last_news_check = 0.0
     last_price_check = 0.0

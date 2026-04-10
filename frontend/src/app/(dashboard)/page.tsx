@@ -523,19 +523,18 @@ function StrategyCard({
 function SectorHeatmap({ sectors }: { sectors: SectorData[] }) {
   if (sectors.length === 0) return null;
 
-  // Abbreviate long sector names
   const abbrev: Record<string, string> = {
-    Technology: "Tech",
-    Healthcare: "Health",
-    Financials: "Fin",
-    "Consumer Discretionary": "Cons Disc",
-    "Communication Services": "Comm Svc",
-    Industrials: "Indust",
-    "Consumer Staples": "Cons Stpl",
+    Technology: "Technology",
+    Healthcare: "Healthcare",
+    Financials: "Financials",
+    "Consumer Discretionary": "Cons. Discr.",
+    "Communication Services": "Comm. Svcs",
+    Industrials: "Industrials",
+    "Consumer Staples": "Cons. Staples",
     Energy: "Energy",
-    Utilities: "Util",
-    "Real Estate": "RE",
-    Materials: "Mater",
+    Utilities: "Utilities",
+    "Real Estate": "Real Estate",
+    Materials: "Materials",
   };
 
   return (

@@ -728,7 +728,14 @@ export default function PipelinePage() {
                                   )}
                                 </div>
                               ) : (
-                                h.summary
+                                h.summary || (() => {
+                                  const parts: string[] = [];
+                                  if (h.screened) parts.push(`${h.screened} screened`);
+                                  if (h.analyzed) parts.push(`${h.analyzed} analyzed`);
+                                  if (h.orders_placed ?? h.ordersPlaced) parts.push(`${h.orders_placed ?? h.ordersPlaced} orders`);
+                                  if (h.errors?.length) parts.push(`${h.errors.length} errors`);
+                                  return parts.length > 0 ? parts.join(" · ") : "Click to expand";
+                                })()
                               )}
                             </TableCell>
                           </TableRow>
@@ -826,14 +833,16 @@ export default function PipelinePage() {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Best Trade
                     </p>
-                    <p className="text-lg font-bold tabular-nums text-[var(--profit)]">
-                      {bestTrade && (bestTrade.pnl ?? 0) > 0
+                    <p className={cn("text-lg font-bold tabular-nums", perfData?.bestTrade && perfData.bestTrade.pnl >= 0 ? "text-[var(--profit)]" : bestTrade && (bestTrade.pnl ?? 0) > 0 ? "text-[var(--profit)]" : "text-muted-foreground")}>
+                      {perfData?.bestTrade
+                        ? `${perfData.bestTrade.pnl >= 0 ? "+" : ""}${formatCurrency(perfData.bestTrade.pnl)}`
+                        : bestTrade && (bestTrade.pnl ?? 0) > 0
                         ? `+${formatCurrency(bestTrade.pnl)}`
                         : "—"}
                     </p>
-                    {bestTrade && (bestTrade.pnl ?? 0) > 0 && (
+                    {(perfData?.bestTrade || (bestTrade && (bestTrade.pnl ?? 0) > 0)) && (
                       <p className="text-[10px] text-muted-foreground">
-                        {bestTrade.symbol}
+                        {perfData?.bestTrade?.symbol ?? bestTrade?.symbol}
                       </p>
                     )}
                   </CardContent>
@@ -845,13 +854,15 @@ export default function PipelinePage() {
                       Worst Trade
                     </p>
                     <p className="text-lg font-bold tabular-nums text-[var(--loss)]">
-                      {worstTrade && (worstTrade.pnl ?? 0) < 0
+                      {perfData?.worstTrade
+                        ? formatCurrency(perfData.worstTrade.pnl)
+                        : worstTrade && (worstTrade.pnl ?? 0) < 0
                         ? formatCurrency(worstTrade.pnl)
                         : "—"}
                     </p>
-                    {worstTrade && (worstTrade.pnl ?? 0) < 0 && (
+                    {(perfData?.worstTrade || (worstTrade && (worstTrade.pnl ?? 0) < 0)) && (
                       <p className="text-[10px] text-muted-foreground">
-                        {worstTrade.symbol}
+                        {perfData?.worstTrade?.symbol ?? worstTrade?.symbol}
                       </p>
                     )}
                   </CardContent>

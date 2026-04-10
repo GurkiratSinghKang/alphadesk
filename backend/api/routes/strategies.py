@@ -413,10 +413,10 @@ async def get_strategy_performance(
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
-    # Start with zeros -- only real data populates
+    # Start with sentinels -- only real data populates
     invested = 0.0
     return_pct = 0.0
-    win_rate = 0.0
+    win_rate = -1.0  # -1 = no closed trades (frontend shows "N/A")
     active_count = 0
     pnl_dollars = 0.0
     last_trade = ""

@@ -31,10 +31,28 @@ WATCHLIST = [
 ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v2/iex"
 
 
+def _is_market_hours() -> bool:
+    """Check if we're within extended market hours (4 AM - 8 PM ET)."""
+    from datetime import datetime, timezone, timedelta
+    et = timezone(timedelta(hours=-4))
+    now = datetime.now(et)
+    # Skip weekends
+    if now.weekday() >= 5:
+        return False
+    return 4 <= now.hour < 20
+
+
 async def _run_stream() -> None:
     global _should_stop
+    backoff = 5  # initial backoff seconds
 
     while not _should_stop:
+        # Don't spam reconnects outside market hours
+        if not _is_market_hours():
+            logger.debug("Alpaca stream: outside market hours, sleeping 5m")
+            await asyncio.sleep(300)
+            continue
+
         try:
             async with websockets.connect(ALPACA_WS_URL) as ws:
                 # Authenticate
@@ -67,6 +85,7 @@ async def _run_stream() -> None:
                 }))
                 sub_resp = await ws.recv()
                 logger.info("Alpaca stream subscribed: %s", str(sub_resp)[:100])
+                backoff = 5  # reset backoff on successful connection
 
                 # Process incoming messages
                 async for raw in ws:
@@ -118,8 +137,9 @@ async def _run_stream() -> None:
         except Exception as e:
             if _should_stop:
                 break
-            logger.error("Alpaca stream error: %s (reconnecting in 5s)", e)
-            await asyncio.sleep(5)
+            logger.error("Alpaca stream error: %s (reconnecting in %ds)", e, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 300)  # exponential backoff, max 5 minutes
 
     logger.info("Alpaca stream loop exited")
 

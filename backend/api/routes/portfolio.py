@@ -172,12 +172,13 @@ def _demo_performance(period: str) -> PerformanceMetrics:
 
 
 def _demo_greeks() -> PortfolioGreeks:
+    """Return zero greeks when no option positions exist."""
     return PortfolioGreeks(
-        net_delta=12.5,
-        net_gamma=0.8,
-        net_theta=-45.20,
-        net_vega=32.10,
-        beta_weighted_delta=15.3,
+        net_delta=0,
+        net_gamma=0,
+        net_theta=0,
+        net_vega=0,
+        beta_weighted_delta=0,
         by_position=[],
     )
 
@@ -361,12 +362,21 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
         for pos in positions.get("positions", []):
             greeks = pos.get("greeks", {})
             qty = pos.get("quantity", 0)
-            multiplier = 100 if pos.get("asset_class") == "option" else 1
+            asset_class = pos.get("asset_class", "us_equity")
+            is_option = asset_class == "option"
+            multiplier = 100 if is_option else 1
 
-            d = greeks.get("delta", 0) * qty * multiplier
-            g = greeks.get("gamma", 0) * qty * multiplier
-            t = greeks.get("theta", 0) * qty * multiplier
-            v = greeks.get("vega", 0) * qty * multiplier
+            # Stocks have delta=1 per share, no gamma/theta/vega
+            if not is_option and not greeks.get("delta"):
+                d = qty  # 1 delta per share
+                g = 0.0
+                t = 0.0
+                v = 0.0
+            else:
+                d = greeks.get("delta", 0) * qty * multiplier
+                g = greeks.get("gamma", 0) * qty * multiplier
+                t = greeks.get("theta", 0) * qty * multiplier
+                v = greeks.get("vega", 0) * qty * multiplier
 
             net_delta += d
             net_gamma += g
