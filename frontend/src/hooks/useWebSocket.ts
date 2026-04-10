@@ -48,17 +48,30 @@ export function useWebSocket(): UseWebSocketReturn {
     }
 
     try {
-      const ws = new WebSocket(env.WS_URL);
+      const wsUrl = env.WS_URL || (
+        typeof window !== "undefined"
+          ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
+          : "ws://localhost:8000/ws"
+      );
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // Send auth token first
+        const token = document.cookie.match(/(?:^|; )access_token=([^;]*)/)?.[1];
+        if (token) {
+          ws.send(JSON.stringify({ action: "auth", token }));
+        }
+
         setIsConnected(true);
         retriesRef.current = 0;
 
-        // Re-subscribe to all channels
-        subscribedChannels.current.forEach((channel) => {
-          ws.send(JSON.stringify({ action: "subscribe", channel }));
-        });
+        // Re-subscribe to all channels after a short delay for auth to process
+        setTimeout(() => {
+          subscribedChannels.current.forEach((channel) => {
+            ws.send(JSON.stringify({ action: "subscribe", channel }));
+          });
+        }, 100);
       };
 
       ws.onmessage = (event) => {

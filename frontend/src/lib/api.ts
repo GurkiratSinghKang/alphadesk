@@ -14,12 +14,40 @@ import type {
 
 // ─── Base Fetch ──────────────────────────────────────────────
 
+function getAccessToken(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const match = document.cookie.match(/(?:^|; )access_token=([^;]*)/);
+  return match?.[1];
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${env.API_URL}${path}`;
+  const base = typeof window !== "undefined"
+    ? (env.API_URL || "")
+    : (env.API_URL || "http://localhost:8000");
+  const url = `${base}${path}`;
+
+  const token = getAccessToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
+    headers,
+    credentials: "include",
   });
+
+  if (res.status === 401 && typeof window !== "undefined") {
+    document.cookie = "access_token=; path=/; max-age=0";
+    document.cookie = "refresh_token=; path=/; max-age=0";
+    window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${res.statusText} – ${body}`);
