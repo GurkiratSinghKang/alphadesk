@@ -138,9 +138,11 @@ async def _check_price_alerts() -> list[dict]:
     return alerts
 
 
+_last_eval_slot: str | None = None  # tracks last strategy evaluation slot
+
 async def _run_monitor() -> None:
     """Main monitoring loop -- runs during market hours."""
-    global _should_stop
+    global _should_stop, _last_eval_slot
 
     news_interval = 60  # seconds
     price_interval = 300  # 5 minutes
@@ -170,25 +172,22 @@ async def _run_monitor() -> None:
                 await _check_price_alerts()
                 last_price_check = current_time
 
-            # Mid-day scan at 11:00 AM ET
-            if hour == 11 and minute == 0:
-                logger.info("Mid-day scan triggered")
-                try:
-                    from data.ingestion.daily_pipeline import run_daily_pipeline
-                    await run_daily_pipeline(screen_limit=20, analyze_limit=5)
-                except Exception as e:
-                    logger.error("Mid-day scan failed: %s", e)
-                await asyncio.sleep(60)  # skip rest of this minute
+            # Strategy evaluation every 30 minutes during market hours (9:30-16:00 ET)
+            is_market_hours = (hour == 9 and minute >= 30) or (10 <= hour <= 15)
+            is_evaluation_time = minute in (0, 30)
 
-            # Afternoon scan at 2:00 PM ET
-            if hour == 14 and minute == 0:
-                logger.info("Afternoon scan triggered")
-                try:
-                    from data.ingestion.daily_pipeline import run_daily_pipeline
-                    await run_daily_pipeline(screen_limit=20, analyze_limit=5)
-                except Exception as e:
-                    logger.error("Afternoon scan failed: %s", e)
-                await asyncio.sleep(60)
+            if is_market_hours and is_evaluation_time:
+                # Check if we already ran this slot
+                slot_key = f"{hour}:{minute:02d}"
+                if slot_key != _last_eval_slot:
+                    _last_eval_slot = slot_key
+                    logger.info("Strategy evaluation triggered (%s ET)", slot_key)
+                    try:
+                        from data.ingestion.daily_pipeline import run_daily_pipeline
+                        await run_daily_pipeline(screen_limit=20, analyze_limit=5)
+                    except Exception as e:
+                        logger.error("Strategy evaluation failed: %s", e)
+                    await asyncio.sleep(60)  # skip rest of this minute
 
             await asyncio.sleep(10)  # check every 10 seconds
 

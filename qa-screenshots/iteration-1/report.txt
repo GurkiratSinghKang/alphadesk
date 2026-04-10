@@ -1,0 +1,41 @@
+=== QA Iteration 1 ===
+Console Errors (15):
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [login] Failed to load resource: the server responded with a status of 401 ()
+  [pipeline] Failed to load resource: the server responded with a status of 404 ()
+Network Failures (0):
+API Results:
+  200 /api/v1/portfolio/summary
+  200 /api/v1/portfolio/performance
+  200 /api/v1/portfolio/calendar
+  200 /api/v1/portfolio/greeks
+  200 /api/v1/trades/positions
+  200 /api/v1/trades/orders
+  200 /api/v1/trades/history
+  200 /api/v1/market/quotes/AAPL
+  200 /api/v1/market/bars/AAPL?timeframe=1d&limit=5
+  200 /api/v1/market-overview/indices
+  200 /api/v1/market-overview/sectors
+  200 /api/v1/strategies/
+  200 /api/v1/strategies/momentum-quality/performance
+  200 /api/v1/strategies/momentum-quality/analytics
+  200 /api/v1/pipeline/status
+  200 /api/v1/pipeline/positions
+  200 /api/v1/news/market
+  200 /api/v1/screener/presets
+  200 /api/v1/symbols/search?q=NTNX
+  200 /api/v1/risk/dashboard
+  200 /api/v1/options/chain/AAPL
+  200 /api/v1/options/iv/AAPL

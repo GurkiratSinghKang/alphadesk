@@ -486,6 +486,16 @@ export async function getPnlCalendar(year?: number, month?: number): Promise<Cal
   };
 }
 
+// ─── Market Regime & Sectors ────────────────────────────────
+
+export function getMarketRegime() {
+  return apiFetch<{ regime: { regime: string; label: string; confidence: number; vix_level: number; description: string; indicators: Record<string, unknown> }; as_of: string }>('/api/v1/market-overview/regime');
+}
+
+export function getMarketSectors() {
+  return apiFetch<{ sectors: { sector: string; change_pct: number; ytd_pct: number; leader: string; leader_change_pct: number }[]; as_of: string }>('/api/v1/market-overview/sectors');
+}
+
 // ─── News ───────────────────────────────────────────────────
 
 export async function getMarketNews() {

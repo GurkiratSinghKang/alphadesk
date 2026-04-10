@@ -1,0 +1,546 @@
+{
+  "date": "2026-04-10",
+  "timestamp": "2026-04-10T15:00:07.306636+00:00",
+  "strategies": {
+    "momentum_quality": {
+      "screened": 4,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "signal": "hold",
+          "conviction": 52,
+          "entry_price": 375.63,
+          "stop_loss": 356.85,
+          "take_profit": 413.0,
+          "rationale": "AVGO shows solid RS (88.3) and adequate F-Score (6/9) with analyst consensus pointing to 33% upside, but insufficient price history prevents trend/MA confirmation and current macro caution warrants waiting for clearer technical setup before entry.",
+          "trend_score": 4,
+          "momentum_score": 6,
+          "volume_score": 4,
+          "catalyst_score": 6,
+          "risk_reward_score": 6,
+          "symbol": "AVGO",
+          "price": 375.63,
+          "sector": "Technology"
+        },
+        {
+          "signal": "hold",
+          "conviction": 52,
+          "entry_price": 121.6,
+          "stop_loss": 115.52,
+          "take_profit": 133.76,
+          "rationale": "Strong fundamentals (F-Score 9/9) and solid relative strength (80.5) support a bullish bias, but insufficient price history prevents trend/MA confirmation, and recent news shows institutional selling pressure with no clear near-term catalyst.",
+          "trend_score": 4,
+          "momentum_score": 6,
+          "volume_score": 3,
+          "catalyst_score": 5,
+          "risk_reward_score": 6,
+          "symbol": "MRK",
+          "price": 121.6,
+          "sector": "Healthcare"
+        }
+      ],
+      "trades_requested": 0,
+      "trades_approved": 0,
+      "trades": []
+    },
+    "pead": {
+      "screened": 13,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "MRK",
+          "price": 113.84,
+          "signal": "buy",
+          "conviction": 79,
+          "entry_price": 113.84,
+          "stop_loss": 108.15,
+          "take_profit": 125.22,
+          "sector": "Healthcare",
+          "rationale": "PEAD: MRK moved +4.8% (composite 76), drift expected to continue."
+        },
+        {
+          "symbol": "WMT",
+          "price": 177.26,
+          "signal": "buy",
+          "conviction": 74,
+          "entry_price": 177.26,
+          "stop_loss": 168.4,
+          "take_profit": 194.99,
+          "sector": "Consumer Defensive",
+          "rationale": "PEAD: WMT moved +3.0% (composite 76), drift expected to continue."
+        }
+      ],
+      "trades_requested": 2,
+      "trades_approved": 0,
+      "trades": [
+        {
+          "approved": false,
+          "reason": "MRK already held by strategy 'pead'",
+          "symbol": "MRK",
+          "strategy": "pead",
+          "shares": 43,
+          "notional": 4895.12,
+          "conviction": 79,
+          "entry_price": 113.84,
+          "stop_loss": 108.15,
+          "take_profit": 125.22,
+          "rationale": "PEAD: MRK moved +4.8% (composite 76), drift expected to continue.",
+          "sector": "Healthcare"
+        },
+        {
+          "approved": false,
+          "reason": "Strategy 'pead' would exceed allocation (9858 > 9006)",
+          "symbol": "WMT",
+          "strategy": "pead",
+          "shares": 28,
+          "notional": 4963.28,
+          "conviction": 74,
+          "entry_price": 177.26,
+          "stop_loss": 168.4,
+          "take_profit": 194.99,
+          "rationale": "PEAD: WMT moved +3.0% (composite 76), drift expected to continue.",
+          "sector": "Consumer Defensive"
+        }
+      ]
+    },
+    "vrp_harvest": {
+      "screened": 20,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "MRK",
+          "price": 113.84,
+          "signal": "hold",
+          "conviction": 40,
+          "entry_price": 113.84,
+          "stop_loss": 108.15,
+          "take_profit": 125.22,
+          "sector": "Healthcare",
+          "rationale": "VRP: MRK IV Rank 51, IV Pctl 78. Equity proxy for premium selling."
+        },
+        {
+          "symbol": "COIN",
+          "price": 183.05,
+          "signal": "hold",
+          "conviction": 40,
+          "entry_price": 183.05,
+          "stop_loss": 173.9,
+          "take_profit": 201.36,
+          "sector": "Financial Services",
+          "rationale": "VRP: COIN IV Rank 45, IV Pctl 58. Equity proxy for premium selling."
+        }
+      ],
+      "trades_requested": 0,
+      "trades_approved": 0,
+      "trades": []
+    },
+    "earnings_vol": {
+      "screened": 10,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "PG",
+          "price": 171.27,
+          "signal": "buy",
+          "conviction": 79,
+          "entry_price": 171.27,
+          "stop_loss": 162.71,
+          "take_profit": 188.4,
+          "sector": "Consumer Defensive",
+          "rationale": "EarningsVol: PG IV Rank 82, implied vol appears overpriced vs historical."
+        },
+        {
+          "symbol": "MRK",
+          "price": 113.84,
+          "signal": "hold",
+          "conviction": 35,
+          "entry_price": 113.84,
+          "stop_loss": 108.15,
+          "take_profit": 125.22,
+          "sector": "Healthcare",
+          "rationale": "EarningsVol: MRK IV Rank 51, implied vol appears overpriced vs historical."
+        }
+      ],
+      "trades_requested": 1,
+      "trades_approved": 0,
+      "trades": [
+        {
+          "approved": false,
+          "reason": "Sector 'Consumer Defensive' would reach 49% (limit: 30.0%)",
+          "symbol": "PG",
+          "strategy": "earnings_vol",
+          "shares": 28,
+          "notional": 4795.56,
+          "conviction": 79,
+          "entry_price": 171.27,
+          "stop_loss": 162.71,
+          "take_profit": 188.4,
+          "rationale": "EarningsVol: PG IV Rank 82, implied vol appears overpriced vs historical.",
+          "sector": "Consumer Defensive"
+        }
+      ]
+    },
+    "regime_adaptive": {
+      "screened": 8,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "BA",
+          "signal": "buy",
+          "conviction": 80,
+          "entry_price": 192.25,
+          "stop_loss": 180.72,
+          "take_profit": 211.48,
+          "rationale": "Sector rotation: Industrials ranked #1 (avg score 68). Top sector \u2014 overweight.",
+          "sector": "Industrials"
+        },
+        {
+          "symbol": "WMT",
+          "signal": "buy",
+          "conviction": 80,
+          "entry_price": 177.26,
+          "stop_loss": 166.62,
+          "take_profit": 194.99,
+          "rationale": "Sector rotation: Consumer Defensive ranked #2 (avg score 65). Top sector \u2014 overweight.",
+          "sector": "Consumer Defensive"
+        }
+      ],
+      "trades_requested": 2,
+      "trades_approved": 0,
+      "trades": [
+        {
+          "approved": false,
+          "reason": "Absolute momentum gate: BA has negative momentum (-10.8%). Dual momentum requires positive absolute return.",
+          "symbol": "BA",
+          "strategy": "regime_adaptive",
+          "shares": 26,
+          "notional": 4998.5,
+          "conviction": 80,
+          "entry_price": 192.25,
+          "stop_loss": 180.72,
+          "take_profit": 211.48,
+          "rationale": "Sector rotation: Industrials ranked #1 (avg score 68). Top sector \u2014 overweight.",
+          "sector": "Industrials"
+        },
+        {
+          "approved": false,
+          "reason": "Sector 'Consumer Defensive' would reach 50% (limit: 30.0%)",
+          "symbol": "WMT",
+          "strategy": "regime_adaptive",
+          "shares": 28,
+          "notional": 4963.28,
+          "conviction": 80,
+          "entry_price": 177.26,
+          "stop_loss": 166.62,
+          "take_profit": 194.99,
+          "rationale": "Sector rotation: Consumer Defensive ranked #2 (avg score 65). Top sector \u2014 overweight.",
+          "sector": "Consumer Defensive"
+        }
+      ]
+    },
+    "claude_alpha": {
+      "screened": 20,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "signal": "hold",
+          "conviction": 42,
+          "entry_price": 375.89,
+          "stop_loss": 357.1,
+          "take_profit": 413.47,
+          "rationale": "Insufficient price history prevents reliable technical confirmation; moderate catalyst support from AI capex tailwinds and analyst 33% upside targets is offset by cautious broad market sentiment and inability to verify trend/momentum alignment.",
+          "trend_score": 4,
+          "momentum_score": 4,
+          "volume_score": 3,
+          "catalyst_score": 6,
+          "risk_reward_score": 5,
+          "symbol": "AVGO",
+          "price": 375.89,
+          "sector": "Technology"
+        },
+        {
+          "signal": "hold",
+          "conviction": 32,
+          "entry_price": 121.6,
+          "stop_loss": 115.52,
+          "take_profit": 133.76,
+          "rationale": "Insufficient price history prevents reliable trend/momentum assessment, while news flow shows consistent institutional selling pressure with no positive catalysts ahead of earnings, making a long swing trade unattractive at current levels.",
+          "trend_score": 3,
+          "momentum_score": 3,
+          "volume_score": 2,
+          "catalyst_score": 4,
+          "risk_reward_score": 4,
+          "symbol": "MRK",
+          "price": 121.6,
+          "sector": "Healthcare"
+        }
+      ],
+      "trades_requested": 0,
+      "trades_approved": 0,
+      "trades": []
+    },
+    "mean_reversion": {
+      "screened": 6,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "NKE",
+          "signal": "buy",
+          "conviction": 87,
+          "entry_price": 96.33,
+          "stop_loss": 89.59,
+          "take_profit": 104.04,
+          "rationale": "Mean reversion: NKE oversold (-3.3%) with F-Score 9. Expected reversion to 104.04.",
+          "sector": "Consumer Cyclical"
+        },
+        {
+          "symbol": "BA",
+          "signal": "buy",
+          "conviction": 82,
+          "entry_price": 192.25,
+          "stop_loss": 178.79,
+          "take_profit": 207.63,
+          "rationale": "Mean reversion: BA oversold (-2.5%) with F-Score 9. Expected reversion to 207.63.",
+          "sector": "Industrials"
+        }
+      ],
+      "trades_requested": 2,
+      "trades_approved": 0,
+      "trades": [
+        {
+          "approved": false,
+          "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$6.74, reward=$7.71)",
+          "symbol": "NKE",
+          "strategy": "mean_reversion",
+          "shares": 51,
+          "notional": 4912.83,
+          "conviction": 87,
+          "entry_price": 96.33,
+          "stop_loss": 89.59,
+          "take_profit": 104.04,
+          "rationale": "Mean reversion: NKE oversold (-3.3%) with F-Score 9. Expected reversion to 104.04.",
+          "sector": "Consumer Cyclical"
+        },
+        {
+          "approved": false,
+          "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$13.46, reward=$15.38)",
+          "symbol": "BA",
+          "strategy": "mean_reversion",
+          "shares": 26,
+          "notional": 4998.5,
+          "conviction": 82,
+          "entry_price": 192.25,
+          "stop_loss": 178.79,
+          "take_profit": 207.63,
+          "rationale": "Mean reversion: BA oversold (-2.5%) with F-Score 9. Expected reversion to 207.63.",
+          "sector": "Industrials"
+        }
+      ]
+    },
+    "vcp_breakout": {
+      "screened": 12,
+      "analyzed": 2,
+      "analyses": [
+        {
+          "symbol": "AVGO",
+          "signal": "buy",
+          "conviction": 81,
+          "entry_price": 375.7,
+          "stop_loss": 364.43,
+          "take_profit": 413.27,
+          "rationale": "VCP Breakout: AVGO in Stage 2 uptrend (RS 88.3), F-Score 6. Tight 3% stop, 10% target. Reward/risk: 3.3:1.",
+          "sector": "Technology"
+        },
+        {
+          "symbol": "MRK",
+          "signal": "buy",
+          "conviction": 85,
+          "entry_price": 121.6,
+          "stop_loss": 117.95,
+          "take_profit": 133.76,
+          "rationale": "VCP Breakout: MRK in Stage 2 uptrend (RS 80.5), F-Score 9. Tight 3% stop, 10% target. Reward/risk: 3.3:1.",
+          "sector": "Healthcare"
+        }
+      ],
+      "trades_requested": 2,
+      "trades_approved": 0,
+      "trades": [
+        {
+          "approved": false,
+          "reason": "Absolute momentum gate: AVGO has negative momentum (-50.4%). Dual momentum requires positive absolute return.",
+          "symbol": "AVGO",
+          "strategy": "vcp_breakout",
+          "shares": 12,
+          "notional": 4508.4,
+          "conviction": 81,
+          "entry_price": 375.7,
+          "stop_loss": 364.43,
+          "take_profit": 413.27,
+          "rationale": "VCP Breakout: AVGO in Stage 2 uptrend (RS 88.3), F-Score 6. Tight 3% stop, 10% target. Reward/risk: 3.3:1.",
+          "sector": "Technology"
+        },
+        {
+          "approved": false,
+          "reason": "MRK already held by strategy 'pead'",
+          "symbol": "MRK",
+          "strategy": "vcp_breakout",
+          "shares": 41,
+          "notional": 4985.6,
+          "conviction": 85,
+          "entry_price": 121.6,
+          "stop_loss": 117.95,
+          "take_profit": 133.76,
+          "rationale": "VCP Breakout: MRK in Stage 2 uptrend (RS 80.5), F-Score 9. Tight 3% stop, 10% target. Reward/risk: 3.3:1.",
+          "sector": "Healthcare"
+        }
+      ]
+    }
+  },
+  "master_agent": {
+    "approved": 0,
+    "rejected": 9,
+    "rejections": [
+      {
+        "strategy": "pead",
+        "symbol": "MRK",
+        "reason": "MRK already held by strategy 'pead'"
+      },
+      {
+        "strategy": "pead",
+        "symbol": "WMT",
+        "reason": "Strategy 'pead' would exceed allocation (9858 > 9006)"
+      },
+      {
+        "strategy": "earnings_vol",
+        "symbol": "PG",
+        "reason": "Sector 'Consumer Defensive' would reach 49% (limit: 30.0%)"
+      },
+      {
+        "strategy": "regime_adaptive",
+        "symbol": "BA",
+        "reason": "Absolute momentum gate: BA has negative momentum (-10.8%). Dual momentum requires positive absolute return."
+      },
+      {
+        "strategy": "regime_adaptive",
+        "symbol": "WMT",
+        "reason": "Sector 'Consumer Defensive' would reach 50% (limit: 30.0%)"
+      },
+      {
+        "strategy": "mean_reversion",
+        "symbol": "NKE",
+        "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$6.74, reward=$7.71)"
+      },
+      {
+        "strategy": "mean_reversion",
+        "symbol": "BA",
+        "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$13.46, reward=$15.38)"
+      },
+      {
+        "strategy": "vcp_breakout",
+        "symbol": "AVGO",
+        "reason": "Absolute momentum gate: AVGO has negative momentum (-50.4%). Dual momentum requires positive absolute return."
+      },
+      {
+        "strategy": "vcp_breakout",
+        "symbol": "MRK",
+        "reason": "MRK already held by strategy 'pead'"
+      }
+    ],
+    "summary": {
+      "equity": 100070.6,
+      "cash": 94840.62,
+      "total_deployed": 4895.12,
+      "deployed_pct": 4.9,
+      "total_positions": 1,
+      "pending_orders": 0,
+      "rejections_count": 9,
+      "rejections": [
+        {
+          "strategy": "pead",
+          "symbol": "MRK",
+          "reason": "MRK already held by strategy 'pead'"
+        },
+        {
+          "strategy": "pead",
+          "symbol": "WMT",
+          "reason": "Strategy 'pead' would exceed allocation (9858 > 9006)"
+        },
+        {
+          "strategy": "earnings_vol",
+          "symbol": "PG",
+          "reason": "Sector 'Consumer Defensive' would reach 49% (limit: 30.0%)"
+        },
+        {
+          "strategy": "regime_adaptive",
+          "symbol": "BA",
+          "reason": "Absolute momentum gate: BA has negative momentum (-10.8%). Dual momentum requires positive absolute return."
+        },
+        {
+          "strategy": "regime_adaptive",
+          "symbol": "WMT",
+          "reason": "Sector 'Consumer Defensive' would reach 50% (limit: 30.0%)"
+        },
+        {
+          "strategy": "mean_reversion",
+          "symbol": "NKE",
+          "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$6.74, reward=$7.71)"
+        },
+        {
+          "strategy": "mean_reversion",
+          "symbol": "BA",
+          "reason": "Risk/reward 1.1:1 below minimum 1.5:1 (risk=$13.46, reward=$15.38)"
+        },
+        {
+          "strategy": "vcp_breakout",
+          "symbol": "AVGO",
+          "reason": "Absolute momentum gate: AVGO has negative momentum (-50.4%). Dual momentum requires positive absolute return."
+        },
+        {
+          "strategy": "vcp_breakout",
+          "symbol": "MRK",
+          "reason": "MRK already held by strategy 'pead'"
+        }
+      ],
+      "by_strategy": {
+        "pead": {
+          "deployed": 4895.12,
+          "positions": 1,
+          "symbols": [
+            "MRK"
+          ]
+        }
+      },
+      "regime": "crisis",
+      "vix_level": 45.4,
+      "max_deployment_pct": 10.0,
+      "halted_strategies": [],
+      "sector_exposure": {
+        "Unknown": 1.0
+      },
+      "portfolio_var": 159.68,
+      "portfolio_var_pct": 0.16
+    },
+    "regime": "crisis",
+    "vix_level": 45.4,
+    "max_deployment_pct": 10.0,
+    "sector_exposure": {
+      "Unknown": 1.0
+    },
+    "portfolio_var": 159.6788144,
+    "halted_strategies": []
+  },
+  "orders_placed": [],
+  "orders_closed": [],
+  "portfolio_snapshot": {
+    "equity": 100073.29,
+    "cash": 94840.62,
+    "positions": 1,
+    "day_pnl": -45.25999999999476
+  },
+  "errors": [],
+  "factor_crowding": {
+    "crowded": false,
+    "warnings": [],
+    "position_count": 1
+  }
+}

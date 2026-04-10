@@ -50,21 +50,34 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "pipeline_logs"
 
 
 async def _get_vix_level(client: httpx.AsyncClient) -> float:
-    """Fetch VIX proxy level from Alpaca (using UVXY as proxy)."""
+    """Fetch VIX level from the market-overview regime endpoint or Polygon."""
+    # Try our own regime endpoint first (uses Polygon VIX data)
     try:
-        resp = await client.get(
-            "https://data.alpaca.markets/v2/stocks/UVXY/snapshot",
-            headers=_alpaca_headers(),
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            # UVXY is a proxy; real VIX would need options data
-            # Use a simple mapping: UVXY $15 ~ VIX 16
-            uvxy_price = data.get("latestTrade", {}).get("p", 15)
-            return round(uvxy_price * 1.1, 1)  # rough proxy
+        from api.routes.market_overview import _get_regime_data
+        regime = await _get_regime_data()
+        if regime and "vix_level" in regime:
+            return float(regime["vix_level"])
     except Exception:
         pass
-    return 16.5  # default
+
+    # Fallback: fetch ^VIX from Polygon if available
+    try:
+        from core.config import settings
+        polygon_key = settings.POLYGON_API_KEY.get_secret_value()
+        if polygon_key:
+            resp = await client.get(
+                f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/VIX",
+                params={"apiKey": polygon_key},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                last = data.get("ticker", {}).get("lastTrade", {}).get("p")
+                if last and last < 100:  # sanity check
+                    return round(float(last), 1)
+    except Exception:
+        pass
+
+    return 16.5  # default — assume normal conditions rather than crisis
 
 # ----- Pipeline state -----
 _pipeline_status: dict[str, Any] = {
@@ -230,6 +243,38 @@ async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) ->
     return placed
 
 
+async def _poll_fill_price(
+    client: httpx.AsyncClient,
+    order_id: str,
+    max_attempts: int = 10,
+    delay: float = 1.0,
+) -> float | None:
+    """Poll Alpaca for an order's filled_avg_price.
+
+    Returns the fill price once the order reaches 'filled' status, or
+    None if it doesn't fill within *max_attempts* polls.
+    """
+    for _ in range(max_attempts):
+        try:
+            resp = await client.get(
+                f"{_base_url()}/v2/orders/{order_id}",
+                headers=_alpaca_headers(),
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                status = data.get("status", "")
+                if status == "filled":
+                    avg = data.get("filled_avg_price")
+                    if avg is not None:
+                        return float(avg)
+                elif status in ("canceled", "expired", "rejected"):
+                    return None
+        except Exception:
+            pass
+        await asyncio.sleep(delay)
+    return None
+
+
 async def _execute_approved_orders(
     client: httpx.AsyncClient,
     master: MasterAgent,
@@ -246,6 +291,9 @@ async def _execute_approved_orders(
             continue
         try:
             result = await _place_order(client, sym, shares, "buy")
+            order_id = result.get("id")
+
+            # Record the entry with the pre-trade estimate first
             ledger.record_entry(
                 symbol=sym,
                 shares=shares,
@@ -258,6 +306,23 @@ async def _execute_approved_orders(
                 rationale=order.get("rationale", ""),
                 strategy=order.get("strategy", "unknown"),
             )
+
+            # Poll for actual fill price and update the ledger
+            if order_id:
+                fill_price = await _poll_fill_price(client, order_id)
+                if fill_price is not None:
+                    ledger.update_entry_price(sym, fill_price)
+                    logger.info(
+                        "Updated %s ledger entry_price to fill price $%.2f",
+                        sym, fill_price,
+                    )
+                else:
+                    logger.warning(
+                        "Could not get fill price for %s order %s; "
+                        "ledger retains pre-trade estimate",
+                        sym, order_id,
+                    )
+
             # Place stop-loss order on Alpaca immediately
             if order.get("stop_loss"):
                 try:
@@ -278,7 +343,7 @@ async def _execute_approved_orders(
                 "shares": shares,
                 "strategy": order.get("strategy"),
                 "conviction": order.get("conviction"),
-                "order_id": result.get("id"),
+                "order_id": order_id,
                 "status": result.get("status"),
             })
         except Exception as e:

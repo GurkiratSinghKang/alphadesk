@@ -210,6 +210,19 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
         "annualized_return_pct": 0,
         "last_trade_date": "",
     },
+    "manual-discretionary": {
+        "name": "Manual / Discretionary",
+        "description": "Your own trades placed directly on Alpaca. Claude reviews each trade with analysis of what went right and wrong.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
 }
 
 
@@ -286,6 +299,7 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
     "claude_alpha": "claude-alpha",
     "mean_reversion": "mean-reversion",
     "vcp_breakout": "vcp-breakout",
+    "manual": "manual-discretionary",
 }
 
 # Reverse mapping: strategy route ID -> ledger strategy name

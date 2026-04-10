@@ -12,11 +12,12 @@ import json
 import logging
 import math
 import re
+import shutil
 from typing import Any
 
 logger = logging.getLogger("alphadesk.strategy_runner")
 
-CLAUDE_CLI = r"C:\Users\gurki\.local\bin\claude.EXE"
+CLAUDE_CLI = shutil.which("claude")
 MAX_POSITION_DOLLAR = 5_000.0
 
 
@@ -197,7 +198,22 @@ async def _fetch_news_headlines(symbol: str, limit: int = 5) -> list[str]:
 
 
 async def _call_claude(prompt: str, symbol: str) -> dict[str, Any]:
-    """Invoke Claude CLI and return parsed JSON analysis."""
+    """Invoke Claude via CLI (if available) or Anthropic API (fallback)."""
+
+    # --- Try API first (more reliable in Docker) ---
+    try:
+        from core.config import settings
+        api_key = settings.ANTHROPIC_API_KEY.get_secret_value()
+        if api_key:
+            return await _call_claude_api(prompt, symbol, api_key)
+    except Exception:
+        pass
+
+    # --- Fallback to CLI ---
+    if CLAUDE_CLI is None:
+        logger.error("No Claude CLI or API key available for %s", symbol)
+        return {"symbol": symbol, "error": "no_claude"}
+
     cmd = [
         CLAUDE_CLI,
         "--print",
@@ -220,32 +236,69 @@ async def _call_claude(prompt: str, symbol: str) -> dict[str, Any]:
             return {"symbol": symbol, "error": err[:300]}
 
         raw = stdout.decode(errors="replace").strip()
-
-        # CLI returns {"type":"result","result":"..."}
         try:
             wrapper = json.loads(raw)
             text = wrapper.get("result", raw) if isinstance(wrapper, dict) else raw
         except json.JSONDecodeError:
             text = raw
 
+        return _parse_claude_response(text, symbol)
+
+    except asyncio.TimeoutError:
+        logger.error("Claude CLI timeout for %s", symbol)
+        return {"symbol": symbol, "error": "timeout"}
+    except Exception as e:
+        logger.error("Analysis error for %s: %s", symbol, e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+async def _call_claude_api(prompt: str, symbol: str, api_key: str) -> dict[str, Any]:
+    """Call Claude via the Anthropic API with retry on rate limits."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    for attempt in range(3):
+        try:
+            resp = await asyncio.wait_for(
+                client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": prompt}],
+                ),
+                timeout=60,
+            )
+            text = resp.content[0].text
+            return _parse_claude_response(text, symbol)
+
+        except anthropic.RateLimitError:
+            delay = 5 * (attempt + 1)
+            logger.warning("Rate limited for %s, retrying in %ds (attempt %d/3)", symbol, delay, attempt + 1)
+            await asyncio.sleep(delay)
+        except asyncio.TimeoutError:
+            logger.error("Claude API timeout for %s", symbol)
+            return {"symbol": symbol, "error": "timeout"}
+        except Exception as e:
+            logger.error("Claude API error for %s: %s", symbol, e)
+            return {"symbol": symbol, "error": str(e)}
+
+    logger.error("Claude API rate limited after 3 retries for %s", symbol)
+    return {"symbol": symbol, "error": "rate_limited"}
+
+
+def _parse_claude_response(text: str, symbol: str) -> dict[str, Any]:
+    """Parse Claude's text response into a structured analysis dict."""
+    try:
         json_match = re.search(r"\{[^{}]*\"signal\"[^{}]*\}", text, re.DOTALL)
         if json_match:
             analysis = json.loads(json_match.group())
         else:
             analysis = json.loads(text)
-
         analysis["symbol"] = symbol
         return analysis
-
-    except asyncio.TimeoutError:
-        logger.error("Claude CLI timeout for %s", symbol)
-        return {"symbol": symbol, "error": "timeout"}
-    except json.JSONDecodeError as e:
-        logger.error("JSON parse error for %s: %s", symbol, e)
-        return {"symbol": symbol, "error": f"json_parse: {e}"}
-    except Exception as e:
-        logger.error("Analysis error for %s: %s", symbol, e)
-        return {"symbol": symbol, "error": str(e)}
+    except json.JSONDecodeError:
+        logger.warning("Could not parse JSON from Claude for %s, using default", symbol)
+        return {"symbol": symbol, "signal": "hold", "score": 50, "rationale": text[:500]}
 
 
 def _score_to_signal(score: float, threshold_buy: float = 65.0) -> str:

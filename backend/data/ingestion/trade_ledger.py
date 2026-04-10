@@ -89,6 +89,27 @@ class TradeLedger:
         logger.info("Ledger: recorded ENTRY %s %d @ %.2f", symbol, shares, price)
         return trade
 
+    def update_entry_price(self, symbol: str, new_price: float) -> bool:
+        """Update entry_price for the most recent open trade of *symbol*.
+
+        Called after an order fill to replace the pre-trade estimate with
+        the actual fill price from the broker.  Returns True if a trade
+        was updated, False otherwise.
+        """
+        # Walk backwards so we update the most recent open trade first
+        for trade in reversed(self._data["trades"]):
+            if trade["symbol"] == symbol and trade["status"] == "open":
+                old = trade["entry_price"]
+                trade["entry_price"] = new_price
+                self._persist()
+                logger.info(
+                    "Ledger: updated entry price for %s: %.2f -> %.2f",
+                    symbol, old, new_price,
+                )
+                return True
+        logger.warning("Ledger: no open trade found for %s to update entry price", symbol)
+        return False
+
     def record_exit(
         self,
         symbol: str,
