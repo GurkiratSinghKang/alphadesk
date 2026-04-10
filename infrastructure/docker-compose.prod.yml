@@ -1,0 +1,95 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - alphadesk
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/OWNER/alphadesk-frontend:latest}
+    restart: unless-stopped
+    volumes: []
+    networks:
+      - alphadesk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/OWNER/alphadesk-backend:latest}
+    restart: unless-stopped
+    env_file: .env.prod
+    volumes: []
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - alphadesk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  timescaledb:
+    volumes:
+      - /var/lib/alphadesk/timescaledb:/var/lib/postgresql/data
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=50
+    networks:
+      - alphadesk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    volumes:
+      - /var/lib/alphadesk/redis:/data
+    networks:
+      - alphadesk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - /var/lib/alphadesk/uptime-kuma:/app/data
+    networks:
+      - alphadesk
+
+networks:
+  alphadesk:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

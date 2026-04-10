@@ -46,8 +46,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: dev
       DEBUG: "true"
-    volumes:
-      - ./backend:/app
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -62,30 +60,8 @@ services:
     container_name: alphadesk-frontend
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     depends_on:
       - backend
-    restart: unless-stopped
-
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: alphadesk-celery-worker
-    command: celery -A core.celery_app worker --loglevel=info --concurrency=4 -Q default,analysis,trades,alerts
-    environment:
-      DATABASE_URL: postgresql+asyncpg://alphadesk:alphadesk_dev@timescaledb:5432/alphadesk
-      REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: dev
-    volumes:
-      - ./backend:/app
-    depends_on:
-      timescaledb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:
