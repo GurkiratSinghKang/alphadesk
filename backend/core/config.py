@@ -71,6 +71,16 @@ class Settings(BaseSettings):
     # --- Dev settings ---
     SKIP_DB_INIT: bool = False
 
+    # --- Auth ---
+    JWT_SECRET: SecretStr = SecretStr("")
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD_HASH: str = ""  # bcrypt hash
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # --- Production ---
+    PRODUCTION_ORIGIN: str = ""  # e.g. "https://alphadesk.example.com"
+
     # --- Derived helpers ---
     @property
     def is_production(self) -> bool:
@@ -79,6 +89,13 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         return self.DATABASE_URL.replace("+asyncpg", "")
+
+    @property
+    def jwt_secret_value(self) -> str:
+        val = self.JWT_SECRET.get_secret_value()
+        if not val and self.is_production:
+            raise ValueError("JWT_SECRET must be set in production")
+        return val or "dev-insecure-secret-change-me"
 
 
 settings = Settings()
