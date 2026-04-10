@@ -172,22 +172,45 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     """Main WebSocket endpoint handler.
 
     Protocol:
-      Client sends JSON messages:
+      Client must authenticate first:
+        {"action": "auth", "token": "<jwt>"}
+
+      Then can subscribe/unsubscribe:
         {"action": "subscribe", "channel": "quotes"}
         {"action": "unsubscribe", "channel": "quotes"}
         {"action": "ping"}
-
-      Server sends JSON messages:
-        {"type": "subscribed", "channel": "quotes"}
-        {"channel": "quotes", ...data...}
-        {"type": "pong"}
     """
-    await manager.connect(ws)
-
-    # Start Redis listener if this is the first connection (singleton)
-    await _ensure_listener_started()
+    await ws.accept()
 
     try:
+        # Require auth as first message within 5 seconds
+        from core.auth import decode_token
+
+        try:
+            raw = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
+            msg = orjson.loads(raw)
+            if msg.get("action") != "auth" or not msg.get("token"):
+                await ws.send_bytes(orjson.dumps({"error": "First message must be auth"}))
+                await ws.close(code=4001, reason="Auth required")
+                return
+            decode_token(msg["token"], expected_type="access")
+            await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
+        except asyncio.TimeoutError:
+            await ws.close(code=4001, reason="Auth timeout")
+            return
+        except Exception:
+            await ws.send_bytes(orjson.dumps({"error": "Invalid token"}))
+            await ws.close(code=4001, reason="Auth failed")
+            return
+
+        # Auth passed — register connection
+        async with manager._lock:
+            manager._connections[ws] = set()
+            count = len(manager._connections)
+        logger.info("WebSocket client authenticated (%d active)", count)
+
+        await _ensure_listener_started()
+
         while True:
             raw = await ws.receive_text()
             try:
