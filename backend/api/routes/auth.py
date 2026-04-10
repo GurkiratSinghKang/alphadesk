@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core.auth import (
@@ -14,6 +15,28 @@ from core.auth import (
 from core.config import settings
 
 router = APIRouter()
+
+def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
+    """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
+    is_prod = settings.ENVIRONMENT == "prod"
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        max_age=expires_in,
+        httponly=True,
+        secure=is_prod,
+        samesite="strict",
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        secure=is_prod,
+        samesite="strict",
+        path="/api/v1/auth",
+    )
 
 
 class LoginRequest(BaseModel):
@@ -32,8 +55,8 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest) -> TokenResponse:
+@router.post("/login")
+async def login(request: LoginRequest):
     if (
         request.username != settings.ADMIN_USERNAME
         or not settings.ADMIN_PASSWORD_HASH
@@ -44,11 +67,19 @@ async def login(request: LoginRequest) -> TokenResponse:
             detail="Invalid username or password",
         )
 
-    return TokenResponse(
-        access_token=create_access_token(request.username),
-        refresh_token=create_refresh_token(request.username),
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
+    access_token = create_access_token(request.username)
+    refresh_token = create_refresh_token(request.username)
+    expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # Return tokens in body (for backward compat) AND set HttpOnly cookies
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+    })
+    _set_token_cookies(response, access_token, refresh_token, expires_in)
+    return response
 
 
 @router.post("/refresh", response_model=TokenResponse)

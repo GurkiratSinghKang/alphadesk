@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import bcrypt
 from jose import JWTError, jwt
@@ -55,12 +55,22 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
 
 
 async def require_auth(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> str:
-    """FastAPI dependency — validates Bearer token and returns username."""
-    if credentials is None:
+    """FastAPI dependency — validates Bearer token (header or HttpOnly cookie) and returns username."""
+    token: str | None = None
+
+    # 1. Try Authorization header first
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        # 2. Fall back to HttpOnly cookie
+        token = request.cookies.get("access_token")
+
+    if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = decode_token(credentials.credentials, expected_type="access")
+    payload = decode_token(token, expected_type="access")
     username: str | None = payload.get("sub")
     if username is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")

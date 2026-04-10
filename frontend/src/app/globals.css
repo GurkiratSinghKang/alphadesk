@@ -209,4 +209,51 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Subtle glow effects */
+  .glow-profit {
+    text-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+  }
+  .glow-loss {
+    text-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+
+  /* Card hover glow */
+  .card-glow {
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .card-glow:hover {
+    border-color: rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.06);
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, #e2e2ea 0%, #a0a0b0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* Subtle page background gradient */
+body {
+  background: linear-gradient(180deg, #0a0a0f 0%, #0d0d16 50%, #0a0a12 100%);
+  background-attachment: fixed;
+}
+
+/* Top bar glass effect */
+header {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Smooth transitions globally */
+*, *::before, *::after {
+  transition-property: color, background-color, border-color, box-shadow, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0ms;
+}
+button, a, [role="button"], input, select, .transition-colors, .transition-all {
+  transition-duration: 150ms;
 }

@@ -37,6 +37,7 @@ out/
 # Environment & Secrets
 # =============================================================================
 .env
+.env.prod
 .env.local
 .env.*.local
 *.pem
