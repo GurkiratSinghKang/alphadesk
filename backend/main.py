@@ -5,8 +5,10 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from core.auth import require_auth
+from api.routes import auth as auth_routes
 
 from core.config import settings
 from core.database import init_db, close_db
@@ -104,32 +106,37 @@ app = FastAPI(
     redoc_url="/redoc" if not settings.is_production else None,
 )
 
+cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if settings.PRODUCTION_ORIGIN:
+    cors_origins.append(settings.PRODUCTION_ORIGIN)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- Routers ---
-app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"])
-app.include_router(screener.router, prefix="/api/v1/screener", tags=["Screener"])
-app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
-app.include_router(options.router, prefix="/api/v1/options", tags=["Options"])
-app.include_router(trades.router, prefix="/api/v1/trades", tags=["Trades"])
-app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["Portfolio"])
-app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"])
+app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])
+app.include_router(screener.router, prefix="/api/v1/screener", tags=["Screener"], dependencies=[Depends(require_auth)])
+app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"], dependencies=[Depends(require_auth)])
+app.include_router(options.router, prefix="/api/v1/options", tags=["Options"], dependencies=[Depends(require_auth)])
+app.include_router(trades.router, prefix="/api/v1/trades", tags=["Trades"], dependencies=[Depends(require_auth)])
+app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["Portfolio"], dependencies=[Depends(require_auth)])
+app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"], dependencies=[Depends(require_auth)])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
-app.include_router(symbols.router, prefix="/api/v1/symbols", tags=["Symbols"])
-app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["Strategies"])
-app.include_router(market_overview.router, prefix="/api/v1/market-overview", tags=["Market Overview"])
-app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"])
-app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"])
-app.include_router(news.router, prefix="/api/v1/news", tags=["News"])
+app.include_router(symbols.router, prefix="/api/v1/symbols", tags=["Symbols"], dependencies=[Depends(require_auth)])
+app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["Strategies"], dependencies=[Depends(require_auth)])
+app.include_router(market_overview.router, prefix="/api/v1/market-overview", tags=["Market Overview"], dependencies=[Depends(require_auth)])
+app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependencies=[Depends(require_auth)])
+app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
+app.include_router(news.router, prefix="/api/v1/news", tags=["News"], dependencies=[Depends(require_auth)])
+app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
 
 # --- WebSocket ---
 app.websocket("/ws")(websocket_endpoint)
@@ -138,6 +145,8 @@ app.websocket("/ws")(websocket_endpoint)
 # --- Health ---
 @app.get("/health", tags=["Health"])
 async def health_check() -> dict:
+    if settings.is_production:
+        return {"status": "ok"}
     return {
         "status": "healthy",
         "environment": settings.ENVIRONMENT.value,
