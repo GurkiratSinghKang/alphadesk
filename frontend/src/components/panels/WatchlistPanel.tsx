@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
-import { formatCurrency, formatPercent, getChangeTextClass } from "@/lib/utils";
+import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
 import type { Quote, ScreenerResult } from "@/types";
 
@@ -110,7 +110,12 @@ function WatchlistRow({
         {quote ? formatCurrency(quote.last) : "---"}
       </div>
 
-      <div className={`w-14 text-right tabular-nums ${changeColor}`}>
+      <div className={cn(
+        "w-14 text-right tabular-nums rounded px-1 py-0.5",
+        changeColor,
+        quote && change > 0 && "bg-[var(--profit)]/10",
+        quote && change < 0 && "bg-[var(--loss)]/10",
+      )}>
         {quote ? formatPercent(change) : "---"}
       </div>
 

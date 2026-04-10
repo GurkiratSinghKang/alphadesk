@@ -9,6 +9,8 @@ from enum import Enum
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from api.routes.market import _is_valid_demo_symbol
+
 router = APIRouter()
 
 
@@ -302,6 +304,8 @@ async def get_options_chain(
     Black-Scholes-Merton.
     """
     if _polygon_key_empty():
+        if not _is_valid_demo_symbol(symbol):
+            raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
         return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
 
     try:
@@ -330,6 +334,8 @@ async def get_options_chain(
                 )
             if resp.status_code in (401, 403):
                 # API key lacks options permissions — fall back to demo
+                if not _is_valid_demo_symbol(symbol):
+                    raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
                 return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
             if resp.status_code != 200:
                 raise HTTPException(status_code=resp.status_code, detail=f"Polygon options error: {resp.text[:200]}")
@@ -403,6 +409,8 @@ async def get_options_chain(
     except HTTPException:
         raise
     except Exception:
+        if not _is_valid_demo_symbol(symbol):
+            raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
         return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
 
 
@@ -428,7 +436,9 @@ async def get_iv_analysis(symbol: str) -> IVData:
         iv_values = iv_history.get("values", [])
 
         if not iv_values:
-            # No cached data available — return demo
+            # No cached data available — return demo (only for valid symbols)
+            if not _is_valid_demo_symbol(symbol):
+                raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
             return _demo_iv(symbol)
 
         current_iv = iv_values[-1]
