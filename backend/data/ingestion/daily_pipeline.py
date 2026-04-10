@@ -1,0 +1,703 @@
+"""
+AlphaDesk Daily Trading Pipeline — Multi-Strategy Edition
+
+Runs every trading day:
+1. Create Master Agent (portfolio gatekeeper)
+2. Run each strategy: screen -> analyze -> generate trades (ask Master)
+3. Execute approved trades via Alpaca
+4. Check exits for existing positions
+5. Log everything
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import math
+import re
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import httpx
+
+from core.config import settings
+from data.ingestion.master_agent import MasterAgent
+from data.ingestion.strategy_runner import (
+    ALL_STRATEGIES,
+    BaseStrategyRunner,
+)
+from data.ingestion.trade_ledger import TradeLedger
+
+logger = logging.getLogger("alphadesk.pipeline")
+
+ET = ZoneInfo("America/New_York")
+
+# ----- Safety constants -----
+MAX_POSITION_PCT = 0.05          # 5 % of equity per position
+MAX_POSITION_DOLLAR = 5_000.0    # hard cap per position
+MAX_OPEN_POSITIONS = 15
+MAX_DAILY_TRADES = 30
+CIRCUIT_BREAKER_PCT = -0.02      # stop if daily P&L < -2 %
+MIN_CONVICTION = 60
+ANALYZE_TOP_N = 15               # total analysis budget across all strategies
+SCREEN_TOP_N = 100               # screen more, strategies will filter
+
+CLAUDE_CLI = r"C:\Users\gurki\.local\bin\claude.EXE"
+LOG_DIR = Path(__file__).resolve().parent.parent / "pipeline_logs"
+
+
+async def _get_vix_level(client: httpx.AsyncClient) -> float:
+    """Fetch VIX proxy level from Alpaca (using UVXY as proxy)."""
+    try:
+        resp = await client.get(
+            "https://data.alpaca.markets/v2/stocks/UVXY/snapshot",
+            headers=_alpaca_headers(),
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # UVXY is a proxy; real VIX would need options data
+            # Use a simple mapping: UVXY $15 ~ VIX 16
+            uvxy_price = data.get("latestTrade", {}).get("p", 15)
+            return round(uvxy_price * 1.1, 1)  # rough proxy
+    except Exception:
+        pass
+    return 16.5  # default
+
+# ----- Pipeline state -----
+_pipeline_status: dict[str, Any] = {
+    "running": False,
+    "last_run": None,
+    "last_result": None,
+}
+
+
+def get_pipeline_status() -> dict[str, Any]:
+    return dict(_pipeline_status)
+
+
+# =====================================================================
+# Helpers
+# =====================================================================
+
+def _alpaca_headers() -> dict[str, str]:
+    return {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        "Content-Type": "application/json",
+    }
+
+
+def _base_url() -> str:
+    url = settings.ALPACA_BASE_URL
+    if "paper" not in url:
+        raise RuntimeError(
+            f"SAFETY: ALPACA_BASE_URL ({url}) does not contain 'paper'. "
+            "Refusing to trade on a live account."
+        )
+    return url.rstrip("/")
+
+
+def _is_within_trading_window() -> bool:
+    """Return True when current ET time is between 9:35 and 15:55."""
+    now = datetime.now(ET)
+    market_open = now.replace(hour=9, minute=35, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=55, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+
+def _now_et() -> datetime:
+    return datetime.now(ET)
+
+
+# =====================================================================
+# Alpaca helpers
+# =====================================================================
+
+async def _get_account(client: httpx.AsyncClient) -> dict[str, Any]:
+    resp = await client.get(f"{_base_url()}/v2/account", headers=_alpaca_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _get_positions(client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    resp = await client.get(f"{_base_url()}/v2/positions", headers=_alpaca_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _place_order(
+    client: httpx.AsyncClient,
+    symbol: str,
+    qty: int,
+    side: str,
+) -> dict[str, Any]:
+    """Place a market order on Alpaca paper."""
+    body = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": side,
+        "type": "market",
+        "time_in_force": "day",
+    }
+    resp = await client.post(
+        f"{_base_url()}/v2/orders",
+        headers=_alpaca_headers(),
+        json=body,
+    )
+    resp.raise_for_status()
+    order = resp.json()
+    logger.info(
+        "Order placed: %s %s %d shares  order_id=%s",
+        side.upper(), symbol, qty, order.get("id"),
+    )
+    return order
+
+
+async def _place_stop_order(client: httpx.AsyncClient, symbol: str, qty: int, stop_price: float) -> dict[str, Any]:
+    """Place a stop-loss sell order on Alpaca."""
+    body = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": "sell",
+        "type": "stop",
+        "stop_price": str(round(stop_price, 2)),
+        "time_in_force": "gtc",  # Good-til-cancelled
+    }
+    resp = await client.post(
+        f"{_base_url()}/v2/orders",
+        headers=_alpaca_headers(),
+        json=body,
+    )
+    resp.raise_for_status()
+    order = resp.json()
+    logger.info("Stop-loss order placed: SELL %s %d shares @ $%.2f  order_id=%s",
+                symbol, qty, stop_price, order.get("id"))
+    return order
+
+
+async def _place_limit_order(client: httpx.AsyncClient, symbol: str, qty: int, limit_price: float) -> dict[str, Any]:
+    """Place a take-profit limit sell order on Alpaca."""
+    body = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": "sell",
+        "type": "limit",
+        "limit_price": str(round(limit_price, 2)),
+        "time_in_force": "gtc",
+    }
+    resp = await client.post(
+        f"{_base_url()}/v2/orders",
+        headers=_alpaca_headers(),
+        json=body,
+    )
+    resp.raise_for_status()
+    order = resp.json()
+    logger.info("Take-profit order placed: SELL %s %d shares @ $%.2f  order_id=%s",
+                symbol, qty, limit_price, order.get("id"))
+    return order
+
+
+async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) -> list[dict[str, Any]]:
+    """Ensure all open positions have active stop-loss orders on Alpaca."""
+    placed: list[dict[str, Any]] = []
+    open_positions = ledger.get_open_positions()
+
+    # Get existing orders to avoid duplicates
+    resp = await client.get(f"{_base_url()}/v2/orders?status=open", headers=_alpaca_headers())
+    existing_orders = resp.json() if resp.status_code == 200 else []
+    symbols_with_stops = {o["symbol"] for o in existing_orders if o.get("type") == "stop" and o.get("side") == "sell"}
+
+    for trade in open_positions:
+        sym = trade["symbol"]
+        if sym in symbols_with_stops:
+            continue  # already has a stop
+
+        stop_price = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss")
+        if not stop_price:
+            # Default stop: 5% below entry
+            stop_price = trade.get("entry_price", 0) * 0.95
+
+        if stop_price and stop_price > 0:
+            try:
+                order = await _place_stop_order(client, sym, trade["shares"], stop_price)
+                placed.append({"symbol": sym, "stop_price": stop_price, "order_id": order.get("id")})
+            except Exception as e:
+                logger.error("Failed to place stop for %s: %s", sym, e)
+
+    return placed
+
+
+async def _execute_approved_orders(
+    client: httpx.AsyncClient,
+    master: MasterAgent,
+    ledger: TradeLedger,
+) -> list[dict[str, Any]]:
+    """Place buy orders for all approved pending orders from the master agent."""
+    orders_placed: list[dict[str, Any]] = []
+    for order in master.pending_orders:
+        if order["side"] != "buy":
+            continue
+        sym = order["symbol"]
+        shares = order.get("shares", 0)
+        if shares < 1:
+            continue
+        try:
+            result = await _place_order(client, sym, shares, "buy")
+            ledger.record_entry(
+                symbol=sym,
+                shares=shares,
+                price=order.get("entry_price", 0),
+                signal={
+                    "stop_loss": order.get("stop_loss"),
+                    "take_profit": order.get("take_profit"),
+                    "conviction": order.get("conviction", 0),
+                },
+                rationale=order.get("rationale", ""),
+                strategy=order.get("strategy", "unknown"),
+            )
+            # Place stop-loss order on Alpaca immediately
+            if order.get("stop_loss"):
+                try:
+                    stop_order = await _place_stop_order(client, sym, shares, order["stop_loss"])
+                except Exception as e:
+                    logger.error("Stop-loss order failed for %s: %s", sym, e)
+
+            # Place take-profit limit order on Alpaca immediately
+            if order.get("take_profit"):
+                try:
+                    take_profit_order = await _place_limit_order(client, sym, shares, order["take_profit"])
+                except Exception as e:
+                    logger.error("Take-profit order failed for %s: %s", sym, e)
+
+            orders_placed.append({
+                "symbol": sym,
+                "side": "buy",
+                "shares": shares,
+                "strategy": order.get("strategy"),
+                "conviction": order.get("conviction"),
+                "order_id": result.get("id"),
+                "status": result.get("status"),
+            })
+        except Exception as e:
+            logger.error("Order failed for %s: %s", sym, e)
+            orders_placed.append({
+                "symbol": sym,
+                "side": "buy",
+                "shares": shares,
+                "strategy": order.get("strategy"),
+                "error": str(e),
+            })
+    return orders_placed
+
+
+async def _check_exits(
+    client: httpx.AsyncClient,
+    ledger: TradeLedger,
+) -> list[dict[str, Any]]:
+    """Check open positions against stop loss / take profit."""
+    closed_orders: list[dict[str, Any]] = []
+    open_trades = ledger.get_open_positions()
+
+    if not open_trades:
+        return closed_orders
+
+    try:
+        positions = await _get_positions(client)
+    except Exception as e:
+        logger.error("Failed to fetch positions: %s", e)
+        return closed_orders
+
+    pos_map = {p["symbol"]: p for p in positions}
+
+    for trade in open_trades:
+        sym = trade["symbol"]
+        pos = pos_map.get(sym)
+        if not pos:
+            continue
+
+        current_price = float(pos.get("current_price", 0))
+        stop = trade.get("stop_loss")
+        target = trade.get("take_profit")
+        entry_price = trade.get("entry_price", 0)
+
+        reason = None
+        if stop and current_price <= stop:
+            reason = "stop_loss"
+        elif target and current_price >= target:
+            reason = "take_profit"
+
+        # Time-based exit: Close positions held > 20 trading days (~28 calendar days)
+        if not reason:
+            entry_date = datetime.fromisoformat(trade.get("entry_time", "2026-01-01"))
+            days_held = (datetime.now(timezone.utc) - entry_date).days
+            if days_held > 28:
+                reason = f"time_exit: held {days_held} days (max 20 trading days)"
+
+        # Trailing stop: If position is up > 5%, move stop to breakeven + buffer
+        if not reason and entry_price > 0 and current_price > entry_price * 1.05:
+            new_stop = entry_price * 1.01  # Move stop to 1% above entry (breakeven + buffer)
+            old_stop = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss", 0) or 0
+            if new_stop > old_stop:
+                # Update the stop in the trade record for next check
+                trade["stop_loss"] = round(new_stop, 2)
+                if trade.get("signal") and isinstance(trade["signal"], dict):
+                    trade["signal"]["stop_loss"] = round(new_stop, 2)
+                # Cancel old stop order and place new one at higher level
+                try:
+                    # Cancel existing stop orders for this symbol
+                    resp = await client.get(
+                        f"{_base_url()}/v2/orders?status=open&symbols={sym}",
+                        headers=_alpaca_headers(),
+                    )
+                    if resp.status_code == 200:
+                        for existing_order in resp.json():
+                            if existing_order.get("type") == "stop" and existing_order.get("side") == "sell":
+                                await client.delete(
+                                    f"{_base_url()}/v2/orders/{existing_order['id']}",
+                                    headers=_alpaca_headers(),
+                                )
+                    await _place_stop_order(client, sym, trade["shares"], round(new_stop, 2))
+                    logger.info(
+                        "Trailing stop updated for %s: raised from $%.2f to $%.2f",
+                        sym, old_stop, new_stop,
+                    )
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 403:
+                        logger.debug("Trailing stop for %s skipped (403 — check Alpaca account/permissions)", sym)
+                    else:
+                        logger.warning("Failed to update trailing stop for %s: %s", sym, e)
+                except Exception as e:
+                    logger.warning("Failed to update trailing stop for %s: %s", sym, e)
+
+        if reason:
+            try:
+                order = await _place_order(client, sym, trade["shares"], "sell")
+                ledger.record_exit(sym, trade["shares"], current_price, reason)
+                closed_orders.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "shares": trade["shares"],
+                    "price": current_price,
+                    "reason": reason,
+                    "strategy": trade.get("strategy", "unknown"),
+                    "order_id": order.get("id"),
+                })
+            except Exception as e:
+                logger.error("Exit order failed for %s: %s", sym, e)
+                closed_orders.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "error": str(e),
+                })
+
+    return closed_orders
+
+
+# =====================================================================
+# Log
+# =====================================================================
+
+def _save_log(log: dict[str, Any]) -> Path:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    date_str = log.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    path = LOG_DIR / f"{date_str}.json"
+    path.write_text(json.dumps(log, indent=2, default=str), encoding="utf-8")
+    logger.info("Pipeline log saved to %s", path)
+    return path
+
+
+# =====================================================================
+# Main pipeline entry point
+# =====================================================================
+
+async def run_daily_pipeline(
+    screen_limit: int = SCREEN_TOP_N,
+    analyze_limit: int = ANALYZE_TOP_N,
+) -> dict[str, Any]:
+    """Execute the full multi-strategy daily trading pipeline."""
+    global _pipeline_status
+
+    if _pipeline_status["running"]:
+        return {"error": "Pipeline is already running"}
+
+    _pipeline_status["running"] = True
+    _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
+
+    errors: list[str] = []
+    log: dict[str, Any] = {
+        "date": _now_et().strftime("%Y-%m-%d"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "strategies": {},
+        "master_agent": {},
+        "orders_placed": [],
+        "orders_closed": [],
+        "portfolio_snapshot": {},
+        "errors": errors,
+    }
+
+    try:
+        # Safety: paper-only check
+        _base_url()
+
+        # Safety: trading window check
+        if not _is_within_trading_window():
+            now = _now_et()
+            logger.warning("Outside trading window (%s ET)", now.strftime("%H:%M"))
+            errors.append(f"Outside trading window ({now.strftime('%H:%M')} ET)")
+
+        ledger = TradeLedger()
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            # ---- Account state ----
+            try:
+                account = await _get_account(client)
+                equity = float(account.get("equity", 100_000))
+                cash = float(account.get("cash", 0))
+                day_pnl = float(account.get("equity", 0)) - float(
+                    account.get("last_equity", account.get("equity", 0))
+                )
+            except Exception as e:
+                logger.error("Cannot reach Alpaca account: %s", e)
+                equity = 100_000
+                cash = 100_000
+                day_pnl = 0
+                errors.append(f"Alpaca account unreachable: {e}")
+
+            # ---- Circuit breaker ----
+            if equity > 0 and (day_pnl / equity) < CIRCUIT_BREAKER_PCT:
+                msg = (
+                    f"CIRCUIT BREAKER: daily P&L {day_pnl:.2f} "
+                    f"({day_pnl/equity*100:.1f}%) exceeds -{abs(CIRCUIT_BREAKER_PCT)*100}% limit"
+                )
+                logger.critical(msg)
+                errors.append(msg)
+                log["portfolio_snapshot"] = {"equity": equity, "cash": cash, "day_pnl": day_pnl}
+                _save_log(log)
+                _pipeline_status["running"] = False
+                _pipeline_status["last_result"] = "circuit_breaker"
+                return log
+
+            # ---- Fetch VIX level for regime detection (P3) ----
+            vix_level = await _get_vix_level(client)
+
+            # ---- Ensure all existing positions have stop-loss orders ----
+            try:
+                stops_placed = await _ensure_stop_orders(client, ledger)
+                if stops_placed:
+                    logger.info("Placed %d missing stop-loss orders", len(stops_placed))
+                    log["stops_ensured"] = stops_placed
+            except Exception as e:
+                logger.error("Failed to ensure stop orders: %s", e)
+                errors.append(f"Stop order check failed: {e}")
+
+            # ---- Create Master Agent ----
+            existing_positions = ledger.get_position_strategy_map()
+            master = MasterAgent(
+                equity=equity,
+                cash=cash,
+                existing_positions=existing_positions,
+                vix_level=vix_level,
+            )
+            logger.info(
+                "Master Agent: regime=%s, VIX=%.1f, max_deployment=%.0f%%",
+                master.regime, master.vix_level, master.max_deployment * 100,
+            )
+
+            # ---- Factor crowding detection ----
+            crowding = master.detect_factor_crowding()
+            log["factor_crowding"] = crowding
+            if crowding["crowded"]:
+                for w in crowding["warnings"]:
+                    logger.warning("CROWDING: [%s] %s", w["factor"], w["message"])
+
+            # ---- Populate momentum data for the momentum filter ----
+            try:
+                from data.ingestion.strategy_runner import _get_screener_results
+                screened = _get_screener_results(limit=100)
+                momentum_data: dict[str, float] = {}
+                for stock in screened:
+                    momentum_data[stock["symbol"]] = stock.get("change_pct", 0)
+
+                # Fetch actual 6-month returns for top candidates
+                for stock in screened[:20]:
+                    sym = stock["symbol"]
+                    try:
+                        resp = await client.get(
+                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars",
+                            headers=_alpaca_headers(),
+                            params={
+                                "timeframe": "1Day",
+                                "limit": 1,
+                                "start": (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y-%m-%d"),
+                                "feed": "iex",
+                            },
+                        )
+                        if resp.status_code == 200:
+                            bars = resp.json().get("bars", [])
+                            if bars:
+                                price_6m_ago = bars[0]["c"]
+                                current_price = stock.get("price", price_6m_ago)
+                                if current_price and price_6m_ago:
+                                    momentum_data[sym] = ((current_price / price_6m_ago) - 1) * 100
+                    except Exception:
+                        pass
+
+                MasterAgent.set_momentum_data(momentum_data)
+                logger.info("Momentum data populated for %d symbols", len(momentum_data))
+
+                # Fetch 12-month absolute momentum (Antonacci Dual Momentum)
+                abs_momentum: dict[str, float] = {}
+                for stock in screened[:30]:
+                    sym = stock["symbol"]
+                    try:
+                        resp = await client.get(
+                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars",
+                            headers=_alpaca_headers(),
+                            params={
+                                "timeframe": "1Day",
+                                "limit": 1,
+                                "start": (_now_et() - timedelta(days=365)).strftime("%Y-%m-%d"),
+                                "feed": "iex",
+                            },
+                        )
+                        if resp.status_code == 200:
+                            bars = resp.json().get("bars", [])
+                            if bars:
+                                price_1y_ago = bars[0]["c"]
+                                current = stock.get("price", 0)
+                                if current and price_1y_ago:
+                                    abs_momentum[sym] = ((current / price_1y_ago) - 1) * 100
+                    except Exception:
+                        pass
+
+                MasterAgent.set_absolute_momentum(abs_momentum)
+                logger.info("Absolute momentum (12-month) data populated for %d symbols", len(abs_momentum))
+            except Exception as e:
+                logger.error("Failed to populate momentum data: %s", e)
+                errors.append(f"Momentum data failed: {e}")
+
+            # ---- Run each strategy ----
+            strategy_instances = [cls() for cls in ALL_STRATEGIES]
+            num_strategies = len(strategy_instances)
+            per_strategy_limit = max(2, analyze_limit // num_strategies)
+
+            for strategy in strategy_instances:
+                strat_name = strategy.name
+                logger.info("Running strategy: %s", strat_name)
+
+                try:
+                    # Screen
+                    candidates = await strategy.screen()
+                    logger.info(
+                        "  %s screened %d candidates", strat_name, len(candidates),
+                    )
+
+                    # Analyze (limit per strategy to conserve CLI calls)
+                    to_analyze = candidates[:per_strategy_limit]
+                    analyses = await strategy.analyze(to_analyze)
+                    logger.info(
+                        "  %s analyzed %d candidates", strat_name, len(analyses),
+                    )
+
+                    # Generate trades (asks master for permission)
+                    trades = await strategy.generate_trades(analyses, master)
+                    approved = [t for t in trades if t.get("approved")]
+                    logger.info(
+                        "  %s: %d trades requested, %d approved",
+                        strat_name, len(trades), len(approved),
+                    )
+
+                    log["strategies"][strat_name] = {
+                        "screened": len(candidates),
+                        "analyzed": len(analyses),
+                        "analyses": analyses,
+                        "trades_requested": len(trades),
+                        "trades_approved": len(approved),
+                        "trades": trades,
+                    }
+
+                except Exception as e:
+                    logger.exception("Strategy %s failed: %s", strat_name, e)
+                    errors.append(f"Strategy {strat_name} failed: {e}")
+                    log["strategies"][strat_name] = {"error": str(e)}
+
+            # ---- Update strategy PnL (P1) ----
+            strategy_values: dict[str, float] = {}
+            for sym, pos in master.existing_positions.items():
+                strat = pos.get("strategy", "unknown")
+                strategy_values[strat] = strategy_values.get(strat, 0) + pos.get("notional", 0)
+            for strat, value in strategy_values.items():
+                pnl_result = master.update_strategy_pnl(strat, value)
+                if pnl_result["action"] == "halt":
+                    logger.warning(
+                        "Strategy '%s' HALTED: drawdown %.1f%%",
+                        strat, pnl_result["drawdown"] * 100,
+                    )
+
+            # ---- Master Agent summary ----
+            summary = master.get_summary()
+            log["master_agent"] = {
+                "approved": len(master.pending_orders),
+                "rejected": len(master.rejections),
+                "rejections": master.rejections,
+                "summary": summary,
+                "regime": master.regime,
+                "vix_level": master.vix_level,
+                "max_deployment_pct": master.max_deployment * 100,
+                "sector_exposure": master._get_sector_exposure(),
+                "portfolio_var": master._portfolio_var(),
+                "halted_strategies": list(master.halted_strategies),
+            }
+
+            # ---- Execute approved orders ----
+            orders_placed = await _execute_approved_orders(client, master, ledger)
+            log["orders_placed"] = orders_placed
+
+            # ---- Check exits ----
+            closed = await _check_exits(client, ledger)
+            log["orders_closed"] = closed
+
+            # ---- Portfolio snapshot ----
+            try:
+                account = await _get_account(client)
+                positions = await _get_positions(client)
+                log["portfolio_snapshot"] = {
+                    "equity": float(account.get("equity", 0)),
+                    "cash": float(account.get("cash", 0)),
+                    "positions": len(positions),
+                    "day_pnl": day_pnl,
+                }
+            except Exception as e:
+                errors.append(f"Snapshot failed: {e}")
+                log["portfolio_snapshot"] = {"equity": equity, "cash": cash}
+
+    except Exception as e:
+        logger.exception("Pipeline failed: %s", e)
+        errors.append(f"Pipeline exception: {e}")
+    finally:
+        _save_log(log)
+        _pipeline_status["running"] = False
+        _pipeline_status["last_result"] = "success" if not errors else "completed_with_errors"
+
+    return log
+
+
+async def run_position_check() -> dict[str, Any]:
+    """Mid-day or end-of-day position check for stop/target exits."""
+    logger.info("Running position check")
+    ledger = TradeLedger()
+    result: dict[str, Any] = {"closed": [], "errors": []}
+
+    try:
+        _base_url()
+        async with httpx.AsyncClient(timeout=30) as client:
+            closed = await _check_exits(client, ledger)
+            result["closed"] = closed
+    except Exception as e:
+        logger.error("Position check failed: %s", e)
+        result["errors"].append(str(e))
+
+    return result

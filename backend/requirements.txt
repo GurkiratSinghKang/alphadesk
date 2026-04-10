@@ -1,0 +1,52 @@
+# Core web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+websockets>=14.0
+httpx>=0.28.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+python-dotenv>=1.0.0
+orjson>=3.10.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30.0
+alembic>=1.14.0
+redis>=5.2.0
+
+# Task queue
+celery[redis]>=5.4.0
+
+# Data science core
+pandas>=2.2.0
+numpy>=2.0.0
+polars>=1.16.0
+scipy>=1.14.0
+
+# ML
+lightgbm>=4.5.0
+xgboost>=2.1.0
+scikit-learn>=1.6.0
+optuna>=4.1.0
+hmmlearn>=0.3.3
+
+# Trading
+polygon-api-client>=1.14.0
+alpaca-py>=0.33.0
+
+# Claude AI
+anthropic>=0.40.0
+
+# Technical analysis
+pandas-ta>=0.3.14b1
+
+# Options math
+py_vollib>=1.0.1
+
+# Notifications
+python-telegram-bot>=21.9
+
+# Fundamentals (install separately - heavy)
+# edgartools>=3.4.0
+# openbb>=4.4.0
+# quantstats>=0.0.64

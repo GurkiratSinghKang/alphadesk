@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: alphadesk-timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: alphadesk
+      POSTGRES_PASSWORD: alphadesk_dev
+      POSTGRES_DB: alphadesk
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alphadesk -d alphadesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: alphadesk-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alphadesk-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://alphadesk:alphadesk_dev@timescaledb:5432/alphadesk
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: dev
+      DEBUG: "true"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: alphadesk-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alphadesk-celery-worker
+    command: celery -A core.celery_app worker --loglevel=info --concurrency=4 -Q default,analysis,trades,alerts
+    environment:
+      DATABASE_URL: postgresql+asyncpg://alphadesk:alphadesk_dev@timescaledb:5432/alphadesk
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: dev
+    volumes:
+      - ./backend:/app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  timescaledb_data:
+    driver: local
+  redis_data:
+    driver: local

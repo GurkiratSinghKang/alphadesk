@@ -1,0 +1,41 @@
+{
+  "trades": [
+    {
+      "id": 1,
+      "symbol": "MRK",
+      "shares": 43,
+      "entry_price": 113.84,
+      "entry_time": "2026-04-08T15:22:04.757089+00:00",
+      "stop_loss": 108.15,
+      "take_profit": 125.22,
+      "conviction": 79,
+      "rationale": "PEAD: MRK moved +4.8% (composite 76), drift expected to continue.",
+      "strategy": "pead",
+      "status": "open",
+      "exit_price": null,
+      "exit_time": null,
+      "exit_reason": null,
+      "pnl": null,
+      "pnl_pct": null
+    },
+    {
+      "id": 2,
+      "symbol": "PG",
+      "shares": 28,
+      "entry_price": 171.27,
+      "entry_time": "2026-04-08T15:22:04.781741+00:00",
+      "stop_loss": 162.71,
+      "take_profit": 188.4,
+      "conviction": 79,
+      "rationale": "EarningsVol: PG IV Rank 82, implied vol appears overpriced vs historical.",
+      "strategy": "earnings_vol",
+      "status": "closed",
+      "exit_price": 144.68,
+      "exit_time": "2026-04-08T18:01:42.864518+00:00",
+      "exit_reason": "stop_loss",
+      "pnl": -744.52,
+      "pnl_pct": -15.53
+    }
+  ],
+  "version": 1
+}

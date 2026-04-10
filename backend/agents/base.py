@@ -1,0 +1,299 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import shutil
+import time
+from abc import ABC
+from typing import Any
+
+from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Model aliases — used for both CLI and API
+MODEL_OPUS = "opus"
+MODEL_SONNET = "sonnet"
+MODEL_HAIKU = "haiku"
+
+# Locate the claude CLI binary
+CLAUDE_CLI = shutil.which("claude")
+
+
+class BaseAgent(ABC):
+    """Base class for all AlphaDesk agents.
+
+    Uses Claude CLI subprocess (Option 2) as the primary execution method.
+    This leverages the user's existing Claude Code subscription — no separate
+    API key required. Falls back to the Anthropic API if CLI is unavailable.
+    """
+
+    name: str = "base"
+    model: str = MODEL_SONNET
+    system_prompt: str = "You are a helpful trading assistant."
+    mcp_servers: list[str] = []
+    max_retries: int = 2
+    retry_delay: float = 1.0
+
+    def __init__(self) -> None:
+        self.logger = logging.getLogger(f"agent.{self.name}")
+        self._use_cli = CLAUDE_CLI is not None
+        self._api_client = None
+
+        if self._use_cli:
+            self.logger.info("Agent '%s' using Claude CLI at %s", self.name, CLAUDE_CLI)
+        else:
+            # Fallback to API
+            api_key = settings.ANTHROPIC_API_KEY.get_secret_value()
+            if api_key:
+                import anthropic
+                self._api_client = anthropic.AsyncAnthropic(api_key=api_key)
+                self.logger.info("Agent '%s' using Anthropic API", self.name)
+            else:
+                self.logger.warning("Agent '%s': no CLI or API key — unavailable", self.name)
+
+    @property
+    def available(self) -> bool:
+        return self._use_cli or self._api_client is not None
+
+    async def run(self, task: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute a task. Tries CLI first, falls back to API."""
+        if not self.available:
+            return {"response": f"Agent '{self.name}' unavailable (no Claude CLI or API key).", "error": True}
+
+        # Build the full prompt with context
+        prompt = self._build_prompt(task, context)
+
+        if self._use_cli:
+            return await self._run_cli(prompt)
+        else:
+            return await self._run_api(prompt)
+
+    async def run_with_tools(
+        self,
+        task: str,
+        tools: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
+        max_iterations: int = 10,
+    ) -> dict[str, Any]:
+        """Run with tools. CLI mode uses --allowedTools, API mode uses tool loop."""
+        prompt = self._build_prompt(task, context)
+
+        if self._use_cli:
+            # CLI can use allowed tools natively
+            tool_names = [t.get("name", "") for t in tools if t.get("name")]
+            return await self._run_cli(prompt, allowed_tools=tool_names)
+        elif self._api_client:
+            return await self._run_api_with_tools(prompt, tools, max_iterations)
+        else:
+            return {"response": "Agent unavailable.", "error": True}
+
+    # ------------------------------------------------------------------
+    # CLI execution
+    # ------------------------------------------------------------------
+
+    async def _run_cli(
+        self,
+        prompt: str,
+        allowed_tools: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Run via Claude CLI subprocess with --print and --output-format json."""
+        cmd = [
+            CLAUDE_CLI,
+            "--print",
+            "--output-format", "json",
+            "--model", self.model,
+            "--append-system-prompt", self.system_prompt,
+        ]
+
+        if allowed_tools:
+            cmd.extend(["--allowedTools", ",".join(allowed_tools)])
+
+        cmd.append(prompt)
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                t0 = time.monotonic()
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=120
+                )
+                elapsed = time.monotonic() - t0
+
+                if proc.returncode != 0:
+                    err = stderr.decode(errors="replace").strip()
+                    self.logger.error("CLI error (attempt %d): %s", attempt, err[:200])
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    return {"response": f"CLI error: {err[:500]}", "error": True}
+
+                raw = stdout.decode(errors="replace").strip()
+                self.logger.info("CLI completed in %.1fs (%d chars)", elapsed, len(raw))
+
+                return self._parse_cli_response(raw)
+
+            except asyncio.TimeoutError:
+                self.logger.warning("CLI timeout (attempt %d)", attempt)
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                return {"response": "Agent timed out.", "error": True}
+
+            except Exception as exc:
+                self.logger.error("CLI exception (attempt %d): %s", attempt, exc)
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                return {"response": f"Agent error: {exc}", "error": True}
+
+        return {"response": "Agent failed after retries.", "error": True}
+
+    def _parse_cli_response(self, raw: str) -> dict[str, Any]:
+        """Parse CLI JSON output."""
+        try:
+            data = json.loads(raw)
+            # CLI --output-format json returns: {"type":"result","subtype":"success","result":"..."}
+            if isinstance(data, dict):
+                result_text = data.get("result", "")
+                if not result_text and "content" in data:
+                    result_text = data["content"]
+                if not result_text:
+                    result_text = raw
+                return {
+                    "response": result_text,
+                    "model": data.get("model", self.model),
+                    "stop_reason": data.get("stop_reason", "end_turn"),
+                    "cost_usd": data.get("cost_usd", 0),
+                    "duration_ms": data.get("duration_ms", 0),
+                }
+            return {"response": raw, "model": self.model, "stop_reason": "end_turn"}
+        except json.JSONDecodeError:
+            # Plain text response
+            return {"response": raw, "model": self.model, "stop_reason": "end_turn"}
+
+    # ------------------------------------------------------------------
+    # API execution (fallback)
+    # ------------------------------------------------------------------
+
+    async def _run_api(self, prompt: str) -> dict[str, Any]:
+        """Fallback: run via Anthropic API."""
+        import anthropic
+
+        # Map CLI model aliases to API model IDs
+        model_map = {
+            "opus": "claude-opus-4-20250514",
+            "sonnet": "claude-sonnet-4-20250514",
+            "haiku": "claude-haiku-4-20250514",
+        }
+        model_id = model_map.get(self.model, self.model)
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                t0 = time.monotonic()
+                response = await self._api_client.messages.create(
+                    model=model_id,
+                    max_tokens=4096,
+                    system=self.system_prompt,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                elapsed = time.monotonic() - t0
+                self.logger.info(
+                    "API completed in %.1fs (tokens: %d in / %d out)",
+                    elapsed, response.usage.input_tokens, response.usage.output_tokens,
+                )
+                text = "".join(b.text for b in response.content if hasattr(b, "text"))
+                return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
+
+            except anthropic.RateLimitError:
+                wait = self.retry_delay * (2 ** (attempt - 1))
+                self.logger.warning("Rate limited, retrying in %.1fs", wait)
+                await asyncio.sleep(wait)
+            except anthropic.APIError as exc:
+                self.logger.error("API error (attempt %d): %s", attempt, exc)
+                if attempt == self.max_retries:
+                    return {"response": f"API error: {exc}", "error": True}
+                await asyncio.sleep(self.retry_delay)
+
+        return {"response": "Agent failed.", "error": True}
+
+    async def _run_api_with_tools(
+        self, prompt: str, tools: list[dict[str, Any]], max_iterations: int
+    ) -> dict[str, Any]:
+        """API tool loop fallback."""
+        model_map = {
+            "opus": "claude-opus-4-20250514",
+            "sonnet": "claude-sonnet-4-20250514",
+            "haiku": "claude-haiku-4-20250514",
+        }
+        model_id = model_map.get(self.model, self.model)
+        messages = [{"role": "user", "content": prompt}]
+
+        for _ in range(max_iterations):
+            response = await self._api_client.messages.create(
+                model=model_id, max_tokens=4096,
+                system=self.system_prompt, messages=messages, tools=tools,
+            )
+            text_parts, tool_calls = [], []
+            for block in response.content:
+                if block.type == "text":
+                    text_parts.append(block.text)
+                elif block.type == "tool_use":
+                    tool_calls.append({"id": block.id, "name": block.name, "input": block.input})
+
+            if not tool_calls:
+                text = "".join(text_parts)
+                return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
+
+            serialized = [
+                {"type": b.type, "text": b.text} if b.type == "text"
+                else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                for b in response.content
+            ]
+            messages.append({"role": "assistant", "content": serialized})
+
+            tool_results = []
+            for tc in tool_calls:
+                result = await self._execute_tool(tc["name"], tc["input"])
+                tool_results.append({"type": "tool_result", "tool_use_id": tc["id"], "content": str(result)})
+            messages.append({"role": "user", "content": tool_results})
+
+        return {"response": "Reached max tool iterations.", "error": True}
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _build_prompt(self, task: str, context: dict[str, Any] | None) -> str:
+        """Build the full prompt string from task + context."""
+        parts = [task]
+        if context:
+            ctx_lines = [f"- {k}: {v}" for k, v in context.items() if k != "conversation_history"]
+            if ctx_lines:
+                parts.append("\nContext:\n" + "\n".join(ctx_lines))
+
+            # Include conversation history
+            history = context.get("conversation_history", [])
+            if history:
+                history_text = "\n".join(
+                    f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+                    for m in history[:-1]
+                )
+                if history_text:
+                    parts.append(f"\nConversation history:\n{history_text}")
+
+        return "\n".join(parts)
+
+    async def _execute_tool(self, tool_name: str, tool_input: dict) -> Any:
+        """Execute a tool by name. Override in subclasses for real tool dispatch."""
+        from mcp_servers import get_mcp_tool
+        handler = get_mcp_tool(tool_name)
+        if handler:
+            return await handler(**tool_input)
+        self.logger.warning("Unknown tool: %s", tool_name)
+        return {"error": f"Tool '{tool_name}' not found"}

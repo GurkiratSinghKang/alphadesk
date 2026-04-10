@@ -1,0 +1,218 @@
+"""
+Continuous Market Monitor
+
+Runs during market hours:
+- Every 60 seconds: Check news for held positions
+- Every 5 minutes: Check prices against stop/take-profit
+- At 11:00 AM: Mid-day scan
+- At 2:00 PM: Afternoon scan
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+logger = logging.getLogger("alphadesk.monitor")
+ET = ZoneInfo("America/New_York")
+
+_monitor_task: asyncio.Task | None = None
+_should_stop = False
+
+
+async def _check_news_for_positions() -> list[dict]:
+    """Check if any held positions have significant news."""
+    from data.ingestion.trade_ledger import TradeLedger
+
+    ledger = TradeLedger()
+    held_symbols = ledger.get_held_symbols()
+    if not held_symbols:
+        return []
+
+    from api.routes.news import fetch_news_for_symbol
+
+    alerts: list[dict] = []
+    for sym in held_symbols:
+        try:
+            headlines = await fetch_news_for_symbol(sym)
+            for h in headlines[:3]:
+                h_lower = h.lower()
+                # Check for urgent keywords
+                urgent_keywords = [
+                    "lawsuit", "recall", "downgrade", "sec", "fraud",
+                    "miss", "cut", "layoff", "crash", "halt",
+                    "warning", "investigation",
+                ]
+                if any(kw in h_lower for kw in urgent_keywords):
+                    alerts.append({"symbol": sym, "headline": h, "severity": "high"})
+                    logger.warning("NEWS ALERT [%s]: %s", sym, h[:100])
+        except Exception:
+            pass
+
+    if alerts:
+        # Publish alerts to Redis for frontend
+        try:
+            from core.redis import publish
+            for alert in alerts:
+                await publish("alerts", {
+                    "type": "news_alert",
+                    "symbol": alert["symbol"],
+                    "message": f"WARNING {alert['symbol']}: {alert['headline'][:100]}",
+                    "severity": alert["severity"],
+                })
+        except Exception:
+            pass
+
+    return alerts
+
+
+async def _check_price_alerts() -> list[dict]:
+    """Check if any positions are near stop-loss or take-profit."""
+    import httpx
+    from core.config import settings
+    from data.ingestion.trade_ledger import TradeLedger
+
+    ledger = TradeLedger()
+    open_positions = ledger.get_open_positions()
+    if not open_positions:
+        return []
+
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+
+    alerts: list[dict] = []
+    async with httpx.AsyncClient(timeout=10) as client:
+        for trade in open_positions:
+            sym = trade["symbol"]
+            try:
+                resp = await client.get(
+                    f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
+                    headers=headers,
+                )
+                if resp.status_code != 200:
+                    continue
+                price = resp.json().get("trade", {}).get("p", 0)
+                if not price:
+                    continue
+
+                entry = trade.get("entry_price", 0)
+                stop = trade.get("stop_loss", 0)
+                target = trade.get("take_profit", 0)
+
+                # Check proximity to stop (within 2%)
+                if stop and price > 0 and (price - stop) / price < 0.02:
+                    alerts.append({
+                        "symbol": sym, "price": price, "stop": stop,
+                        "message": f"{sym} at ${price:.2f} -- approaching stop-loss ${stop:.2f}",
+                        "severity": "high",
+                    })
+                    logger.warning("PRICE ALERT: %s at $%.2f near stop $%.2f", sym, price, stop)
+
+                # Check proximity to target (within 2%)
+                if target and price > 0 and (target - price) / price < 0.02:
+                    alerts.append({
+                        "symbol": sym, "price": price, "target": target,
+                        "message": f"{sym} at ${price:.2f} -- approaching target ${target:.2f}",
+                        "severity": "medium",
+                    })
+            except Exception:
+                pass
+
+    # Publish alerts
+    if alerts:
+        try:
+            from core.redis import publish
+            for alert in alerts:
+                await publish("alerts", {
+                    "type": "price_alert",
+                    "symbol": alert["symbol"],
+                    "message": alert["message"],
+                    "severity": alert["severity"],
+                })
+        except Exception:
+            pass
+
+    return alerts
+
+
+async def _run_monitor() -> None:
+    """Main monitoring loop -- runs during market hours."""
+    global _should_stop
+
+    news_interval = 60  # seconds
+    price_interval = 300  # 5 minutes
+    last_news_check = 0.0
+    last_price_check = 0.0
+
+    while not _should_stop:
+        try:
+            now = datetime.now(ET)
+            hour = now.hour
+            minute = now.minute
+
+            # Only run during extended market hours (7 AM - 8 PM ET)
+            if hour < 7 or hour >= 20:
+                await asyncio.sleep(60)
+                continue
+
+            current_time = asyncio.get_event_loop().time()
+
+            # News check every 60 seconds
+            if current_time - last_news_check >= news_interval:
+                await _check_news_for_positions()
+                last_news_check = current_time
+
+            # Price check every 5 minutes
+            if current_time - last_price_check >= price_interval:
+                await _check_price_alerts()
+                last_price_check = current_time
+
+            # Mid-day scan at 11:00 AM ET
+            if hour == 11 and minute == 0:
+                logger.info("Mid-day scan triggered")
+                try:
+                    from data.ingestion.daily_pipeline import run_daily_pipeline
+                    await run_daily_pipeline(screen_limit=20, analyze_limit=5)
+                except Exception as e:
+                    logger.error("Mid-day scan failed: %s", e)
+                await asyncio.sleep(60)  # skip rest of this minute
+
+            # Afternoon scan at 2:00 PM ET
+            if hour == 14 and minute == 0:
+                logger.info("Afternoon scan triggered")
+                try:
+                    from data.ingestion.daily_pipeline import run_daily_pipeline
+                    await run_daily_pipeline(screen_limit=20, analyze_limit=5)
+                except Exception as e:
+                    logger.error("Afternoon scan failed: %s", e)
+                await asyncio.sleep(60)
+
+            await asyncio.sleep(10)  # check every 10 seconds
+
+        except Exception as e:
+            logger.error("Monitor error: %s", e)
+            await asyncio.sleep(30)
+
+
+async def start_continuous_monitor() -> None:
+    """Start the continuous market monitor as a background task."""
+    global _monitor_task, _should_stop
+    _should_stop = False
+    _monitor_task = asyncio.create_task(_run_monitor())
+    logger.info("Continuous market monitor started")
+
+
+async def stop_continuous_monitor() -> None:
+    """Stop the continuous market monitor."""
+    global _should_stop, _monitor_task
+    _should_stop = True
+    if _monitor_task:
+        _monitor_task.cancel()
+        try:
+            await _monitor_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    logger.info("Continuous market monitor stopped")
