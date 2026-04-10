@@ -33,9 +33,15 @@ services:
     image: ${BACKEND_IMAGE:-ghcr.io/OWNER/alphadesk-backend:latest}
     restart: unless-stopped
     env_file: .env.prod
+    environment:
+      # Override base compose dev values — environment: takes precedence over env_file:
+      ENVIRONMENT: prod
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:-alphadesk_dev}@timescaledb:5432/alphadesk
+      REDIS_URL: redis://redis:6379/0
     volumes: []
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

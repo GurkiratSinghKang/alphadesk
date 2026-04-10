@@ -55,6 +55,8 @@ async def login(request: LoginRequest) -> TokenResponse:
 async def refresh(request: RefreshRequest) -> TokenResponse:
     payload = decode_token(request.refresh_token, expected_type="refresh")
     username = payload.get("sub", "")
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
 
     return TokenResponse(
         access_token=create_access_token(username),

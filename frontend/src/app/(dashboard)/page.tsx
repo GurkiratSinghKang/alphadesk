@@ -43,8 +43,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
-import { getPortfolioSummary, getMarketNews, getQuote } from "@/lib/api";
-import { env } from "@/env";
+import { getPortfolioSummary, getMarketNews, getQuote, getStrategies, getMarketIndices } from "@/lib/api";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
 
 // ─── Mini Sparkline SVG ────────────────────────────────────
@@ -333,9 +332,8 @@ function DashboardContent() {
 
   // Fetch real strategy data from API on mount
   useEffect(() => {
-    fetch(`${env.API_URL}/api/v1/strategies/`)
-      .then((res) => res.json())
-      .then((data: Array<{ id: string; name: string; status: string; invested_amount: number; total_return_pct: number; win_rate: number; active_positions_count: number }>) => {
+    getStrategies()
+      .then((data) => {
         if (!Array.isArray(data) || data.length === 0) return;
         setStrategies((prev) =>
           prev.map((s) => {
@@ -375,18 +373,17 @@ function DashboardContent() {
 
   // Fetch real market index prices with change data on mount
   useEffect(() => {
-    fetch(`${env.API_URL}/api/v1/market-overview/indices`)
-      .then((res) => res.json())
+    getMarketIndices()
       .then((data) => {
         const names: Record<string, string> = { SPY: "S&P 500", QQQ: "NASDAQ 100", IWM: "Russell 2000" };
         const indices = (data.indices || [])
-          .filter((idx: Record<string, unknown>) => names[idx.symbol as string])
-          .map((idx: Record<string, unknown>) => ({
-            symbol: idx.symbol as string,
-            name: names[idx.symbol as string] || (idx.name as string),
-            price: idx.price as number,
-            change: (idx.change as number) ?? 0,
-            changePct: (idx.change_pct as number) ?? 0,
+          .filter((idx) => names[idx.symbol])
+          .map((idx) => ({
+            symbol: idx.symbol,
+            name: names[idx.symbol] || idx.name,
+            price: idx.price,
+            change: idx.change ?? 0,
+            changePct: idx.change_pct ?? 0,
           }));
         if (indices.length > 0) setMarketIndices(indices);
       })
@@ -629,7 +626,7 @@ function DashboardContent() {
                     key={strategy.id}
                     className="group border-border bg-[var(--surface)] hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:scale-[1.01] transition-all duration-200 cursor-pointer overflow-hidden"
                     style={{ borderLeft: `3px solid ${borderColor}` }}
-                    onClick={() => router.push("/trade")}
+                    onClick={() => router.push(`/strategies/${strategy.id}`)}
                   >
                     <CardContent className="p-5">
                       {/* Header */}
@@ -773,7 +770,7 @@ function DashboardContent() {
                   <div
                     key={idx.symbol}
                     className="flex items-center justify-between rounded-md px-2.5 py-2 text-xs hover:bg-accent/30 transition-colors cursor-pointer"
-                    onClick={() => router.push("/trade")}
+                    onClick={() => { useMarketStore.getState().setSelectedSymbol(idx.symbol); router.push("/trade"); }}
                   >
                     <div>
                       <span className="font-semibold text-foreground">

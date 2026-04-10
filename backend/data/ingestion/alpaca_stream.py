@@ -51,9 +51,11 @@ async def _run_stream() -> None:
                     auth_msgs = json.loads(auth_resp)
                     for m in (auth_msgs if isinstance(auth_msgs, list) else [auth_msgs]):
                         if m.get("T") == "error":
-                            logger.error("Alpaca auth failed: %s", m.get("msg", "unknown"))
-                            await asyncio.sleep(60)  # wait longer on auth failure
-                            continue
+                            logger.error("Alpaca auth failed: %s — retrying in 60s", m.get("msg", "unknown"))
+                            await asyncio.sleep(60)
+                            raise ConnectionError("Alpaca auth failed")
+                except ConnectionError:
+                    break  # exits async-with block, outer while loop reconnects
                 except Exception:
                     pass
 

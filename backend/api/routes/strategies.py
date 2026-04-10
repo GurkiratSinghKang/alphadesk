@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import math
 import random
+import statistics
+from collections import defaultdict
 from datetime import datetime, date, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -57,6 +59,46 @@ class ToggleResponse(BaseModel):
     name: str
     previous_status: StrategyStatus
     new_status: StrategyStatus
+
+
+class StreakInfo(BaseModel):
+    type: str  # "win" or "loss"
+    count: int
+
+
+class Streaks(BaseModel):
+    current: StreakInfo
+    best_win: int
+    worst_loss: int
+
+
+class MonthlyReturn(BaseModel):
+    year: int
+    month: int
+    return_pct: float
+
+
+class ConvictionBucket(BaseModel):
+    bucket: str
+    wins: int
+    losses: int
+
+
+class HoldTimeStats(BaseModel):
+    avg_win_days: float
+    avg_loss_days: float
+    median_hold_days: float
+
+
+class StrategyAnalytics(BaseModel):
+    strategy_id: str
+    sector_exposure: dict[str, dict[str, float]]
+    monthly_returns: list[MonthlyReturn]
+    streaks: Streaks
+    conviction_distribution: list[ConvictionBucket]
+    hold_time_stats: HoldTimeStats
+    correlations: dict[str, float]
+    rolling_beta: list[Any]
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +288,9 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
     "vcp_breakout": "vcp-breakout",
 }
 
+# Reverse mapping: strategy route ID -> ledger strategy name
+_ID_TO_NAME: dict[str, str] = {v: k for k, v in _STRATEGY_NAME_TO_ID.items()}
+
 
 # In-memory status overrides (toggle endpoint)
 _status_overrides: dict[str, StrategyStatus] = {}
@@ -423,4 +468,198 @@ async def toggle_strategy(
         name=data["name"],
         previous_status=current_status,
         new_status=new_status,
+    )
+
+
+def _get_symbol_sector_map() -> dict[str, str]:
+    """Build a symbol -> sector lookup from the symbols database."""
+    try:
+        from api.routes.symbols import _build_demo_symbols
+        return {
+            s.symbol: s.sector
+            for s in _build_demo_symbols()
+            if s.sector
+        }
+    except Exception:
+        return {}
+
+
+def _parse_iso_dt(s: str | None) -> datetime | None:
+    """Parse an ISO 8601 datetime string, returning None on failure."""
+    if not s:
+        return None
+    try:
+        # Handle both timezone-aware and naive strings
+        return datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
+@router.get("/{strategy_id}/analytics", response_model=StrategyAnalytics)
+async def get_strategy_analytics(
+    strategy_id: str = Path(..., description="Strategy identifier"),
+) -> StrategyAnalytics:
+    """Return in-depth analytics for a single strategy computed from the trade ledger."""
+    data = _get_strategy_data(strategy_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+
+    from data.ingestion.trade_ledger import TradeLedger
+    ledger = TradeLedger()
+
+    # Resolve ledger strategy name from route ID
+    ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
+
+    all_trades = [
+        t for t in ledger._data.get("trades", [])
+        if t.get("strategy") == ledger_name
+    ]
+    open_trades = [t for t in all_trades if t.get("status") == "open"]
+    closed_trades = [t for t in all_trades if t.get("status") == "closed"]
+
+    # -- Sector exposure (from open positions) --
+    sector_map = _get_symbol_sector_map()
+    sector_notional: dict[str, float] = defaultdict(float)
+    total_notional = 0.0
+    for t in open_trades:
+        notional = (t.get("entry_price") or 0) * (t.get("shares") or 0)
+        sector = sector_map.get(t.get("symbol", ""), "Unknown")
+        sector_notional[sector] += notional
+        total_notional += notional
+
+    current_sector: dict[str, float] = {}
+    if total_notional > 0:
+        current_sector = {
+            sector: round(val / total_notional, 4)
+            for sector, val in sorted(sector_notional.items())
+        }
+
+    # -- Monthly returns (group closed trades by exit month, sum P&L %) --
+    monthly_pnl: dict[tuple[int, int], float] = defaultdict(float)
+    monthly_invested: dict[tuple[int, int], float] = defaultdict(float)
+    for t in closed_trades:
+        exit_dt = _parse_iso_dt(t.get("exit_time"))
+        if exit_dt is None:
+            continue
+        key = (exit_dt.year, exit_dt.month)
+        monthly_pnl[key] += t.get("pnl", 0) or 0
+        monthly_invested[key] += (t.get("entry_price") or 0) * (t.get("shares") or 0)
+
+    monthly_returns: list[MonthlyReturn] = []
+    for (year, month) in sorted(monthly_pnl.keys()):
+        invested = monthly_invested[(year, month)]
+        ret_pct = round(monthly_pnl[(year, month)] / invested * 100, 2) if invested > 0 else 0.0
+        monthly_returns.append(MonthlyReturn(year=year, month=month, return_pct=ret_pct))
+
+    # -- Streaks (chronological order by exit_time) --
+    sorted_closed = sorted(
+        closed_trades,
+        key=lambda t: t.get("exit_time") or "",
+    )
+    current_streak_type = "win"
+    current_streak_count = 0
+    best_win_streak = 0
+    worst_loss_streak = 0
+    running_win = 0
+    running_loss = 0
+
+    for t in sorted_closed:
+        pnl = t.get("pnl") or 0
+        if pnl > 0:
+            running_win += 1
+            running_loss = 0
+            best_win_streak = max(best_win_streak, running_win)
+        elif pnl < 0:
+            running_loss += 1
+            running_win = 0
+            worst_loss_streak = max(worst_loss_streak, running_loss)
+        else:
+            # breakeven resets both
+            running_win = 0
+            running_loss = 0
+
+    # Determine current streak from the tail of sorted trades
+    if sorted_closed:
+        last_pnl = sorted_closed[-1].get("pnl") or 0
+        if last_pnl >= 0:
+            current_streak_type = "win"
+            current_streak_count = running_win
+        else:
+            current_streak_type = "loss"
+            current_streak_count = running_loss
+    else:
+        current_streak_type = "win"
+        current_streak_count = 0
+
+    # -- Conviction distribution --
+    buckets = ["0-20", "20-40", "40-60", "60-80", "80-100"]
+    conviction_wins: dict[str, int] = {b: 0 for b in buckets}
+    conviction_losses: dict[str, int] = {b: 0 for b in buckets}
+
+    for t in closed_trades:
+        conv = t.get("conviction") or 0
+        pnl = t.get("pnl") or 0
+        if conv <= 20:
+            bucket = "0-20"
+        elif conv <= 40:
+            bucket = "20-40"
+        elif conv <= 60:
+            bucket = "40-60"
+        elif conv <= 80:
+            bucket = "60-80"
+        else:
+            bucket = "80-100"
+
+        if pnl > 0:
+            conviction_wins[bucket] += 1
+        elif pnl < 0:
+            conviction_losses[bucket] += 1
+        # breakeven trades not counted in either
+
+    conviction_distribution = [
+        ConvictionBucket(bucket=b, wins=conviction_wins[b], losses=conviction_losses[b])
+        for b in buckets
+    ]
+
+    # -- Hold time stats --
+    win_hold_days: list[float] = []
+    loss_hold_days: list[float] = []
+    all_hold_days: list[float] = []
+
+    for t in closed_trades:
+        entry_dt = _parse_iso_dt(t.get("entry_time"))
+        exit_dt = _parse_iso_dt(t.get("exit_time"))
+        if entry_dt is None or exit_dt is None:
+            continue
+        hold = (exit_dt - entry_dt).total_seconds() / 86400.0
+        all_hold_days.append(hold)
+        pnl = t.get("pnl") or 0
+        if pnl > 0:
+            win_hold_days.append(hold)
+        elif pnl < 0:
+            loss_hold_days.append(hold)
+
+    hold_time_stats = HoldTimeStats(
+        avg_win_days=round(sum(win_hold_days) / len(win_hold_days), 1) if win_hold_days else 0.0,
+        avg_loss_days=round(sum(loss_hold_days) / len(loss_hold_days), 1) if loss_hold_days else 0.0,
+        median_hold_days=round(statistics.median(all_hold_days), 1) if all_hold_days else 0.0,
+    )
+
+    # -- Correlations & rolling beta (placeholder -- require market data) --
+    correlations = {"SPY": 0.0, "QQQ": 0.0}
+    rolling_beta: list[Any] = []
+
+    return StrategyAnalytics(
+        strategy_id=strategy_id,
+        sector_exposure={"current": current_sector},
+        monthly_returns=monthly_returns,
+        streaks=Streaks(
+            current=StreakInfo(type=current_streak_type, count=current_streak_count),
+            best_win=best_win_streak,
+            worst_loss=worst_loss_streak,
+        ),
+        conviction_distribution=conviction_distribution,
+        hold_time_stats=hold_time_stats,
+        correlations=correlations,
+        rolling_beta=rolling_beta,
     )

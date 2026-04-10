@@ -187,6 +187,7 @@ export function CommandPalette() {
         <Command
           className="bg-transparent"
           loop
+          shouldFilter={false}
         >
           <div className="flex items-center border-b border-border px-3">
             {isSearching ? (

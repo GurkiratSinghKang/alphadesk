@@ -111,6 +111,9 @@ async def pipeline_history() -> list[dict[str, Any]]:
 @router.get("/history/{date}")
 async def pipeline_history_date(date: str) -> dict[str, Any]:
     """Return the full pipeline log for a specific date (YYYY-MM-DD)."""
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
     path = LOG_DIR / f"{date}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"No pipeline log for {date}")

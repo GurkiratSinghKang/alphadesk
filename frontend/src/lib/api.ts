@@ -42,9 +42,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (res.status === 401 && typeof window !== "undefined") {
-    document.cookie = "access_token=; path=/; max-age=0";
-    document.cookie = "refresh_token=; path=/; max-age=0";
-    window.location.href = "/login";
+    if (window.location.pathname !== "/login") {
+      document.cookie = "access_token=; path=/; max-age=0";
+      document.cookie = "refresh_token=; path=/; max-age=0";
+      window.location.href = "/login";
+    }
     throw new Error("Session expired");
   }
 
@@ -53,6 +55,87 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status}: ${res.statusText} – ${body}`);
   }
   return res.json() as Promise<T>;
+}
+
+// ─── Strategies ─────────────────────────────────────────────
+
+export function getStrategies() {
+  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; total_return_pct: number; win_rate: number; active_positions_count: number }[]>(
+    `/api/v1/strategies/`
+  );
+}
+
+export interface StrategyPerformance {
+  name: string;
+  description: string;
+  status: string;
+  invested_amount: number;
+  current_value: number;
+  total_return_pct: number;
+  annualized_return_pct: number;
+  return_dollars: number;
+  win_rate: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  active_positions_count: number;
+  equity_curve: { date: string; value: number }[];
+  last_trade_date: string;
+}
+
+export function getStrategyPerformance(strategyId: string) {
+  return apiFetch<StrategyPerformance>(`/api/v1/strategies/${strategyId}/performance`);
+}
+
+export interface StrategyTrade {
+  id: number;
+  symbol: string;
+  strategy: string | null;
+  side: string;
+  quantity: number;
+  entry_price: number;
+  exit_price: number | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+  entry_time: string;
+  exit_time: string | null;
+  status: string;
+  notes: string | null;
+  conviction?: number;
+  rationale?: string;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  exit_reason?: string | null;
+}
+
+export function getStrategyTrades(strategyId: string, limit = 100) {
+  return apiFetch<StrategyTrade[]>(`/api/v1/trades/history?strategy=${strategyId}&limit=${limit}`);
+}
+
+export function toggleStrategy(strategyId: string) {
+  return apiFetch<{ strategy_id: string; new_status: string }>(`/api/v1/strategies/${strategyId}/toggle`, { method: "POST" });
+}
+
+export interface StrategyAnalytics {
+  strategy_id: string;
+  sector_exposure: { current: Record<string, number> };
+  monthly_returns: { year: number; month: number; return_pct: number }[];
+  streaks: { current: { type: string; count: number }; best_win: number; worst_loss: number };
+  conviction_distribution: { bucket: string; wins: number; losses: number }[];
+  hold_time_stats: { avg_win_days: number; avg_loss_days: number; median_hold_days: number };
+  correlations: Record<string, number>;
+  rolling_beta: { date: string; beta: number }[];
+}
+
+export function getStrategyAnalytics(strategyId: string) {
+  return apiFetch<StrategyAnalytics>(`/api/v1/strategies/${strategyId}/analytics`);
+}
+
+// ─── Market Overview ────────────────────────────────────────
+
+export function getMarketIndices() {
+  return apiFetch<{ indices: { symbol: string; name: string; price: number; change: number; change_pct: number }[] }>(
+    `/api/v1/market-overview/indices`
+  );
 }
 
 // ─── Symbol Search ──────────────────────────────────────────
@@ -330,8 +413,8 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     positions_count: number;
   }
   const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`);
-  const dayPnl = raw.unrealized_pnl + raw.realized_pnl_today;
-  const lastEquity = raw.equity - dayPnl;
+  const dayPnl = (raw.unrealized_pnl ?? 0) + (raw.realized_pnl_today ?? 0);
+  const lastEquity = (raw.equity ?? 0) - dayPnl;
   const dayPnlPct = lastEquity > 0 ? (dayPnl / lastEquity) * 100 : 0;
   return {
     equity: raw.equity,

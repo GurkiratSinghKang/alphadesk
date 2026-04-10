@@ -100,7 +100,7 @@ function WatchlistRow({
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
       }`}
     >
-      <div className="flex-1 min-w-0">
+      <div className="w-14 shrink-0 truncate">
         <div className="font-medium text-foreground tabular-nums">{symbol}</div>
       </div>
 
