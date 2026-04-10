@@ -147,13 +147,16 @@ export function TopBar() {
 
         {/* WS status */}
         <div className="flex items-center gap-1.5 ml-1">
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              isConnected ? "bg-[var(--profit)]" : "bg-[var(--loss)]"
-            }`}
-          />
-          <span className="text-[11px] text-muted-foreground">
-            {isConnected ? "LIVE" : "DISCONNECTED"}
+          {isConnected ? (
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--profit)] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--profit)]" />
+            </span>
+          ) : (
+            <span className="inline-block h-2 w-2 rounded-full bg-[var(--loss)]" />
+          )}
+          <span className={cn("text-[11px] font-medium", isConnected ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+            {isConnected ? "LIVE" : "OFFLINE"}
           </span>
         </div>
       </div>

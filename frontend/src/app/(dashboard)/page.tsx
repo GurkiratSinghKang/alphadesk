@@ -504,20 +504,17 @@ function StrategyCard({
                 {strategy.positions} pos
               </span>
             </div>
-            {strategy.winRate > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {(strategy.winRate * 100).toFixed(0)}% win rate
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground italic">
+              {regimeNote}
+            </p>
           </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <Sparkline
+            data={generateSparkData(strategy.id.length * 31 + strategy.returnPct * 100)}
+            color={strategy.returnPct >= 0 ? "#22c55e" : "#ef4444"}
+            width={48}
+            height={18}
+          />
         </div>
-
-        {regimeNote && (
-          <p className="mt-2 text-xs italic text-muted-foreground">
-            {regimeNote}
-          </p>
-        )}
       </CardContent>
     </Card>
   );

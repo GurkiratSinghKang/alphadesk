@@ -768,7 +768,8 @@ export default function PipelinePage() {
                 </Card>
               ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-gradient-to-r from-[var(--profit)] to-[var(--loss)]" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Total P&L
@@ -795,7 +796,8 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-primary/60" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Win Rate
@@ -806,7 +808,8 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-primary/40" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Total Trades
@@ -817,7 +820,8 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-primary/30" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Active Positions
@@ -828,7 +832,8 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-[var(--profit)]/60" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Best Trade
@@ -848,7 +853,8 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="h-0.5 bg-[var(--loss)]/60" />
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Worst Trade
