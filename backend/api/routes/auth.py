@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -15,6 +17,25 @@ from core.auth import (
 from core.config import settings
 
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Login rate limiting: max 5 attempts per IP per 5-minute window
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 300  # 5 minutes
+_RATE_LIMIT_MAX = 5
+
+
+def _check_rate_limit(client_ip: str) -> None:
+    now = time.time()
+    attempts = _login_attempts[client_ip]
+    # Prune old entries
+    _login_attempts[client_ip] = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
+    if len(_login_attempts[client_ip]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again in a few minutes.",
+        )
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
@@ -56,7 +77,11 @@ class RefreshRequest(BaseModel):
 
 
 @router.post("/login")
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, req: Request):
+    client_ip = req.client.host if req.client else "unknown"
+    _check_rate_limit(client_ip)
+    _login_attempts[client_ip].append(time.time())
+
     if (
         request.username != settings.ADMIN_USERNAME
         or not settings.ADMIN_PASSWORD_HASH
@@ -94,3 +119,12 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
         refresh_token=create_refresh_token(username),
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.post("/logout")
+async def logout():
+    """Clear HttpOnly auth cookies."""
+    response = JSONResponse(content={"ok": True})
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/api/v1/auth")
+    return response

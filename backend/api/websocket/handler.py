@@ -187,14 +187,21 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         from core.auth import decode_token
 
         try:
-            raw = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
-            msg = orjson.loads(raw)
-            if msg.get("action") != "auth" or not msg.get("token"):
-                await ws.send_bytes(orjson.dumps({"error": "First message must be auth"}))
-                await ws.close(code=4001, reason="Auth required")
-                return
-            decode_token(msg["token"], expected_type="access")
-            await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
+            # Try cookie-based auth first (from HttpOnly cookies in handshake)
+            cookie_token = ws.cookies.get("access_token")
+            if cookie_token:
+                decode_token(cookie_token, expected_type="access")
+                await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
+            else:
+                # Fall back to message-based auth
+                raw = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
+                msg = orjson.loads(raw)
+                if msg.get("action") != "auth" or not msg.get("token"):
+                    await ws.send_bytes(orjson.dumps({"error": "First message must be auth"}))
+                    await ws.close(code=4001, reason="Auth required")
+                    return
+                decode_token(msg["token"], expected_type="access")
+                await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
         except asyncio.TimeoutError:
             await ws.close(code=4001, reason="Auth timeout")
             return

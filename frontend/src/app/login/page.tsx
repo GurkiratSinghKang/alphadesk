@@ -33,12 +33,9 @@ export default function LoginPage() {
         return;
       }
 
-      const data = await res.json();
-
-      // Store tokens in cookies
-      document.cookie = `access_token=${data.access_token}; path=/; max-age=${data.expires_in}; SameSite=Strict; Secure`;
-      document.cookie = `refresh_token=${data.refresh_token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Strict; Secure`;
-
+      await res.json();
+      // HttpOnly cookies are set by the backend via Set-Cookie headers
+      // No need to store tokens in JS-accessible cookies
       router.push("/");
     } catch {
       setError("Failed to connect to server");

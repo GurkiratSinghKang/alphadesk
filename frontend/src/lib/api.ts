@@ -43,8 +43,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (res.status === 401 && typeof window !== "undefined") {
     if (window.location.pathname !== "/login") {
+      // Clear any legacy JS-set cookies and redirect to login
       document.cookie = "access_token=; path=/; max-age=0";
       document.cookie = "refresh_token=; path=/; max-age=0";
+      // Request backend to clear HttpOnly cookies
+      fetch(`${base}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
       window.location.href = "/login";
     }
     throw new Error("Session expired");
