@@ -47,6 +47,10 @@ function EquityCurveSVG({
   const PAD_X = 0;
   const PAD_Y = 8;
 
+  // useId must be called before any early return (Rules of Hooks)
+  const rawId = useId();
+  const gradientId = `equity-grad-${rawId.replace(/:/g, "")}`;
+
   if (data.length < 2) return null;
 
   const values = data.map((d) => d.value);
@@ -65,7 +69,6 @@ function EquityCurveSVG({
   const lastVal = data[data.length - 1].value;
   const isUp = lastVal >= firstVal;
   const colorVar = isUp ? "var(--profit, #22c55e)" : "var(--loss, #ef4444)";
-  const gradientId = `equity-grad-${useId().replace(/:/g, "")}`;
 
   // Polygon: close the area down to the bottom
   const areaPoints = [

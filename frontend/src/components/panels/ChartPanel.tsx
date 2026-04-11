@@ -125,7 +125,7 @@ export function ChartPanel() {
         const pos = positions.status === "fulfilled"
           ? positions.value.find((p) => p.symbol === selectedSymbol)
           : null;
-        const pipPos = pipelineData.status === "fulfilled" && pipelineData.value.positions
+        const pipPos = pipelineData.status === "fulfilled" && Array.isArray(pipelineData.value?.positions)
           ? pipelineData.value.positions.find((p) => p.symbol === selectedSymbol)
           : null;
 

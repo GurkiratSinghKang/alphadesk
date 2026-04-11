@@ -27,16 +27,6 @@ import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketCo
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function formatTimeShort(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 function todayDateStr(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -72,8 +62,6 @@ function CommandCenter() {
   const [regime, setRegime] = useState<RegimeData | null>(null);
   const [sectors, setSectors] = useState<{ sector: string; change_pct: number }[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
-  const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +177,6 @@ function CommandCenter() {
       let pStatus: PipelineStatus | null = null;
       if (pipelineStatusRes.status === "fulfilled") {
         pStatus = pipelineStatusRes.value;
-        setPipelineStatus(pStatus);
       }
 
       // Pipeline history: find today's log
@@ -201,7 +188,6 @@ function CommandCenter() {
         );
         if (todayEntry) {
           pLog = todayEntry;
-          setPipelineLog(todayEntry);
         }
       }
 

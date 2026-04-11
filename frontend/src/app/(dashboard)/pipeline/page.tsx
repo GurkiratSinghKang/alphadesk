@@ -324,7 +324,7 @@ export default function PipelinePage() {
                     </TableHeader>
                     <TableBody>
                       {positions.map((pos) => (
-                        <TableRow key={pos.symbol} className="border-border">
+                        <TableRow key={`${pos.symbol}-${pos.entryDate}`} className="border-border">
                           <TableCell className="text-xs font-bold text-foreground">
                             {pos.symbol}
                           </TableCell>
@@ -501,7 +501,7 @@ export default function PipelinePage() {
                               ) : (
                                 h.summary || (() => {
                                   const parts: string[] = [];
-                                  const screened = h.screened ?? h.strategies_run ? Object.values(h.strategies_run || {}).reduce((s: number, v: any) => s + (v?.screened ?? 0), 0) : 0;
+                                  const screened = h.screened ?? (h.strategies_run ? Object.values(h.strategies_run || {}).reduce((s: number, v: any) => s + (v?.screened ?? 0), 0) : 0);
                                   const orders = h.orders_placed ?? h.ordersPlaced ?? 0;
                                   if (screened) parts.push(`${screened} screened`);
                                   if (h.analyzed) parts.push(`${h.analyzed} analyzed`);

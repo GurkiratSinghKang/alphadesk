@@ -51,7 +51,7 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
               stroke="var(--profit)"
               strokeWidth={12}
               strokeDasharray={`${investedDash} ${circumference}`}
-              strokeDashoffset={-cashDash}
+              strokeDashoffset={circumference - cashDash}
               strokeLinecap="butt"
               transform={`rotate(-90 ${cx} ${cy})`}
               opacity={0.8}

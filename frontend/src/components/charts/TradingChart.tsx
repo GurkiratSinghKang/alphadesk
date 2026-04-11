@@ -173,7 +173,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         chartRef.current?.timeScale().fitContent();
       },
       fitContent: () => chartRef.current?.timeScale().fitContent(),
-    }));
+    }), [chartType]);
 
     // Create chart — recreate when chartType changes
     useEffect(() => {
@@ -454,7 +454,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           try { series.removePriceLine(line); } catch {}
         });
       };
-    }, [positionLines]);
+    }, [positionLines, chartType]);
 
     return (
       <>
