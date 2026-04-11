@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Bot,
+  Brain,
   Play,
   TrendingUp,
   Target,
@@ -25,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn, formatCurrency } from "@/lib/utils";
+import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
 import {
   getPipelineStatus,
   triggerPipeline,
@@ -401,6 +403,22 @@ export default function PipelinePage() {
               {!todayRun && (
                 <p className="text-hint mt-2">No run today — click Run Now to trigger manually</p>
               )}
+            </section>
+
+            <Separator className="border-border" />
+
+            {/* Strategy Builder */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Strategy Builder
+                </h2>
+                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium">AI</span>
+              </div>
+              <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
+                <StrategyBuilder />
+              </div>
             </section>
 
             <Separator className="border-border" />
