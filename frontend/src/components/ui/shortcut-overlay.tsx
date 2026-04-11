@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect } from "react";
 import { SHORTCUT_GROUPS } from "@/hooks/useKeyboardShortcuts";
 
 function KBD({ children }: { children: string }) {
@@ -11,13 +12,19 @@ function KBD({ children }: { children: string }) {
 }
 
 export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { contentRef.current?.focus(); }, []);
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[600px] rounded-xl border border-border bg-[var(--surface)] p-6 shadow-2xl"
+        ref={contentRef}
+        tabIndex={-1}
+        className="w-full max-w-[600px] rounded-xl border border-border bg-[var(--surface)] p-6 shadow-2xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">

@@ -47,7 +47,7 @@ export function ProfileMenu() {
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}><Settings className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
           <DropdownMenuItem onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => { fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" }).catch(() => {}); document.cookie = "access_token=; path=/; max-age=0"; window.location.href = "/login"; }}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
+          <DropdownMenuItem onClick={async () => { try { await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" }); } catch {} document.cookie = "access_token=; path=/; max-age=0"; window.location.href = "/login"; }}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

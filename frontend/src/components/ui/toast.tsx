@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useState, type ReactNode } from "react";
+import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,8 +83,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismissToast = useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) clearTimeout(timer);
+    timersRef.current.delete(id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
@@ -94,11 +98,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const entry: ToastEntry = { ...data, id, createdAt: Date.now() };
       setToasts((prev) => [entry, ...prev].slice(0, 3));
       const duration = data.duration ?? 5000;
-      setTimeout(() => dismissToast(id), duration);
+      const timer = setTimeout(() => dismissToast(id), duration);
+      timersRef.current.set(id, timer);
       return id;
     },
     [dismissToast]
   );
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((timer) => clearTimeout(timer));
+      timersRef.current.clear();
+    };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ addToast, dismissToast }}>

@@ -50,7 +50,16 @@ export function TopBar() {
 
       <div className="flex items-center gap-2">
         <Popover>
-          <PopoverTrigger render={<Button variant="ghost" size="icon" className="relative h-8 w-8"><Bell className="h-4 w-4 text-muted-foreground" />{unacknowledgedCount > 0 && (<span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">{unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}</span>)}</Button>} />
+          <PopoverTrigger>
+            <Button variant="ghost" size="icon" className="relative h-8 w-8">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              {unacknowledgedCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                  {unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
           <PopoverContent side="bottom" align="end" className="w-80 bg-[var(--surface)] border-border p-0">
             <div className="border-b border-border px-3 py-2"><span className="text-xs font-medium text-foreground">Alerts & Notifications</span></div>
             <ScrollArea className="max-h-64">
