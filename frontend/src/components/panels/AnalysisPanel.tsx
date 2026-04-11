@@ -240,8 +240,13 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     <div className="space-y-4 p-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-xs font-medium text-muted-foreground">
+          <h3 className="text-xs font-medium text-muted-foreground flex items-center">
             Technical Score
+            {!analysis && (
+              <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
+                Estimated
+              </span>
+            )}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3 overflow-hidden break-words">
             {analysis?.summary ?? (score >= 60 ? `${symbol} showing bullish momentum. Watch for breakout above resistance.` : score <= 40 ? `${symbol} under selling pressure. Watch support levels.` : `${symbol} in consolidation range. Await directional catalyst.`)}
@@ -357,8 +362,13 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
   return (
     <div className="space-y-4 p-3">
       <div>
-        <h3 className="text-xs font-medium text-muted-foreground mb-2">
+        <h3 className="text-xs font-medium text-muted-foreground mb-2 flex items-center">
           Piotroski F-Score
+          {!analysis && (
+            <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
+              Estimated
+            </span>
+          )}
         </h3>
         <FScoreDots score={fScore} />
         <p className="text-[11px] text-muted-foreground mt-2">
@@ -425,8 +435,13 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     <div className="space-y-4 p-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-xs font-medium text-muted-foreground">
+          <h3 className="text-xs font-medium text-muted-foreground flex items-center">
             Sentiment Score
+            {!analysis && (
+              <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
+                Estimated
+              </span>
+            )}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1">
             Moderately bullish sentiment. Analysts positive, options flow mixed.
@@ -658,7 +673,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Quantity */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#555]">Quantity</label>
+        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Quantity</label>
         <div className="flex items-center gap-1 mt-1">
           <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">-</button>
           <input
@@ -674,7 +689,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Order Type */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#555]">Order Type</label>
+        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Order Type</label>
         <select
           value={orderType}
           onChange={(e) => setOrderType(e.target.value as any)}
@@ -690,7 +705,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       {/* Price (shown for limit/stop) */}
       {orderType !== "market" && (
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-[#555]">
+          <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
             {orderType === "stop" ? "Stop Price" : "Limit Price"}
           </label>
           <input
@@ -705,7 +720,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Time in Force */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#555]">Time in Force</label>
+        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Time in Force</label>
         <div className="flex gap-1 mt-1">
           <button onClick={() => setTif("day")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "day" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>Day</button>
           <button onClick={() => setTif("gtc")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "gtc" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>GTC</button>
@@ -715,7 +730,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       {/* Separator + Preview */}
       <div className="border-t border-border pt-3 space-y-1.5">
         <div className="flex justify-between text-xs">
-          <span className="text-[#555]">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
+          <span className="text-[#8a8a95]">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
           <span className="text-foreground tabular-nums font-medium">${estimatedCost.toFixed(2)}</span>
         </div>
       </div>

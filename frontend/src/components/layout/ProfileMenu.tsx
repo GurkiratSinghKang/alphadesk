@@ -31,13 +31,13 @@ export function ProfileMenu() {
           <div className="px-3 py-2 space-y-1">
             <p className="text-xs font-medium text-foreground">admin</p>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-[#555]">Equity</span>
+              <span className="text-[#8a8a95]">Equity</span>
               <span className="text-foreground tabular-nums">{formatCurrency(summary.equity > 0 ? summary.equity : 0)}</span>
             </div>
           </div>
           <DropdownMenuSeparator />
           <div className="px-3 py-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-[#555] mb-1.5">Trading Mode</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#8a8a95] mb-1.5">Trading Mode</p>
             <div className="flex gap-1.5">
               <button onClick={() => setTradingMode("paper")} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
               <button onClick={handleModeToggle} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>

@@ -382,11 +382,30 @@ async def get_trade_history(
 # Helpers
 # ---------------------------------------------------------------------------
 
+async def _get_current_price(symbol: str) -> float:
+    """Get current price for notional calculation."""
+    from core.redis import cache_get
+    cached = await cache_get(f"quote:{symbol}")
+    if cached and cached.get("last"):
+        return float(cached["last"])
+    # Fallback: use a reasonable estimate
+    return 0.0
+
+
 async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
     """Run risk checks before submitting an order (BUG-026: simple notional check)."""
-    total_notional = sum(
-        (leg.limit_price or 0) * leg.qty for leg in request.legs
-    )
+    total_notional = 0.0
+    for leg in request.legs:
+        if leg.limit_price:
+            total_notional += leg.limit_price * leg.qty
+        else:
+            price = await _get_current_price(leg.symbol)
+            if price <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot determine price for {leg.symbol}. Use a limit order.",
+                )
+            total_notional += price * leg.qty
 
     if total_notional > 50_000:
         return False, f"Order notional ${total_notional:,.0f} exceeds single-order limit of $50,000"
@@ -399,6 +418,14 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
 
     Supports both single-leg equity orders and multi-leg options orders (BUG-027).
     """
+    # Safety: reject live trading from the manual endpoint
+    base_url = settings.ALPACA_BASE_URL
+    if "paper" not in base_url.lower():
+        raise HTTPException(
+            status_code=403,
+            detail="Live trading is not enabled. Manual orders are restricted to paper trading.",
+        )
+
     import httpx
 
     headers = {

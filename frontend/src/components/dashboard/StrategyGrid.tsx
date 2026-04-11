@@ -112,6 +112,9 @@ function StrategyCard({
     <Card
       className="cursor-pointer border-border bg-[var(--surface)] card-glow hover:bg-[var(--surface)]/80"
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
     >
       <CardContent className="p-3.5">
         <div className="flex items-start justify-between gap-2">

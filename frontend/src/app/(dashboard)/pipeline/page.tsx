@@ -73,7 +73,7 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
               ? "border-primary/40 bg-primary/5"
               : "border-border bg-[var(--surface)]"
           )}>
-            <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#555]")}>
+            <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#8a8a95]")}>
               {stage.count}
             </p>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stage.label}</p>

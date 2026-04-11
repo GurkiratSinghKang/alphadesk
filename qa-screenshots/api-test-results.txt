@@ -1,0 +1,19 @@
+200 /api/v1/portfolio/summary -> {"equity":100061.68,"cash":94840.62,"buying_power":393981.44,"total_market_value":5221.06,"unrealized_pnl":-0.449995,"unrealized_pnl_pct":-0.008618843683083511,"realized_pnl_today":0.449995,"positions_count":1,"last_updated":"2026-04-11T14:16:29.104728Z"}
+
+200 /api/v1/market/quotes/AAPL -> {"symbol":"AAPL","bid":246.87,"ask":272.99,"last":260.43,"volume":807892,"timestamp":"2026-04-11T14:16:29.239407Z","change":-0.01,"changePct":-0.0,"high":262.18,"low":259.03,"open":259.98,"close":260.44}
+
+200 /api/v1/market/bars/AAPL?timeframe=1d&limit=10 -> [{"timestamp":"2025-04-11T04:00:00Z","open":186.1,"high":199.54,"low":186.06,"close":198.15,"volume":87435915,"vwap":195.623},{"timestamp":"2025-04-14T04:00:00Z","open":211.44,"high":212.94,"low":201.1621,"close":202.52,"volume":101352911,"vwap":205.5914},{"timestamp":"2025-04-15T04:00:00Z","open":2...
+
+200 /api/v1/pipeline/status -> {"running":false,"last_run":null,"last_result":null}
+
+200 /api/v1/trades/positions -> [{"symbol":"MRK","quantity":43.0,"side":"long","avg_cost":121.430465,"current_price":121.42,"market_value":5221.06,"unrealized_pnl":-0.449995,"unrealized_pnl_pct":-0.009000000000000001,"asset_class":"us_equity"}]
+
+200 /api/v1/trades/orders -> [{"id":"c8f7e5ff-7e87-4595-b1fe-a35afc54b764","status":"submitted","legs":[{"symbol":"MRK","side":"sell","qty":43.0,"order_type":"stop","limit_price":null,"stop_price":null,"asset_class":"equity"}],"time_in_force":"gtc","strategy":null,"submitted_at":"2026-04-11T14:00:04.747559Z","filled_at":null,"a...
+
+200 /api/v1/portfolio/greeks -> {"net_delta":0.0,"net_gamma":0.0,"net_theta":0.0,"net_vega":0.0,"beta_weighted_delta":0.0,"by_position":[]}
+
+200 /api/v1/portfolio/calendar -> {"month":4,"year":2026,"days":[{"date":"2026-04-01","pnl":-170.05,"trades":8,"win_rate":12.5},{"date":"2026-04-02","pnl":368.58,"trades":6,"win_rate":100.0},{"date":"2026-04-03","pnl":-266.45,"trades":7,"win_rate":42.9},{"date":"2026-04-06","pnl":297.02,"trades":5,"win_rate":0.0},{"date":"2026-04-07...
+
+200 /api/v1/news/market -> {"articles":[{"title":"National Australia Bank (OTCMKTS:NABZY) versus Grupo Financiero Galicia (NASDAQ:GGAL) Critical Survey","description":"National Australia Bank (OTCMKTS:NABZY – Get Free Report) and Grupo Financiero Galicia (NASDAQ:GGAL – Get Free Report) are both finance companies, but which is...
+
+200 /api/v1/screener/presets -> [{"id":1,"name":"Momentum + Quality","filters":[],"created_at":"2026-04-11T14:16:29.610619Z"},{"id":2,"name":"High IV Rank","filters":[],"created_at":"2026-04-11T14:16:29.610642Z"},{"id":3,"name":"Earnings Plays","filters":[],"created_at":"2026-04-11T14:16:29.610649Z"},{"id":4,"name":"Value + Growth...

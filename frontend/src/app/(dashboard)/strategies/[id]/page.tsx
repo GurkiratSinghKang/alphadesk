@@ -163,7 +163,7 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
   return (
     <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "opacity-50")}>
       <p className="text-label mb-1">{label}</p>
-      <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#555]" : color)}>
+      <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#8a8a95]" : color)}>
         {isEmpty ? <span className="text-sm font-normal">No data</span> : value}
       </p>
     </div>

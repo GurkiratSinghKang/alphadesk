@@ -226,7 +226,7 @@ export function ChartPanel() {
                   <span className="text-[var(--profit)]">{quote.bid.toFixed(2)}</span>
                   {" / "}
                   <span className="text-[var(--loss)]">{quote.ask.toFixed(2)}</span>
-                  <span className="ml-1.5 text-[#555]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
+                  <span className="ml-1.5 text-[#8a8a95]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
                 </span>
                 <span className="text-border">|</span>
                 <span>Vol: {formatNumber(quote.volume, true)}</span>

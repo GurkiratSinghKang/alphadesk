@@ -1,0 +1,20 @@
+[
+  {
+    "url": "/api/v1/market/quotes/INVALIDSYMBOL123",
+    "desc": "invalid symbol quote",
+    "status": 404,
+    "body": "{\"detail\":\"Symbol 'INVALIDSYMBOL123' not found\"}"
+  },
+  {
+    "url": "/api/v1/strategies/nonexistent-id/performance",
+    "desc": "invalid strategy",
+    "status": 404,
+    "body": "{\"detail\":\"Strategy 'nonexistent-id' not found\"}"
+  },
+  {
+    "url": "/api/v1/options/chain/INVALIDSYMBOL123",
+    "desc": "invalid options chain",
+    "status": 404,
+    "body": "{\"detail\":\"Symbol 'INVALIDSYMBOL123' not found\"}"
+  }
+]

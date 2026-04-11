@@ -1,0 +1,164 @@
+{
+  "timestamp": "2026-04-11T13:42:25.717Z",
+  "base_url": "https://tradingalpha.net",
+  "total": 22,
+  "passed": 22,
+  "failed": 0,
+  "slow": 0,
+  "results": [
+    {
+      "test": "POST /auth/login",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 468,
+      "details": "Token received"
+    },
+    {
+      "test": "POST /auth/logout",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 82,
+      "details": "Logout OK"
+    },
+    {
+      "test": "GET /portfolio/summary",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 62,
+      "details": "equity=100061.68, cash=94840.62, market_value=5221.06"
+    },
+    {
+      "test": "GET /portfolio/greeks",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 18,
+      "details": "delta=0, theta=0, positions=0"
+    },
+    {
+      "test": "GET /portfolio/calendar",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 25,
+      "details": "8 days, month_total=1154.81"
+    },
+    {
+      "test": "GET /portfolio/performance",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 17,
+      "details": "30 points, period=30d"
+    },
+    {
+      "test": "GET /market/quotes/AAPL",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 102,
+      "details": "last=260.43, bid=246.87, ask=272.99"
+    },
+    {
+      "test": "GET /market/quotes/INVALIDXYZ",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 109,
+      "details": "Correct 404 for invalid symbol"
+    },
+    {
+      "test": "GET /market/bars/SPY?timeframe=1d&limit=10",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 106,
+      "details": "10 bars returned"
+    },
+    {
+      "test": "GET /options/chain/AAPL",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 98,
+      "details": "132 contracts, 6 expirations"
+    },
+    {
+      "test": "GET /options/chain/INVALIDXYZ",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 73,
+      "details": "Correct 404 for invalid symbol"
+    },
+    {
+      "test": "GET /trades/positions",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 43,
+      "details": "1 positions"
+    },
+    {
+      "test": "GET /trades/orders",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 52,
+      "details": "1 orders"
+    },
+    {
+      "test": "GET /strategies/",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 44,
+      "details": "9 strategies: Momentum + Quality, PEAD, VRP Harvesting, Earnings Vol Premium, Regime Adaptive, Claude Alpha, Mean Reversion, VCP Breakout, Manual / Discretionary"
+    },
+    {
+      "test": "GET /strategies/pead/performance",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 107,
+      "details": "return=0%, sharpe=0, win_rate=-1"
+    },
+    {
+      "test": "GET /pipeline/status",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 20,
+      "details": "Fields: running, last_run, last_result"
+    },
+    {
+      "test": "GET /pipeline/positions",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 51,
+      "details": "N/A pipeline positions"
+    },
+    {
+      "test": "GET /news/market",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 141,
+      "details": "10 articles"
+    },
+    {
+      "test": "GET /screener/presets",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 30,
+      "details": "5 presets"
+    },
+    {
+      "test": "GET /market-overview/indices",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 105,
+      "details": "5 indices: SPY, QQQ, IWM, DIA, VIX"
+    },
+    {
+      "test": "GET /market-overview/regime",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 25,
+      "details": "regime=\"Bull - Low Volatility\", confidence=0.72, vix=16.5"
+    },
+    {
+      "test": "GET /market-overview/sectors",
+      "pass": true,
+      "slow": false,
+      "elapsed_ms": 20,
+      "details": "11 sectors"
+    }
+  ]
+}

@@ -95,7 +95,7 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
     """Fetch articles from newsdata.io. Returns raw article dicts."""
     import time
 
-    api_key = settings.NEWSDATA_API_KEY
+    api_key = settings.NEWSDATA_API_KEY.get_secret_value()
     if not api_key:
         return []
 
@@ -249,7 +249,7 @@ async def get_latest_news(
     if cached:
         return NewsResponse(**cached)
 
-    if settings.NEWSDATA_API_KEY:
+    if settings.NEWSDATA_API_KEY.get_secret_value():
         raw = await _fetch_newsdata(q, limit)
         articles = _parse_articles(raw)
     else:
@@ -268,7 +268,7 @@ async def get_market_news() -> NewsResponse:
     if cached:
         return NewsResponse(**cached)
 
-    if settings.NEWSDATA_API_KEY:
+    if settings.NEWSDATA_API_KEY.get_secret_value():
         raw = await _fetch_newsdata("stock market finance", 10)
         articles = _parse_articles(raw)
     else:
@@ -291,7 +291,7 @@ async def get_symbol_news(
     if cached:
         return NewsResponse(**cached)
 
-    if settings.NEWSDATA_API_KEY:
+    if settings.NEWSDATA_API_KEY.get_secret_value():
         query = _company_query(symbol)
         raw = await _fetch_newsdata(query, limit)
         articles = _parse_articles(raw, symbols=[symbol])
@@ -317,7 +317,7 @@ async def fetch_news_for_symbol(symbol: str, limit: int = 5) -> list[str]:
     if cached:
         return cached  # type: ignore[return-value]
 
-    if settings.NEWSDATA_API_KEY:
+    if settings.NEWSDATA_API_KEY.get_secret_value():
         query = _company_query(symbol)
         raw = await _fetch_newsdata(query, limit)
         headlines = [r["title"] for r in raw if r.get("title")][:limit]

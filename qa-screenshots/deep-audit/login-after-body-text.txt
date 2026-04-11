@@ -1,0 +1,250 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+-$83.76(-0.08%)
+Regime
+---
+VIX
+--.-
+LIVE
+Alpaca (Paper)
+PAPER
+1W
+1M
+3M
+YTD
+
+PORTFOLIO
+
+$100,032.10
+
+DAY P&L
+
+-$83.76 (-0.08%)
+
+REGIME
+
+Bull - Low Volatility
+
+VIX
+
+16.5
+↓3.2%
+
+PIPELINE
+
+0 trades
+Live
+Activity Feed
+Today
+4 events
+
+Market regime: Bull - Low Volatility
+
+Broad market uptrend with below-average volatility. Momentum and risk-on strategies favored. VIX term structure in contango.
+
+9:48 PM
+
+Muthoot Finance Jumps 3% After Board Approves 300% Dividend, Eyes Insurance Space
+
+Inc Business
+
+1:39 PM
+
+CPI: Inflation rose to 3.3% amid Iran war in March, missing forecasts
+
+Headtopics
+
+1:36 PM
+
+KeyBanc reiterates Oracle stock Overweight rating at $300 target
+
+Investing Nigeria
+
+1:36 PM
+Open Positions
+1 position
+MRK
+43 shares
+
+$120.73
+
+avg $121.43
+
+-$30.03
+
+-0.58%
+
+April P&L
++$1,154.81
+S
+M
+T
+W
+T
+F
+S
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+Strategies
+7 active
+
+Momentum + Quality
+
+Active
++0.00%
+0 pos
+
+Thrives in bull trends
+
+PEAD
+
+Active
++6.60%
+1 pos
+
+Event-driven, all regimes
+
+VRP Harvesting
+
+Active
++0.00%
+0 pos
+
+Best in low-vol contango
+
+Earnings Vol
+
+Paused
+-15.50%
+0 pos
+
+Paused in high-vol regimes
+
+Regime Adaptive
+
+Active
++0.00%
+0 pos
+
+Adjusts to any regime
+
+Claude Alpha
+
+Active
++0.00%
+0 pos
+
+AI-driven, regime-aware
+
+Mean Reversion
+
+Active
++0.00%
+0 pos
+
+Favored in sideways markets
+
+VCP Breakout
+
+Active
++0.00%
+0 pos
+
+Needs bull momentum
+
+MARKET INDICES
+
+SPY
+
+S&P 500
+
+$679.35
+
++0.00%
+
+QQQ
+
+NASDAQ 100
+
+$611.65
+
++0.08%
+
+IWM
+
+Russell 2000
+
+$261.19
+
+-0.05%
+
+SECTOR PERFORMANCE
+Technology
++1.2%
+Healthcare
++0.8%
+Comm Svcs
++0.6%
+Energy
+-0.5%
+Real Est
+-0.4%
+Financials
++0.3%
+Utilities
+-0.3%
+Cons Stpl
++0.2%
+Cons Disc
++0.1%
+Industrials
+-0.1%
+Materials
++0.0%
+HEADLINES
+
+Muthoot Finance Jumps 3% After Board Approves 300% Dividend, Eyes Insurance Space
+
+Inc Business • 1:39 PM
+
+CPI: Inflation rose to 3.3% amid Iran war in March, missing forecasts
+
+Headtopics • 1:36 PM
+
+KeyBanc reiterates Oracle stock Overweight rating at $300 target
+
+Investing Nigeria • 1:36 PM

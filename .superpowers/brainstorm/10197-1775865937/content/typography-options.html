@@ -1,0 +1,43 @@
+<h2>Typography Hierarchy</h2>
+<p class="subtitle">The current app uses uniform font weights with subtle size differences. Which direction for stronger hierarchy?</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:24px;background:#0a0a0f;border-radius:8px 8px 0 0;">
+      <div style="font-family:Inter,system-ui,sans-serif;color:#e2e2ea;">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;margin-bottom:4px;">PORTFOLIO</div>
+        <div style="font-size:32px;font-weight:800;letter-spacing:-0.02em;color:#e2e2ea;">$100,061.68</div>
+        <div style="font-size:14px;font-weight:400;color:#71717a;margin-top:8px;">Day P&L</div>
+        <div style="font-size:18px;font-weight:600;color:#22c55e;">+$245.30 (+0.24%)</div>
+        <div style="margin-top:20px;border-top:1px solid #2a2a3e;padding-top:12px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#71717a;margin-bottom:8px;">STRATEGIES</div>
+          <div style="font-size:14px;font-weight:600;color:#e2e2ea;">Momentum + Quality</div>
+          <div style="font-size:12px;font-weight:400;color:#71717a;">Thrives in bull trends</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Weight Contrast</h3>
+      <p>Heavy headlines (800), semibold values (600), regular body (400), light labels. Uses weight to create depth. Tighter letter-spacing on large numbers.</p>
+    </div>
+  </div>
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:24px;background:#0a0a0f;border-radius:8px 8px 0 0;">
+      <div style="font-family:Inter,system-ui,sans-serif;color:#e2e2ea;">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#555;margin-bottom:4px;">PORTFOLIO</div>
+        <div style="font-size:36px;font-weight:700;letter-spacing:-0.03em;color:#e2e2ea;">$100,061.68</div>
+        <div style="font-size:13px;font-weight:500;color:#555;margin-top:8px;">Day P&L</div>
+        <div style="font-size:20px;font-weight:500;color:#22c55e;">+$245.30 <span style="font-size:14px;color:#22c55e99;">(+0.24%)</span></div>
+        <div style="margin-top:20px;border-top:1px solid #2a2a3e;padding-top:12px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#555;margin-bottom:8px;">STRATEGIES</div>
+          <div style="font-size:15px;font-weight:500;color:#e2e2ea;">Momentum + Quality</div>
+          <div style="font-size:12px;font-weight:400;color:#555;">Thrives in bull trends</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Size + Dimming</h3>
+      <p>Larger size jumps between levels. Labels much dimmer (#555 vs #71717a). Values use medium weight (500). Secondary values like percentages get reduced opacity. More Bloomberg-like.</p>
+    </div>
+  </div>
+</div>

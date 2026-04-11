@@ -1,0 +1,33 @@
+<h2>TopBar Redesign</h2>
+<p class="subtitle">Current bar has 9 elements in one row: logo, nav tabs, LIVE dot, search, P&L, broker, mode badge, alerts, settings. Which approach reduces clutter?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Two-Row Header</h3>
+      <p><strong>Row 1:</strong> Logo + Nav tabs + Search bar (centered, wider) + Alerts + Settings</p>
+      <p><strong>Row 2 (slim data strip):</strong> P&L | Broker status | Mode badge | LIVE indicator — all in a 28px accent bar below</p>
+      <p style="margin-top:8px;color:#71717a;font-size:13px;">Pro: Clean separation of navigation vs. status. Search gets more room. Con: Uses ~76px total height instead of 48px.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Collapsible Single Row</h3>
+      <p><strong>Always visible:</strong> Logo + Nav tabs + Search + P&L + Alerts</p>
+      <p><strong>On hover/click:</strong> Broker, Mode, Settings slide out from a "⋯" menu on the right</p>
+      <p style="margin-top:8px;color:#71717a;font-size:13px;">Pro: Keeps 48px height, less visual noise. Con: Hides broker/mode status — might miss context.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Keep Single Row, Regroup</h3>
+      <p><strong>Left:</strong> Logo + Nav tabs</p>
+      <p><strong>Center:</strong> Search bar (wider)</p>
+      <p><strong>Right:</strong> Compact P&L chip | LIVE dot | Alerts bell | Profile avatar (click opens: broker, mode, settings, shortcuts)</p>
+      <p style="margin-top:8px;color:#71717a;font-size:13px;">Pro: Stays 48px, groups related items behind a profile menu. Con: Broker/mode requires one extra click.</p>
+    </div>
+  </div>
+</div>

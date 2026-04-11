@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -45,7 +46,7 @@ MIN_CONVICTION = 60
 ANALYZE_TOP_N = 15               # total analysis budget across all strategies
 SCREEN_TOP_N = 100               # screen more, strategies will filter
 
-CLAUDE_CLI = r"C:\Users\gurki\.local\bin\claude.EXE"
+CLAUDE_CLI = os.environ.get("CLAUDE_CLI_PATH", "claude")
 LOG_DIR = Path(__file__).resolve().parent.parent / "pipeline_logs"
 
 
@@ -282,6 +283,16 @@ async def _execute_approved_orders(
 ) -> list[dict[str, Any]]:
     """Place buy orders for all approved pending orders from the master agent."""
     orders_placed: list[dict[str, Any]] = []
+
+    # Enforce daily trade limit
+    today_count = ledger.count_today_trades()
+    if today_count >= MAX_DAILY_TRADES:
+        logger.warning(
+            "Daily trade limit reached (%d/%d), skipping remaining orders",
+            today_count, MAX_DAILY_TRADES,
+        )
+        return orders_placed
+
     for order in master.pending_orders:
         if order["side"] != "buy":
             continue

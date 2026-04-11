@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-04-11T02:26:51.127Z",
+  "consoleErrors": [
+    "[DASHBOARD PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "[TRADE PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "[PIPELINE PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "[PIPELINE] Failed to load resource: the server responded with a status of 404 ()",
+    "[STRATEGY:Momentum + Quality PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "[STRATEGY:PEAD PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "[STRATEGY:VRP Harvesting PAGE_ERROR] Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ],
+  "networkFailures": [],
+  "warnings": [],
+  "apiErrorTests": [
+    {
+      "url": "/api/v1/market/quotes/INVALIDSYMBOL123",
+      "desc": "invalid symbol quote",
+      "status": 404,
+      "body": "{\"detail\":\"Symbol 'INVALIDSYMBOL123' not found\"}"
+    },
+    {
+      "url": "/api/v1/strategies/nonexistent-id/performance",
+      "desc": "invalid strategy",
+      "status": 404,
+      "body": "{\"detail\":\"Strategy 'nonexistent-id' not found\"}"
+    },
+    {
+      "url": "/api/v1/options/chain/INVALIDSYMBOL123",
+      "desc": "invalid options chain",
+      "status": 404,
+      "body": "{\"detail\":\"Symbol 'INVALIDSYMBOL123' not found\"}"
+    }
+  ],
+  "dashboardIssues": {
+    "nanDisplayed": false,
+    "undefinedDisplayed": false,
+    "nullDisplayed": false,
+    "brokenImages": []
+  },
+  "tradeIssues": {
+    "nanDisplayed": false,
+    "undefinedDisplayed": false,
+    "nullDisplayed": false,
+    "chartLoaded": true
+  },
+  "pipelineIssues": {
+    "nanDisplayed": false,
+    "undefinedDisplayed": false,
+    "nullDisplayed": false
+  }
+}

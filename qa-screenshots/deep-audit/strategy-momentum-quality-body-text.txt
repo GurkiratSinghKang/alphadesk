@@ -1,0 +1,102 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+-$83.76(-0.08%)
+Regime
+---
+VIX
+--.-
+LIVE
+Alpaca (Paper)
+PAPER
+Dashboard
+Momentum + Quality
+Momentum + Quality
+
+Combines relative strength momentum with quality factor screens (high ROE, low debt, earnings stability). Rebalances monthly.
+
+Active
+Pause
+1M
+3M
+6M
+YTD
+ALL
+
+Not enough data for equity curve
+
+TOTAL RETURN
+
++0.00% ($0.00)
+
+SHARPE RATIO
+
+No data
+
+MAX DRAWDOWN
+
+No data
+
+WIN RATE
+
+No data
+
+ACTIVE POSITIONS
+
+0
+
+CALMAR RATIO
+
+No data
+
+Trade History
+All (0)
+Open (0)
+Closed (0)
+
+No trades yet
+
+This strategy will enter positions when its signals trigger
+
+View Pipeline →
+About
+Positions
+Sector Exposure
+Correlation
+Analytics
+Strategy Thesis
+
+This strategy combines the well-documented cross-sectional momentum anomaly with fundamental quality screening to construct a portfolio of stocks exhibiting both strong price trends and robust financial health. The momentum component follows the canonical 12-minus-1 month formation period established by Jegadeesh & Titman (1993), skipping the most recent month to avoid the short-term reversal effect documented by Lehmann (1990). By ranking the investable universe on prior returns and selecting from the top decile, the strategy captures the tendency of past winners to continue outperforming over intermediate horizons — an effect that has persisted across geographies and decades, as confirmed by Asness, Moskowitz & Pedersen (2013) in their seminal study of value and momentum everywhere.
+
+The quality overlay uses the Piotroski F-Score (Piotroski, 2000), a composite measure of profitability, leverage, and operating efficiency, requiring a score of 6 or higher for portfolio inclusion. This filter serves a dual purpose: it eliminates financially distressed firms that may exhibit high momentum due to speculative activity or short squeezes, and it selects for companies whose price appreciation is grounded in genuine fundamental improvement. Research by Asness, Frazzini & Pedersen (2019) demonstrates that quality factors earn a significant premium and, critically, exhibit negative correlation with momentum drawdowns.
+
+The intersection of momentum and quality directly addresses the primary risk of pure momentum strategies — catastrophic crash risk during market reversals. Momentum crashes, as analyzed by Daniel & Moskowitz (2016), tend to concentrate in low-quality, high-beta names. By excluding these through the F-Score screen, the strategy preserves the core momentum premium while substantially reducing tail risk, resulting in a more favorable Sharpe ratio and maximum drawdown profile than either factor in isolation.
+
+Edge
+
+Exploits the behavioral underreaction to gradual information flow in fundamentally sound companies, where institutional herding amplifies trends that quality screening ensures are grounded in real earnings improvement rather than speculative excess.
+
+Parameters
+Rebalance Frequency
+Monthly (first trading day)
+Universe
+S&P 500 constituents, excluding financials and REITs
+Position Sizing
+Equal-weight across selected positions
+Entry Criteria
+Top-decile 12-minus-1 month momentum AND Piotroski F-Score >= 6
+Exit Criteria
+Falls below top-quartile momentum OR F-Score drops below 5
+Max Positions
+20
+
+Risk Profile
+
+Medium
+
+Quality screening materially reduces momentum crash risk, but the strategy remains exposed to broad factor rotations and can underperform during sharp reversals from growth to value.

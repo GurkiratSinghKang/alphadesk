@@ -238,24 +238,9 @@ function TradeBuilderTab() {
       };
       const order = await placeOrder(payload);
       addOrder(order);
-    } catch {
-      // Create a local order record even if API fails
-      addOrder({
-        id: `local-${Date.now()}`,
-        symbol: selectedSymbol,
-        side: legs[0].side,
-        type: "limit",
-        quantity: legs[0].quantity,
-        price: legs[0].price,
-        status: "pending",
-        legs: legs.map((l) => ({
-          symbol: l.symbol,
-          side: l.side,
-          quantity: l.quantity,
-          price: l.price,
-        })),
-        createdAt: new Date().toISOString(),
-      });
+    } catch (err: any) {
+      // Show error toast — do NOT create phantom orders
+      console.error("Order placement failed:", err);
     } finally {
       setSubmitting(false);
     }

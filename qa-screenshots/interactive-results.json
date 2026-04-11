@@ -1,0 +1,1049 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "status": "PASS",
+      "section": "Login",
+      "description": "Login with admin credentials",
+      "details": "Redirected to https://tradingalpha.net/",
+      "timestamp": "2026-04-11T13:57:29.065Z"
+    },
+    {
+      "id": 2,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: momentum-quality",
+      "details": "Navigated to https://tradingalpha.net/strategies/momentum-quality",
+      "timestamp": "2026-04-11T13:57:38.152Z"
+    },
+    {
+      "id": 3,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: pead",
+      "details": "Navigated to https://tradingalpha.net/strategies/pead",
+      "timestamp": "2026-04-11T13:57:43.321Z"
+    },
+    {
+      "id": 4,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: vrp-harvesting",
+      "details": "Navigated to https://tradingalpha.net/strategies/vrp-harvesting",
+      "timestamp": "2026-04-11T13:57:48.268Z"
+    },
+    {
+      "id": 5,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: earnings-vol-premium",
+      "details": "Navigated to https://tradingalpha.net/strategies/earnings-vol-premium",
+      "timestamp": "2026-04-11T13:57:53.386Z"
+    },
+    {
+      "id": 6,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: regime-adaptive",
+      "details": "Navigated to https://tradingalpha.net/strategies/regime-adaptive",
+      "timestamp": "2026-04-11T13:57:58.402Z"
+    },
+    {
+      "id": 7,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: claude-alpha",
+      "details": "Navigated to https://tradingalpha.net/strategies/claude-alpha",
+      "timestamp": "2026-04-11T13:58:03.701Z"
+    },
+    {
+      "id": 8,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: mean-reversion",
+      "details": "Navigated to https://tradingalpha.net/strategies/mean-reversion",
+      "timestamp": "2026-04-11T13:58:08.931Z"
+    },
+    {
+      "id": 9,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click strategy card: vcp-breakout",
+      "details": "Navigated to https://tradingalpha.net/strategies/vcp-breakout",
+      "timestamp": "2026-04-11T13:58:13.984Z"
+    },
+    {
+      "id": 10,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Activity feed 'Run Pipeline' link",
+      "details": "Feed has content (not in empty state) — link may not be visible",
+      "timestamp": "2026-04-11T13:58:18.015Z"
+    },
+    {
+      "id": 11,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click equity curve period pill: 1W",
+      "details": "Button clicked, screenshots taken",
+      "timestamp": "2026-04-11T13:58:23.054Z"
+    },
+    {
+      "id": 12,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click equity curve period pill: 1M",
+      "details": "Button clicked, screenshots taken",
+      "timestamp": "2026-04-11T13:58:24.032Z"
+    },
+    {
+      "id": 13,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click equity curve period pill: 3M",
+      "details": "Button clicked, screenshots taken",
+      "timestamp": "2026-04-11T13:58:25.017Z"
+    },
+    {
+      "id": 14,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click equity curve period pill: YTD",
+      "details": "Button clicked, screenshots taken",
+      "timestamp": "2026-04-11T13:58:26.006Z"
+    },
+    {
+      "id": 15,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Hover P&L calendar cells shows tooltip",
+      "details": "Tooltip: \"\"",
+      "timestamp": "2026-04-11T13:58:30.790Z"
+    },
+    {
+      "id": 16,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click profile avatar 'A' opens dropdown",
+      "details": "Dropdown contains: adminEquity$100,061.68Trading ModePaperLiveSettingsKeyboard ShortcutsLogout",
+      "timestamp": "2026-04-11T13:58:34.626Z"
+    },
+    {
+      "id": 17,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Click search bar opens command palette",
+      "details": "Command palette dialog appeared",
+      "timestamp": "2026-04-11T13:58:38.769Z"
+    },
+    {
+      "id": 18,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Press '?' opens keyboard shortcuts overlay",
+      "details": "Overlay appeared",
+      "timestamp": "2026-04-11T13:58:43.348Z"
+    },
+    {
+      "id": 19,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Press Escape closes keyboard shortcuts overlay",
+      "details": "Overlay dismissed",
+      "timestamp": "2026-04-11T13:58:43.954Z"
+    },
+    {
+      "id": 20,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: AAPL",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:50.868Z"
+    },
+    {
+      "id": 21,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: MSFT",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:52.436Z"
+    },
+    {
+      "id": 22,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: GOOGL",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:54.018Z"
+    },
+    {
+      "id": 23,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: AMZN",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:55.597Z"
+    },
+    {
+      "id": 24,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: NVDA",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:57.161Z"
+    },
+    {
+      "id": 25,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol: TSLA",
+      "details": "Symbol found in UI after click",
+      "timestamp": "2026-04-11T13:58:58.729Z"
+    },
+    {
+      "id": 26,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: 1m",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:58:59.982Z"
+    },
+    {
+      "id": 27,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: 5m",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:59:01.232Z"
+    },
+    {
+      "id": 28,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: 15m",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:59:02.496Z"
+    },
+    {
+      "id": 29,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: 1H",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:59:03.745Z"
+    },
+    {
+      "id": 30,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: D",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:59:09.171Z"
+    },
+    {
+      "id": 31,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click timeframe button: W",
+      "details": "Button shows active state",
+      "timestamp": "2026-04-11T13:59:10.427Z"
+    },
+    {
+      "id": 32,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click column header: Symbol",
+      "details": "Header clicked — sort may have changed",
+      "timestamp": "2026-04-11T13:59:15.161Z"
+    },
+    {
+      "id": 33,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click column header: Last",
+      "details": "Header clicked — sort may have changed",
+      "timestamp": "2026-04-11T13:59:15.708Z"
+    },
+    {
+      "id": 34,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click column header: Chg%",
+      "details": "Header clicked — sort may have changed",
+      "timestamp": "2026-04-11T13:59:16.265Z"
+    },
+    {
+      "id": 35,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click 'Order' tab in analysis panel",
+      "details": "Order form appeared with Buy/Sell",
+      "timestamp": "2026-04-11T13:59:21.307Z"
+    },
+    {
+      "id": 36,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click Buy button",
+      "details": "Buy selected (state changed)",
+      "timestamp": "2026-04-11T13:59:27.124Z"
+    },
+    {
+      "id": 37,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click Sell button",
+      "details": "Sell selected (active state)",
+      "timestamp": "2026-04-11T13:59:27.681Z"
+    },
+    {
+      "id": 38,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click +/- quantity buttons",
+      "details": "Plus: found, Minus: found",
+      "timestamp": "2026-04-11T13:59:32.581Z"
+    },
+    {
+      "id": 39,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Change order type to Limit",
+      "details": "Limit selected, price field visible",
+      "timestamp": "2026-04-11T13:59:38.640Z"
+    },
+    {
+      "id": 40,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click options expiration: Apr 17 (6d)",
+      "details": "Expiry selected, chain should update",
+      "timestamp": "2026-04-11T13:59:44.217Z"
+    },
+    {
+      "id": 41,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click options expiration: Apr 24 (13d)",
+      "details": "Expiry selected, chain should update",
+      "timestamp": "2026-04-11T13:59:45.078Z"
+    },
+    {
+      "id": 42,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click options expiration: May 1 (20d)",
+      "details": "Expiry selected, chain should update",
+      "timestamp": "2026-04-11T13:59:45.926Z"
+    },
+    {
+      "id": 43,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click full-screen toggle on options panel",
+      "details": "Toggle clicked — panel expanded",
+      "timestamp": "2026-04-11T13:59:51.120Z"
+    },
+    {
+      "id": 44,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Click 'Run Now' shows running state",
+      "details": "Running indicator appeared",
+      "timestamp": "2026-04-11T13:59:56.745Z"
+    },
+    {
+      "id": 45,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Click history row expands details",
+      "details": "Clicked row — 4 rows available",
+      "timestamp": "2026-04-11T14:00:07.468Z"
+    },
+    {
+      "id": 46,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Flow diagram shows stage counts",
+      "details": "Stage labels found in page content",
+      "timestamp": "2026-04-11T14:00:12.411Z"
+    },
+    {
+      "id": 47,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click tab: About",
+      "details": "Tab active: clicked",
+      "timestamp": "2026-04-11T14:00:20.903Z"
+    },
+    {
+      "id": 48,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click tab: Positions",
+      "details": "Tab active: clicked",
+      "timestamp": "2026-04-11T14:00:25.311Z"
+    },
+    {
+      "id": 49,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click tab: Sector Exposure",
+      "details": "Tab active: clicked",
+      "timestamp": "2026-04-11T14:00:29.883Z"
+    },
+    {
+      "id": 50,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click tab: Correlation",
+      "details": "Tab active: clicked",
+      "timestamp": "2026-04-11T14:00:34.328Z"
+    },
+    {
+      "id": 51,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click tab: Analytics",
+      "details": "Tab active: clicked",
+      "timestamp": "2026-04-11T14:00:38.950Z"
+    },
+    {
+      "id": 52,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click Pause/Active toggle",
+      "details": "Before: \"Pause\" -> After: \"Resume\"",
+      "timestamp": "2026-04-11T14:00:44.809Z"
+    },
+    {
+      "id": 53,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click period pill: 1M",
+      "details": "Period pill clicked",
+      "timestamp": "2026-04-11T14:00:50.517Z"
+    },
+    {
+      "id": 54,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click period pill: 3M",
+      "details": "Period pill clicked",
+      "timestamp": "2026-04-11T14:00:51.149Z"
+    },
+    {
+      "id": 55,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click period pill: 6M",
+      "details": "Period pill clicked",
+      "timestamp": "2026-04-11T14:00:51.806Z"
+    },
+    {
+      "id": 56,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click period pill: YTD",
+      "details": "Period pill clicked",
+      "timestamp": "2026-04-11T14:00:52.456Z"
+    },
+    {
+      "id": 57,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Click period pill: ALL",
+      "details": "Period pill clicked",
+      "timestamp": "2026-04-11T14:00:53.107Z"
+    },
+    {
+      "id": 58,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "SPY benchmark line visible",
+      "details": "SPY label found in equity curve SVG",
+      "timestamp": "2026-04-11T14:00:58.207Z"
+    },
+    {
+      "id": 59,
+      "status": "PASS",
+      "section": "Global",
+      "description": "Ctrl+K opens command palette",
+      "details": "Command palette dialog appeared",
+      "timestamp": "2026-04-11T14:01:01.921Z"
+    },
+    {
+      "id": 60,
+      "status": "PASS",
+      "section": "Global",
+      "description": "Type symbol in command palette",
+      "details": "AAPL found in palette results",
+      "timestamp": "2026-04-11T14:01:08.095Z"
+    },
+    {
+      "id": 61,
+      "status": "FAIL",
+      "section": "Global",
+      "description": "Click alerts bell opens dropdown",
+      "details": "No popover appeared after clicking bell",
+      "timestamp": "2026-04-11T14:01:12.725Z"
+    },
+    {
+      "id": 62,
+      "status": "PASS",
+      "section": "Global",
+      "description": "Keyboard shortcut: g+d -> Dashboard",
+      "details": "URL: https://tradingalpha.net/",
+      "timestamp": "2026-04-11T14:01:18.172Z"
+    },
+    {
+      "id": 63,
+      "status": "PASS",
+      "section": "Global",
+      "description": "Keyboard shortcut: g+t -> Trade",
+      "details": "URL: https://tradingalpha.net/trade",
+      "timestamp": "2026-04-11T14:01:23.544Z"
+    },
+    {
+      "id": 64,
+      "status": "PASS",
+      "section": "Global",
+      "description": "Keyboard shortcut: g+p -> Pipeline",
+      "details": "URL: https://tradingalpha.net/pipeline",
+      "timestamp": "2026-04-11T14:01:28.896Z"
+    }
+  ],
+  "summary": {
+    "total": 64,
+    "pass": 63,
+    "fail": 1,
+    "passRate": "98.4%",
+    "timestamp": "2026-04-11T14:01:28.897Z",
+    "sections": {
+      "Dashboard": [
+        {
+          "id": 2,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: momentum-quality",
+          "details": "Navigated to https://tradingalpha.net/strategies/momentum-quality",
+          "timestamp": "2026-04-11T13:57:38.152Z"
+        },
+        {
+          "id": 3,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: pead",
+          "details": "Navigated to https://tradingalpha.net/strategies/pead",
+          "timestamp": "2026-04-11T13:57:43.321Z"
+        },
+        {
+          "id": 4,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: vrp-harvesting",
+          "details": "Navigated to https://tradingalpha.net/strategies/vrp-harvesting",
+          "timestamp": "2026-04-11T13:57:48.268Z"
+        },
+        {
+          "id": 5,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: earnings-vol-premium",
+          "details": "Navigated to https://tradingalpha.net/strategies/earnings-vol-premium",
+          "timestamp": "2026-04-11T13:57:53.386Z"
+        },
+        {
+          "id": 6,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: regime-adaptive",
+          "details": "Navigated to https://tradingalpha.net/strategies/regime-adaptive",
+          "timestamp": "2026-04-11T13:57:58.402Z"
+        },
+        {
+          "id": 7,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: claude-alpha",
+          "details": "Navigated to https://tradingalpha.net/strategies/claude-alpha",
+          "timestamp": "2026-04-11T13:58:03.701Z"
+        },
+        {
+          "id": 8,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: mean-reversion",
+          "details": "Navigated to https://tradingalpha.net/strategies/mean-reversion",
+          "timestamp": "2026-04-11T13:58:08.931Z"
+        },
+        {
+          "id": 9,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click strategy card: vcp-breakout",
+          "details": "Navigated to https://tradingalpha.net/strategies/vcp-breakout",
+          "timestamp": "2026-04-11T13:58:13.984Z"
+        },
+        {
+          "id": 10,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Activity feed 'Run Pipeline' link",
+          "details": "Feed has content (not in empty state) — link may not be visible",
+          "timestamp": "2026-04-11T13:58:18.015Z"
+        },
+        {
+          "id": 11,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click equity curve period pill: 1W",
+          "details": "Button clicked, screenshots taken",
+          "timestamp": "2026-04-11T13:58:23.054Z"
+        },
+        {
+          "id": 12,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click equity curve period pill: 1M",
+          "details": "Button clicked, screenshots taken",
+          "timestamp": "2026-04-11T13:58:24.032Z"
+        },
+        {
+          "id": 13,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click equity curve period pill: 3M",
+          "details": "Button clicked, screenshots taken",
+          "timestamp": "2026-04-11T13:58:25.017Z"
+        },
+        {
+          "id": 14,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click equity curve period pill: YTD",
+          "details": "Button clicked, screenshots taken",
+          "timestamp": "2026-04-11T13:58:26.006Z"
+        },
+        {
+          "id": 15,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Hover P&L calendar cells shows tooltip",
+          "details": "Tooltip: \"\"",
+          "timestamp": "2026-04-11T13:58:30.790Z"
+        },
+        {
+          "id": 16,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click profile avatar 'A' opens dropdown",
+          "details": "Dropdown contains: adminEquity$100,061.68Trading ModePaperLiveSettingsKeyboard ShortcutsLogout",
+          "timestamp": "2026-04-11T13:58:34.626Z"
+        },
+        {
+          "id": 17,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Click search bar opens command palette",
+          "details": "Command palette dialog appeared",
+          "timestamp": "2026-04-11T13:58:38.769Z"
+        },
+        {
+          "id": 18,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Press '?' opens keyboard shortcuts overlay",
+          "details": "Overlay appeared",
+          "timestamp": "2026-04-11T13:58:43.348Z"
+        },
+        {
+          "id": 19,
+          "status": "PASS",
+          "section": "Dashboard",
+          "description": "Press Escape closes keyboard shortcuts overlay",
+          "details": "Overlay dismissed",
+          "timestamp": "2026-04-11T13:58:43.954Z"
+        }
+      ],
+      "Trade": [
+        {
+          "id": 20,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: AAPL",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:50.868Z"
+        },
+        {
+          "id": 21,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: MSFT",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:52.436Z"
+        },
+        {
+          "id": 22,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: GOOGL",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:54.018Z"
+        },
+        {
+          "id": 23,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: AMZN",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:55.597Z"
+        },
+        {
+          "id": 24,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: NVDA",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:57.161Z"
+        },
+        {
+          "id": 25,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click watchlist symbol: TSLA",
+          "details": "Symbol found in UI after click",
+          "timestamp": "2026-04-11T13:58:58.729Z"
+        },
+        {
+          "id": 26,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: 1m",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:58:59.982Z"
+        },
+        {
+          "id": 27,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: 5m",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:59:01.232Z"
+        },
+        {
+          "id": 28,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: 15m",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:59:02.496Z"
+        },
+        {
+          "id": 29,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: 1H",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:59:03.745Z"
+        },
+        {
+          "id": 30,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: D",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:59:09.171Z"
+        },
+        {
+          "id": 31,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click timeframe button: W",
+          "details": "Button shows active state",
+          "timestamp": "2026-04-11T13:59:10.427Z"
+        },
+        {
+          "id": 32,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click column header: Symbol",
+          "details": "Header clicked — sort may have changed",
+          "timestamp": "2026-04-11T13:59:15.161Z"
+        },
+        {
+          "id": 33,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click column header: Last",
+          "details": "Header clicked — sort may have changed",
+          "timestamp": "2026-04-11T13:59:15.708Z"
+        },
+        {
+          "id": 34,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click column header: Chg%",
+          "details": "Header clicked — sort may have changed",
+          "timestamp": "2026-04-11T13:59:16.265Z"
+        },
+        {
+          "id": 35,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click 'Order' tab in analysis panel",
+          "details": "Order form appeared with Buy/Sell",
+          "timestamp": "2026-04-11T13:59:21.307Z"
+        },
+        {
+          "id": 36,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click Buy button",
+          "details": "Buy selected (state changed)",
+          "timestamp": "2026-04-11T13:59:27.124Z"
+        },
+        {
+          "id": 37,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click Sell button",
+          "details": "Sell selected (active state)",
+          "timestamp": "2026-04-11T13:59:27.681Z"
+        },
+        {
+          "id": 38,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click +/- quantity buttons",
+          "details": "Plus: found, Minus: found",
+          "timestamp": "2026-04-11T13:59:32.581Z"
+        },
+        {
+          "id": 39,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Change order type to Limit",
+          "details": "Limit selected, price field visible",
+          "timestamp": "2026-04-11T13:59:38.640Z"
+        },
+        {
+          "id": 40,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click options expiration: Apr 17 (6d)",
+          "details": "Expiry selected, chain should update",
+          "timestamp": "2026-04-11T13:59:44.217Z"
+        },
+        {
+          "id": 41,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click options expiration: Apr 24 (13d)",
+          "details": "Expiry selected, chain should update",
+          "timestamp": "2026-04-11T13:59:45.078Z"
+        },
+        {
+          "id": 42,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click options expiration: May 1 (20d)",
+          "details": "Expiry selected, chain should update",
+          "timestamp": "2026-04-11T13:59:45.926Z"
+        },
+        {
+          "id": 43,
+          "status": "PASS",
+          "section": "Trade",
+          "description": "Click full-screen toggle on options panel",
+          "details": "Toggle clicked — panel expanded",
+          "timestamp": "2026-04-11T13:59:51.120Z"
+        }
+      ],
+      "Pipeline": [
+        {
+          "id": 44,
+          "status": "PASS",
+          "section": "Pipeline",
+          "description": "Click 'Run Now' shows running state",
+          "details": "Running indicator appeared",
+          "timestamp": "2026-04-11T13:59:56.745Z"
+        },
+        {
+          "id": 45,
+          "status": "PASS",
+          "section": "Pipeline",
+          "description": "Click history row expands details",
+          "details": "Clicked row — 4 rows available",
+          "timestamp": "2026-04-11T14:00:07.468Z"
+        },
+        {
+          "id": 46,
+          "status": "PASS",
+          "section": "Pipeline",
+          "description": "Flow diagram shows stage counts",
+          "details": "Stage labels found in page content",
+          "timestamp": "2026-04-11T14:00:12.411Z"
+        }
+      ],
+      "Strategy Detail": [
+        {
+          "id": 47,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click tab: About",
+          "details": "Tab active: clicked",
+          "timestamp": "2026-04-11T14:00:20.903Z"
+        },
+        {
+          "id": 48,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click tab: Positions",
+          "details": "Tab active: clicked",
+          "timestamp": "2026-04-11T14:00:25.311Z"
+        },
+        {
+          "id": 49,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click tab: Sector Exposure",
+          "details": "Tab active: clicked",
+          "timestamp": "2026-04-11T14:00:29.883Z"
+        },
+        {
+          "id": 50,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click tab: Correlation",
+          "details": "Tab active: clicked",
+          "timestamp": "2026-04-11T14:00:34.328Z"
+        },
+        {
+          "id": 51,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click tab: Analytics",
+          "details": "Tab active: clicked",
+          "timestamp": "2026-04-11T14:00:38.950Z"
+        },
+        {
+          "id": 52,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click Pause/Active toggle",
+          "details": "Before: \"Pause\" -> After: \"Resume\"",
+          "timestamp": "2026-04-11T14:00:44.809Z"
+        },
+        {
+          "id": 53,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click period pill: 1M",
+          "details": "Period pill clicked",
+          "timestamp": "2026-04-11T14:00:50.517Z"
+        },
+        {
+          "id": 54,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click period pill: 3M",
+          "details": "Period pill clicked",
+          "timestamp": "2026-04-11T14:00:51.149Z"
+        },
+        {
+          "id": 55,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click period pill: 6M",
+          "details": "Period pill clicked",
+          "timestamp": "2026-04-11T14:00:51.806Z"
+        },
+        {
+          "id": 56,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click period pill: YTD",
+          "details": "Period pill clicked",
+          "timestamp": "2026-04-11T14:00:52.456Z"
+        },
+        {
+          "id": 57,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "Click period pill: ALL",
+          "details": "Period pill clicked",
+          "timestamp": "2026-04-11T14:00:53.107Z"
+        },
+        {
+          "id": 58,
+          "status": "PASS",
+          "section": "Strategy Detail",
+          "description": "SPY benchmark line visible",
+          "details": "SPY label found in equity curve SVG",
+          "timestamp": "2026-04-11T14:00:58.207Z"
+        }
+      ],
+      "Global": [
+        {
+          "id": 59,
+          "status": "PASS",
+          "section": "Global",
+          "description": "Ctrl+K opens command palette",
+          "details": "Command palette dialog appeared",
+          "timestamp": "2026-04-11T14:01:01.921Z"
+        },
+        {
+          "id": 60,
+          "status": "PASS",
+          "section": "Global",
+          "description": "Type symbol in command palette",
+          "details": "AAPL found in palette results",
+          "timestamp": "2026-04-11T14:01:08.095Z"
+        },
+        {
+          "id": 61,
+          "status": "FAIL",
+          "section": "Global",
+          "description": "Click alerts bell opens dropdown",
+          "details": "No popover appeared after clicking bell",
+          "timestamp": "2026-04-11T14:01:12.725Z"
+        },
+        {
+          "id": 62,
+          "status": "PASS",
+          "section": "Global",
+          "description": "Keyboard shortcut: g+d -> Dashboard",
+          "details": "URL: https://tradingalpha.net/",
+          "timestamp": "2026-04-11T14:01:18.172Z"
+        },
+        {
+          "id": 63,
+          "status": "PASS",
+          "section": "Global",
+          "description": "Keyboard shortcut: g+t -> Trade",
+          "details": "URL: https://tradingalpha.net/trade",
+          "timestamp": "2026-04-11T14:01:23.544Z"
+        },
+        {
+          "id": 64,
+          "status": "PASS",
+          "section": "Global",
+          "description": "Keyboard shortcut: g+p -> Pipeline",
+          "details": "URL: https://tradingalpha.net/pipeline",
+          "timestamp": "2026-04-11T14:01:28.896Z"
+        }
+      ],
+      "Login": [
+        {
+          "id": 1,
+          "status": "PASS",
+          "section": "Login",
+          "description": "Login with admin credentials",
+          "details": "Redirected to https://tradingalpha.net/",
+          "timestamp": "2026-04-11T13:57:29.065Z"
+        }
+      ]
+    }
+  }
+}

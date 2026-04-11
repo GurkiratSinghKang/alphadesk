@@ -1,0 +1,64 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+-$83.76(-0.08%)
+Regime
+---
+VIX
+--.-
+LIVE
+Alpaca (Paper)
+PAPER
+Trading Pipeline
+Idle
+Run Now
+CURRENT POSITIONS
+1
+Symbol	Shares	Entry	Current	P&L ($)	P&L (%)	Stop Loss	Take Profit	Entry Date	Signal
+MRK	43	$113.84	$121.40	+$325.08	+6.64%	$108.15	$125.22	Apr 8, 2026, 11:22 AM	HOLD
+TODAY'S PIPELINE RUN
+
+No run today
+
+Click Run Now to trigger manually
+
+HISTORY (LAST 7 DAYS)
+	Date	Summary
+
+	2026-04-09	Click to expand
+
+	2026-04-08	Click to expand
+PERFORMANCE SUMMARY
+
+TOTAL P&L
+
+-$419.44
+
+WIN RATE
+
+N/A
+
+TOTAL TRADES
+
+2
+
+ACTIVE POSITIONS
+
+1
+
+BEST TRADE
+
+-$744.52
+
+PG
+
+WORST TRADE
+
+-$744.52
+
+PG

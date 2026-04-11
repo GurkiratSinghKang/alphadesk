@@ -1,0 +1,1093 @@
+{
+  "generatedAt": "2026-04-11T01:54:17.657Z",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "pages": {
+    "login-before": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "empty-container",
+          "className": "pointer-events-none absolute inset-0",
+          "size": "1920x1080"
+        },
+        {
+          "type": "empty-container",
+          "className": "absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[128px]",
+          "size": "384x384"
+        },
+        {
+          "type": "empty-container",
+          "className": "absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-[var(--profit)]/5 blur-[128px]",
+          "size": "384x384"
+        }
+      ],
+      "visualIssues": []
+    },
+    "dashboard": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [
+        {
+          "message": "Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "stack": "Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at rX (https://tradingalpha.net/_next/static/chunks/07o~osqztxvwt.js:1:47213)\n    at https://trad"
+        }
+      ],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "text-overflow",
+          "tag": "DIV",
+          "className": "",
+          "text": "HeadlinesMuthoot Finance Jumps 3% After Board Approves 300% Dividend, Eyes Insurance SpaceInc Business • 1:39 PMCPI: Inf",
+          "overflow": 6
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "1W",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "1M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "3M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "YTD",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "Market regime: Bull - Low VolatilityBroad market u",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08",
+          "el2": "Muthoot Finance Jumps 3% After Board Approves 300%",
+          "overlapPct": 56
+        }
+      ],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\n1W\n"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        },
+        {
+          "type": "many-zero-percent",
+          "count": 7,
+          "note": "Multiple 0.00% returns may indicate strategies not generating data"
+        }
+      ]
+    },
+    "trade-spy": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "text-overflow",
+          "tag": "DIV",
+          "className": "flex items-start justify-between",
+          "text": "Technical ScoreSPY in consolidation range. Await directional catalyst.50Technical",
+          "overflow": 17
+        },
+        {
+          "type": "text-overflow",
+          "tag": "DIV",
+          "className": "flex flex-col items-center gap-1",
+          "text": "50Technical",
+          "overflow": 17
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "INPUT",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AAPL$260.43-0.00%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "MSFT$370.82-0.58%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "GOOGL$317.28-0.42%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AMZN$238.42+2.09%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "NVDA$188.64+2.59%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "TSLA$348.64+0.84%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "SPY$679.35-0.08%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "QQQ$611.65+0.26%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "META$630.16+0.29%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AMD$245.02+3.54%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AAPL$260.43-0.00%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "MSFT$370.82-0.58%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "GOOGL$317.28-0.42%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AMZN$238.42+2.09%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "NVDA$188.64+2.59%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "TSLA$348.64+0.84%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "SPY$679.35-0.08%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "QQQ$611.65+0.26%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "META$630.16+0.29%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AMD$245.02+3.54%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Technical ScoreSPY in consolidation range. Await d",
+          "el2": "Technical ScoreSPY in consolidation range. Await d",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0",
+          "el2": "Add Leg",
+          "overlapPct": 100
+        }
+      ],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nWat"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        }
+      ]
+    },
+    "trade-aapl": {
+      "consoleErrors": [
+        {
+          "text": "Failed to load resource: the server responded with a status of 404 ()",
+          "location": {
+            "url": "https://tradingalpha.net/api/v1/pipeline/history/2026-04-11",
+            "lineNumber": 0,
+            "columnNumber": 0
+          }
+        }
+      ],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "text-overflow",
+          "tag": "DIV",
+          "className": "flex items-start justify-between",
+          "text": "Technical ScoreAAPL in consolidation range. Await directional catalyst.50Technical",
+          "overflow": 17
+        },
+        {
+          "type": "text-overflow",
+          "tag": "DIV",
+          "className": "flex flex-col items-center gap-1",
+          "text": "50Technical",
+          "overflow": 17
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "INPUT",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AAPL$260.43-0.00%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "MSFT$370.82-0.58%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "GOOGL$317.28-0.42%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AMZN$238.42+2.09%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "NVDA$188.64+2.59%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "TSLA$348.64+0.84%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "SPY$679.35-0.08%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "QQQ$611.65+0.26%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "META$630.16+0.29%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Click to select| for actionsSymbolLastChg%AAPL$260",
+          "el2": "AMD$245.02+3.54%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AAPL$260.43-0.00%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "MSFT$370.82-0.58%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "GOOGL$317.28-0.42%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AMZN$238.42+2.09%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "NVDA$188.64+2.59%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "TSLA$348.64+0.84%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "SPY$679.35-0.08%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "QQQ$611.65+0.26%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "META$630.16+0.29%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4",
+          "el2": "AMD$245.02+3.54%",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Technical ScoreAAPL in consolidation range. Await ",
+          "el2": "Technical ScoreAAPL in consolidation range. Await ",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ",
+          "el2": "Add Leg",
+          "overlapPct": 100
+        }
+      ],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nWat"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        }
+      ]
+    },
+    "pipeline": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nTra"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "N/A",
+          "context": "OTAL P&L\n\n-$419.44\n\nWIN RATE\n\nN/A\n\nTOTAL TRADES\n\n2\n\nACTIVE POSI"
+        },
+        {
+          "type": "data-logic-error",
+          "detail": "Best trade is negative: -$744.52",
+          "note": "Best trade should not have a loss value"
+        },
+        {
+          "type": "data-logic-error",
+          "detail": "Best trade (-$744.52 PG) equals worst trade (-$744.52 PG)",
+          "note": "Likely only one trade exists but labels are misleading"
+        }
+      ]
+    },
+    "strategy-pead": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "Pause",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "1M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "3M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "6M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "YTD",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "ALL",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "all (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "open (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "closed (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "View Pipeline →",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "About",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "Positions",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "Sector Exposure",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "Correlation",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardPEADPEADPost-Earnings Announcement Drift ",
+          "el2": "Analytics",
+          "overlapPct": 68
+        }
+      ],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nDas"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "No data",
+          "context": "+0.00% ($0.00)\n\nSHARPE RATIO\n\nNo data\n\nMAX DRAWDOWN\n\nNo data\n\nWIN R"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "No trades yet",
+          "context": "\nAll (0)\nOpen (0)\nClosed (0)\n\nNo trades yet\n\nThis strategy will enter pos"
+        }
+      ]
+    },
+    "strategy-momq": {
+      "consoleErrors": [],
+      "networkFailures": [],
+      "pageErrors": [],
+      "textAnomalies": [],
+      "layoutIssues": [
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "BUTTON",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "Pause",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "1M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "3M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "6M",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "YTD",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "ALL",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "all (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "open (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "closed (0)",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "View Pipeline →",
+          "overlapPct": 100
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "About",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "Positions",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "Sector Exposure",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "Correlation",
+          "overlapPct": 68
+        },
+        {
+          "type": "overlapping-interactive",
+          "el1": "DashboardMomentum + QualityMomentum + QualityCombi",
+          "el2": "Analytics",
+          "overlapPct": 68
+        }
+      ],
+      "visualIssues": [
+        {
+          "type": "placeholder-data",
+          "marker": "--.-",
+          "context": "$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nDas"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "---",
+          "context": "\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "No data",
+          "context": "+0.00% ($0.00)\n\nSHARPE RATIO\n\nNo data\n\nMAX DRAWDOWN\n\nNo data\n\nWIN R"
+        },
+        {
+          "type": "placeholder-data",
+          "marker": "No trades yet",
+          "context": "\nAll (0)\nOpen (0)\nClosed (0)\n\nNo trades yet\n\nThis strategy will enter pos"
+        }
+      ]
+    },
+    "cross-page": {
+      "consoleErrors": [
+        {
+          "text": "Failed to load resource: the server responded with a status of 404 ()",
+          "location": {
+            "url": "https://tradingalpha.net/api/v1/pipeline/history/2026-04-11",
+            "lineNumber": 0,
+            "columnNumber": 0
+          }
+        }
+      ],
+      "networkFailures": [],
+      "pageErrors": [
+        {
+          "message": "Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "stack": "Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at rX (https://tradingalpha.net/_next/static/chunks/07o~osqztxvwt.js:1:47213)\n    at https://trad"
+        }
+      ],
+      "textAnomalies": [],
+      "layoutIssues": [],
+      "visualIssues": []
+    }
+  },
+  "visualAuditObservations": {
+    "generatedBy": "Manual pixel-level inspection of all screenshots",
+    "critical": [
+      {
+        "id": "CRIT-01",
+        "page": "global (topbar)",
+        "issue": "TopBar shows placeholder values for Regime (---) and VIX (--.-)",
+        "detail": "On every single page, the condensed topbar shows Regime as \"---\" and VIX as \"--.-\". The dashboard body correctly shows \"Bull - Low Volatility\" and VIX 16.5, so the topbar is failing to populate these values from the same data source.",
+        "screenshot": "04a-dashboard-hero.png",
+        "severity": "critical",
+        "affectsPages": [
+          "dashboard",
+          "trade",
+          "pipeline",
+          "strategies"
+        ]
+      },
+      {
+        "id": "CRIT-02",
+        "page": "dashboard",
+        "issue": "React hydration error #418 on every page load",
+        "detail": "Minified React error #418 fires on dashboard load, indicating a server/client HTML mismatch (hydration failure). This is a text node mismatch — likely caused by date/time formatting that differs between server and client.",
+        "severity": "critical",
+        "affectsPages": [
+          "dashboard"
+        ]
+      },
+      {
+        "id": "CRIT-03",
+        "page": "pipeline",
+        "issue": "BEST TRADE shows a LOSS value (-$744.52)",
+        "detail": "The Performance Summary section shows BEST TRADE = -$744.52 (PG) and WORST TRADE = -$744.52 (PG). A \"best trade\" should never be negative. Both fields show the same value and same symbol, suggesting no distinction is being made when there is only one closed trade (or only losses).",
+        "screenshot": "07-pipeline-full.png",
+        "severity": "critical"
+      },
+      {
+        "id": "CRIT-04",
+        "page": "api",
+        "issue": "404 on /api/v1/pipeline/history/2026-04-11",
+        "detail": "The pipeline history endpoint returns 404 for today's date. This is fetched on the trade page and pipeline page, causing console errors. The endpoint should return an empty result for days with no runs rather than 404.",
+        "severity": "critical",
+        "affectsPages": [
+          "trade-aapl",
+          "pipeline"
+        ]
+      }
+    ],
+    "high": [
+      {
+        "id": "HIGH-01",
+        "page": "dashboard",
+        "issue": "6 of 8 strategies show +0.00% return with 0 positions",
+        "detail": "Only PEAD (+6.60%, 1 pos) and Earnings Vol (-15.50%, 0 pos) show actual return data. The remaining 6 strategies (Momentum+Quality, VRP Harvesting, Regime Adaptive, Claude Alpha, Mean Reversion, VCP Breakout) all show +0.00% and 0 positions. While this could be correct if they have no trades yet, the strategy grid cards still render sparkline charts showing activity, which is visually misleading.",
+        "screenshot": "04b-dashboard-strategies.png",
+        "severity": "high"
+      },
+      {
+        "id": "HIGH-02",
+        "page": "strategy-momq",
+        "issue": "Equity curve shows \"Not enough data for equity curve\" in empty chart area",
+        "detail": "The Momentum+Quality strategy detail page shows a large empty dark-purple chart area with small gray text \"Not enough data for equity curve\" centered in it. The area takes up ~400px of vertical space. Should either show a more obvious empty state or collapse the chart area.",
+        "screenshot": "09a-momq-header-chart.png",
+        "severity": "high"
+      },
+      {
+        "id": "HIGH-03",
+        "page": "strategy-pead / strategy-momq",
+        "issue": "KPI cards show \"No data\" for Sharpe Ratio, Max Drawdown, Win Rate, and Calmar Ratio",
+        "detail": "PEAD strategy shows TOTAL RETURN +0.00% ($0.00) despite the chart showing a non-zero equity curve and 1 active position. The KPI cards for Sharpe, Drawdown, Win Rate, Calmar all show \"No data\" even though there is at least 1 closed trade visible on the Pipeline page.",
+        "severity": "high"
+      },
+      {
+        "id": "HIGH-04",
+        "page": "trade",
+        "issue": "Analysis panel Technical Score text overflows container by 17px",
+        "detail": "The \"Technical Score\" header and description text (\"SPY in consolidation range...\") overflows its container in the analysis panel by 17 pixels. The text and the circular score gauge compete for horizontal space.",
+        "screenshot": "05b-trade-analysis.png",
+        "severity": "high"
+      },
+      {
+        "id": "HIGH-05",
+        "page": "trade",
+        "issue": "Chart header shows SPY at $686.97 but current price label shows $679.35",
+        "detail": "The chart header text says \"SPY $686.97 -0.52 (-0.08%)\" while the price axis label on the chart shows 679.35. The watchlist also shows SPY at $679.35. The $686.97 in the header appears to be a stale/different value (possibly previous close or a different quote source).",
+        "screenshot": "05e-trade-chart.png",
+        "severity": "high"
+      }
+    ],
+    "medium": [
+      {
+        "id": "MED-01",
+        "page": "dashboard",
+        "issue": "Market Context section text overflow in Headlines column",
+        "detail": "The \"Headlines\" column in the Market Context section has text that overflows its container by 6px. Long headline titles are not properly truncated.",
+        "screenshot": "04f-dashboard-market-context.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-02",
+        "page": "dashboard",
+        "issue": "Sector Performance treemap labels are truncated",
+        "detail": "In the Market Context bottom section, the sector performance treemap shows abbreviated labels like \"Cons ...\", \"Indust...\". The treemap cells are too narrow to display full sector names. Some cells show only partial text.",
+        "screenshot": "04f-dashboard-market-context.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-03",
+        "page": "dashboard",
+        "issue": "Market Indices section only shows 1 of 3 indices in the viewport crop",
+        "detail": "The Market Context bottom section shows MARKET INDICES with only SPY visible. QQQ and IWM are listed in the body text but the section appears to only have room for one index row before running out of viewport height. The layout is too tall for the available space.",
+        "screenshot": "04f-dashboard-market-context.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-04",
+        "page": "trade",
+        "issue": "AAPL watchlist shows -0.00% change (negative zero)",
+        "detail": "The watchlist shows AAPL with -0.00% change. Negative zero is visually confusing and should display as 0.00% (neutral) with neutral color.",
+        "screenshot": "05a-trade-watchlist.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-05",
+        "page": "trade",
+        "issue": "Trade panel Greeks truncated at bottom edge",
+        "detail": "In the Trade/Order Panel (bottom-right), the Greeks row (Delta, Gamma, Theta, Vega) values appear cut off at the bottom. The values +0.82, +0.024, -0.045, +0.180 are partially visible but the containing box clips them.",
+        "screenshot": "05d-trade-order-panel.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-06",
+        "page": "pipeline",
+        "issue": "Pipeline WIN RATE shows N/A despite having 2 closed trades",
+        "detail": "The Performance Summary shows TOTAL TRADES: 2 but WIN RATE: N/A. If there are 2 trades, a win rate should be calculable (e.g., 0%, 50%, or 100%). N/A is only appropriate when there are zero trades.",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-07",
+        "page": "pipeline",
+        "issue": "MRK position shows Entry $113.84 but signal says HOLD while P&L is +6.64%",
+        "detail": "Current price is $121.40, entry was $113.84, giving +$325.08 (+6.64%). The signal badge shows HOLD. This is functional but the date shows \"Apr 8, 2026\" — might want to show how many days the position has been held.",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-08",
+        "page": "dashboard",
+        "issue": "Equity curve in hero uses simulated random walk data",
+        "detail": "The equity curve in the PortfolioHero section uses a deterministic random walk generated from seed values rather than actual historical equity data. This is visible as synthetic-looking price action that does not match real portfolio performance.",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-09",
+        "page": "strategy-pead",
+        "issue": "Chart shows equity curve but KPIs show 0% return",
+        "detail": "The PEAD strategy page shows a chart with visible equity curve movements (including a significant uptick at the end), but the TOTAL RETURN KPI reads +0.00% ($0.00). These two are contradictory — the chart suggests non-zero returns.",
+        "screenshot": "08a-pead-header-chart.png",
+        "severity": "medium"
+      },
+      {
+        "id": "MED-10",
+        "page": "trade",
+        "issue": "Options chain has deep ITM calls showing $0.01 across Last/Bid/Ask (put side)",
+        "detail": "The put side of the options chain for strikes 530-550 shows $0.01 for Last, Bid, and Ask. For deep ITM puts these should have significant intrinsic value. This suggests the options data may be stale or the put/call sides may be reversed.",
+        "severity": "medium"
+      }
+    ],
+    "low": [
+      {
+        "id": "LOW-01",
+        "page": "login",
+        "issue": "Login page has decorative blur circles that register as empty containers",
+        "detail": "Two 384x384 blurred circles (bg-primary/5 and bg-[var(--profit)]/5) are detected as empty containers. These are intentional design elements. Not a real issue, just noise in the automated checks.",
+        "severity": "info"
+      },
+      {
+        "id": "LOW-02",
+        "page": "dashboard",
+        "issue": "Overlapping interactive elements in PortfolioHero time range buttons",
+        "detail": "The 1W/1M/3M/YTD time range buttons overlap with a parent clickable container at 100%. This is likely a button-group structure where the parent div has a click handler. Not visually broken but indicates z-index stacking that could cause click target confusion.",
+        "severity": "low"
+      },
+      {
+        "id": "LOW-03",
+        "page": "dashboard",
+        "issue": "P&L Calendar shows empty cells for future dates without visual distinction",
+        "detail": "The April P&L calendar shows dates 11-30 as empty cells. While dates in the future should naturally be empty, there is no visual distinction between days with no trading data and future days.",
+        "screenshot": "04e-dashboard-pnl-calendar.png",
+        "severity": "low"
+      },
+      {
+        "id": "LOW-04",
+        "page": "trade",
+        "issue": "Chart time axis label shows \"28 Oct '25 04:00\" highlighted in viewport",
+        "detail": "The chart time axis has a highlighted date marker \"28 Oct '25 04:00\" which appears to be a crosshair or cursor position indicator stuck at a historical date rather than current.",
+        "screenshot": "05c-trade-options.png",
+        "severity": "low"
+      },
+      {
+        "id": "LOW-05",
+        "page": "trade",
+        "issue": "Trade panel title shows \"Bull Call Spread\" but option strikes (235/245) do not match actual ATM levels",
+        "detail": "For SPY at ~$679, the pre-populated bull call spread uses 235C/245C strikes which are deeply in-the-money. For AAPL at ~$260, the same strikes are also not optimal. The default order ticket should auto-suggest ATM strikes based on the current price.",
+        "screenshot": "05d-trade-order-panel.png",
+        "severity": "low"
+      },
+      {
+        "id": "LOW-06",
+        "page": "pipeline",
+        "issue": "History section rows say \"Click to expand\" but are not easily discoverable",
+        "detail": "The pipeline history rows for 2026-04-09 and 2026-04-08 show \"Click to expand\" text. The expand affordance could use a chevron icon or better visual cue.",
+        "severity": "low"
+      },
+      {
+        "id": "LOW-07",
+        "page": "strategy-pead",
+        "issue": "Trade History tabs show \"All (0) Open (0) Closed (0)\" despite 1 active position",
+        "detail": "PEAD strategy shows ACTIVE POSITIONS: 1 in the KPI area, but Trade History tab counts show All: 0, Open: 0, Closed: 0. This is contradictory.",
+        "severity": "low"
+      }
+    ],
+    "summary": {
+      "totalScreenshots": 36,
+      "pagesAudited": 8,
+      "criticalIssues": 4,
+      "highIssues": 5,
+      "mediumIssues": 10,
+      "lowIssues": 7,
+      "automatedFindings": 132
+    }
+  }
+}

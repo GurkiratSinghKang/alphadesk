@@ -58,12 +58,12 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
 
     # --- News ---
-    NEWSDATA_API_KEY: str = ""
+    NEWSDATA_API_KEY: SecretStr = SecretStr("")
 
     # --- Notifications ---
     TELEGRAM_BOT_TOKEN: SecretStr = SecretStr("")
     TELEGRAM_CHAT_ID: str = ""
-    DISCORD_WEBHOOK_URL: str = ""
+    DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
 
     # --- Webhooks ---
     TRADINGVIEW_WEBHOOK_SECRET: SecretStr = SecretStr("")

@@ -1,0 +1,295 @@
+{
+  "audit": {
+    "target": "https://tradingalpha.net",
+    "date": "2026-04-11T13:50:38.472Z",
+    "viewport": "1920x1080 + 1366x768",
+    "pages": ["/", "/trade", "/pipeline", "/strategies/pead", "/strategies/momentum-quality"],
+    "passes": 3,
+    "method": "Playwright automated DOM inspection + manual screenshot visual review"
+  },
+  "summary": {
+    "totalFindings": 28,
+    "bySeverity": {
+      "critical": 0,
+      "high": 4,
+      "medium": 19,
+      "low": 5
+    },
+    "byCategory": {
+      "placeholder-data": 2,
+      "missing-sparkline": 2,
+      "empty-chart": 1,
+      "data-quality": 3,
+      "overflow": 3,
+      "truncation": 2,
+      "empty-section": 2,
+      "responsive-overflow": 1,
+      "hydration-error": 1,
+      "console-error": 2,
+      "visual-inconsistency": 4,
+      "missing-data": 5
+    },
+    "byPage": {
+      "Dashboard": 8,
+      "Trade": 7,
+      "Pipeline": 4,
+      "Strategies PEAD": 5,
+      "Strategies Momentum Quality": 3,
+      "All Pages": 1
+    }
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "page": "Dashboard",
+      "category": "placeholder-data",
+      "description": "Top status bar shows persistent placeholder values: P&L='$--.--', Regime='---', VIX='--.-'. These dashes remain visible after page fully loads and data is available elsewhere on the page. The secondary nav bar between the main nav and the portfolio value clearly shows unresolved placeholder text.",
+      "severity": "high",
+      "screenshot": "dashboard-status-bar.png",
+      "location": "Secondary navigation bar, below main header, full width"
+    },
+    {
+      "id": "F002",
+      "page": "Dashboard",
+      "category": "missing-sparkline",
+      "description": "PEAD strategy card on dashboard has an SVG element but no path data -- the sparkline chart is blank/invisible. Other strategy cards (Momentum+Quality, VRP Harvesting, Earnings Vol, etc.) all render sparklines correctly. Only PEAD is missing its sparkline despite having +6.60% return data.",
+      "severity": "medium",
+      "screenshot": "dashboard-all-strategies.png",
+      "location": "Right panel, Strategies section, PEAD card"
+    },
+    {
+      "id": "F003",
+      "page": "Dashboard",
+      "category": "missing-sparkline",
+      "description": "VCP Breakout strategy card on dashboard has an SVG element but no path data -- the sparkline chart is blank/invisible. The card shows Active status with +0.00% but no visual sparkline like other cards have.",
+      "severity": "medium",
+      "screenshot": "dashboard-all-strategies.png",
+      "location": "Right panel, Strategies section, VCP Breakout card (bottom row)"
+    },
+    {
+      "id": "F004",
+      "page": "Dashboard",
+      "category": "truncation",
+      "description": "In the heatmap/calendar area, sector label 'Materials' is truncated due to overflow:hidden on a 10px text span. The scrollWidth (52px) exceeds clientWidth (49px).",
+      "severity": "low",
+      "screenshot": "dashboard-fullpage.png",
+      "location": "Calendar heatmap sector labels"
+    },
+    {
+      "id": "F005",
+      "page": "Dashboard",
+      "category": "visual-inconsistency",
+      "description": "The portfolio P&L display shows '+$0.00 (+0.00%)' in green color. While technically correct for zero change, the green color implies a gain when there is none. Consider using neutral/gray for zero values.",
+      "severity": "low",
+      "screenshot": "dashboard-activity-feed.png",
+      "location": "Portfolio header, DAY P&L value"
+    },
+    {
+      "id": "F006",
+      "page": "Dashboard",
+      "category": "placeholder-data",
+      "description": "Activity feed text for 'Risk manager rejected 9 trade(s)' is truncated with ellipsis. The rejection reasons (important operational detail) are cut off mid-sentence. The text ends with '...MRK: MRK already held by strategy pead | WMT: Strategy pead would exceed allocation (9858 > 9006) | INTC: Absolute momentum gate...' without showing the full message.",
+      "severity": "low",
+      "screenshot": "dashboard-positions-detail.png",
+      "location": "Activity Feed, second item"
+    },
+    {
+      "id": "F007",
+      "page": "Dashboard",
+      "category": "visual-inconsistency",
+      "description": "Earnings Vol strategy card shows -15.50% in red with 'Paused' badge in amber/orange, which is correct and consistent. However, strategy cards with +0.00% (VRP Harvesting, Regime Adaptive, Claude Alpha, Mean Reversion) all show green text for a zero return -- should use neutral color.",
+      "severity": "low",
+      "screenshot": "dashboard-all-strategies.png",
+      "location": "Strategy cards right panel"
+    },
+    {
+      "id": "F008",
+      "page": "Dashboard",
+      "category": "missing-data",
+      "description": "Multiple strategy cards show '+0.00%' and '0 pos' (Momentum+Quality, VRP Harvesting, Regime Adaptive, Claude Alpha, Mean Reversion, VCP Breakout). Only PEAD has any data (+6.60%, 1 pos). This may indicate strategies are configured but not yet trading, or data is not being populated correctly.",
+      "severity": "low",
+      "screenshot": "dashboard-all-strategies.png",
+      "location": "Right panel strategy cards"
+    },
+    {
+      "id": "F009",
+      "page": "Trade",
+      "category": "overflow",
+      "description": "Right-side panel tab bar (Tech / Fund / Sent / Chat / Order) overflows the viewport on the right side. The tab container extends 37px past the 1920px viewport boundary (right edge at 1957px). The 'Order' tab button is partially clipped.",
+      "severity": "medium",
+      "screenshot": "trade-right-panel-tabs.png",
+      "location": "Right panel, tab bar at top"
+    },
+    {
+      "id": "F010",
+      "page": "Trade",
+      "category": "overflow",
+      "description": "The 'Order' tab button inside the right panel is cut off by the viewport edge (right: 1954px vs viewport: 1920px). Only 'Orde' is visible, the 'r' is clipped.",
+      "severity": "medium",
+      "screenshot": "trade-right-panel-tabs.png",
+      "location": "Right panel tab bar, last tab"
+    },
+    {
+      "id": "F011",
+      "page": "Trade",
+      "category": "data-quality",
+      "description": "Options chain puts side (right half of chain) shows 0.01 for Last, Bid, and Ask across all visible strike prices (530-550). These appear to be placeholder/stale values since real put options at these strikes would have meaningful prices. The calls side (left half) shows proper market data.",
+      "severity": "medium",
+      "screenshot": "trade-positions-tab.png",
+      "location": "Options chain table, right columns (puts side)"
+    },
+    {
+      "id": "F012",
+      "page": "Trade",
+      "category": "empty-section",
+      "description": "Chat tab on right panel is completely empty -- no content, no placeholder text, no input field. Just a blank dark panel. Should show a chat interface, empty state message, or be hidden if not functional.",
+      "severity": "medium",
+      "screenshot": "trade-right-chat.png",
+      "location": "Right panel, Chat tab content area"
+    },
+    {
+      "id": "F013",
+      "page": "Trade",
+      "category": "truncation",
+      "description": "Journal tab entries show truncated text. 'NVDA Bull Ca...' (should be 'Bull Call Spread') and 'Entered on AI...' are cut off. Entry descriptions should either wrap or show full text on hover.",
+      "severity": "medium",
+      "screenshot": "trade-journal-tab.png",
+      "location": "Bottom panel, Journal tab, entry cards on right side"
+    },
+    {
+      "id": "F014",
+      "page": "Trade",
+      "category": "responsive-overflow",
+      "description": "At 1366x768 viewport, the trade page has elements overflowing horizontally. The watchlist, chart, and right panel do not properly reflow, causing horizontal scrollbar.",
+      "severity": "medium",
+      "screenshot": "trade-1366x768.png",
+      "location": "Entire trade page layout at narrower viewport"
+    },
+    {
+      "id": "F015",
+      "page": "Pipeline",
+      "category": "missing-data",
+      "description": "Today's Pipeline Run section shows all zeros: 0 Screened, 0 Analyzed, 0 Signals, 0 Orders. The pipeline status shows 'Idle' and the activity feed confirms 'Pipeline completed: 0 screened, 0 analyzed, 0 trades approved'. This might be accurate but the empty-looking pipeline with all zeros creates a poor visual impression.",
+      "severity": "medium",
+      "screenshot": "pipeline-performance-detail.png",
+      "location": "Pipeline steps bar showing 0 -> 0 -> 0 -> 0"
+    },
+    {
+      "id": "F016",
+      "page": "Pipeline",
+      "category": "data-quality",
+      "description": "Win Rate shows 'N/A' in the Performance Summary despite having 2 total trades (1 active MRK position with +$325.08, and historical data showing WORST TRADE of -$744.52). The win rate should be calculable from available data.",
+      "severity": "medium",
+      "screenshot": "pipeline-fullpage.png",
+      "location": "Performance Summary cards, Win Rate card"
+    },
+    {
+      "id": "F017",
+      "page": "Pipeline",
+      "category": "missing-data",
+      "description": "History (Last 7 Days) section shows only 2 dates (2026-04-09 and 2026-04-08) both with 'No activity' summary. Expected: pipeline run history with details on stocks screened and actions taken.",
+      "severity": "medium",
+      "screenshot": "pipeline-history-detail.png",
+      "location": "History section table"
+    },
+    {
+      "id": "F018",
+      "page": "Pipeline",
+      "category": "console-error",
+      "description": "A 404 resource load failure occurs on the Pipeline page in addition to the hydration error. This is a missing asset or API endpoint that should be investigated.",
+      "severity": "medium",
+      "screenshot": "pipeline-fullpage.png",
+      "location": "Console (network error)"
+    },
+    {
+      "id": "F019",
+      "page": "Strategies PEAD",
+      "category": "missing-data",
+      "description": "PEAD strategy detail page shows '+0.00% ($0.00)' as the return display at the bottom of the chart, despite the dashboard showing +6.60% for the same strategy. The return calculation appears inconsistent between pages.",
+      "severity": "high",
+      "screenshot": "strategies-pead-fullpage.png",
+      "location": "Below equity curve chart, return badge"
+    },
+    {
+      "id": "F020",
+      "page": "Strategies PEAD",
+      "category": "missing-data",
+      "description": "PEAD stat blocks (Total Return, Sharpe, Max Drawdown, Win Rate, Calmar Ratio) all show 'No data' despite having an active position (MRK, +6.60%) and an equity curve that renders historical performance. Stats should be computed from available trade data.",
+      "severity": "high",
+      "screenshot": "pead-stat-blocks.png",
+      "location": "Stats row between chart and tabs"
+    },
+    {
+      "id": "F021",
+      "page": "Strategies PEAD",
+      "category": "empty-section",
+      "description": "Positions tab shows 'No open positions for this strategy' even though the dashboard and pipeline page both show MRK (43 shares, +$325.08) as an active PEAD position. Data is inconsistent between views.",
+      "severity": "high",
+      "screenshot": "pead-positions-tab.png",
+      "location": "Positions tab content area"
+    },
+    {
+      "id": "F022",
+      "page": "Strategies PEAD",
+      "category": "missing-data",
+      "description": "Analytics tab shows all zero or empty values: 'No monthly return data yet', all streaks are 0, all hold times are 0.0d, conviction distribution all 0.0%. Despite having historical equity curve data and an active trade, analytics are not populated.",
+      "severity": "medium",
+      "screenshot": "pead-analytics-tab.png",
+      "location": "Analytics tab, all sub-sections"
+    },
+    {
+      "id": "F023",
+      "page": "Strategies PEAD",
+      "category": "visual-inconsistency",
+      "description": "Correlation tab shows market correlations of 0.00 for both SPY and QQQ, and displays 'Insufficient data for rolling beta calculation' for Rolling Beta to SPY. With equity curve data visible in the chart, at least some correlation data should be calculable.",
+      "severity": "medium",
+      "screenshot": "pead-correlation-tab.png",
+      "location": "Correlation tab"
+    },
+    {
+      "id": "F024",
+      "page": "Strategies Momentum Quality",
+      "category": "empty-chart",
+      "description": "Main equity curve chart area shows only 'Not enough data for equity curve' text centered in a large empty dark panel. This is a significant empty space dominating the page. The strategy is marked 'Active' but has no trading data.",
+      "severity": "medium",
+      "screenshot": "momentum-chart-area.png",
+      "location": "Main chart area, full width below header"
+    },
+    {
+      "id": "F025",
+      "page": "Strategies Momentum Quality",
+      "category": "missing-data",
+      "description": "All stat blocks on Momentum+Quality page appear empty/invisible. The stat row between chart and tabs renders as a blank strip with no visible labels or values.",
+      "severity": "medium",
+      "screenshot": "momentum-stat-blocks.png",
+      "location": "Stats row between chart and tabs"
+    },
+    {
+      "id": "F026",
+      "page": "Strategies Momentum Quality",
+      "category": "visual-inconsistency",
+      "description": "Positions tab shows 'No open positions for this strategy' which is correct for an Active strategy with 0 pos, but the Momentum+Quality equity curve has 'Not enough data' while other 0-position strategies like VRP Harvesting show sparklines. Inconsistent empty state handling.",
+      "severity": "low",
+      "screenshot": "momentum-positions-tab.png",
+      "location": "Positions tab"
+    },
+    {
+      "id": "F027",
+      "page": "All Pages",
+      "category": "hydration-error",
+      "description": "React hydration mismatch error #418 fires on every single page load. This indicates server-rendered HTML does not match client-rendered HTML. Likely caused by dynamic data (timestamps, live prices, market status) being rendered during SSR but producing different values on client hydration. Should suppress or fix by deferring dynamic content to client-only rendering.",
+      "severity": "medium",
+      "screenshot": null,
+      "location": "Browser console on all pages"
+    },
+    {
+      "id": "F028",
+      "page": "Trade",
+      "category": "data-quality",
+      "description": "Options chain delta column on puts side shows small negative values (-0.01 to -0.05) while all price fields show 0.01. This is internally inconsistent -- if there is enough data for delta calculation, the price should not be a flat 0.01 placeholder.",
+      "severity": "medium",
+      "screenshot": "trade-section-4-div.png",
+      "location": "Options chain table, puts side (right of Strike column)"
+    }
+  ]
+}

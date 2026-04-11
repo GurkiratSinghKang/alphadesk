@@ -1,0 +1,185 @@
+# AlphaDesk Visual Audit Report
+Generated: 2026-04-11T01:54:17.657Z
+Viewport: 1920x1080
+Total issues: 132
+
+## login-before
+### layoutIssues (3)
+- {"type":"empty-container","className":"pointer-events-none absolute inset-0","size":"1920x1080"}
+- {"type":"empty-container","className":"absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[128px]","size":"384x384"}
+- {"type":"empty-container","className":"absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-[var(--profit)]/5 blur-[128px]","size":"384x384"}
+
+
+## dashboard
+### pageErrors (1)
+- {"message":"Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.","stack":"Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at rX (https://tradingalpha.net/_next/static/chunks/07o~osqztxvwt.js:1:47213)\n    at https://trad"}
+
+### layoutIssues (7)
+- {"type":"text-overflow","tag":"DIV","className":"","text":"HeadlinesMuthoot Finance Jumps 3% After Board Approves 300% Dividend, Eyes Insurance SpaceInc Business • 1:39 PMCPI: Inf","overflow":6}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"1W","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"1M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"3M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"YTD","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"Market regime: Bull - Low VolatilityBroad market u","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"1W1M3MYTDPortfolio$100,032.10Day P&L-$83.76 (-0.08","el2":"Muthoot Finance Jumps 3% After Board Approves 300%","overlapPct":56}
+
+### visualIssues (3)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\n1W\n"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+- {"type":"many-zero-percent","count":7,"note":"Multiple 0.00% returns may indicate strategies not generating data"}
+
+
+## trade-spy
+### layoutIssues (33)
+- {"type":"text-overflow","tag":"DIV","className":"flex items-start justify-between","text":"Technical ScoreSPY in consolidation range. Await directional catalyst.50Technical","overflow":17}
+- {"type":"text-overflow","tag":"DIV","className":"flex flex-col items-center gap-1","text":"50Technical","overflow":17}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"INPUT","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AAPL$260.43-0.00%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"MSFT$370.82-0.58%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"GOOGL$317.28-0.42%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AMZN$238.42+2.09%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"NVDA$188.64+2.59%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"TSLA$348.64+0.84%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"SPY$679.35-0.08%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"QQQ$611.65+0.26%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"META$630.16+0.29%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AMD$245.02+3.54%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AAPL$260.43-0.00%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"MSFT$370.82-0.58%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"GOOGL$317.28-0.42%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AMZN$238.42+2.09%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"NVDA$188.64+2.59%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"TSLA$348.64+0.84%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"SPY$679.35-0.08%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"QQQ$611.65+0.26%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"META$630.16+0.29%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AMD$245.02+3.54%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Technical ScoreSPY in consolidation range. Await d","el2":"Technical ScoreSPY in consolidation range. Await d","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadSPYBUY235 C 05-161$5.20SELL245 C 0","el2":"Add Leg","overlapPct":100}
+
+### visualIssues (2)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nWat"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+
+
+## trade-aapl
+### consoleErrors (1)
+- {"text":"Failed to load resource: the server responded with a status of 404 ()","location":{"url":"https://tradingalpha.net/api/v1/pipeline/history/2026-04-11","lineNumber":0,"columnNumber":0}}
+
+### layoutIssues (33)
+- {"type":"text-overflow","tag":"DIV","className":"flex items-start justify-between","text":"Technical ScoreAAPL in consolidation range. Await directional catalyst.50Technical","overflow":17}
+- {"type":"text-overflow","tag":"DIV","className":"flex flex-col items-center gap-1","text":"50Technical","overflow":17}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"INPUT","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AAPL$260.43-0.00%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"MSFT$370.82-0.58%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"GOOGL$317.28-0.42%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AMZN$238.42+2.09%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"NVDA$188.64+2.59%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"TSLA$348.64+0.84%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"SPY$679.35-0.08%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"QQQ$611.65+0.26%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"META$630.16+0.29%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Click to select| for actionsSymbolLastChg%AAPL$260","el2":"AMD$245.02+3.54%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AAPL$260.43-0.00%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"MSFT$370.82-0.58%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"GOOGL$317.28-0.42%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AMZN$238.42+2.09%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"NVDA$188.64+2.59%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"TSLA$348.64+0.84%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"SPY$679.35-0.08%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"QQQ$611.65+0.26%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"META$630.16+0.29%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.4","el2":"AMD$245.02+3.54%","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Technical ScoreAAPL in consolidation range. Await ","el2":"Technical ScoreAAPL in consolidation range. Await ","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"Bull Call SpreadAAPLBUY235 C 05-161$5.20SELL245 C ","el2":"Add Leg","overlapPct":100}
+
+### visualIssues (2)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nWat"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+
+
+## pipeline
+### visualIssues (5)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nTra"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+- {"type":"placeholder-data","marker":"N/A","context":"OTAL P&L\n\n-$419.44\n\nWIN RATE\n\nN/A\n\nTOTAL TRADES\n\n2\n\nACTIVE POSI"}
+- {"type":"data-logic-error","detail":"Best trade is negative: -$744.52","note":"Best trade should not have a loss value"}
+- {"type":"data-logic-error","detail":"Best trade (-$744.52 PG) equals worst trade (-$744.52 PG)","note":"Likely only one trade exists but labels are misleading"}
+
+
+## strategy-pead
+### layoutIssues (16)
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"Pause","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"1M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"3M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"6M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"YTD","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"ALL","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"all (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"open (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"closed (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"View Pipeline →","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"About","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"Positions","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"Sector Exposure","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"Correlation","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardPEADPEADPost-Earnings Announcement Drift ","el2":"Analytics","overlapPct":68}
+
+### visualIssues (4)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nDas"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+- {"type":"placeholder-data","marker":"No data","context":"+0.00% ($0.00)\n\nSHARPE RATIO\n\nNo data\n\nMAX DRAWDOWN\n\nNo data\n\nWIN R"}
+- {"type":"placeholder-data","marker":"No trades yet","context":"\nAll (0)\nOpen (0)\nClosed (0)\n\nNo trades yet\n\nThis strategy will enter pos"}
+
+
+## strategy-momq
+### layoutIssues (16)
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"BUTTON","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"Pause","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"1M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"3M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"6M","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"YTD","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"ALL","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"all (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"open (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"closed (0)","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"View Pipeline →","overlapPct":100}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"About","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"Positions","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"Sector Exposure","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"Correlation","overlapPct":68}
+- {"type":"overlapping-interactive","el1":"DashboardMomentum + QualityMomentum + QualityCombi","el2":"Analytics","overlapPct":68}
+
+### visualIssues (4)
+- {"type":"placeholder-data","marker":"--.-","context":"$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\nPAPER\nDas"}
+- {"type":"placeholder-data","marker":"---","context":"\nA\nP&L\n-$83.76(-0.08%)\nRegime\n---\nVIX\n--.-\nLIVE\nAlpaca (Paper)\n"}
+- {"type":"placeholder-data","marker":"No data","context":"+0.00% ($0.00)\n\nSHARPE RATIO\n\nNo data\n\nMAX DRAWDOWN\n\nNo data\n\nWIN R"}
+- {"type":"placeholder-data","marker":"No trades yet","context":"\nAll (0)\nOpen (0)\nClosed (0)\n\nNo trades yet\n\nThis strategy will enter pos"}
+
+
+## cross-page
+### consoleErrors (1)
+- {"text":"Failed to load resource: the server responded with a status of 404 ()","location":{"url":"https://tradingalpha.net/api/v1/pipeline/history/2026-04-11","lineNumber":0,"columnNumber":0}}
+
+### pageErrors (1)
+- {"message":"Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.","stack":"Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at rX (https://tradingalpha.net/_next/static/chunks/07o~osqztxvwt.js:1:47213)\n    at https://trad"}
+
+

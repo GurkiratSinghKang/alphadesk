@@ -192,11 +192,11 @@ async def _send_notification(message: str) -> None:
             logger.error("Failed to send Telegram notification: %s", e)
 
     # Discord
-    if settings.DISCORD_WEBHOOK_URL:
+    if settings.DISCORD_WEBHOOK_URL.get_secret_value():
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(
-                    settings.DISCORD_WEBHOOK_URL,
+                    settings.DISCORD_WEBHOOK_URL.get_secret_value(),
                     json={"content": f"**[AlphaDesk]** {message}"},
                 )
         except Exception as e:

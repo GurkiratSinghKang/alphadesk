@@ -46,7 +46,7 @@ interface PlaceholderProps {
 export function Placeholder({ value, format, className }: PlaceholderProps) {
   if (value == null || (typeof value === "number" && !Number.isFinite(value))) {
     return (
-      <span className={cn("text-[#555] tabular-nums", className)}>
+      <span className={cn("text-[#8a8a95] tabular-nums", className)}>
         {PLACEHOLDER_TEXT[format]}
       </span>
     );

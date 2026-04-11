@@ -259,14 +259,14 @@
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #555;
+    color: #8a8a95;
   }
   .text-secondary {
     opacity: 0.65;
   }
   .text-hint {
     font-size: 11px;
-    color: #555;
+    color: #8a8a95;
   }
 }
 

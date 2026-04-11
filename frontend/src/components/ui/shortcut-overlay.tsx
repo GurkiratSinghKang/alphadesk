@@ -57,7 +57,7 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <p className="mt-6 text-[11px] text-[#555]">
+        <p className="mt-6 text-[11px] text-[#8a8a95]">
           Customize bindings in localStorage key &quot;alphadesk:keybindings&quot;
         </p>
       </div>

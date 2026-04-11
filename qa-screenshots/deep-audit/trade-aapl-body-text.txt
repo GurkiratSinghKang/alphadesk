@@ -1,0 +1,168 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+-$83.76(-0.08%)
+Regime
+---
+VIX
+--.-
+LIVE
+Alpaca (Paper)
+PAPER
+Watchlist
+Screener
+Signals
+Click to select
+|
+ for actions
+SYMBOL
+LAST
+CHG%
+AAPL
+$260.43
+-0.00%
+MSFT
+$370.82
+-0.58%
+GOOGL
+$317.28
+-0.42%
+AMZN
+$238.42
++2.09%
+NVDA
+$188.64
++2.59%
+TSLA
+$348.64
++0.84%
+SPY
+$679.35
+-0.08%
+QQQ
+$611.65
++0.26%
+META
+$630.16
++0.29%
+AMD
+$245.02
++3.54%
+AAPL
+$260.43
+-0.01 (-0.00%)
+Indicators
+1
+1m
+5m
+15m
+1H
+4H
+D
+W
+M
+	
+	
+
+	
+	
+Tech
+Fund
+Sent
+Chat
+Technical Score
+
+AAPL in consolidation range. Await directional catalyst.
+
+50
+Technical
+Key Levels
+Resistance 2
+$276.06
+Resistance 1
+$268.24
+Current
+$260.43
+Support 1
+$252.62
+Support 2
+$244.80
+Indicators
+RSI (14)
+55.0
+MACD
+Converging
+EMA 20/50
+Flat
+BB Width
+Normal
+ADX
+27.5
+OBV
+Flat
+AAPL Options
+IV Rank: 49.4
+IV Pctl: 75
+Expected Move: ±$8.33
+Apr 11 (1d)
+Apr 18 (8d)
+Apr 25 (15d)
+May 2 (22d)
+May 9 (29d)
+May 16 (36d)
+May 23 (43d)
+May 30 (50d)
+Jun 6 (57d)
+Jun 13 (64d)
+Jun 20 (71d)
+Jun 27 (78d)
+Last	Bid	Ask	Vol	OI	IV	Δ	Strike	Last	Bid	Ask	Vol	OI	IV	Δ
+25.16	24.25	26.07	2K	7.2K	30.6%	+0.96	205	0.01	0.01	0.01	1.4K	981	30.6%	-0.04
+20.30	19.54	21.07	2.6K	1.5K	30.0%	+0.93	210	0.01	0.01	0.01	1.8K	14.4K	30.0%	-0.07
+15.58	15.14	16.02	957	11.3K	27.4%	+0.89	215	0.17	0.17	0.18	2.7K	9.7K	27.4%	-0.11
+11.56	11.27	11.86	1.9K	12.3K	28.6%	+0.80	220	1.14	1.12	1.16	2K	5.2K	28.6%	-0.20
+7.39	7.25	7.52	681	1K	24.0%	+0.70	225	1.95	1.88	2.02	2K	12.6K	24.0%	-0.30
+4.75	4.62	4.88	3.1K	7.5K	25.2%	+0.53	230	4.31	4.25	4.36	3.8K	23.7K	25.2%	-0.47
+2.65	2.58	2.71	3.8K	6.7K	25.7%	+0.36	235	7.20	7.02	7.38	838	24.2K	25.7%	-0.64
+1.24	1.20	1.28	2K	16.7K	26.5%	+0.23	240	10.78	10.61	10.95	2.5K	10.9K	26.5%	-0.77
+0.54	0.53	0.56	117	5K	28.8%	+0.16	245	15.07	14.75	15.39	70	19.3K	28.8%	-0.84
+0.06	0.06	0.07	1.8K	12.6K	29.8%	+0.10	250	19.58	18.98	20.18	906	1.1K	29.8%	-0.90
+0.01	0.01	0.01	1.1K	11.4K	27.5%	+0.05	255	24.29	23.54	25.04	280	13.8K	27.5%	-0.95
+Trade
+Positions
+Orders
+Journal
+Calendar
+Bull Call Spread
+AAPL
+BUY
+235 C 05-16
+1
+$5.20
+SELL
+245 C 05-16
+1
+$2.80
+Add Leg
+Delta
++0.82
+Gamma
++0.024
+Theta
+-0.045
+Vega
++0.180
+Net Debit
+$240.00
+Max Profit
+$760.00
+Max Loss
+$240.00
+Breakeven
+$237.40
+Paper Trade

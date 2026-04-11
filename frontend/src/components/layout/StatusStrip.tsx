@@ -31,22 +31,22 @@ export function StatusStrip() {
   return (
     <div className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[11px]">
       <div className="flex items-center gap-1.5 pr-4 border-r border-border/50">
-        <span className="text-[#555] font-medium">P&L</span>
+        <span className="text-[#8a8a95] font-medium">P&L</span>
         {hasPnl ? (
           <span className={cn("font-semibold tabular-nums", dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
             {dayPnl >= 0 ? "+" : ""}{formatCurrency(dayPnl)}
             <span className="text-secondary ml-1">({dayPnlPct >= 0 ? "+" : ""}{dayPnlPct.toFixed(2)}%)</span>
           </span>
         ) : (
-          <span className="text-[#555] tabular-nums">$--.--</span>
+          <span className="text-[#8a8a95] tabular-nums">$--.--</span>
         )}
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
-        <span className="text-[#555]">Regime</span>
-        <span className={cn("font-medium", regime ? regimeColor : "text-[#555]")}>{regime?.regime ?? "---"}</span>
+        <span className="text-[#8a8a95]">Regime</span>
+        <span className={cn("font-medium", regime ? regimeColor : "text-[#8a8a95]")}>{regime?.regime ?? "---"}</span>
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
-        <span className="text-[#555]">VIX</span>
+        <span className="text-[#8a8a95]">VIX</span>
         <span className="text-foreground tabular-nums font-medium">{regime?.vix_level ? regime.vix_level.toFixed(1) : "--.-"}</span>
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
