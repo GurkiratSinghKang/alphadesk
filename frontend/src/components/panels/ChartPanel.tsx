@@ -6,6 +6,7 @@ import {
   LineChart,
   AreaChart,
   ChevronDown,
+  BellPlus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -90,6 +91,9 @@ export function ChartPanel() {
     stopLoss: number | null;
     takeProfit: number | null;
   } | null>(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertPrice, setAlertPrice] = useState(0);
+  const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
 
   const quote = quotes.get(selectedSymbol);
 
@@ -219,6 +223,13 @@ export function ChartPanel() {
               <span className={`text-xs tabular-nums ${getChangeTextClass(change)}`}>
                 {formatChangeWithSign(change)} ({formatPercent(changePct)})
               </span>
+              <button
+                onClick={() => { setAlertPrice(quote?.last ?? 0); setAlertOpen(!alertOpen); }}
+                className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                title="Set price alert"
+              >
+                <BellPlus className="h-3.5 w-3.5" />
+              </button>
             </div>
             {/* L1 Data Bar */}
             {quote && (
@@ -234,6 +245,28 @@ export function ChartPanel() {
                 <span className="text-border">|</span>
                 <span>H: {quote.high.toFixed(2)}</span>
                 <span>L: {quote.low.toFixed(2)}</span>
+              </div>
+            )}
+            {alertOpen && (
+              <div className="flex items-center gap-2 mt-1 p-2 rounded border border-border bg-[var(--surface)]">
+                <select value={alertCondition} onChange={(e) => setAlertCondition(e.target.value as "above" | "below")} className="h-6 rounded border border-border bg-background px-1 text-[11px] text-foreground">
+                  <option value="above">Above</option>
+                  <option value="below">Below</option>
+                </select>
+                <input type="number" value={alertPrice} onChange={(e) => setAlertPrice(parseFloat(e.target.value) || 0)} step={0.01} className="h-6 w-24 rounded border border-border bg-background px-2 text-[11px] tabular-nums text-foreground" />
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch(`/api/v1/trades/alerts?symbol=${selectedSymbol}&price=${alertPrice}&condition=${alertCondition}`, { method: "POST", credentials: "include" });
+                      setAlertOpen(false);
+                      // Could add toast here
+                    } catch {}
+                  }}
+                  className="h-6 px-2 rounded bg-primary text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Set Alert
+                </button>
+                <button onClick={() => setAlertOpen(false)} className="h-6 w-6 rounded text-muted-foreground hover:text-foreground">✕</button>
               </div>
             )}
           </div>

@@ -494,6 +494,41 @@ async def resume_trading(username: str = Depends(require_auth)):
     return {"halted": False, "message": "Trading resumed."}
 
 
+# ---------------------------------------------------------------------------
+# Price Alerts
+# ---------------------------------------------------------------------------
+
+_price_alerts: list[dict] = []  # In-memory for now; move to Redis/DB later
+
+@router.get("/alerts")
+async def list_alerts(username: str = Depends(require_auth)):
+    return _price_alerts
+
+@router.post("/alerts")
+async def create_alert(
+    symbol: str = Query(...),
+    price: float = Query(...),
+    condition: str = Query("above", regex="^(above|below)$"),
+    username: str = Depends(require_auth),
+):
+    alert = {
+        "id": f"alert-{len(_price_alerts)+1}",
+        "symbol": symbol.upper(),
+        "price": price,
+        "condition": condition,
+        "triggered": False,
+        "created_at": datetime.now(ZoneInfo("America/New_York")).isoformat(),
+    }
+    _price_alerts.append(alert)
+    return alert
+
+@router.delete("/alerts/{alert_id}")
+async def delete_alert(alert_id: str, username: str = Depends(require_auth)):
+    global _price_alerts
+    _price_alerts = [a for a in _price_alerts if a["id"] != alert_id]
+    return {"ok": True}
+
+
 async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
     """Submit the order to Alpaca and return the broker order ID.
 
