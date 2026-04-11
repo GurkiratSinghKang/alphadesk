@@ -40,6 +40,11 @@ interface TradingChartProps {
   indicators?: Indicator[];
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
+  positionLines?: {
+    entry: number | null;
+    stopLoss: number | null;
+    takeProfit: number | null;
+  } | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -138,7 +143,7 @@ function computeBollinger(
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -405,6 +410,51 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     useEffect(() => {
       if (data?.length) setChartData(data);
     }, [data, setChartData]);
+
+    // Position indicator lines (entry, stop loss, take profit)
+    useEffect(() => {
+      const series = mainSeriesRef.current;
+      if (!series) return;
+
+      const lines: ReturnType<typeof series.createPriceLine>[] = [];
+
+      if (positionLines?.entry != null) {
+        lines.push(series.createPriceLine({
+          price: positionLines.entry,
+          color: "#3b82f6",
+          lineWidth: 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: true,
+          title: `Entry $${positionLines.entry.toFixed(2)}`,
+        }));
+      }
+      if (positionLines?.stopLoss != null) {
+        lines.push(series.createPriceLine({
+          price: positionLines.stopLoss,
+          color: "#ef4444",
+          lineWidth: 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: true,
+          title: `SL $${positionLines.stopLoss.toFixed(2)}`,
+        }));
+      }
+      if (positionLines?.takeProfit != null) {
+        lines.push(series.createPriceLine({
+          price: positionLines.takeProfit,
+          color: "#22c55e",
+          lineWidth: 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: true,
+          title: `TP $${positionLines.takeProfit.toFixed(2)}`,
+        }));
+      }
+
+      return () => {
+        lines.forEach((line) => {
+          try { series.removePriceLine(line); } catch {}
+        });
+      };
+    }, [positionLines]);
 
     return (
       <>

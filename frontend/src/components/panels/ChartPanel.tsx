@@ -23,7 +23,7 @@ import {
   formatNumber,
   getChangeTextClass,
 } from "@/lib/utils";
-import { getBars } from "@/lib/api";
+import { getBars, getPositions, getPipelinePositions } from "@/lib/api";
 import type { TimeFrame, ChartType, Indicator, OHLCVBar } from "@/types";
 
 // ─── Timeframes ──────────────────────────────────────────────
@@ -84,6 +84,11 @@ export function ChartPanel() {
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [activeIndicators, setActiveIndicators] = useState<Indicator[]>(["Volume"]);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
+  const [positionLines, setPositionLines] = useState<{
+    entry: number | null;
+    stopLoss: number | null;
+    takeProfit: number | null;
+  } | null>(null);
 
   const quote = quotes.get(selectedSymbol);
 
@@ -106,6 +111,40 @@ export function ChartPanel() {
         // Fall back to demo data
       });
   }, [selectedSymbol, timeframe]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchPositionLevels() {
+      try {
+        const [positions, pipelineData] = await Promise.allSettled([
+          getPositions(),
+          getPipelinePositions(),
+        ]);
+        if (cancelled) return;
+
+        const pos = positions.status === "fulfilled"
+          ? positions.value.find((p) => p.symbol === selectedSymbol)
+          : null;
+        const pipPos = pipelineData.status === "fulfilled" && pipelineData.value.positions
+          ? pipelineData.value.positions.find((p) => p.symbol === selectedSymbol)
+          : null;
+
+        if (pos) {
+          setPositionLines({
+            entry: pos.avgCost,
+            stopLoss: pipPos?.stopLoss ?? null,
+            takeProfit: pipPos?.takeProfit ?? null,
+          });
+        } else {
+          setPositionLines(null);
+        }
+      } catch {
+        setPositionLines(null);
+      }
+    }
+    fetchPositionLevels();
+    return () => { cancelled = true; };
+  }, [selectedSymbol]);
 
   const displayData = apiBars ?? chartData;
 
@@ -274,6 +313,7 @@ export function ChartPanel() {
           chartType={chartType}
           indicators={activeIndicators}
           onCrosshairMove={handleCrosshairMove}
+          positionLines={positionLines}
         />
         </div>
       </div>
