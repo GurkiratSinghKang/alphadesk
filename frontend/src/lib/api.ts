@@ -401,6 +401,7 @@ export async function getPositions(): Promise<Position[]> {
     currentPrice: (p.current_price as number) ?? (p.currentPrice as number) ?? 0,
     unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,
     marketValue: (p.market_value as number) ?? (p.marketValue as number) ?? 0,
+    side: (p.side as "long" | "short") ?? undefined,
   }));
 }
 

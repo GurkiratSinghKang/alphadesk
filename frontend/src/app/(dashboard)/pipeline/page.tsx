@@ -210,7 +210,13 @@ export default function PipelinePage() {
     }
   };
 
-  if (!mounted) return null;
+  if (!mounted) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   // ─── Computed stats ─────────────────────────────────────
   const totalPnl = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);

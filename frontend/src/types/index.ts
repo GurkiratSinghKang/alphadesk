@@ -40,6 +40,7 @@ export interface Position {
   currentPrice: number;
   unrealizedPnl: number;
   marketValue: number;
+  side?: "long" | "short";
   greeks?: PositionGreeks;
 }
 

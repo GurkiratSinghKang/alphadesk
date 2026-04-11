@@ -37,7 +37,10 @@ export function PositionsSummary() {
       </div>
       <div className="divide-y divide-border">
         {positions.map((pos) => {
-          const pnlPct = pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost) * 100 : 0;
+          const isShort = pos.side === "short";
+          const pnlPct = pos.avgCost > 0
+            ? (isShort ? -1 : 1) * ((pos.currentPrice - pos.avgCost) / pos.avgCost) * 100
+            : 0;
           const positive = pos.unrealizedPnl >= 0;
           return (
             <div key={pos.symbol} className="flex items-center justify-between gap-4 px-4 py-2.5">

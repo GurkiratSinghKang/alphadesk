@@ -75,6 +75,7 @@ function CommandCenter() {
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
   const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ─── Data Fetching ─────────────────────────────────────────
@@ -212,6 +213,28 @@ function CommandCenter() {
         console.error("[Dashboard] Data processing error:", err);
       }
 
+      // Fetch real equity curve from performance endpoint
+      try {
+        const perfResp = await fetch("/api/v1/portfolio/performance", { credentials: "include" });
+        if (perfResp.ok) {
+          const perfData = await perfResp.json();
+          if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
+            const baseEquity = summaryRes.status === "fulfilled" ? summaryRes.value.equity : 100000;
+            const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
+            const startEquity = baseEquity - totalPnl;
+            const history = perfData.equity_curve.map((pt: any, i: number) => {
+              const d = new Date();
+              d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
+              return {
+                date: d.toISOString().slice(0, 10),
+                value: startEquity + (pt.cumulative_pnl ?? 0),
+              };
+            });
+            if (!cancelled) setEquityHistory(history);
+          }
+        }
+      } catch {}
+
       if (!cancelled) setLoading(false);
     }
 
@@ -229,26 +252,6 @@ function CommandCenter() {
   const portfolioValue = Number.isFinite(summary.equity) && summary.equity > 0 ? summary.equity : 0;
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
-
-  // Equity history for the hero chart
-  const equityHistory = useMemo(() => {
-    const history: { date: string; value: number }[] = [];
-    let val = portfolioValue - dayPnl; // approximate starting value
-    const now = new Date();
-    for (let i = 30; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-      const dateStr = d.toISOString().slice(0, 10);
-      // Small deterministic random walk
-      const seed = (i * 16807) % 2147483647;
-      val += ((seed % 1000) - 480) / 10;
-      history.push({ date: dateStr, value: val });
-    }
-    // Ensure last point matches current equity
-    if (history.length > 0) history[history.length - 1].value = portfolioValue;
-    return history;
-  }, [portfolioValue, dayPnl]);
 
   // Sparkline data (deterministic per symbol)
   const sparkData = useMemo(() => {
