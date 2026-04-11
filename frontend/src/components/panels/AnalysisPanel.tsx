@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
+import { usePortfolioStore } from "@/stores/portfolio";
 import { cn } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
@@ -616,6 +617,63 @@ function ChatTab({ symbol }: { symbol: string }) {
   );
 }
 
+// ─── Position Sizer ──────────────────────────────────────────
+
+function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice: number }) {
+  const [riskPct, setRiskPct] = useState(2);
+  const [stopLossPct, setStopLossPct] = useState(5);
+  const summary = usePortfolioStore((s) => s.summary);
+
+  const accountSize = summary.equity > 0 ? summary.equity : 100000;
+  const riskAmount = accountSize * (riskPct / 100);
+  const stopLossDistance = currentPrice * (stopLossPct / 100);
+  const shares = stopLossDistance > 0 ? Math.floor(riskAmount / stopLossDistance) : 0;
+  const positionValue = shares * currentPrice;
+  const pctOfPortfolio = accountSize > 0 ? ((positionValue / accountSize) * 100).toFixed(1) : "0";
+
+  return (
+    <div className="border border-border rounded-lg p-2.5 mb-3 bg-[var(--panel)]/50">
+      <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] mb-2 font-semibold">Position Sizer</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] text-muted-foreground">Risk %</label>
+          <input
+            type="number" value={riskPct} onChange={(e) => setRiskPct(parseFloat(e.target.value) || 1)}
+            min={0.5} max={10} step={0.5}
+            className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-muted-foreground">Stop Loss %</label>
+          <input
+            type="number" value={stopLossPct} onChange={(e) => setStopLossPct(parseFloat(e.target.value) || 1)}
+            min={0.5} max={20} step={0.5}
+            className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+          />
+        </div>
+      </div>
+      <div className="mt-2 space-y-0.5 text-[11px]">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Shares</span>
+          <span className="text-foreground font-semibold tabular-nums">{shares}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Position Value</span>
+          <span className="text-foreground tabular-nums">${positionValue.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Risk Amount</span>
+          <span className="text-[var(--loss)] tabular-nums">${riskAmount.toFixed(0)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">% of Portfolio</span>
+          <span className="text-foreground tabular-nums">{pctOfPortfolio}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Order Tab ───────────────────────────────────────────────
 
 function OrderTab({ symbol }: { symbol: string }) {
@@ -655,6 +713,9 @@ function OrderTab({ symbol }: { symbol: string }) {
 
   return (
     <div className="p-3 space-y-3">
+      {/* Position Sizer */}
+      <PositionSizer symbol={symbol} currentPrice={quote?.last ?? 0} />
+
       {/* Side Toggle */}
       <div className="flex gap-1">
         <button
