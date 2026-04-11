@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useDataPipeline } from "@/hooks/useDataPipeline";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ToastProvider } from "@/components/ui/toast";
 
 // ─── React Query ─────────────────────────────────────────────
 
@@ -56,15 +57,17 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isLogin ? (
-        <TooltipProvider delay={200}>{children}</TooltipProvider>
-      ) : (
-        <WebSocketProvider>
-          <DataPipelineBridge>
-            <TooltipProvider delay={200}>{children}</TooltipProvider>
-          </DataPipelineBridge>
-        </WebSocketProvider>
-      )}
+      <ToastProvider>
+        {isLogin ? (
+          <TooltipProvider delay={200}>{children}</TooltipProvider>
+        ) : (
+          <WebSocketProvider>
+            <DataPipelineBridge>
+              <TooltipProvider delay={200}>{children}</TooltipProvider>
+            </DataPipelineBridge>
+          </WebSocketProvider>
+        )}
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
