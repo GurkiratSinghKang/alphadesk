@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Plus, X, TrendingUp, TrendingDown, Minus, MoreHorizontal } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -273,6 +273,33 @@ export function WatchlistPanel() {
     useMarketStore();
   const { activePanels, setActiveTab } = useUIStore();
   const [addInput, setAddInput] = useState("");
+  const [sortKey, setSortKey] = useState<"default" | "symbol" | "last" | "changePct">("default");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (key: typeof sortKey) => {
+    if (key === sortKey) {
+      // Cycle: desc → asc → default
+      if (sortDir === "desc") setSortDir("asc");
+      else { setSortKey("default"); setSortDir("desc"); }
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sortedWatchlist = useMemo(() => {
+    if (sortKey === "default") return watchlist;
+    const sorted = [...watchlist].sort((a, b) => {
+      const quoteA = quotes.get(a);
+      const quoteB = quotes.get(b);
+      let valA = 0, valB = 0;
+      if (sortKey === "symbol") { return sortDir === "asc" ? a.localeCompare(b) : b.localeCompare(a); }
+      if (sortKey === "last") { valA = quoteA?.last ?? 0; valB = quoteB?.last ?? 0; }
+      if (sortKey === "changePct") { valA = quoteA?.changePct ?? 0; valB = quoteB?.changePct ?? 0; }
+      return sortDir === "asc" ? valA - valB : valB - valA;
+    });
+    return sorted;
+  }, [watchlist, quotes, sortKey, sortDir]);
 
   const handleAdd = useCallback(
     (e: React.FormEvent) => {
@@ -353,10 +380,16 @@ export function WatchlistPanel() {
 
           {/* Column headers */}
           <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-[#2a2a3e] bg-[#14141e]">
-            <div className="flex-1">Symbol</div>
+            <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
+              Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+            </button>
             <div className="w-9" />
-            <div className="w-16 text-right">Last</div>
-            <div className="w-14 text-right">Chg%</div>
+            <button onClick={() => handleSort("last")} className="w-16 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+              Last {sortKey === "last" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+            </button>
+            <button onClick={() => handleSort("changePct")} className="w-14 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+              Chg% {sortKey === "changePct" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+            </button>
             <div className="w-5" />
           </div>
 
@@ -369,7 +402,7 @@ export function WatchlistPanel() {
                   <p className="text-[10px] text-muted-foreground/60">Type a ticker above and press + to add one</p>
                 </div>
               ) : (
-                watchlist.map((symbol) => (
+                sortedWatchlist.map((symbol) => (
                   <WatchlistRow
                     key={symbol}
                     symbol={symbol}
