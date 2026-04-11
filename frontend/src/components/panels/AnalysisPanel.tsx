@@ -11,6 +11,7 @@ import {
   DollarSign,
   MessageSquare,
   Activity,
+  ShoppingCart,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,7 +22,8 @@ import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
-import { chatWithAgent, getAnalysis, analyzeSymbol } from "@/lib/api";
+import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 import type { ChatMessage, Analysis } from "@/types";
 
 // ─── Score Gauge ─────────────────────────────────────────────
@@ -599,6 +601,142 @@ function ChatTab({ symbol }: { symbol: string }) {
   );
 }
 
+// ─── Order Tab ───────────────────────────────────────────────
+
+function OrderTab({ symbol }: { symbol: string }) {
+  const quote = useMarketStore((s) => s.quotes.get(symbol));
+  const { toast } = useToast();
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [quantity, setQuantity] = useState(10);
+  const [orderType, setOrderType] = useState<"market" | "limit" | "stop" | "stop_limit">("market");
+  const [price, setPrice] = useState(quote?.last ?? 0);
+  const [tif, setTif] = useState<"day" | "gtc">("day");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Update price when quote changes and order type is market
+  useEffect(() => {
+    if (orderType === "market" && quote?.last) setPrice(quote.last);
+  }, [quote?.last, orderType]);
+
+  const estimatedCost = quantity * price;
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      await placeOrder({
+        symbol,
+        side,
+        type: orderType,
+        quantity,
+        price: orderType !== "market" ? price : undefined,
+      });
+      toast({ type: "success", message: `Order placed: ${side === "buy" ? "Buy" : "Sell"} ${quantity} ${symbol} @ ${orderType === "market" ? "Market" : "$" + price.toFixed(2)}` });
+    } catch (err: any) {
+      toast({ type: "error", message: err?.message ?? "Order failed" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-3 space-y-3">
+      {/* Side Toggle */}
+      <div className="flex gap-1">
+        <button
+          onClick={() => setSide("buy")}
+          className={cn("flex-1 rounded py-1.5 text-xs font-semibold transition-colors",
+            side === "buy" ? "bg-[var(--profit)]/20 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground"
+          )}
+        >Buy</button>
+        <button
+          onClick={() => setSide("sell")}
+          className={cn("flex-1 rounded py-1.5 text-xs font-semibold transition-colors",
+            side === "sell" ? "bg-[var(--loss)]/20 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground"
+          )}
+        >Sell</button>
+      </div>
+
+      {/* Quantity */}
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-[#555]">Quantity</label>
+        <div className="flex items-center gap-1 mt-1">
+          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">-</button>
+          <input
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            className="h-8 flex-1 rounded border border-border bg-background px-2 text-center text-sm tabular-nums text-foreground"
+            min={1}
+          />
+          <button onClick={() => setQuantity(quantity + 1)} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">+</button>
+        </div>
+      </div>
+
+      {/* Order Type */}
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-[#555]">Order Type</label>
+        <select
+          value={orderType}
+          onChange={(e) => setOrderType(e.target.value as any)}
+          className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-xs text-foreground"
+        >
+          <option value="market">Market</option>
+          <option value="limit">Limit</option>
+          <option value="stop">Stop</option>
+          <option value="stop_limit">Stop Limit</option>
+        </select>
+      </div>
+
+      {/* Price (shown for limit/stop) */}
+      {orderType !== "market" && (
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-[#555]">
+            {orderType === "stop" ? "Stop Price" : "Limit Price"}
+          </label>
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+            step={0.01}
+            className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
+          />
+        </div>
+      )}
+
+      {/* Time in Force */}
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-[#555]">Time in Force</label>
+        <div className="flex gap-1 mt-1">
+          <button onClick={() => setTif("day")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "day" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>Day</button>
+          <button onClick={() => setTif("gtc")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "gtc" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>GTC</button>
+        </div>
+      </div>
+
+      {/* Separator + Preview */}
+      <div className="border-t border-border pt-3 space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-[#555]">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
+          <span className="text-foreground tabular-nums font-medium">${estimatedCost.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Submit */}
+      <button
+        onClick={handleSubmit}
+        disabled={submitting || quantity <= 0}
+        className={cn(
+          "w-full rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-50",
+          side === "buy"
+            ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-white"
+            : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+        )}
+      >
+        {submitting ? "Placing..." : `${side === "buy" ? "Buy" : "Sell"} ${quantity} ${symbol} @ ${orderType === "market" ? "Market" : "$" + price.toFixed(2)}`}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Panel ──────────────────────────────────────────────
 
 export function AnalysisPanel() {
@@ -627,6 +765,9 @@ export function AnalysisPanel() {
             <TabsTrigger value="chat" className="text-[11px] h-6 px-2 gap-1">
               <MessageSquare className="h-3 w-3" /> Chat
             </TabsTrigger>
+            <TabsTrigger value="order" className="text-[11px] h-6 px-2 gap-1">
+              <ShoppingCart className="h-3 w-3" /> Order
+            </TabsTrigger>
           </TabsList>
           <HelpCircle text="AI-powered analysis of the selected symbol. Technical, fundamental, and sentiment scores updated by Claude agents." />
         </div>
@@ -651,6 +792,12 @@ export function AnalysisPanel() {
 
         <TabsContent value="chat" className="flex-1 mt-0 overflow-hidden">
           <ChatTab symbol={selectedSymbol} />
+        </TabsContent>
+
+        <TabsContent value="order" className="flex-1 mt-0 overflow-hidden">
+          <ScrollArea className="h-full">
+            <OrderTab symbol={selectedSymbol} />
+          </ScrollArea>
         </TabsContent>
       </Tabs>
     </div>
