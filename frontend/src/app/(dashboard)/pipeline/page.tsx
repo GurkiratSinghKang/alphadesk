@@ -8,13 +8,8 @@ import {
   Target,
   Clock,
   Loader2,
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Activity,
-  BarChart3,
-  Crosshair,
-  FileText,
   Zap,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,7 +34,6 @@ import {
   type PipelineStatus,
   type PipelineRun,
   type PipelinePosition,
-  type PipelineAnalysis,
 } from "@/lib/api";
 
 // ─── Signal badge helper ────────────────────────────────────
@@ -59,45 +53,37 @@ function SignalBadge({ signal }: { signal: string }) {
   );
 }
 
-// ─── Conviction bar ─────────────────────────────────────────
+// ─── Pipeline Flow Diagram ──────────────────────────────────
 
-function ConvictionBar({ value: rawValue }: { value: number }) {
-  const value = rawValue ?? 0;
-  const color =
-    value < 30
-      ? "bg-[var(--loss)]"
-      : value < 60
-      ? "bg-yellow-500"
-      : "bg-[var(--profit)]";
+function PipelineFlow({ run }: { run: PipelineRun | null }) {
+  const stages = [
+    { label: "Screened", count: run?.screened?.length ?? 0 },
+    { label: "Analyzed", count: run?.analyzed?.length ?? 0 },
+    { label: "Signals", count: run?.signals?.length ?? 0 },
+    { label: "Orders", count: run?.ordersPlaced?.length ?? 0 },
+  ];
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-        />
-      </div>
-      <span className="text-[11px] tabular-nums text-muted-foreground">
-        {value}
-      </span>
+    <div className="flex items-center justify-between gap-2">
+      {stages.map((stage, i) => (
+        <div key={stage.label} className="flex items-center gap-2 flex-1">
+          <div className={cn(
+            "flex-1 rounded-lg border px-3 py-2 text-center",
+            stage.count > 0
+              ? "border-primary/40 bg-primary/5"
+              : "border-border bg-[var(--surface)]"
+          )}>
+            <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#555]")}>
+              {stage.count}
+            </p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+          </div>
+          {i < stages.length - 1 && (
+            <span className="text-muted-foreground/40 text-sm shrink-0">→</span>
+          )}
+        </div>
+      ))}
     </div>
-  );
-}
-
-// ─── Order status badge ─────────────────────────────────────
-
-function OrderStatusBadge({ status }: { status: string }) {
-  const s = (status ?? "").toLowerCase();
-  const color =
-    s === "filled"
-      ? "bg-[var(--profit)]/15 text-[var(--profit)] border-[var(--profit)]/30"
-      : s === "rejected"
-      ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
-      : "bg-yellow-500/15 text-yellow-500 border-yellow-500/30";
-  return (
-    <Badge className={cn("text-[10px] uppercase border", color)}>
-      {status}
-    </Badge>
   );
 }
 
@@ -117,7 +103,6 @@ export default function PipelinePage() {
     {}
   );
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [errorsExpanded, setErrorsExpanded] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -407,229 +392,14 @@ export default function PipelinePage() {
             {/* Section 2: Today's Pipeline Run */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Activity className="h-4 w-4 text-primary" />
+                <Zap className="h-4 w-4 text-primary" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  {"Today's Pipeline Run"}
+                  Today&apos;s Pipeline Run
                 </h2>
               </div>
-              {!todayRun ? (
-                <div className="flex items-center justify-between rounded-lg border border-border bg-[var(--surface)] px-4 py-3">
-                  <div>
-                    <p className="text-body">No run today</p>
-                    <p className="text-hint">Click Run Now to trigger manually</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {/* Screened */}
-                  <Card className="border-border bg-[var(--surface)]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Crosshair className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-bold text-foreground">
-                          Screened
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {(todayRun.screened ?? []).length} stocks
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(todayRun.screened ?? []).slice(0, 5).map((s) => (
-                          <Badge
-                            key={s.symbol}
-                            variant="outline"
-                            className="text-[10px] font-mono"
-                          >
-                            {s.symbol}
-                          </Badge>
-                        ))}
-                        {(todayRun.screened ?? []).length > 5 && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] text-muted-foreground"
-                          >
-                            +{(todayRun.screened ?? []).length - 5} more
-                          </Badge>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Signals Generated */}
-                  <Card className="border-border bg-[var(--surface)]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Zap className="h-4 w-4 text-yellow-500" />
-                        <span className="text-xs font-bold text-foreground">
-                          Signals Generated
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {(todayRun.signals ?? []).length}
-                        </Badge>
-                      </div>
-                      {(todayRun.signals ?? []).length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          No signals generated
-                        </p>
-                      ) : (
-                        <div className="space-y-1">
-                          {(todayRun.signals ?? []).map(
-                            (sig: Record<string, unknown>, i: number) => (
-                              <div
-                                key={i}
-                                className="text-[11px] text-muted-foreground"
-                              >
-                                {String(sig.symbol || sig.name || JSON.stringify(sig))}
-                              </div>
-                            )
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Orders Placed */}
-                  <Card className="border-border bg-[var(--surface)]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-bold text-foreground">
-                          Orders Placed
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {(todayRun.ordersPlaced ?? []).length}
-                        </Badge>
-                      </div>
-                      {(todayRun.ordersPlaced ?? []).length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          No orders placed
-                        </p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {(todayRun.ordersPlaced ?? []).map((o) => (
-                            <div
-                              key={o.orderId}
-                              className="flex items-center justify-between text-[11px]"
-                            >
-                              <span className="font-mono font-medium text-foreground">
-                                {(o.side ?? "").toUpperCase()} {o.qty} {o.symbol}
-                              </span>
-                              <OrderStatusBadge status={o.status} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Errors */}
-                  {(todayRun.errors ?? []).length > 0 && (
-                    <Card className="border-border bg-[var(--surface)] border-[var(--loss)]/30">
-                      <CardContent className="p-4">
-                        <button
-                          onClick={() => setErrorsExpanded(!errorsExpanded)}
-                          className="flex items-center gap-2 mb-2 w-full text-left"
-                        >
-                          <AlertTriangle className="h-4 w-4 text-[var(--loss)]" />
-                          <span className="text-xs font-bold text-[var(--loss)]">
-                            Errors
-                          </span>
-                          <Badge
-                            variant="destructive"
-                            className="text-[10px]"
-                          >
-                            {(todayRun.errors ?? []).length}
-                          </Badge>
-                          {errorsExpanded ? (
-                            <ChevronDown className="h-3 w-3 ml-auto text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3 ml-auto text-muted-foreground" />
-                          )}
-                        </button>
-                        {errorsExpanded && (
-                          <div className="space-y-1">
-                            {(todayRun.errors ?? []).map((e, i) => (
-                              <p
-                                key={i}
-                                className="text-[11px] text-[var(--loss)]"
-                              >
-                                {e}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              )}
-
-              {/* Analyzed - shown as a wider section below the cards */}
-              {todayRun && (todayRun.analyzed ?? []).length > 0 && (
-                <div className="mt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BarChart3 className="h-4 w-4 text-primary" />
-                    <span className="text-xs font-bold text-foreground">
-                      Analysis Results
-                    </span>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {(todayRun.analyzed ?? []).length} analyzed
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {(todayRun.analyzed ?? []).map((a: PipelineAnalysis) => (
-                      <Card
-                        key={a.symbol}
-                        className="border-border bg-[var(--surface)]"
-                      >
-                        <CardContent className="p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold font-mono text-foreground">
-                              {a.symbol}
-                            </span>
-                            <SignalBadge signal={a.signal} />
-                          </div>
-                          <ConvictionBar value={a.conviction} />
-                          <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
-                            <div>
-                              <span className="block text-muted-foreground/70">
-                                Entry
-                              </span>
-                              <span className="tabular-nums text-foreground">
-                                {a.entryPrice
-                                  ? formatCurrency(a.entryPrice)
-                                  : "—"}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="block text-muted-foreground/70">
-                                SL
-                              </span>
-                              <span className="tabular-nums text-[var(--loss)]">
-                                {a.stopLoss
-                                  ? formatCurrency(a.stopLoss)
-                                  : "—"}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="block text-muted-foreground/70">
-                                TP
-                              </span>
-                              <span className="tabular-nums text-[var(--profit)]">
-                                {a.takeProfit
-                                  ? formatCurrency(a.takeProfit)
-                                  : "—"}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-                            {a.rationale}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
+              <PipelineFlow run={todayRun} />
+              {!todayRun && (
+                <p className="text-hint mt-2">No run today — click Run Now to trigger manually</p>
               )}
             </section>
 
@@ -731,11 +501,13 @@ export default function PipelinePage() {
                               ) : (
                                 h.summary || (() => {
                                   const parts: string[] = [];
-                                  if (h.screened) parts.push(`${h.screened} screened`);
+                                  const screened = h.screened ?? h.strategies_run ? Object.values(h.strategies_run || {}).reduce((s: number, v: any) => s + (v?.screened ?? 0), 0) : 0;
+                                  const orders = h.orders_placed ?? h.ordersPlaced ?? 0;
+                                  if (screened) parts.push(`${screened} screened`);
                                   if (h.analyzed) parts.push(`${h.analyzed} analyzed`);
-                                  if (h.orders_placed ?? h.ordersPlaced) parts.push(`${h.orders_placed ?? h.ordersPlaced} orders`);
-                                  if (h.errors?.length) parts.push(`${h.errors.length} errors`);
-                                  return parts.length > 0 ? parts.join(" · ") : "Click to expand";
+                                  if (orders) parts.push(`${orders} order${orders !== 1 ? "s" : ""}`);
+                                  if (h.errors?.length) parts.push(`${h.errors.length} error${h.errors.length !== 1 ? "s" : ""}`);
+                                  return parts.length > 0 ? parts.join(" · ") : "No activity";
                                 })()
                               )}
                             </TableCell>
