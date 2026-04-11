@@ -752,20 +752,20 @@ export function AnalysisPanel() {
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 border border-[#2a2a3e]">
-            <TabsTrigger value="technical" className="text-[11px] h-6 px-2 gap-1">
+          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-hidden border border-[#2a2a3e]">
+            <TabsTrigger value="technical" className="text-[10px] h-6 px-1.5 gap-0.5">
               <Activity className="h-3 w-3" /> Tech
             </TabsTrigger>
-            <TabsTrigger value="fundamental" className="text-[11px] h-6 px-2 gap-1">
+            <TabsTrigger value="fundamental" className="text-[10px] h-6 px-1.5 gap-0.5">
               <DollarSign className="h-3 w-3" /> Fund
             </TabsTrigger>
-            <TabsTrigger value="sentiment" className="text-[11px] h-6 px-2 gap-1">
+            <TabsTrigger value="sentiment" className="text-[10px] h-6 px-1.5 gap-0.5">
               <BarChart2 className="h-3 w-3" /> Sent
             </TabsTrigger>
-            <TabsTrigger value="chat" className="text-[11px] h-6 px-2 gap-1">
+            <TabsTrigger value="chat" className="text-[10px] h-6 px-1.5 gap-0.5">
               <MessageSquare className="h-3 w-3" /> Chat
             </TabsTrigger>
-            <TabsTrigger value="order" className="text-[11px] h-6 px-2 gap-1">
+            <TabsTrigger value="order" className="text-[10px] h-6 px-1.5 gap-0.5">
               <ShoppingCart className="h-3 w-3" /> Order
             </TabsTrigger>
           </TabsList>
