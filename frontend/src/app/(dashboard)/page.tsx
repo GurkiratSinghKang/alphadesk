@@ -23,6 +23,7 @@ import { StrategyGrid, STRATEGY_META, STRATEGY_ORDER, type StrategyData } from "
 import { PositionsSummary } from "@/components/dashboard/PositionsSummary";
 import { PnlCalendarMini } from "@/components/dashboard/PnlCalendarMini";
 import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketContext";
+import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -279,6 +280,7 @@ function CommandCenter() {
               <PositionsSummary />
               <PnlCalendarMini />
             </div>
+            <EconomicCalendar />
           </div>
 
           {/* Strategy Grid (right ~40%) */}
