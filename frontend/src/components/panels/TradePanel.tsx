@@ -616,12 +616,113 @@ function OrdersTab() {
 // ─── Journal Tab ─────────────────────────────────────────────
 
 function JournalTab() {
+  const positions = usePortfolioStore((s) => s.positions);
+  const orders = usePortfolioStore((s) => s.orders);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+
+  // Generate journal entries from recent orders
+  const entries = useMemo(() => {
+    const items: { id: string; date: string; type: string; symbol: string; detail: string; pnl?: number }[] = [];
+
+    // From orders
+    for (const order of orders.slice(0, 10)) {
+      items.push({
+        id: order.id,
+        date: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—",
+        type: order.side === "buy" ? "BUY" : "SELL",
+        symbol: order.symbol,
+        detail: `${order.quantity} shares @ ${order.type === "market" ? "Market" : "$" + (order.price?.toFixed(2) ?? "—")}`,
+      });
+    }
+
+    // From positions (current holdings)
+    for (const pos of positions) {
+      items.push({
+        id: `pos-${pos.symbol}`,
+        date: "Active",
+        type: "HOLD",
+        symbol: pos.symbol,
+        detail: `${pos.quantity} shares, avg $${pos.avgCost.toFixed(2)}`,
+        pnl: pos.unrealizedPnl,
+      });
+    }
+
+    return items;
+  }, [orders, positions]);
+
+  const handleSaveNote = (entryId: string) => {
+    setNotes((prev) => ({ ...prev, [entryId]: noteText }));
+    setEditingId(null);
+    setNoteText("");
+  };
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <BookOpen className="h-8 w-8 mb-3 text-muted-foreground opacity-30" />
+        <p className="text-sm text-foreground">Trading Journal</p>
+        <p className="text-hint mt-1">Journal entries appear as you trade</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center py-12">
-      <BookOpen className="h-8 w-8 mb-3 text-muted-foreground opacity-30" />
-      <p className="text-sm text-foreground">Trading Journal</p>
-      <p className="text-hint mt-1">Journal entries will appear as you trade</p>
-    </div>
+    <ScrollArea className="h-full">
+      <div className="p-2 space-y-1">
+        {entries.map((entry) => (
+          <div key={entry.id} className="rounded-lg border border-border bg-[var(--surface)] p-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
+                  entry.type === "BUY" ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
+                  entry.type === "SELL" ? "bg-[var(--loss)]/15 text-[var(--loss)]" :
+                  "bg-primary/15 text-primary"
+                )}>
+                  {entry.type}
+                </span>
+                <span className="text-xs font-semibold text-foreground">{entry.symbol}</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground">{entry.date}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{entry.detail}</p>
+            {entry.pnl !== undefined && (
+              <p className={cn("text-[11px] font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                P&L: {entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}
+              </p>
+            )}
+            {/* Notes */}
+            {notes[entry.id] && editingId !== entry.id && (
+              <p className="text-[10px] text-muted-foreground mt-1.5 italic border-t border-border pt-1.5">
+                📝 {notes[entry.id]}
+              </p>
+            )}
+            {editingId === entry.id ? (
+              <div className="mt-1.5 flex gap-1">
+                <input
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Add a note..."
+                  className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
+                />
+                <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-[9px] font-medium text-primary-foreground">Save</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setEditingId(entry.id); setNoteText(notes[entry.id] ?? ""); }}
+                className="text-[9px] text-primary hover:underline mt-1"
+              >
+                {notes[entry.id] ? "Edit note" : "Add note"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -675,9 +776,7 @@ export function TradePanel() {
         </TabsContent>
 
         <TabsContent value="journal" className="flex-1 mt-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            <JournalTab />
-          </ScrollArea>
+          <JournalTab />
         </TabsContent>
 
         <TabsContent value="calendar" className="flex-1 mt-0 overflow-hidden">
