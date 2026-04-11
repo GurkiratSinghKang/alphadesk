@@ -234,6 +234,40 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+
+  /* Typography scale — Bloomberg-style size + dimming hierarchy */
+  .text-display {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--foreground);
+    line-height: 1;
+  }
+  .text-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--foreground);
+    letter-spacing: -0.01em;
+  }
+  .text-body {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--foreground);
+  }
+  .text-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #555;
+  }
+  .text-secondary {
+    opacity: 0.65;
+  }
+  .text-hint {
+    font-size: 11px;
+    color: #555;
+  }
 }
 
 /* Subtle page background gradient */
