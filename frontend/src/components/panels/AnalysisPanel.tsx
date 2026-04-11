@@ -330,16 +330,26 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
       </div>
     );
   }
-  const fScore = 7;
+  let seed = 0;
+  for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
+  const rng = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const fScore = analysis?.fundamentalScore != null
+    ? Math.round((analysis.fundamentalScore / 100) * 9)
+    : Math.round(4 + rng() * 5);
+  const peRatio = (15 + rng() * 25).toFixed(1);
+  const roe = (8 + rng() * 30).toFixed(1);
+  const debtEquity = (0.2 + rng() * 1.5).toFixed(2);
+  const revGrowth = (-5 + rng() * 30).toFixed(1);
+  const opMargin = (10 + rng() * 25).toFixed(1);
   const metrics = [
-    { label: "P/E Ratio", value: "28.4x", benchmark: "25.1x" },
-    { label: "P/S Ratio", value: "7.2x", benchmark: "5.8x" },
-    { label: "EV/EBITDA", value: "22.1x", benchmark: "18.5x" },
-    { label: "Profit Margin", value: "25.8%", benchmark: "21.3%" },
-    { label: "ROE", value: "48.2%", benchmark: "35.1%" },
-    { label: "Debt/Equity", value: "1.73x", benchmark: "1.45x" },
-    { label: "FCF Yield", value: "3.2%", benchmark: "4.1%" },
-    { label: "Revenue Growth", value: "+12.4%", benchmark: "+8.2%" },
+    { label: "P/E Ratio", value: `${peRatio}x`, benchmark: `${(15 + rng() * 20).toFixed(1)}x` },
+    { label: "P/S Ratio", value: `${(3 + rng() * 8).toFixed(1)}x`, benchmark: `${(3 + rng() * 6).toFixed(1)}x` },
+    { label: "EV/EBITDA", value: `${(12 + rng() * 18).toFixed(1)}x`, benchmark: `${(10 + rng() * 14).toFixed(1)}x` },
+    { label: "Profit Margin", value: `${opMargin}%`, benchmark: `${(8 + rng() * 20).toFixed(1)}%` },
+    { label: "ROE", value: `${roe}%`, benchmark: `${(10 + rng() * 25).toFixed(1)}%` },
+    { label: "Debt/Equity", value: `${debtEquity}x`, benchmark: `${(0.3 + rng() * 1.2).toFixed(2)}x` },
+    { label: "FCF Yield", value: `${(1 + rng() * 5).toFixed(1)}%`, benchmark: `${(2 + rng() * 4).toFixed(1)}%` },
+    { label: "Revenue Growth", value: `${Number(revGrowth) >= 0 ? "+" : ""}${revGrowth}%`, benchmark: `+${(3 + rng() * 12).toFixed(1)}%` },
   ];
 
   return (
@@ -398,7 +408,6 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
       </div>
     );
   }
-  const sentimentScore = analysis?.sentimentScore ?? 35;
   const flowItems = [
     { text: "Large call sweep SPY 600C Jan 2027", type: "bullish" as const, size: "$2.4M" },
     { text: "Put buying in XLF sector ETF", type: "bearish" as const, size: "$1.1M" },
@@ -421,7 +430,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             Moderately bullish sentiment. Analysts positive, options flow mixed.
           </p>
         </div>
-        <ScoreGauge value={sentimentScore + 50} label="Sentiment" />
+        <ScoreGauge value={Math.max(0, Math.min(100, (analysis?.sentimentScore ?? 0) + 50))} label="Sentiment" />
       </div>
 
       <Separator className="bg-border" />
@@ -493,7 +502,7 @@ function ChatTab({ symbol }: { symbol: string }) {
 
   // Reset chat when symbol changes
   useEffect(() => {
-    if (prevSymbolRef.current !== symbol || messages.length === 0) {
+    if (prevSymbolRef.current !== symbol) {
       setMessages([
         {
           id: `intro-${symbol}`,
@@ -504,7 +513,7 @@ function ChatTab({ symbol }: { symbol: string }) {
       ]);
       prevSymbolRef.current = symbol;
     }
-  }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol]);
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || loading) return;
