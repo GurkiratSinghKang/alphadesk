@@ -29,6 +29,7 @@ import {
   getStrategyTrades,
   getStrategyAnalytics,
   toggleStrategy,
+  getBars,
   type StrategyPerformance,
   type StrategyTrade,
   type StrategyAnalytics,
@@ -67,7 +68,15 @@ function filterEquityCurve(curve: { date: string; value: number }[], period: Tim
 
 // ─── Equity Curve SVG Chart ──────────────────────────────────
 
-function EquityCurve({ data, height = 400 }: { data: { date: string; value: number }[]; height?: number }) {
+function EquityCurve({
+  data,
+  benchmark = [],
+  height = 400,
+}: {
+  data: { date: string; value: number }[];
+  benchmark?: { date: string; value: number }[];
+  height?: number;
+}) {
   if (data.length < 2) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-border bg-[var(--panel)]" style={{ height }}>
@@ -76,23 +85,44 @@ function EquityCurve({ data, height = 400 }: { data: { date: string; value: numb
     );
   }
 
-  const values = data.map((d) => d.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
   const w = 1000;
   const h = height - 40;
   const padding = 20;
 
-  const points = data.map((d, i) => {
-    const x = padding + (i / (data.length - 1)) * (w - 2 * padding);
-    const y = padding + (1 - (d.value - min) / range) * (h - 2 * padding);
-    return `${x},${y}`;
-  });
+  const hasBenchmark = benchmark.length >= 2;
 
-  const areaPoints = [...points, `${padding + ((data.length - 1) / (data.length - 1)) * (w - 2 * padding)},${h - padding}`, `${padding},${h - padding}`];
-  const isPositive = values[values.length - 1] >= values[0];
+  // When benchmark present, normalise both series to % returns
+  const mainValues = hasBenchmark
+    ? data.map((d) => ((d.value / data[0].value) - 1) * 100)
+    : data.map((d) => d.value);
+
+  // Benchmark is already in % return format from the fetch
+  const benchValues = benchmark.map((d) => d.value);
+
+  const allValues = hasBenchmark ? [...mainValues, ...benchValues] : mainValues;
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const range = max - min || 1;
+
+  const toPoint = (values: number[], idx: number, total: number) => {
+    const x = padding + (idx / (total - 1)) * (w - 2 * padding);
+    const y = padding + (1 - (values[idx] - min) / range) * (h - 2 * padding);
+    return `${x},${y}`;
+  };
+
+  const points = mainValues.map((_, i) => toPoint(mainValues, i, mainValues.length));
+  const areaPoints = [
+    ...points,
+    `${padding + ((mainValues.length - 1) / (mainValues.length - 1)) * (w - 2 * padding)},${h - padding}`,
+    `${padding},${h - padding}`,
+  ];
+
+  const isPositive = mainValues[mainValues.length - 1] >= mainValues[0];
   const color = isPositive ? "var(--profit)" : "var(--loss)";
+
+  const benchPoints = hasBenchmark
+    ? benchValues.map((_, i) => toPoint(benchValues, i, benchValues.length))
+    : [];
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full rounded-lg border border-border bg-[var(--panel)]" style={{ height }} preserveAspectRatio="none">
@@ -103,7 +133,25 @@ function EquityCurve({ data, height = 400 }: { data: { date: string; value: numb
         </linearGradient>
       </defs>
       <polygon points={areaPoints.join(" ")} fill="url(#curveGrad)" />
+      {hasBenchmark && (
+        <polyline
+          points={benchPoints.join(" ")}
+          fill="none"
+          stroke="#71717a"
+          strokeWidth={1}
+          strokeLinejoin="round"
+          opacity={0.4}
+        />
+      )}
       <polyline points={points.join(" ")} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
+      {hasBenchmark && (
+        <g>
+          <circle cx={w - 80} cy={15} r={3} fill={color} />
+          <text x={w - 72} y={18} fontSize={9} className="fill-foreground">Strategy</text>
+          <circle cx={w - 80} cy={28} r={3} fill="#71717a" />
+          <text x={w - 72} y={31} fontSize={9} className="fill-muted-foreground">SPY</text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -179,6 +227,7 @@ export default function StrategyDetailPage() {
   const [expandedTrade, setExpandedTrade] = useState<number | null>(null);
   const [tradeFilter, setTradeFilter] = useState<"all" | "open" | "closed">("all");
   const [toggling, setToggling] = useState(false);
+  const [benchmarkData, setBenchmarkData] = useState<{ date: string; value: number }[]>([]);
   // Strategy content is imported statically — no need for state
 
   const meta = STRATEGY_META[strategyId] || { name: strategyId, shortName: strategyId, icon: Activity };
@@ -198,6 +247,19 @@ export default function StrategyDetailPage() {
   }, [strategyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    if (!perf?.equity_curve || perf.equity_curve.length < 2) return;
+    getBars("SPY", "D", perf.equity_curve.length + 5).then((bars) => {
+      if (bars.length > 0) {
+        const firstClose = bars[0].close;
+        setBenchmarkData(bars.map((b) => ({
+          date: new Date(b.time * 1000).toISOString().slice(0, 10),
+          value: ((b.close / firstClose) - 1) * 100,
+        })));
+      }
+    }).catch(() => {});
+  }, [perf?.equity_curve]);
 
   async function handleToggle() {
     if (!perf) return;
@@ -283,7 +345,7 @@ export default function StrategyDetailPage() {
           </div>
 
           {/* Equity Curve */}
-          <EquityCurve data={equityData} />
+          <EquityCurve data={equityData} benchmark={benchmarkData} />
 
           {/* Metrics Row */}
           {perf && (
@@ -307,130 +369,15 @@ export default function StrategyDetailPage() {
 
         <Separator />
 
-        {/* ─── Trade History Table ─────────────────────── */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Trade History</h2>
-            <div className="flex gap-1">
-              {(["all", "open", "closed"] as const).map((f) => (
-                <Button key={f} variant={tradeFilter === f ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs capitalize" onClick={() => setTradeFilter(f)}>
-                  {f} {f === "all" ? `(${trades.length})` : f === "open" ? `(${trades.filter((t) => t.status === "open" || t.status === "submitted").length})` : `(${trades.filter((t) => t.status === "closed" || t.status === "filled").length})`}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {filteredTrades.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <TrendingUp className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-              <p className="text-body">No trades yet</p>
-              <p className="text-hint mt-1">This strategy will enter positions when its signals trigger</p>
-              <a href="/pipeline" className="mt-2 text-[11px] text-[var(--primary)] hover:underline">
-                View Pipeline &rarr;
-              </a>
-            </div>
-          ) : (
-            <Card className="border-border bg-[var(--surface)] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="px-4 py-2 text-left font-medium">Date</th>
-                      <th className="px-4 py-2 text-left font-medium">Symbol</th>
-                      <th className="px-4 py-2 text-left font-medium">Side</th>
-                      <th className="px-4 py-2 text-right font-medium">Entry</th>
-                      <th className="px-4 py-2 text-right font-medium">Exit</th>
-                      <th className="px-4 py-2 text-right font-medium">P&L</th>
-                      <th className="px-4 py-2 text-right font-medium">P&L %</th>
-                      <th className="px-4 py-2 text-right font-medium">Hold</th>
-                      <th className="px-4 py-2 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTrades.map((trade) => {
-                      const isExpanded = expandedTrade === trade.id;
-                      const holdDays = trade.exit_time && trade.entry_time
-                        ? Math.max(1, Math.round((new Date(trade.exit_time).getTime() - new Date(trade.entry_time).getTime()) / 86400000))
-                        : null;
-
-                      return (
-                        <tr key={trade.id} className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors" onClick={() => setExpandedTrade(isExpanded ? null : trade.id)}>
-                          <td className="px-4 py-2.5 tabular-nums">{new Date(trade.entry_time).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td>
-                          <td className="px-4 py-2.5 font-medium">{trade.symbol}</td>
-                          <td className="px-4 py-2.5">
-                            <Badge variant="outline" className={cn("text-[10px]", trade.side === "buy" ? "text-[var(--profit)] border-[var(--profit)]/30" : "text-[var(--loss)] border-[var(--loss)]/30")}>
-                              {trade.side === "buy" ? "Long" : "Short"}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(trade.entry_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">{trade.exit_price ? formatCurrency(trade.exit_price) : <span className="text-muted-foreground">Open</span>}</td>
-                          <td className={cn("px-4 py-2.5 text-right tabular-nums font-medium", trade.pnl != null ? (trade.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]") : "")}>
-                            {trade.pnl != null ? `${trade.pnl >= 0 ? "+" : ""}${formatCurrency(trade.pnl)}` : "—"}
-                          </td>
-                          <td className={cn("px-4 py-2.5 text-right tabular-nums", trade.pnl_pct != null ? (trade.pnl_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]") : "")}>
-                            {trade.pnl_pct != null ? `${trade.pnl_pct >= 0 ? "+" : ""}${trade.pnl_pct.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
-                            {holdDays ? `${holdDays}d` : "—"}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-
-          {/* Expanded trade detail */}
-          {expandedTrade != null && (() => {
-            const trade = trades.find((t) => t.id === expandedTrade);
-            if (!trade) return null;
-            return (
-              <Card className="border-border bg-[var(--panel)] ml-4 animate-in slide-in-from-top-2">
-                <CardContent className="p-4 space-y-2 text-xs">
-                  {trade.rationale && (
-                    <div>
-                      <p className="text-muted-foreground font-medium mb-1">Rationale</p>
-                      <p className="text-foreground leading-relaxed">{trade.rationale}</p>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-                    {trade.conviction != null && (
-                      <div>
-                        <p className="text-muted-foreground">Conviction</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="h-1.5 flex-1 rounded-full bg-border">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${trade.conviction}%` }} />
-                          </div>
-                          <span className="tabular-nums font-medium">{trade.conviction}</span>
-                        </div>
-                      </div>
-                    )}
-                    {trade.stop_loss != null && <div><p className="text-muted-foreground">Stop Loss</p><p className="font-medium text-[var(--loss)]">{formatCurrency(trade.stop_loss)}</p></div>}
-                    {trade.take_profit != null && <div><p className="text-muted-foreground">Take Profit</p><p className="font-medium text-[var(--profit)]">{formatCurrency(trade.take_profit)}</p></div>}
-                    {trade.exit_reason && <div><p className="text-muted-foreground">Exit Reason</p><p className="font-medium capitalize">{trade.exit_reason}</p></div>}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-        </div>
-
-        <Separator />
-
         {/* ─── Tabs ────────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="flex gap-1 border-b border-border">
+          <div className="flex gap-0 border-b border-border">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+                  "flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
                   activeTab === tab.id
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -442,47 +389,163 @@ export default function StrategyDetailPage() {
             ))}
           </div>
 
-          {/* Tab: About */}
-          {activeTab === "about" && strategyContent && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card className="border-border bg-[var(--surface)]">
-                <CardContent className="p-5 space-y-4">
-                  <h3 className="font-semibold">Strategy Thesis</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {strategyContent.thesis}
-                  </p>
-                  <div className="pt-2">
-                    <p className="text-xs text-muted-foreground font-medium mb-1">Edge</p>
-                    <p className="text-sm text-foreground">{strategyContent.edge}</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border bg-[var(--surface)]">
-                <CardContent className="p-5 space-y-4">
-                  <h3 className="font-semibold">Parameters</h3>
-                  <div className="space-y-2 text-sm">
-                    {Object.entries(strategyContent.parameters || {}).map(([key, val]) => (
-                      <div key={key} className="flex justify-between py-1 border-b border-border/50">
-                        <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</span>
-                        <span className="text-foreground font-medium text-right max-w-[60%]">{val as string}</span>
+          {/* Tab: About — strategy thesis + trade history */}
+          {activeTab === "about" && (
+            <div className="space-y-6">
+              {strategyContent ? (
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <Card className="border-border bg-[var(--surface)]">
+                    <CardContent className="p-5 space-y-4">
+                      <h3 className="font-semibold">Strategy Thesis</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                        {strategyContent.thesis}
+                      </p>
+                      <div className="pt-2">
+                        <p className="text-xs text-muted-foreground font-medium mb-1">Edge</p>
+                        <p className="text-sm text-foreground">{strategyContent.edge}</p>
                       </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border bg-[var(--surface)]">
+                    <CardContent className="p-5 space-y-4">
+                      <h3 className="font-semibold">Parameters</h3>
+                      <div className="space-y-2 text-sm">
+                        {Object.entries(strategyContent.parameters || {}).map(([key, val]) => (
+                          <div key={key} className="flex justify-between py-1 border-b border-border/50">
+                            <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</span>
+                            <span className="text-foreground font-medium text-right max-w-[60%]">{val as string}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-2">
+                        <p className="text-xs text-muted-foreground font-medium mb-1">Risk Profile</p>
+                        <Badge variant="outline">{strategyContent.riskProfile?.level}</Badge>
+                        <p className="text-sm text-muted-foreground mt-1">{strategyContent.riskProfile?.description}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <Card className="border-border bg-[var(--surface)]">
+                  <CardContent className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground">Strategy documentation loading...</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Trade History */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Trade History</h2>
+                  <div className="flex gap-1">
+                    {(["all", "open", "closed"] as const).map((f) => (
+                      <Button key={f} variant={tradeFilter === f ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs capitalize" onClick={() => setTradeFilter(f)}>
+                        {f} {f === "all" ? `(${trades.length})` : f === "open" ? `(${trades.filter((t) => t.status === "open" || t.status === "submitted").length})` : `(${trades.filter((t) => t.status === "closed" || t.status === "filled").length})`}
+                      </Button>
                     ))}
                   </div>
-                  <div className="pt-2">
-                    <p className="text-xs text-muted-foreground font-medium mb-1">Risk Profile</p>
-                    <Badge variant="outline">{strategyContent.riskProfile?.level}</Badge>
-                    <p className="text-sm text-muted-foreground mt-1">{strategyContent.riskProfile?.description}</p>
+                </div>
+
+                {filteredTrades.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <TrendingUp className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
+                    <p className="text-body">No trades yet</p>
+                    <p className="text-hint mt-1">This strategy will enter positions when its signals trigger</p>
+                    <a href="/pipeline" className="mt-2 text-[11px] text-[var(--primary)] hover:underline">
+                      View Pipeline &rarr;
+                    </a>
                   </div>
-                </CardContent>
-              </Card>
+                ) : (
+                  <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border text-muted-foreground">
+                            <th className="px-4 py-2 text-left font-medium">Date</th>
+                            <th className="px-4 py-2 text-left font-medium">Symbol</th>
+                            <th className="px-4 py-2 text-left font-medium">Side</th>
+                            <th className="px-4 py-2 text-right font-medium">Entry</th>
+                            <th className="px-4 py-2 text-right font-medium">Exit</th>
+                            <th className="px-4 py-2 text-right font-medium">P&L</th>
+                            <th className="px-4 py-2 text-right font-medium">P&L %</th>
+                            <th className="px-4 py-2 text-right font-medium">Hold</th>
+                            <th className="px-4 py-2 w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredTrades.map((trade) => {
+                            const isExpanded = expandedTrade === trade.id;
+                            const holdDays = trade.exit_time && trade.entry_time
+                              ? Math.max(1, Math.round((new Date(trade.exit_time).getTime() - new Date(trade.entry_time).getTime()) / 86400000))
+                              : null;
+
+                            return (
+                              <tr key={trade.id} className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors" onClick={() => setExpandedTrade(isExpanded ? null : trade.id)}>
+                                <td className="px-4 py-2.5 tabular-nums">{new Date(trade.entry_time).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td>
+                                <td className="px-4 py-2.5 font-medium">{trade.symbol}</td>
+                                <td className="px-4 py-2.5">
+                                  <Badge variant="outline" className={cn("text-[10px]", trade.side === "buy" ? "text-[var(--profit)] border-[var(--profit)]/30" : "text-[var(--loss)] border-[var(--loss)]/30")}>
+                                    {trade.side === "buy" ? "Long" : "Short"}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(trade.entry_price)}</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">{trade.exit_price ? formatCurrency(trade.exit_price) : <span className="text-muted-foreground">Open</span>}</td>
+                                <td className={cn("px-4 py-2.5 text-right tabular-nums font-medium", trade.pnl != null ? (trade.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]") : "")}>
+                                  {trade.pnl != null ? `${trade.pnl >= 0 ? "+" : ""}${formatCurrency(trade.pnl)}` : "—"}
+                                </td>
+                                <td className={cn("px-4 py-2.5 text-right tabular-nums", trade.pnl_pct != null ? (trade.pnl_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]") : "")}>
+                                  {trade.pnl_pct != null ? `${trade.pnl_pct >= 0 ? "+" : ""}${trade.pnl_pct.toFixed(1)}%` : "—"}
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
+                                  {holdDays ? `${holdDays}d` : "—"}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Expanded trade detail */}
+                {expandedTrade != null && (() => {
+                  const trade = trades.find((t) => t.id === expandedTrade);
+                  if (!trade) return null;
+                  return (
+                    <Card className="border-border bg-[var(--panel)] ml-4 animate-in slide-in-from-top-2">
+                      <CardContent className="p-4 space-y-2 text-xs">
+                        {trade.rationale && (
+                          <div>
+                            <p className="text-muted-foreground font-medium mb-1">Rationale</p>
+                            <p className="text-foreground leading-relaxed">{trade.rationale}</p>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                          {trade.conviction != null && (
+                            <div>
+                              <p className="text-muted-foreground">Conviction</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="h-1.5 flex-1 rounded-full bg-border">
+                                  <div className="h-full rounded-full bg-primary" style={{ width: `${trade.conviction}%` }} />
+                                </div>
+                                <span className="tabular-nums font-medium">{trade.conviction}</span>
+                              </div>
+                            </div>
+                          )}
+                          {trade.stop_loss != null && <div><p className="text-muted-foreground">Stop Loss</p><p className="font-medium text-[var(--loss)]">{formatCurrency(trade.stop_loss)}</p></div>}
+                          {trade.take_profit != null && <div><p className="text-muted-foreground">Take Profit</p><p className="font-medium text-[var(--profit)]">{formatCurrency(trade.take_profit)}</p></div>}
+                          {trade.exit_reason && <div><p className="text-muted-foreground">Exit Reason</p><p className="font-medium capitalize">{trade.exit_reason}</p></div>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+              </div>
             </div>
-          )}
-          {activeTab === "about" && !strategyContent && (
-            <Card className="border-border bg-[var(--surface)]">
-              <CardContent className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">Strategy documentation loading...</p>
-              </CardContent>
-            </Card>
           )}
 
           {/* Tab: Positions */}
