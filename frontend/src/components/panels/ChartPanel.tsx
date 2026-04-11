@@ -20,6 +20,7 @@ import {
   formatCurrency,
   formatChangeWithSign,
   formatPercent,
+  formatNumber,
   getChangeTextClass,
 } from "@/lib/utils";
 import { getBars } from "@/lib/api";
@@ -167,16 +168,34 @@ export function ChartPanel() {
       <div className="flex items-center justify-between border-b border-[#2a2a3e] px-3 py-1.5 shrink-0 bg-[var(--surface)] relative z-10">
         {/* Symbol & Price */}
         <div className="flex items-center gap-4">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-bold text-white">
-              {selectedSymbol}
-            </span>
-            <span className="text-lg font-bold text-white tabular-nums">
-              {formatCurrency(displayPrice)}
-            </span>
-            <span className={`text-xs tabular-nums ${getChangeTextClass(change)}`}>
-              {formatChangeWithSign(change)} ({formatPercent(changePct)})
-            </span>
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-bold text-white">
+                {selectedSymbol}
+              </span>
+              <span className="text-lg font-bold text-white tabular-nums">
+                {formatCurrency(displayPrice)}
+              </span>
+              <span className={`text-xs tabular-nums ${getChangeTextClass(change)}`}>
+                {formatChangeWithSign(change)} ({formatPercent(changePct)})
+              </span>
+            </div>
+            {/* L1 Data Bar */}
+            {quote && (
+              <div className="flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground mt-0.5">
+                <span>
+                  <span className="text-[var(--profit)]">{quote.bid.toFixed(2)}</span>
+                  {" / "}
+                  <span className="text-[var(--loss)]">{quote.ask.toFixed(2)}</span>
+                  <span className="ml-1.5 text-[#555]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
+                </span>
+                <span className="text-border">|</span>
+                <span>Vol: {formatNumber(quote.volume, true)}</span>
+                <span className="text-border">|</span>
+                <span>H: {quote.high.toFixed(2)}</span>
+                <span>L: {quote.low.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
 
