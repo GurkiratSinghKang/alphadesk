@@ -149,75 +149,112 @@ function WatchlistRow({
 // ─── Screener tab content ─────────────────────────────────────
 
 function ScreenerTab() {
+  const { addToWatchlist } = useMarketStore();
+  const [preset, setPreset] = useState("momentum-quality");
+  const [results, setResults] = useState<Array<{ symbol: string; name: string; price: number; changePct: number; compositeScore: number; sector: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
   const presets = [
-    { name: "Momentum", preset: "momentum" },
-    { name: "High IV Rank", preset: "high_iv" },
-    { name: "Oversold Bounce", preset: "oversold" },
-    { name: "Earnings This Week", preset: "earnings" },
-    { name: "Gap & Go", preset: "gap_and_go" },
+    { id: "momentum-quality", name: "Momentum + Quality" },
+    { id: "high-iv", name: "High IV Rank" },
+    { id: "earnings", name: "Earnings Plays" },
+    { id: "value-growth", name: "Value + Growth" },
+    { id: "oversold", name: "Oversold Bounce" },
   ];
 
-  const [results, setResults] = useState<ScreenerResult[]>([]);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const { setSelectedSymbol } = useMarketStore();
-
-  const handlePresetClick = async (preset: string) => {
-    setActivePreset(preset);
+  const runScreener = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await screenStocks(preset);
-      setResults(data);
-    } catch {
-      // Generate demo screener results when API is unavailable
-      const demoResults: ScreenerResult[] = [
-        { symbol: "NVDA", price: 142.5, change: 5.2, changePct: 3.8, rsScore: 92, fScore: 7, ivRank: 45, ivPctl: 38, mlScore: 85, composite: 88, sector: "Technology" },
-        { symbol: "META", price: 522.4, change: 8.1, changePct: 1.6, rsScore: 85, fScore: 8, ivRank: 32, ivPctl: 28, mlScore: 78, composite: 82, sector: "Technology" },
-        { symbol: "AAPL", price: 232.1, change: 3.4, changePct: 1.5, rsScore: 78, fScore: 7, ivRank: 28, ivPctl: 22, mlScore: 72, composite: 76, sector: "Technology" },
-        { symbol: "AMZN", price: 198.3, change: 2.1, changePct: 1.1, rsScore: 74, fScore: 6, ivRank: 35, ivPctl: 30, mlScore: 70, composite: 73, sector: "Technology" },
-        { symbol: "TSLA", price: 248.7, change: -4.3, changePct: -1.7, rsScore: 68, fScore: 5, ivRank: 62, ivPctl: 55, mlScore: 65, composite: 66, sector: "Automotive" },
-      ];
-      setResults(demoResults);
-    } finally {
+      const resp = await fetch(`/api/v1/screener/screen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ strategy: preset }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const mapped = (data.results ?? []).slice(0, 15).map((r: any) => ({
+          symbol: r.symbol,
+          name: r.name ?? r.symbol,
+          price: r.price ?? 0,
+          changePct: r.change_pct ?? 0,
+          compositeScore: r.composite_score ?? 0,
+          sector: r.sector ?? "—",
+        }));
+        setResults(mapped);
+      }
+    } catch {} finally {
       setLoading(false);
     }
-  };
+  }, [preset]);
+
+  useEffect(() => { runScreener(); }, [runScreener]);
 
   return (
-    <div className="p-2 space-y-1">
-      {presets.map((p) => (
-        <button
-          key={p.name}
-          onClick={() => handlePresetClick(p.preset)}
-          className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-xs text-foreground hover:bg-accent/50 transition-colors ${
-            activePreset === p.preset ? "bg-primary/10 text-primary" : ""
-          }`}
+    <div className="flex flex-col h-full">
+      {/* Preset selector */}
+      <div className="px-3 py-2 border-b border-border">
+        <select
+          value={preset}
+          onChange={(e) => setPreset(e.target.value)}
+          className="w-full h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground"
         >
-          <span>{p.name}</span>
-          <span className="text-muted-foreground">—</span>
-        </button>
-      ))}
-
-      {loading && (
-        <div className="text-center text-xs text-muted-foreground py-2">Loading...</div>
-      )}
-
-      {results.length > 0 && (
-        <div className="border-t border-border mt-2 pt-2 space-y-0.5">
-          {results.slice(0, 15).map((r) => (
-            <button
-              key={r.symbol}
-              onClick={() => setSelectedSymbol(r.symbol)}
-              className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors cursor-pointer"
-            >
-              <span className="font-medium text-foreground">{r.symbol}</span>
-              <span className={getChangeTextClass(r.changePct)}>
-                {formatPercent(r.changePct)}
-              </span>
-            </button>
+          {presets.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </div>
-      )}
+        </select>
+      </div>
+
+      {/* Results */}
+      <ScrollArea className="flex-1">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-xs text-muted-foreground">Screening...</div>
+          </div>
+        ) : results.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-xs text-muted-foreground">No results</div>
+          </div>
+        ) : (
+          <div className="py-1">
+            {results.map((r) => (
+              <button
+                key={r.symbol}
+                onClick={() => addToWatchlist(r.symbol)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors"
+              >
+                <div className="flex-1 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground">{r.symbol}</span>
+                    <span className="text-muted-foreground truncate text-[10px]">{r.sector}</span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="tabular-nums text-foreground">${r.price.toFixed(2)}</div>
+                  <div className={cn("text-[10px] tabular-nums", r.changePct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                    {r.changePct >= 0 ? "+" : ""}{r.changePct.toFixed(1)}%
+                  </div>
+                </div>
+                <div className="w-8 text-center">
+                  <span className={cn(
+                    "text-[10px] font-bold rounded px-1 py-0.5",
+                    r.compositeScore >= 70 ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
+                    r.compositeScore >= 40 ? "bg-amber-500/15 text-amber-400" :
+                    "bg-[var(--loss)]/15 text-[var(--loss)]"
+                  )}>
+                    {r.compositeScore}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+
+      {/* Footer */}
+      <div className="px-3 py-1.5 border-t border-border text-[9px] text-muted-foreground">
+        Click a result to add to watchlist · {results.length} results
+      </div>
     </div>
   );
 }
@@ -415,9 +452,7 @@ export function WatchlistPanel() {
         </TabsContent>
 
         <TabsContent value="screener" className="flex-1 mt-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            <ScreenerTab />
-          </ScrollArea>
+          <ScreenerTab />
         </TabsContent>
 
         <TabsContent value="signals" className="flex-1 mt-0 overflow-hidden">
