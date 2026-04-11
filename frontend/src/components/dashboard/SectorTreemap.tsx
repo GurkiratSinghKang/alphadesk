@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 interface SectorItem {
@@ -159,7 +159,21 @@ interface SectorTreemapProps {
   height?: number;
 }
 
-export function SectorTreemap({ sectors, width = 400, height = 120 }: SectorTreemapProps) {
+export function SectorTreemap({ sectors, width: propWidth, height = 120 }: SectorTreemapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(propWidth ?? 380);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setMeasuredWidth(w);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const width = propWidth ?? measuredWidth;
   const rects = useMemo(() => {
     if (sectors.length === 0) return [];
     // Equal weights since we don't have market cap data
@@ -174,7 +188,7 @@ export function SectorTreemap({ sectors, width = 400, height = 120 }: SectorTree
   }
 
   return (
-    <div className="relative" style={{ width, height }}>
+    <div ref={containerRef} className="relative w-full" style={{ height }}>
       {rects.map((rect) => {
         const showText = rect.w > 45 && rect.h > 30;
         const val = rect.change_pct;

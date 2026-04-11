@@ -118,7 +118,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
             Sector Performance
           </h3>
           <div className="w-full">
-            <SectorTreemap sectors={sectors} width={380} height={120} />
+            <SectorTreemap sectors={sectors} height={120} />
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
               <div className="space-y-2.5">
                 {news.slice(0, 3).map((article, i) => (
                   <a
-                    key={i}
+                    key={article.url || i}
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"

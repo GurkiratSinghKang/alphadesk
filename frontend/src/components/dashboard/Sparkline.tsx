@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 // ─── Mini Sparkline SVG ──────────────────────────────────────
 
 export function Sparkline({
@@ -28,7 +30,7 @@ export function Sparkline({
     .join(" ");
 
   const areaPoints = `0,${height} ${points} ${width},${height}`;
-  const gradId = `spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const gradId = `spark-${useId().replace(/:/g, "")}`;
 
   return (
     <svg width={width} height={height} className={className ?? "shrink-0"}>

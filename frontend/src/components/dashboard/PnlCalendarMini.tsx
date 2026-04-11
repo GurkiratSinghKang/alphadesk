@@ -100,7 +100,7 @@ export function PnlCalendarMini() {
             className="absolute z-10 rounded-lg border border-border bg-[var(--surface)] px-3 py-2.5 shadow-lg pointer-events-none"
             style={{
               left: Math.max(0, Math.min(hovered.x - 80, (containerRef.current?.offsetWidth ?? 320) - 160)),
-              top: hovered.y - 95,
+              top: Math.max(0, hovered.y - 95),
               width: 160,
             }}
           >

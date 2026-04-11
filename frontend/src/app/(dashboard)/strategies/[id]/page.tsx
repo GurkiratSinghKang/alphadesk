@@ -299,7 +299,7 @@ export default function StrategyDetailPage() {
               <MetricCard label="Active Positions" value={String(perf.active_positions_count)} />
               <MetricCard
                 label="Calmar Ratio"
-                value={perf.max_drawdown !== 0 ? (perf.annualized_return_pct / Math.abs(perf.max_drawdown)).toFixed(2) : "N/A"}
+                value={Math.abs(perf.max_drawdown) >= 0.1 ? (perf.annualized_return_pct / Math.abs(perf.max_drawdown)).toFixed(2) : "N/A"}
               />
             </div>
           )}

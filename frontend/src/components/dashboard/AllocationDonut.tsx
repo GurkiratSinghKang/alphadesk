@@ -40,22 +40,22 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
               strokeWidth={12}
               strokeDasharray={`${cashDash} ${circumference}`}
               strokeDashoffset={0}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               transform={`rotate(-90 ${cx} ${cy})`}
               opacity={0.8}
             />
-            {/* Invested segment (green) */}
-            <circle
+            {/* Invested segment (green) — only render if invested > 0 */}
+            {investedPct > 0.005 && <circle
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke="var(--profit)"
               strokeWidth={12}
               strokeDasharray={`${investedDash} ${circumference}`}
               strokeDashoffset={-cashDash}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               transform={`rotate(-90 ${cx} ${cy})`}
               opacity={0.8}
-            />
+            />}
             {/* Center text */}
             <text x={cx} y={cy - 6} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>Total</text>
             <text x={cx} y={cy + 10} textAnchor="middle" className="fill-foreground" fontSize={13} fontWeight={600}>
