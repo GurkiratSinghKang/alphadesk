@@ -197,7 +197,8 @@ export function CommandPalette() {
             )}
             <Command.Input
               placeholder="Search symbols, commands..."
-              className="flex h-12 w-full bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="flex h-12 w-full bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground overflow-hidden text-ellipsis"
+              maxLength={100}
               value={query}
               onValueChange={handleValueChange}
             />
