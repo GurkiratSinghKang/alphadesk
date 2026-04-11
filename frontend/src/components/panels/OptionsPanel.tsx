@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useMarketStore } from "@/stores/market";
 import { useOptionsStore } from "@/stores/options";
 import { HelpCircle } from "@/components/ui/HelpCircle";
-import { cn, formatCurrency, formatNumber, formatGreek } from "@/lib/utils";
+import { cn, formatNumber, formatGreek } from "@/lib/utils";
 import { getOptionsChain, getIVData } from "@/lib/api";
 
 // ─── Generate demo options chain ─────────────────────────────

@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
-import { formatPercent, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol } from "@/lib/api";
 import type { ChatMessage, Analysis } from "@/types";
@@ -241,7 +241,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
           <h3 className="text-xs font-medium text-muted-foreground">
             Technical Score
           </h3>
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3 overflow-hidden break-words">
             {analysis?.summary ?? (score >= 60 ? `${symbol} showing bullish momentum. Watch for breakout above resistance.` : score <= 40 ? `${symbol} under selling pressure. Watch support levels.` : `${symbol} in consolidation range. Await directional catalyst.`)}
           </p>
         </div>

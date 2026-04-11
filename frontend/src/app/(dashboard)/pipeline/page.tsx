@@ -5,9 +5,7 @@ import {
   Bot,
   Play,
   TrendingUp,
-  TrendingDown,
   Target,
-  Shield,
   Clock,
   Loader2,
   AlertTriangle,
@@ -835,14 +833,14 @@ export default function PipelinePage() {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Best Trade
                     </p>
-                    <p className={cn("text-lg font-bold tabular-nums", perfData?.bestTrade && perfData.bestTrade.pnl >= 0 ? "text-[var(--profit)]" : bestTrade && (bestTrade.pnl ?? 0) > 0 ? "text-[var(--profit)]" : "text-muted-foreground")}>
-                      {perfData?.bestTrade
-                        ? `${perfData.bestTrade.pnl >= 0 ? "+" : ""}${formatCurrency(perfData.bestTrade.pnl)}`
+                    <p className={cn("text-lg font-bold tabular-nums", perfData?.bestTrade && perfData.bestTrade.pnl > 0 ? "text-[var(--profit)]" : bestTrade && (bestTrade.pnl ?? 0) > 0 ? "text-[var(--profit)]" : "text-muted-foreground")}>
+                      {perfData?.bestTrade && perfData.bestTrade.pnl > 0
+                        ? `+${formatCurrency(perfData.bestTrade.pnl)}`
                         : bestTrade && (bestTrade.pnl ?? 0) > 0
                         ? `+${formatCurrency(bestTrade.pnl)}`
                         : "—"}
                     </p>
-                    {(perfData?.bestTrade || (bestTrade && (bestTrade.pnl ?? 0) > 0)) && (
+                    {((perfData?.bestTrade && perfData.bestTrade.pnl > 0) || (bestTrade && (bestTrade.pnl ?? 0) > 0)) && (
                       <p className="text-[10px] text-muted-foreground">
                         {perfData?.bestTrade?.symbol ?? bestTrade?.symbol}
                       </p>

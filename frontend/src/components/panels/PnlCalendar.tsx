@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Trophy, Skull } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy, Skull } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {

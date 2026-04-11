@@ -23,7 +23,6 @@ import { placeOrder, cancelOrder } from "@/lib/api";
 import type { PlaceOrderPayload } from "@/lib/api";
 import {
   formatCurrency,
-  formatPercent,
   formatGreek,
   getChangeTextClass,
   cn,

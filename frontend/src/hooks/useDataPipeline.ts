@@ -6,7 +6,7 @@ import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useAlertsStore } from "@/stores/alerts";
 import { getSnapshot, getPositions, getOrders, getPortfolioSummary, getPortfolioGreeks } from "@/lib/api";
-import type { Quote, Alert, OHLCVBar } from "@/types";
+import type { Quote, Alert } from "@/types";
 
 /**
  * Bridges the WebSocket + REST API to Zustand stores.
