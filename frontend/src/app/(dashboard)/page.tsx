@@ -2,31 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  TrendingUp,
-  Activity,
-  Zap,
-  BarChart3,
-  Target,
-  Crosshair,
-  Brain,
-  Shield,
-  ChevronRight,
-  Clock,
-  AlertTriangle,
-  Info,
-  Newspaper,
-  Radio,
-  RefreshCw,
-  ExternalLink,
-  Briefcase,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Activity, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { usePortfolioStore } from "@/stores/portfolio";
-import { formatCurrency, cn } from "@/lib/utils";
 import {
   getPortfolioSummary,
   getMarketNews,
@@ -36,199 +14,18 @@ import {
   getMarketSectors,
   getPipelineStatus,
   getPipelineHistory,
-  getPositions,
-  getPnlCalendar,
   type PipelineStatus,
-  type CalendarDay,
 } from "@/lib/api";
-import type { Position } from "@/types";
 
-// ─── Types ───────────────────────────────────────────────────
-
-interface FeedItem {
-  id: string;
-  time: Date;
-  type: "pipeline" | "trade" | "position" | "news" | "regime" | "alert";
-  severity: "success" | "danger" | "info" | "warning";
-  title: string;
-  detail?: string;
-}
-
-interface StrategyData {
-  id: string;
-  name: string;
-  shortName: string;
-  status: "active" | "paused";
-  returnPct: number;
-  positions: number;
-  winRate: number;
-  invested: number;
-  icon: typeof Activity;
-}
-
-interface MarketIndex {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePct: number;
-}
-
-interface RegimeData {
-  regime: string;
-  label: string;
-  confidence: number;
-  vix_level: number;
-  description: string;
-}
-
-interface SectorData {
-  sector: string;
-  change_pct: number;
-}
-
-interface NewsItem {
-  title: string;
-  source: string;
-  published_at: string;
-  url: string;
-}
-
-// ─── Constants ───────────────────────────────────────────────
-
-const STRATEGY_META: Record<string, { name: string; shortName: string; icon: typeof Activity; regimeNote: string }> = {
-  "momentum-quality": {
-    name: "Cross-Sectional Momentum + Quality",
-    shortName: "Momentum + Quality",
-    icon: TrendingUp,
-    regimeNote: "Thrives in bull trends",
-  },
-  pead: {
-    name: "Post-Earnings Announcement Drift",
-    shortName: "PEAD",
-    icon: Target,
-    regimeNote: "Event-driven, all regimes",
-  },
-  "vrp-harvesting": {
-    name: "Systematic VRP Harvesting",
-    shortName: "VRP Harvesting",
-    icon: Shield,
-    regimeNote: "Best in low-vol contango",
-  },
-  "earnings-vol-premium": {
-    name: "Earnings Volatility Premium",
-    shortName: "Earnings Vol",
-    icon: BarChart3,
-    regimeNote: "Paused in high-vol regimes",
-  },
-  "regime-adaptive": {
-    name: "HMM Regime-Adaptive Allocation",
-    shortName: "Regime Adaptive",
-    icon: Brain,
-    regimeNote: "Adjusts to any regime",
-  },
-  "claude-alpha": {
-    name: "Claude Alpha",
-    shortName: "Claude Alpha",
-    icon: Zap,
-    regimeNote: "AI-driven, regime-aware",
-  },
-  "mean-reversion": {
-    name: "Mean Reversion",
-    shortName: "Mean Reversion",
-    icon: Activity,
-    regimeNote: "Favored in sideways markets",
-  },
-  "vcp-breakout": {
-    name: "VCP Breakout",
-    shortName: "VCP Breakout",
-    icon: Crosshair,
-    regimeNote: "Needs bull momentum",
-  },
-};
-
-const STRATEGY_ORDER = [
-  "momentum-quality",
-  "pead",
-  "vrp-harvesting",
-  "earnings-vol-premium",
-  "regime-adaptive",
-  "claude-alpha",
-  "mean-reversion",
-  "vcp-breakout",
-];
-
-// ─── Mini Sparkline SVG ──────────────────────────────────────
-
-function Sparkline({
-  data,
-  color,
-  width = 80,
-  height = 24,
-}: {
-  data: number[];
-  color: string;
-  width?: number;
-  height?: number;
-}) {
-  if (data.length < 2) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const points = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - ((v - min) / range) * (height - 4) - 2;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  const areaPoints = `0,${height} ${points} ${width},${height}`;
-  const gradId = `spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
-
-  return (
-    <svg width={width} height={height} className="shrink-0">
-      <defs>
-        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={areaPoints} fill={`url(#${gradId})`} />
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function generateSparkData(seed: number, count = 20): number[] {
-  const data: number[] = [];
-  let val = 100;
-  let s = seed;
-  for (let i = 0; i < count; i++) {
-    s = (s * 16807 + 0) % 2147483647;
-    const r = (s - 1) / 2147483646;
-    val += (r - 0.47) * 3;
-    data.push(val);
-  }
-  return data;
-}
+import { generateSparkData } from "@/components/dashboard/Sparkline";
+import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
+import { ActivityFeed, buildFeedItems, type FeedItem, type RegimeData, type NewsItem } from "@/components/dashboard/ActivityFeed";
+import { StrategyGrid, STRATEGY_META, STRATEGY_ORDER, type StrategyData } from "@/components/dashboard/StrategyGrid";
+import { PositionsSummary } from "@/components/dashboard/PositionsSummary";
+import { PnlCalendarMini } from "@/components/dashboard/PnlCalendarMini";
+import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketContext";
 
 // ─── Helpers ─────────────────────────────────────────────────
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 function formatTimeShort(dateStr: string): string {
   const d = new Date(dateStr);
@@ -246,480 +43,6 @@ function todayDateStr(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-// ─── Feed Builder ────────────────────────────────────────────
-
-function buildFeedItems(
-  pipelineStatus: PipelineStatus | null,
-  pipelineLog: Record<string, any> | null,
-  regime: RegimeData | null,
-  news: NewsItem[],
-): FeedItem[] {
-  const items: FeedItem[] = [];
-  const now = new Date();
-
-  // Pipeline run summary
-  if (pipelineLog) {
-    const ordersPlaced = Array.isArray(pipelineLog.orders_placed) ? pipelineLog.orders_placed : [];
-    const ordersClosed = Array.isArray(pipelineLog.orders_closed) ? pipelineLog.orders_closed : [];
-    const errors = Array.isArray(pipelineLog.errors) ? pipelineLog.errors : [];
-    const ts = pipelineLog.timestamp ? new Date(pipelineLog.timestamp) : now;
-
-    // Aggregate strategy stats from the log (key is strategies_run or strategies)
-    const strats = pipelineLog.strategies_run ?? pipelineLog.strategies ?? {};
-    let totalScreened = 0;
-    let totalAnalyzed = 0;
-    let totalRequested = 0;
-    let totalApproved = 0;
-    for (const s of Object.values(strats) as any[]) {
-      totalScreened += s.screened ?? 0;
-      totalAnalyzed += s.analyzed ?? 0;
-      totalRequested += s.trades_requested ?? 0;
-      totalApproved += s.trades_approved ?? 0;
-    }
-
-    // Main pipeline summary
-    items.push({
-      id: "pipeline-run",
-      time: ts,
-      type: "pipeline",
-      severity: errors.length > 0 ? "warning" : "success",
-      title: `Pipeline completed: ${totalScreened} screened, ${totalAnalyzed} analyzed, ${totalApproved} trades approved`,
-      detail: totalRequested > totalApproved
-        ? `${totalRequested - totalApproved} candidate(s) rejected by risk manager`
-        : undefined,
-    });
-
-    // Master agent rejections
-    const master = pipelineLog.master_agent ?? {};
-    const rejections = master.rejections ?? [];
-    if (rejections.length > 0) {
-      items.push({
-        id: "pipeline-rejections",
-        time: ts,
-        type: "pipeline",
-        severity: "info",
-        title: `Risk manager rejected ${rejections.length} trade(s)`,
-        detail: rejections.slice(0, 3).map((r: any) => `${r.symbol}: ${r.reason}`).join(" | "),
-      });
-    }
-
-    // Individual trade executions
-    for (const order of ordersPlaced) {
-      const orderTs = order.timestamp ? new Date(order.timestamp) : ts;
-      items.push({
-        id: `trade-open-${order.symbol}-${order.order_id ?? order.orderId ?? ""}`,
-        time: orderTs,
-        type: "trade",
-        severity: "info",
-        title: `${order.side === "buy" ? "Bought" : "Sold"} ${order.qty} ${order.symbol} @ $${Number(order.price).toFixed(2)}`,
-        detail: order.strategy ? `via ${order.strategy}` : undefined,
-      });
-    }
-
-    // Closed positions
-    for (const order of ordersClosed) {
-      const orderTs = order.timestamp ? new Date(order.timestamp) : ts;
-      const pnl = order.pnl ?? null;
-      items.push({
-        id: `trade-close-${order.symbol}-${order.order_id ?? order.orderId ?? ""}`,
-        time: orderTs,
-        type: "trade",
-        severity: pnl !== null ? (pnl >= 0 ? "success" : "danger") : "info",
-        title: `Closed ${order.symbol}: ${order.side === "sell" ? "Sold" : "Covered"} ${order.qty} @ $${Number(order.price).toFixed(2)}`,
-        detail: pnl !== null ? `P&L: ${pnl >= 0 ? "+" : ""}$${Number(pnl).toFixed(2)}` : undefined,
-      });
-    }
-
-    // Errors
-    for (let i = 0; i < errors.length; i++) {
-      items.push({
-        id: `error-${i}`,
-        time: ts,
-        type: "alert",
-        severity: "danger",
-        title: `Pipeline error: ${typeof errors[i] === "string" ? errors[i] : JSON.stringify(errors[i])}`,
-      });
-    }
-  }
-
-  // Pipeline status info
-  if (pipelineStatus) {
-    if (pipelineStatus.running) {
-      items.push({
-        id: "pipeline-running",
-        time: now,
-        type: "pipeline",
-        severity: "info",
-        title: "Pipeline is currently running...",
-      });
-    }
-  }
-
-  // Regime info
-  if (regime) {
-    items.push({
-      id: "regime-current",
-      time: now,
-      type: "regime",
-      severity: regime.label === "bear" ? "danger" : regime.label === "bull" ? "success" : "warning",
-      title: `Market regime: ${regime.regime}`,
-      detail: regime.description,
-    });
-  }
-
-  // News headlines
-  for (let i = 0; i < Math.min(news.length, 3); i++) {
-    const article = news[i];
-    const pubDate = article.published_at ? new Date(article.published_at) : now;
-    items.push({
-      id: `news-${i}`,
-      time: pubDate,
-      type: "news",
-      severity: "info",
-      title: article.title,
-      detail: article.source,
-    });
-  }
-
-  // Sort by time descending
-  items.sort((a, b) => b.time.getTime() - a.time.getTime());
-  return items;
-}
-
-// ─── Feed Item Component ─────────────────────────────────────
-
-const FEED_ICONS: Record<FeedItem["type"], typeof Activity> = {
-  pipeline: RefreshCw,
-  trade: TrendingUp,
-  position: BarChart3,
-  news: Newspaper,
-  regime: Radio,
-  alert: AlertTriangle,
-};
-
-const SEVERITY_COLORS: Record<FeedItem["severity"], string> = {
-  success: "text-[var(--profit)]",
-  danger: "text-[var(--loss)]",
-  info: "text-blue-400",
-  warning: "text-amber-400",
-};
-
-const SEVERITY_BORDER: Record<FeedItem["severity"], string> = {
-  success: "border-l-emerald-500/40",
-  danger: "border-l-red-500/60",
-  info: "border-l-blue-500/30",
-  warning: "border-l-amber-500/50",
-};
-
-function FeedItemRow({ item }: { item: FeedItem }) {
-  const Icon = FEED_ICONS[item.type];
-  const isHighlight = item.severity === "danger" || item.severity === "warning";
-
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-3 rounded-lg border-l-2 px-3 py-2.5 transition-colors",
-        SEVERITY_BORDER[item.severity],
-        isHighlight ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]/50"
-      )}
-    >
-      <div className={cn("mt-0.5 shrink-0", SEVERITY_COLORS[item.severity])}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] leading-snug text-foreground">{item.title}</p>
-        {item.detail && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
-        )}
-      </div>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {formatTime(item.time)}
-      </span>
-    </div>
-  );
-}
-
-// ─── Strategy Card Component ─────────────────────────────────
-
-function StrategyCard({
-  strategy,
-  regimeLabel,
-  onClick,
-}: {
-  strategy: StrategyData;
-  regimeLabel: string;
-  onClick: () => void;
-}) {
-  const meta = STRATEGY_META[strategy.id];
-  const Icon = meta?.icon ?? Activity;
-  const regimeNote = meta?.regimeNote ?? "";
-
-  return (
-    <Card
-      className="cursor-pointer border-border bg-[var(--surface)] card-glow hover:bg-[var(--surface)]/80"
-      onClick={onClick}
-    >
-      <CardContent className="p-3.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="shrink-0 rounded-md bg-[var(--panel)] p-1.5">
-              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
-                {strategy.shortName}
-              </p>
-            </div>
-          </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "shrink-0 text-xs",
-              strategy.status === "active"
-                ? "border-emerald-500/30 text-emerald-400"
-                : "border-amber-500/30 text-amber-400"
-            )}
-          >
-            {strategy.status === "active" ? "Active" : "Paused"}
-          </Badge>
-        </div>
-
-        <div className="mt-3 flex items-end justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  "text-sm font-semibold tabular-nums",
-                  strategy.returnPct >= 0
-                    ? "text-[var(--profit)]"
-                    : "text-[var(--loss)]"
-                )}
-              >
-                {strategy.returnPct >= 0 ? "+" : ""}
-                {strategy.returnPct.toFixed(2)}%
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {strategy.positions} pos
-              </span>
-            </div>
-            <p className="text-[10px] text-muted-foreground italic">
-              {regimeNote}
-            </p>
-          </div>
-          <Sparkline
-            data={generateSparkData(strategy.id.length * 31 + strategy.returnPct * 100)}
-            color={strategy.returnPct >= 0 ? "#22c55e" : "#ef4444"}
-            width={48}
-            height={18}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Sector Heatmap ──────────────────────────────────────────
-
-function SectorHeatmap({ sectors }: { sectors: SectorData[] }) {
-  if (sectors.length === 0) return null;
-
-  const abbrev: Record<string, string> = {
-    Technology: "Technology",
-    Healthcare: "Healthcare",
-    Financials: "Financials",
-    "Consumer Discretionary": "Cons. Discr.",
-    "Communication Services": "Comm. Svcs",
-    Industrials: "Industrials",
-    "Consumer Staples": "Cons. Staples",
-    Energy: "Energy",
-    Utilities: "Utilities",
-    "Real Estate": "Real Estate",
-    Materials: "Materials",
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {sectors.map((s) => {
-        const val = s.change_pct;
-        const bg =
-          val > 1
-            ? "bg-emerald-600/70"
-            : val > 0.3
-              ? "bg-emerald-600/40"
-              : val > 0
-                ? "bg-emerald-600/20"
-                : val > -0.3
-                  ? "bg-red-600/20"
-                  : val > -1
-                    ? "bg-red-600/40"
-                    : "bg-red-600/70";
-        const text = val >= 0 ? "text-emerald-300" : "text-red-300";
-
-        return (
-          <div
-            key={s.sector}
-            className={cn(
-              "rounded px-2 py-1 text-center",
-              bg
-            )}
-          >
-            <p className="text-xs font-medium text-foreground/80">
-              {abbrev[s.sector] ?? s.sector}
-            </p>
-            <p className={cn("text-xs tabular-nums font-semibold", text)}>
-              {val >= 0 ? "+" : ""}
-              {val.toFixed(1)}%
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── P&L Calendar Mini ──────────────────────────────────────
-
-function PnlCalendarMini() {
-  const [days, setDays] = useState<CalendarDay[]>([]);
-  const [monthTotal, setMonthTotal] = useState(0);
-
-  useEffect(() => {
-    getPnlCalendar().then((data) => {
-      setDays(data.days);
-      setMonthTotal(data.monthTotal);
-    }).catch(() => {});
-  }, []);
-
-  if (days.length === 0) return null;
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthName = now.toLocaleString("en-US", { month: "long" });
-
-  // Build a map of date -> pnl
-  const pnlMap = new Map(days.map((d) => [d.date, d.pnl]));
-
-  const cells: { day: number; pnl: number | null }[] = [];
-  // Empty leading cells
-  for (let i = 0; i < firstDay; i++) cells.push({ day: 0, pnl: null });
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    cells.push({ day: d, pnl: pnlMap.get(dateStr) ?? null });
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-[var(--panel)]">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">
-            {monthName} P&L
-          </h2>
-        </div>
-        <span className={cn("text-sm font-semibold tabular-nums", monthTotal >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-          {monthTotal >= 0 ? "+" : ""}{formatCurrency(monthTotal)}
-        </span>
-      </div>
-      <div className="p-3">
-        <div className="grid grid-cols-7 gap-1">
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <div key={i} className="text-center text-[9px] font-medium text-muted-foreground py-0.5">{d}</div>
-          ))}
-          {cells.map((cell, i) => {
-            if (cell.day === 0) return <div key={`e-${i}`} />;
-            const isToday = cell.day === now.getDate();
-            const hasPnl = cell.pnl !== null;
-            const positive = (cell.pnl ?? 0) >= 0;
-            const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / 500, 1) : 0;
-            return (
-              <div
-                key={cell.day}
-                className={cn(
-                  "relative flex flex-col items-center justify-center rounded-md py-1 text-[10px] tabular-nums",
-                  isToday && "ring-1 ring-primary/50",
-                  hasPnl && positive && "bg-[var(--profit)]",
-                  hasPnl && !positive && "bg-[var(--loss)]",
-                  !hasPnl && "bg-[var(--surface)]"
-                )}
-                style={hasPnl ? { opacity: 0.3 + intensity * 0.7 } : undefined}
-                title={hasPnl ? `${cell.pnl! >= 0 ? "+" : ""}$${cell.pnl!.toFixed(0)}` : undefined}
-              >
-                <span className={cn("font-medium", hasPnl ? "text-white" : "text-muted-foreground")}>{cell.day}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Positions Summary ──────────────────────────────────────
-
-function PositionsSummary() {
-  const [positions, setPositions] = useState<Position[]>([]);
-  useEffect(() => {
-    getPositions().then(setPositions).catch(() => {});
-  }, []);
-
-  if (positions.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-[var(--panel)] px-4 py-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Briefcase className="h-4 w-4 text-muted-foreground opacity-30" />
-          <span className="text-sm font-semibold text-foreground">Open Positions</span>
-        </div>
-        <p className="text-hint">No open positions — the pipeline opens trades during market hours</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-[var(--panel)]">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Briefcase className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">
-            Open Positions
-          </h2>
-        </div>
-        <span className="text-xs text-muted-foreground">{positions.length} position{positions.length !== 1 ? "s" : ""}</span>
-      </div>
-      <div className="divide-y divide-border">
-        {positions.map((pos) => {
-          const pnlPct = pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost) * 100 : 0;
-          const positive = pos.unrealizedPnl >= 0;
-          return (
-            <div key={pos.symbol} className="flex items-center justify-between gap-4 px-4 py-2.5">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm font-semibold text-foreground">{pos.symbol}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">{pos.quantity} shares</span>
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <div className="text-right">
-                  <p className="text-sm tabular-nums text-foreground">{formatCurrency(pos.currentPrice)}</p>
-                  <p className="text-[11px] tabular-nums text-muted-foreground">avg {formatCurrency(pos.avgCost)}</p>
-                </div>
-                <div className="text-right min-w-[80px]">
-                  <p className={cn("text-sm font-semibold tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {positive ? "+" : ""}{formatCurrency(pos.unrealizedPnl)}
-                  </p>
-                  <p className={cn("text-[11px] tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {positive ? "+" : ""}{pnlPct.toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // ─── Main Page ───────────────────────────────────────────────
@@ -747,7 +70,7 @@ function CommandCenter() {
   const [strategies, setStrategies] = useState<StrategyData[]>([]);
   const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [regime, setRegime] = useState<RegimeData | null>(null);
-  const [sectors, setSectors] = useState<SectorData[]>([]);
+  const [sectors, setSectors] = useState<{ sector: string; change_pct: number }[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
   const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
@@ -793,7 +116,7 @@ function CommandCenter() {
         const apiStrategies = strategiesRes.value;
         const mapped: StrategyData[] = STRATEGY_ORDER.map((id) => {
           const meta = STRATEGY_META[id];
-          const apiMatch = apiStrategies.find((s) => s.id === id);
+          const apiMatch = apiStrategies.find((s: any) => s.id === id);
           return {
             id,
             name: meta?.name ?? id,
@@ -814,7 +137,7 @@ function CommandCenter() {
             id,
             name: STRATEGY_META[id]?.name ?? id,
             shortName: STRATEGY_META[id]?.shortName ?? id,
-            status: "active",
+            status: "active" as const,
             returnPct: 0,
             positions: 0,
             winRate: 0,
@@ -834,8 +157,8 @@ function CommandCenter() {
           VIX: "VIX",
         };
         const filtered = raw
-          .filter((idx) => names[idx.symbol])
-          .map((idx) => ({
+          .filter((idx: any) => names[idx.symbol])
+          .map((idx: any) => ({
             symbol: idx.symbol,
             name: names[idx.symbol] ?? idx.name,
             price: idx.price,
@@ -874,7 +197,7 @@ function CommandCenter() {
       if (pipelineHistoryRes.status === "fulfilled" && Array.isArray(pipelineHistoryRes.value)) {
         const today = todayDateStr();
         const todayEntry = pipelineHistoryRes.value.find(
-          (entry) => entry.date === today
+          (entry: any) => entry.date === today
         );
         if (todayEntry) {
           pLog = todayEntry;
@@ -967,9 +290,6 @@ function CommandCenter() {
     return parts.join(" \u2014 ");
   }, [pipelineStatus, pipelineLog]);
 
-  // Non-VIX indices for display
-  const displayIndices = indices.filter((i) => i.symbol !== "VIX");
-
   // Sparkline data (deterministic per symbol)
   const sparkData = useMemo(() => {
     const seeds: Record<string, number> = { SPY: 42, QQQ: 137, IWM: 256, VIX: 512 };
@@ -993,161 +313,30 @@ function CommandCenter() {
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-[1800px] space-y-4 p-4 md:p-6">
-        {/* ─── Section 1: Command Bar ───────────────────────── */}
-        <div className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] px-5 py-4">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {/* Portfolio Equity */}
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-                Portfolio
-              </p>
-              <p className="text-4xl font-bold text-foreground tabular-nums leading-none tracking-tight text-gradient">
-                {formatCurrency(portfolioValue)}
-              </p>
-            </div>
+        {/* Section 1: Command Bar */}
+        <PortfolioHero
+          portfolioValue={portfolioValue}
+          dayPnl={dayPnl}
+          dayPnlPct={dayPnlPct}
+          regimeLabel={regime?.label ?? "unknown"}
+          regimeName={regime?.regime ?? "Unknown"}
+          regimeBadgeColor={regimeBadgeColor}
+          vixLevel={vixLevel}
+          vixChangePct={vixData ? vixData.changePct : null}
+          pipelineSummaryText={pipelineSummaryText}
+          wsConnected={wsConnected}
+        />
 
-            <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-            {/* Day P&L */}
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-                Day P&L
-              </p>
-              <p
-                className={cn(
-                  "text-xl font-semibold tabular-nums leading-none",
-                  dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss"
-                )}
-              >
-                {dayPnl >= 0 ? "+" : ""}
-                {formatCurrency(dayPnl)}{" "}
-                <span className="text-sm font-normal">
-                  ({dayPnlPct >= 0 ? "+" : ""}
-                  {dayPnlPct.toFixed(2)}%)
-                </span>
-              </p>
-            </div>
-
-            <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-            {/* Market Regime Badge */}
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1.5">
-                Regime
-              </p>
-              <Badge
-                variant="outline"
-                className={cn("text-sm font-medium px-3 py-0.5", regimeBadgeColor)}
-              >
-                {regime?.regime ?? "Unknown"}
-              </Badge>
-            </div>
-
-            <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-            {/* VIX */}
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-                VIX
-              </p>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl font-semibold tabular-nums text-foreground leading-none">
-                  {vixLevel.toFixed(1)}
-                </span>
-                {vixData && (
-                  <span
-                    className={cn(
-                      "text-xs tabular-nums",
-                      vixData.changePct <= 0
-                        ? "text-[var(--profit)]"
-                        : "text-[var(--loss)]"
-                    )}
-                  >
-                    {vixData.changePct <= 0 ? "\u2193" : "\u2191"}
-                    {Math.abs(vixData.changePct).toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-            {/* Pipeline Status */}
-            <div className="min-w-0 flex-1">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-                Pipeline
-              </p>
-              <div className="flex items-center gap-2">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-sm text-foreground truncate">
-                  {pipelineSummaryText}
-                </span>
-              </div>
-            </div>
-
-            {/* WebSocket Indicator */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {wsConnected ? (
-                <>
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  </span>
-                  <span className="text-xs text-emerald-400">Live</span>
-                </>
-              ) : (
-                <>
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                  <span className="text-xs text-red-400">Offline</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ─── Sections 2 & 3: Activity Feed + Strategy Grid ── */}
+        {/* Sections 2 & 3: Activity Feed + Strategy Grid */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Activity Feed (left ~60%) */}
           <div className="lg:col-span-3 space-y-4">
-            <div className="rounded-xl border border-border bg-[var(--panel)]">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold text-foreground">
-                    Activity Feed
-                  </h2>
-                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                    Today
-                  </Badge>
-                </div>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {feedItems.length} event{feedItems.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <ScrollArea className={feedItems.length <= 3 ? "max-h-[200px]" : "h-[320px]"}>
-                <div className="space-y-1 p-3">
-                  {feedItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <Info className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-                      <p className="text-body">No activity yet today</p>
-                      <p className="text-hint mt-1">Events appear when the pipeline runs</p>
-                      <button
-                        onClick={() => router.push("/pipeline")}
-                        className="mt-2 text-[11px] text-[var(--primary)] hover:underline"
-                      >
-                        Run Pipeline &rarr;
-                      </button>
-                    </div>
-                  ) : (
-                    feedItems.map((item) => (
-                      <FeedItemRow key={item.id} item={item} />
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-            </div>
+            <ActivityFeed
+              feedItems={feedItems}
+              onNavigate={(path) => router.push(path)}
+            />
 
-            {/* ─── Positions + Calendar (below feed) ─────────── */}
+            {/* Positions + Calendar (below feed) */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <PositionsSummary />
               <PnlCalendarMini />
@@ -1156,173 +345,22 @@ function CommandCenter() {
 
           {/* Strategy Grid (right ~40%) */}
           <div className="lg:col-span-2">
-            <div className="rounded-xl border border-border bg-[var(--panel)]">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold text-foreground">
-                    Strategies
-                  </h2>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {strategies.filter((s) => s.status === "active").length} active
-                </span>
-              </div>
-              <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                {strategies.map((strategy) => (
-                  <StrategyCard
-                    key={strategy.id}
-                    strategy={strategy}
-                    regimeLabel={regime?.label ?? "unknown"}
-                    onClick={() => router.push(`/strategies/${strategy.id}`)}
-                  />
-                ))}
-              </div>
-            </div>
+            <StrategyGrid
+              strategies={strategies}
+              regimeLabel={regime?.label ?? "unknown"}
+              onStrategyClick={(id) => router.push(`/strategies/${id}`)}
+            />
           </div>
         </div>
 
-        {/* ─── Section 4: Market Context ────────────────────── */}
-        <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Indices */}
-            <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Market Indices
-              </h3>
-              <div className="space-y-2.5">
-                {(displayIndices.length > 0 ? displayIndices : indices).map((idx) => {
-                  const positive = idx.changePct >= 0;
-                  const color = positive ? "#22c55e" : "#ef4444";
-                  return (
-                    <div
-                      key={idx.symbol}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground">
-                          {idx.symbol}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{idx.name}</p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <Sparkline
-                          data={sparkData[idx.symbol] ?? []}
-                          color={color}
-                          width={64}
-                          height={20}
-                        />
-                        <div className="text-right min-w-[90px]">
-                          <p className="text-sm font-medium tabular-nums text-foreground">
-                            {idx.price > 0
-                              ? idx.symbol === "VIX"
-                                ? idx.price.toFixed(2)
-                                : formatCurrency(idx.price)
-                              : "\u2014"}
-                          </p>
-                          <p
-                            className={cn(
-                              "text-xs tabular-nums",
-                              positive
-                                ? "text-[var(--profit)]"
-                                : "text-[var(--loss)]"
-                            )}
-                          >
-                            {positive ? "+" : ""}
-                            {idx.changePct.toFixed(2)}%
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Sector Heatmap */}
-            <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Sector Performance
-              </h3>
-              {sectors.length > 0 ? (
-                <SectorHeatmap sectors={sectors} />
-              ) : (
-                <p className="text-xs text-muted-foreground">No sector data</p>
-              )}
-            </div>
-
-            {/* Headlines or P&L Calendar */}
-            <div>
-              {news.length > 0 ? (
-                <>
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Headlines
-                  </h3>
-                  <div className="space-y-2.5">
-                    {news.slice(0, 3).map((article, i) => (
-                      <a
-                        key={i}
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex items-start gap-2 rounded-md p-1.5 -mx-1.5 transition-colors hover:bg-[var(--panel)]"
-                      >
-                        <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
-                            {article.title}
-                          </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {article.source}
-                            {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
-                          </p>
-                        </div>
-                        <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </a>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Account Overview
-                  </h3>
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Cash</span>
-                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.cash)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Buying Power</span>
-                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.buyingPower)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Market Value</span>
-                      <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.totalMarketValue)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Positions</span>
-                      <span className="text-sm tabular-nums text-foreground">{summary.positionsCount}</span>
-                    </div>
-                    <Separator className="bg-border" />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Unrealized P&L</span>
-                      <span className={cn("text-sm font-semibold tabular-nums", summary.unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                        {summary.unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(summary.unrealizedPnl)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Realized Today</span>
-                      <span className={cn("text-sm font-semibold tabular-nums", summary.realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                        {summary.realizedPnlToday >= 0 ? "+" : ""}{formatCurrency(summary.realizedPnlToday)}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Section 4: Market Context */}
+        <MarketContext
+          indices={indices}
+          sectors={sectors}
+          news={news}
+          summary={summary}
+          sparkData={sparkData}
+        />
       </div>
     </ScrollArea>
   );
