@@ -45,6 +45,7 @@ interface TradingChartProps {
     stopLoss: number | null;
     takeProfit: number | null;
   } | null;
+  drawingPriceLines?: Array<{ price: number; color: string; label?: string }>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -143,7 +144,7 @@ function computeBollinger(
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines, drawingPriceLines },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -455,6 +456,23 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         });
       };
     }, [positionLines, chartType]);
+
+    // Drawing price lines (user-drawn horizontal lines)
+    useEffect(() => {
+      const series = mainSeriesRef.current;
+      if (!series) return;
+      const lines = (drawingPriceLines ?? []).map((d) =>
+        series.createPriceLine({
+          price: d.price,
+          color: d.color,
+          lineWidth: 1,
+          lineStyle: 0, // Solid
+          axisLabelVisible: true,
+          title: d.label ?? `$${d.price.toFixed(2)}`,
+        })
+      );
+      return () => lines.forEach((l) => { try { series.removePriceLine(l); } catch {} });
+    }, [drawingPriceLines, chartType]);
 
     return (
       <>

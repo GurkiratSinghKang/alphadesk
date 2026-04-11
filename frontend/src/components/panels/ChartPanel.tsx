@@ -94,6 +94,16 @@ export function ChartPanel() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState(0);
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
+  const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib">("none");
+  const [drawings, setDrawings] = useState<Array<{
+    type: "hline" | "trendline" | "fib";
+    price?: number;
+    startPrice?: number;
+    endPrice?: number;
+    startTime?: number;
+    endTime?: number;
+    color?: string;
+  }>>([]);
 
   const quote = quotes.get(selectedSymbol);
 
@@ -167,6 +177,14 @@ export function ChartPanel() {
       prev.includes(ind) ? prev.filter((i) => i !== ind) : [...prev, ind]
     );
   };
+
+  const addHLine = (price: number) => {
+    setDrawings((prev) => [...prev, { type: "hline", price, color: "#3b82f6" }]);
+  };
+
+  const drawingPriceLines = drawings
+    .filter((d) => d.type === "hline" && d.price != null)
+    .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6" }));
 
   // Real-time chart update: when quote updates via WebSocket, push new bar to chart
   const prevQuoteRef = useRef<{ last: number; volume: number } | null>(null);
@@ -358,6 +376,38 @@ export function ChartPanel() {
             </button>
           ))}
         </div>
+        <div className="flex items-center gap-0.5 ml-2 border-l border-border pl-2">
+          <button
+            onClick={() => setDrawingMode(drawingMode === "hline" ? "none" : "hline")}
+            className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "hline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+            title="Horizontal Line"
+          >
+            ─
+          </button>
+          <button
+            onClick={() => setDrawingMode(drawingMode === "trendline" ? "none" : "trendline")}
+            className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "trendline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+            title="Trendline"
+          >
+            ╲
+          </button>
+          <button
+            onClick={() => setDrawingMode(drawingMode === "fib" ? "none" : "fib")}
+            className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "fib" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+            title="Fibonacci"
+          >
+            Fib
+          </button>
+          {drawings.length > 0 && (
+            <button
+              onClick={() => setDrawings([])}
+              className="h-6 px-1.5 rounded text-[10px] text-muted-foreground hover:text-[var(--loss)]"
+              title="Clear all drawings"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Chart — BUG #11: pass chartType, BUG #12: pass indicators */}
@@ -370,8 +420,34 @@ export function ChartPanel() {
           indicators={activeIndicators}
           onCrosshairMove={handleCrosshairMove}
           positionLines={positionLines}
+          drawingPriceLines={drawingPriceLines}
         />
         </div>
+
+        {/* Drawing overlay — captures clicks when a drawing mode is active */}
+        {drawingMode === "hline" && (
+          <div
+            className="absolute inset-0 cursor-crosshair z-[5]"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pctY = (e.clientY - rect.top) / rect.height;
+              if (quote) {
+                const high = quote.high || quote.last * 1.05;
+                const low = quote.low || quote.last * 0.95;
+                const price = high - pctY * (high - low);
+                addHLine(Math.round(price * 100) / 100);
+              } else if (displayData.length) {
+                const highs = displayData.map((b) => b.high);
+                const lows = displayData.map((b) => b.low);
+                const high = Math.max(...highs);
+                const low = Math.min(...lows);
+                const price = high - pctY * (high - low);
+                addHLine(Math.round(price * 100) / 100);
+              }
+              setDrawingMode("none");
+            }}
+          />
+        )}
 
         {/* Quick trade buttons — overlaid on right edge of chart */}
         {quote && (
