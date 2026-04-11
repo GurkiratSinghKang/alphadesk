@@ -372,6 +372,36 @@ export function ChartPanel() {
           positionLines={positionLines}
         />
         </div>
+
+        {/* Quick trade buttons — overlaid on right edge of chart */}
+        {quote && (
+          <div className="absolute right-3 top-1/3 z-10 flex flex-col gap-1.5">
+            <button
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("alphadesk:quick-order", {
+                    detail: { symbol: selectedSymbol, side: "buy", price: quote.last },
+                  })
+                );
+              }}
+              className="rounded-md bg-[var(--profit)]/90 px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--profit)] backdrop-blur-sm"
+            >
+              BUY
+            </button>
+            <button
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("alphadesk:quick-order", {
+                    detail: { symbol: selectedSymbol, side: "sell", price: quote.last },
+                  })
+                );
+              }}
+              className="rounded-md bg-[var(--loss)]/90 px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--loss)] backdrop-blur-sm"
+            >
+              SELL
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

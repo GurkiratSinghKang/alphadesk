@@ -691,6 +691,18 @@ function OrderTab({ symbol }: { symbol: string }) {
     if (orderType === "market" && quote?.last) setPrice(quote.last);
   }, [quote?.last, orderType]);
 
+  // Listen for quick-order events from the chart BUY/SELL buttons
+  useEffect(() => {
+    function handleQuickOrder(e: CustomEvent) {
+      const { side: newSide, price: newPrice } = e.detail;
+      setSide(newSide);
+      setPrice(newPrice);
+      setOrderType("limit");
+    }
+    window.addEventListener("alphadesk:quick-order", handleQuickOrder as EventListener);
+    return () => window.removeEventListener("alphadesk:quick-order", handleQuickOrder as EventListener);
+  }, []);
+
   const estimatedCost = quantity * price;
 
   const handleSubmit = async () => {
@@ -819,6 +831,15 @@ export function AnalysisPanel() {
   const { selectedSymbol } = useMarketStore();
   const { activePanels, setActiveTab } = useUIStore();
   const { analysis, loading, timedOut } = useAnalysisData(selectedSymbol);
+
+  // Auto-switch to the Order tab when a quick-order event arrives from the chart
+  useEffect(() => {
+    function handleQuickOrder() {
+      setActiveTab("right", "order");
+    }
+    window.addEventListener("alphadesk:quick-order", handleQuickOrder);
+    return () => window.removeEventListener("alphadesk:quick-order", handleQuickOrder);
+  }, [setActiveTab]);
 
   return (
     <div className="flex h-full flex-col bg-[var(--panel)] border-l border-[#2a2a3e]">
