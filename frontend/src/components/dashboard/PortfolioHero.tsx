@@ -68,7 +68,7 @@ function EquityCurveSVG({
   const firstVal = data[0].value;
   const lastVal = data[data.length - 1].value;
   const isUp = lastVal >= firstVal;
-  const colorVar = isUp ? "var(--profit, #22c55e)" : "var(--loss, #ef4444)";
+  const colorVar = isUp ? "var(--profit)" : "var(--loss)";
 
   // Polygon: close the area down to the bottom
   const areaPoints = [

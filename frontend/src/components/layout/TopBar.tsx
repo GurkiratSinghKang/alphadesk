@@ -42,7 +42,7 @@ export function TopBar() {
         </nav>
       </div>
 
-      <button onClick={() => setCommandPaletteOpen(true)} className="flex h-8 w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+      <button onClick={() => setCommandPaletteOpen(true)} className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
         <Search className="h-3.5 w-3.5" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
         <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">Ctrl+K</kbd>

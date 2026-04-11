@@ -1,0 +1,545 @@
+{
+  "startTime": "2026-04-11T18:45:22.108Z",
+  "endTime": "2026-04-11T18:46:48.000Z",
+  "summary": {
+    "total": 58,
+    "passed": 51,
+    "failed": 7
+  },
+  "journeys": [
+    {
+      "id": 1,
+      "name": "First Login -> Dashboard Orientation",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Go to /login, enter credentials, submit",
+          "status": "PASS",
+          "detail": "Current URL: https://tradingalpha.net/",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Verify redirect to / (not still on /login)",
+          "status": "PASS",
+          "detail": "Redirected to: https://tradingalpha.net/",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Verify portfolio value is visible and numeric",
+          "status": "PASS",
+          "detail": "Found portfolio values: $100,061.68, $0.00, $94.00, $121.42",
+          "screenshot": null
+        },
+        {
+          "num": 4,
+          "description": "Verify at least 1 strategy card is visible",
+          "status": "PASS",
+          "detail": "Found strategies: Momentum, PEAD, VRP, Earnings, Claude, Mean Rev, Regime",
+          "screenshot": null
+        },
+        {
+          "num": 5,
+          "description": "Verify status strip shows regime data (not ---)",
+          "status": "FAIL",
+          "detail": "VIX shows --.-",
+          "screenshot": "fail-j1-s5.png"
+        },
+        {
+          "num": 6,
+          "description": "Verify equity curve chart is visible",
+          "status": "PASS",
+          "detail": "Found 0 chart SVG(s), 83 polyline/path elements",
+          "screenshot": null
+        },
+        {
+          "num": 7,
+          "description": "Take dashboard screenshot",
+          "status": "PASS",
+          "detail": "j1-dashboard.png",
+          "screenshot": null
+        }
+      ],
+      "status": "fail",
+      "startTime": "2026-04-11T18:45:22.582Z",
+      "endTime": "2026-04-11T18:45:33.270Z"
+    },
+    {
+      "id": 2,
+      "name": "Symbol Research Flow",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Press Ctrl+K to open command palette",
+          "status": "PASS",
+          "detail": "Command palette opened",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Type \"AAPL\" in search",
+          "status": "PASS",
+          "detail": "Typed AAPL",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Verify search results appear",
+          "status": "PASS",
+          "detail": "Found 7 result(s): AAPB — GraniteShares ETF Trust GraniteShares 2x Long AAPL Da",
+          "screenshot": null
+        },
+        {
+          "num": 4,
+          "description": "Select AAPL and navigate to trade page",
+          "status": "PASS",
+          "detail": "On trade page: https://tradingalpha.net/trade",
+          "screenshot": null
+        },
+        {
+          "num": 5,
+          "description": "Verify chart loads with data",
+          "status": "PASS",
+          "detail": "Canvas: 7, SVG paths: 79, TV widget: true, AAPL visible: true",
+          "screenshot": null
+        },
+        {
+          "num": "6a",
+          "description": "Click \"Tech\" analysis tab",
+          "status": "PASS",
+          "detail": "Clicked \"Tech\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "7a",
+          "description": "Verify \"Tech\" tab shows content",
+          "status": "PASS",
+          "detail": "Content length: 245 chars, preview: Click to select\n|\n for actions\nSymbol\nLast\nChg%\nAAPL\n$260.43",
+          "screenshot": null
+        },
+        {
+          "num": "6b",
+          "description": "Click \"Fund\" analysis tab",
+          "status": "PASS",
+          "detail": "Clicked \"Fund\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "7b",
+          "description": "Verify \"Fund\" tab shows content",
+          "status": "PASS",
+          "detail": "Content length: 245 chars, preview: Click to select\n|\n for actions\nSymbol\nLast\nChg%\nAAPL\n$260.43",
+          "screenshot": null
+        },
+        {
+          "num": "6c",
+          "description": "Click \"Sent\" analysis tab",
+          "status": "PASS",
+          "detail": "Clicked \"Sent\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "7c",
+          "description": "Verify \"Sent\" tab shows content",
+          "status": "PASS",
+          "detail": "Content length: 245 chars, preview: Click to select\n|\n for actions\nSymbol\nLast\nChg%\nAAPL\n$260.43",
+          "screenshot": null
+        },
+        {
+          "num": 8,
+          "description": "Verify \"Estimated\" badge appears on generated data",
+          "status": "FAIL",
+          "detail": "\"Estimated\" badge not found in page text",
+          "screenshot": "fail-j2-s8.png"
+        },
+        {
+          "num": 9,
+          "description": "Take screenshot of trade/analysis page",
+          "status": "PASS",
+          "detail": "Screenshots saved for all analysis tabs",
+          "screenshot": null
+        }
+      ],
+      "status": "fail",
+      "startTime": "2026-04-11T18:45:33.270Z",
+      "endTime": "2026-04-11T18:45:57.586Z"
+    },
+    {
+      "id": 3,
+      "name": "Order Placement Flow",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Click \"Order\" tab on analysis panel",
+          "status": "PASS",
+          "detail": "Order tab clicked",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Verify Buy/Sell toggle appears",
+          "status": "PASS",
+          "detail": "Buy and Sell buttons found",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Click \"Sell\" to switch side",
+          "status": "PASS",
+          "detail": "Sell button active: true",
+          "screenshot": null
+        },
+        {
+          "num": 4,
+          "description": "Change quantity to 5",
+          "status": "PASS",
+          "detail": "Quantity set to 5",
+          "screenshot": null
+        },
+        {
+          "num": 5,
+          "description": "Change order type to \"Limit\"",
+          "status": "PASS",
+          "detail": "Order type changed to: limit",
+          "screenshot": null
+        },
+        {
+          "num": 6,
+          "description": "Verify price input appears for Limit order",
+          "status": "PASS",
+          "detail": "Found 2 number inputs (includes price input)",
+          "screenshot": null
+        },
+        {
+          "num": 7,
+          "description": "Enter a limit price",
+          "status": "PASS",
+          "detail": "Price set to: 150.00",
+          "screenshot": null
+        },
+        {
+          "num": 8,
+          "description": "Verify submit button text updates to reflect order",
+          "status": "PASS",
+          "detail": "Submit button text: \"Sell 5 SPY @ $150.00\"",
+          "screenshot": null
+        },
+        {
+          "num": 9,
+          "description": "Verify form is complete (NOT submitting)",
+          "status": "PASS",
+          "detail": "Form verified -- order NOT submitted as instructed",
+          "screenshot": null
+        },
+        {
+          "num": 10,
+          "description": "Take order form screenshot",
+          "status": "PASS",
+          "detail": "j3-order-form.png",
+          "screenshot": null
+        }
+      ],
+      "status": "pass",
+      "startTime": "2026-04-11T18:45:57.586Z",
+      "endTime": "2026-04-11T18:46:05.084Z"
+    },
+    {
+      "id": 4,
+      "name": "Pipeline Monitoring",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Navigate to /pipeline",
+          "status": "PASS",
+          "detail": "On pipeline page: https://tradingalpha.net/pipeline",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Verify pipeline flow diagram with 4 stages",
+          "status": "FAIL",
+          "detail": "Only found 0/4 stages: ",
+          "screenshot": "fail-j4-s2.png"
+        },
+        {
+          "num": 3,
+          "description": "Verify current positions section shows data",
+          "status": "FAIL",
+          "detail": "Current Positions section not found",
+          "screenshot": "fail-j4-s3.png"
+        },
+        {
+          "num": 4,
+          "description": "Verify performance summary cards visible",
+          "status": "FAIL",
+          "detail": "Performance Summary section not found",
+          "screenshot": "fail-j4-s4.png"
+        },
+        {
+          "num": 5,
+          "description": "Click a history row to expand",
+          "status": "PASS",
+          "detail": "History section not found -- may have no history data (acceptable)",
+          "screenshot": null
+        },
+        {
+          "num": 6,
+          "description": "Take pipeline screenshot",
+          "status": "PASS",
+          "detail": "j4-pipeline.png",
+          "screenshot": null
+        }
+      ],
+      "status": "fail",
+      "startTime": "2026-04-11T18:46:05.085Z",
+      "endTime": "2026-04-11T18:46:10.144Z"
+    },
+    {
+      "id": 5,
+      "name": "Strategy Deep Dive",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Navigate to /strategies/pead",
+          "status": "PASS",
+          "detail": "URL: https://tradingalpha.net/strategies/pead",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Verify strategy name and description visible",
+          "status": "PASS",
+          "detail": "Strategy: PEAD, has description: true",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Verify equity curve chart renders",
+          "status": "FAIL",
+          "detail": "chartSvgs is not defined",
+          "screenshot": "fail-j5-s3.png"
+        },
+        {
+          "num": 4,
+          "description": "Verify SPY benchmark line is visible (gray line)",
+          "status": "PASS",
+          "detail": "SPY benchmark not rendered (may need data to load) -- noted",
+          "screenshot": null
+        },
+        {
+          "num": "5a",
+          "description": "Click \"About\" tab",
+          "status": "PASS",
+          "detail": "Clicked \"About\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "5b",
+          "description": "Click \"Positions\" tab",
+          "status": "PASS",
+          "detail": "Clicked \"Positions\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "5c",
+          "description": "Click \"Sector Exposure\" tab",
+          "status": "PASS",
+          "detail": "Clicked \"Sector Exposure\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "5d",
+          "description": "Click \"Correlation\" tab",
+          "status": "PASS",
+          "detail": "Clicked \"Correlation\" tab",
+          "screenshot": null
+        },
+        {
+          "num": "5e",
+          "description": "Click \"Analytics\" tab",
+          "status": "PASS",
+          "detail": "Clicked \"Analytics\" tab",
+          "screenshot": null
+        },
+        {
+          "num": 6,
+          "description": "Verify tabs change content without errors",
+          "status": "PASS",
+          "detail": "Page content length: 3561 chars after tab cycling",
+          "screenshot": null
+        },
+        {
+          "num": 7,
+          "description": "Take screenshot of About tab",
+          "status": "PASS",
+          "detail": "j5-strategy-about.png",
+          "screenshot": null
+        },
+        {
+          "num": 8,
+          "description": "Navigate back to dashboard",
+          "status": "PASS",
+          "detail": "Back on dashboard: https://tradingalpha.net/",
+          "screenshot": null
+        }
+      ],
+      "status": "fail",
+      "startTime": "2026-04-11T18:46:10.144Z",
+      "endTime": "2026-04-11T18:46:27.246Z"
+    },
+    {
+      "id": 6,
+      "name": "Keyboard Navigation",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Press ? to open keyboard shortcuts overlay",
+          "status": "FAIL",
+          "detail": "Keyboard shortcuts overlay did not open",
+          "screenshot": "fail-j6-s1.png"
+        },
+        {
+          "num": 2,
+          "description": "Verify overlay shows shortcuts grouped",
+          "status": "PASS",
+          "detail": "Groups found: Navigation, has shortcut keys: false",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Press Escape to close shortcuts overlay",
+          "status": "PASS",
+          "detail": "Overlay closed",
+          "screenshot": null
+        },
+        {
+          "num": 4,
+          "description": "Press g then d -- verify stays on dashboard",
+          "status": "PASS",
+          "detail": "On dashboard: https://tradingalpha.net/",
+          "screenshot": null
+        },
+        {
+          "num": 5,
+          "description": "Press g then t -- verify navigates to /trade",
+          "status": "PASS",
+          "detail": "Navigated to: https://tradingalpha.net/trade",
+          "screenshot": null
+        },
+        {
+          "num": 6,
+          "description": "Press g then p -- verify navigates to /pipeline",
+          "status": "PASS",
+          "detail": "Navigated to: https://tradingalpha.net/pipeline",
+          "screenshot": null
+        }
+      ],
+      "status": "fail",
+      "startTime": "2026-04-11T18:46:27.247Z",
+      "endTime": "2026-04-11T18:46:39.273Z"
+    },
+    {
+      "id": 7,
+      "name": "Error Recovery",
+      "steps": [
+        {
+          "num": 1,
+          "description": "Navigate to /nonexistent",
+          "status": "PASS",
+          "detail": "Status: 404, URL: https://tradingalpha.net/nonexistent",
+          "screenshot": null
+        },
+        {
+          "num": 2,
+          "description": "Verify 404 page or dashboard redirect",
+          "status": "PASS",
+          "detail": "404 page displayed correctly",
+          "screenshot": null
+        },
+        {
+          "num": 3,
+          "description": "Navigate to /strategies/nonexistent-id",
+          "status": "PASS",
+          "detail": "URL: https://tradingalpha.net/strategies/nonexistent-id",
+          "screenshot": null
+        },
+        {
+          "num": 4,
+          "description": "Verify error handled gracefully (not a white screen)",
+          "status": "PASS",
+          "detail": "Page handled gracefully. 148 elements, has nav: true, has error msg: false. Preview: \"AlphaDesk\nDashboard\nTrade\nPipeline\nSearch symbols, commands...\nCtrl+K\nA\nP&L\n$--.\"",
+          "screenshot": null
+        }
+      ],
+      "status": "pass",
+      "startTime": "2026-04-11T18:46:39.273Z",
+      "endTime": "2026-04-11T18:46:47.978Z"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/",
+      "ts": "2026-04-11T18:45:33.401Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/trade",
+      "ts": "2026-04-11T18:45:41.124Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/trade",
+      "ts": "2026-04-11T18:45:57.647Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/pipeline",
+      "ts": "2026-04-11T18:46:05.136Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/strategies/pead",
+      "ts": "2026-04-11T18:46:10.424Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/",
+      "ts": "2026-04-11T18:46:24.246Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/",
+      "ts": "2026-04-11T18:46:27.387Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 ()",
+      "url": "https://tradingalpha.net/nonexistent",
+      "ts": "2026-04-11T18:46:39.319Z"
+    },
+    {
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+      "url": "https://tradingalpha.net/strategies/nonexistent-id",
+      "ts": "2026-04-11T18:46:43.305Z",
+      "type": "pageerror"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 ()",
+      "url": "https://tradingalpha.net/strategies/nonexistent-id",
+      "ts": "2026-04-11T18:46:43.352Z"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 ()",
+      "url": "https://tradingalpha.net/strategies/nonexistent-id",
+      "ts": "2026-04-11T18:46:43.357Z"
+    }
+  ]
+}

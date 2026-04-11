@@ -97,7 +97,7 @@ export default function TradePage() {
   );
 
   return (
-    <div style={{ width: "100vw", height: totalH, overflow: "hidden", position: "relative" }}>
+    <div style={{ width: "100%", height: totalH, overflow: "hidden", position: "relative" }}>
 
       {/* ── Top Row (hidden in full-screen mode) ── */}
       {!optionsFullScreen && (
@@ -111,7 +111,7 @@ export default function TradePage() {
               width: WATCHLIST_W,
               height: topRowH,
               overflow: "auto",
-              borderRight: "1px solid #3a3a5e",
+              borderRight: "1px solid var(--border)",
               background: "var(--panel)",
             }}
           >
@@ -142,7 +142,7 @@ export default function TradePage() {
               width: ANALYSIS_W,
               height: topRowH,
               overflow: "auto",
-              borderLeft: "1px solid #3a3a5e",
+              borderLeft: "1px solid var(--border)",
               zIndex: 10,
               background: "var(--panel)",
             }}
@@ -181,7 +181,7 @@ export default function TradePage() {
           width: optionsW,
           height: optionsFullScreen ? totalH : optionsPanelHeight,
           overflow: "auto",
-          borderTop: optionsFullScreen ? "none" : "1px solid #3a3a5e",
+          borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
           zIndex: 10,
           background: "var(--panel)",
         }}
@@ -199,8 +199,8 @@ export default function TradePage() {
           width: TRADE_PANEL_W,
           height: optionsFullScreen ? totalH : optionsPanelHeight,
           overflow: "auto",
-          borderTop: optionsFullScreen ? "none" : "1px solid #3a3a5e",
-          borderLeft: "1px solid #3a3a5e",
+          borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
+          borderLeft: "1px solid var(--border)",
           zIndex: 10,
           background: "var(--panel)",
         }}

@@ -265,9 +265,9 @@ export function OptionsPanel() {
   const colHeaders = ["Last", "Bid", "Ask", "Vol", "OI", "IV", "\u0394"];
 
   return (
-    <div data-slot="options-panel" className="flex h-full flex-col bg-[var(--panel)] border-t border-[#2a2a3e]">
+    <div data-slot="options-panel" className="flex h-full flex-col bg-[var(--panel)] border-t border-border">
       {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-[#2a2a3e] px-3 py-1.5 shrink-0 bg-[#14141e]">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-[#14141e]">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-foreground">
             {selectedSymbol} Options
@@ -292,7 +292,7 @@ export function OptionsPanel() {
       </div>
 
       {/* Expiration selector */}
-      <div className="flex gap-1.5 overflow-x-auto border-b border-[#2a2a3e] px-3 py-2 scrollbar-thin shrink-0 bg-[#14141e]">
+      <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 scrollbar-thin shrink-0 bg-[#14141e]">
         {expirations.map((exp) => {
           const d = new Date(exp + "T00:00:00");
           const label = d.toLocaleDateString("en-US", {
@@ -329,7 +329,7 @@ export function OptionsPanel() {
       <ScrollArea className="flex-1 overflow-auto">
         <table className="w-full text-[11px] min-w-[700px]">
           <thead className="sticky top-0 z-10 bg-[#14141e]">
-            <tr className="border-b border-[#2a2a3e]">
+            <tr className="border-b border-border">
               {colHeaders.map((h) => (
                 <th
                   key={`c-${h}`}

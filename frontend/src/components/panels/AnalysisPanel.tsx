@@ -742,8 +742,8 @@ function OrderTab({ symbol }: { symbol: string }) {
         className={cn(
           "w-full rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-50",
           side === "buy"
-            ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-white"
-            : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+            ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
+            : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-black"
         )}
       >
         {submitting ? "Placing..." : `${side === "buy" ? "Buy" : "Sell"} ${quantity} ${symbol} @ ${orderType === "market" ? "Market" : "$" + price.toFixed(2)}`}

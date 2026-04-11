@@ -209,10 +209,10 @@ export function ChartPanel() {
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <div className="flex items-baseline gap-2">
-              <span className="text-sm font-bold text-white">
+              <span className="text-sm font-bold text-foreground">
                 {selectedSymbol}
               </span>
-              <span className="text-lg font-bold text-white tabular-nums">
+              <span className="text-lg font-bold text-foreground tabular-nums">
                 {formatCurrency(displayPrice)}
               </span>
               <span className={`text-xs tabular-nums ${getChangeTextClass(change)}`}>

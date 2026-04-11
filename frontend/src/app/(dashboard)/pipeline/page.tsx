@@ -283,7 +283,7 @@ export default function PipelinePage() {
             {/* Section 1: Current Positions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Target className="h-4 w-4 text-primary" />
+                <Target className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
                   Current Positions
                 </h2>
@@ -392,7 +392,7 @@ export default function PipelinePage() {
             {/* Section 2: Today's Pipeline Run */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Zap className="h-4 w-4 text-primary" />
+                <Zap className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
                   Today&apos;s Pipeline Run
                 </h2>
@@ -408,7 +408,7 @@ export default function PipelinePage() {
             {/* Section 3: History */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="h-4 w-4 text-primary" />
+                <Clock className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
                   History (Last 7 Days)
                 </h2>
@@ -525,7 +525,7 @@ export default function PipelinePage() {
             {/* Section 4: Performance Summary */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-4 w-4 text-primary" />
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
                   Performance Summary
                 </h2>

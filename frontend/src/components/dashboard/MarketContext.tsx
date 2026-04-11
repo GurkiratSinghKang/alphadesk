@@ -60,7 +60,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
           <div className="space-y-2.5">
             {(displayIndices.length > 0 ? displayIndices : indices).map((idx) => {
               const positive = idx.changePct >= 0;
-              const color = positive ? "#22c55e" : "#ef4444";
+              const color = positive ? "var(--profit)" : "var(--loss)";
               return (
                 <div
                   key={idx.symbol}

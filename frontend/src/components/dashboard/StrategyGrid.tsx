@@ -96,7 +96,7 @@ function StrategyCard({
           <div className="mt-2 -mx-1">
             <Sparkline
               data={generateSparkData(strategy.id.length * 31 + strategy.id.charCodeAt(0), 30)}
-              color={strategy.returnPct >= 0 ? "#22c55e" : "#ef4444"}
+              color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
               width={140}
               height={28}
               className="w-full"
