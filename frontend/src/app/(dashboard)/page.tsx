@@ -76,7 +76,6 @@ function CommandCenter() {
   const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [wsConnected, setWsConnected] = useState(false);
 
   // ─── Data Fetching ─────────────────────────────────────────
   useEffect(() => {
@@ -221,16 +220,8 @@ function CommandCenter() {
       setLoading(false);
     });
 
-    // WebSocket connection indicator — check if we can reach the API
-    const wsCheck = setInterval(() => {
-      setWsConnected((prev) => !prev ? true : prev);
-    }, 5000);
-    // Mark connected after initial load
-    setWsConnected(true);
-
     return () => {
       cancelled = true;
-      clearInterval(wsCheck);
     };
   }, [setSummary]);
 
@@ -238,57 +229,6 @@ function CommandCenter() {
   const portfolioValue = Number.isFinite(summary.equity) && summary.equity > 0 ? summary.equity : 0;
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
-
-  // Regime badge color
-  const regimeBadgeColor = useMemo(() => {
-    if (!regime) return "bg-zinc-700 text-zinc-300";
-    switch (regime.label) {
-      case "bull":
-        return "bg-emerald-900/60 text-emerald-300 border-emerald-500/30";
-      case "bear":
-        return "bg-red-900/60 text-red-300 border-red-500/30";
-      default:
-        return "bg-amber-900/60 text-amber-300 border-amber-500/30";
-    }
-  }, [regime]);
-
-  // VIX from indices
-  const vixData = indices.find((i) => i.symbol === "VIX");
-  const vixLevel = regime?.vix_level ?? vixData?.price ?? 0;
-
-  // Pipeline summary text
-  const pipelineSummaryText = useMemo(() => {
-    if (!pipelineStatus && !pipelineLog) return "No pipeline data";
-    if (pipelineStatus?.running) return "Pipeline running...";
-
-    const lastRun = pipelineStatus?.lastRun;
-    // Aggregate screened count from strategy entries in pipeline log
-    let totalScreened = 0;
-    let totalApproved = 0;
-    const strats = pipelineLog?.strategies_run ?? pipelineLog?.strategies ?? {};
-    if (typeof strats === "object" && strats !== null) {
-      for (const s of Object.values(strats)) {
-        if (s && typeof s === "object") {
-          totalScreened += (s as any).screened ?? 0;
-          totalApproved += (s as any).trades_approved ?? 0;
-        }
-      }
-    }
-    const ordersPlaced = Array.isArray(pipelineLog?.orders_placed) ? pipelineLog.orders_placed.length : 0;
-
-    let timeStr = "";
-    if (lastRun) {
-      timeStr = formatTimeShort(lastRun);
-    } else if (pipelineLog?.timestamp) {
-      timeStr = formatTimeShort(pipelineLog.timestamp);
-    }
-
-    const parts: string[] = [];
-    if (timeStr) parts.push(`Last run ${timeStr}`);
-    if (totalScreened > 0) parts.push(`${totalScreened} screened`);
-    parts.push(`${ordersPlaced} trade${ordersPlaced !== 1 ? "s" : ""}`);
-    return parts.join(" \u2014 ");
-  }, [pipelineStatus, pipelineLog]);
 
   // Equity history for the hero chart
   const equityHistory = useMemo(() => {
@@ -338,13 +278,6 @@ function CommandCenter() {
           portfolioValue={portfolioValue}
           dayPnl={dayPnl}
           dayPnlPct={dayPnlPct}
-          regimeLabel={regime?.label ?? "unknown"}
-          regimeName={regime?.regime ?? "Unknown"}
-          regimeBadgeColor={regimeBadgeColor}
-          vixLevel={vixLevel}
-          vixChangePct={vixData ? vixData.changePct : null}
-          pipelineSummaryText={pipelineSummaryText}
-          wsConnected={wsConnected}
           equityHistory={equityHistory}
         />
 

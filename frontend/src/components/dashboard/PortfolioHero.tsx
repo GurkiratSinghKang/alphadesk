@@ -1,9 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Clock } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+import { useState, useMemo, useId } from "react";
 import { formatCurrency, cn } from "@/lib/utils";
 
 type Period = "1W" | "1M" | "3M" | "YTD";
@@ -12,13 +9,6 @@ interface PortfolioHeroProps {
   portfolioValue: number;
   dayPnl: number;
   dayPnlPct: number;
-  regimeLabel: string;
-  regimeName: string;
-  regimeBadgeColor: string;
-  vixLevel: number;
-  vixChangePct: number | null;
-  pipelineSummaryText: string;
-  wsConnected: boolean;
   equityHistory: { date: string; value: number }[];
 }
 
@@ -75,7 +65,7 @@ function EquityCurveSVG({
   const lastVal = data[data.length - 1].value;
   const isUp = lastVal >= firstVal;
   const colorVar = isUp ? "var(--profit, #22c55e)" : "var(--loss, #ef4444)";
-  const gradientId = "equity-gradient";
+  const gradientId = `equity-grad-${useId().replace(/:/g, "")}`;
 
   // Polygon: close the area down to the bottom
   const areaPoints = [
@@ -123,13 +113,6 @@ export function PortfolioHero({
   portfolioValue,
   dayPnl,
   dayPnlPct,
-  regimeLabel,
-  regimeName,
-  regimeBadgeColor,
-  vixLevel,
-  vixChangePct,
-  pipelineSummaryText,
-  wsConnected,
   equityHistory,
 }: PortfolioHeroProps) {
   const [period, setPeriod] = useState<Period>("1M");
@@ -180,8 +163,6 @@ export function PortfolioHero({
           </p>
         </div>
 
-        <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
         {/* Day P&L */}
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
@@ -200,81 +181,6 @@ export function PortfolioHero({
               {dayPnlPct.toFixed(2)}%)
             </span>
           </p>
-        </div>
-
-        <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-        {/* Market Regime Badge */}
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1.5">
-            Regime
-          </p>
-          <Badge
-            variant="outline"
-            className={cn("text-sm font-medium px-3 py-0.5", regimeBadgeColor)}
-          >
-            {regimeName}
-          </Badge>
-        </div>
-
-        <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-        {/* VIX */}
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-            VIX
-          </p>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xl font-semibold tabular-nums text-foreground leading-none">
-              {vixLevel.toFixed(1)}
-            </span>
-            {vixChangePct !== null && (
-              <span
-                className={cn(
-                  "text-xs tabular-nums",
-                  vixChangePct <= 0
-                    ? "text-[var(--profit)]"
-                    : "text-[var(--loss)]"
-                )}
-              >
-                {vixChangePct <= 0 ? "\u2193" : "\u2191"}
-                {Math.abs(vixChangePct).toFixed(1)}%
-              </span>
-            )}
-          </div>
-        </div>
-
-        <Separator orientation="vertical" className="hidden h-12 bg-border sm:block" />
-
-        {/* Pipeline Status */}
-        <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-            Pipeline
-          </p>
-          <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm text-foreground truncate">
-              {pipelineSummaryText}
-            </span>
-          </div>
-        </div>
-
-        {/* WebSocket Indicator */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {wsConnected ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              </span>
-              <span className="text-xs text-emerald-400">Live</span>
-            </>
-          ) : (
-            <>
-              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-              <span className="text-xs text-red-400">Offline</span>
-            </>
-          )}
         </div>
       </div>
     </div>
