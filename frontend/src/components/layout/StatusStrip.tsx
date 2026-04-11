@@ -5,7 +5,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
-import { getMarketRegime, getMarketIndices } from "@/lib/api";
+import { getMarketRegime } from "@/lib/api";
 
 export function StatusStrip() {
   const summary = usePortfolioStore((s) => s.summary);
@@ -15,10 +15,8 @@ export function StatusStrip() {
   const [regime, setRegime] = useState<{ regime: string; label: string; vix_level: number } | null>(null);
 
   useEffect(() => {
-    Promise.allSettled([getMarketRegime(), getMarketIndices()]).then(([regimeRes, indicesRes]) => {
-      if (regimeRes.status === "fulfilled") {
-        setRegime(regimeRes.value.regime);
-      }
+    getMarketRegime().then((data) => {
+      setRegime(data.regime);
     }).catch(() => {});
   }, []);
 

@@ -30,6 +30,7 @@ export function useDataPipeline() {
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
+    let cancelled = false;
 
     const fetchInitialData = (attempt = 1) => {
       const { watchlist, selectedSymbol } = useMarketStore.getState();
@@ -37,6 +38,7 @@ export function useDataPipeline() {
       // Fetch initial quotes for watchlist
       getSnapshot(watchlist)
         .then((snapshot) => {
+          if (cancelled) return;
           const quotes: Quote[] = Object.values(snapshot);
           if (quotes.length) {
             useMarketStore.getState().updateQuotes(quotes);
@@ -53,6 +55,7 @@ export function useDataPipeline() {
       if (!watchlist.includes(selectedSymbol)) {
         getSnapshot([selectedSymbol])
           .then((snapshot) => {
+            if (cancelled) return;
             const quotes: Quote[] = Object.values(snapshot);
             if (quotes.length) {
               useMarketStore.getState().updateQuotes(quotes);
@@ -63,31 +66,44 @@ export function useDataPipeline() {
 
       // Fetch portfolio data
       getPositions()
-        .then((positions) => usePortfolioStore.getState().setPositions(positions))
+        .then((positions) => {
+          if (cancelled) return;
+          usePortfolioStore.getState().setPositions(positions);
+        })
         .catch((err) => {
           console.warn("[DataPipeline] Positions fetch failed:", err.message);
         });
 
       getOrders()
-        .then((orders) => usePortfolioStore.getState().setOrders(orders))
+        .then((orders) => {
+          if (cancelled) return;
+          usePortfolioStore.getState().setOrders(orders);
+        })
         .catch((err) => {
           console.warn("[DataPipeline] Orders fetch failed:", err.message);
         });
 
       getPortfolioSummary()
-        .then((summary) => usePortfolioStore.getState().setSummary(summary))
+        .then((summary) => {
+          if (cancelled) return;
+          usePortfolioStore.getState().setSummary(summary);
+        })
         .catch((err) => {
           console.warn("[DataPipeline] Summary fetch failed:", err.message);
         });
 
       getPortfolioGreeks()
-        .then((greeks) => usePortfolioStore.getState().setGreeks(greeks))
+        .then((greeks) => {
+          if (cancelled) return;
+          usePortfolioStore.getState().setGreeks(greeks);
+        })
         .catch((err) => {
           console.warn("[DataPipeline] Greeks fetch failed:", err.message);
         });
     };
 
     fetchInitialData();
+    return () => { cancelled = true; };
   }, []);
 
   // Route WS messages to stores
@@ -111,6 +127,7 @@ export function useDataPipeline() {
           const mapped = rawPositions.map((p) => ({
             symbol: (p.symbol as string) ?? "",
             quantity: (p.quantity as number) ?? (p.qty as number) ?? 0,
+            side: (p.side as "long" | "short") ?? undefined,
             avgCost: (p.avg_cost as number) ?? (p.avgCost as number) ?? 0,
             currentPrice: (p.current_price as number) ?? (p.currentPrice as number) ?? 0,
             unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,

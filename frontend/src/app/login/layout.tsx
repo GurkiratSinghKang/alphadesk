@@ -8,7 +8,7 @@ export default function LoginLayout({ children }: { children: ReactNode }) {
         <div className="absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[128px]" />
         <div className="absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-[var(--profit)]/5 blur-[128px]" />
       </div>
-      {children}
+      <main className="relative z-10">{children}</main>
     </div>
   );
 }

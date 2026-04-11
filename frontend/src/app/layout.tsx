@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AlphaDesk",
+  title: "AlphaDesk — AI-Powered Trading Terminal",
   description:
     "Claude-powered trading platform. AI-driven analysis, options flow, and portfolio management.",
 };

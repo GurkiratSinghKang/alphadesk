@@ -1,0 +1,383 @@
+{
+  "auditDate": "2026-04-11T17:07:48.054Z",
+  "baseUrl": "https://tradingalpha.net",
+  "pages": {
+    "/": {
+      "performance": {
+        "score": 100,
+        "issues": [],
+        "metrics": {
+          "pageLoadTimeMs": 176,
+          "domElementCount": 55,
+          "firstContentfulPaintMs": 168,
+          "largestContentfulPaintMs": 168,
+          "cumulativeLayoutShift": 0,
+          "jsResourceCount": 11,
+          "cssResourceCount": 5,
+          "totalResources": 15,
+          "totalTransferredBytes": 88912,
+          "networkRequestCount": 17
+        }
+      },
+      "bestPractices": {
+        "score": 100,
+        "issues": [],
+        "details": {}
+      },
+      "seo": {
+        "score": 95,
+        "issues": [
+          "Title tag is too short: \"AlphaDesk\""
+        ],
+        "details": {
+          "title": "AlphaDesk",
+          "language": "en",
+          "headings": {
+            "issues": [],
+            "h1Count": 1,
+            "totalHeadings": 1
+          }
+        }
+      },
+      "accessibility": {
+        "score": 77,
+        "issues": [
+          "2 element(s) with insufficient color contrast",
+          "2 form input(s) without labels",
+          "Missing <main> or [role=\"main\"] landmark",
+          "Missing <nav> or [role=\"navigation\"] landmark"
+        ],
+        "details": {
+          "contrastIssues": [
+            {
+              "text": "AlphaDesk",
+              "tag": "h1",
+              "color": "rgb(226, 226, 234)",
+              "background": "rgba(0, 0, 0, 0)",
+              "contrastRatio": 1.29,
+              "required": 3,
+              "isLargeText": true
+            },
+            {
+              "text": "Sign In",
+              "tag": "button",
+              "color": "rgb(255, 255, 255)",
+              "background": "rgb(59, 130, 246)",
+              "contrastRatio": 3.68,
+              "required": 4.5,
+              "isLargeText": false
+            }
+          ],
+          "inputsWithoutLabels": [
+            {
+              "tag": "input",
+              "type": "",
+              "id": "base-ui-_R_hinqbrb_",
+              "name": "",
+              "placeholder": "admin"
+            },
+            {
+              "tag": "input",
+              "type": "password",
+              "id": "base-ui-_R_iinqbrb_",
+              "name": "",
+              "placeholder": "Password"
+            }
+          ],
+          "landmarks": {
+            "main": 0,
+            "nav": 0,
+            "banner": 0,
+            "contentinfo": 0,
+            "complementary": 0
+          }
+        }
+      }
+    },
+    "/trade": {
+      "performance": {
+        "score": 100,
+        "issues": [],
+        "metrics": {
+          "pageLoadTimeMs": 96,
+          "domElementCount": 55,
+          "firstContentfulPaintMs": 88,
+          "largestContentfulPaintMs": 88,
+          "cumulativeLayoutShift": 0,
+          "jsResourceCount": 11,
+          "cssResourceCount": 5,
+          "totalResources": 15,
+          "totalTransferredBytes": 88912,
+          "networkRequestCount": 17
+        }
+      },
+      "bestPractices": {
+        "score": 100,
+        "issues": [],
+        "details": {}
+      },
+      "seo": {
+        "score": 95,
+        "issues": [
+          "Title tag is too short: \"AlphaDesk\""
+        ],
+        "details": {
+          "title": "AlphaDesk",
+          "language": "en",
+          "headings": {
+            "issues": [],
+            "h1Count": 1,
+            "totalHeadings": 1
+          }
+        }
+      },
+      "accessibility": {
+        "score": 77,
+        "issues": [
+          "2 element(s) with insufficient color contrast",
+          "2 form input(s) without labels",
+          "Missing <main> or [role=\"main\"] landmark",
+          "Missing <nav> or [role=\"navigation\"] landmark"
+        ],
+        "details": {
+          "contrastIssues": [
+            {
+              "text": "AlphaDesk",
+              "tag": "h1",
+              "color": "rgb(226, 226, 234)",
+              "background": "rgba(0, 0, 0, 0)",
+              "contrastRatio": 1.29,
+              "required": 3,
+              "isLargeText": true
+            },
+            {
+              "text": "Sign In",
+              "tag": "button",
+              "color": "rgb(255, 255, 255)",
+              "background": "rgb(59, 130, 246)",
+              "contrastRatio": 3.68,
+              "required": 4.5,
+              "isLargeText": false
+            }
+          ],
+          "inputsWithoutLabels": [
+            {
+              "tag": "input",
+              "type": "",
+              "id": "base-ui-_R_hinqbrb_",
+              "name": "",
+              "placeholder": "admin"
+            },
+            {
+              "tag": "input",
+              "type": "password",
+              "id": "base-ui-_R_iinqbrb_",
+              "name": "",
+              "placeholder": "Password"
+            }
+          ],
+          "landmarks": {
+            "main": 0,
+            "nav": 0,
+            "banner": 0,
+            "contentinfo": 0,
+            "complementary": 0
+          }
+        }
+      }
+    },
+    "/pipeline": {
+      "performance": {
+        "score": 100,
+        "issues": [],
+        "metrics": {
+          "pageLoadTimeMs": 93,
+          "domElementCount": 55,
+          "firstContentfulPaintMs": 104,
+          "largestContentfulPaintMs": 104,
+          "cumulativeLayoutShift": 0,
+          "jsResourceCount": 11,
+          "cssResourceCount": 5,
+          "totalResources": 15,
+          "totalTransferredBytes": 88912,
+          "networkRequestCount": 17
+        }
+      },
+      "bestPractices": {
+        "score": 100,
+        "issues": [],
+        "details": {}
+      },
+      "seo": {
+        "score": 95,
+        "issues": [
+          "Title tag is too short: \"AlphaDesk\""
+        ],
+        "details": {
+          "title": "AlphaDesk",
+          "language": "en",
+          "headings": {
+            "issues": [],
+            "h1Count": 1,
+            "totalHeadings": 1
+          }
+        }
+      },
+      "accessibility": {
+        "score": 77,
+        "issues": [
+          "2 element(s) with insufficient color contrast",
+          "2 form input(s) without labels",
+          "Missing <main> or [role=\"main\"] landmark",
+          "Missing <nav> or [role=\"navigation\"] landmark"
+        ],
+        "details": {
+          "contrastIssues": [
+            {
+              "text": "AlphaDesk",
+              "tag": "h1",
+              "color": "rgb(226, 226, 234)",
+              "background": "rgba(0, 0, 0, 0)",
+              "contrastRatio": 1.29,
+              "required": 3,
+              "isLargeText": true
+            },
+            {
+              "text": "Sign In",
+              "tag": "button",
+              "color": "rgb(255, 255, 255)",
+              "background": "rgb(59, 130, 246)",
+              "contrastRatio": 3.68,
+              "required": 4.5,
+              "isLargeText": false
+            }
+          ],
+          "inputsWithoutLabels": [
+            {
+              "tag": "input",
+              "type": "",
+              "id": "base-ui-_R_hinqbrb_",
+              "name": "",
+              "placeholder": "admin"
+            },
+            {
+              "tag": "input",
+              "type": "password",
+              "id": "base-ui-_R_iinqbrb_",
+              "name": "",
+              "placeholder": "Password"
+            }
+          ],
+          "landmarks": {
+            "main": 0,
+            "nav": 0,
+            "banner": 0,
+            "contentinfo": 0,
+            "complementary": 0
+          }
+        }
+      }
+    },
+    "/strategies/pead": {
+      "performance": {
+        "score": 100,
+        "issues": [],
+        "metrics": {
+          "pageLoadTimeMs": 94,
+          "domElementCount": 55,
+          "firstContentfulPaintMs": 84,
+          "largestContentfulPaintMs": 84,
+          "cumulativeLayoutShift": 0,
+          "jsResourceCount": 11,
+          "cssResourceCount": 5,
+          "totalResources": 15,
+          "totalTransferredBytes": 88912,
+          "networkRequestCount": 17
+        }
+      },
+      "bestPractices": {
+        "score": 100,
+        "issues": [],
+        "details": {}
+      },
+      "seo": {
+        "score": 95,
+        "issues": [
+          "Title tag is too short: \"AlphaDesk\""
+        ],
+        "details": {
+          "title": "AlphaDesk",
+          "language": "en",
+          "headings": {
+            "issues": [],
+            "h1Count": 1,
+            "totalHeadings": 1
+          }
+        }
+      },
+      "accessibility": {
+        "score": 77,
+        "issues": [
+          "2 element(s) with insufficient color contrast",
+          "2 form input(s) without labels",
+          "Missing <main> or [role=\"main\"] landmark",
+          "Missing <nav> or [role=\"navigation\"] landmark"
+        ],
+        "details": {
+          "contrastIssues": [
+            {
+              "text": "AlphaDesk",
+              "tag": "h1",
+              "color": "rgb(226, 226, 234)",
+              "background": "rgba(0, 0, 0, 0)",
+              "contrastRatio": 1.29,
+              "required": 3,
+              "isLargeText": true
+            },
+            {
+              "text": "Sign In",
+              "tag": "button",
+              "color": "rgb(255, 255, 255)",
+              "background": "rgb(59, 130, 246)",
+              "contrastRatio": 3.68,
+              "required": 4.5,
+              "isLargeText": false
+            }
+          ],
+          "inputsWithoutLabels": [
+            {
+              "tag": "input",
+              "type": "",
+              "id": "base-ui-_R_hinqbrb_",
+              "name": "",
+              "placeholder": "admin"
+            },
+            {
+              "tag": "input",
+              "type": "password",
+              "id": "base-ui-_R_iinqbrb_",
+              "name": "",
+              "placeholder": "Password"
+            }
+          ],
+          "landmarks": {
+            "main": 0,
+            "nav": 0,
+            "banner": 0,
+            "contentinfo": 0,
+            "complementary": 0
+          }
+        }
+      }
+    }
+  },
+  "summary": {
+    "overallScore": 93,
+    "categoryAverages": {
+      "performance": 100,
+      "bestPractices": 100,
+      "seo": 95,
+      "accessibility": 77
+    }
+  }
+}

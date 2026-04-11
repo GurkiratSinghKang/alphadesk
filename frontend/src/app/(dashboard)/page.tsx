@@ -6,7 +6,6 @@ import { Activity, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePortfolioStore } from "@/stores/portfolio";
 import {
-  getPortfolioSummary,
   getMarketNews,
   getStrategies,
   getMarketIndices,
@@ -54,7 +53,6 @@ export default function DashboardPage() {
 function CommandCenter() {
   const router = useRouter();
   const summary = usePortfolioStore((s) => s.summary);
-  const setSummary = usePortfolioStore((s) => s.setSummary);
 
   // ─── State ─────────────────────────────────────────────────
   const [strategies, setStrategies] = useState<StrategyData[]>([]);
@@ -73,7 +71,6 @@ function CommandCenter() {
     async function fetchAll() {
       // Fire all requests in parallel
       const [
-        summaryRes,
         strategiesRes,
         indicesRes,
         regimeRes,
@@ -82,7 +79,6 @@ function CommandCenter() {
         pipelineStatusRes,
         pipelineHistoryRes,
       ] = await Promise.allSettled([
-        getPortfolioSummary(),
         getStrategies(),
         getMarketIndices(),
         getMarketRegime(),
@@ -95,10 +91,6 @@ function CommandCenter() {
       if (cancelled) return;
 
       try {
-      if (summaryRes.status === "fulfilled") {
-        setSummary(summaryRes.value);
-      }
-
       // Strategies
       if (strategiesRes.status === "fulfilled" && Array.isArray(strategiesRes.value)) {
         const apiStrategies = strategiesRes.value;
@@ -200,26 +192,29 @@ function CommandCenter() {
       }
 
       // Fetch real equity curve from performance endpoint
-      try {
-        const perfResp = await fetch("/api/v1/portfolio/performance", { credentials: "include" });
-        if (perfResp.ok) {
-          const perfData = await perfResp.json();
-          if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
-            const baseEquity = summaryRes.status === "fulfilled" ? summaryRes.value.equity : 100000;
-            const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
-            const startEquity = baseEquity - totalPnl;
-            const history = perfData.equity_curve.map((pt: any, i: number) => {
-              const d = new Date();
-              d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
-              return {
-                date: d.toISOString().slice(0, 10),
-                value: startEquity + (pt.cumulative_pnl ?? 0),
-              };
-            });
-            if (!cancelled) setEquityHistory(history);
+      if (!cancelled) {
+        try {
+          const perfResp = await fetch("/api/v1/portfolio/performance", { credentials: "include" });
+          if (cancelled) return;
+          if (perfResp.ok) {
+            const perfData = await perfResp.json();
+            if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
+              const baseEquity = summary.equity > 0 ? summary.equity : 100000;
+              const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
+              const startEquity = baseEquity - totalPnl;
+              const history = perfData.equity_curve.map((pt: any, i: number) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
+                return {
+                  date: d.toISOString().slice(0, 10),
+                  value: startEquity + (pt.cumulative_pnl ?? 0),
+                };
+              });
+              if (!cancelled) setEquityHistory(history);
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       if (!cancelled) setLoading(false);
     }
@@ -232,7 +227,7 @@ function CommandCenter() {
     return () => {
       cancelled = true;
     };
-  }, [setSummary]);
+  }, []);
 
   // ─── Derived values ────────────────────────────────────────
   const portfolioValue = Number.isFinite(summary.equity) && summary.equity > 0 ? summary.equity : 0;

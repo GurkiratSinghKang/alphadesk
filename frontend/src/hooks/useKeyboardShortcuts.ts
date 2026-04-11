@@ -145,7 +145,11 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      lastKeyRef.current = { key: keyStr, time: now };
+      // Only track keys that are chord prefixes
+      const isPotentialChordStart = Object.keys(bindings).some(
+        (k) => k.startsWith(keyStr + " ")
+      );
+      lastKeyRef.current = isPotentialChordStart ? { key: keyStr, time: now } : null;
     }
 
     document.addEventListener("keydown", onKeyDown);

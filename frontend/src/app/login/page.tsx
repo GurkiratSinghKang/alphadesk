@@ -58,8 +58,9 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-xs text-muted-foreground">Username</label>
+          <label htmlFor="login-username" className="text-xs text-muted-foreground">Username</label>
           <Input
+            id="login-username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="admin"
@@ -68,8 +69,9 @@ export default function LoginPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground">Password</label>
+          <label htmlFor="login-password" className="text-xs text-muted-foreground">Password</label>
           <Input
+            id="login-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
