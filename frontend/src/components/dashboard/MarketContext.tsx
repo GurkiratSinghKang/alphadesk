@@ -1,9 +1,9 @@
 "use client";
 
 import { Newspaper, ExternalLink } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Sparkline } from "@/components/dashboard/Sparkline";
+import { AllocationDonut } from "./AllocationDonut";
 import type { PortfolioSummary } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -214,42 +214,14 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
               </div>
             </>
           ) : (
-            <>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Account Overview
-              </h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Cash</span>
-                  <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.cash)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Buying Power</span>
-                  <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.buyingPower)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Market Value</span>
-                  <span className="text-sm tabular-nums text-foreground">{formatCurrency(summary.totalMarketValue)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Positions</span>
-                  <span className="text-sm tabular-nums text-foreground">{summary.positionsCount}</span>
-                </div>
-                <Separator className="bg-border" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Unrealized P&L</span>
-                  <span className={cn("text-sm font-semibold tabular-nums", summary.unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {summary.unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(summary.unrealizedPnl)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Realized Today</span>
-                  <span className={cn("text-sm font-semibold tabular-nums", summary.realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {summary.realizedPnlToday >= 0 ? "+" : ""}{formatCurrency(summary.realizedPnlToday)}
-                  </span>
-                </div>
-              </div>
-            </>
+            <AllocationDonut
+              cash={summary.cash}
+              invested={summary.totalMarketValue}
+              equity={summary.equity}
+              buyingPower={summary.buyingPower}
+              unrealizedPnl={summary.unrealizedPnl}
+              realizedPnlToday={summary.realizedPnlToday}
+            />
           )}
         </div>
       </div>
