@@ -17,6 +17,7 @@ import { HelpCircle } from "@/components/ui/HelpCircle";
 import { useMarketStore } from "@/stores/market";
 import { TradingChart, type TradingChartHandle } from "@/components/charts/TradingChart";
 import {
+  cn,
   formatCurrency,
   formatChangeWithSign,
   formatPercent,
@@ -302,6 +303,28 @@ export function ChartPanel() {
             {tf}
           </button>
         ))}
+        <div className="mx-1.5 h-4 w-px bg-[#2a2a3e]" />
+        <div className="flex items-center gap-0.5">
+          {([
+            { type: "candle" as const, label: "🕯" },
+            { type: "line" as const, label: "📈" },
+            { type: "area" as const, label: "▨" },
+          ]).map(({ type, label }) => (
+            <button
+              key={type}
+              onClick={() => setChartType(type)}
+              className={cn(
+                "h-6 w-7 rounded text-[11px] transition-colors",
+                chartType === type
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )}
+              title={type.charAt(0).toUpperCase() + type.slice(1)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Chart — BUG #11: pass chartType, BUG #12: pass indicators */}
