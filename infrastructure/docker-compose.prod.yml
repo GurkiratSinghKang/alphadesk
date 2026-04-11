@@ -39,7 +39,8 @@ services:
       DEBUG: "false"
       DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:-alphadesk_dev}@timescaledb:5432/alphadesk
       REDIS_URL: redis://redis:6379/0
-    volumes: []
+    volumes:
+      - /var/lib/alphadesk/pipeline_logs:/app/data/pipeline_logs
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
