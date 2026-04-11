@@ -4,6 +4,7 @@ import { Newspaper, ExternalLink } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { AllocationDonut } from "./AllocationDonut";
+import { SectorTreemap } from "./SectorTreemap";
 import type { PortfolioSummary } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -38,65 +39,6 @@ function formatTimeShort(dateStr: string): string {
     minute: "2-digit",
     hour12: true,
   });
-}
-
-// ─── Sector Heatmap ──────────────────────────────────────────
-
-function SectorHeatmap({ sectors }: { sectors: SectorData[] }) {
-  if (sectors.length === 0) return null;
-
-  const abbrev: Record<string, string> = {
-    Technology: "Technology",
-    Healthcare: "Healthcare",
-    Financials: "Financials",
-    "Consumer Discretionary": "Cons. Discr.",
-    "Communication Services": "Comm. Svcs",
-    Industrials: "Industrials",
-    "Consumer Staples": "Cons. Staples",
-    Energy: "Energy",
-    Utilities: "Utilities",
-    "Real Estate": "Real Estate",
-    Materials: "Materials",
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {sectors.map((s) => {
-        const val = s.change_pct;
-        const bg =
-          val > 1
-            ? "bg-emerald-600/70"
-            : val > 0.3
-              ? "bg-emerald-600/40"
-              : val > 0
-                ? "bg-emerald-600/20"
-                : val > -0.3
-                  ? "bg-red-600/20"
-                  : val > -1
-                    ? "bg-red-600/40"
-                    : "bg-red-600/70";
-        const text = val >= 0 ? "text-emerald-300" : "text-red-300";
-
-        return (
-          <div
-            key={s.sector}
-            className={cn(
-              "rounded px-2 py-1 text-center",
-              bg
-            )}
-          >
-            <p className="text-xs font-medium text-foreground/80">
-              {abbrev[s.sector] ?? s.sector}
-            </p>
-            <p className={cn("text-xs tabular-nums font-semibold", text)}>
-              {val >= 0 ? "+" : ""}
-              {val.toFixed(1)}%
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ─── Market Context Panel ────────────────────────────────────
@@ -170,16 +112,14 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
           </div>
         </div>
 
-        {/* Sector Heatmap */}
+        {/* Sector Treemap */}
         <div>
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Sector Performance
           </h3>
-          {sectors.length > 0 ? (
-            <SectorHeatmap sectors={sectors} />
-          ) : (
-            <p className="text-xs text-muted-foreground">No sector data</p>
-          )}
+          <div className="w-full">
+            <SectorTreemap sectors={sectors} width={380} height={120} />
+          </div>
         </div>
 
         {/* Headlines or Account Overview */}
