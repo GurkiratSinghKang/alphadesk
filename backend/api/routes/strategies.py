@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import random
 import statistics
@@ -11,6 +12,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -298,6 +301,7 @@ def _get_real_strategy_performance() -> dict[str, dict]:
 
         return perf
     except Exception:
+        logger.warning("Failed to compute real strategy performance from trade ledger", exc_info=True)
         return {}
 
 
@@ -318,17 +322,34 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
 _ID_TO_NAME: dict[str, str] = {v: k for k, v in _STRATEGY_NAME_TO_ID.items()}
 
 
-# In-memory status overrides (toggle endpoint)
-_status_overrides: dict[str, StrategyStatus] = {}
+async def _get_strategy_status_override(strategy_id: str) -> StrategyStatus | None:
+    """Retrieve a persisted strategy status override from Redis."""
+    try:
+        from core.redis import cache_get
+        result = await cache_get(f"strategy_status:{strategy_id}")
+        return StrategyStatus(result["status"]) if result else None
+    except Exception:
+        logger.warning("Failed to read strategy status override from Redis", exc_info=True)
+        return None
 
 
-def _get_strategy_data(strategy_id: str) -> dict[str, Any] | None:
+async def _set_strategy_status_override(strategy_id: str, status: StrategyStatus) -> None:
+    """Persist a strategy status override to Redis (no TTL — survives restarts)."""
+    try:
+        from core.redis import cache_set
+        await cache_set(f"strategy_status:{strategy_id}", {"status": status.value}, ttl_seconds=0)
+    except Exception:
+        logger.warning("Failed to persist strategy status override to Redis", exc_info=True)
+
+
+async def _get_strategy_data(strategy_id: str) -> dict[str, Any] | None:
     data = _STRATEGIES.get(strategy_id)
     if data is None:
         return None
     result = dict(data)
-    if strategy_id in _status_overrides:
-        result["status"] = _status_overrides[strategy_id]
+    override = await _get_strategy_status_override(strategy_id)
+    if override is not None:
+        result["status"] = override
     return result
 
 
@@ -371,13 +392,13 @@ async def list_strategies() -> list[StrategySummary]:
                             cur = resp.json().get("trade", {}).get("p", 0)
                             unrealized_by_strat[strat] = unrealized_by_strat.get(strat, 0) + (cur - entry) * shares
                     except Exception:
-                        pass
+                        logger.warning("Failed to fetch live price for %s (unrealized P&L skipped)", sym, exc_info=True)
         except Exception:
-            pass
+            logger.warning("Failed to fetch live prices for open positions", exc_info=True)
 
     summaries = []
     for sid, data in _STRATEGIES.items():
-        d = _get_strategy_data(sid)
+        d = await _get_strategy_data(sid)
         if d is None:
             continue
 
@@ -421,7 +442,7 @@ async def get_strategy_performance(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> StrategyPerformance:
     """Get detailed performance data for a single strategy using real ledger data only."""
-    data = _get_strategy_data(strategy_id)
+    data = await _get_strategy_data(strategy_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
@@ -477,7 +498,7 @@ async def toggle_strategy(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> ToggleResponse:
     """Toggle a strategy between active and paused."""
-    data = _get_strategy_data(strategy_id)
+    data = await _get_strategy_data(strategy_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
@@ -487,7 +508,7 @@ async def toggle_strategy(
     else:
         new_status = StrategyStatus.ACTIVE
 
-    _status_overrides[strategy_id] = new_status
+    await _set_strategy_status_override(strategy_id, new_status)
 
     return ToggleResponse(
         id=strategy_id,
@@ -507,6 +528,7 @@ def _get_symbol_sector_map() -> dict[str, str]:
             if s.sector
         }
     except Exception:
+        logger.warning("Failed to build symbol-sector map", exc_info=True)
         return {}
 
 
@@ -526,7 +548,7 @@ async def get_strategy_analytics(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> StrategyAnalytics:
     """Return in-depth analytics for a single strategy computed from the trade ledger."""
-    data = _get_strategy_data(strategy_id)
+    data = await _get_strategy_data(strategy_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 

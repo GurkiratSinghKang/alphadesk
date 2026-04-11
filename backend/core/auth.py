@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -36,7 +39,7 @@ def create_access_token(subject: str) -> str:
 def create_refresh_token(subject: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return jwt.encode(
-        {"sub": subject, "exp": expire, "type": "refresh"},
+        {"sub": subject, "exp": expire, "type": "refresh", "jti": str(uuid.uuid4())},
         settings.jwt_secret_value,
         algorithm=ALGORITHM,
     )
@@ -75,7 +78,7 @@ async def revoke_token(token: str) -> None:
             ttl = max(int(payload.get("exp", 0) - datetime.now(timezone.utc).timestamp()), 0)
             await cache_set(f"revoked:{jti}", {"revoked": True}, ttl_seconds=max(ttl, 60))
     except Exception:
-        pass
+        logger.warning("Token revocation failed", exc_info=True)
 
 
 async def require_auth(

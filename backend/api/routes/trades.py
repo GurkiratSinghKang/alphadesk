@@ -18,10 +18,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Emergency halt state
+# Emergency halt state (persisted in Redis)
 # ---------------------------------------------------------------------------
 
-_trading_halted = False
+async def _is_trading_halted() -> bool:
+    """Check if trading is halted (persisted in Redis)."""
+    try:
+        from core.redis import cache_get
+        result = await cache_get("trading:halted")
+        return result is not None and result.get("halted", False)
+    except Exception:
+        return False  # If Redis is down, allow trading (fail-open)
+
+
+async def _set_trading_halted(halted: bool) -> None:
+    """Set trading halt state in Redis."""
+    try:
+        from core.redis import cache_set
+        if halted:
+            await cache_set("trading:halted", {"halted": True}, ttl_seconds=86400)  # 24h max
+        else:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis:
+                await redis.delete("trading:halted")
+    except Exception:
+        logger.warning("Failed to set trading halt state in Redis", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +162,7 @@ async def create_order(
     Supports single-leg equity orders and multi-leg options orders.
     All orders pass through the RiskManagerAgent before submission.
     """
-    if _trading_halted:
+    if await _is_trading_halted():
         raise HTTPException(
             status_code=503,
             detail="Trading is halted. Use POST /api/v1/trades/resume to resume.",
@@ -200,7 +222,7 @@ async def create_order(
                 db.add(trade)
                 await db.flush()
     except Exception:
-        pass  # DB not available — order still submitted to broker
+        logger.warning("Failed to persist trade record to DB (order still submitted to broker)", exc_info=True)
 
     response = OrderResponse(
         id=order_id,
@@ -292,6 +314,7 @@ async def list_orders(
     except HTTPException:
         raise
     except Exception:
+        logger.warning("Failed to fetch orders from broker", exc_info=True)
         return []
 
 
@@ -362,6 +385,7 @@ async def list_positions() -> list[PositionResponse]:
     except HTTPException:
         raise
     except Exception:
+        logger.warning("Failed to fetch positions from broker", exc_info=True)
         return []
 
 
@@ -411,6 +435,7 @@ async def get_trade_history(
             for t in trades
         ]
     except Exception:
+        logger.warning("Failed to retrieve trade history from DB", exc_info=True)
         return []
 
 
@@ -470,8 +495,7 @@ async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
 @router.post("/halt")
 async def halt_trading(username: str = Depends(require_auth)):
     """Emergency halt — prevents all new orders."""
-    global _trading_halted
-    _trading_halted = True
+    await _set_trading_halted(True)
     # Cancel all open orders on Alpaca
     try:
         from core.config import settings
@@ -489,8 +513,7 @@ async def halt_trading(username: str = Depends(require_auth)):
 @router.post("/resume")
 async def resume_trading(username: str = Depends(require_auth)):
     """Resume trading after emergency halt."""
-    global _trading_halted
-    _trading_halted = False
+    await _set_trading_halted(False)
     return {"halted": False, "message": "Trading resumed."}
 
 
