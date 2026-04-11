@@ -409,15 +409,12 @@ export default function PipelinePage() {
                 </h2>
               </div>
               {!todayRun ? (
-                <Card className="border-border bg-[var(--surface)]">
-                  <CardContent className="py-8 text-center">
-                    <Bot className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-                    <p className="text-xs text-muted-foreground">
-                      No pipeline run today yet &mdash; click &quot;Run
-                      Now&quot; to trigger manually
-                    </p>
-                  </CardContent>
-                </Card>
+                <div className="flex items-center justify-between rounded-lg border border-border bg-[var(--surface)] px-4 py-3">
+                  <div>
+                    <p className="text-body">No run today</p>
+                    <p className="text-hint">Click Run Now to trigger manually</p>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {/* Screened */}

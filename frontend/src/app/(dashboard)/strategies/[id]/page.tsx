@@ -111,10 +111,13 @@ function EquityCurve({ data, height = 400 }: { data: { date: string; value: numb
 // ─── Metric Card ─────────────────────────────────────────────
 
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
+  const isEmpty = value === "N/A" || value === "—";
   return (
-    <div className="rounded-lg border border-border bg-[var(--panel)] px-4 py-3">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</p>
-      <p className={cn("text-lg font-semibold tabular-nums", color)}>{value}</p>
+    <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "opacity-50")}>
+      <p className="text-label mb-1">{label}</p>
+      <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#555]" : color)}>
+        {isEmpty ? <span className="text-sm font-normal">No data</span> : value}
+      </p>
     </div>
   );
 }
@@ -318,11 +321,14 @@ export default function StrategyDetailPage() {
           </div>
 
           {filteredTrades.length === 0 ? (
-            <Card className="border-border bg-[var(--surface)]">
-              <CardContent className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">No trades recorded for this strategy yet.</p>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center justify-center py-8">
+              <TrendingUp className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
+              <p className="text-body">No trades yet</p>
+              <p className="text-hint mt-1">This strategy will enter positions when its signals trigger</p>
+              <a href="/pipeline" className="mt-2 text-[11px] text-[var(--primary)] hover:underline">
+                View Pipeline &rarr;
+              </a>
+            </div>
           ) : (
             <Card className="border-border bg-[var(--surface)] overflow-hidden">
               <div className="overflow-x-auto">

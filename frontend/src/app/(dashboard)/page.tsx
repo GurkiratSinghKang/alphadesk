@@ -667,7 +667,17 @@ function PositionsSummary() {
     getPositions().then(setPositions).catch(() => {});
   }, []);
 
-  if (positions.length === 0) return null;
+  if (positions.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-[var(--panel)] px-4 py-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Briefcase className="h-4 w-4 text-muted-foreground opacity-30" />
+          <span className="text-sm font-semibold text-foreground">Open Positions</span>
+        </div>
+        <p className="text-hint">No open positions — the pipeline opens trades during market hours</p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">
@@ -1117,10 +1127,16 @@ function CommandCenter() {
               <ScrollArea className={feedItems.length <= 3 ? "max-h-[200px]" : "h-[320px]"}>
                 <div className="space-y-1 p-3">
                   {feedItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                      <Info className="h-6 w-6 mb-2 opacity-40" />
-                      <p className="text-sm">No activity yet today</p>
-                      <p className="text-xs mt-1">Events will appear as the pipeline runs</p>
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <Info className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
+                      <p className="text-body">No activity yet today</p>
+                      <p className="text-hint mt-1">Events appear when the pipeline runs</p>
+                      <button
+                        onClick={() => router.push("/pipeline")}
+                        className="mt-2 text-[11px] text-[var(--primary)] hover:underline"
+                      >
+                        Run Pipeline &rarr;
+                      </button>
                     </div>
                   ) : (
                     feedItems.map((item) => (
