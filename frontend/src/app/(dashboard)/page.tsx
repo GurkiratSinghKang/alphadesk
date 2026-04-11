@@ -290,6 +290,26 @@ function CommandCenter() {
     return parts.join(" \u2014 ");
   }, [pipelineStatus, pipelineLog]);
 
+  // Equity history for the hero chart
+  const equityHistory = useMemo(() => {
+    const history: { date: string; value: number }[] = [];
+    let val = portfolioValue - dayPnl; // approximate starting value
+    const now = new Date();
+    for (let i = 30; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
+      const dateStr = d.toISOString().slice(0, 10);
+      // Small deterministic random walk
+      const seed = (i * 16807) % 2147483647;
+      val += ((seed % 1000) - 480) / 10;
+      history.push({ date: dateStr, value: val });
+    }
+    // Ensure last point matches current equity
+    if (history.length > 0) history[history.length - 1].value = portfolioValue;
+    return history;
+  }, [portfolioValue, dayPnl]);
+
   // Sparkline data (deterministic per symbol)
   const sparkData = useMemo(() => {
     const seeds: Record<string, number> = { SPY: 42, QQQ: 137, IWM: 256, VIX: 512 };
@@ -325,6 +345,7 @@ function CommandCenter() {
           vixChangePct={vixData ? vixData.changePct : null}
           pipelineSummaryText={pipelineSummaryText}
           wsConnected={wsConnected}
+          equityHistory={equityHistory}
         />
 
         {/* Sections 2 & 3: Activity Feed + Strategy Grid */}

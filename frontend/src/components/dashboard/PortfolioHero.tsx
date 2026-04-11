@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, cn } from "@/lib/utils";
+
+type Period = "1W" | "1M" | "3M" | "YTD";
 
 interface PortfolioHeroProps {
   portfolioValue: number;
@@ -16,6 +19,104 @@ interface PortfolioHeroProps {
   vixChangePct: number | null;
   pipelineSummaryText: string;
   wsConnected: boolean;
+  equityHistory: { date: string; value: number }[];
+}
+
+function filterByPeriod(
+  history: { date: string; value: number }[],
+  period: Period
+): { date: string; value: number }[] {
+  if (history.length === 0) return history;
+  const now = new Date();
+  let cutoff: Date;
+  if (period === "1W") {
+    cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - 7);
+  } else if (period === "1M") {
+    cutoff = new Date(now);
+    cutoff.setMonth(now.getMonth() - 1);
+  } else if (period === "3M") {
+    cutoff = new Date(now);
+    cutoff.setMonth(now.getMonth() - 3);
+  } else {
+    // YTD
+    cutoff = new Date(now.getFullYear(), 0, 1);
+  }
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const filtered = history.filter((d) => d.date >= cutoffStr);
+  return filtered.length > 0 ? filtered : history;
+}
+
+function EquityCurveSVG({
+  data,
+}: {
+  data: { date: string; value: number }[];
+}) {
+  const W = 1000;
+  const H = 120;
+  const PAD_X = 0;
+  const PAD_Y = 8;
+
+  if (data.length < 2) return null;
+
+  const values = data.map((d) => d.value);
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+
+  const toX = (i: number) =>
+    PAD_X + (i / (data.length - 1)) * (W - PAD_X * 2);
+  const toY = (v: number) =>
+    PAD_Y + (1 - (v - minV) / range) * (H - PAD_Y * 2);
+
+  const points = data.map((d, i) => `${toX(i)},${toY(d.value)}`).join(" ");
+
+  const firstVal = data[0].value;
+  const lastVal = data[data.length - 1].value;
+  const isUp = lastVal >= firstVal;
+  const colorVar = isUp ? "var(--profit, #22c55e)" : "var(--loss, #ef4444)";
+  const gradientId = "equity-gradient";
+
+  // Polygon: close the area down to the bottom
+  const areaPoints = [
+    `${toX(0)},${H}`,
+    ...data.map((d, i) => `${toX(i)},${toY(d.value)}`),
+    `${toX(data.length - 1)},${H}`,
+  ].join(" ");
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+      }}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={colorVar} stopOpacity="0.15" />
+          <stop offset="100%" stopColor={colorVar} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Gradient fill area */}
+      <polygon points={areaPoints} fill={`url(#${gradientId})`} />
+      {/* Line */}
+      <polyline
+        points={points}
+        fill="none"
+        stroke={colorVar}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 export function PortfolioHero({
@@ -29,10 +130,46 @@ export function PortfolioHero({
   vixChangePct,
   pipelineSummaryText,
   wsConnected,
+  equityHistory,
 }: PortfolioHeroProps) {
+  const [period, setPeriod] = useState<Period>("1M");
+
+  const filteredHistory = useMemo(
+    () => filterByPeriod(equityHistory, period),
+    [equityHistory, period]
+  );
+
   return (
-    <div className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] px-5 py-4">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+    <div
+      className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] px-5 py-4"
+      style={{ position: "relative", overflow: "hidden" }}
+    >
+      {/* SVG equity curve background */}
+      <EquityCurveSVG data={filteredHistory} />
+
+      {/* Period pill buttons — top-right corner */}
+      <div
+        className="absolute top-3 right-3 flex gap-1"
+        style={{ zIndex: 1 }}
+      >
+        {(["1W", "1M", "3M", "YTD"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+              period === p
+                ? "bg-primary/20 text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Content — sits above the SVG */}
+      <div className="relative flex flex-wrap items-center gap-x-6 gap-y-3" style={{ zIndex: 1 }}>
         {/* Portfolio Equity */}
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
