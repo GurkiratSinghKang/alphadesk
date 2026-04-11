@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Bot,
+  BarChart3,
   Brain,
   Play,
   TrendingUp,
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { cn, formatCurrency } from "@/lib/utils";
 import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
+import { BacktestPanel } from "@/components/panels/BacktestPanel";
 import {
   getPipelineStatus,
   triggerPipeline,
@@ -418,6 +420,21 @@ export default function PipelinePage() {
               </div>
               <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
                 <StrategyBuilder />
+              </div>
+            </section>
+
+            <Separator className="border-border" />
+
+            {/* Backtesting */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Backtesting
+                </h2>
+              </div>
+              <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
+                <BacktestPanel />
               </div>
             </section>
 
