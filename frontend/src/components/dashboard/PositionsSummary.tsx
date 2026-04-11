@@ -1,16 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Briefcase } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { getPositions } from "@/lib/api";
-import type { Position } from "@/types";
+import { usePortfolioStore } from "@/stores/portfolio";
 
 export function PositionsSummary() {
-  const [positions, setPositions] = useState<Position[]>([]);
-  useEffect(() => {
-    getPositions().then(setPositions).catch(() => {});
-  }, []);
+  const positions = usePortfolioStore((s) => s.positions);
 
   if (positions.length === 0) {
     return (

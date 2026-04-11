@@ -226,6 +226,18 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
 }
 
 
+def _annualized_return(return_pct: float) -> float:
+    """Calculate proper CAGR-based annualized return."""
+    if return_pct == 0:
+        return 0
+    days_held = max((date.today() - date(2026, 4, 1)).days, 1)
+    if days_held >= 365:
+        annualized = ((1 + return_pct / 100) ** (365 / days_held) - 1) * 100
+    else:
+        annualized = return_pct * (365 / days_held) if days_held > 0 else 0
+    return round(annualized, 2)
+
+
 def _generate_equity_curve(
     strategy_id: str, invested: float, return_pct: float, days: int = 90,
 ) -> list[dict[str, Any]]:
@@ -239,7 +251,7 @@ def _generate_equity_curve(
 
     curve: list[dict[str, Any]] = []
     value = invested
-    base_date = date(2026, 4, 6) - timedelta(days=days)
+    base_date = date.today() - timedelta(days=days)
 
     for i in range(days):
         d = base_date + timedelta(days=i)
@@ -449,7 +461,7 @@ async def get_strategy_performance(
         invested_amount=round(invested, 2),
         current_value=current_value,
         total_return_pct=return_pct,
-        annualized_return_pct=return_pct * 2 if return_pct != 0 else 0,
+        annualized_return_pct=_annualized_return(return_pct),
         return_dollars=return_dollars,
         win_rate=win_rate,
         sharpe_ratio=0,

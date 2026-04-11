@@ -81,8 +81,8 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float:
     return 16.5  # default — assume normal conditions rather than crisis
 
 # ----- Pipeline state -----
+_pipeline_lock = asyncio.Lock()
 _pipeline_status: dict[str, Any] = {
-    "running": False,
     "last_run": None,
     "last_result": None,
 }
@@ -496,10 +496,20 @@ async def run_daily_pipeline(
     """Execute the full multi-strategy daily trading pipeline."""
     global _pipeline_status
 
-    if _pipeline_status["running"]:
-        return {"error": "Pipeline is already running"}
+    if _pipeline_lock.locked():
+        return {"error": "Pipeline already running"}
 
-    _pipeline_status["running"] = True
+    async with _pipeline_lock:
+        return await _run_pipeline_inner(screen_limit=screen_limit, analyze_limit=analyze_limit)
+
+
+async def _run_pipeline_inner(
+    screen_limit: int = SCREEN_TOP_N,
+    analyze_limit: int = ANALYZE_TOP_N,
+) -> dict[str, Any]:
+    """Inner pipeline logic, called under _pipeline_lock."""
+    global _pipeline_status
+
     _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
 
     errors: list[str] = []
@@ -552,7 +562,6 @@ async def run_daily_pipeline(
                 errors.append(msg)
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash, "day_pnl": day_pnl}
                 _save_log(log)
-                _pipeline_status["running"] = False
                 _pipeline_status["last_result"] = "circuit_breaker"
                 return log
 
@@ -755,7 +764,6 @@ async def run_daily_pipeline(
         errors.append(f"Pipeline exception: {e}")
     finally:
         _save_log(log)
-        _pipeline_status["running"] = False
         _pipeline_status["last_result"] = "success" if not errors else "completed_with_errors"
 
     return log

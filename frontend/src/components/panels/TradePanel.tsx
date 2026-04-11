@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Loader2,
   X,
+  BookOpen,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -47,7 +48,6 @@ interface TradeLeg {
   vega?: number;
 }
 
-// BUG #17: Auto-detect strategy name from leg configuration
 function detectStrategy(legs: TradeLeg[]): string {
   if (legs.length === 0) return "No Legs";
   if (legs.length === 1) {
@@ -125,14 +125,12 @@ function TradeBuilderTab() {
 
   const [submitting, setSubmitting] = useState(false);
 
-  // BUG #13: Reset legs when selectedSymbol changes
   useEffect(() => {
     setLegs((prev) =>
       prev.map((l) => ({ ...l, symbol: selectedSymbol }))
     );
   }, [selectedSymbol]);
 
-  // BUG #17/#23: Populate legs from OptionsPanel selected strikes
   useEffect(() => {
     if (selectedStrikes.length === 0) return;
     const newLegs: TradeLeg[] = selectedStrikes.map(
@@ -161,7 +159,6 @@ function TradeBuilderTab() {
     return sum + (l.side === "buy" ? -cost : cost);
   }, 0);
 
-  // BUG #16: Compute aggregate Greeks from legs
   const aggregateGreeks = useMemo(() => {
     const g = { delta: 0, gamma: 0, theta: 0, vega: 0 };
     for (const leg of legs) {
@@ -174,7 +171,6 @@ function TradeBuilderTab() {
     return g;
   }, [legs]);
 
-  // BUG #17: Auto-detect strategy name
   const strategyName = useMemo(() => detectStrategy(legs), [legs]);
 
   const strikes = legs.filter((l) => l.strike).map((l) => l.strike!);
@@ -197,7 +193,6 @@ function TradeBuilderTab() {
     setLegs((prev) => prev.filter((l) => l.id !== id));
   };
 
-  // BUG #14: Add Leg button
   const addLeg = () => {
     setLegs((prev) => [
       ...prev,
@@ -218,7 +213,6 @@ function TradeBuilderTab() {
     ]);
   };
 
-  // BUG #4: Submit order handler
   const handleSubmit = useCallback(async () => {
     if (legs.length === 0 || submitting) return;
     setSubmitting(true);
@@ -318,7 +312,6 @@ function TradeBuilderTab() {
         ))}
       </div>
 
-      {/* BUG #14: Add Leg button */}
       <button
         onClick={addLeg}
         className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors mb-3"
@@ -328,7 +321,7 @@ function TradeBuilderTab() {
 
       <Separator className="bg-border mb-3" />
 
-      {/* Greeks — BUG #16: computed from legs */}
+      {/* Greeks */}
       <div className="grid grid-cols-4 gap-2 mb-3">
         {Object.entries(aggregateGreeks).map(([key, val]) => (
           <div key={key} className="text-center">
@@ -372,7 +365,6 @@ function TradeBuilderTab() {
         )}
       </div>
 
-      {/* BUG #4: Submit button with onClick + loading */}
       <div className="mt-auto">
         <Button
           onClick={handleSubmit}
@@ -401,7 +393,7 @@ function TradeBuilderTab() {
   );
 }
 
-// ─── Positions Tab (BUG #15/#18: use portfolio store, BUG #19: interactive rows) ─
+// ─── Positions Tab ────────────────────────────────────────────
 
 function PositionsTab() {
   const positions = usePortfolioStore((s) => s.positions);
@@ -493,7 +485,7 @@ function PositionsTab() {
   );
 }
 
-// ─── Orders Tab (BUG #15/#18: use portfolio store, BUG #19/#20: interactive + cancel) ─
+// ─── Orders Tab ──────────────────────────────────────────────
 
 function OrdersTab() {
   const orders = usePortfolioStore((s) => s.orders);
@@ -600,7 +592,6 @@ function OrdersTab() {
                 {o.status}
               </Badge>
             </span>
-            {/* BUG #19/#20: Cancel button for pending orders */}
             <span className="w-6 flex justify-end">
               {o.status === "pending" && (
                 <button
@@ -625,63 +616,11 @@ function OrdersTab() {
 // ─── Journal Tab ─────────────────────────────────────────────
 
 function JournalTab() {
-  const entries = [
-    {
-      date: "Apr 4, 2026",
-      symbol: "NVDA",
-      strategy: "Bull Call Spread",
-      pnl: 1240,
-      note: "Entered on AI signal. Closed at 80% max profit.",
-    },
-    {
-      date: "Apr 2, 2026",
-      symbol: "SPY",
-      strategy: "Iron Condor",
-      pnl: 380,
-      note: "Weekly IC, expired worthless. Full credit collected.",
-    },
-    {
-      date: "Mar 28, 2026",
-      symbol: "TSLA",
-      strategy: "Put Debit Spread",
-      pnl: -450,
-      note: "Stopped out after earnings gap up. Bad timing.",
-    },
-  ];
-
   return (
-    <div className="p-2 space-y-2">
-      {entries.map((e, i) => (
-        <div
-          key={i}
-          className="rounded-md bg-background/50 px-3 py-2 text-xs"
-        >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-foreground">{e.symbol}</span>
-              <Badge
-                variant="outline"
-                className="text-[9px] px-1.5 py-0 border-primary/30 text-primary"
-              >
-                {e.strategy}
-              </Badge>
-            </div>
-            <span
-              className={cn(
-                "font-medium tabular-nums",
-                getChangeTextClass(e.pnl)
-              )}
-            >
-              {e.pnl >= 0 ? "+" : ""}
-              {formatCurrency(e.pnl)}
-            </span>
-          </div>
-          <p className="text-muted-foreground leading-relaxed">{e.note}</p>
-          <span className="text-[10px] text-muted-foreground mt-1 block">
-            {e.date}
-          </span>
-        </div>
-      ))}
+    <div className="flex flex-col items-center justify-center py-12">
+      <BookOpen className="h-8 w-8 mb-3 text-muted-foreground opacity-30" />
+      <p className="text-sm text-foreground">Trading Journal</p>
+      <p className="text-hint mt-1">Journal entries will appear as you trade</p>
     </div>
   );
 }

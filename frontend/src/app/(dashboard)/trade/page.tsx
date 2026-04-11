@@ -9,7 +9,7 @@ import { OptionsPanel } from "@/components/panels/OptionsPanel";
 import { TradePanel } from "@/components/panels/TradePanel";
 import type { TimeFrame } from "@/types";
 
-const TOPBAR_H = 48; // px - matches TopBar h-12
+const TOPBAR_H = 72; // px - TopBar h-11 (44px) + StatusStrip h-7 (28px)
 const WATCHLIST_W = 240;
 const ANALYSIS_W = 300;
 const TRADE_PANEL_W = 380;

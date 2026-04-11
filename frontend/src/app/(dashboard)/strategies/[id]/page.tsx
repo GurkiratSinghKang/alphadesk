@@ -4,19 +4,17 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Pause,
   Play,
   ChevronDown,
   ChevronRight,
-  BarChart3,
   PieChart,
-  GitBranch,
-  LineChart,
   BookOpen,
   Briefcase,
+  GitBranch,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,19 +33,7 @@ import {
   type StrategyAnalytics,
 } from "@/lib/api";
 import { STRATEGY_CONTENT } from "@/lib/strategy-content";
-
-// ─── Strategy metadata (names, icons) ────────────────────────
-
-const STRATEGY_META: Record<string, { name: string; shortName: string; icon: typeof Activity }> = {
-  "momentum-quality": { name: "Momentum + Quality", shortName: "MOM+Q", icon: TrendingUp },
-  "pead": { name: "PEAD", shortName: "PEAD", icon: BarChart3 },
-  "vrp-harvesting": { name: "VRP Harvesting", shortName: "VRP", icon: Activity },
-  "earnings-vol-premium": { name: "Earnings Vol Premium", shortName: "EVOL", icon: LineChart },
-  "regime-adaptive": { name: "Regime Adaptive", shortName: "REGIME", icon: GitBranch },
-  "claude-alpha": { name: "Claude Alpha", shortName: "ALPHA", icon: Activity },
-  "mean-reversion": { name: "Mean Reversion", shortName: "MR", icon: TrendingDown },
-  "vcp-breakout": { name: "VCP Breakout", shortName: "VCP", icon: TrendingUp },
-};
+import { STRATEGY_META } from "@/lib/strategies";
 
 // ─── Time period filter ──────────────────────────────────────
 

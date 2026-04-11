@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from core.auth import require_auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Emergency halt state
+# ---------------------------------------------------------------------------
+
+_trading_halted = False
 
 
 # ---------------------------------------------------------------------------
@@ -127,11 +140,31 @@ async def create_order(
     Supports single-leg equity orders and multi-leg options orders.
     All orders pass through the RiskManagerAgent before submission.
     """
+    if _trading_halted:
+        raise HTTPException(
+            status_code=503,
+            detail="Trading is halted. Use POST /api/v1/trades/resume to resume.",
+        )
+
     if _alpaca_keys_empty():
         raise HTTPException(
             status_code=503,
             detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
         )
+
+    # Reject market orders outside regular trading hours (9:30 AM – 4:00 PM ET)
+    if any(leg.order_type == OrderType.MARKET for leg in request.legs):
+        et_now = datetime.now(ZoneInfo("America/New_York"))
+        if (
+            et_now.weekday() >= 5
+            or et_now.hour < 9
+            or (et_now.hour == 9 and et_now.minute < 30)
+            or et_now.hour >= 16
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Market orders can only be placed during regular trading hours (9:30 AM - 4:00 PM ET)",
+            )
 
     from core.config import settings
     from core.redis import publish
@@ -140,6 +173,9 @@ async def create_order(
     risk_ok, risk_msg = await _risk_check(request)
     if not risk_ok:
         raise HTTPException(status_code=422, detail=f"Risk check failed: {risk_msg}")
+
+    # Duplicate order check
+    await _check_duplicate_order(request)
 
     # Submit to broker
     order_id = await _submit_to_broker(request, settings)
@@ -382,6 +418,24 @@ async def get_trade_history(
 # Helpers
 # ---------------------------------------------------------------------------
 
+async def _check_duplicate_order(request: CreateOrderRequest) -> None:
+    """Prevent duplicate orders within a 30-second window."""
+    from core.redis import cache_get, cache_set
+
+    # Create a hash of the order
+    order_key = hashlib.md5(
+        f"{request.legs[0].symbol}:{request.legs[0].side}:{request.legs[0].qty}:{request.time_in_force}".encode()
+    ).hexdigest()
+
+    cache_key = f"order_dedup:{order_key}"
+    existing = await cache_get(cache_key)
+    if existing:
+        raise HTTPException(status_code=409, detail="Duplicate order detected. Please wait before resubmitting.")
+
+    # Mark this order as submitted for 30 seconds
+    await cache_set(cache_key, {"submitted": True}, ttl_seconds=30)
+
+
 async def _get_current_price(symbol: str) -> float:
     """Get current price for notional calculation."""
     from core.redis import cache_get
@@ -411,6 +465,33 @@ async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
         return False, f"Order notional ${total_notional:,.0f} exceeds single-order limit of $50,000"
 
     return True, "passed"
+
+
+@router.post("/halt")
+async def halt_trading(username: str = Depends(require_auth)):
+    """Emergency halt — prevents all new orders."""
+    global _trading_halted
+    _trading_halted = True
+    # Cancel all open orders on Alpaca
+    try:
+        from core.config import settings
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient() as client:
+            await client.delete(f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers)
+    except Exception as e:
+        logger.error("Failed to cancel orders during halt: %s", e)
+    return {"halted": True, "message": "All trading halted. All open orders cancelled."}
+
+
+@router.post("/resume")
+async def resume_trading(username: str = Depends(require_auth)):
+    """Resume trading after emergency halt."""
+    global _trading_halted
+    _trading_halted = False
+    return {"halted": False, "message": "Trading resumed."}
 
 
 async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:

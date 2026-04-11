@@ -165,12 +165,16 @@ export function SectorTreemap({ sectors, width: propWidth, height = 120 }: Secto
 
   useEffect(() => {
     if (!containerRef.current) return;
+    let timeout: ReturnType<typeof setTimeout>;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w && w > 0) setMeasuredWidth(w);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        const w = entries[0]?.contentRect.width;
+        if (w && w > 0) setMeasuredWidth(w);
+      }, 100);
     });
     ro.observe(containerRef.current);
-    return () => ro.disconnect();
+    return () => { clearTimeout(timeout); ro.disconnect(); };
   }, []);
 
   const width = propWidth ?? measuredWidth;

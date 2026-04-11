@@ -120,6 +120,8 @@ export function PortfolioHero({
   );
 
   return (
+    <>
+      <h1 className="sr-only">AlphaDesk Dashboard</h1>
     <div className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] overflow-hidden">
       {/* Text content */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -175,5 +177,6 @@ export function PortfolioHero({
         <EquityCurveSVG data={filteredHistory} />
       </div>
     </div>
+    </>
   );
 }

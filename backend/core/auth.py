@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -26,7 +27,7 @@ def hash_password(password: str) -> str:
 def create_access_token(subject: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode(
-        {"sub": subject, "exp": expire, "type": "access"},
+        {"sub": subject, "exp": expire, "type": "access", "jti": str(uuid.uuid4())},
         settings.jwt_secret_value,
         algorithm=ALGORITHM,
     )
@@ -54,6 +55,29 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     return payload
 
 
+async def is_token_revoked(jti: str) -> bool:
+    """Check if a token has been revoked."""
+    try:
+        from core.redis import cache_get
+        return await cache_get(f"revoked:{jti}") is not None
+    except Exception:
+        return False  # If Redis is down, don't block auth
+
+
+async def revoke_token(token: str) -> None:
+    """Add a token to the revocation blocklist."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_value, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        if jti:
+            from core.redis import cache_set
+            # Keep in blocklist until token would have expired anyway
+            ttl = max(int(payload.get("exp", 0) - datetime.now(timezone.utc).timestamp()), 0)
+            await cache_set(f"revoked:{jti}", {"revoked": True}, ttl_seconds=max(ttl, 60))
+    except Exception:
+        pass
+
+
 async def require_auth(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -70,7 +94,14 @@ async def require_auth(
 
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
     payload = decode_token(token, expected_type="access")
+
+    # Check revocation
+    jti = payload.get("jti")
+    if jti and await is_token_revoked(jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+
     username: str | None = payload.get("sub")
     if username is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")

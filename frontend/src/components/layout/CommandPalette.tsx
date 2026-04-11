@@ -125,7 +125,7 @@ export function CommandPalette() {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [setCommandPaletteOpen]);
+  }, [toggleCommandPalette]);
 
   function selectSymbol(symbol: string) {
     setSelectedSymbol(symbol);

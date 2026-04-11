@@ -44,7 +44,7 @@ function MiniSparkline({ trend }: { trend: number }) {
   );
 }
 
-// ─── Watchlist Row (BUG #5: separate click from context menu) ─
+// ─── Watchlist Row ────────────────────────────────────────────
 
 function WatchlistRow({
   symbol,
@@ -96,7 +96,7 @@ function WatchlistRow({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onSelect();
       }}
-      className={`group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-[#252538] cursor-pointer ${flashClass} ${
+      className={`group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
       }`}
     >
@@ -119,7 +119,6 @@ function WatchlistRow({
         {quote ? formatPercent(change) : "---"}
       </div>
 
-      {/* BUG #5: Dedicated context menu trigger button */}
       <DropdownMenu>
         <DropdownMenuTrigger
           onClick={(e) => e.stopPropagation()}
@@ -132,11 +131,9 @@ function WatchlistRow({
           side="right"
           className="bg-[var(--panel)] border-border"
         >
-          {/* BUG #6: Analyze sets symbol + switches to TA tab */}
           <DropdownMenuItem onClick={onAnalyze}>
             <TrendingUp className="mr-2 h-3.5 w-3.5" /> Analyze
           </DropdownMenuItem>
-          {/* BUG #6: Trade sets symbol + switches to trade tab */}
           <DropdownMenuItem onClick={onTrade}>
             <TrendingDown className="mr-2 h-3.5 w-3.5" /> Trade
           </DropdownMenuItem>
@@ -149,15 +146,15 @@ function WatchlistRow({
   );
 }
 
-// ─── Screener tab content (BUG #7: onClick handlers) ─────────
+// ─── Screener tab content ─────────────────────────────────────
 
 function ScreenerTab() {
   const presets = [
-    { name: "Momentum", count: 24, preset: "momentum" },
-    { name: "High IV Rank", count: 18, preset: "high_iv" },
-    { name: "Oversold Bounce", count: 12, preset: "oversold" },
-    { name: "Earnings This Week", count: 31, preset: "earnings" },
-    { name: "Gap & Go", count: 8, preset: "gap_and_go" },
+    { name: "Momentum", preset: "momentum" },
+    { name: "High IV Rank", preset: "high_iv" },
+    { name: "Oversold Bounce", preset: "oversold" },
+    { name: "Earnings This Week", preset: "earnings" },
+    { name: "Gap & Go", preset: "gap_and_go" },
   ];
 
   const [results, setResults] = useState<ScreenerResult[]>([]);
@@ -197,7 +194,7 @@ function ScreenerTab() {
           }`}
         >
           <span>{p.name}</span>
-          <span className="text-muted-foreground">{p.count} results</span>
+          <span className="text-muted-foreground">—</span>
         </button>
       ))}
 
@@ -225,7 +222,7 @@ function ScreenerTab() {
   );
 }
 
-// ─── Signals tab content (BUG #20: signal rows clickable) ────
+// ─── Signals tab content ──────────────────────────────────────
 
 function SignalsTab() {
   const { setSelectedSymbol } = useMarketStore();
@@ -313,7 +310,6 @@ export function WatchlistPanel() {
     [addInput, addToWatchlist]
   );
 
-  // BUG #6: Analyze = select symbol + switch to technical tab
   const handleAnalyze = useCallback(
     (symbol: string) => {
       setSelectedSymbol(symbol);
@@ -322,7 +318,6 @@ export function WatchlistPanel() {
     [setSelectedSymbol, setActiveTab]
   );
 
-  // BUG #6: Trade = select symbol + switch to trade tab
   const handleTrade = useCallback(
     (symbol: string) => {
       setSelectedSymbol(symbol);
@@ -332,14 +327,14 @@ export function WatchlistPanel() {
   );
 
   return (
-    <div className="flex h-full flex-col bg-[var(--panel)] border-r border-[#2a2a3e]">
+    <div className="flex h-full flex-col bg-[var(--panel)] border-r border-border">
       <Tabs
         value={activePanels.left}
         onValueChange={(v) => setActiveTab("left", v)}
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 border border-[#2a2a3e]">
+          <TabsList className="h-7 bg-[var(--background)] p-0.5 flex-1 border border-border">
           <TabsTrigger value="watchlist" className="text-[11px] h-6 px-2.5">
             Watchlist
           </TabsTrigger>
@@ -359,7 +354,7 @@ export function WatchlistPanel() {
               placeholder="Add symbol..."
               value={addInput}
               onChange={(e) => setAddInput(e.target.value.toUpperCase())}
-              className="h-7 bg-[#12121a] text-xs border-[#2a2a3e] placeholder:text-muted-foreground/60"
+              className="h-7 bg-[var(--background)] text-xs border-border placeholder:text-muted-foreground/60"
             />
             <button
               type="submit"
@@ -370,7 +365,7 @@ export function WatchlistPanel() {
           </form>
 
           {/* Keyboard hint */}
-          <div className="flex items-center gap-1.5 px-3 py-1 text-[9px] text-muted-foreground/60 bg-[#14141e] border-b border-[#2a2a3e]">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-[9px] text-muted-foreground/60 bg-[var(--surface)] border-b border-border">
             <span>Click to select</span>
             <span className="text-muted-foreground/30">|</span>
             <span>
@@ -379,7 +374,7 @@ export function WatchlistPanel() {
           </div>
 
           {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-[#2a2a3e] bg-[#14141e]">
+          <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
             <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>

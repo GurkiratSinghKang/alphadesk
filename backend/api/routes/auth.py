@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -19,23 +17,33 @@ from core.config import settings
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Login rate limiting: max 5 attempts per IP per 5-minute window
+# Login rate limiting: max 5 attempts per IP per 5-minute window (Redis-backed)
 # ---------------------------------------------------------------------------
-_login_attempts: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_WINDOW = 300  # 5 minutes
 _RATE_LIMIT_MAX = 5
 
 
-def _check_rate_limit(client_ip: str) -> None:
-    now = time.time()
-    attempts = _login_attempts[client_ip]
-    # Prune old entries
-    _login_attempts[client_ip] = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
-    if len(_login_attempts[client_ip]) >= _RATE_LIMIT_MAX:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many login attempts. Please try again in a few minutes.",
-        )
+async def _check_rate_limit(client_ip: str) -> None:
+    """Rate limit login attempts using Redis sliding window."""
+    from core.redis import get_redis
+    redis = await get_redis()
+    if not redis:
+        return  # If Redis is down, don't block login
+
+    key = f"login_attempts:{client_ip}"
+    try:
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, _RATE_LIMIT_WINDOW)
+        if count > _RATE_LIMIT_MAX:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Please try again in a few minutes.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Redis error shouldn't block login
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
@@ -79,8 +87,7 @@ class RefreshRequest(BaseModel):
 @router.post("/login")
 async def login(request: LoginRequest, req: Request):
     client_ip = req.client.host if req.client else "unknown"
-    _check_rate_limit(client_ip)
-    _login_attempts[client_ip].append(time.time())
+    await _check_rate_limit(client_ip)
 
     if (
         request.username != settings.ADMIN_USERNAME
@@ -122,8 +129,14 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
 
 
 @router.post("/logout")
-async def logout():
-    """Clear HttpOnly auth cookies."""
+async def logout(request: Request):
+    """Clear HttpOnly auth cookies and revoke the access token."""
+    # Revoke the current access token
+    token = request.cookies.get("access_token")
+    if token:
+        from core.auth import revoke_token
+        await revoke_token(token)
+
     response = JSONResponse(content={"ok": True})
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/api/v1/auth")

@@ -33,10 +33,10 @@ ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v2/iex"
 
 def _is_market_hours() -> bool:
     """Check if we're within extended market hours (4 AM - 8 PM ET)."""
-    from datetime import datetime, timezone, timedelta
-    et = timezone(timedelta(hours=-4))
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    et = ZoneInfo("America/New_York")
     now = datetime.now(et)
-    # Skip weekends
     if now.weekday() >= 5:
         return False
     return 4 <= now.hour < 20
