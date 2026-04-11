@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useId } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -63,6 +63,9 @@ function EquityCurve({
   benchmark?: { date: string; value: number }[];
   height?: number;
 }) {
+  const rawId = useId();
+  const gradId = rawId.replace(/:/g, "");
+
   if (data.length < 2) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-border bg-[var(--panel)]" style={{ height }}>
@@ -113,12 +116,12 @@ function EquityCurve({
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full rounded-lg border border-border bg-[var(--panel)]" style={{ height }} preserveAspectRatio="none">
       <defs>
-        <linearGradient id="curveGrad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity={0.3} />
           <stop offset="100%" stopColor={color} stopOpacity={0.02} />
         </linearGradient>
       </defs>
-      <polygon points={areaPoints.join(" ")} fill="url(#curveGrad)" />
+      <polygon points={areaPoints.join(" ")} fill={`url(#${gradId})`} />
       {hasBenchmark && (
         <polyline
           points={benchPoints.join(" ")}
@@ -150,7 +153,7 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
     <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "opacity-50")}>
       <p className="text-label mb-1">{label}</p>
       <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#8a8a95]" : color)}>
-        {isEmpty ? <span className="text-sm font-normal">No data</span> : value}
+        {isEmpty ? <span className="text-[11px] font-normal text-muted-foreground">Awaiting trades</span> : value}
       </p>
     </div>
   );

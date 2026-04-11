@@ -214,7 +214,9 @@ function CommandCenter() {
               if (!cancelled) setEquityHistory(history);
             }
           }
-        } catch {}
+        } catch (err) {
+          console.error("[Dashboard] Equity curve fetch failed:", err);
+        }
       }
 
       if (!cancelled) setLoading(false);

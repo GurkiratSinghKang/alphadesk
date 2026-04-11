@@ -21,6 +21,9 @@ export default function TradePage() {
   const startY = useRef(0);
   const startHeight = useRef(0);
 
+  // NOTE: keys 1-6 overlap with useKeyboardShortcuts (global alphadesk:shortcut events).
+  // Keys 7-8 (W/M timeframes) are trade-page-only extras. Guard against input fields and
+  // drawing mode to avoid firing during annotation interactions.
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;

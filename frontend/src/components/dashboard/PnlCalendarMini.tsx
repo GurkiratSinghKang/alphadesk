@@ -15,7 +15,7 @@ export function PnlCalendarMini() {
     getPnlCalendar().then((data) => {
       setDays(data.days);
       setMonthTotal(data.monthTotal);
-    }).catch(() => {});
+    }).catch((err) => console.error("[PnlCalendarMini] Calendar fetch failed:", err));
   }, []);
 
   if (days.length === 0) return null;

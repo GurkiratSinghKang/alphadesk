@@ -17,12 +17,12 @@ export function StatusStrip() {
   useEffect(() => {
     getMarketRegime().then((data) => {
       setRegime(data.regime);
-    }).catch(() => {});
+    }).catch((err) => console.error("[StatusStrip] Regime fetch failed:", err));
   }, []);
 
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
-  const hasPnl = dayPnl !== 0;
+  const hasPnl = Number.isFinite(summary.dayPnl);
 
   const regimeColor = regime?.label === "bull" ? "text-[var(--profit)]" : regime?.label === "bear" ? "text-[var(--loss)]" : "text-amber-400";
 

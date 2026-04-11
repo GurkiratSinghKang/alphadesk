@@ -424,17 +424,24 @@ export function OptionsPanel() {
                     className={cn(
                       "cursor-pointer",
                       putITM && "bg-[var(--loss)]/5",
-                      putSelected && "bg-primary/20 text-primary"
+                      putSelected && "bg-primary/20 text-primary",
+                      !putSelected && row.put.last <= 0.01 && "text-muted-foreground/50"
                     )}
                     onClick={() => handlePutClick(row)}
                   />
                   <Cell
                     value={row.put.bid}
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    className={cn(
+                      putITM ? "bg-[var(--loss)]/5" : "",
+                      row.put.bid <= 0.01 && "text-muted-foreground/50"
+                    )}
                   />
                   <Cell
                     value={row.put.ask}
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    className={cn(
+                      putITM ? "bg-[var(--loss)]/5" : "",
+                      row.put.ask <= 0.01 && "text-muted-foreground/50"
+                    )}
                   />
                   <Cell
                     value={row.put.vol}
