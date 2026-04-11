@@ -79,13 +79,7 @@ function EquityCurveSVG({
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-      }}
+      className="absolute inset-0 w-full h-full pointer-events-none"
       aria-hidden="true"
     >
       <defs>
@@ -123,65 +117,59 @@ export function PortfolioHero({
   );
 
   return (
-    <div
-      className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] px-5 py-4"
-      style={{ position: "relative", overflow: "hidden" }}
-    >
-      {/* SVG equity curve background */}
-      <EquityCurveSVG data={filteredHistory} />
+    <div className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] overflow-hidden">
+      {/* Text content */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {/* Portfolio Equity */}
+          <div className="min-w-0">
+            <p className="text-label leading-none mb-1">Portfolio</p>
+            <p className="text-display tabular-nums text-gradient">
+              {formatCurrency(portfolioValue)}
+            </p>
+          </div>
 
-      {/* Period pill buttons — top-right corner */}
-      <div
-        className="absolute top-3 right-3 flex gap-1"
-        style={{ zIndex: 1 }}
-      >
-        {(["1W", "1M", "3M", "YTD"] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={cn(
-              "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
-              period === p
-                ? "bg-primary/20 text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {p}
-          </button>
-        ))}
+          {/* Day P&L */}
+          <div className="min-w-0">
+            <p className="text-label leading-none mb-1">Day P&L</p>
+            <p
+              className={cn(
+                "text-xl font-semibold tabular-nums leading-none",
+                dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss"
+              )}
+            >
+              {dayPnl >= 0 ? "+" : ""}
+              {formatCurrency(dayPnl)}{" "}
+              <span className="text-sm font-normal text-secondary">
+                ({dayPnlPct >= 0 ? "+" : ""}
+                {dayPnlPct.toFixed(2)}%)
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* Period pills */}
+        <div className="flex gap-1 shrink-0">
+          {(["1W", "1M", "3M", "YTD"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+                period === p
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Content — sits above the SVG */}
-      <div className="relative flex flex-wrap items-center gap-x-6 gap-y-3" style={{ zIndex: 1 }}>
-        {/* Portfolio Equity */}
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-            Portfolio
-          </p>
-          <p className="text-4xl font-bold text-foreground tabular-nums leading-none tracking-tight text-gradient">
-            {formatCurrency(portfolioValue)}
-          </p>
-        </div>
-
-        {/* Day P&L */}
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground leading-none mb-1">
-            Day P&L
-          </p>
-          <p
-            className={cn(
-              "text-xl font-semibold tabular-nums leading-none",
-              dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss"
-            )}
-          >
-            {dayPnl >= 0 ? "+" : ""}
-            {formatCurrency(dayPnl)}{" "}
-            <span className="text-sm font-normal">
-              ({dayPnlPct >= 0 ? "+" : ""}
-              {dayPnlPct.toFixed(2)}%)
-            </span>
-          </p>
-        </div>
+      {/* Chart strip — dedicated space below text */}
+      <div className="relative h-[56px] border-t border-border/30">
+        <EquityCurveSVG data={filteredHistory} />
       </div>
     </div>
   );
