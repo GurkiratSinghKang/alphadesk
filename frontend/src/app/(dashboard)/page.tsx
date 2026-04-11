@@ -212,12 +212,12 @@ function CommandCenter() {
         console.error("[Dashboard] Data processing error:", err);
       }
 
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
 
     fetchAll().catch((err) => {
       console.error("[Dashboard] fetchAll error:", err);
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     });
 
     return () => {

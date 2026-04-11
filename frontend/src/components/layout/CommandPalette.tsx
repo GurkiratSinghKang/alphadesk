@@ -55,7 +55,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
 }
 
 export function CommandPalette() {
-  const { commandPaletteOpen, setCommandPaletteOpen, setActiveTab, setTradingMode } = useUIStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, setActiveTab, setTradingMode } = useUIStore();
   const { selectedSymbol, setSelectedSymbol, addToWatchlist } = useMarketStore();
 
   const [query, setQuery] = useState("");
@@ -120,12 +120,12 @@ export function CommandPalette() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setCommandPaletteOpen(!commandPaletteOpen);
+        toggleCommandPalette();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [commandPaletteOpen, setCommandPaletteOpen]);
+  }, [setCommandPaletteOpen]);
 
   function selectSymbol(symbol: string) {
     setSelectedSymbol(symbol);

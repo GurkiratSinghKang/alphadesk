@@ -6,6 +6,7 @@ import { Sparkline } from "@/components/dashboard/Sparkline";
 import { AllocationDonut } from "./AllocationDonut";
 import { SectorTreemap } from "./SectorTreemap";
 import type { PortfolioSummary } from "@/types";
+import type { NewsItem } from "@/components/dashboard/ActivityFeed";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -20,13 +21,6 @@ export interface MarketIndex {
 export interface SectorData {
   sector: string;
   change_pct: number;
-}
-
-export interface NewsItem {
-  title: string;
-  source: string;
-  published_at: string;
-  url: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
