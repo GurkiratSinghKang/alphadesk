@@ -7,11 +7,13 @@ export function Sparkline({
   color,
   width = 80,
   height = 24,
+  className,
 }: {
   data: number[];
   color: string;
   width?: number;
   height?: number;
+  className?: string;
 }) {
   if (data.length < 2) return null;
   const min = Math.min(...data);
@@ -29,7 +31,7 @@ export function Sparkline({
   const gradId = `spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   return (
-    <svg width={width} height={height} className="shrink-0">
+    <svg width={width} height={height} className={className ?? "shrink-0"}>
       <defs>
         <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />

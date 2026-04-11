@@ -138,33 +138,34 @@ function StrategyCard({
           </Badge>
         </div>
 
-        <div className="mt-3 flex items-end justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  "text-sm font-semibold tabular-nums",
-                  strategy.returnPct >= 0
-                    ? "text-[var(--profit)]"
-                    : "text-[var(--loss)]"
-                )}
-              >
-                {strategy.returnPct >= 0 ? "+" : ""}
-                {strategy.returnPct.toFixed(2)}%
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {strategy.positions} pos
-              </span>
-            </div>
-            <p className="text-[10px] text-muted-foreground italic">
-              {regimeNote}
-            </p>
+        <div className="mt-3 space-y-1">
+          <div className="flex items-center gap-3">
+            <span
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                strategy.returnPct >= 0
+                  ? "text-[var(--profit)]"
+                  : "text-[var(--loss)]"
+              )}
+            >
+              {strategy.returnPct >= 0 ? "+" : ""}
+              {strategy.returnPct.toFixed(2)}%
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {strategy.positions} pos
+            </span>
           </div>
+          <p className="text-[10px] text-muted-foreground italic">
+            {regimeNote}
+          </p>
+        </div>
+        <div className="mt-2 -mx-1">
           <Sparkline
-            data={generateSparkData(strategy.id.length * 31 + strategy.returnPct * 100)}
+            data={generateSparkData(strategy.id.length * 31 + strategy.returnPct * 100, 30)}
             color={strategy.returnPct >= 0 ? "#22c55e" : "#ef4444"}
-            width={48}
-            height={18}
+            width={140}
+            height={28}
+            className="w-full"
           />
         </div>
       </CardContent>

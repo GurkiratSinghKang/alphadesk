@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BarChart3 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { getPnlCalendar, type CalendarDay } from "@/lib/api";
@@ -8,6 +8,8 @@ import { getPnlCalendar, type CalendarDay } from "@/lib/api";
 export function PnlCalendarMini() {
   const [days, setDays] = useState<CalendarDay[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
+  const [hovered, setHovered] = useState<{ date: string; pnl: number; trades: number; winRate: number; x: number; y: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getPnlCalendar().then((data) => {
@@ -49,7 +51,7 @@ export function PnlCalendarMini() {
           {monthTotal >= 0 ? "+" : ""}{formatCurrency(monthTotal)}
         </span>
       </div>
-      <div className="p-3">
+      <div className="relative p-3" ref={containerRef}>
         <div className="grid grid-cols-7 gap-1">
           {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
             <div key={i} className="text-center text-[9px] font-medium text-muted-foreground py-0.5">{d}</div>
@@ -60,6 +62,7 @@ export function PnlCalendarMini() {
             const hasPnl = cell.pnl !== null;
             const positive = (cell.pnl ?? 0) >= 0;
             const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / 500, 1) : 0;
+            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
             return (
               <div
                 key={cell.day}
@@ -71,13 +74,48 @@ export function PnlCalendarMini() {
                   !hasPnl && "bg-[var(--surface)]"
                 )}
                 style={hasPnl ? { opacity: 0.3 + intensity * 0.7 } : undefined}
-                title={hasPnl ? `${cell.pnl! >= 0 ? "+" : ""}$${cell.pnl!.toFixed(0)}` : undefined}
+                onMouseEnter={(e) => {
+                  if (!hasPnl) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const containerRect = containerRef.current?.getBoundingClientRect();
+                  if (!containerRect) return;
+                  setHovered({
+                    date: dateStr,
+                    pnl: cell.pnl!,
+                    trades: days.find(d => d.date === dateStr)?.trades ?? 0,
+                    winRate: days.find(d => d.date === dateStr)?.winRate ?? 0,
+                    x: rect.left - containerRect.left + rect.width / 2,
+                    y: rect.top - containerRect.top,
+                  });
+                }}
+                onMouseLeave={() => setHovered(null)}
               >
                 <span className={cn("font-medium", hasPnl ? "text-white" : "text-muted-foreground")}>{cell.day}</span>
               </div>
             );
           })}
         </div>
+        {hovered && (
+          <div
+            className="absolute z-10 rounded-lg border border-border bg-[var(--surface)] px-3 py-2.5 shadow-lg pointer-events-none"
+            style={{
+              left: Math.max(0, Math.min(hovered.x - 80, (containerRef.current?.offsetWidth ?? 320) - 160)),
+              top: hovered.y - 95,
+              width: 160,
+            }}
+          >
+            <p className="text-xs text-foreground font-medium">
+              {new Date(hovered.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </p>
+            <p className={cn("text-sm font-semibold tabular-nums mt-0.5", hovered.pnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
+              {hovered.pnl >= 0 ? "+" : ""}${Math.abs(hovered.pnl).toFixed(0)}
+            </p>
+            <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+              <span>{hovered.trades} trades</span>
+              <span>Win: {hovered.winRate > 0 ? `${hovered.winRate.toFixed(0)}%` : "N/A"}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
