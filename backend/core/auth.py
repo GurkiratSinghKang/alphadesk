@@ -59,12 +59,13 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
 
 
 async def is_token_revoked(jti: str) -> bool:
-    """Check if a token has been revoked."""
+    """Check if a token has been revoked. FAILS CLOSED — treats token as revoked if Redis unavailable."""
     try:
         from core.redis import cache_get
         return await cache_get(f"revoked:{jti}") is not None
     except Exception:
-        return False  # If Redis is down, don't block auth
+        logger.warning("Redis unavailable — treating token as revoked (fail closed)")
+        return True  # FAIL CLOSED: block auth when we can't check revocation
 
 
 async def revoke_token(token: str) -> None:

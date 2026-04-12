@@ -31,7 +31,7 @@ async def _check_rate_limit(client_ip: str) -> None:
     from core.redis import get_redis
     redis = await get_redis()
     if not redis:
-        return  # If Redis is down, don't block login
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     key = f"login_attempts:{client_ip}"
     try:
@@ -47,7 +47,7 @@ async def _check_rate_limit(client_ip: str) -> None:
         raise
     except Exception as e:
         logger.warning("Rate limit check failed (Redis unavailable): %s", e)
-        pass  # Don't block login if Redis is down
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
@@ -125,11 +125,17 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
     if not username:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    return TokenResponse(
+    new_tokens = TokenResponse(
         access_token=create_access_token(username),
         refresh_token=create_refresh_token(username),
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+    # Revoke the old refresh token so it cannot be reused
+    from core.auth import revoke_token
+    await revoke_token(request.refresh_token)
+
+    return new_tokens
 
 
 @router.post("/logout")

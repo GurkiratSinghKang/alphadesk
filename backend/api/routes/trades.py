@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from enum import Enum
@@ -9,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.auth import require_auth
 
@@ -84,20 +85,34 @@ class OrderStatus(str, Enum):
 
 
 class OrderLeg(BaseModel):
-    symbol: str
+    symbol: str = Field(..., pattern=r"^[A-Z]{1,10}$")
     side: OrderSide
-    qty: float
+    qty: float = Field(..., gt=0, le=100000)
     order_type: OrderType = OrderType.LIMIT
     limit_price: float | None = None
     stop_price: float | None = None
     asset_class: str = Field("equity", description="equity or option")
+
+    @field_validator("limit_price")
+    @classmethod
+    def limit_price_must_be_positive(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError("limit_price must be greater than 0")
+        return v
+
+    @field_validator("stop_price")
+    @classmethod
+    def stop_price_must_be_positive(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError("stop_price must be greater than 0")
+        return v
 
 
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
     time_in_force: TimeInForce = TimeInForce.DAY
     strategy: str | None = Field(None, description="Originating strategy name")
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=1000)
 
 
 class OrderResponse(BaseModel):
@@ -235,6 +250,7 @@ async def create_order(
                 )
                 db.add(trade)
                 await db.flush()
+                await db.commit()
     except Exception:
         logger.warning("Failed to persist trade record to DB (order still submitted to broker)", exc_info=True)
 
@@ -279,7 +295,7 @@ async def list_orders(
         if status:
             params["status"] = status.value
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"{settings.ALPACA_BASE_URL}/v2/orders",
                 headers=headers,
@@ -349,7 +365,7 @@ async def cancel_order(order_id: str) -> None:
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.delete(
             f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
             headers=headers,
@@ -373,7 +389,7 @@ async def list_positions() -> list[PositionResponse]:
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"{settings.ALPACA_BASE_URL}/v2/positions",
                 headers=headers,
@@ -458,21 +474,25 @@ async def get_trade_history(
 # ---------------------------------------------------------------------------
 
 async def _check_duplicate_order(request: CreateOrderRequest) -> None:
-    """Prevent duplicate orders within a 30-second window."""
-    from core.redis import cache_get, cache_set
+    """Prevent duplicate orders within a 30-second window using atomic Redis SET NX."""
+    from core.redis import get_redis
 
-    # Create a hash of the order
-    order_key = hashlib.md5(
-        f"{request.legs[0].symbol}:{request.legs[0].side}:{request.legs[0].qty}:{request.time_in_force}".encode()
+    # Create a hash of ALL legs (not just the first)
+    order_key = hashlib.sha256(
+        json.dumps(
+            [{"s": l.symbol, "sd": l.side.value, "q": l.qty, "t": l.order_type.value} for l in request.legs],
+            sort_keys=True,
+        ).encode()
     ).hexdigest()
 
     cache_key = f"order_dedup:{order_key}"
-    existing = await cache_get(cache_key)
-    if existing:
-        raise HTTPException(status_code=409, detail="Duplicate order detected. Please wait before resubmitting.")
 
-    # Mark this order as submitted for 30 seconds
-    await cache_set(cache_key, {"submitted": True}, ttl_seconds=30)
+    redis = await get_redis()
+    if redis:
+        # Atomic set-if-not-exists with 30s expiry — no race condition
+        was_set = await redis.set(cache_key, "1", nx=True, ex=30)
+        if not was_set:
+            raise HTTPException(status_code=409, detail="Duplicate order detected. Please wait before resubmitting.")
 
 
 async def _get_current_price(symbol: str) -> float:
@@ -517,7 +537,7 @@ async def halt_trading(username: str = Depends(require_auth)):
             "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             await client.delete(f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers)
     except Exception as e:
         logger.error("Failed to cancel orders during halt: %s", e)
@@ -527,7 +547,25 @@ async def halt_trading(username: str = Depends(require_auth)):
 @router.post("/resume")
 async def resume_trading(username: str = Depends(require_auth)):
     """Resume trading after emergency halt."""
-    await _set_trading_halted(False)
+    try:
+        await _set_trading_halted(False)
+        # Verify the halt key was actually removed
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis:
+            still_halted = await redis.get("trading:halted")
+            if still_halted:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Failed to resume trading — halt state could not be cleared.",
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to resume trading — could not verify halt state was cleared.",
+        )
     return {"halted": False, "message": "Trading resumed."}
 
 
@@ -619,7 +657,7 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
             ],
         }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
             f"{settings.ALPACA_BASE_URL}/v2/orders",
             headers=headers,
@@ -628,6 +666,6 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
         if resp.status_code not in (200, 201):
             raise HTTPException(
                 status_code=502,
-                detail=f"Broker rejected order: {resp.text}",
+                detail="Broker rejected order. Check order parameters and try again.",
             )
         return resp.json()["id"]

@@ -121,7 +121,8 @@ async def pipeline_history_date(date: str) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read log: {e}")
+        logger.error(f"Failed to read log: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read pipeline log")
 
 
 # ---- GET /positions — AI-managed positions with entry/exit levels ----
@@ -141,7 +142,7 @@ async def pipeline_positions() -> dict[str, Any]:
         from core.config import settings
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 for pos in open_positions:
                     symbol = pos.get("symbol", "")
                     if not symbol:

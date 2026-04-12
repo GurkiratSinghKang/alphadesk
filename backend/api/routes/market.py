@@ -307,7 +307,7 @@ async def get_quote(symbol: str) -> Quote:
             import httpx
             from core.config import settings
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
@@ -337,7 +337,7 @@ async def get_quote(symbol: str) -> Quote:
             import httpx
 
             headers = _alpaca_data_headers()
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{ALPACA_DATA_URL}/v2/stocks/{symbol.upper()}/snapshot",
                     headers=headers,
@@ -417,7 +417,7 @@ async def get_bars(
                 f"{mult}/{span}/{effective_start.isoformat()}/{effective_end.isoformat()}"
             )
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, params=params)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -452,7 +452,7 @@ async def get_bars(
                 "feed": "iex",
                 "sort": "asc",
             }
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{ALPACA_DATA_URL}/v2/stocks/{symbol.upper()}/bars",
                     headers=headers,
@@ -491,7 +491,7 @@ async def get_snapshot(symbol: str) -> Snapshot:
             import httpx
             from core.config import settings
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
@@ -538,7 +538,7 @@ async def get_snapshot(symbol: str) -> Snapshot:
             import httpx
 
             headers = _alpaca_data_headers()
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{ALPACA_DATA_URL}/v2/stocks/{symbol.upper()}/snapshot",
                     headers=headers,
@@ -599,7 +599,7 @@ async def get_market_status() -> MarketStatus:
             import httpx
             from core.config import settings
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     "https://api.polygon.io/v1/marketstatus/now",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
@@ -620,7 +620,7 @@ async def get_market_status() -> MarketStatus:
             import httpx
 
             headers = _alpaca_data_headers()
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{ALPACA_TRADING_URL}/v2/clock",
                     headers=headers,

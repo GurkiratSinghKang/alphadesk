@@ -428,7 +428,7 @@ async def list_strategies() -> list[StrategySummary]:
     unrealized_by_strat: dict[str, float] = {}
     if open_trades:
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 for t in open_trades:
                     sym = t.get("symbol", "")
                     strat = t.get("strategy", "unknown")
@@ -524,7 +524,7 @@ async def get_strategy_performance(
         open_trades = ledger.get_open_positions()
         strat_open = [t for t in open_trades if t.get("strategy") == ledger_name]
         if strat_open:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 for t in strat_open:
                     sym = t.get("symbol", "")
                     entry = t.get("entry_price", 0)
