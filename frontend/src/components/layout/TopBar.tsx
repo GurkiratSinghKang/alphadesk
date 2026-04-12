@@ -51,7 +51,7 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <Popover>
           <PopoverTrigger>
-            <Button variant="ghost" size="icon" className="relative h-8 w-8">
+            <Button variant="ghost" size="icon" className="relative h-8 w-8" aria-label="Notifications">
               <Bell className="h-4 w-4 text-muted-foreground" />
               {unacknowledgedCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">

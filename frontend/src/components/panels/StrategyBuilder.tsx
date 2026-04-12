@@ -84,8 +84,9 @@ export function StrategyBuilder() {
     <div className="space-y-3">
       {/* Strategy Name */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy Name</label>
+        <label htmlFor="strategy-name" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy Name</label>
         <input
+          id="strategy-name"
           value={strategyName}
           onChange={(e) => setStrategyName(e.target.value)}
           className="w-full h-8 mt-1 rounded border border-border bg-background px-3 text-sm text-foreground"
@@ -94,9 +95,10 @@ export function StrategyBuilder() {
 
       {/* Rule Input */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Add Rule (Natural Language)</label>
+        <label htmlFor="strategy-rule-input" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Add Rule (Natural Language)</label>
         <div className="flex gap-2 mt-1">
           <input
+            id="strategy-rule-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") addRule(); }}
@@ -148,7 +150,7 @@ export function StrategyBuilder() {
                     </div>
                   )}
                 </div>
-                <button onClick={() => removeRule(rule.id)} className="text-muted-foreground hover:text-[var(--loss)]">
+                <button aria-label="Remove rule" onClick={() => removeRule(rule.id)} className="text-muted-foreground hover:text-[var(--loss)]">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>

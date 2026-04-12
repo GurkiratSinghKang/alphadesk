@@ -212,12 +212,12 @@ export function BacktestPanel() {
       {/* Parameters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</label>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground" />
+          <label htmlFor="backtest-symbol" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</label>
+          <input id="backtest-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground" />
         </div>
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
-          <select value={strategy} onChange={(e) => setStrategy(e.target.value as any)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
+          <label htmlFor="backtest-strategy" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
+          <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as any)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
             <option value="sma-cross">SMA Crossover</option>
             <option value="rsi">RSI Mean Reversion</option>
             <option value="macd">MACD Signal</option>
@@ -226,19 +226,19 @@ export function BacktestPanel() {
         {strategy === "sma-cross" && (
           <>
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
-              <input type="number" value={fastPeriod} onChange={(e) => setFastPeriod(parseInt(e.target.value) || 10)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <label htmlFor="backtest-fast-sma" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
+              <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(parseInt(e.target.value) || 10)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
-              <input type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(parseInt(e.target.value) || 50)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <label htmlFor="backtest-slow-sma" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
+              <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(parseInt(e.target.value) || 50)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
           </>
         )}
         {strategy === "rsi" && (
           <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
-            <input type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground opacity-50" disabled />
+            <label htmlFor="backtest-rsi-period" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
+            <input id="backtest-rsi-period" type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground opacity-50" disabled />
             <p className="text-[10px] text-muted-foreground mt-0.5">Buy RSI&lt;30, Sell RSI&gt;70</p>
           </div>
         )}
@@ -249,8 +249,8 @@ export function BacktestPanel() {
           </div>
         )}
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
-          <input type="number" value={capital} onChange={(e) => setCapital(parseInt(e.target.value) || 100000)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <label htmlFor="backtest-capital" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
+          <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(parseInt(e.target.value) || 100000)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
       </div>
 
