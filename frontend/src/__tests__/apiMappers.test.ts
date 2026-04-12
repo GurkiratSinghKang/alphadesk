@@ -23,6 +23,7 @@ import {
   screenStocks,
   getScreenerPresets,
   analyzeSymbol,
+  getAnalysis,
   getOptionsChain,
   getIVData,
   placeOrder,
@@ -37,6 +38,8 @@ import {
   getMarketNews,
   chatWithAgent,
   getPipelineStatus,
+  triggerPipeline,
+  getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
   mapPipelineRun,
@@ -1324,6 +1327,91 @@ describe('getPipelinePositions', () => {
     expect(result.performance.totalTrades).toBe(0);
     expect(result.performance.winRate).toBe(0);
     expect(result.performance.bestTrade).toBeNull();
+  });
+});
+
+// ─── getAnalysis ─────────────────────────────────────────────────────────────
+
+describe('getAnalysis', () => {
+  it('returns analysis data unchanged for a symbol', async () => {
+    const payload = {
+      symbol: 'AAPL',
+      technicalScore: 78,
+      fundamentalScore: 65,
+      sentimentScore: 70,
+      composite: 71,
+      summary: 'Mildly bullish',
+      signals: [],
+    };
+    mockFetch.mockReturnValueOnce(ok(payload));
+
+    const result = await getAnalysis('AAPL');
+    expect(result.symbol).toBe('AAPL');
+    expect(result.composite).toBe(71);
+  });
+
+  it('includes symbol in the request URL', async () => {
+    mockFetch.mockReturnValueOnce(ok({ symbol: 'MSFT', technicalScore: 0, fundamentalScore: 0, sentimentScore: 0, composite: 0, summary: '', signals: [] }));
+    await getAnalysis('MSFT');
+    const calledUrl: string = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('/analysis/MSFT');
+  });
+});
+
+// ─── triggerPipeline ─────────────────────────────────────────────────────────
+
+describe('triggerPipeline', () => {
+  it('calls POST and maps result via mapPipelineRun', async () => {
+    const payload = {
+      ok: true,
+      result: {
+        date: '2026-04-10',
+        timestamp: '2026-04-10T18:00:00Z',
+        screened: [{ symbol: 'NVDA', name: 'NVIDIA', price: 820, composite_score: 0.9, sector: 'Tech', change_pct: 2 }],
+        analyzed: [],
+        signals: [],
+        orders_placed: [{ symbol: 'NVDA', side: 'buy', qty: 5, price: 820, order_id: 'ord-99', status: 'filled', timestamp: '2026-04-10T18:01:00Z' }],
+        orders_closed: [],
+        portfolio_snapshot: { equity: 115000, cash: 78000, positions: 3 },
+        errors: [],
+      },
+    };
+    mockFetch.mockReturnValueOnce(ok(payload));
+
+    const result = await triggerPipeline();
+    expect(result.ok).toBe(true);
+    expect(result.result.date).toBe('2026-04-10');
+    expect(result.result.screened[0].compositeScore).toBe(0.9);
+    expect(result.result.ordersPlaced[0].orderId).toBe('ord-99');
+    expect(result.result.portfolioSnapshot.equity).toBe(115000);
+
+    const [calledUrl, init] = mockFetch.mock.calls[0];
+    expect(calledUrl).toContain('/pipeline/run');
+    expect(init.method).toBe('POST');
+  });
+});
+
+// ─── getPipelineHistory ───────────────────────────────────────────────────────
+
+describe('getPipelineHistory', () => {
+  it('returns history array unchanged', async () => {
+    const payload = [
+      { date: '2026-04-09', run_id: 'run-1', status: 'success' },
+      { date: '2026-04-08', run_id: 'run-2', status: 'success' },
+    ];
+    mockFetch.mockReturnValueOnce(ok(payload));
+
+    const result = await getPipelineHistory();
+    expect(result).toHaveLength(2);
+    expect(result[0].date).toBe('2026-04-09');
+    expect(result[1].run_id).toBe('run-2');
+  });
+
+  it('calls the correct endpoint', async () => {
+    mockFetch.mockReturnValueOnce(ok([]));
+    await getPipelineHistory();
+    const calledUrl: string = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('/pipeline/history');
   });
 });
 
