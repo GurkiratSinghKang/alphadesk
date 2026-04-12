@@ -67,7 +67,7 @@ describe('TradePanel', () => {
     expect(text.includes('SPY') || text.includes('Spread') || text.includes('Leg')).toBe(true);
   });
 
-  it('renders demo positions when store is empty', async () => {
+  it('renders empty state when no positions', async () => {
     const { TradePanel } = await import('@/components/panels/TradePanel');
     render(<TradePanel />);
     // Switch to positions tab via the store (controlled Tabs component)
@@ -76,7 +76,8 @@ describe('TradePanel', () => {
         activePanels: { left: 'watchlist', center: 'chart', right: 'technical', bottom: 'positions' },
       });
     });
-    // Demo positions include AAPL
-    expect(screen.getByText('AAPL')).toBeDefined();
+    // Demo data was removed — positions tab should show empty state or no AAPL
+    const text = document.body.textContent ?? '';
+    expect(text.includes('AAPL')).toBe(false);
   });
 });

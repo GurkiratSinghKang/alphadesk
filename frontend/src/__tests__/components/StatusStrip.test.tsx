@@ -1,8 +1,17 @@
 import '../setup-mocks';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StatusStrip } from '@/components/layout/StatusStrip';
 import { usePortfolioStore } from '@/stores/portfolio';
+
+// Mock React Query-based useRegime hook
+vi.mock('@/hooks/useQueries', () => ({
+  useRegime: () => ({
+    data: { regime: { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16.5, description: 'test' } },
+    isLoading: false,
+    error: null,
+  }),
+}));
 
 beforeEach(() => {
   usePortfolioStore.setState({

@@ -48,8 +48,8 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['vcp-breakout']).toBeDefined();
   });
 
-  it('has 8 strategies total', () => {
-    expect(Object.keys(STRATEGY_CONTENT).length).toBe(8);
+  it('has 12 strategies total', () => {
+    expect(Object.keys(STRATEGY_CONTENT).length).toBe(12);
   });
 
   it('each strategy has a valid risk profile', () => {
