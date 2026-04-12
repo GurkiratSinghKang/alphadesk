@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Settings, Keyboard, LogOut } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -15,6 +16,12 @@ export function ProfileMenu() {
   const summary = usePortfolioStore((s) => s.summary);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setSettingsOpen(false);
+    setModeConfirmOpen(false);
+  }, [pathname]);
 
   const handleModeToggle = () => {
     if (tradingMode === "paper") setModeConfirmOpen(true);

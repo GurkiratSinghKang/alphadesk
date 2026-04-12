@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { Command } from "cmdk";
 import {
   BarChart3,
@@ -63,6 +64,12 @@ export function CommandPalette() {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pathname = usePathname();
+
+  // Close command palette on navigation
+  useEffect(() => {
+    setCommandPaletteOpen(false);
+  }, [pathname, setCommandPaletteOpen]);
 
   // Debounced search
   const debouncedSearch = useCallback((q: string) => {
