@@ -37,14 +37,14 @@ export function StatusStrip() {
         <span className="text-[#8a8a95]">Regime</span>
         <span className={cn("font-medium", regime ? regimeColor : "text-[#8a8a95]")}>
           {regime?.regime ?? "---"}
-          {(regime as any)?.is_demo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
+          {(regimeData as any)?.is_demo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
         </span>
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">VIX</span>
-        <span className={cn("tabular-nums font-medium", (regime as any)?.is_demo ? "text-muted-foreground" : "text-foreground")}>
+        <span className={cn("tabular-nums font-medium", (regimeData as any)?.is_demo ? "text-muted-foreground" : "text-foreground")}>
           {regime?.vix_level ? regime.vix_level.toFixed(1) : "--.-"}
-          {(regime as any)?.is_demo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
+          {(regimeData as any)?.is_demo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
         </span>
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">

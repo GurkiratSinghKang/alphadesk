@@ -52,7 +52,7 @@ export function ProfileMenu() {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}><Settings className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={async () => { try { await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" }); } catch {} document.cookie = "access_token=; path=/; max-age=0"; window.location.href = "/login"; }}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
         </DropdownMenuContent>
@@ -61,7 +61,11 @@ export function ProfileMenu() {
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="right" className="bg-[var(--surface)] border-border">
           <SheetHeader><SheetTitle>Settings</SheetTitle><SheetDescription>Configure your trading environment.</SheetDescription></SheetHeader>
-          <div className="space-y-6 p-4"><p className="text-xs text-muted-foreground">Settings panel — broker API keys, preferences, and configuration.</p></div>
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <Settings className="h-8 w-8 text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium text-foreground">Settings coming soon</p>
+            <p className="text-xs text-muted-foreground mt-1">Broker API keys, preferences, and configuration will be available here.</p>
+          </div>
         </SheetContent>
       </Sheet>
 

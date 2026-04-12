@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Zap, LayoutDashboard, BarChart3, Bot, Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,10 @@ export function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const { setCommandPaletteOpen } = useUIStore();
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? ""));
+  }, []);
   const alerts = useAlertsStore((s) => s.alerts);
   const unacknowledgedCount = useAlertsStore((s) => s.alerts.filter((a) => !a.acknowledged).length);
   const acknowledgeAlert = useAlertsStore((s) => s.acknowledgeAlert);
@@ -45,7 +50,7 @@ export function TopBar() {
       <button onClick={() => setCommandPaletteOpen(true)} className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
         <Search className="h-3.5 w-3.5" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
-        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">Ctrl+K</kbd>
+        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>
 
       <div className="flex items-center gap-2">

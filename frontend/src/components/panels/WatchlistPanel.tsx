@@ -76,20 +76,11 @@ const WatchlistRow = React.memo(function WatchlistRow({
     prevPrice.current = quote?.last;
   }, [quote?.last]);
 
-  // Calculate change from quote data, or derive from last price as fallback
+  // Calculate change from quote data — show "—" when no real data exists
+  const hasRealChange = quote?.changePct != null;
   const change = (() => {
-    let raw: number;
-    if (quote?.changePct != null) {
-      raw = quote.changePct;
-    } else if (!quote) {
-      raw = 0;
-    } else {
-      // Generate a deterministic demo change based on symbol
-      let seed = 0;
-      for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
-      seed = (seed * 16807) % 2147483647;
-      raw = ((seed % 800) - 300) / 100; // range roughly -3% to +5%
-    }
+    if (!hasRealChange) return 0;
+    let raw = quote!.changePct!;
     // Clamp near-zero to exactly zero to avoid "-0.00%"
     if (Math.abs(raw) < 0.005) raw = 0;
     return raw;
@@ -112,7 +103,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
         <div className="font-medium text-foreground tabular-nums">{symbol}</div>
       </div>
 
-      <MiniSparkline trend={change} />
+      <MiniSparkline trend={hasRealChange ? change : 0} />
 
       <div className="w-16 text-right tabular-nums">
         {quote ? formatCurrency(quote.last) : "---"}
@@ -120,11 +111,11 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
       <div className={cn(
         "w-14 text-right tabular-nums rounded px-1 py-0.5",
-        changeColor,
-        quote && change > 0 && "bg-[var(--profit)]/10",
-        quote && change < 0 && "bg-[var(--loss)]/10",
+        hasRealChange ? changeColor : "text-muted-foreground",
+        hasRealChange && change > 0 && "bg-[var(--profit)]/10",
+        hasRealChange && change < 0 && "bg-[var(--loss)]/10",
       )}>
-        {quote ? formatPercent(change) : "---"}
+        {hasRealChange ? formatPercent(change) : "\u2014"}
       </div>
 
       <DropdownMenu>

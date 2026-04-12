@@ -314,7 +314,7 @@ function TradeBuilderTab() {
       {/* Risk summary */}
       <div className="space-y-1 mb-3 text-xs">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Net Debit</span>
+          <span className="text-muted-foreground">{netDebit >= 0 ? "Net Credit" : "Net Debit"}</span>
           <span className={cn("tabular-nums", getChangeTextClass(netDebit))}>
             {formatCurrency(Math.abs(netDebit))}
           </span>

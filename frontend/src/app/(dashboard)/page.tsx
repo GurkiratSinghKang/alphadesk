@@ -76,6 +76,13 @@ function CommandCenter() {
   const { data: strategiesData } = useStrategies();
   const { data: portfolioSummaryData } = usePortfolioSummary();
 
+  // Sync React Query portfolio data into Zustand so StatusStrip/ProfileMenu stay current
+  useEffect(() => {
+    if (portfolioSummaryData) {
+      usePortfolioStore.getState().setSummary(portfolioSummaryData);
+    }
+  }, [portfolioSummaryData]);
+
   // ─── State (for data without hooks) ───────────────────────
   const [sectors, setSectors] = useState<{ sector: string; change_pct: number }[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);

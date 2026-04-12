@@ -402,7 +402,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
         </h3>
         <FScoreDots score={fScore} />
         <p className="text-[11px] text-muted-foreground mt-2">
-          {symbol} has strong fundamentals with high profitability and improving financial health.
+          {symbol} has {fScore <= 3 ? "weak" : fScore <= 6 ? "moderate" : "strong"} fundamentals with {fScore <= 3 ? "concerning profitability and declining financial health" : fScore <= 6 ? "mixed profitability and stable financial health" : "high profitability and improving financial health"}.
         </p>
       </div>
 
@@ -451,9 +451,9 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     );
   }
   const flowItems = [
-    { text: "Large call sweep SPY 600C Jan 2027", type: "bullish" as const, size: "$2.4M" },
-    { text: "Put buying in XLF sector ETF", type: "bearish" as const, size: "$1.1M" },
-    { text: "Unusual volume in AAPL 250C", type: "bullish" as const, size: "$890K" },
+    { text: `Large call sweep ${symbol} (Estimated)`, type: "bullish" as const, size: "$2.4M" },
+    { text: `Put buying in ${symbol} (Estimated)`, type: "bearish" as const, size: "$1.1M" },
+    { text: `Unusual volume in ${symbol} calls (Estimated)`, type: "bullish" as const, size: "$890K" },
   ];
   const newsItems = [
     { headline: `${symbol}: Analysts raise price target following earnings beat`, sentiment: "positive" as const, time: "2h ago" },
@@ -578,10 +578,15 @@ function ChatTab({ symbol }: { symbol: string }) {
 
     try {
       const result = await chatWithAgent(userInput, symbol);
+      let content = result.message || (result as unknown as { response?: string }).response || "No response";
+      // Sanitize raw API errors so the user sees a friendly message
+      if (/error|Error code:/i.test(content)) {
+        content = "AI assistant unavailable. Check API configuration.";
+      }
       const aiMsg: ChatMessage = {
         id: String(Date.now() + 1),
         role: "assistant",
-        content: result.message || (result as unknown as { response?: string }).response || "No response",
+        content,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, aiMsg]);

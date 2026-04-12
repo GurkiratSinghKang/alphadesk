@@ -47,11 +47,12 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
 
-  const { data: apiData, isLoading: loading } = usePnlCalendar(month, year);
+  const { data: apiData, isLoading: loading, isError } = usePnlCalendar(month, year);
 
-  // Fall back to generated demo data when API returns nothing
+  // Fall back to generated demo data when API returns nothing (not on error)
   const data: CalendarData | null = useMemo(() => {
     if (apiData) return apiData;
+    if (isError) return null;
     // Generate demo calendar data when API is unavailable
     const daysInMonth = new Date(year, month, 0).getDate();
     let seed = year * 100 + month;
@@ -87,7 +88,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
       month, year, days: demoDays, monthTotal, tradingDays,
       winningDays: winDays, losingDays: loseDays, bestDay, worstDay,
     };
-  }, [apiData, year, month]);
+  }, [apiData, isError, year, month]);
 
   const prevMonth = () => {
     if (month === 1) {
@@ -204,7 +205,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
           </div>
         ) : !data ? (
           <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
-            Failed to load calendar data
+            No data available for this month
           </div>
         ) : (
           <>
