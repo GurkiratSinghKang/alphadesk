@@ -356,7 +356,7 @@ export default function StrategyDetailPage() {
               />
               <MetricCard label="Sharpe Ratio" value={perf.sharpe_ratio !== 0 ? perf.sharpe_ratio.toFixed(2) : "N/A"} />
               <MetricCard label="Max Drawdown" value={perf.max_drawdown !== 0 ? `${perf.max_drawdown.toFixed(1)}%` : "N/A"} color={perf.max_drawdown !== 0 ? "text-[var(--loss)]" : undefined} />
-              <MetricCard label="Win Rate" value={perf.win_rate > 0 || (perf.win_rate === 0 && perf.active_positions_count > 0) ? `${perf.win_rate.toFixed(0)}%` : "N/A"} />
+              <MetricCard label="Win Rate" value={perf.win_rate >= 0 ? `${perf.win_rate.toFixed(0)}%` : "N/A"} />
               <MetricCard label="Active Positions" value={String(perf.active_positions_count)} />
               <MetricCard
                 label="Calmar Ratio"

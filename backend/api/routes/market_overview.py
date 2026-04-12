@@ -123,32 +123,8 @@ async def get_indices() -> IndicesResponse:
             for demo in _DEMO_INDICES:
                 sym = demo["symbol"]
                 if sym == "VIX":
-                    # Try to fetch VIX via VIXY ETF as a proxy
-                    try:
-                        vix_bar = await client.get(
-                            "https://data.alpaca.markets/v2/stocks/VIXY/bars?timeframe=1Day&limit=2&feed=iex",
-                            headers=headers,
-                        )
-                        vix_trade = await client.get(
-                            "https://data.alpaca.markets/v2/stocks/VIXY/trades/latest",
-                            headers=headers,
-                        )
-                        if vix_bar.status_code == 200 and vix_trade.status_code == 200:
-                            vix_bars = vix_bar.json().get("bars", [])
-                            vix_price = vix_trade.json().get("trade", {}).get("p", 0)
-                            vix_prev = vix_bars[-2]["c"] if len(vix_bars) >= 2 else vix_bars[0]["c"] if vix_bars else demo["prev_close"]
-                            vix_change = round(vix_price - vix_prev, 2)
-                            vix_change_pct = round((vix_change / vix_prev) * 100, 2) if vix_prev else 0
-                            indices.append(IndexData(
-                                symbol="VIX", name="CBOE Volatility Index (via VIXY)",
-                                price=round(vix_price, 2), change=vix_change,
-                                change_pct=vix_change_pct, prev_close=round(vix_prev, 2),
-                                is_demo=False,
-                            ))
-                        else:
-                            indices.append(IndexData(**demo, is_demo=True))
-                    except Exception:
-                        indices.append(IndexData(**demo, is_demo=True))
+                    # VIX index is not tradable on Alpaca; use demo fallback
+                    indices.append(IndexData(**demo, is_demo=True))
                     continue
                 try:
                     bar_resp = await client.get(

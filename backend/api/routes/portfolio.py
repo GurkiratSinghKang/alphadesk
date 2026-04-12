@@ -108,12 +108,12 @@ def _alpaca_keys_empty() -> bool:
 def _demo_portfolio_summary() -> PortfolioSummary:
     return PortfolioSummary(
         equity=100_000.00,
-        cash=45_000.00,
-        buying_power=90_000.00,
-        total_market_value=55_000.00,
-        unrealized_pnl=1_250.00,
-        unrealized_pnl_pct=2.33,
-        realized_pnl_today=320.00,
+        cash=100_000.00,
+        buying_power=200_000.00,
+        total_market_value=0,
+        unrealized_pnl=0,
+        unrealized_pnl_pct=0,
+        realized_pnl_today=0,
         positions_count=0,
         last_updated=datetime.now(timezone.utc),
         is_demo=True,

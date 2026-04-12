@@ -102,6 +102,93 @@ function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number
   };
 }
 
+function runMacdBacktest(bars: OHLCVBar[], initialCapital: number): BacktestResult {
+  if (bars.length < 35) return emptyResult(initialCapital);
+
+  const closes = bars.map(b => b.close);
+
+  // Compute EMA helper
+  const ema = (data: number[], period: number): number[] => {
+    const result: number[] = [data[0]];
+    const k = 2 / (period + 1);
+    for (let i = 1; i < data.length; i++) {
+      result.push(data[i] * k + result[i - 1] * (1 - k));
+    }
+    return result;
+  };
+
+  const ema12 = ema(closes, 12);
+  const ema26 = ema(closes, 26);
+
+  // MACD line = 12-EMA - 26-EMA
+  const macdLine = ema12.map((v, i) => v - ema26[i]);
+
+  // Signal line = 9-EMA of MACD line
+  const signalLine = ema(macdLine, 9);
+
+  let capital = initialCapital;
+  let position = 0;
+  let entryPrice = 0;
+  let trades = 0, wins = 0, losses = 0;
+  const equityCurve: number[] = [capital];
+  let peak = capital;
+  let maxDd = 0;
+  const returns: number[] = [];
+
+  // Start after enough bars for 26-EMA + 9-period signal to stabilize
+  for (let i = 27; i < closes.length; i++) {
+    const macdPrev = macdLine[i - 1] - signalLine[i - 1];
+    const macdCurr = macdLine[i] - signalLine[i];
+
+    // Buy: MACD crosses above signal
+    if (macdPrev <= 0 && macdCurr > 0 && position === 0) {
+      position = Math.floor(capital / closes[i]);
+      entryPrice = closes[i];
+      capital -= position * entryPrice;
+    }
+    // Sell: MACD crosses below signal
+    else if (macdPrev >= 0 && macdCurr < 0 && position > 0) {
+      const proceeds = position * closes[i];
+      const pnl = proceeds - position * entryPrice;
+      capital += proceeds;
+      trades++;
+      if (pnl > 0) wins++;
+      else losses++;
+      position = 0;
+    }
+
+    const equity = capital + position * closes[i];
+    equityCurve.push(equity);
+    if (equity > peak) peak = equity;
+    const dd = (peak - equity) / peak;
+    if (dd > maxDd) maxDd = dd;
+    if (equityCurve.length > 1) {
+      returns.push((equity - equityCurve[equityCurve.length - 2]) / equityCurve[equityCurve.length - 2]);
+    }
+  }
+
+  // Close any open position
+  if (position > 0) {
+    capital += position * closes[closes.length - 1];
+    position = 0;
+  }
+
+  const totalReturn = capital - initialCapital;
+  const meanRet = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const stdRet = returns.length > 1 ? Math.sqrt(returns.reduce((s, r) => s + (r - meanRet) ** 2, 0) / (returns.length - 1)) : 1;
+
+  return {
+    totalReturn,
+    totalReturnPct: (totalReturn / initialCapital) * 100,
+    trades,
+    wins,
+    losses,
+    maxDrawdown: maxDd * 100,
+    sharpe: Math.round((stdRet > 0 ? meanRet / stdRet * Math.sqrt(252) : 0) * 100) / 100,
+    equityCurve,
+  };
+}
+
 function runRsiBacktest(bars: OHLCVBar[], period: number, oversold: number, overbought: number, capital: number): BacktestResult {
   if (bars.length < period + 10) return emptyResult(capital);
 
@@ -178,7 +265,7 @@ export function BacktestPanel() {
       } else if (strategy === "rsi") {
         res = runRsiBacktest(bars, 14, 30, 70, capital);
       } else {
-        res = runSmaBacktest(bars, 12, 26, capital); // MACD approximation
+        res = runMacdBacktest(bars, capital);
       }
       setResult(res);
     } catch { setResult(null); }

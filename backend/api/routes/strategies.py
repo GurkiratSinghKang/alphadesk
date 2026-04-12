@@ -281,15 +281,31 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
 }
 
 
-def _annualized_return(return_pct: float) -> float:
-    """Calculate proper CAGR-based annualized return."""
-    if return_pct == 0:
+def _annualized_return(return_pct: float, first_trade_date: str | None = None) -> float:
+    """Calculate proper CAGR-based annualized return.
+
+    Uses the actual first trade date from the ledger.  If no trades exist
+    or the holding period is less than 30 days the raw (non-annualized)
+    return is returned to avoid misleading extrapolation.
+    """
+    if return_pct == 0 or not first_trade_date:
         return 0
-    days_held = max((date.today() - date(2026, 4, 1)).days, 1)
+
+    try:
+        start = date.fromisoformat(first_trade_date[:10])
+    except (ValueError, TypeError):
+        return 0
+
+    days_held = max((date.today() - start).days, 1)
+
+    # Don't annualize short track records -- just show the raw return
+    if days_held < 30:
+        return round(return_pct, 2)
+
     if days_held >= 365:
         annualized = ((1 + return_pct / 100) ** (365 / days_held) - 1) * 100
     else:
-        annualized = return_pct * (365 / days_held) if days_held > 0 else 0
+        annualized = return_pct * (365 / days_held)
     return round(annualized, 2)
 
 
@@ -335,7 +351,7 @@ def _get_real_strategy_performance() -> dict[str, dict]:
         for trade in ledger._data.get("trades", []):
             strat = trade.get("strategy", "unknown")
             if strat not in perf:
-                perf[strat] = {"trades": 0, "pnl": 0.0, "wins": 0, "open": 0, "invested": 0.0, "last_trade_date": ""}
+                perf[strat] = {"trades": 0, "pnl": 0.0, "wins": 0, "open": 0, "invested": 0.0, "last_trade_date": "", "first_trade_date": ""}
             perf[strat]["trades"] += 1
             entry_price = trade.get("entry_price", 0)
             shares = trade.get("shares", 0)
@@ -343,6 +359,8 @@ def _get_real_strategy_performance() -> dict[str, dict]:
             trade_date = trade.get("entry_time", "")
             if trade_date and trade_date > perf[strat]["last_trade_date"]:
                 perf[strat]["last_trade_date"] = trade_date[:10] if len(trade_date) >= 10 else trade_date
+            if trade_date and (not perf[strat]["first_trade_date"] or trade_date < perf[strat]["first_trade_date"]):
+                perf[strat]["first_trade_date"] = trade_date[:10] if len(trade_date) >= 10 else trade_date
             if trade.get("status") == "open":
                 perf[strat]["open"] += 1
             if trade.get("status") == "closed" and trade.get("exit_price") and entry_price:
@@ -513,6 +531,7 @@ async def get_strategy_performance(
     active_count = 0
     pnl_dollars = 0.0
     last_trade = ""
+    first_trade = ""
 
     real_perf = _get_real_strategy_performance()
 
@@ -555,6 +574,7 @@ async def get_strategy_performance(
                 pnl_dollars = rp["pnl"] + unrealized
                 invested = rp.get("invested", 0.0)
                 last_trade = rp.get("last_trade_date", "")
+                first_trade = rp.get("first_trade_date", "")
                 closed = rp["trades"] - rp["open"]
                 if closed > 0:
                     win_rate = round(rp["wins"] / closed * 100, 1)
@@ -574,7 +594,7 @@ async def get_strategy_performance(
         invested_amount=round(invested, 2),
         current_value=current_value,
         total_return_pct=return_pct,
-        annualized_return_pct=_annualized_return(return_pct),
+        annualized_return_pct=_annualized_return(return_pct, first_trade),
         return_dollars=return_dollars,
         win_rate=win_rate,
         sharpe_ratio=0,

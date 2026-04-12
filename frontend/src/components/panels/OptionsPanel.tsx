@@ -219,9 +219,17 @@ export function OptionsPanel() {
 
   // Fetch IV data via React Query with fallback
   const { data: rawIvData } = useIVData(selectedSymbol);
-  const ivRank = rawIvData?.ivRank ?? 42;
-  const ivPctl = rawIvData?.ivPctl ?? 38;
-  const expectedMove = spotPrice * 0.032;
+  const ivRank = rawIvData?.ivRank ?? null;
+  const ivPctl = rawIvData?.ivPctl ?? null;
+  const currentIV = rawIvData?.currentIV ?? null;
+
+  // Compute expected move from IV if available; derive DTE from selected expiry
+  const expectedMove = useMemo(() => {
+    if (currentIV == null || !selectedExpiry) return null;
+    const expiryDate = new Date(selectedExpiry + "T00:00:00");
+    const dte = Math.max(1, Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+    return currentIV * spotPrice * Math.sqrt(dte / 365);
+  }, [currentIV, spotPrice, selectedExpiry]);
 
   // BUG #21: Handle call cell click
   const handleCallClick = (row: ChainRow) => {
@@ -260,16 +268,16 @@ export function OptionsPanel() {
             variant="outline"
             className="text-[10px] px-1.5 py-0.5 border-primary/50 text-primary font-semibold bg-primary/10"
           >
-            IV Rank: {ivRank}
+            IV Rank: {ivRank != null ? ivRank : "\u2014"}
           </Badge>
           <Badge
             variant="outline"
             className="text-[10px] px-1.5 py-0.5 border-muted-foreground/40 text-foreground font-medium bg-muted-foreground/10"
           >
-            IV Pctl: {ivPctl}
+            IV Pctl: {ivPctl != null ? ivPctl : "\u2014"}
           </Badge>
           <span className="text-[10px] text-muted-foreground">
-            Expected Move: {"\u00B1"}${expectedMove.toFixed(2)}
+            Expected Move: {expectedMove != null ? `\u00B1$${expectedMove.toFixed(2)}` : "\u2014"}
           </span>
         </div>
       </div>

@@ -26,6 +26,7 @@ const defaultSummary: PortfolioSummary = {
   positionsCount: 0,
   dayPnl: 0,
   dayPnlPct: 0,
+  is_demo: true,
 };
 
 const defaultGreeks: PortfolioGreeks = {
