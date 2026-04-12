@@ -10,6 +10,8 @@ import {
   Loader2,
   X,
   BookOpen,
+  Briefcase,
+  FileText,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -92,36 +94,7 @@ function TradeBuilderTab() {
   const addOrder = usePortfolioStore((s) => s.addOrder);
   const selectedStrikes = useOptionsStore((s) => s.selectedStrikes);
 
-  const [legs, setLegs] = useState<TradeLeg[]>([
-    {
-      id: "1",
-      symbol: selectedSymbol,
-      side: "buy",
-      quantity: 1,
-      price: 5.2,
-      type: "call",
-      strike: 235,
-      expiry: "2026-05-16",
-      delta: 0.55,
-      gamma: 0.018,
-      theta: -0.035,
-      vega: 0.12,
-    },
-    {
-      id: "2",
-      symbol: selectedSymbol,
-      side: "sell",
-      quantity: 1,
-      price: 2.8,
-      type: "call",
-      strike: 245,
-      expiry: "2026-05-16",
-      delta: -0.27,
-      gamma: -0.006,
-      theta: 0.01,
-      vega: -0.06,
-    },
-  ]);
+  const [legs, setLegs] = useState<TradeLeg[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -204,7 +177,7 @@ function TradeBuilderTab() {
         price: 0,
         type: "call",
         strike: undefined,
-        expiry: "2026-05-16",
+        expiry: undefined,
         delta: 0,
         gamma: 0,
         theta: 0,
@@ -423,17 +396,15 @@ function PositionsTab() {
     );
   }
 
-  // Fallback to demo if store is empty
-  const displayPositions =
-    positions.length > 0
-      ? positions
-      : [
-          { symbol: "AAPL", quantity: 100, avgCost: 218.5, currentPrice: 232.1, unrealizedPnl: 1360, marketValue: 23210 },
-          { symbol: "NVDA 140C 5/16", quantity: 5, avgCost: 12.3, currentPrice: 15.8, unrealizedPnl: 1750, marketValue: 7900 },
-          { symbol: "SPY", quantity: -50, avgCost: 595.0, currentPrice: 590.2, unrealizedPnl: 240, marketValue: 29510 },
-          { symbol: "TSLA 250P 5/16", quantity: 3, avgCost: 8.5, currentPrice: 6.2, unrealizedPnl: -690, marketValue: 1860 },
-          { symbol: "META", quantity: 200, avgCost: 510.0, currentPrice: 522.4, unrealizedPnl: 2480, marketValue: 104480 },
-        ];
+  if (positions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8">
+        <Briefcase className="h-6 w-6 mb-2 text-muted-foreground opacity-30" />
+        <p className="text-sm text-foreground">No open positions</p>
+        <p className="text-hint mt-1">Positions will appear when orders are filled</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-2">
@@ -446,7 +417,7 @@ function PositionsTab() {
           <span className="w-16 text-right">P&L</span>
         </div>
 
-        {displayPositions.map((p) => (
+        {positions.map((p) => (
           <div
             key={p.symbol}
             role="button"
@@ -516,16 +487,15 @@ function OrdersTab() {
     );
   }
 
-  // Fallback to demo if store is empty
-  const displayOrders =
-    orders.length > 0
-      ? orders
-      : [
-          { id: "O-001", symbol: "AAPL 240C", side: "buy" as const, type: "limit" as const, quantity: 5, price: 4.2, status: "pending" as const, createdAt: new Date().toISOString() },
-          { id: "O-002", symbol: "SPY", side: "sell" as const, type: "market" as const, quantity: 100, price: 595.0, status: "filled" as const, createdAt: new Date().toISOString() },
-          { id: "O-003", symbol: "NVDA 150C", side: "buy" as const, type: "limit" as const, quantity: 10, price: 8.5, status: "filled" as const, createdAt: new Date().toISOString() },
-          { id: "O-004", symbol: "TSLA", side: "buy" as const, type: "stop" as const, quantity: 50, price: 240.0, status: "cancelled" as const, createdAt: new Date().toISOString() },
-        ];
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8">
+        <FileText className="h-6 w-6 mb-2 text-muted-foreground opacity-30" />
+        <p className="text-sm text-foreground">No recent orders</p>
+        <p className="text-hint mt-1">Orders will appear after you place a trade</p>
+      </div>
+    );
+  }
 
   const statusColors: Record<string, string> = {
     pending: "bg-[var(--chart-4)]/15 text-[var(--chart-4)] border-[var(--chart-4)]/30",
@@ -556,7 +526,7 @@ function OrdersTab() {
           <span className="w-6" />
         </div>
 
-        {displayOrders.map((o) => (
+        {orders.map((o) => (
           <div
             key={o.id}
             role="button"

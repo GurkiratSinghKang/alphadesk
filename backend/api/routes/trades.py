@@ -22,13 +22,16 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 async def _is_trading_halted() -> bool:
-    """Check if trading is halted (persisted in Redis)."""
+    """Check if trading is halted. FAILS CLOSED — blocks trading if Redis unavailable."""
     try:
         from core.redis import cache_get
         result = await cache_get("trading:halted")
-        return result is not None and result.get("halted", False)
+        if result is not None:
+            return result.get("halted", False)
+        return False  # Key doesn't exist = not halted
     except Exception:
-        return False  # If Redis is down, allow trading (fail-open)
+        logger.warning("Redis unavailable — trading halted as safety precaution")
+        return True  # FAIL CLOSED: block trading when we can't check
 
 
 async def _set_trading_halted(halted: bool) -> None:
@@ -156,6 +159,7 @@ def _alpaca_keys_empty() -> bool:
 @router.post("/orders", response_model=OrderResponse, status_code=201)
 async def create_order(
     request: CreateOrderRequest,
+    username: str = Depends(require_auth),
 ) -> OrderResponse:
     """Submit a new order through the broker (Alpaca).
 
@@ -201,6 +205,16 @@ async def create_order(
 
     # Submit to broker
     order_id = await _submit_to_broker(request, settings)
+
+    # Observability: log every submitted order with the acting user
+    logger.info(
+        "Order submitted: %s %s %s @ %s (user: %s)",
+        request.legs[0].side,
+        request.legs[0].qty,
+        request.legs[0].symbol,
+        "market" if request.legs[0].order_type == OrderType.MARKET else f"${request.legs[0].limit_price}",
+        username,
+    )
 
     # Persist trade record (best-effort)
     try:

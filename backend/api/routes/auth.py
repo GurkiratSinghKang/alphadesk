@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from core.auth import (
     create_access_token,
@@ -42,8 +45,9 @@ async def _check_rate_limit(client_ip: str) -> None:
             )
     except HTTPException:
         raise
-    except Exception:
-        pass  # Redis error shouldn't block login
+    except Exception as e:
+        logger.warning("Rate limit check failed (Redis unavailable): %s", e)
+        pass  # Don't block login if Redis is down
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""

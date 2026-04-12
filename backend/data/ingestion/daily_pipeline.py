@@ -421,6 +421,9 @@ async def _check_exits(
                 trade["stop_loss"] = round(new_stop, 2)
                 if trade.get("signal") and isinstance(trade["signal"], dict):
                     trade["signal"]["stop_loss"] = round(new_stop, 2)
+                # Persist the updated stop level
+                ledger._persist()
+                logger.info("Trailing stop updated for %s: $%.2f → $%.2f (persisted)", sym, old_stop, new_stop)
                 # Cancel old stop order and place new one at higher level
                 try:
                     # Cancel existing stop orders for this symbol
