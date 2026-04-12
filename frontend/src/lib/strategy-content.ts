@@ -200,4 +200,80 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       maxPositions: "12",
     },
   },
+
+  "pairs-trading": {
+    thesis:
+      "Pairs trading exploits temporary mispricings between historically correlated securities. By identifying cointegrated pairs via the Engle-Granger method and monitoring their spread, the strategy enters mean-reverting positions when the z-score exceeds \u00B12 standard deviations. The approach is market-neutral by construction \u2014 long one stock, short the other \u2014 isolating the relative value signal from broader market movements. This edge persists because institutional capital flows, sector rotation, and idiosyncratic news create temporary spread dislocations that reliably revert to the long-run equilibrium.",
+    edge: "Harvests the mean-reverting spread between cointegrated pairs, profiting from temporary dislocations while maintaining market neutrality.",
+    riskProfile: {
+      level: "Low",
+      description:
+        "Market-neutral construction limits directional exposure, but spread blow-outs from structural regime changes or pair decoupling can generate outsized losses if stops are not respected.",
+    },
+    parameters: {
+      rebalanceFrequency: "Daily z-score monitoring with immediate entry on threshold breach",
+      universe: "S&P 500 sector pairs with 2+ year cointegration history (Engle-Granger p < 0.05)",
+      positionSizing: "Equal dollar long/short per pair, 3-5% of NAV per pair position",
+      entryCriteria: "Z-score > 2.0 or < -2.0 on the cointegrated spread",
+      exitCriteria: "Z-score crosses 0 (mean reversion) or stop at z-score > 3.5 (spread blow-out)",
+      maxPositions: "8",
+    },
+  },
+
+  "dividend-capture": {
+    thesis:
+      "The dividend capture strategy systematically harvests dividend payments by entering positions shortly before the ex-dividend date and exiting shortly after. While the stock price theoretically drops by the dividend amount on the ex-date, empirical evidence shows that high-quality dividend stocks with strong fundamentals often recover this drop within 2-5 trading days, particularly in bull market regimes. The strategy screens for stocks with dividend yields above 3%, adequate daily liquidity (> $10M ADV), positive 20-day momentum, and F-Score \u2265 5 to avoid value traps.",
+    edge: "Captures reliable dividend income from high-quality stocks while momentum and quality filters minimize the ex-date price drop risk.",
+    riskProfile: {
+      level: "Low",
+      description:
+        "Dividend capture is inherently low-volatility, but concentrated ex-date exposure means a broad market selloff during the capture window can overwhelm the dividend income.",
+    },
+    parameters: {
+      rebalanceFrequency: "Event-driven (triggered by upcoming ex-dividend dates)",
+      universe: "US equities with annualized dividend yield > 3%, average daily volume > $10M, and Piotroski F-Score \u2265 5",
+      positionSizing: "Equal-weight at 3-5% per position, max 5 concurrent captures",
+      entryCriteria: "Enter 2-3 days before ex-dividend date with positive 20-day momentum",
+      exitCriteria: "Exit 3-5 days after ex-dividend date, or on 80% price recovery, or 5% stop-loss below entry",
+      maxPositions: "5",
+    },
+  },
+
+  "sector-rotation": {
+    thesis:
+      "Sector rotation capitalizes on the tendency of sector performance to persist over intermediate time horizons. By ranking all 11 GICS sectors on relative strength (1-month and 3-month returns, equally weighted), the strategy allocates to the top 3 sectors and underweights or avoids the bottom 3. This exploits the institutional herding and macro-driven sector flows that create momentum at the sector level. The strategy rebalances monthly on the first trading day, using sector ETFs (XLK, XLV, XLF, etc.) for liquid, low-cost execution.",
+    edge: "Rides sector-level momentum driven by macro themes and institutional capital flows, rotating into leadership sectors monthly.",
+    riskProfile: {
+      level: "Medium",
+      description:
+        "Concentrated sector bets amplify drawdowns during sector mean-reversion episodes, and monthly rebalancing can lag rapid sector rotations driven by macro shocks.",
+    },
+    parameters: {
+      rebalanceFrequency: "Monthly (first trading day)",
+      universe: "11 GICS sector ETFs (XLK, XLV, XLF, XLE, XLI, XLY, XLP, XLU, XLB, XLRE, XLC)",
+      positionSizing: "Equal-weight 33% per selected sector across top 3 sectors",
+      entryCriteria: "Top 3 sectors by composite 1-month + 3-month relative strength ranking",
+      exitCriteria: "Sector drops below 10th percentile rank at monthly rebalance, or replaced by higher-ranked sector",
+      maxPositions: "3",
+    },
+  },
+
+  "gap-fill": {
+    thesis:
+      "Overnight gaps in liquid large-cap stocks tend to fill partially or completely during the first 30-90 minutes of trading. This strategy identifies gaps > 1% at the open, enters in the direction of the fill (short gap-ups, long gap-downs), and targets 50-80% gap closure. The edge exists because overnight news and pre-market trading create exaggerated price moves that the opening auction and early volume normalize. Tight stops at the gap extreme limit downside to the gap size minus entry. The strategy is paused during high-VIX environments where gaps tend to extend rather than fill.",
+    edge: "Fades exaggerated overnight gaps in liquid stocks, profiting from the reliable tendency of gaps to fill during early trading hours.",
+    riskProfile: {
+      level: "High",
+      description:
+        "Intraday gap fading is high-frequency and high-volatility; gaps driven by genuine catalysts (earnings, M&A) can extend violently, and the VIX filter may lag sudden regime shifts.",
+    },
+    parameters: {
+      rebalanceFrequency: "Intraday (9:30 AM ET entry, close by 11:00 AM ET)",
+      universe: "S&P 500 stocks with average daily volume > $50M and overnight gap > 1% from previous close",
+      positionSizing: "1-2% of portfolio NAV per trade, scaled inversely with gap size",
+      entryCriteria: "Gap > 1% from previous close at market open, VIX < 25, no pending earnings or major news catalyst",
+      exitCriteria: "50-80% of gap filled (target), stop-loss at gap extreme (100% gap), or time stop at 11:00 AM ET",
+      maxPositions: "3",
+    },
+  },
 };

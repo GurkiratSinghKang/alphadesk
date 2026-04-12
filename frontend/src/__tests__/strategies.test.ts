@@ -10,8 +10,8 @@ describe('Strategy configuration', () => {
     }
   });
 
-  it('has 8 strategies', () => {
-    expect(STRATEGY_ORDER.length).toBe(8);
+  it('has 12 strategies', () => {
+    expect(STRATEGY_ORDER.length).toBe(12);
   });
 
   it('has unique strategy IDs', () => {

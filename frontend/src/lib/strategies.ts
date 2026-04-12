@@ -7,6 +7,10 @@ import {
   Crosshair,
   Brain,
   Shield,
+  GitMerge,
+  DollarSign,
+  PieChart,
+  ArrowLeftRight,
 } from "lucide-react";
 
 export const STRATEGY_META: Record<
@@ -61,6 +65,30 @@ export const STRATEGY_META: Record<
     icon: Crosshair,
     regimeNote: "Needs bull momentum",
   },
+  "pairs-trading": {
+    name: "Statistical Arbitrage Pairs",
+    shortName: "Pairs Trading",
+    icon: GitMerge,
+    regimeNote: "Market-neutral, all regimes",
+  },
+  "dividend-capture": {
+    name: "Dividend Capture",
+    shortName: "Dividend Capture",
+    icon: DollarSign,
+    regimeNote: "Income-focused, stable markets",
+  },
+  "sector-rotation": {
+    name: "Sector Rotation Model",
+    shortName: "Sector Rotation",
+    icon: PieChart,
+    regimeNote: "Trend-following across sectors",
+  },
+  "gap-fill": {
+    name: "Overnight Gap Fill",
+    shortName: "Gap Fill",
+    icon: ArrowLeftRight,
+    regimeNote: "Intraday, paused after hours",
+  },
 };
 
 export const STRATEGY_ORDER: string[] = [
@@ -72,4 +100,8 @@ export const STRATEGY_ORDER: string[] = [
   "claude-alpha",
   "mean-reversion",
   "vcp-breakout",
+  "pairs-trading",
+  "dividend-capture",
+  "sector-rotation",
+  "gap-fill",
 ];
