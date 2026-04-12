@@ -660,7 +660,7 @@ export default function PipelinePage() {
                       Active Positions
                     </p>
                     <p className="text-lg font-bold tabular-nums text-foreground">
-                      {positions.length}
+                      {displayPositions.length}
                     </p>
                   </CardContent>
                 </Card>

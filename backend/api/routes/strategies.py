@@ -442,6 +442,10 @@ async def get_strategy_performance(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> StrategyPerformance:
     """Get detailed performance data for a single strategy using real ledger data only."""
+    import httpx
+    from core.config import settings
+    from data.ingestion.trade_ledger import TradeLedger
+
     data = await _get_strategy_data(strategy_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
@@ -455,12 +459,44 @@ async def get_strategy_performance(
     last_trade = ""
 
     real_perf = _get_real_strategy_performance()
+
+    # Fetch unrealized P&L for open positions (same approach as list_strategies)
+    ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
+    unrealized = 0.0
+    try:
+        ledger = TradeLedger()
+        open_trades = ledger.get_open_positions()
+        strat_open = [t for t in open_trades if t.get("strategy") == ledger_name]
+        if strat_open:
+            async with httpx.AsyncClient() as client:
+                for t in strat_open:
+                    sym = t.get("symbol", "")
+                    entry = t.get("entry_price", 0)
+                    shares = t.get("shares", 0)
+                    if not sym or not entry or not shares:
+                        continue
+                    try:
+                        resp = await client.get(
+                            f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
+                            headers={
+                                "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                                "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                            },
+                        )
+                        if resp.status_code == 200:
+                            cur = resp.json().get("trade", {}).get("p", 0)
+                            unrealized += (cur - entry) * shares
+                    except Exception:
+                        logger.warning("Failed to fetch live price for %s", sym, exc_info=True)
+    except Exception:
+        logger.warning("Failed to compute unrealized P&L for strategy %s", strategy_id, exc_info=True)
+
     for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
         if strat_id == strategy_id and strat_name in real_perf:
             rp = real_perf[strat_name]
             if rp["trades"] > 0:
                 active_count = rp["open"]
-                pnl_dollars = rp["pnl"]
+                pnl_dollars = rp["pnl"] + unrealized
                 invested = rp.get("invested", 0.0)
                 last_trade = rp.get("last_trade_date", "")
                 closed = rp["trades"] - rp["open"]
