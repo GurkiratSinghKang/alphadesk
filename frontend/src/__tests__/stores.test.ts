@@ -3,6 +3,7 @@ import { useMarketStore } from '@/stores/market';
 import { usePortfolioStore } from '@/stores/portfolio';
 import { useAlertsStore } from '@/stores/alerts';
 import { useUIStore } from '@/stores/ui';
+import { useOptionsStore, type SelectedStrike } from '@/stores/options';
 
 // ─── Market Store ─────────────────────────────────────────────
 
@@ -470,5 +471,124 @@ describe('Portfolio Store', () => {
     usePortfolioStore.getState().setGreeks({ netDelta: 0.5, netGamma: 0.02, netTheta: -10, netVega: 50, betaWeightedDelta: 0.45 });
     expect(usePortfolioStore.getState().greeks.netDelta).toBe(0.5);
     expect(usePortfolioStore.getState().greeks.netTheta).toBe(-10);
+  });
+});
+
+// ─── Options Store ───────────────────────────────────────────
+
+describe('Options Store', () => {
+  const sampleCall: SelectedStrike = {
+    strike: 680,
+    type: 'call',
+    expiry: '2026-05-16',
+    price: 5.20,
+    delta: 0.45,
+  };
+
+  const samplePut: SelectedStrike = {
+    strike: 670,
+    type: 'put',
+    expiry: '2026-05-16',
+    price: 3.10,
+    delta: -0.35,
+  };
+
+  beforeEach(() => {
+    useOptionsStore.setState({ selectedStrikes: [] });
+  });
+
+  it('starts with empty selectedStrikes', () => {
+    expect(useOptionsStore.getState().selectedStrikes).toEqual([]);
+  });
+
+  it('addStrike adds a strike', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+    expect(useOptionsStore.getState().selectedStrikes[0].strike).toBe(680);
+  });
+
+  it('addStrike adds multiple strikes', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().addStrike(samplePut);
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(2);
+  });
+
+  it('addStrike preserves all strike fields', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    const stored = useOptionsStore.getState().selectedStrikes[0];
+    expect(stored.strike).toBe(680);
+    expect(stored.type).toBe('call');
+    expect(stored.expiry).toBe('2026-05-16');
+    expect(stored.price).toBe(5.20);
+    expect(stored.delta).toBe(0.45);
+  });
+
+  it('removeStrike removes a strike by value and type', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().addStrike(samplePut);
+    useOptionsStore.getState().removeStrike(680, 'call');
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+    expect(useOptionsStore.getState().selectedStrikes[0].type).toBe('put');
+  });
+
+  it('removeStrike leaves other strikes intact', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().addStrike(samplePut);
+    useOptionsStore.getState().removeStrike(680, 'call');
+    expect(useOptionsStore.getState().selectedStrikes[0].strike).toBe(670);
+  });
+
+  it('removeStrike is a no-op for unknown strike', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().removeStrike(999, 'call');
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+  });
+
+  it('removeStrike distinguishes between call and put at same strike', () => {
+    const callAt680: SelectedStrike = { strike: 680, type: 'call', expiry: '2026-05-16', price: 5, delta: 0.45 };
+    const putAt680: SelectedStrike = { strike: 680, type: 'put', expiry: '2026-05-16', price: 4, delta: -0.55 };
+    useOptionsStore.getState().addStrike(callAt680);
+    useOptionsStore.getState().addStrike(putAt680);
+    useOptionsStore.getState().removeStrike(680, 'call');
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+    expect(useOptionsStore.getState().selectedStrikes[0].type).toBe('put');
+  });
+
+  it('toggleStrike adds when absent', () => {
+    useOptionsStore.getState().toggleStrike(sampleCall);
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+    expect(useOptionsStore.getState().selectedStrikes[0].strike).toBe(680);
+  });
+
+  it('toggleStrike removes when present', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().toggleStrike(sampleCall);
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(0);
+  });
+
+  it('toggleStrike is idempotent: toggle twice restores original', () => {
+    useOptionsStore.getState().toggleStrike(sampleCall);
+    useOptionsStore.getState().toggleStrike(sampleCall);
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(0);
+  });
+
+  it('toggleStrike only affects matching strike/type pair', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().addStrike(samplePut);
+    useOptionsStore.getState().toggleStrike(sampleCall); // removes sampleCall
+    expect(useOptionsStore.getState().selectedStrikes.length).toBe(1);
+    expect(useOptionsStore.getState().selectedStrikes[0].type).toBe('put');
+  });
+
+  it('clearStrikes empties the array', () => {
+    useOptionsStore.getState().addStrike(sampleCall);
+    useOptionsStore.getState().addStrike(samplePut);
+    useOptionsStore.getState().clearStrikes();
+    expect(useOptionsStore.getState().selectedStrikes).toEqual([]);
+  });
+
+  it('clearStrikes is a no-op on empty array', () => {
+    useOptionsStore.getState().clearStrikes();
+    expect(useOptionsStore.getState().selectedStrikes).toEqual([]);
   });
 });
