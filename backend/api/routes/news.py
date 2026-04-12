@@ -41,12 +41,14 @@ class NewsArticle(BaseModel):
     image_url: str | None = None
     sentiment: str | None = None  # positive/negative/neutral
     symbols: list[str] = []
+    is_demo: bool = False
 
 
 class NewsResponse(BaseModel):
     articles: list[NewsArticle]
     query: str
     count: int
+    is_demo: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -216,12 +218,13 @@ def _generate_demo_articles(symbol: str | None = None, limit: int = 10) -> list[
         articles.append(NewsArticle(
             title=title,
             description=f"Demo article for development. Configure NEWSDATA_API_KEY for live news.",
-            url=f"https://example.com/news/{i}",
+            url="",
             source=rng.choice(_DEMO_SOURCES),
             published_at=now.strftime("%Y-%m-%d %H:%M:%S"),
             image_url=None,
             sentiment=item.get("sentiment"),
             symbols=syms,
+            is_demo=True,
         ))
     return articles
 
@@ -249,13 +252,15 @@ async def get_latest_news(
     if cached:
         return NewsResponse(**cached)
 
+    is_demo = False
     if settings.NEWSDATA_API_KEY.get_secret_value():
         raw = await _fetch_newsdata(q, limit)
         articles = _parse_articles(raw)
     else:
         articles = _generate_demo_articles(symbol=q if q != "stock market" else None, limit=limit)
+        is_demo = True
 
-    response = NewsResponse(articles=articles, query=q, count=len(articles))
+    response = NewsResponse(articles=articles, query=q, count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
     return response
 
@@ -268,13 +273,15 @@ async def get_market_news() -> NewsResponse:
     if cached:
         return NewsResponse(**cached)
 
+    is_demo = False
     if settings.NEWSDATA_API_KEY.get_secret_value():
         raw = await _fetch_newsdata("stock market finance", 10)
         articles = _parse_articles(raw)
     else:
         articles = _generate_demo_articles(symbol=None, limit=10)
+        is_demo = True
 
-    response = NewsResponse(articles=articles, query="market", count=len(articles))
+    response = NewsResponse(articles=articles, query="market", count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
     return response
 
@@ -291,14 +298,16 @@ async def get_symbol_news(
     if cached:
         return NewsResponse(**cached)
 
+    is_demo = False
     if settings.NEWSDATA_API_KEY.get_secret_value():
         query = _company_query(symbol)
         raw = await _fetch_newsdata(query, limit)
         articles = _parse_articles(raw, symbols=[symbol])
     else:
         articles = _generate_demo_articles(symbol=symbol, limit=limit)
+        is_demo = True
 
-    response = NewsResponse(articles=articles, query=symbol, count=len(articles))
+    response = NewsResponse(articles=articles, query=symbol, count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
     return response
 

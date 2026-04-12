@@ -25,6 +25,8 @@ class PortfolioSummary(BaseModel):
     realized_pnl_today: float
     positions_count: int
     last_updated: datetime
+    is_demo: bool = False
+    source: str = "alpaca"
 
 
 class PerformanceMetrics(BaseModel):
@@ -42,6 +44,7 @@ class PerformanceMetrics(BaseModel):
     worst_trade: float | None = None
     total_trades: int = 0
     equity_curve: list[dict[str, Any]] = Field(default_factory=list)
+    is_demo: bool = False
 
 
 class PortfolioGreeks(BaseModel):
@@ -86,6 +89,8 @@ class CalendarResponse(BaseModel):
     losing_days: int
     best_day: CalendarBestWorst | None = None
     worst_day: CalendarBestWorst | None = None
+    is_demo: bool = False
+    has_data: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +116,8 @@ def _demo_portfolio_summary() -> PortfolioSummary:
         realized_pnl_today=320.00,
         positions_count=0,
         last_updated=datetime.now(timezone.utc),
+        is_demo=True,
+        source="demo",
     )
 
 
@@ -168,6 +175,7 @@ def _demo_performance(period: str) -> PerformanceMetrics:
         worst_trade=round(min(daily_pnls), 2) if daily_pnls else None,
         total_trades=len(daily_pnls),
         equity_curve=equity_curve,
+        is_demo=True,
     )
 
 
@@ -459,6 +467,7 @@ def _demo_calendar(year: int, month: int) -> CalendarResponse:
         losing_days=len(losing),
         best_day=CalendarBestWorst(date=best.date, pnl=best.pnl) if best else None,
         worst_day=CalendarBestWorst(date=worst.date, pnl=worst.pnl) if worst else None,
+        is_demo=True,
     )
 
 
@@ -492,6 +501,8 @@ async def get_pnl_calendar(
         losing_days=0,
         best_day=None,
         worst_day=None,
+        is_demo=False,
+        has_data=False,
     )
 
 
