@@ -1,24 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
-import { getMarketRegime } from "@/lib/api";
+import { useRegime } from "@/hooks/useQueries";
 
 export function StatusStrip() {
   const summary = usePortfolioStore((s) => s.summary);
   const { isConnected } = useWs();
   const tradingMode = useUIStore((s) => s.tradingMode);
 
-  const [regime, setRegime] = useState<{ regime: string; label: string; vix_level: number } | null>(null);
-
-  useEffect(() => {
-    getMarketRegime().then((data) => {
-      setRegime(data.regime);
-    }).catch((err) => console.error("[StatusStrip] Regime fetch failed:", err));
-  }, []);
+  const { data: regimeData } = useRegime();
+  const regime = regimeData?.regime ?? null;
 
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;

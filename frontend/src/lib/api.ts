@@ -55,6 +55,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    // Dispatch error event for toast system to catch
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
+        detail: { status: res.status, message: `API ${res.status}: ${res.statusText}`, path },
+      }));
+    }
     throw new Error(`API ${res.status}: ${res.statusText} – ${body}`);
   }
   return res.json() as Promise<T>;

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 type PanelTab = string;
 
@@ -25,31 +26,39 @@ interface UIState {
   setTradingMode: (mode: "paper" | "live") => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  activePanels: {
-    left: "watchlist",
-    center: "chart",
-    right: "technical",
-    bottom: "trade",
-  },
-  commandPaletteOpen: false,
-  sidebarCollapsed: false,
-  theme: "dark",
-  tradingMode: "paper",
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      activePanels: {
+        left: "watchlist",
+        center: "chart",
+        right: "technical",
+        bottom: "trade",
+      },
+      commandPaletteOpen: false,
+      sidebarCollapsed: false,
+      theme: "dark",
+      tradingMode: "paper",
 
-  setActiveTab: (panel, tab) =>
-    set((state) => ({
-      activePanels: { ...state.activePanels, [panel]: tab },
-    })),
+      setActiveTab: (panel, tab) =>
+        set((state) => ({
+          activePanels: { ...state.activePanels, [panel]: tab },
+        })),
 
-  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
-  toggleCommandPalette: () =>
-    set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+      toggleCommandPalette: () =>
+        set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
 
-  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-  toggleSidebar: () =>
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleSidebar: () =>
+        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-  setTheme: (theme) => set({ theme }),
-  setTradingMode: (mode) => set({ tradingMode: mode }),
-}));
+      setTheme: (theme) => set({ theme }),
+      setTradingMode: (mode) => set({ tradingMode: mode }),
+    }),
+    {
+      name: "alphadesk-ui",
+      partialize: (state) => ({ tradingMode: state.tradingMode }),
+    }
+  )
+);
