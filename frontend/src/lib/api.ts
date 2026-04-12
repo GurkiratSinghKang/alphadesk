@@ -608,7 +608,7 @@ export async function getPipelineRun(date: string): Promise<PipelineRun> {
   return mapPipelineRun(raw);
 }
 
-function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
+export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
   const r = raw as Record<string, any>;
   return {
     date: r.date ?? "",
