@@ -564,6 +564,16 @@ async def _run_pipeline_inner(
                 logger.critical(msg)
                 errors.append(msg)
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash, "day_pnl": day_pnl}
+
+                # Send alert via available channels
+                try:
+                    discord_url = settings.DISCORD_WEBHOOK_URL.get_secret_value() if hasattr(settings.DISCORD_WEBHOOK_URL, 'get_secret_value') else settings.DISCORD_WEBHOOK_URL
+                    if discord_url:
+                        async with httpx.AsyncClient() as client:
+                            await client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
+                except Exception:
+                    pass
+
                 _save_log(log)
                 _pipeline_status["last_result"] = "circuit_breaker"
                 return log

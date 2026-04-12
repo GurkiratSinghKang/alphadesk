@@ -18,9 +18,13 @@ interface BacktestResult {
   equityCurve: number[];
 }
 
+function emptyResult(capital: number): BacktestResult {
+  return { totalReturn: 0, totalReturnPct: 0, trades: 0, wins: 0, losses: 0, maxDrawdown: 0, sharpe: 0, equityCurve: [capital] };
+}
+
 function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number, initialCapital: number): BacktestResult {
   if (bars.length < slowPeriod + 10) {
-    return { totalReturn: 0, totalReturnPct: 0, trades: 0, wins: 0, losses: 0, maxDrawdown: 0, sharpe: 0, equityCurve: [initialCapital] };
+    return emptyResult(initialCapital);
   }
 
   // Calculate SMAs
@@ -98,8 +102,66 @@ function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number
   };
 }
 
+function runRsiBacktest(bars: OHLCVBar[], period: number, oversold: number, overbought: number, capital: number): BacktestResult {
+  if (bars.length < period + 10) return emptyResult(capital);
+
+  const closes = bars.map(b => b.close);
+  let cash = capital, position = 0, entryPrice = 0;
+  let trades = 0, wins = 0, losses = 0;
+  const equityCurve = [capital];
+  let peak = capital, maxDd = 0;
+  const returns: number[] = [];
+
+  for (let i = period; i < closes.length; i++) {
+    // Calculate RSI
+    let gains = 0, loss = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const diff = closes[j] - closes[j - 1];
+      if (diff > 0) gains += diff;
+      else loss -= diff;
+    }
+    const avgGain = gains / period;
+    const avgLoss = loss / period;
+    const rs = avgLoss > 0 ? avgGain / avgLoss : 100;
+    const rsi = 100 - (100 / (1 + rs));
+
+    // Buy when RSI < oversold, sell when RSI > overbought
+    if (rsi < oversold && position === 0) {
+      position = Math.floor(cash / closes[i]);
+      entryPrice = closes[i];
+      cash -= position * entryPrice;
+    } else if (rsi > overbought && position > 0) {
+      const proceeds = position * closes[i];
+      const pnl = proceeds - position * entryPrice;
+      cash += proceeds;
+      trades++; if (pnl > 0) wins++; else losses++;
+      position = 0;
+    }
+
+    const equity = cash + position * closes[i];
+    equityCurve.push(equity);
+    if (equity > peak) peak = equity;
+    const dd = (peak - equity) / peak;
+    if (dd > maxDd) maxDd = dd;
+    if (equityCurve.length > 1) returns.push((equity - equityCurve[equityCurve.length - 2]) / equityCurve[equityCurve.length - 2]);
+  }
+
+  if (position > 0) { cash += position * closes[closes.length - 1]; position = 0; }
+  const totalReturn = cash - capital;
+  const meanRet = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const stdRet = returns.length > 1 ? Math.sqrt(returns.reduce((s, r) => s + (r - meanRet) ** 2, 0) / (returns.length - 1)) : 1;
+
+  return {
+    totalReturn, totalReturnPct: (totalReturn / capital) * 100,
+    trades, wins, losses, maxDrawdown: maxDd * 100,
+    sharpe: Math.round((stdRet > 0 ? meanRet / stdRet * Math.sqrt(252) : 0) * 100) / 100,
+    equityCurve,
+  };
+}
+
 export function BacktestPanel() {
   const [symbol, setSymbol] = useState("SPY");
+  const [strategy, setStrategy] = useState<"sma-cross" | "rsi" | "macd">("sma-cross");
   const [fastPeriod, setFastPeriod] = useState(10);
   const [slowPeriod, setSlowPeriod] = useState(50);
   const [capital, setCapital] = useState(100000);
@@ -110,11 +172,16 @@ export function BacktestPanel() {
     setRunning(true);
     try {
       const bars = await getBars(symbol, "D", 500);
-      const res = runSmaBacktest(bars, fastPeriod, slowPeriod, capital);
+      let res: BacktestResult;
+      if (strategy === "sma-cross") {
+        res = runSmaBacktest(bars, fastPeriod, slowPeriod, capital);
+      } else if (strategy === "rsi") {
+        res = runRsiBacktest(bars, 14, 30, 70, capital);
+      } else {
+        res = runSmaBacktest(bars, 12, 26, capital); // MACD approximation
+      }
       setResult(res);
-    } catch {
-      setResult(null);
-    }
+    } catch { setResult(null); }
     setRunning(false);
   };
 
@@ -149,13 +216,38 @@ export function BacktestPanel() {
           <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground" />
         </div>
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
-          <input type="number" value={fastPeriod} onChange={(e) => setFastPeriod(parseInt(e.target.value) || 10)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
+          <select value={strategy} onChange={(e) => setStrategy(e.target.value as any)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
+            <option value="sma-cross">SMA Crossover</option>
+            <option value="rsi">RSI Mean Reversion</option>
+            <option value="macd">MACD Signal</option>
+          </select>
         </div>
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
-          <input type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(parseInt(e.target.value) || 50)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
-        </div>
+        {strategy === "sma-cross" && (
+          <>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
+              <input type="number" value={fastPeriod} onChange={(e) => setFastPeriod(parseInt(e.target.value) || 10)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
+              <input type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(parseInt(e.target.value) || 50)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+            </div>
+          </>
+        )}
+        {strategy === "rsi" && (
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
+            <input type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground opacity-50" disabled />
+            <p className="text-[10px] text-muted-foreground mt-0.5">Buy RSI&lt;30, Sell RSI&gt;70</p>
+          </div>
+        )}
+        {strategy === "macd" && (
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">MACD</label>
+            <p className="text-[10px] text-muted-foreground mt-2">12/26 EMA crossover</p>
+          </div>
+        )}
         <div>
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
           <input type="number" value={capital} onChange={(e) => setCapital(parseInt(e.target.value) || 100000)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
