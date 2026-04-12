@@ -58,7 +58,7 @@ export function StatusStrip() {
         )}
       </div>
       <div className="flex items-center gap-2 px-4">
-        <span className="text-foreground font-medium">Alpaca (Paper)</span>
+        <span className="text-foreground font-medium">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
         <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)]" : "bg-[var(--loss)]/15 text-[var(--loss)]")}>
           {tradingMode}
         </span>

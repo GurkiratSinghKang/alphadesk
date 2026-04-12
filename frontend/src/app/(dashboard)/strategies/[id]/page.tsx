@@ -202,10 +202,20 @@ function HeatmapCell({ value, label }: { value: number; label: string }) {
 
 // ─── Main Page Component ─────────────────────────────────────
 
+// Map URL slugs to canonical strategy IDs when they differ
+const SLUG_TO_ID: Record<string, string> = {
+  "earnings-vol": "earnings-vol-premium",
+};
+
+function resolveStrategyId(slug: string): string {
+  return SLUG_TO_ID[slug] ?? slug;
+}
+
 export default function StrategyDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const strategyId = params.id as string;
+  const rawSlug = params.id as string;
+  const strategyId = resolveStrategyId(rawSlug);
 
   const [perf, setPerf] = useState<StrategyPerformance | null>(null);
   const [trades, setTrades] = useState<StrategyTrade[]>([]);

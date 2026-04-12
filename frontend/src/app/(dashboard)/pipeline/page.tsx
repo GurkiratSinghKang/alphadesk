@@ -73,26 +73,35 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
     { label: "Orders", count: activeRun?.ordersPlaced?.length ?? 0 },
   ];
 
+  const allZero = stages.every((s) => s.count === 0);
+
   return (
-    <div className="flex items-center justify-between gap-2">
-      {stages.map((stage, i) => (
-        <div key={stage.label} className="flex items-center gap-2 flex-1">
-          <div className={cn(
-            "flex-1 rounded-lg border px-3 py-2 text-center",
-            stage.count > 0
-              ? "border-primary/40 bg-primary/5"
-              : "border-border bg-[var(--surface)]"
-          )}>
-            <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#8a8a95]")}>
-              {stage.count}
-            </p>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        {stages.map((stage, i) => (
+          <div key={stage.label} className="flex items-center gap-2 flex-1">
+            <div className={cn(
+              "flex-1 rounded-lg border px-3 py-2 text-center",
+              stage.count > 0
+                ? "border-primary/40 bg-primary/5"
+                : "border-border bg-[var(--surface)]"
+            )}>
+              <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#8a8a95]")}>
+                {stage.count}
+              </p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+            </div>
+            {i < stages.length - 1 && (
+              <span className="text-muted-foreground/40 text-sm shrink-0">→</span>
+            )}
           </div>
-          {i < stages.length - 1 && (
-            <span className="text-muted-foreground/40 text-sm shrink-0">→</span>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      {allZero && (
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          Pipeline has not run today &mdash; awaiting next scheduled run
+        </p>
+      )}
     </div>
   );
 }

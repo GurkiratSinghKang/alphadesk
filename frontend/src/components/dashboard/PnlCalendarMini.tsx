@@ -18,7 +18,16 @@ export function PnlCalendarMini() {
     }).catch((err) => console.error("[PnlCalendarMini] Calendar fetch failed:", err));
   }, []);
 
-  if (days.length === 0) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (days.length === 0) return (
+    <div className="animate-pulse bg-[var(--panel)] rounded-lg h-48 border border-border" />
+  );
+
+  if (!mounted) return (
+    <div className="animate-pulse bg-[var(--panel)] rounded-lg h-48 border border-border" />
+  );
 
   const now = new Date();
   const year = now.getFullYear();

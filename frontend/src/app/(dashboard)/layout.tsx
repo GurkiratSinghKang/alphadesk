@@ -25,10 +25,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [toast]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex min-h-screen flex-col">
       <TopBar />
       <StatusStrip />
-      <main className="flex-1 min-h-0">{children}</main>
+      <main className="flex-1 overflow-y-auto">{children}</main>
       <CommandPalette />
       {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
     </div>
