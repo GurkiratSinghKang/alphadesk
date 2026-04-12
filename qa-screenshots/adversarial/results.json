@@ -1,0 +1,252 @@
+{
+  "startTime": "2026-04-11T22:06:22.619Z",
+  "endTime": "2026-04-11T22:08:02.590Z",
+  "summary": {
+    "total": 30,
+    "passed": 28,
+    "failed": 0,
+    "warnings": 2
+  },
+  "tests": [
+    {
+      "id": 1,
+      "name": "Rapid Buy/Sell toggle (20x)",
+      "status": "PASS",
+      "detail": "20 rapid Buy/Sell toggles. State stable, no crash.",
+      "screenshot": null,
+      "duration": 3006
+    },
+    {
+      "id": 2,
+      "name": "Rapid analysis tab switching (Tech/Fund/Sent/Chat/Order x5 rounds)",
+      "status": "PASS",
+      "detail": "25 rapid tab switches completed. No crash, no JS errors.",
+      "screenshot": null,
+      "duration": 2737
+    },
+    {
+      "id": 3,
+      "name": "Rapid strategy card clicks (dashboard)",
+      "status": "PASS",
+      "detail": "Clicked 8 cards rapidly. Navigation: https://tradingalpha.net/strategies/vcp-breakout. No crash.",
+      "screenshot": null,
+      "duration": 6246
+    },
+    {
+      "id": 4,
+      "name": "Rapid chart timeframe switching (1m->D->W->1m->5m x3 rounds)",
+      "status": "PASS",
+      "detail": "27 rapid timeframe switches. Chart survived. Console errors: 0",
+      "screenshot": null,
+      "duration": 4424
+    },
+    {
+      "id": 5,
+      "name": "Rapid chart type switching (candle/line/area x10)",
+      "status": "PASS",
+      "detail": "30 rapid chart type switches. No crash. Console errors: 0",
+      "screenshot": null,
+      "duration": 2547
+    },
+    {
+      "id": 6,
+      "name": "Order quantity = 0",
+      "status": "PASS",
+      "detail": "Quantity set to \"1\". Code guards: Math.max(1, parseInt(v) || 1) clamps to 1.",
+      "screenshot": null,
+      "duration": 2891
+    },
+    {
+      "id": 7,
+      "name": "Order quantity = 999,999,999",
+      "status": "PASS",
+      "detail": "Qty \"999999999\" accepted. No NaN/Infinity on page. (No max validation -- potential UX issue)",
+      "screenshot": null,
+      "duration": 2879
+    },
+    {
+      "id": 8,
+      "name": "Order quantity = -1",
+      "status": "PASS",
+      "detail": "Negative input clamped to \"11\". Guard working.",
+      "screenshot": null,
+      "duration": 2929
+    },
+    {
+      "id": 9,
+      "name": "Limit price = 0.001",
+      "status": "PASS",
+      "detail": "Limit price 0.001 accepted (\"0.001\"). No minimum price validation.",
+      "screenshot": null,
+      "duration": 3084
+    },
+    {
+      "id": 10,
+      "name": "Limit price = 999,999",
+      "status": "PASS",
+      "detail": "Limit price 999999 accepted. No NaN/Infinity.",
+      "screenshot": null,
+      "duration": 216
+    },
+    {
+      "id": 11,
+      "name": "Position Sizer Risk% = 0 (division by zero?)",
+      "status": "PASS",
+      "detail": "Risk%=0 entered as \"1\". Guard: parseFloat(v)||1 converts 0->1. No Infinity/NaN.",
+      "screenshot": null,
+      "duration": 2866
+    },
+    {
+      "id": 12,
+      "name": "Position Sizer Stop Loss% = 0 (division by zero?)",
+      "status": "PASS",
+      "detail": "SL%=0: Shares=\"294\". Guard: stopLossDistance>0?...:0 prevents division by zero.",
+      "screenshot": null,
+      "duration": 432
+    },
+    {
+      "id": 13,
+      "name": "Position Sizer Stop Loss% = 100",
+      "status": "PASS",
+      "detail": "SL%=100: Shares=\"2\". Very small position calculated. No crash.",
+      "screenshot": null,
+      "duration": 324
+    },
+    {
+      "id": 14,
+      "name": "Command palette: 500 character input",
+      "status": "WARN",
+      "detail": "Dialog overflows horizontally with 500 char input",
+      "screenshot": "fail-14.png",
+      "duration": 3746
+    },
+    {
+      "id": 15,
+      "name": "Command palette: Enter with no results",
+      "status": "PASS",
+      "detail": "Enter on empty results: no crash. \"No results\" message shown: false",
+      "screenshot": null,
+      "duration": 2337
+    },
+    {
+      "id": 16,
+      "name": "Path traversal: /strategies/../../../../etc/passwd",
+      "status": "PASS",
+      "detail": "Path traversal blocked. Status: 404. No sensitive file content exposed.",
+      "screenshot": null,
+      "duration": 2073
+    },
+    {
+      "id": 17,
+      "name": "XSS: /strategies/<script>alert(1)</script>",
+      "status": "PASS",
+      "detail": "XSS blocked. React escapes URL parameters. No script execution.",
+      "screenshot": null,
+      "duration": 2066
+    },
+    {
+      "id": 18,
+      "name": "Open shortcuts overlay AND command palette simultaneously",
+      "status": "PASS",
+      "detail": "0 dialog(s) visible. Second dialog may have closed the first.",
+      "screenshot": null,
+      "duration": 3537
+    },
+    {
+      "id": 19,
+      "name": "Open multiple dropdowns simultaneously",
+      "status": "PASS",
+      "detail": "1 dropdown elements in DOM. No crash. Proper layering.",
+      "screenshot": null,
+      "duration": 2951
+    },
+    {
+      "id": 20,
+      "name": "Shrink viewport to crush options panel",
+      "status": "PASS",
+      "detail": "Options panel found at 400px height. Page survived.",
+      "screenshot": null,
+      "duration": 3582
+    },
+    {
+      "id": 21,
+      "name": "Extreme viewport: 300px height (negative chart area?)",
+      "status": "PASS",
+      "detail": "Chart dimensions at 300px: 1060x0. No crash.",
+      "screenshot": null,
+      "duration": 1566
+    },
+    {
+      "id": 22,
+      "name": "Add XSS symbols to watchlist: A&B, TEST<>, <img onerror>",
+      "status": "PASS",
+      "detail": "XSS payloads in watchlist: all auto-escaped by React. No execution.",
+      "screenshot": null,
+      "duration": 3351
+    },
+    {
+      "id": 23,
+      "name": "Add same symbol twice to watchlist",
+      "status": "WARN",
+      "detail": "Duplicate symbol: DUPETEST appears 2 times. No dedup guard.",
+      "screenshot": "fail-23.png",
+      "duration": 2799
+    },
+    {
+      "id": 24,
+      "name": "Add 50 symbols to watchlist (performance stress)",
+      "status": "PASS",
+      "detail": "50 symbols added in 3278ms. Page alive. Scroll: no scroll area",
+      "screenshot": null,
+      "duration": 5292
+    },
+    {
+      "id": 25,
+      "name": "Resize to 320px width (mobile)",
+      "status": "PASS",
+      "detail": "Renders at 320px without horizontal overflow or crash.",
+      "screenshot": null,
+      "duration": 2093
+    },
+    {
+      "id": 26,
+      "name": "Zoom to 200% (CSS transform simulation)",
+      "status": "PASS",
+      "detail": "200% zoom: page renders. Content overflows viewport (expected at 2x scale).",
+      "screenshot": null,
+      "duration": 2890
+    },
+    {
+      "id": 27,
+      "name": "Right-click on chart area",
+      "status": "PASS",
+      "detail": "Right-click on chart: no crash. Browser context menu shown normally.",
+      "screenshot": null,
+      "duration": 2529
+    },
+    {
+      "id": 28,
+      "name": "Rapid navigation: / -> /trade -> /pipeline -> / x5",
+      "status": "PASS",
+      "detail": "25 rapid navigations. Final URL: https://tradingalpha.net/. No crash.",
+      "screenshot": null,
+      "duration": 5025
+    },
+    {
+      "id": 29,
+      "name": "Concurrent: type quantity while clicking +/-",
+      "status": "PASS",
+      "detail": "Final qty: \"42\". Concurrent input+click: no crash, state resolved.",
+      "screenshot": null,
+      "duration": 4192
+    },
+    {
+      "id": 30,
+      "name": "Double-click stress on 15 UI elements",
+      "status": "PASS",
+      "detail": "Double-clicked 15 elements. No crash.",
+      "screenshot": null,
+      "duration": 2593
+    }
+  ]
+}

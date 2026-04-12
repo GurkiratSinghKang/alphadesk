@@ -1,0 +1,317 @@
+{
+  "startTime": "2026-04-11T21:05:15.133Z",
+  "sections": {
+    "Login": [
+      {
+        "detail": "Login successful, redirected to https://tradingalpha.net/",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:26.089Z"
+      }
+    ],
+    "Dashboard": [
+      {
+        "detail": "Portfolio value displayed prominently",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "P&L with percentage displayed",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "P&L shows placeholder $--.--",
+        "severity": "high",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Equity curve / sparkline chart visible",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "8/8 strategies visible in grid",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "9 strategies show non-zero returns",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Positions section present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "P&L Calendar heatmap present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Market data / indices visible",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Economic calendar present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Activity feed / news present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      },
+      {
+        "detail": "Sector data present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:31.358Z"
+      }
+    ],
+    "Trade": [
+      {
+        "detail": "Watchlist panel visible with symbols",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Watchlist shows live prices",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Chart canvas rendered",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Timeframe buttons present (1m-M)",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Drawing tools present (NEW) -- horizontal line, trendline, fib",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "BUY/SELL buttons on chart",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Price alert button present (NEW)",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Indicators dropdown available",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "L1 data (bid/ask/spread/vol/H/L) visible",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Options chain present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:37.944Z"
+      },
+      {
+        "detail": "Chart type switching works (candle -> line)",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:39.052Z"
+      },
+      {
+        "detail": "Horizontal line drawing tool activated and placed",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:40.736Z"
+      },
+      {
+        "detail": "Price alert dialog opens with price input, above/below selector, and Set button",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:41.365Z"
+      },
+      {
+        "detail": "Clicking AAPL in watchlist updates chart and all panels",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:43.485Z"
+      },
+      {
+        "detail": "Options chain shows strikes",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:48.931Z"
+      },
+      {
+        "detail": "Options chain shows Greeks (Delta, IV)",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:48.931Z"
+      },
+      {
+        "detail": "Options chain shows expiration dates with DTE",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:48.931Z"
+      }
+    ],
+    "Pipeline": [
+      {
+        "detail": "Pipeline flow diagram not found",
+        "severity": "high",
+        "ts": "2026-04-11T21:05:53.881Z"
+      },
+      {
+        "detail": "Run Now button present",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:53.881Z"
+      },
+      {
+        "detail": "Strategy Builder tab not found on pipeline page",
+        "severity": "info",
+        "ts": "2026-04-11T21:05:53.882Z"
+      },
+      {
+        "detail": "Strategy Builder input found inline on page",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:53.885Z"
+      },
+      {
+        "detail": "Backtest tab found and opened (NEW)",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:54.989Z"
+      },
+      {
+        "detail": "Backtest panel has Run Backtest button",
+        "severity": "good",
+        "ts": "2026-04-11T21:05:54.989Z"
+      },
+      {
+        "detail": "Backtest did not show Total Return",
+        "severity": "high",
+        "ts": "2026-04-11T21:06:00.102Z"
+      },
+      {
+        "detail": "Backtest Win Rate: 3%",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:00.103Z"
+      },
+      {
+        "detail": "Backtest equity curve not visible",
+        "severity": "high",
+        "ts": "2026-04-11T21:06:00.103Z"
+      }
+    ],
+    "Strategy": [
+      {
+        "detail": "PEAD strategy detail page loaded",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      },
+      {
+        "detail": "Equity curve chart rendered",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      },
+      {
+        "detail": "SPY benchmark comparison visible on equity curve (NEW)",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      },
+      {
+        "detail": "Time period filters present: 1M, 3M, 6M, YTD, ALL",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      },
+      {
+        "detail": "Tabs available: About, Positions, Trade History, Analytics",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      },
+      {
+        "detail": "Strategy thesis / edge documentation present",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:05.119Z"
+      }
+    ],
+    "DataQuality": [
+      {
+        "detail": "Real equity prices visible",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "Bid/Ask spread visible — real L1 data",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "Volume data present",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "High/Low data present",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "Found 37 instances of $0.01 — puts side may still be placeholder",
+        "severity": "high",
+        "ts": "2026-04-11T21:06:19.976Z"
+      }
+    ],
+    "Errors": [
+      {
+        "detail": "2 console errors captured",
+        "severity": "high",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "Console: Failed to load resource: the server responded with a status of 404 ()",
+        "severity": "info",
+        "ts": "2026-04-11T21:06:19.976Z"
+      },
+      {
+        "detail": "Console: Failed to load resource: the server responded with a status of 404 ()",
+        "severity": "info",
+        "ts": "2026-04-11T21:06:19.976Z"
+      }
+    ],
+    "Layout": [
+      {
+        "detail": "No horizontal overflow at 1920x1080",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:24.215Z"
+      },
+      {
+        "detail": "Order tab is fully visible (bug fixed)",
+        "severity": "good",
+        "ts": "2026-04-11T21:06:24.216Z"
+      }
+    ]
+  },
+  "scores": {},
+  "screenshots": [
+    "00-post-login",
+    "01-dashboard-full",
+    "01b-dashboard-bottom",
+    "02-trade-full",
+    "02b-chart-line",
+    "02c-drawing-hline",
+    "02d-alert-dialog",
+    "02e-switched-to-aapl",
+    "02f-analysis-tabs",
+    "02g-options-chain",
+    "03-pipeline-full",
+    "03f-backtest-panel",
+    "03g-backtest-results",
+    "04-strategy-detail-pead",
+    "04b-strategy-tabs",
+    "04d-strategy-momentum",
+    "99-final-dashboard"
+  ],
+  "endTime": "2026-04-11T21:06:27.268Z"
+}

@@ -1,0 +1,149 @@
+{
+  "run_at": "2026-04-11T21:55:31.897Z",
+  "target": "https://tradingalpha.net",
+  "summary": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0
+  },
+  "results": [
+    {
+      "test": "SEC-01: SQL injection on /market/quotes",
+      "pass": true,
+      "elapsed_ms": 176,
+      "details": "Status 404 (expected 4xx rejection)"
+    },
+    {
+      "test": "SEC-02: SQL injection on /strategies",
+      "pass": true,
+      "elapsed_ms": 27,
+      "details": "Status 404 (expected 4xx rejection)"
+    },
+    {
+      "test": "SEC-03: XSS reflection in /market/quotes",
+      "pass": true,
+      "elapsed_ms": 46,
+      "details": "No script reflected (status 404)"
+    },
+    {
+      "test": "SEC-04: Path traversal on /pipeline/history",
+      "pass": true,
+      "elapsed_ms": 28,
+      "details": "Status 404, no sensitive file content"
+    },
+    {
+      "test": "SEC-05: JWT tampering (modified payload)",
+      "pass": true,
+      "elapsed_ms": 27,
+      "details": "Status 401 (expected 401/403)"
+    },
+    {
+      "test": "SEC-06: Expired token",
+      "pass": true,
+      "elapsed_ms": 27,
+      "details": "Status 401 (expected 401/403)"
+    },
+    {
+      "test": "SEC-07: Refresh token used as access token",
+      "pass": true,
+      "elapsed_ms": 29,
+      "details": "Status 401 (expected 401/403)"
+    },
+    {
+      "test": "SEC-08: CORS rejects evil.com origin",
+      "pass": true,
+      "elapsed_ms": 64,
+      "details": "No ACAO header returned (good)"
+    },
+    {
+      "test": "SEC-09: PUT /trades/orders (should be POST)",
+      "pass": true,
+      "elapsed_ms": 26,
+      "details": "Status 405 (expected 405 or 404)"
+    },
+    {
+      "test": "SEC-10: 1 MB payload to /trades/orders",
+      "pass": true,
+      "elapsed_ms": 525,
+      "details": "Status 422 (expected 4xx graceful rejection)"
+    },
+    {
+      "test": "SEC-11: Rate limiting on login (10 rapid attempts)",
+      "pass": true,
+      "elapsed_ms": 0,
+      "details": "429 first seen on attempt 4. Statuses: [401,401,401,429,429,429,429,429,429,429]"
+    },
+    {
+      "test": "SEC-12: Login after rate limit cooldown",
+      "pass": true,
+      "elapsed_ms": 72,
+      "details": "Status 429 (rate limit window still active, 5-min window)"
+    },
+    {
+      "test": "SEC-13: POST /trades/halt",
+      "pass": true,
+      "elapsed_ms": 105,
+      "details": "Status 200, body: {\"halted\":true,\"message\":\"All trading halted. All open orders cancelled.\"}"
+    },
+    {
+      "test": "SEC-14: Orders blocked while halted",
+      "pass": true,
+      "elapsed_ms": 23,
+      "details": "Status 503 (expected 503). {\"detail\":\"Trading is halted. Use POST /api/v1/trades/resume to resume.\"}"
+    },
+    {
+      "test": "SEC-15: POST /trades/resume",
+      "pass": true,
+      "elapsed_ms": 29,
+      "details": "Status 200, body: {\"halted\":false,\"message\":\"Trading resumed.\"}"
+    },
+    {
+      "test": "DI-16: Portfolio equity = cash + market_value",
+      "pass": true,
+      "elapsed_ms": 55,
+      "details": "equity=100061.68, cash=94840.62, market_value=5221.06, sum=100061.68, diff=0.00"
+    },
+    {
+      "test": "DI-17: Positions have numeric avgCost/currentPrice",
+      "pass": true,
+      "elapsed_ms": 58,
+      "details": "All 1 positions have valid numeric fields"
+    },
+    {
+      "test": "DI-18: Strategies have valid status",
+      "pass": true,
+      "elapsed_ms": 21,
+      "details": "All 9 strategies have valid status (active/paused/backtest)"
+    },
+    {
+      "test": "DI-19: Calendar has no future PnL data",
+      "pass": true,
+      "elapsed_ms": 26,
+      "details": "No future dates with PnL (8 days checked)"
+    },
+    {
+      "test": "DI-20: Market quotes consistency (AAPL x2)",
+      "pass": true,
+      "elapsed_ms": 168,
+      "details": "last: 260.43 vs 260.43 (diff 0.0000), bid diff 0.0000, ask diff 0.0000"
+    },
+    {
+      "test": "PERF-21: 20x GET /portfolio/summary",
+      "pass": true,
+      "elapsed_ms": 273,
+      "details": "20 concurrent | p50=284ms p95=302ms avg=273ms max=307ms | errors=0"
+    },
+    {
+      "test": "PERF-22: 20x GET /market/quotes/SPY",
+      "pass": true,
+      "elapsed_ms": 569,
+      "details": "20 concurrent | p50=576ms p95=592ms avg=569ms max=609ms | errors=0"
+    },
+    {
+      "test": "PERF-23: 20x GET /strategies/",
+      "pass": true,
+      "elapsed_ms": 108,
+      "details": "20 concurrent | p50=101ms p95=128ms avg=108ms max=128ms | errors=0"
+    }
+  ]
+}

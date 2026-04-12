@@ -1,0 +1,205 @@
+{
+  "dashboard": {
+    "hero-value": [
+      "Found dollar values: $100,061.68, $0.00, $25.25, $121.42, $121.43"
+    ],
+    "placeholder": [
+      "Found 1 placeholder values: $--.--"
+    ],
+    "economic-calendar": [
+      "Economic calendar elements found: event, Economic, Calendar, CPI, GDP"
+    ],
+    "below-fold": [
+      "Content extends to 1080px total"
+    ],
+    "color-pnl": [
+      "Found 107 numeric values with colors"
+    ],
+    "color-buttons": [
+      "Found 19 buttons"
+    ],
+    "hover-effects": [
+      "2/5 elements change on hover"
+    ],
+    "loading-states": [
+      "Found 0 loading indicators in DOM"
+    ],
+    "hero-value-detail": [
+      "Large $ values: \"$100,061.68\" @ 36px/700"
+    ],
+    "typography": [
+      "Heading hierarchy: h1=\"AlphaDesk Dashboard\" 16px/400; h2=\"Activity Feed\" 14px/600; h2=\"Open Positions\" 14px/600; h2=\"April P&L\" 14px/600; h2=\"Economic Calendar\" 14px/600; h2=\"Strategies\" 14px/600; h3=\"Market Indices\" 12px/600; h3=\"Sector Performance\" 12px/600; h3=\"Headlines\" 12px/600"
+    ],
+    "tabular-numbers": [
+      "Tabular numeric figures detected"
+    ]
+  },
+  "trade": {
+    "hero-value": [
+      "Found dollar values: $260.43, $370.82, $317.28, $238.42, $188.64"
+    ],
+    "placeholder": [
+      "Found 1 placeholder values: $--.--"
+    ],
+    "chart-type-selector": [
+      "Chart type selector found (1 elements)"
+    ],
+    "drawing-toolbar": [
+      "Drawing toolbar indicators found"
+    ],
+    "buy-sell-buttons": [
+      "BUY and SELL buttons both found"
+    ],
+    "price-alert-bell": [
+      "Price alert indicator found"
+    ],
+    "position-sizing": [
+      "No position sizing calculator text found"
+    ],
+    "ai-trade-journal": [
+      "AI trade journal elements: Journal"
+    ],
+    "screener": [
+      "Screener elements: Screener"
+    ],
+    "color-pnl": [
+      "Found 245 numeric values with colors"
+    ],
+    "color-buttons": [
+      "Found 74 buttons"
+    ],
+    "hover-effects": [
+      "2/8 elements change on hover"
+    ],
+    "loading-states": [
+      "Found 0 loading indicators in DOM"
+    ],
+    "chart-type-interaction": [
+      "Clicked \"Pipeline\" chart type - captured screenshot"
+    ],
+    "floating-buy-sell": [
+      "No floating BUY/SELL buttons found (may be inline)"
+    ],
+    "order-tab": [
+      "Clicked order tab: \"Maximum position size: 5% of portfolio\""
+    ]
+  },
+  "pipeline": {
+    "hero-value": [
+      "Found dollar values: $10, $0.00"
+    ],
+    "placeholder": [
+      "Found 1 placeholder values: $--.--"
+    ],
+    "strategy-builder": [
+      "Strategy builder elements: STRATEGY BUILDER"
+    ],
+    "backtesting-engine": [
+      "Backtesting elements: BACKTEST, Backtest"
+    ],
+    "color-pnl": [
+      "Found 8 numeric values with colors"
+    ],
+    "color-buttons": [
+      "Found 16 buttons"
+    ],
+    "hover-effects": [
+      "4/7 elements change on hover"
+    ],
+    "loading-states": [
+      "Found 0 loading indicators in DOM"
+    ]
+  },
+  "strategy-pead": {
+    "hero-value": [
+      "Found dollar values: $0.00"
+    ],
+    "placeholder": [
+      "Found 2 placeholder values: $--.--, --"
+    ],
+    "empty-states": [
+      "Found empty state text: No data, No data, No data, No data, No trades yet"
+    ],
+    "color-pnl": [
+      "Found 4 numeric values with colors"
+    ],
+    "color-buttons": [
+      "Found 22 buttons"
+    ],
+    "hover-effects": [
+      "3/5 elements change on hover"
+    ],
+    "loading-states": [
+      "Found 0 loading indicators in DOM"
+    ]
+  },
+  "strategy-momentum": {
+    "hero-value": [
+      "Found dollar values: $0.00"
+    ],
+    "placeholder": [
+      "Found 1 placeholder values: $--.--"
+    ],
+    "empty-states": [
+      "Found empty state text: No data, No data, No data, No data, No trades yet"
+    ],
+    "color-pnl": [
+      "Found 4 numeric values with colors"
+    ],
+    "color-buttons": [
+      "Found 22 buttons"
+    ],
+    "hover-effects": [
+      "3/5 elements change on hover"
+    ],
+    "loading-states": [
+      "Found 0 loading indicators in DOM"
+    ]
+  },
+  "cross-page": {
+    "nav-consistency": [
+      "Nav backgrounds: 1 unique (rgba(0, 0, 0, 0))"
+    ],
+    "card-consistency": [
+      "Card border-radius values: 6 unique (4px, 11.2px, 0px, 6.4px, 3.35544e+07px)"
+    ],
+    "button-consistency": [
+      "Button border-radius values: 5 unique (6.4px, 0px, 8px, 3.35544e+07px, 4px)"
+    ],
+    "spacing-consistency": [
+      "Grid/flex gap values: 9 unique (16px, 8px, 4px, 6px, 0px, 12px 24px, 12px, 24px)"
+    ]
+  },
+  "responsive": {
+    "dashboard": [
+      "H-overflow: 0px, page-height: 768px, hasScrollbar: false"
+    ],
+    "dashboard-truncation": [
+      "Truncated elements: 27, Overflowing: 6"
+    ],
+    "trade": [
+      "H-overflow: 0px, page-height: 768px, hasScrollbar: false"
+    ],
+    "trade-truncation": [
+      "Truncated elements: 10, Overflowing: 19"
+    ],
+    "pipeline": [
+      "H-overflow: 0px, page-height: 768px, hasScrollbar: false"
+    ],
+    "pipeline-truncation": [
+      "Truncated elements: 0, Overflowing: 1"
+    ],
+    "strategy-pead": [
+      "H-overflow: 0px, page-height: 768px, hasScrollbar: false"
+    ],
+    "strategy-pead-truncation": [
+      "Truncated elements: 0, Overflowing: 0"
+    ],
+    "strategy-momentum": [
+      "H-overflow: 0px, page-height: 768px, hasScrollbar: false"
+    ],
+    "strategy-momentum-truncation": [
+      "Truncated elements: 0, Overflowing: 0"
+    ]
+  }
+}

@@ -1,19 +1,19 @@
-200 /api/v1/portfolio/summary -> {"equity":100061.68,"cash":94840.62,"buying_power":393981.44,"total_market_value":5221.06,"unrealized_pnl":-0.449995,"unrealized_pnl_pct":-0.008618843683083511,"realized_pnl_today":0.449995,"positions_count":1,"last_updated":"2026-04-11T15:41:16.439868Z"}
+200 /api/v1/portfolio/summary -> {"equity":100061.68,"cash":94840.62,"buying_power":393981.44,"total_market_value":5221.06,"unrealized_pnl":-0.449995,"unrealized_pnl_pct":-0.008618843683083511,"realized_pnl_today":0.449995,"positions_count":1,"last_updated":"2026-04-12T02:59:48.915541Z"}
 
-200 /api/v1/market/quotes/AAPL -> {"symbol":"AAPL","bid":246.87,"ask":272.99,"last":260.43,"volume":807892,"timestamp":"2026-04-11T15:41:16.588409Z","change":-0.01,"changePct":-0.0,"high":262.18,"low":259.03,"open":259.98,"close":260.44}
+200 /api/v1/market/quotes/AAPL -> {"symbol":"AAPL","bid":246.87,"ask":272.99,"last":260.43,"volume":807892,"timestamp":"2026-04-12T02:59:49.069213Z","change":-0.01,"changePct":-0.0,"high":262.18,"low":259.03,"open":259.98,"close":260.44}
 
-200 /api/v1/market/bars/AAPL?timeframe=1d&limit=10 -> [{"timestamp":"2025-04-11T04:00:00Z","open":186.1,"high":199.54,"low":186.06,"close":198.15,"volume":87435915,"vwap":195.623},{"timestamp":"2025-04-14T04:00:00Z","open":211.44,"high":212.94,"low":201.1621,"close":202.52,"volume":101352911,"vwap":205.5914},{"timestamp":"2025-04-15T04:00:00Z","open":2...
+200 /api/v1/market/bars/AAPL?timeframe=1d&limit=10 -> [{"timestamp":"2025-04-14T04:00:00Z","open":211.44,"high":212.94,"low":201.1621,"close":202.52,"volume":101352911,"vwap":205.5914},{"timestamp":"2025-04-15T04:00:00Z","open":201.855,"high":203.51,"low":199.8,"close":202.14,"volume":51343872,"vwap":202.1396},{"timestamp":"2025-04-16T04:00:00Z","open"...
 
-200 /api/v1/pipeline/status -> {"running":false,"last_run":null,"last_result":null}
+200 /api/v1/pipeline/status -> {"last_run":null,"last_result":null}
 
 200 /api/v1/trades/positions -> [{"symbol":"MRK","quantity":43.0,"side":"long","avg_cost":121.430465,"current_price":121.42,"market_value":5221.06,"unrealized_pnl":-0.449995,"unrealized_pnl_pct":-0.009000000000000001,"asset_class":"us_equity"}]
 
-200 /api/v1/trades/orders -> [{"id":"396b3c69-8773-44eb-969e-331595372cf8","status":"submitted","legs":[{"symbol":"MRK","side":"sell","qty":43.0,"order_type":"stop","limit_price":null,"stop_price":null,"asset_class":"equity"}],"time_in_force":"gtc","strategy":null,"submitted_at":"2026-04-11T15:30:11.755367Z","filled_at":null,"a...
+200 /api/v1/trades/orders -> []
 
 200 /api/v1/portfolio/greeks -> {"net_delta":0.0,"net_gamma":0.0,"net_theta":0.0,"net_vega":0.0,"beta_weighted_delta":0.0,"by_position":[]}
 
 200 /api/v1/portfolio/calendar -> {"month":4,"year":2026,"days":[{"date":"2026-04-01","pnl":-170.05,"trades":8,"win_rate":12.5},{"date":"2026-04-02","pnl":368.58,"trades":6,"win_rate":100.0},{"date":"2026-04-03","pnl":-266.45,"trades":7,"win_rate":42.9},{"date":"2026-04-06","pnl":297.02,"trades":5,"win_rate":0.0},{"date":"2026-04-07...
 
-200 /api/v1/news/market -> {"articles":[{"title":"TriCo Bancshares (NASDAQ:TCBK) Stock Price Crosses Above Two Hundred Day Moving Average – Here’s Why","description":"TriCo Bancshares (NASDAQ:TCBK – Get Free Report) crossed above its 200-day moving average during trading on Wednesday . The stock has a 200-day moving average o...
+200 /api/v1/news/market -> {"articles":[{"title":"USMCA expected to remain in place, a crypto scam and restructuring energy markets: Must-read business and investing stories","description":"Plus, an affluent Toronto neighbourhood takes action after a series of break-ins","url":"https://www.theglobeandmail.com/business/article...
 
-200 /api/v1/screener/presets -> [{"id":1,"name":"Momentum + Quality","filters":[],"created_at":"2026-04-11T15:41:17.000726Z"},{"id":2,"name":"High IV Rank","filters":[],"created_at":"2026-04-11T15:41:17.000746Z"},{"id":3,"name":"Earnings Plays","filters":[],"created_at":"2026-04-11T15:41:17.000750Z"},{"id":4,"name":"Value + Growth...
+200 /api/v1/screener/presets -> [{"id":1,"name":"Momentum + Quality","filters":[],"created_at":"2026-04-12T02:59:49.480603Z"},{"id":2,"name":"High IV Rank","filters":[],"created_at":"2026-04-12T02:59:49.480623Z"},{"id":3,"name":"Earnings Plays","filters":[],"created_at":"2026-04-12T02:59:49.480628Z"},{"id":4,"name":"Value + Growth...

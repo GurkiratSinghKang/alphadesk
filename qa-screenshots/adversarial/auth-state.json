@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc3ODUzNjk4MSwidHlwZSI6InJlZnJlc2giLCJqdGkiOiIwN2RhNTZkNS00OWU0LTQxMjYtYmY4ZS0xMjZiNGU1MDdmNGQifQ.pdMuDT-cvPsvfa7XlhTHTnCzUxkj61lzd-eZU7Bu4FE",
+      "domain": "tradingalpha.net",
+      "path": "/api/v1/auth",
+      "expires": 1778536981.207527,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "access_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc3NTk0Njc4MSwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjRkNmZiZjQ4LWFhNWYtNGU3OS1hOTU3LTQyMjYwZTdmZjQ3YyJ9.N3iIaXD41Ofdrxr30XxVAK7aylKOu-wD3oIWedMevQE",
+      "domain": "tradingalpha.net",
+      "path": "/",
+      "expires": 1775946781.206433,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": []
+}

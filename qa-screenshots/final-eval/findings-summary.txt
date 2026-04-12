@@ -1,0 +1,71 @@
+
+### Login
+- [PASS] Login successful, redirected to https://tradingalpha.net/
+
+### Dashboard
+- [PASS] Portfolio value displayed prominently
+- [PASS] P&L with percentage displayed
+- [WARN] P&L shows placeholder $--.--
+- [PASS] Equity curve / sparkline chart visible
+- [PASS] 8/8 strategies visible in grid
+- [PASS] 9 strategies show non-zero returns
+- [PASS] Positions section present
+- [PASS] P&L Calendar heatmap present
+- [PASS] Market data / indices visible
+- [PASS] Economic calendar present
+- [PASS] Activity feed / news present
+- [PASS] Sector data present
+
+### Trade
+- [PASS] Watchlist panel visible with symbols
+- [PASS] Watchlist shows live prices
+- [PASS] Chart canvas rendered
+- [PASS] Timeframe buttons present (1m-M)
+- [PASS] Drawing tools present (NEW) -- horizontal line, trendline, fib
+- [PASS] BUY/SELL buttons on chart
+- [PASS] Price alert button present (NEW)
+- [PASS] Indicators dropdown available
+- [PASS] L1 data (bid/ask/spread/vol/H/L) visible
+- [PASS] Options chain present
+- [PASS] Chart type switching works (candle -> line)
+- [PASS] Horizontal line drawing tool activated and placed
+- [PASS] Price alert dialog opens with price input, above/below selector, and Set button
+- [PASS] Clicking AAPL in watchlist updates chart and all panels
+- [PASS] Options chain shows strikes
+- [PASS] Options chain shows Greeks (Delta, IV)
+- [PASS] Options chain shows expiration dates with DTE
+
+### Pipeline
+- [WARN] Pipeline flow diagram not found
+- [PASS] Run Now button present
+- [INFO] Strategy Builder tab not found on pipeline page
+- [PASS] Strategy Builder input found inline on page
+- [PASS] Backtest tab found and opened (NEW)
+- [PASS] Backtest panel has Run Backtest button
+- [WARN] Backtest did not show Total Return
+- [PASS] Backtest Win Rate: 3%
+- [WARN] Backtest equity curve not visible
+
+### Strategy
+- [PASS] PEAD strategy detail page loaded
+- [PASS] Equity curve chart rendered
+- [PASS] SPY benchmark comparison visible on equity curve (NEW)
+- [PASS] Time period filters present: 1M, 3M, 6M, YTD, ALL
+- [PASS] Tabs available: About, Positions, Trade History, Analytics
+- [PASS] Strategy thesis / edge documentation present
+
+### DataQuality
+- [PASS] Real equity prices visible
+- [PASS] Bid/Ask spread visible — real L1 data
+- [PASS] Volume data present
+- [PASS] High/Low data present
+- [WARN] Found 37 instances of $0.01 — puts side may still be placeholder
+
+### Errors
+- [WARN] 2 console errors captured
+- [INFO] Console: Failed to load resource: the server responded with a status of 404 ()
+- [INFO] Console: Failed to load resource: the server responded with a status of 404 ()
+
+### Layout
+- [PASS] No horizontal overflow at 1920x1080
+- [PASS] Order tab is fully visible (bug fixed)

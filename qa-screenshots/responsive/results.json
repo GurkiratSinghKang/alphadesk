@@ -1,0 +1,2253 @@
+{
+  "viewports": [
+    {
+      "width": 1920,
+      "height": 1080,
+      "label": "Full HD Desktop",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-1920x1080.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 4,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 1724,
+              "clientWidth": 1718,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            },
+            {
+              "tag": "div",
+              "className": "",
+              "id": "",
+              "scrollWidth": 563,
+              "clientWidth": 557,
+              "text": "HeadlinesAurobindo Pharma share buyback, Muthoot Fin dividen"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-2.5",
+              "id": "",
+              "scrollWidth": 563,
+              "clientWidth": 557,
+              "text": "Aurobindo Pharma share buyback, Muthoot Fin dividend, 2 othe"
+            }
+          ],
+          "truncatedText": 2,
+          "truncatedDetails": [
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Materials",
+              "scrollWidth": 52,
+              "clientWidth": 49
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 898,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1920,
+            "clientWidth": 1920,
+            "scrollHeight": 1080,
+            "clientHeight": 1080
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-1920x1080.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 16,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "GOOGL$317.28-0.42%"
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 898,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1920,
+            "clientWidth": 1920,
+            "scrollHeight": 1080,
+            "clientHeight": 1080
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-1920x1080.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 898,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1920,
+            "clientWidth": 1920,
+            "scrollHeight": 1080,
+            "clientHeight": 1080
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-1920x1080.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 0,
+          "overflowDetails": [],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 898,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1920,
+            "clientWidth": 1920,
+            "scrollHeight": 1080,
+            "clientHeight": 1080
+          }
+        }
+      ]
+    },
+    {
+      "width": 1366,
+      "height": 768,
+      "label": "Common Laptop",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-1366x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 4,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 1290,
+              "clientWidth": 1284,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            },
+            {
+              "tag": "div",
+              "className": "",
+              "id": "",
+              "scrollWidth": 418,
+              "clientWidth": 412,
+              "text": "HeadlinesAurobindo Pharma share buyback, Muthoot Fin dividen"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-2.5",
+              "id": "",
+              "scrollWidth": 418,
+              "clientWidth": 412,
+              "text": "Aurobindo Pharma share buyback, Muthoot Fin dividend, 2 othe"
+            }
+          ],
+          "truncatedText": 4,
+          "truncatedDetails": [
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "p",
+              "className": "truncate text-sm font-medium text-foreground",
+              "text": "Momentum + Quality",
+              "scrollWidth": 140,
+              "clientWidth": 118
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Cons Disc",
+              "scrollWidth": 56,
+              "clientWidth": 54
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Industrials",
+              "scrollWidth": 58,
+              "clientWidth": 54
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 621,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1366,
+            "clientWidth": 1366,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-1366x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 15,
+          "overflowDetails": [
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "GOOGL$317.28-0.42%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AMZN$238.42+2.09%"
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 621,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1366,
+            "clientWidth": 1366,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-1366x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 621,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1366,
+            "clientWidth": 1366,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-1366x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 8,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 621,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1366,
+            "clientWidth": 1366,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        }
+      ]
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "label": "Small Laptop",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-1280x720.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 4,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 1204,
+              "clientWidth": 1198,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            },
+            {
+              "tag": "div",
+              "className": "",
+              "id": "",
+              "scrollWidth": 389,
+              "clientWidth": 383,
+              "text": "HeadlinesAurobindo Pharma share buyback, Muthoot Fin dividen"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-2.5",
+              "id": "",
+              "scrollWidth": 389,
+              "clientWidth": 383,
+              "text": "Aurobindo Pharma share buyback, Muthoot Fin dividend, 2 othe"
+            }
+          ],
+          "truncatedText": 7,
+          "truncatedDetails": [
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "p",
+              "className": "truncate text-sm font-medium text-foreground",
+              "text": "Momentum + Quality",
+              "scrollWidth": 140,
+              "clientWidth": 100
+            },
+            {
+              "tag": "p",
+              "className": "truncate text-sm font-medium text-foreground",
+              "text": "VRP Harvesting",
+              "scrollWidth": 105,
+              "clientWidth": 100
+            },
+            {
+              "tag": "p",
+              "className": "truncate text-sm font-medium text-foreground",
+              "text": "Regime Adaptive",
+              "scrollWidth": 113,
+              "clientWidth": 100
+            },
+            {
+              "tag": "p",
+              "className": "truncate text-sm font-medium text-foreground",
+              "text": "Mean Reversion",
+              "scrollWidth": 107,
+              "clientWidth": 100
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 578,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "scrollHeight": 720,
+            "clientHeight": 720
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-1280x720.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 16,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 8,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "GOOGL$317.28-0.42%"
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 578,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "scrollHeight": 720,
+            "clientHeight": 720
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-1280x720.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 578,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "scrollHeight": 720,
+            "clientHeight": 720
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-1280x720.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 578,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "scrollHeight": 720,
+            "clientHeight": 720
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "label": "iPad Landscape",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-1024x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 4,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 948,
+              "clientWidth": 942,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            },
+            {
+              "tag": "div",
+              "className": "",
+              "id": "",
+              "scrollWidth": 304,
+              "clientWidth": 298,
+              "text": "HeadlinesAurobindo Pharma share buyback, Muthoot Fin dividen"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-2.5",
+              "id": "",
+              "scrollWidth": 304,
+              "clientWidth": 298,
+              "text": "Aurobindo Pharma share buyback, Muthoot Fin dividend, 2 othe"
+            }
+          ],
+          "truncatedText": 6,
+          "truncatedDetails": [
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Technology",
+              "scrollWidth": 64,
+              "clientWidth": 52
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Healthcare",
+              "scrollWidth": 60,
+              "clientWidth": 52
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Comm Svcs",
+              "scrollWidth": 65,
+              "clientWidth": 52
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Financials",
+              "scrollWidth": 56,
+              "clientWidth": 52
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 450,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1024,
+            "clientWidth": 1024,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-1024x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 16,
+          "overflowDetails": [
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "GOOGL$317.28-0.42%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AMZN$238.42+2.09%"
+            }
+          ],
+          "truncatedText": 1,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-full flex-col bg-[var(--surface)] overflow-hidden",
+              "text": "SPY$679.35-0.52 (-0.08%)679.20 / 679.29spread: 0.09|Vol: 959.5K|H: 682.03L: 678.",
+              "scrollWidth": 516,
+              "clientWidth": 484
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 450,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1024,
+            "clientWidth": 1024,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-1024x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 450,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1024,
+            "clientWidth": 1024,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-1024x768.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 0,
+          "overflowDetails": [],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 450,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 1024,
+            "clientWidth": 1024,
+            "scrollHeight": 768,
+            "clientHeight": 768
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "label": "iPad Portrait",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-768x1024.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 4,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 692,
+              "clientWidth": 686,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            },
+            {
+              "tag": "div",
+              "className": "",
+              "id": "",
+              "scrollWidth": 692,
+              "clientWidth": 686,
+              "text": "HeadlinesAurobindo Pharma share buyback, Muthoot Fin dividen"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-2.5",
+              "id": "",
+              "scrollWidth": 692,
+              "clientWidth": 686,
+              "text": "Aurobindo Pharma share buyback, Muthoot Fin dividend, 2 othe"
+            }
+          ],
+          "truncatedText": 3,
+          "truncatedDetails": [
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Technology",
+              "scrollWidth": 64,
+              "clientWidth": 60
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Comm Svcs",
+              "scrollWidth": 65,
+              "clientWidth": 60
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 768,
+            "clientWidth": 768,
+            "scrollHeight": 1024,
+            "clientHeight": 1024
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-768x1024.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 17,
+          "overflowDetails": [
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "GOOGL$317.28-0.42%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AMZN$238.42+2.09%"
+            }
+          ],
+          "truncatedText": 1,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-full flex-col bg-[var(--surface)] overflow-hidden",
+              "text": "SPY$679.35-0.52 (-0.08%)679.20 / 679.29spread: 0.09|Vol: 959.5K|H: 682.03L: 678.",
+              "scrollWidth": 516,
+              "clientWidth": 228
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 768,
+            "clientWidth": 768,
+            "scrollHeight": 1024,
+            "clientHeight": 1024
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-768x1024.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 768,
+            "clientWidth": 768,
+            "scrollHeight": 1024,
+            "clientHeight": 1024
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-768x1024.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 1,
+          "overflowDetails": [
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 8,
+              "clientWidth": 6,
+              "text": ""
+            }
+          ],
+          "truncatedText": 0,
+          "truncatedDetails": [],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 768,
+            "clientWidth": 768,
+            "scrollHeight": 1024,
+            "clientHeight": 1024
+          }
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "label": "iPhone",
+      "pages": [
+        {
+          "path": "/",
+          "name": "dashboard",
+          "screenshot": "dashboard-375x812.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 7,
+          "overflowDetails": [
+            {
+              "tag": "header",
+              "className": "flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(-",
+              "id": "",
+              "scrollWidth": 680,
+              "clientWidth": 375,
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ct"
+            },
+            {
+              "tag": "div",
+              "className": "flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background",
+              "id": "",
+              "scrollWidth": 548,
+              "clientWidth": 375,
+              "text": "P&L+$0.00(+0.00%)RegimeBull - Low VolatilityVIX16.5LIVEAlpac"
+            },
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "flex items-center justify-between px-5 pt-4 pb-2",
+              "id": "",
+              "scrollWidth": 377,
+              "clientWidth": 341,
+              "text": "Portfolio$100,061.68Day P&L+$0.00 (+0.00%)1W1M3MYTD"
+            },
+            {
+              "tag": "div",
+              "className": "grid grid-cols-1 gap-6 lg:grid-cols-3",
+              "id": "",
+              "scrollWidth": 315,
+              "clientWidth": 309,
+              "text": "Market IndicesSPYS&P 500$590.00+0.30%QQQNASDAQ 100$510.00+0."
+            }
+          ],
+          "truncatedText": 7,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-screen flex-col overflow-hidden",
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ctrl+KAP&L+$0.00(+0.00",
+              "scrollWidth": 680,
+              "clientWidth": 375
+            },
+            {
+              "tag": "h1",
+              "className": "sr-only",
+              "text": "AlphaDesk Dashboard",
+              "scrollWidth": 168,
+              "clientWidth": 1
+            },
+            {
+              "tag": "div",
+              "className": "rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(",
+              "text": "Portfolio$100,061.68Day P&L+$0.00 (+0.00%)1W1M3MYTD",
+              "scrollWidth": 377,
+              "clientWidth": 341
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Technology",
+              "scrollWidth": 64,
+              "clientWidth": 54
+            },
+            {
+              "tag": "span",
+              "className": "text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate ma",
+              "text": "Healthcare",
+              "scrollWidth": 60,
+              "clientWidth": 54
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Portfolio value",
+              "selector": "[class*=\"portfolio\"], [class*=\"Portfolio\"], [class*=\"total\"], [class*=\"value\"], [class*=\"balance\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 375,
+            "clientWidth": 375,
+            "scrollHeight": 812,
+            "clientHeight": 812
+          }
+        },
+        {
+          "path": "/trade",
+          "name": "trade",
+          "screenshot": "trade-375x812.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 21,
+          "overflowDetails": [
+            {
+              "tag": "header",
+              "className": "flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(-",
+              "id": "",
+              "scrollWidth": 680,
+              "clientWidth": 375,
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ct"
+            },
+            {
+              "tag": "div",
+              "className": "flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background",
+              "id": "",
+              "scrollWidth": 548,
+              "clientWidth": 375,
+              "text": "P&L+$0.00(+0.00%)RegimeBull - Low VolatilityVIX16.5LIVEAlpac"
+            },
+            {
+              "tag": "div",
+              "className": "py-0.5",
+              "id": "",
+              "scrollWidth": 262,
+              "clientWidth": 238,
+              "text": "AAPL$260.43-0.00%MSFT$370.82-0.58%GOOGL$317.28-0.42%AMZN$238"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "AAPL$260.43-0.00%"
+            },
+            {
+              "tag": "div",
+              "className": "group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover",
+              "id": "",
+              "scrollWidth": 260,
+              "clientWidth": 236,
+              "text": "MSFT$370.82-0.58%"
+            }
+          ],
+          "truncatedText": 3,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-screen flex-col overflow-hidden",
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ctrl+KAP&L+$0.00(+0.00",
+              "scrollWidth": 680,
+              "clientWidth": 375
+            },
+            {
+              "tag": "div",
+              "className": "flex h-full flex-col bg-[var(--surface)] overflow-hidden",
+              "text": "SPY$679.35-0.52 (-0.08%)679.20 / 679.29spread: 0.09|Vol: 959.5K|H: 682.03L: 678.",
+              "scrollWidth": 516,
+              "clientWidth": 0
+            },
+            {
+              "tag": "div",
+              "className": "tv-lightweight-charts",
+              "text": "",
+              "scrollWidth": 56,
+              "clientWidth": 0
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            },
+            {
+              "name": "Chart",
+              "selector": "canvas, svg, [class*=\"chart\"], [class*=\"Chart\"], .recharts-wrapper, .tradingview-widget, [class*=\"tradingview\"]",
+              "found": true,
+              "visible": true,
+              "clipped": false,
+              "rect": {
+                "top": 12,
+                "left": 16,
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "name": "Watchlist",
+              "selector": "[class*=\"watchlist\"], [class*=\"Watchlist\"], [class*=\"watch-list\"]",
+              "found": false,
+              "visible": false,
+              "clipped": false
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 375,
+            "clientWidth": 375,
+            "scrollHeight": 812,
+            "clientHeight": 812
+          }
+        },
+        {
+          "path": "/pipeline",
+          "name": "pipeline",
+          "screenshot": "pipeline-375x812.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 5,
+          "overflowDetails": [
+            {
+              "tag": "header",
+              "className": "flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(-",
+              "id": "",
+              "scrollWidth": 680,
+              "clientWidth": 375,
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ct"
+            },
+            {
+              "tag": "div",
+              "className": "flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background",
+              "id": "",
+              "scrollWidth": 548,
+              "clientWidth": 375,
+              "text": "P&L+$0.00(+0.00%)RegimeBull - Low VolatilityVIX16.5LIVEAlpac"
+            },
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "section",
+              "className": "",
+              "id": "",
+              "scrollWidth": 401,
+              "clientWidth": 327,
+              "text": "Today's Pipeline Run0Screened→0Analyzed→0Signals→1Orders"
+            },
+            {
+              "tag": "div",
+              "className": "flex items-center justify-between gap-2",
+              "id": "",
+              "scrollWidth": 401,
+              "clientWidth": 327,
+              "text": "0Screened→0Analyzed→0Signals→1Orders"
+            }
+          ],
+          "truncatedText": 1,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-screen flex-col overflow-hidden",
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ctrl+KAP&L+$0.00(+0.00",
+              "scrollWidth": 680,
+              "clientWidth": 375
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 375,
+            "clientWidth": 375,
+            "scrollHeight": 812,
+            "clientHeight": 812
+          }
+        },
+        {
+          "path": "/strategies/pead",
+          "name": "strategies-pead",
+          "screenshot": "strategies-pead-375x812.png",
+          "horizontalOverflow": false,
+          "overflowingElements": 8,
+          "overflowDetails": [
+            {
+              "tag": "header",
+              "className": "flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(-",
+              "id": "",
+              "scrollWidth": 680,
+              "clientWidth": 375,
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ct"
+            },
+            {
+              "tag": "div",
+              "className": "flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background",
+              "id": "",
+              "scrollWidth": 548,
+              "clientWidth": 375,
+              "text": "P&L+$0.00(+0.00%)RegimeBull - Low VolatilityVIX16.5LIVEAlpac"
+            },
+            {
+              "tag": "span",
+              "className": "relative flex h-1.5 w-1.5",
+              "id": "",
+              "scrollWidth": 9,
+              "clientWidth": 6,
+              "text": ""
+            },
+            {
+              "tag": "div",
+              "className": "mx-auto max-w-[1400px] space-y-6 p-6",
+              "id": "",
+              "scrollWidth": 542,
+              "clientWidth": 375,
+              "text": "DashboardPost-Earnings Announcement DriftPost-Earnings Annou"
+            },
+            {
+              "tag": "div",
+              "className": "space-y-4",
+              "id": "",
+              "scrollWidth": 382,
+              "clientWidth": 327,
+              "text": "Post-Earnings Announcement DriftPost-Earnings Announcement D"
+            }
+          ],
+          "truncatedText": 1,
+          "truncatedDetails": [
+            {
+              "tag": "div",
+              "className": "flex h-screen flex-col overflow-hidden",
+              "text": "AlphaDeskDashboardTradePipelineSearch symbols, commands...Ctrl+KAP&L+$0.00(+0.00",
+              "scrollWidth": 680,
+              "clientWidth": 375
+            }
+          ],
+          "keyElements": [
+            {
+              "name": "Navigation tabs",
+              "selector": "nav, [role=\"navigation\"], .nav-tabs, .MuiTabs-root, [class*=\"nav\"], [class*=\"Nav\"], [class*=\"sidebar\"], [class*=\"Sidebar\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 5,
+                "left": 149,
+                "width": 269,
+                "height": 33
+              }
+            },
+            {
+              "name": "Search bar",
+              "selector": "input[type=\"search\"], input[placeholder*=\"earch\"], input[placeholder*=\"ticker\"], [class*=\"search\"], [class*=\"Search\"]",
+              "found": true,
+              "visible": true,
+              "clipped": true,
+              "rect": {
+                "top": 15,
+                "left": 432,
+                "width": 14,
+                "height": 14
+              }
+            }
+          ],
+          "dimensions": {
+            "scrollWidth": 375,
+            "clientWidth": 375,
+            "scrollHeight": 812,
+            "clientHeight": 812
+          }
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "viewport": "375x812",
+      "page": "/",
+      "element": "Navigation tabs",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 5,
+        "left": 149,
+        "width": 269,
+        "height": 33
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/",
+      "element": "Search bar",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 15,
+        "left": 432,
+        "width": 14,
+        "height": 14
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/trade",
+      "element": "Navigation tabs",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 5,
+        "left": 149,
+        "width": 269,
+        "height": 33
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/trade",
+      "element": "Search bar",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 15,
+        "left": 432,
+        "width": 14,
+        "height": 14
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/pipeline",
+      "element": "Navigation tabs",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 5,
+        "left": 149,
+        "width": 269,
+        "height": 33
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/pipeline",
+      "element": "Search bar",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 15,
+        "left": 432,
+        "width": 14,
+        "height": 14
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/strategies/pead",
+      "element": "Navigation tabs",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 5,
+        "left": 149,
+        "width": 269,
+        "height": 33
+      }
+    },
+    {
+      "viewport": "375x812",
+      "page": "/strategies/pead",
+      "element": "Search bar",
+      "status": "CLIPPED",
+      "rect": {
+        "top": 15,
+        "left": 432,
+        "width": 14,
+        "height": 14
+      }
+    }
+  ],
+  "summary": {
+    "totalViewports": 6,
+    "totalPages": 4,
+    "totalTests": 24,
+    "totalIssues": 8,
+    "problematicBreakpoints": [
+      {
+        "viewport": "1920x1080",
+        "label": "Full HD Desktop",
+        "issueCount": 21,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      },
+      {
+        "viewport": "1366x768",
+        "label": "Common Laptop",
+        "issueCount": 21,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      },
+      {
+        "viewport": "1280x720",
+        "label": "Small Laptop",
+        "issueCount": 22,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      },
+      {
+        "viewport": "1024x768",
+        "label": "iPad Landscape",
+        "issueCount": 21,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      },
+      {
+        "viewport": "768x1024",
+        "label": "iPad Portrait",
+        "issueCount": 23,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      },
+      {
+        "viewport": "375x812",
+        "label": "iPhone",
+        "issueCount": 41,
+        "horizontalOverflow": false,
+        "hiddenCriticalElements": [],
+        "severity": "CRITICAL"
+      }
+    ],
+    "timestamp": "2026-04-11T21:56:34.168Z"
+  }
+}

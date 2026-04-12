@@ -1,0 +1,889 @@
+[
+  {
+    "route": "/",
+    "data": {
+      "navBg": "rgba(0, 0, 0, 0)",
+      "headings": [
+        {
+          "text": "AlphaDesk Dashboard",
+          "size": "16px",
+          "weight": "400",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Activity Feed",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Open Positions",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "April P&L",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Economic Calendar",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Strategies",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Market Indices",
+          "size": "12px",
+          "weight": "600",
+          "color": "rgb(113, 113, 122)"
+        },
+        {
+          "text": "Sector Performance",
+          "size": "12px",
+          "weight": "600",
+          "color": "rgb(113, 113, 122)"
+        },
+        {
+          "text": "Headlines",
+          "size": "12px",
+          "weight": "600",
+          "color": "rgb(113, 113, 122)"
+        }
+      ],
+      "cards": [
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "4px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(18, 18, 26)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.915108 0.0030475 -0.0103379 / 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+        },
+        {
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "6.4px",
+          "boxShadow": "none"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "Dashboard",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Trade",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Pipeline",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Search symbols, comm",
+          "bg": "rgb(10, 10, 15)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "0px",
+          "fontSize": "16px"
+        },
+        {
+          "text": "",
+          "bg": "oklab(0.211341 0.00849673 -0.0381766 / 0.5)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "A",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "1W",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "4px",
+          "fontSize": "10px"
+        },
+        {
+          "text": "1M",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.2)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "4px",
+          "fontSize": "10px"
+        },
+        {
+          "text": "3M",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "4px",
+          "fontSize": "10px"
+        }
+      ],
+      "gaps": [
+        "16px",
+        "8px",
+        "4px",
+        "6px",
+        "0px",
+        "12px 24px",
+        "12px",
+        "24px"
+      ]
+    }
+  },
+  {
+    "route": "/trade",
+    "data": {
+      "navBg": "rgba(0, 0, 0, 0)",
+      "headings": [
+        {
+          "text": "Technical Score",
+          "size": "12px",
+          "weight": "500",
+          "color": "rgb(113, 113, 122)"
+        },
+        {
+          "text": "Key Levels",
+          "size": "11px",
+          "weight": "500",
+          "color": "rgb(113, 113, 122)"
+        },
+        {
+          "text": "Indicators",
+          "size": "11px",
+          "weight": "500",
+          "color": "rgb(113, 113, 122)"
+        }
+      ],
+      "cards": [
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "4px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "Dashboard",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Trade",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Pipeline",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Search symbols, comm",
+          "bg": "rgb(10, 10, 15)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "0px",
+          "fontSize": "16px"
+        },
+        {
+          "text": "",
+          "bg": "oklab(0.211341 0.00849673 -0.0381766 / 0.5)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "A",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "Watchlist",
+          "bg": "oklab(0.294318 0.00873664 -0.0350941 / 0.3)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Screener",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Signals",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        }
+      ],
+      "gaps": [
+        "16px",
+        "8px",
+        "4px",
+        "6px",
+        "0px",
+        "2px",
+        "12px"
+      ]
+    }
+  },
+  {
+    "route": "/pipeline",
+    "data": {
+      "navBg": "rgba(0, 0, 0, 0)",
+      "headings": [
+        {
+          "text": "Trading Pipeline",
+          "size": "14px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Current Positions",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Today's Pipeline Run",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Strategy Builder",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Backtesting",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "History (Last 7 Days)",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Performance Summary",
+          "size": "12px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        }
+      ],
+      "cards": [
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "4px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(18, 18, 26)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.915108 0.0030475 -0.0103379 / 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+        },
+        {
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "3.35544e+07px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(18, 18, 26)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.915108 0.0030475 -0.0103379 / 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "Dashboard",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Trade",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Pipeline",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Search symbols, comm",
+          "bg": "rgb(10, 10, 15)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "0px",
+          "fontSize": "16px"
+        },
+        {
+          "text": "",
+          "bg": "oklab(0.211341 0.00849673 -0.0381766 / 0.5)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "A",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "Run Now",
+          "bg": "rgb(59, 130, 246)",
+          "color": "rgb(255, 255, 255)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Add",
+          "bg": "rgb(59, 130, 246)",
+          "color": "rgb(255, 255, 255)",
+          "borderRadius": "6.4px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "Buy when RSI(14) dro",
+          "bg": "rgb(30, 30, 50)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "10px"
+        }
+      ],
+      "gaps": [
+        "16px",
+        "8px",
+        "4px",
+        "6px",
+        "0px",
+        "12px"
+      ]
+    }
+  },
+  {
+    "route": "/strategies/pead",
+    "data": {
+      "navBg": "rgba(0, 0, 0, 0)",
+      "headings": [
+        {
+          "text": "PEAD",
+          "size": "24px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Strategy Thesis",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Parameters",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Trade History",
+          "size": "18px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        }
+      ],
+      "cards": [
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "4px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(18, 18, 26)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.915108 0.0030475 -0.0103379 / 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+        },
+        {
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "Dashboard",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Trade",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Pipeline",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Search symbols, comm",
+          "bg": "rgb(10, 10, 15)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "0px",
+          "fontSize": "16px"
+        },
+        {
+          "text": "",
+          "bg": "oklab(0.211341 0.00849673 -0.0381766 / 0.5)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "A",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "Pause",
+          "bg": "oklab(0.294318 0.00873664 -0.0350941 / 0.3)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "6.4px",
+          "fontSize": "12.8px"
+        },
+        {
+          "text": "1M",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "6.4px",
+          "fontSize": "12px"
+        }
+      ],
+      "gaps": [
+        "16px",
+        "8px",
+        "4px",
+        "6px",
+        "0px",
+        "12px",
+        "24px"
+      ]
+    }
+  },
+  {
+    "route": "/strategies/momentum-quality",
+    "data": {
+      "navBg": "rgba(0, 0, 0, 0)",
+      "headings": [
+        {
+          "text": "Momentum + Quality",
+          "size": "24px",
+          "weight": "700",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Strategy Thesis",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Parameters",
+          "size": "14px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        },
+        {
+          "text": "Trade History",
+          "size": "18px",
+          "weight": "600",
+          "color": "rgb(226, 226, 234)"
+        }
+      ],
+      "cards": [
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "4px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(30, 30, 50)",
+          "border": "1px solid rgb(42, 42, 62)",
+          "borderRadius": "8px",
+          "boxShadow": "none"
+        },
+        {
+          "bg": "rgb(18, 18, 26)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "11.2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.915108 0.0030475 -0.0103379 / 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+        },
+        {
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "0px solid rgb(42, 42, 62)",
+          "borderRadius": "0px",
+          "boxShadow": "none"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "Dashboard",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Trade",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Pipeline",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "11px"
+        },
+        {
+          "text": "Search symbols, comm",
+          "bg": "rgb(10, 10, 15)",
+          "color": "rgb(113, 113, 122)",
+          "borderRadius": "6.4px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "0px",
+          "fontSize": "16px"
+        },
+        {
+          "text": "",
+          "bg": "oklab(0.211341 0.00849673 -0.0381766 / 0.5)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "A",
+          "bg": "oklab(0.623066 -0.0332245 -0.185038 / 0.15)",
+          "color": "rgb(59, 130, 246)",
+          "borderRadius": "3.35544e+07px",
+          "fontSize": "12px"
+        },
+        {
+          "text": "",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "8px",
+          "fontSize": "14px"
+        },
+        {
+          "text": "Pause",
+          "bg": "oklab(0.294318 0.00873664 -0.0350941 / 0.3)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "6.4px",
+          "fontSize": "12.8px"
+        },
+        {
+          "text": "1M",
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(226, 226, 234)",
+          "borderRadius": "6.4px",
+          "fontSize": "12px"
+        }
+      ],
+      "gaps": [
+        "16px",
+        "8px",
+        "4px",
+        "6px",
+        "0px",
+        "12px",
+        "24px"
+      ]
+    }
+  }
+]

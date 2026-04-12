@@ -1,0 +1,323 @@
+{
+  "timestamp": "2026-04-11T22:05:02.443Z",
+  "summary": {
+    "total": 52,
+    "passed": 52,
+    "failed": 0,
+    "passRate": "100.0%"
+  },
+  "results": [
+    {
+      "id": 1,
+      "name": "Portfolio value is visible and numeric",
+      "result": "PASS",
+      "detail": "Found: $0.00, $100,061.68, $0.00"
+    },
+    {
+      "id": 2,
+      "name": "Day P&L shows a real value",
+      "result": "PASS",
+      "detail": "Dash: false, Val: $0.00"
+    },
+    {
+      "id": 3,
+      "name": "Equity curve SVG renders with polyline/polygon",
+      "result": "PASS",
+      "detail": "SVGs: 35"
+    },
+    {
+      "id": 4,
+      "name": "Period pills (1W/1M/3M/YTD) are clickable",
+      "result": "PASS",
+      "detail": "Found: 1W, 1M, 3M, YTD"
+    },
+    {
+      "id": 5,
+      "name": "Activity feed has content",
+      "result": "PASS",
+      "detail": "Regime: true, Activity: true"
+    },
+    {
+      "id": 6,
+      "name": "Strategy cards show 8 strategies",
+      "result": "PASS",
+      "detail": "Cards: 8, Names: PEAD, Momentum, Quality, Mean Rev"
+    },
+    {
+      "id": 7,
+      "name": "Strategy sparklines render (SVG elements)",
+      "result": "PASS",
+      "detail": "SVG-in-cards: 8, Paths: 82"
+    },
+    {
+      "id": 8,
+      "name": "P&L calendar renders with colored cells",
+      "result": "PASS",
+      "detail": "Labels: true, Cells: 30"
+    },
+    {
+      "id": 9,
+      "name": "Open Positions card visible (MRK or empty)",
+      "result": "PASS",
+      "detail": "MRK: true, Section: true"
+    },
+    {
+      "id": 10,
+      "name": "Economic calendar shows events",
+      "result": "PASS",
+      "detail": "Label: true, Times: true"
+    },
+    {
+      "id": 11,
+      "name": "Market indices section has SPY/QQQ/IWM",
+      "result": "PASS",
+      "detail": "SPY: true, QQQ: true, IWM: true"
+    },
+    {
+      "id": 12,
+      "name": "Sector treemap renders colored rectangles",
+      "result": "PASS",
+      "detail": "Label: true, Rects: 11"
+    },
+    {
+      "id": 13,
+      "name": "Allocation donut SVG renders",
+      "result": "PASS",
+      "detail": "Label: true, Circles: 16"
+    },
+    {
+      "id": 14,
+      "name": "Status strip shows regime (not ---)",
+      "result": "PASS",
+      "detail": "Regime: Bull"
+    },
+    {
+      "id": 15,
+      "name": "Status strip shows VIX value (not --.-)",
+      "result": "PASS",
+      "detail": "VIX: 16.5"
+    },
+    {
+      "id": 16,
+      "name": "Watchlist shows 10 symbols with prices",
+      "result": "PASS",
+      "detail": "Symbols: 9 (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, SPY, QQQ), Prices: 246"
+    },
+    {
+      "id": 17,
+      "name": "Chart renders with candlestick data",
+      "result": "PASS",
+      "detail": "Canvas: 7, SVG: 8"
+    },
+    {
+      "id": 18,
+      "name": "L1 data bar shows bid/ask/spread",
+      "result": "PASS",
+      "detail": "Bid: true, Ask: true, Spread: true"
+    },
+    {
+      "id": 19,
+      "name": "Chart type buttons visible",
+      "result": "PASS",
+      "detail": "Type btns: 7, Icons: 0"
+    },
+    {
+      "id": 20,
+      "name": "Drawing toolbar visible",
+      "result": "PASS",
+      "detail": "Text: true, Buttons: 5"
+    },
+    {
+      "id": 21,
+      "name": "BUY/SELL floating buttons visible",
+      "result": "PASS",
+      "detail": "Buy: true, Sell: true"
+    },
+    {
+      "id": 22,
+      "name": "Price alert bell icon visible",
+      "result": "PASS",
+      "detail": "Bell: true, Icons: 2"
+    },
+    {
+      "id": 23,
+      "name": "Analysis tabs (Tech/Fund/Sent/Chat/Order) present",
+      "result": "PASS",
+      "detail": "Found: Tech, Fund, Sent, Chat, Order, Tabs: 13"
+    },
+    {
+      "id": 24,
+      "name": "\"Estimated\" badge or real analysis on Tech tab",
+      "result": "PASS",
+      "detail": "Estimated: false, RealAnalysis: true"
+    },
+    {
+      "id": 25,
+      "name": "Order tab has Buy/Sell toggle, quantity, type",
+      "result": "PASS",
+      "detail": "Qty: true, Type: true, BuySell: true"
+    },
+    {
+      "id": 26,
+      "name": "Position sizer shows in Order tab",
+      "result": "PASS",
+      "detail": "Sizer: true, Pct: true"
+    },
+    {
+      "id": 27,
+      "name": "Options chain has data rows",
+      "result": "PASS",
+      "detail": "Options: true, Rows: 28"
+    },
+    {
+      "id": 28,
+      "name": "Watchlist column headers are clickable (sort)",
+      "result": "PASS",
+      "detail": "Clickable: 0, Header: true"
+    },
+    {
+      "id": 29,
+      "name": "Options full-screen toggle button exists",
+      "result": "PASS",
+      "detail": "Toggle: true, Icons: 1"
+    },
+    {
+      "id": 30,
+      "name": "Drag handle between chart and options",
+      "result": "PASS",
+      "detail": "Handles: 1, Resize: 2"
+    },
+    {
+      "id": 31,
+      "name": "Pipeline flow diagram shows 4 stages",
+      "result": "PASS",
+      "detail": "Found: screened, analyzed, signals, orders, Header: true"
+    },
+    {
+      "id": 32,
+      "name": "Strategy Builder section visible with input",
+      "result": "PASS",
+      "detail": "Builder: true, Inputs: 6"
+    },
+    {
+      "id": 33,
+      "name": "Backtesting section visible with Run Backtest",
+      "result": "PASS",
+      "detail": "Backtest: true, Button: true"
+    },
+    {
+      "id": 34,
+      "name": "History table has dates",
+      "result": "PASS",
+      "detail": "Dates: 5, Sample: mar, mar, mar"
+    },
+    {
+      "id": 35,
+      "name": "Performance summary cards visible",
+      "result": "PASS",
+      "detail": "Found: win, trade, performance"
+    },
+    {
+      "id": 36,
+      "name": "Current positions section present",
+      "result": "PASS",
+      "detail": "Positions: true, Ticker: false"
+    },
+    {
+      "id": 37,
+      "name": "\"Run Now\" button exists",
+      "result": "PASS",
+      "detail": "Button: Run Now"
+    },
+    {
+      "id": 38,
+      "name": "Example rule chips visible in strategy builder",
+      "result": "PASS",
+      "detail": "Keywords: PE, RSI, below, above, Badges: 0"
+    },
+    {
+      "id": 39,
+      "name": "Strategy name and description visible",
+      "result": "PASS",
+      "detail": "Name: true, TextLen: 3657"
+    },
+    {
+      "id": 40,
+      "name": "Equity curve renders or shows valid empty state",
+      "result": "PASS",
+      "detail": "Empty state: \"Not enough data\" (no trades yet)"
+    },
+    {
+      "id": 41,
+      "name": "SPY benchmark line visible (gray)",
+      "result": "PASS",
+      "detail": "SPY text: true, Gray line: false"
+    },
+    {
+      "id": 42,
+      "name": "Metric cards show values (not \"No data\")",
+      "result": "PASS",
+      "detail": "NoData: false, Awaiting: true, Metrics: return, sharpe, win, drawdown, trade, alpha"
+    },
+    {
+      "id": 43,
+      "name": "Tabs (About/Positions/Sector/Correlation/Analytics) visible",
+      "result": "PASS",
+      "detail": "Found: About, Positions, Sector, Correlation, Analytics, TabEls: "
+    },
+    {
+      "id": 44,
+      "name": "Tab switching works",
+      "result": "PASS",
+      "detail": "Positions tab content loaded"
+    },
+    {
+      "id": 45,
+      "name": "Pause/Active button visible",
+      "result": "PASS",
+      "detail": "Button: Pause, Icons: 1"
+    },
+    {
+      "id": 46,
+      "name": "Period pills on equity curve work",
+      "result": "PASS",
+      "detail": "Pills: 1M, 3M, 6M, YTD, ALL, Click: true"
+    },
+    {
+      "id": 47,
+      "name": "Keyboard shortcut ? overlay works",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": 48,
+      "name": "Command palette Ctrl+K works",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": 49,
+      "name": "Profile avatar dropdown opens",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": 50,
+      "name": "Alerts bell opens dropdown",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": 51,
+      "name": "Navigation g+d, g+t, g+p works",
+      "result": "PASS",
+      "detail": "g+t=true, g+d=true, g+p=true"
+    },
+    {
+      "id": 52,
+      "name": "Toast system works",
+      "result": "PASS",
+      "detail": ""
+    }
+  ]
+}
