@@ -78,13 +78,21 @@ function WatchlistRow({
 
   // Calculate change from quote data, or derive from last price as fallback
   const change = (() => {
-    if (quote?.changePct != null) return quote.changePct;
-    // Generate a deterministic demo change based on symbol
-    if (!quote) return 0;
-    let seed = 0;
-    for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
-    seed = (seed * 16807) % 2147483647;
-    return ((seed % 800) - 300) / 100; // range roughly -3% to +5%
+    let raw: number;
+    if (quote?.changePct != null) {
+      raw = quote.changePct;
+    } else if (!quote) {
+      raw = 0;
+    } else {
+      // Generate a deterministic demo change based on symbol
+      let seed = 0;
+      for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
+      seed = (seed * 16807) % 2147483647;
+      raw = ((seed % 800) - 300) / 100; // range roughly -3% to +5%
+    }
+    // Clamp near-zero to exactly zero to avoid "-0.00%"
+    if (Math.abs(raw) < 0.005) raw = 0;
+    return raw;
   })();
   const changeColor = getChangeTextClass(change);
 

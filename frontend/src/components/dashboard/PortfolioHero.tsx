@@ -56,12 +56,17 @@ function EquityCurveSVG({
   const values = data.map((d) => d.value);
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
-  const range = maxV - minV || 1;
+  const rawRange = maxV - minV;
+  const range = rawRange > 0 ? rawRange : 1;
+  // Add 10% padding above and below to make small movements more visible
+  const paddedMin = minV - range * 0.1;
+  const paddedMax = maxV + range * 0.1;
+  const paddedRange = paddedMax - paddedMin;
 
   const toX = (i: number) =>
     PAD_X + (i / (data.length - 1)) * (W - PAD_X * 2);
   const toY = (v: number) =>
-    PAD_Y + (1 - (v - minV) / range) * (H - PAD_Y * 2);
+    PAD_Y + (1 - (v - paddedMin) / paddedRange) * (H - PAD_Y * 2);
 
   const points = data.map((d, i) => `${toX(i)},${toY(d.value)}`).join(" ");
 
@@ -140,13 +145,13 @@ export function PortfolioHero({
             <p
               className={cn(
                 "text-xl font-semibold tabular-nums leading-none",
-                dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss"
+                dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
               )}
             >
-              {dayPnl >= 0 ? "+" : ""}
+              {dayPnl > 0 ? "+" : ""}
               {formatCurrency(dayPnl)}{" "}
               <span className="text-sm font-normal text-secondary">
-                ({dayPnlPct >= 0 ? "+" : ""}
+                ({dayPnlPct > 0 ? "+" : ""}
                 {dayPnlPct.toFixed(2)}%)
               </span>
             </p>

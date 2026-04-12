@@ -7,6 +7,8 @@ import {
   AreaChart,
   ChevronDown,
   BellPlus,
+  Minus,
+  TrendingDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -451,7 +453,7 @@ export function ChartPanel() {
 
         {/* Quick trade buttons — overlaid on right edge of chart */}
         {quote && (
-          <div className="absolute right-3 top-1/3 z-10 flex flex-col gap-1.5">
+          <div className="absolute right-16 top-1/3 z-10 flex flex-col gap-1.5">
             <button
               onClick={() => {
                 window.dispatchEvent(

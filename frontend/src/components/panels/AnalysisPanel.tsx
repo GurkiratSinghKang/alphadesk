@@ -630,6 +630,7 @@ function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice:
   const shares = stopLossDistance > 0 ? Math.floor(riskAmount / stopLossDistance) : 0;
   const positionValue = shares * currentPrice;
   const pctOfPortfolio = accountSize > 0 ? ((positionValue / accountSize) * 100).toFixed(1) : "0";
+  const isOverRisk = positionValue > accountSize * 0.1; // over 10% of portfolio
 
   return (
     <div className="border border-border rounded-lg p-2.5 mb-3 bg-[var(--panel)]/50">
@@ -667,7 +668,9 @@ function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice:
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">% of Portfolio</span>
-          <span className="text-foreground tabular-nums">{pctOfPortfolio}%</span>
+          <span className={cn("text-foreground tabular-nums", isOverRisk && "text-[var(--loss)] font-semibold")}>
+            {pctOfPortfolio}% {isOverRisk && "⚠"}
+          </span>
         </div>
       </div>
     </div>

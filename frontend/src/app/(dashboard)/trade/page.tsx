@@ -183,6 +183,7 @@ export default function TradePage() {
           left: 0,
           width: optionsW,
           height: optionsFullScreen ? totalH : optionsPanelHeight,
+          minHeight: 200,
           overflow: "auto",
           borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
           zIndex: 10,
