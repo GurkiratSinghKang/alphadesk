@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   TrendingUp,
   Activity,
@@ -218,7 +219,7 @@ export function buildFeedItems(
 
 // ─── Feed Item Component ─────────────────────────────────────
 
-function FeedItemRow({ item }: { item: FeedItem }) {
+const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }) {
   const Icon = FEED_ICONS[item.type];
   const isHighlight = item.severity === "danger" || item.severity === "warning";
 
@@ -244,7 +245,7 @@ function FeedItemRow({ item }: { item: FeedItem }) {
       </span>
     </div>
   );
-}
+});
 
 // ─── Activity Feed Panel ─────────────────────────────────────
 

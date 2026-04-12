@@ -6,10 +6,9 @@ interface AlertsState {
   addAlert: (alert: Alert) => void;
   acknowledgeAlert: (id: string) => void;
   clearAlerts: () => void;
-  unacknowledgedCount: () => number;
 }
 
-export const useAlertsStore = create<AlertsState>((set, get) => ({
+export const useAlertsStore = create<AlertsState>((set) => ({
   alerts: [],
 
   addAlert: (alert) =>
@@ -23,7 +22,4 @@ export const useAlertsStore = create<AlertsState>((set, get) => ({
     })),
 
   clearAlerts: () => set({ alerts: [] }),
-
-  unacknowledgedCount: () =>
-    get().alerts.filter((a) => !a.acknowledged).length,
 }));

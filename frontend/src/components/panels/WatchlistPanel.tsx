@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Plus, X, TrendingUp, TrendingDown, Minus, MoreHorizontal } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,7 +16,7 @@ import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
-import type { Quote, ScreenerResult } from "@/types";
+import type { Quote } from "@/types";
 
 // ─── Mock sparkline (tiny SVG) ───────────────────────────────
 
@@ -46,7 +46,7 @@ function MiniSparkline({ trend }: { trend: number }) {
 
 // ─── Watchlist Row ────────────────────────────────────────────
 
-function WatchlistRow({
+const WatchlistRow = React.memo(function WatchlistRow({
   symbol,
   quote,
   isSelected,
@@ -74,7 +74,7 @@ function WatchlistRow({
       return () => clearTimeout(t);
     }
     prevPrice.current = quote?.last;
-  }, [quote?.last, quote]);
+  }, [quote?.last]);
 
   // Calculate change from quote data, or derive from last price as fallback
   const change = (() => {
@@ -152,7 +152,7 @@ function WatchlistRow({
       </DropdownMenu>
     </div>
   );
-}
+});
 
 // ─── Screener tab content ─────────────────────────────────────
 
@@ -173,25 +173,19 @@ function ScreenerTab() {
   const runScreener = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`/api/v1/screener/screen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ strategy: preset }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        const mapped = (data.results ?? []).slice(0, 15).map((r: any) => ({
-          symbol: r.symbol,
-          name: r.name ?? r.symbol,
-          price: r.price ?? 0,
-          changePct: r.change_pct ?? 0,
-          compositeScore: r.composite_score ?? 0,
-          sector: r.sector ?? "—",
-        }));
-        setResults(mapped);
-      }
-    } catch {} finally {
+      const data = await screenStocks(preset);
+      const mapped = data.slice(0, 15).map((r) => ({
+        symbol: r.symbol,
+        name: r.symbol,
+        price: r.price ?? 0,
+        changePct: r.changePct ?? 0,
+        compositeScore: r.composite ?? 0,
+        sector: r.sector ?? "—",
+      }));
+      setResults(mapped);
+    } catch (err) {
+      console.error("Screener fetch failed:", err);
+    } finally {
       setLoading(false);
     }
   }, [preset]);
@@ -311,8 +305,12 @@ function SignalsTab() {
 // ─── Main Panel ──────────────────────────────────────────────
 
 export function WatchlistPanel() {
-  const { watchlist, quotes, selectedSymbol, setSelectedSymbol, addToWatchlist, removeFromWatchlist } =
-    useMarketStore();
+  const watchlist = useMarketStore((s) => s.watchlist);
+  const quotes = useMarketStore((s) => s.quotes);
+  const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
+  const removeFromWatchlist = useMarketStore((s) => s.removeFromWatchlist);
   const { activePanels, setActiveTab } = useUIStore();
   const [addInput, setAddInput] = useState("");
   const [sortKey, setSortKey] = useState<"default" | "symbol" | "last" | "changePct">("default");
@@ -332,8 +330,8 @@ export function WatchlistPanel() {
   const sortedWatchlist = useMemo(() => {
     if (sortKey === "default") return watchlist;
     const sorted = [...watchlist].sort((a, b) => {
-      const quoteA = quotes.get(a);
-      const quoteB = quotes.get(b);
+      const quoteA = quotes[a];
+      const quoteB = quotes[b];
       let valA = 0, valB = 0;
       if (sortKey === "symbol") { return sortDir === "asc" ? a.localeCompare(b) : b.localeCompare(a); }
       if (sortKey === "last") { valA = quoteA?.last ?? 0; valB = quoteB?.last ?? 0; }
@@ -446,7 +444,7 @@ export function WatchlistPanel() {
                   <WatchlistRow
                     key={symbol}
                     symbol={symbol}
-                    quote={quotes.get(symbol)}
+                    quote={quotes[symbol]}
                     isSelected={symbol === selectedSymbol}
                     onSelect={() => setSelectedSymbol(symbol)}
                     onRemove={() => removeFromWatchlist(symbol)}

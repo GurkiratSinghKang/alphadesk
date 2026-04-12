@@ -158,9 +158,11 @@ function Cell({
 // ─── Main Panel ──────────────────────────────────────────────
 
 export function OptionsPanel() {
-  const { selectedSymbol, quotes } = useMarketStore();
+  const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const quotes = useMarketStore((s) => s.quotes);
   const { selectedStrikes, toggleStrike } = useOptionsStore();
-  const expirations = useMemo(generateExpirations, []);
+  const today = new Date().toDateString();
+  const expirations = useMemo(generateExpirations, [today]);
   const [selectedExpiry, setSelectedExpiry] = useState(expirations[2] ?? "");
 
   // Track selected call/put keys locally for highlighting
@@ -173,7 +175,7 @@ export function OptionsPanel() {
   }, [selectedStrikes]);
 
   // BUG #28/#33: Derive spotPrice from market store with fallback
-  const quoteData = quotes.get(selectedSymbol);
+  const quoteData = quotes[selectedSymbol];
   const spotPrice =
     quoteData?.last ??
     (selectedSymbol === "SPY" ? 590 : selectedSymbol === "AAPL" ? 230 : 175);

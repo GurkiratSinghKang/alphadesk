@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Activity, Target } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ export interface StrategyData {
 
 // ─── Strategy Card Component ─────────────────────────────────
 
-function StrategyCard({
+const StrategyCard = React.memo(function StrategyCard({
   strategy,
   regimeLabel,
   onClick,
@@ -53,7 +54,7 @@ function StrategyCard({
               <Icon className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
+              <p className="truncate text-sm font-medium text-foreground" title={strategy.name}>
                 {strategy.shortName}
               </p>
             </div>
@@ -73,20 +74,29 @@ function StrategyCard({
 
         <div className="mt-3 space-y-1">
           <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "text-sm font-semibold tabular-nums",
-                strategy.returnPct >= 0
-                  ? "text-[var(--profit)]"
-                  : "text-[var(--loss)]"
-              )}
-            >
-              {strategy.returnPct >= 0 ? "+" : ""}
-              {strategy.returnPct.toFixed(2)}%
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {strategy.positions} pos
-            </span>
+            {strategy.returnPct === 0 && strategy.positions === 0 ? (
+              <>
+                <span className="text-sm text-muted-foreground">&mdash;</span>
+                <span className="text-xs text-muted-foreground">No positions</span>
+              </>
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    strategy.returnPct >= 0
+                      ? "text-[var(--profit)]"
+                      : "text-[var(--loss)]"
+                  )}
+                >
+                  {strategy.returnPct >= 0 ? "+" : ""}
+                  {strategy.returnPct.toFixed(2)}%
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {strategy.positions} pos
+                </span>
+              </>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground italic">
             {regimeNote}
@@ -108,7 +118,7 @@ function StrategyCard({
       </CardContent>
     </Card>
   );
-}
+});
 
 // ─── Strategy Grid Panel ─────────────────────────────────────
 

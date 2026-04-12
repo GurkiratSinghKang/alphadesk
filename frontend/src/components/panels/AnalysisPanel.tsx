@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import type { ChatMessage, Analysis } from "@/types";
+import type { ChatMessage, Analysis, QuickOrderEvent } from "@/types";
 
 // ─── Score Gauge ─────────────────────────────────────────────
 
@@ -197,7 +197,7 @@ function useAnalysisData(symbol: string) {
 // ─── Technical Tab ───────────────────────────────────────────
 
 function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
-  const quote = useMarketStore((s) => s.quotes.get(symbol));
+  const quote = useMarketStore((s) => s.quotes[symbol]);
   const score = analysis?.technicalScore ?? 50;
   // Derive key levels from the actual quote price
   const currentPrice = quote?.last ?? quote?.close ?? 0;
@@ -680,7 +680,7 @@ function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice:
 // ─── Order Tab ───────────────────────────────────────────────
 
 function OrderTab({ symbol }: { symbol: string }) {
-  const quote = useMarketStore((s) => s.quotes.get(symbol));
+  const quote = useMarketStore((s) => s.quotes[symbol]);
   const { toast } = useToast();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState(10);
@@ -696,14 +696,14 @@ function OrderTab({ symbol }: { symbol: string }) {
 
   // Listen for quick-order events from the chart BUY/SELL buttons
   useEffect(() => {
-    function handleQuickOrder(e: CustomEvent) {
-      const { side: newSide, price: newPrice } = e.detail;
+    function handleQuickOrder(e: Event) {
+      const { side: newSide, price: newPrice } = (e as CustomEvent<QuickOrderEvent>).detail;
       setSide(newSide);
       setPrice(newPrice);
       setOrderType("limit");
     }
-    window.addEventListener("alphadesk:quick-order", handleQuickOrder as EventListener);
-    return () => window.removeEventListener("alphadesk:quick-order", handleQuickOrder as EventListener);
+    window.addEventListener("alphadesk:quick-order", handleQuickOrder);
+    return () => window.removeEventListener("alphadesk:quick-order", handleQuickOrder);
   }, []);
 
   const estimatedCost = quantity * price;

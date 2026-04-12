@@ -214,28 +214,33 @@ describe('Alerts Store', () => {
     expect(useAlertsStore.getState().alerts).toEqual([]);
   });
 
-  it('unacknowledgedCount returns correct count', () => {
+  it('unacknowledged count can be derived from alerts array', () => {
     useAlertsStore.getState().addAlert({ id: '1', type: 'system', message: 'A', time: 1, acknowledged: false });
     useAlertsStore.getState().addAlert({ id: '2', type: 'system', message: 'B', time: 2, acknowledged: true });
-    expect(useAlertsStore.getState().unacknowledgedCount()).toBe(1);
+    const count = useAlertsStore.getState().alerts.filter((a) => !a.acknowledged).length;
+    expect(count).toBe(1);
   });
 
-  it('unacknowledgedCount is 0 when all acknowledged', () => {
+  it('unacknowledged count is 0 when all acknowledged', () => {
     useAlertsStore.getState().addAlert({ id: '1', type: 'system', message: 'A', time: 1, acknowledged: true });
     useAlertsStore.getState().addAlert({ id: '2', type: 'system', message: 'B', time: 2, acknowledged: true });
-    expect(useAlertsStore.getState().unacknowledgedCount()).toBe(0);
+    const count = useAlertsStore.getState().alerts.filter((a) => !a.acknowledged).length;
+    expect(count).toBe(0);
   });
 
-  it('unacknowledgedCount is 0 when list is empty', () => {
-    expect(useAlertsStore.getState().unacknowledgedCount()).toBe(0);
+  it('unacknowledged count is 0 when list is empty', () => {
+    const count = useAlertsStore.getState().alerts.filter((a) => !a.acknowledged).length;
+    expect(count).toBe(0);
   });
 
-  it('unacknowledgedCount updates after acknowledgeAlert', () => {
+  it('unacknowledged count updates after acknowledgeAlert', () => {
     useAlertsStore.getState().addAlert({ id: '1', type: 'system', message: 'A', time: 1, acknowledged: false });
     useAlertsStore.getState().addAlert({ id: '2', type: 'system', message: 'B', time: 2, acknowledged: false });
-    expect(useAlertsStore.getState().unacknowledgedCount()).toBe(2);
+    let count = useAlertsStore.getState().alerts.filter((a) => !a.acknowledged).length;
+    expect(count).toBe(2);
     useAlertsStore.getState().acknowledgeAlert('1');
-    expect(useAlertsStore.getState().unacknowledgedCount()).toBe(1);
+    count = useAlertsStore.getState().alerts.filter((a) => !a.acknowledged).length;
+    expect(count).toBe(1);
   });
 
   it('supports all alert types', () => {

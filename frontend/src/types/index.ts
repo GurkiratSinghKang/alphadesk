@@ -189,3 +189,11 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
 }
+
+// ─── Custom Events ──────────────────────────────────────────
+
+export interface QuickOrderEvent {
+  symbol: string;
+  side: "buy" | "sell";
+  price: number;
+}

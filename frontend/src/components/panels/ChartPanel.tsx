@@ -27,8 +27,8 @@ import {
   formatNumber,
   getChangeTextClass,
 } from "@/lib/utils";
-import { getBars, getPositions, getPipelinePositions } from "@/lib/api";
-import type { TimeFrame, ChartType, Indicator, OHLCVBar } from "@/types";
+import { getBars, getPositions, getPipelinePositions, createPriceAlert } from "@/lib/api";
+import type { TimeFrame, ChartType, Indicator, OHLCVBar, QuickOrderEvent } from "@/types";
 
 // ─── Timeframes ──────────────────────────────────────────────
 
@@ -83,7 +83,8 @@ function generateDemoOHLCV(symbol: string, timeframe: TimeFrame, count = 200): O
 
 export function ChartPanel() {
   const chartHandleRef = useRef<TradingChartHandle>(null);
-  const { selectedSymbol, quotes } = useMarketStore();
+  const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const quotes = useMarketStore((s) => s.quotes);
   const [timeframe, setTimeframe] = useState<TimeFrame>("D");
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [activeIndicators, setActiveIndicators] = useState<Indicator[]>(["Volume"]);
@@ -107,7 +108,7 @@ export function ChartPanel() {
     color?: string;
   }>>([]);
 
-  const quote = quotes.get(selectedSymbol);
+  const quote = quotes[selectedSymbol];
 
   // BUG #10: chartData depends on timeframe
   const chartData = useMemo(
@@ -188,12 +189,14 @@ export function ChartPanel() {
     .filter((d) => d.type === "hline" && d.price != null)
     .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6" }));
 
-  // Real-time chart update: when quote updates via WebSocket, push new bar to chart
+  // Real-time chart update: when quote updates via WebSocket, push new bar to chart.
+  // chartHandleRef.current may be null on the first quote if the chart hasn't mounted yet;
+  // this is expected and we simply skip the update — the chart will render the data on mount.
   const prevQuoteRef = useRef<{ last: number; volume: number } | null>(null);
   useEffect(() => {
-    if (!quote || !chartHandleRef.current) return;
+    if (!quote) return;
     const prev = prevQuoteRef.current;
-    if (prev && quote.last !== prev.last) {
+    if (prev && quote.last !== prev.last && chartHandleRef.current) {
       const now = Math.floor(Date.now() / 1000);
       chartHandleRef.current.updateBar({
         time: now,
@@ -244,6 +247,7 @@ export function ChartPanel() {
                 {formatChangeWithSign(change)} ({formatPercent(changePct)})
               </span>
               <button
+                aria-label="Set price alert"
                 onClick={() => { setAlertPrice(quote?.last ?? 0); setAlertOpen(!alertOpen); }}
                 className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50"
                 title="Set price alert"
@@ -277,16 +281,17 @@ export function ChartPanel() {
                 <button
                   onClick={async () => {
                     try {
-                      await fetch(`/api/v1/trades/alerts?symbol=${selectedSymbol}&price=${alertPrice}&condition=${alertCondition}`, { method: "POST", credentials: "include" });
+                      await createPriceAlert(selectedSymbol, alertPrice, alertCondition);
                       setAlertOpen(false);
-                      // Could add toast here
-                    } catch {}
+                    } catch (err) {
+                      console.error("Failed to create price alert:", err);
+                    }
                   }}
                   className="h-6 px-2 rounded bg-primary text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
                 >
                   Set Alert
                 </button>
-                <button onClick={() => setAlertOpen(false)} className="h-6 w-6 rounded text-muted-foreground hover:text-foreground">✕</button>
+                <button aria-label="Close alert form" onClick={() => setAlertOpen(false)} className="h-6 w-6 rounded text-muted-foreground hover:text-foreground">✕</button>
               </div>
             )}
           </div>
@@ -380,6 +385,7 @@ export function ChartPanel() {
         </div>
         <div className="flex items-center gap-0.5 ml-2 border-l border-border pl-2">
           <button
+            aria-label="Draw horizontal line"
             onClick={() => setDrawingMode(drawingMode === "hline" ? "none" : "hline")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "hline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Horizontal Line"
@@ -387,6 +393,7 @@ export function ChartPanel() {
             <Minus className="h-3 w-3" />
           </button>
           <button
+            aria-label="Draw trendline"
             onClick={() => setDrawingMode(drawingMode === "trendline" ? "none" : "trendline")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "trendline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Trendline"
@@ -394,6 +401,7 @@ export function ChartPanel() {
             <TrendingDown className="h-3 w-3" />
           </button>
           <button
+            aria-label="Draw fibonacci retracement"
             onClick={() => setDrawingMode(drawingMode === "fib" ? "none" : "fib")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "fib" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Fibonacci"
@@ -402,6 +410,7 @@ export function ChartPanel() {
           </button>
           {drawings.length > 0 && (
             <button
+              aria-label="Clear all drawings"
               onClick={() => setDrawings([])}
               className="h-6 px-1.5 rounded text-[10px] text-muted-foreground hover:text-[var(--loss)]"
               title="Clear all drawings"
@@ -451,30 +460,30 @@ export function ChartPanel() {
           />
         )}
 
-        {/* Quick trade buttons — overlaid on right edge of chart */}
+        {/* Quick trade buttons — right edge, translucent until hovered */}
         {quote && (
-          <div className="absolute right-16 top-1/3 z-10 flex flex-col gap-1.5">
+          <div className="absolute right-2 top-1/3 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
             <button
+              aria-label="Quick buy"
               onClick={() => {
+                const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "buy", price: quote.last };
                 window.dispatchEvent(
-                  new CustomEvent("alphadesk:quick-order", {
-                    detail: { symbol: selectedSymbol, side: "buy", price: quote.last },
-                  })
+                  new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail })
                 );
               }}
-              className="rounded-md bg-[var(--profit)]/90 px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--profit)] backdrop-blur-sm"
+              className="rounded-md bg-[var(--profit)] px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--profit)]/90 backdrop-blur-sm"
             >
               BUY
             </button>
             <button
+              aria-label="Quick sell"
               onClick={() => {
+                const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "sell", price: quote.last };
                 window.dispatchEvent(
-                  new CustomEvent("alphadesk:quick-order", {
-                    detail: { symbol: selectedSymbol, side: "sell", price: quote.last },
-                  })
+                  new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail })
                 );
               }}
-              className="rounded-md bg-[var(--loss)]/90 px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--loss)] backdrop-blur-sm"
+              className="rounded-md bg-[var(--loss)] px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--loss)]/90 backdrop-blur-sm"
             >
               SELL
             </button>
