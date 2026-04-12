@@ -75,7 +75,7 @@ export function EconomicCalendar() {
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Economic Calendar</h2>
         </div>
-        <span className="text-xs text-muted-foreground">Next 7 days</span>
+        <span className="text-[10px] text-muted-foreground bg-[var(--panel)] px-1.5 py-0.5 rounded">Sample Data</span>
       </div>
       <div className="divide-y divide-border">
         {events.map((evt, i) => (

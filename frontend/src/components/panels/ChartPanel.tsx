@@ -384,14 +384,14 @@ export function ChartPanel() {
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "hline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Horizontal Line"
           >
-            ─
+            <Minus className="h-3 w-3" />
           </button>
           <button
             onClick={() => setDrawingMode(drawingMode === "trendline" ? "none" : "trendline")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "trendline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Trendline"
           >
-            ╲
+            <TrendingDown className="h-3 w-3" />
           </button>
           <button
             onClick={() => setDrawingMode(drawingMode === "fib" ? "none" : "fib")}

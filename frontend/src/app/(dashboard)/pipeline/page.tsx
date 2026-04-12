@@ -35,6 +35,7 @@ import {
   getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
+  getPositions,
   type PipelineStatus,
   type PipelineRun,
   type PipelinePosition,
@@ -60,11 +61,16 @@ function SignalBadge({ signal }: { signal: string }) {
 // ─── Pipeline Flow Diagram ──────────────────────────────────
 
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
+  // Only show counts from today's actual run, not stale cached data
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = run?.date === today || run?.timestamp?.startsWith(today);
+  const activeRun = isToday ? run : null;
+
   const stages = [
-    { label: "Screened", count: run?.screened?.length ?? 0 },
-    { label: "Analyzed", count: run?.analyzed?.length ?? 0 },
-    { label: "Signals", count: run?.signals?.length ?? 0 },
-    { label: "Orders", count: run?.ordersPlaced?.length ?? 0 },
+    { label: "Screened", count: activeRun?.screened?.length ?? 0 },
+    { label: "Analyzed", count: activeRun?.analyzed?.length ?? 0 },
+    { label: "Signals", count: activeRun?.signals?.length ?? 0 },
+    { label: "Orders", count: activeRun?.ordersPlaced?.length ?? 0 },
   ];
 
   return (
@@ -101,6 +107,7 @@ export default function PipelinePage() {
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [todayRun, setTodayRun] = useState<PipelineRun | null>(null);
   const [positions, setPositions] = useState<PipelinePosition[]>([]);
+  const [brokerPositions, setBrokerPositions] = useState<PipelinePosition[]>([]);
   const [perfData, setPerfData] = useState<{ totalTrades: number; totalPnl: number; winRate: number; bestTrade: { symbol: string; pnl: number } | null; worstTrade: { symbol: string; pnl: number } | null } | null>(null);
   const [history, setHistory] = useState<Record<string, any>[]>([]);
   const [historyRuns, setHistoryRuns] = useState<Record<string, PipelineRun>>(
@@ -115,10 +122,11 @@ export default function PipelinePage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, p, h] = await Promise.allSettled([
+      const [s, p, h, bp] = await Promise.allSettled([
         getPipelineStatus(),
         getPipelinePositions(),
         getPipelineHistory(),
+        getPositions(),
       ]);
       if (s.status === "fulfilled") setStatus(s.value);
       if (p.status === "fulfilled") {
@@ -129,6 +137,22 @@ export default function PipelinePage() {
         } else {
           setPositions(Array.isArray(val) ? val : []);
         }
+      }
+      // Map broker positions as fallback when pipeline positions are empty
+      if (bp.status === "fulfilled") {
+        setBrokerPositions(bp.value.map(pos => ({
+          symbol: pos.symbol,
+          shares: pos.quantity,
+          entryPrice: pos.avgCost,
+          currentPrice: pos.currentPrice,
+          pnl: pos.unrealizedPnl,
+          pnlPct: pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost * 100) : 0,
+          stopLoss: null,
+          takeProfit: null,
+          entryDate: "",
+          signal: "hold",
+          rationale: "",
+        })));
       }
       if (h.status === "fulfilled") setHistory(Array.isArray(h.value) ? h.value.slice(0, 7) : []);
 
@@ -208,17 +232,19 @@ export default function PipelinePage() {
   }
 
   // ─── Computed stats ─────────────────────────────────────
-  const totalPnl = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);
-  const wins = positions.filter((p) => (p.pnl ?? 0) > 0).length;
-  const losses = positions.filter((p) => (p.pnl ?? 0) < 0).length;
-  const hasPnlData = positions.some((p) => p.pnl !== 0 && p.pnl != null);
+  // Use broker positions as fallback when pipeline has none
+  const displayPositions = positions.length > 0 ? positions : brokerPositions;
+  const totalPnl = displayPositions.reduce((s, p) => s + (p.pnl ?? 0), 0);
+  const wins = displayPositions.filter((p) => (p.pnl ?? 0) > 0).length;
+  const losses = displayPositions.filter((p) => (p.pnl ?? 0) < 0).length;
+  const hasPnlData = displayPositions.some((p) => p.pnl !== 0 && p.pnl != null);
   const winRate =
     wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : "N/A";
-  const bestTrade = positions.length
-    ? positions.reduce((best, p) => ((p.pnl ?? 0) > (best.pnl ?? 0) ? p : best), positions[0])
+  const bestTrade = displayPositions.length
+    ? displayPositions.reduce((best, p) => ((p.pnl ?? 0) > (best.pnl ?? 0) ? p : best), displayPositions[0])
     : null;
-  const worstTrade = positions.length
-    ? positions.reduce((worst, p) => ((p.pnl ?? 0) < (worst.pnl ?? 0) ? p : worst), positions[0])
+  const worstTrade = displayPositions.length
+    ? displayPositions.reduce((worst, p) => ((p.pnl ?? 0) < (worst.pnl ?? 0) ? p : worst), displayPositions[0])
     : null;
 
   const statusColor = status?.running
@@ -291,20 +317,19 @@ export default function PipelinePage() {
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
                   Current Positions
                 </h2>
-                {positions.length > 0 && (
+                {displayPositions.length > 0 && (
                   <Badge variant="secondary" className="text-[10px]">
-                    {positions.length}
+                    {displayPositions.length}
                   </Badge>
                 )}
               </div>
-              {positions.length === 0 ? (
+              {displayPositions.length === 0 ? (
                 <Card className="border-border bg-[var(--surface)]">
-                  <CardContent className="py-8 text-center">
-                    <Target className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-                    <p className="text-xs text-muted-foreground">
-                      No active positions &mdash; pipeline will open trades
-                      during market hours
-                    </p>
+                  <CardContent className="p-0">
+                    <div className="flex items-center justify-center gap-3 py-4 text-muted-foreground">
+                      <Target className="h-5 w-5 opacity-30" />
+                      <p className="text-xs">No active positions — pipeline will open trades during market hours</p>
+                    </div>
                   </CardContent>
                 </Card>
               ) : (
@@ -327,7 +352,7 @@ export default function PipelinePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {positions.map((pos) => (
+                      {displayPositions.map((pos) => (
                         <TableRow key={`${pos.symbol}-${pos.entryDate}`} className="border-border">
                           <TableCell className="text-xs font-bold text-foreground">
                             {pos.symbol}
@@ -565,7 +590,7 @@ export default function PipelinePage() {
                   Performance Summary
                 </h2>
               </div>
-              {!perfData && !hasPnlData && positions.length === 0 ? (
+              {!perfData && !hasPnlData && displayPositions.length === 0 ? (
                 <Card className="border-border bg-[var(--surface)]">
                   <CardContent className="py-8 text-center">
                     <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
@@ -623,7 +648,7 @@ export default function PipelinePage() {
                       Total Trades
                     </p>
                     <p className="text-lg font-bold tabular-nums text-foreground">
-                      {perfData ? perfData.totalTrades + positions.length : positions.length}
+                      {perfData ? perfData.totalTrades + displayPositions.length : displayPositions.length}
                     </p>
                   </CardContent>
                 </Card>

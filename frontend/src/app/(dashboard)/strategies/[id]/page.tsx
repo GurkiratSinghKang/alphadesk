@@ -150,7 +150,7 @@ function EquityCurve({
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   const isEmpty = value === "N/A" || value === "—";
   return (
-    <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "opacity-50")}>
+    <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "border-border/50")}>
       <p className="text-label mb-1">{label}</p>
       <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#8a8a95]" : color)}>
         {isEmpty ? <span className="text-[11px] font-normal text-muted-foreground">Awaiting trades</span> : value}

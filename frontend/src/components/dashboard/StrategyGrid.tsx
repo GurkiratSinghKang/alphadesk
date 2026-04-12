@@ -92,7 +92,7 @@ function StrategyCard({
             {regimeNote}
           </p>
         </div>
-        {strategy.returnPct !== 0 || strategy.positions > 0 ? (
+        {(Math.abs(strategy.returnPct) > 0.01 || strategy.positions > 0) ? (
           <div className="mt-2 -mx-1">
             <Sparkline
               data={generateSparkData(strategy.id.length * 31 + strategy.id.charCodeAt(0), 30)}

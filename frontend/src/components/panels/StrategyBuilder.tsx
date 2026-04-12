@@ -81,7 +81,7 @@ export function StrategyBuilder() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Strategy Name */}
       <div>
         <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy Name</label>
