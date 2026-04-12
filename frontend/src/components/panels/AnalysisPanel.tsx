@@ -157,27 +157,9 @@ function useAnalysisData(symbol: string) {
           setAnalysis(data);
         } catch {
           if (cancelled) return;
-          // Use fallback demo data
-          // Generate deterministic scores based on symbol
-          let seed = 0;
-          for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
-          const rng = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-          const techScore = Math.round(40 + rng() * 50);
-          const fundScore = Math.round(35 + rng() * 55);
-          const sentScore = Math.round(-20 + rng() * 70);
-          setAnalysis({
-            symbol,
-            technicalScore: techScore,
-            fundamentalScore: fundScore,
-            sentimentScore: sentScore,
-            composite: Math.round((techScore + fundScore + sentScore + 50) / 3),
-            summary: `${symbol} showing constructive technical setup with bullish momentum indicators.`,
-            signals: [
-              { name: "MACD Crossover", type: "bullish", description: "Bullish MACD cross on daily", strength: 78 },
-              { name: "RSI Neutral", type: "neutral", description: "RSI at 58, room to run", strength: 55 },
-              { name: "Above EMAs", type: "bullish", description: "Price above 20/50 EMA", strength: 82 },
-            ],
-          });
+          // No real analysis available — leave analysis as null
+          // so the UI shows an honest "No analysis available" state
+          setAnalysis(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -237,20 +219,64 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     );
   }
 
+  if (!analysis) {
+    return (
+      <div className="space-y-4 p-3">
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+          <Activity className="h-6 w-6 text-muted-foreground/40 mb-2" />
+          <p className="text-xs text-muted-foreground">No analysis available for {symbol}</p>
+          <p className="text-[10px] text-muted-foreground/60 mt-1">Connect live analysis API for real-time scores</p>
+        </div>
+
+        <Separator className="bg-border" />
+
+        <div>
+          <h4 className="text-[11px] font-medium text-muted-foreground mb-2">
+            Key Levels
+          </h4>
+          <div className="space-y-1">
+            {keyLevels.map((l) => (
+              <div
+                key={l.label}
+                className={cn(
+                  "flex items-center justify-between rounded px-2 py-1 text-xs",
+                  l.label === "Current" && "bg-primary/10"
+                )}
+              >
+                <span
+                  className={
+                    l.label === "Current"
+                      ? "text-primary font-medium"
+                      : l.label.startsWith("Resistance")
+                      ? "text-[var(--loss)]"
+                      : "text-[var(--profit)]"
+                  }
+                >
+                  {l.label}
+                  {l.label !== "Current" && (
+                    <span className="text-[10px] text-[#8a8a95] ml-1">(est.)</span>
+                  )}
+                </span>
+                <span className="tabular-nums text-foreground">
+                  ${l.price.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 p-3">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-xs font-medium text-muted-foreground flex items-center">
             Technical Score
-            {!analysis && (
-              <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
-                Estimated
-              </span>
-            )}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3 overflow-hidden break-words">
-            {analysis?.summary ?? (score >= 60 ? `${symbol} showing bullish momentum. Watch for breakout above resistance.` : score <= 40 ? `${symbol} under selling pressure. Watch support levels.` : `${symbol} in consolidation range. Await directional catalyst.`)}
+            {analysis.summary}
           </p>
         </div>
         <ScoreGauge value={score} label="Technical" />
@@ -281,6 +307,9 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
                 }
               >
                 {l.label}
+                {l.label !== "Current" && (
+                  <span className="text-[10px] text-[#8a8a95] ml-1">(est.)</span>
+                )}
               </span>
               <span className="tabular-nums text-foreground">
                 ${l.price.toFixed(2)}
@@ -605,6 +634,7 @@ function ChatTab({ symbol }: { symbol: string }) {
           className="h-8 text-xs bg-background/50 border-border"
         />
         <Button
+          aria-label="Send message"
           onClick={handleSend}
           disabled={loading || !input.trim()}
           size="icon"
@@ -637,16 +667,18 @@ function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice:
       <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] mb-2 font-semibold">Position Sizer</p>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-[10px] text-muted-foreground">Risk %</label>
+          <label htmlFor="position-risk-pct" className="text-[10px] text-muted-foreground">Risk %</label>
           <input
+            id="position-risk-pct"
             type="number" value={riskPct} onChange={(e) => setRiskPct(parseFloat(e.target.value) || 1)}
             min={0.5} max={10} step={0.5}
             className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
           />
         </div>
         <div>
-          <label className="text-[10px] text-muted-foreground">Stop Loss %</label>
+          <label htmlFor="position-stop-loss" className="text-[10px] text-muted-foreground">Stop Loss %</label>
           <input
+            id="position-stop-loss"
             type="number" value={stopLossPct} onChange={(e) => setStopLossPct(parseFloat(e.target.value) || 1)}
             min={0.5} max={20} step={0.5}
             className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
@@ -749,24 +781,26 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Quantity */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Quantity</label>
+        <label htmlFor="order-quantity" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Quantity</label>
         <div className="flex items-center gap-1 mt-1">
-          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">-</button>
+          <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">-</button>
           <input
+            id="order-quantity"
             type="number"
             value={quantity}
             onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
             className="h-8 flex-1 rounded border border-border bg-background px-2 text-center text-sm tabular-nums text-foreground"
             min={1}
           />
-          <button onClick={() => setQuantity(quantity + 1)} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">+</button>
+          <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">+</button>
         </div>
       </div>
 
       {/* Order Type */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Order Type</label>
+        <label htmlFor="order-type" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Order Type</label>
         <select
+          id="order-type"
           value={orderType}
           onChange={(e) => setOrderType(e.target.value as any)}
           className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-xs text-foreground"
@@ -781,10 +815,11 @@ function OrderTab({ symbol }: { symbol: string }) {
       {/* Price (shown for limit/stop) */}
       {orderType !== "market" && (
         <div>
-          <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
+          <label htmlFor="order-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
             {orderType === "stop" ? "Stop Price" : "Limit Price"}
           </label>
           <input
+            id="order-price"
             type="number"
             value={price}
             onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}

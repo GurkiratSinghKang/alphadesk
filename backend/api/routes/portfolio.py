@@ -466,6 +466,7 @@ def _demo_calendar(year: int, month: int) -> CalendarResponse:
 async def get_pnl_calendar(
     year: int = Query(None, description="Year (default: current)"),
     month: int = Query(None, description="Month 1-12 (default: current)"),
+    demo: bool = Query(False, description="Return demo data for testing"),
 ) -> CalendarResponse:
     """Get daily P&L calendar data for a given month."""
     today = date.today()
@@ -477,7 +478,21 @@ async def get_pnl_calendar(
     if y < 2000 or y > 2100:
         raise HTTPException(status_code=400, detail="Year out of range")
 
-    return _demo_calendar(y, m)
+    if demo:
+        return _demo_calendar(y, m)
+
+    # Return honest empty response — no real trade history available yet
+    return CalendarResponse(
+        month=m,
+        year=y,
+        days=[],
+        month_total=0,
+        trading_days=0,
+        winning_days=0,
+        losing_days=0,
+        best_day=None,
+        worst_day=None,
+    )
 
 
 @router.get("/journal", response_model=list[JournalEntry])

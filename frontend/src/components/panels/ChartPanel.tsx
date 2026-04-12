@@ -165,6 +165,7 @@ export function ChartPanel() {
   }, [selectedSymbol]);
 
   const displayData = apiBars ?? chartData;
+  const usingDemoData = apiBars === null;
 
   const displayPrice = crosshairPrice ?? quote?.last ?? displayData[displayData.length - 1]?.close ?? 0;
   const change = quote?.change ?? (displayData.length > 1 ? displayData[displayData.length - 1].close - displayData[displayData.length - 2].close : 0);
@@ -302,7 +303,7 @@ export function ChartPanel() {
           <HelpCircle text="Interactive price chart. Change timeframes with 1-8 keys. Use the dropdown to switch chart types and add indicators." />
           {/* Chart type */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md h-7 gap-1 px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            <DropdownMenuTrigger aria-label="Chart type selector" className="inline-flex items-center justify-center rounded-md h-7 gap-1 px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
               <ChartTypeIcon className="h-3.5 w-3.5" />
               <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
@@ -364,13 +365,14 @@ export function ChartPanel() {
         <div className="mx-1.5 h-4 w-px bg-[#2a2a3e]" />
         <div className="flex items-center gap-0.5">
           {([
-            { type: "candle" as const, label: "🕯" },
-            { type: "line" as const, label: "📈" },
-            { type: "area" as const, label: "▨" },
-          ]).map(({ type, label }) => (
+            { type: "candle" as const, label: "🕯", ariaLabel: "Candlestick chart" },
+            { type: "line" as const, label: "📈", ariaLabel: "Line chart" },
+            { type: "area" as const, label: "▨", ariaLabel: "Area chart" },
+          ]).map(({ type, label, ariaLabel }) => (
             <button
               key={type}
               onClick={() => setChartType(type)}
+              aria-label={ariaLabel}
               className={cn(
                 "h-6 w-7 rounded text-[11px] transition-colors",
                 chartType === type
@@ -434,6 +436,13 @@ export function ChartPanel() {
           drawingPriceLines={drawingPriceLines}
         />
         </div>
+
+        {/* Demo data watermark */}
+        {usingDemoData && (
+          <div className="absolute top-2 left-2 z-[6] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20">
+            <span className="text-[10px] font-medium text-amber-300/70">Demo data</span>
+          </div>
+        )}
 
         {/* Drawing overlay — captures clicks when a drawing mode is active */}
         {drawingMode === "hline" && (

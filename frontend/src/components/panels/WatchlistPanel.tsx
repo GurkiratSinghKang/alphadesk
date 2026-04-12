@@ -129,6 +129,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
       <DropdownMenu>
         <DropdownMenuTrigger
+          aria-label={`Options for ${symbol}`}
           onClick={(e) => e.stopPropagation()}
           className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 opacity-0 group-hover:opacity-100 shrink-0"
           style={{ opacity: isSelected ? 1 : undefined }}
@@ -276,6 +277,9 @@ function SignalsTab() {
 
   return (
     <div className="p-2 space-y-1">
+      <div className="px-3 py-1.5 mb-1 text-[10px] text-amber-300/70 bg-amber-500/10 rounded border border-amber-500/20">
+        Sample signals — connect live scanner for real-time signals
+      </div>
       {signals.map((s, i) => (
         <div
           key={i}
