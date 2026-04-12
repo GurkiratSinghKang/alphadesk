@@ -27,7 +27,7 @@ const EXAMPLE_RULES = [
   "Maximum position size: 5% of portfolio",
 ];
 
-function parseNaturalLanguage(text: string): NonNullable<StrategyRule["parsed"]> {
+export function parseNaturalLanguage(text: string): NonNullable<StrategyRule["parsed"]> {
   const lower = text.toLowerCase();
 
   // Simple pattern matching for demo
