@@ -8,6 +8,7 @@ import { getPnlCalendar, type CalendarDay } from "@/lib/api";
 export function PnlCalendarMini() {
   const [days, setDays] = useState<CalendarDay[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
+  const [fetched, setFetched] = useState(false);
   const [hovered, setHovered] = useState<{ date: string; pnl: number; trades: number; winRate: number; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -15,18 +16,25 @@ export function PnlCalendarMini() {
     getPnlCalendar().then((data) => {
       setDays(data.days);
       setMonthTotal(data.monthTotal);
-    }).catch((err) => console.error("[PnlCalendarMini] Calendar fetch failed:", err));
+      setFetched(true);
+    }).catch((err) => {
+      console.error("[PnlCalendarMini] Calendar fetch failed:", err);
+      setFetched(true);
+    });
   }, []);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  if (days.length === 0) return (
+  if (!mounted || !fetched) return (
     <div className="animate-pulse bg-[var(--panel)] rounded-lg h-48 border border-border" />
   );
 
-  if (!mounted) return (
-    <div className="animate-pulse bg-[var(--panel)] rounded-lg h-48 border border-border" />
+  if (days.length === 0) return (
+    <div className="rounded-xl border border-border bg-[var(--panel)] flex flex-col items-center justify-center h-48">
+      <BarChart3 className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">No trading data for this month</p>
+    </div>
   );
 
   const now = new Date();

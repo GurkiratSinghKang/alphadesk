@@ -53,15 +53,7 @@ export function Sparkline({
   );
 }
 
-export function generateSparkData(seed: number, count = 20): number[] {
-  const data: number[] = [];
-  let val = 100;
-  let s = seed;
-  for (let i = 0; i < count; i++) {
-    s = (s * 16807 + 0) % 2147483647;
-    const r = (s - 1) / 2147483646;
-    val += (r - 0.47) * 3;
-    data.push(val);
-  }
-  return data;
+export function generateSparkData(_seed: number, count = 20): number[] {
+  // Return flat line — no fake random walk data
+  return Array(count).fill(100);
 }

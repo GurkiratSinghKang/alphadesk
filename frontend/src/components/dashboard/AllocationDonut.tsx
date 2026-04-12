@@ -10,9 +10,10 @@ interface AllocationDonutProps {
   buyingPower: number;
   unrealizedPnl: number;
   realizedPnlToday: number;
+  isDemo?: boolean;
 }
 
-export function AllocationDonut({ cash, invested, equity, buyingPower, unrealizedPnl, realizedPnlToday }: AllocationDonutProps) {
+export function AllocationDonut({ cash, invested, equity, buyingPower, unrealizedPnl, realizedPnlToday, isDemo }: AllocationDonutProps) {
   const total = cash + invested;
   const investedPct = total > 0 ? invested / total : 0;
   const cashPct = total > 0 ? cash / total : 1;
@@ -27,7 +28,14 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
 
   return (
     <div>
-      <h3 className="mb-3 text-label">Allocation</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-label">Allocation</h3>
+        {isDemo && (
+          <span className="text-[9px] font-medium text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5">
+            Demo data
+          </span>
+        )}
+      </div>
       <div className="flex items-start gap-4">
         {/* Donut SVG */}
         <div className="shrink-0">

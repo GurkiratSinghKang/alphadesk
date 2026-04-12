@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 import { useRegime, useIndices, useStrategies, usePortfolioSummary } from "@/hooks/useQueries";
 
-import { generateSparkData } from "@/components/dashboard/Sparkline";
+// generateSparkData removed — using flat arrays instead of fake random walks
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
 import { ActivityFeed, buildFeedItems, type FeedItem, type RegimeData, type NewsItem } from "@/components/dashboard/ActivityFeed";
 import { StrategyGrid, STRATEGY_META, STRATEGY_ORDER, type StrategyData } from "@/components/dashboard/StrategyGrid";
@@ -241,13 +241,14 @@ function CommandCenter() {
   const portfolioValue = Number.isFinite(activeSummary.equity) && activeSummary.equity > 0 ? activeSummary.equity : 0;
   const dayPnl = Number.isFinite(activeSummary.dayPnl) ? activeSummary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(activeSummary.dayPnlPct) ? activeSummary.dayPnlPct : 0;
+  const isDemo = !!(activeSummary as any).is_demo;
 
-  // Sparkline data (deterministic per symbol)
+  // Sparkline data — flat lines since we don't have real intraday index data
   const sparkData = useMemo(() => {
-    const seeds: Record<string, number> = { SPY: 42, QQQ: 137, IWM: 256, VIX: 512 };
+    const flat = Array(20).fill(100);
     const result: Record<string, number[]> = {};
     for (const idx of indices) {
-      result[idx.symbol] = generateSparkData(seeds[idx.symbol] ?? 100);
+      result[idx.symbol] = flat;
     }
     return result;
   }, [indices]);
@@ -271,6 +272,7 @@ function CommandCenter() {
           dayPnl={dayPnl}
           dayPnlPct={dayPnlPct}
           equityHistory={equityHistory}
+          isDemo={isDemo}
         />
 
         {/* Sections 2 & 3: Activity Feed + Strategy Grid */}
@@ -307,6 +309,7 @@ function CommandCenter() {
           news={news}
           summary={activeSummary}
           sparkData={sparkData}
+          isDemo={isDemo}
         />
       </div>
     </ScrollArea>

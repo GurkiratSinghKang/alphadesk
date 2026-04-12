@@ -157,9 +157,10 @@ interface SectorTreemapProps {
   sectors: SectorItem[];
   width?: number;
   height?: number;
+  isDemo?: boolean;
 }
 
-export function SectorTreemap({ sectors, width: propWidth, height = 120 }: SectorTreemapProps) {
+export function SectorTreemap({ sectors, width: propWidth, height = 120, isDemo }: SectorTreemapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState(propWidth ?? 380);
 
@@ -193,6 +194,11 @@ export function SectorTreemap({ sectors, width: propWidth, height = 120 }: Secto
 
   return (
     <div ref={containerRef} className="relative w-full" style={{ height }}>
+      {isDemo && (
+        <span className="absolute top-1 right-1 z-10 text-[9px] font-medium text-amber-400 bg-black/60 rounded px-1.5 py-0.5">
+          Demo
+        </span>
+      )}
       {rects.map((rect) => {
         const showText = rect.w > 45 && rect.h > 30;
         const val = rect.change_pct;

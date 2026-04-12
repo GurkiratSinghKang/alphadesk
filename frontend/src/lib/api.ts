@@ -421,6 +421,8 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     unrealized_pnl_pct: number;
     realized_pnl_today: number;
     positions_count: number;
+    is_demo?: boolean;
+    source?: string;
   }
   const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`);
   const dayPnl = (raw.unrealized_pnl ?? 0) + (raw.realized_pnl_today ?? 0);
@@ -437,6 +439,7 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     positionsCount: raw.positions_count,
     dayPnl,
     dayPnlPct,
+    is_demo: raw.is_demo === true || raw.source === "demo",
   };
 }
 

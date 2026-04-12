@@ -79,6 +79,7 @@ export interface PortfolioSummary {
   positionsCount: number;
   dayPnl: number;
   dayPnlPct: number;
+  is_demo?: boolean;
 }
 
 export interface PortfolioGreeks {

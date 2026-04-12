@@ -10,6 +10,7 @@ interface PortfolioHeroProps {
   dayPnl: number;
   dayPnlPct: number;
   equityHistory: { date: string; value: number }[];
+  isDemo?: boolean;
 }
 
 function filterByPeriod(
@@ -116,6 +117,7 @@ export function PortfolioHero({
   dayPnl,
   dayPnlPct,
   equityHistory,
+  isDemo,
 }: PortfolioHeroProps) {
   const [period, setPeriod] = useState<Period>("1M");
 
@@ -136,25 +138,36 @@ export function PortfolioHero({
             <p className="text-label leading-none mb-1">Portfolio</p>
             <p className="text-display tabular-nums text-gradient">
               {formatCurrency(portfolioValue)}
+              {isDemo && (
+                <span className="ml-2 align-middle inline-block text-xs font-medium text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5">
+                  Demo
+                </span>
+              )}
             </p>
           </div>
 
           {/* Day P&L */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Day P&L</p>
-            <p
-              className={cn(
-                "text-xl font-semibold tabular-nums leading-none",
-                dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
-              )}
-            >
-              {dayPnl > 0 ? "+" : ""}
-              {formatCurrency(dayPnl)}{" "}
-              <span className="text-sm font-normal text-secondary">
-                ({dayPnlPct > 0 ? "+" : ""}
-                {dayPnlPct.toFixed(2)}%)
-              </span>
-            </p>
+            {isDemo ? (
+              <p className="text-sm text-amber-400">
+                Demo data — connect Alpaca API for live portfolio
+              </p>
+            ) : (
+              <p
+                className={cn(
+                  "text-xl font-semibold tabular-nums leading-none",
+                  dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
+                )}
+              >
+                {dayPnl > 0 ? "+" : ""}
+                {formatCurrency(dayPnl)}{" "}
+                <span className="text-sm font-normal text-secondary">
+                  ({dayPnlPct > 0 ? "+" : ""}
+                  {dayPnlPct.toFixed(2)}%)
+                </span>
+              </p>
+            )}
           </div>
         </div>
 

@@ -12,16 +12,15 @@ describe('generateSparkData', () => {
     expect(generateSparkData(42).length).toBe(20);
   });
 
-  it('is deterministic with the same seed', () => {
+  it('returns flat array (all values are 100)', () => {
+    const data = generateSparkData(42);
+    data.forEach(v => expect(v).toBe(100));
+  });
+
+  it('is deterministic — same seed returns same flat data', () => {
     const a = generateSparkData(42);
     const b = generateSparkData(42);
     expect(a).toEqual(b);
-  });
-
-  it('produces different data with different seeds', () => {
-    const a = generateSparkData(42);
-    const b = generateSparkData(99);
-    expect(a).not.toEqual(b);
   });
 
   it('generates reasonable values (no NaN or Infinity)', () => {
@@ -31,17 +30,15 @@ describe('generateSparkData', () => {
     });
   });
 
-  it('starts near 100 (initial value)', () => {
+  it('all values are 100', () => {
     const data = generateSparkData(1, 1);
-    // First value is val = 100 + (r - 0.47) * 3, which stays near 100
-    expect(data[0]).toBeGreaterThan(95);
-    expect(data[0]).toBeLessThan(105);
+    expect(data[0]).toBe(100);
   });
 
   it('generates a single point when count is 1', () => {
     const data = generateSparkData(7, 1);
     expect(data.length).toBe(1);
-    expect(Number.isFinite(data[0])).toBe(true);
+    expect(data[0]).toBe(100);
   });
 
   it('generates no points when count is 0', () => {
@@ -49,21 +46,9 @@ describe('generateSparkData', () => {
     expect(data.length).toBe(0);
   });
 
-  it('is deterministic across larger data sets', () => {
-    const a = generateSparkData(9999, 100);
-    const b = generateSparkData(9999, 100);
-    expect(a).toEqual(b);
-  });
-
-  it('seed 0 produces a valid sequence', () => {
-    const data = generateSparkData(0, 10);
-    expect(data.length).toBe(10);
-    data.forEach(v => expect(Number.isFinite(v)).toBe(true));
-  });
-
-  it('large count produces all finite values', () => {
+  it('large count produces all flat values', () => {
     const data = generateSparkData(42, 500);
     expect(data.length).toBe(500);
-    data.forEach(v => expect(Number.isFinite(v)).toBe(true));
+    data.forEach(v => expect(v).toBe(100));
   });
 });

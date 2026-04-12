@@ -43,9 +43,10 @@ interface MarketContextProps {
   news: NewsItem[];
   summary: PortfolioSummary;
   sparkData: Record<string, number[]>;
+  isDemo?: boolean;
 }
 
-export function MarketContext({ indices, sectors, news, summary, sparkData }: MarketContextProps) {
+export function MarketContext({ indices, sectors, news, summary, sparkData, isDemo }: MarketContextProps) {
   // Non-VIX indices for display
   const displayIndices = indices.filter((i) => i.symbol !== "VIX");
 
@@ -112,7 +113,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
             Sector Performance
           </h3>
           <div className="w-full">
-            <SectorTreemap sectors={sectors} height={120} />
+            <SectorTreemap sectors={sectors} height={120} isDemo={isDemo} />
           </div>
         </div>
 
@@ -124,27 +125,49 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
                 Headlines
               </h3>
               <div className="space-y-2.5">
-                {news.slice(0, 3).map((article, i) => (
-                  <a
-                    key={article.url || i}
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-start gap-2 rounded-md p-1.5 -mx-1.5 transition-colors hover:bg-[var(--panel)]"
-                  >
-                    <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
-                        {article.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {article.source}
-                        {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
-                      </p>
+                {news.slice(0, 3).map((article, i) => {
+                  const hasValidUrl = article.url && article.url.trim() !== "" && !article.url.includes("example.com");
+                  if (hasValidUrl) {
+                    return (
+                      <a
+                        key={article.url || i}
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-start gap-2 rounded-md p-1.5 -mx-1.5 transition-colors hover:bg-[var(--panel)]"
+                      >
+                        <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
+                            {article.title}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {article.source}
+                            {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
+                          </p>
+                        </div>
+                        <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    );
+                  }
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 rounded-md p-1.5 -mx-1.5"
+                    >
+                      <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] leading-snug text-foreground line-clamp-2">
+                          {article.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {article.source}
+                          {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
+                        </p>
+                      </div>
                     </div>
-                    <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </a>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : (
@@ -155,6 +178,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData }: Ma
               buyingPower={summary.buyingPower}
               unrealizedPnl={summary.unrealizedPnl}
               realizedPnlToday={summary.realizedPnlToday}
+              isDemo={isDemo}
             />
           )}
         </div>
