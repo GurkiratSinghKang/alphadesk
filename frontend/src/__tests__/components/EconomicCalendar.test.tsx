@@ -8,9 +8,9 @@ describe('EconomicCalendar', () => {
     expect(screen.getByText('Economic Calendar')).toBeDefined();
   });
 
-  it('shows Sample Data badge', () => {
+  it('shows sample events label', () => {
     render(<EconomicCalendar />);
-    expect(screen.getByText('Sample Data')).toBeDefined();
+    expect(screen.getByText(/Sample Events/)).toBeDefined();
   });
 
   it('renders events with impact badges', () => {

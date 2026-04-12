@@ -1,0 +1,992 @@
+{
+  "pages": [
+    {
+      "name": "Dashboard",
+      "path": "/",
+      "url": "https://tradingalpha.net/",
+      "perf": {
+        "loadTimeMs": 1115,
+        "domElements": 746,
+        "fcp": 56,
+        "totalTransferred": 1208992,
+        "totalTransferredHuman": "1.15 MB",
+        "networkRequests": 45,
+        "jsFiles": 16,
+        "jsSize": 964485,
+        "jsSizeHuman": "941.9 KB",
+        "cssFiles": 2,
+        "cssSize": 108278,
+        "cssSizeHuman": "105.7 KB",
+        "topResources": [
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/07o~osqztxvwt.js",
+            "size": 227537,
+            "sizeHuman": "222.2 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/04mvxko68_ww2.js",
+            "size": 143491,
+            "sizeHuman": "140.1 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0_8dr~n.kcree.js",
+            "size": 116557,
+            "sizeHuman": "113.8 KB"
+          },
+          {
+            "type": "CSS",
+            "url": "/_next/static/chunks/13w9zv2-0wk13.css",
+            "size": 104113,
+            "sizeHuman": "101.7 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0cxbqc-kyfv5f.js",
+            "size": 100850,
+            "sizeHuman": "98.5 KB"
+          }
+        ]
+      },
+      "a11y": {
+        "contrast": {
+          "totalChecked": 416,
+          "failCount": 14,
+          "failures": [
+            {
+              "element": "button",
+              "text": "Trade",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "3.86",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Search symbols, commands...Ctrl+K",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(10, 10, 15)",
+              "ratio": "4.09",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "(+0.00%)",
+              "fg": "rgb(30, 30, 50)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "1.21",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "p",
+              "text": "-$0.45",
+              "fg": "rgb(239, 68, 68)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "4.34",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "1",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgb(239, 68, 68)",
+              "ratio": "2.92",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "1",
+              "fg": "rgb(255, 255, 255)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "3.76",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "2",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgb(34, 197, 94)",
+              "ratio": "1.77",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "Sample Data",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(30, 30, 50)",
+              "ratio": "3.38",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "high",
+              "fg": "rgb(239, 68, 68)",
+              "bg": "oklab(0.636841 0.187884 0.0889429 / 0.2)",
+              "ratio": "4.34",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "Technology+1.2%",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgba(34, 197, 94, 0.7)",
+              "ratio": "1.77",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "Healthcare+0.8%",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgba(34, 197, 94, 0.45)",
+              "ratio": "1.77",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "Energy-0.5%",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgba(239, 68, 68, 0.45)",
+              "ratio": "2.92",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "Financials+0.3%",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgba(34, 197, 94, 0.25)",
+              "ratio": "1.77",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "Industrials-0.1%",
+              "fg": "rgb(226, 226, 234)",
+              "bg": "rgba(239, 68, 68, 0.25)",
+              "ratio": "2.92",
+              "threshold": 4.5,
+              "large": false
+            }
+          ],
+          "mutedColorInstances": 5
+        },
+        "forms": {
+          "totalInputs": 0,
+          "labeled": 0,
+          "unlabeled": []
+        },
+        "landmarks": {
+          "main": true,
+          "nav": true,
+          "banner": true,
+          "complementary": false,
+          "contentinfo": false,
+          "search": false,
+          "count": 3
+        },
+        "headings": {
+          "list": [
+            {
+              "level": 1,
+              "text": "AlphaDesk Dashboard"
+            },
+            {
+              "level": 2,
+              "text": "Activity Feed"
+            },
+            {
+              "level": 2,
+              "text": "Open Positions"
+            },
+            {
+              "level": 2,
+              "text": "April P&L"
+            },
+            {
+              "level": 2,
+              "text": "Economic Calendar"
+            },
+            {
+              "level": 2,
+              "text": "Strategies"
+            },
+            {
+              "level": 3,
+              "text": "Market Indices"
+            },
+            {
+              "level": 3,
+              "text": "Sector Performance"
+            },
+            {
+              "level": 3,
+              "text": "Headlines"
+            }
+          ],
+          "h1Count": 1,
+          "issues": []
+        },
+        "unlabeledButtons": [
+          {
+            "tag": "button",
+            "classes": "",
+            "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline"
+          },
+          {
+            "tag": "button",
+            "classes": "group/button inline-flex shrink-0 items-center justify-center rounded-lg border ",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          }
+        ],
+        "emptyLinks": [],
+        "focusable": {
+          "total": 28,
+          "withIndicator": 20
+        },
+        "ariaRoleCount": 16,
+        "missingAltImages": 0
+      }
+    },
+    {
+      "name": "Trade",
+      "path": "/trade",
+      "url": "https://tradingalpha.net/trade",
+      "perf": {
+        "loadTimeMs": 1301,
+        "domElements": 1029,
+        "fcp": 96,
+        "totalTransferred": 1607451,
+        "totalTransferredHuman": "1.53 MB",
+        "networkRequests": 45,
+        "jsFiles": 17,
+        "jsSize": 1214921,
+        "jsSizeHuman": "1.16 MB",
+        "cssFiles": 2,
+        "cssSize": 108278,
+        "cssSizeHuman": "105.7 KB",
+        "topResources": [
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0shwfccp22d_c.js",
+            "size": 273786,
+            "sizeHuman": "267.4 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/07o~osqztxvwt.js",
+            "size": 227537,
+            "sizeHuman": "222.2 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/04mvxko68_ww2.js",
+            "size": 143491,
+            "sizeHuman": "140.1 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0_8dr~n.kcree.js",
+            "size": 116557,
+            "sizeHuman": "113.8 KB"
+          },
+          {
+            "type": "CSS",
+            "url": "/_next/static/chunks/13w9zv2-0wk13.css",
+            "size": 104113,
+            "sizeHuman": "101.7 KB"
+          }
+        ]
+      },
+      "a11y": {
+        "contrast": {
+          "totalChecked": 624,
+          "failCount": 9,
+          "failures": [
+            {
+              "element": "button",
+              "text": "Dashboard",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "3.86",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Search symbols, commands...Ctrl+K",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(10, 10, 15)",
+              "ratio": "4.09",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "(+0.00%)",
+              "fg": "rgb(30, 30, 50)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "1.21",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "div",
+              "text": "-0.58%",
+              "fg": "rgb(239, 68, 68)",
+              "bg": "oklab(0.636841 0.187884 0.0889429 / 0.1)",
+              "ratio": "4.34",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "|",
+              "fg": "rgb(42, 42, 62)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "1.33",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "BUY",
+              "fg": "rgb(0, 0, 0)",
+              "bg": "oklab(0.722741 -0.165537 0.0972287 / 0.9)",
+              "ratio": "1.13",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "SELL",
+              "fg": "rgb(0, 0, 0)",
+              "bg": "oklab(0.636841 0.187884 0.0889429 / 0.9)",
+              "ratio": "1.13",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "Resistance 2",
+              "fg": "rgb(239, 68, 68)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "4.34",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "Current",
+              "fg": "rgb(59, 130, 246)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "4.44",
+              "threshold": 4.5,
+              "large": false
+            }
+          ],
+          "mutedColorInstances": 4
+        },
+        "forms": {
+          "totalInputs": 1,
+          "labeled": 1,
+          "unlabeled": []
+        },
+        "landmarks": {
+          "main": true,
+          "nav": true,
+          "banner": true,
+          "complementary": false,
+          "contentinfo": false,
+          "search": false,
+          "count": 3
+        },
+        "headings": {
+          "list": [
+            {
+              "level": 3,
+              "text": "Technical Score"
+            },
+            {
+              "level": 4,
+              "text": "Key Levels"
+            },
+            {
+              "level": 4,
+              "text": "Indicators"
+            }
+          ],
+          "h1Count": 0,
+          "issues": [
+            "No <h1> element found"
+          ]
+        },
+        "unlabeledButtons": [
+          {
+            "tag": "button",
+            "classes": "",
+            "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline"
+          },
+          {
+            "tag": "button",
+            "classes": "group/button inline-flex shrink-0 items-center justify-center rounded-lg border ",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-full text-muted-foreground/50 ho",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-borde",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:tex",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-full text-muted-foreground/50 ho",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-md h-7 gap-1 px-2 text-xs text-m",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-full text-muted-foreground/50 ho",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-full text-muted-foreground/50 ho",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "inline-flex items-center justify-center rounded-full text-muted-foreground/50 ho",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foregro",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foregro",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "text-muted-foreground hover:text-[var(--loss)]",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foregro",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foregro",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "text-muted-foreground hover:text-[var(--loss)]",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          }
+        ],
+        "emptyLinks": [],
+        "focusable": {
+          "total": 95,
+          "withIndicator": 20
+        },
+        "ariaRoleCount": 38,
+        "missingAltImages": 0
+      }
+    },
+    {
+      "name": "Pipeline",
+      "path": "/pipeline",
+      "url": "https://tradingalpha.net/pipeline",
+      "perf": {
+        "loadTimeMs": 1035,
+        "domElements": 309,
+        "fcp": 56,
+        "totalTransferred": 1197390,
+        "totalTransferredHuman": "1.14 MB",
+        "networkRequests": 41,
+        "jsFiles": 16,
+        "jsSize": 956437,
+        "jsSizeHuman": "934.0 KB",
+        "cssFiles": 2,
+        "cssSize": 108278,
+        "cssSizeHuman": "105.7 KB",
+        "topResources": [
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/07o~osqztxvwt.js",
+            "size": 227537,
+            "sizeHuman": "222.2 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/04mvxko68_ww2.js",
+            "size": 143491,
+            "sizeHuman": "140.1 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0_8dr~n.kcree.js",
+            "size": 116557,
+            "sizeHuman": "113.8 KB"
+          },
+          {
+            "type": "CSS",
+            "url": "/_next/static/chunks/13w9zv2-0wk13.css",
+            "size": 104113,
+            "sizeHuman": "101.7 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0cxbqc-kyfv5f.js",
+            "size": 100850,
+            "sizeHuman": "98.5 KB"
+          }
+        ]
+      },
+      "a11y": {
+        "contrast": {
+          "totalChecked": 146,
+          "failCount": 5,
+          "failures": [
+            {
+              "element": "button",
+              "text": "Dashboard",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "3.86",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Search symbols, commands...Ctrl+K",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(10, 10, 15)",
+              "ratio": "4.09",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "(+0.00%)",
+              "fg": "rgb(30, 30, 50)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "1.21",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Run Now",
+              "fg": "rgb(255, 255, 255)",
+              "bg": "rgb(59, 130, 246)",
+              "ratio": "3.68",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Buy when RSI(14) drops below 30",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(30, 30, 50)",
+              "ratio": "3.38",
+              "threshold": 4.5,
+              "large": false
+            }
+          ],
+          "mutedColorInstances": 7
+        },
+        "forms": {
+          "totalInputs": 6,
+          "labeled": 1,
+          "unlabeled": [
+            {
+              "tag": "input",
+              "type": "text",
+              "name": "",
+              "classes": "w-full h-8 mt-1 rounded border border-border bg-background px-3 text-sm text-for"
+            },
+            {
+              "tag": "input",
+              "type": "text",
+              "name": "",
+              "classes": "w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-for"
+            },
+            {
+              "tag": "input",
+              "type": "number",
+              "name": "",
+              "classes": "w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-"
+            },
+            {
+              "tag": "input",
+              "type": "number",
+              "name": "",
+              "classes": "w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-"
+            },
+            {
+              "tag": "input",
+              "type": "number",
+              "name": "",
+              "classes": "w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-"
+            }
+          ]
+        },
+        "landmarks": {
+          "main": true,
+          "nav": true,
+          "banner": true,
+          "complementary": false,
+          "contentinfo": false,
+          "search": false,
+          "count": 3
+        },
+        "headings": {
+          "list": [
+            {
+              "level": 1,
+              "text": "Trading Pipeline"
+            },
+            {
+              "level": 2,
+              "text": "Current Positions"
+            },
+            {
+              "level": 2,
+              "text": "Today's Pipeline Run"
+            },
+            {
+              "level": 2,
+              "text": "Strategy Builder"
+            },
+            {
+              "level": 2,
+              "text": "Backtesting"
+            },
+            {
+              "level": 2,
+              "text": "History (Last 7 Days)"
+            },
+            {
+              "level": 2,
+              "text": "Performance Summary"
+            }
+          ],
+          "h1Count": 1,
+          "issues": []
+        },
+        "unlabeledButtons": [
+          {
+            "tag": "button",
+            "classes": "",
+            "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline"
+          },
+          {
+            "tag": "button",
+            "classes": "group/button inline-flex shrink-0 items-center justify-center rounded-lg border ",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          }
+        ],
+        "emptyLinks": [],
+        "focusable": {
+          "total": 22,
+          "withIndicator": 20
+        },
+        "ariaRoleCount": 4,
+        "missingAltImages": 0
+      }
+    },
+    {
+      "name": "Strategy Detail",
+      "path": "/strategies/pead",
+      "url": "https://tradingalpha.net/strategies/pead",
+      "perf": {
+        "loadTimeMs": 874,
+        "domElements": 246,
+        "fcp": 104,
+        "totalTransferred": 1223113,
+        "totalTransferredHuman": "1.17 MB",
+        "networkRequests": 40,
+        "jsFiles": 16,
+        "jsSize": 987975,
+        "jsSizeHuman": "964.8 KB",
+        "cssFiles": 2,
+        "cssSize": 108278,
+        "cssSizeHuman": "105.7 KB",
+        "topResources": [
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/07o~osqztxvwt.js",
+            "size": 227537,
+            "sizeHuman": "222.2 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/04mvxko68_ww2.js",
+            "size": 143491,
+            "sizeHuman": "140.1 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0_8dr~n.kcree.js",
+            "size": 116557,
+            "sizeHuman": "113.8 KB"
+          },
+          {
+            "type": "CSS",
+            "url": "/_next/static/chunks/13w9zv2-0wk13.css",
+            "size": 104113,
+            "sizeHuman": "101.7 KB"
+          },
+          {
+            "type": "JS",
+            "url": "/_next/static/chunks/0cxbqc-kyfv5f.js",
+            "size": 100850,
+            "sizeHuman": "98.5 KB"
+          }
+        ]
+      },
+      "a11y": {
+        "contrast": {
+          "totalChecked": 117,
+          "failCount": 4,
+          "failures": [
+            {
+              "element": "button",
+              "text": "Dashboard",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "3.86",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "Search symbols, commands...Ctrl+K",
+              "fg": "rgb(113, 113, 122)",
+              "bg": "rgb(10, 10, 15)",
+              "ratio": "4.09",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "span",
+              "text": "(+0.00%)",
+              "fg": "rgb(30, 30, 50)",
+              "bg": "rgba(0, 0, 0, 0)",
+              "ratio": "1.21",
+              "threshold": 4.5,
+              "large": false
+            },
+            {
+              "element": "button",
+              "text": "3M",
+              "fg": "rgb(255, 255, 255)",
+              "bg": "rgb(59, 130, 246)",
+              "ratio": "3.68",
+              "threshold": 4.5,
+              "large": false
+            }
+          ],
+          "mutedColorInstances": 14
+        },
+        "forms": {
+          "totalInputs": 0,
+          "labeled": 0,
+          "unlabeled": []
+        },
+        "landmarks": {
+          "main": true,
+          "nav": true,
+          "banner": true,
+          "complementary": false,
+          "contentinfo": false,
+          "search": false,
+          "count": 3
+        },
+        "headings": {
+          "list": [
+            {
+              "level": 1,
+              "text": "Post-Earnings Announcement Drift"
+            },
+            {
+              "level": 3,
+              "text": "Strategy Thesis"
+            },
+            {
+              "level": 3,
+              "text": "Parameters"
+            },
+            {
+              "level": 2,
+              "text": "Trade History"
+            }
+          ],
+          "h1Count": 1,
+          "issues": [
+            "Heading level skipped: h1 -> h3 (\"Strategy Thesis\")"
+          ]
+        },
+        "unlabeledButtons": [
+          {
+            "tag": "button",
+            "classes": "",
+            "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline"
+          },
+          {
+            "tag": "button",
+            "classes": "group/button inline-flex shrink-0 items-center justify-center rounded-lg border ",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          },
+          {
+            "tag": "button",
+            "classes": "group/button inline-flex shrink-0 items-center justify-center rounded-lg border ",
+            "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 2"
+          }
+        ],
+        "emptyLinks": [],
+        "focusable": {
+          "total": 24,
+          "withIndicator": 20
+        },
+        "ariaRoleCount": 3,
+        "missingAltImages": 0
+      }
+    }
+  ],
+  "ratings": {
+    "Page Load Performance": {
+      "score": 8,
+      "details": "Avg load: 1081ms, Avg FCP: 78ms, Avg requests: 43"
+    },
+    "Bundle Efficiency": {
+      "score": 5,
+      "details": "Max JS bundle: 1.16 MB, Avg transfer: 1.25 MB, Avg requests: 43"
+    },
+    "DOM Complexity": {
+      "score": 8,
+      "details": "Avg DOM elements: 583, Range: 246-1029"
+    },
+    "Color Contrast (WCAG AA)": {
+      "score": 7,
+      "details": "32/1303 unique failing pairs (2.5%), #8a8a95 on #0a0a0f ratio: 5.78:1 (AA normal requires 4.5:1) PASS, 30 muted-color instances found"
+    },
+    "Keyboard Navigation": {
+      "score": 10,
+      "details": "Avg focus indicator rate: 100% of sampled elements have visible focus indicators"
+    },
+    "Screen Reader Support": {
+      "score": 5,
+      "details": "Avg landmarks: 3.0/6, Avg ARIA roles: 15, Unlabeled buttons: 32, Empty links: 0, H1 issues on 1 pages, 2 heading hierarchy issues"
+    },
+    "Form Accessibility": {
+      "score": 2,
+      "details": "2/7 inputs labeled (29%)"
+    },
+    "Focus Management": {
+      "score": 6,
+      "details": "Avg focusable elements: 42, Focus indicator coverage: 100%, Unlabeled interactive: 32"
+    }
+  },
+  "overallScore": 6.375,
+  "top5Shortcomings": [
+    {
+      "severity": 34,
+      "issue": "32 buttons/interactive elements lack accessible labels (no text, aria-label, or title)."
+    },
+    {
+      "severity": 32,
+      "issue": "32 unique color contrast failures found across 4 pages (1303 elements checked)."
+    },
+    {
+      "severity": 8,
+      "issue": "5 form inputs lack proper labels (no label[for], aria-label, or placeholder)."
+    },
+    {
+      "severity": 4,
+      "issue": "Trade: No <h1> element found"
+    },
+    {
+      "severity": 4,
+      "issue": "Strategy Detail: Heading level skipped: h1 -> h3 (\"Strategy Thesis\")"
+    }
+  ]
+}

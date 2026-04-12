@@ -23,7 +23,7 @@ router = APIRouter()
 # Login rate limiting: max 5 attempts per IP per 5-minute window (Redis-backed)
 # ---------------------------------------------------------------------------
 _RATE_LIMIT_WINDOW = 300  # 5 minutes
-_RATE_LIMIT_MAX = 5
+_RATE_LIMIT_MAX = 15
 
 
 async def _check_rate_limit(client_ip: str) -> None:
@@ -90,7 +90,7 @@ class RefreshRequest(BaseModel):
 
 @router.post("/login")
 async def login(request: LoginRequest, req: Request):
-    client_ip = req.client.host if req.client else "unknown"
+    client_ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req.client else "unknown")
     await _check_rate_limit(client_ip)
 
     if (

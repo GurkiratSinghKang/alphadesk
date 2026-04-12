@@ -1,0 +1,79 @@
+
+### Login
+- [PASS] Logged in, landed at https://tradingalpha.net/
+
+### Dashboard
+- [PASS] Portfolio value displayed prominently
+- [PASS] P&L percentages visible
+- [PASS] Equity curve / sparkline charts rendered
+- [PASS] 12/12 strategies visible in grid
+- [PASS] 17 strategies show non-zero returns (live data)
+- [PASS] Positions section present
+- [PASS] P&L calendar heatmap present
+- [PASS] Economic calendar present
+- [PASS] Market context (S&P, VIX) visible
+- [PASS] Activity feed / signals present
+- [PASS] Sector breakdown present
+- [PASS] Allocation visualization present
+- [PASS] Market regime label shown
+
+### Trade
+- [PASS] Watchlist visible
+- [PASS] 9 symbols in watchlist
+- [PASS] Watchlist shows live prices
+- [PASS] Chart area rendered
+- [PASS] Timeframes: 1m, 5m, 15m, 1H, 4H
+- [PASS] Drawing tools: Line, Horizontal Line, Trendline, Fibonacci
+- [PASS] BUY/SELL buttons present
+- [PASS] Price alert button present
+- [PASS] Technical indicators available
+- [PASS] L1 / OHLCV data visible
+- [PASS] Screener / filter functionality visible
+- [PASS] Horizontal line placed on chart via drawing tool
+- [PASS] Clicking AAPL updates chart and all panels
+- [PASS] Options chain renders strikes + calls/puts
+- [PASS] Options Greeks displayed (Delta, IV, Theta)
+- [PASS] Options expiration dates visible
+- [PASS] Order entry supports Market and Limit orders
+- [PASS] Quantity/shares input present
+
+### Pipeline
+- [WARN] Pipeline flow diagram not found
+- [PASS] Run Now / Run Pipeline button present
+- [PASS] Current positions table visible
+- [WARN] Strategy Builder tab not found
+- [PASS] Backtest tab opened
+- [PASS] Backtest panel: symbol, SMA params, capital, Run button
+- [WARN] Backtest did not display Total Return
+- [PASS] Backtest equity curve rendered as SVG
+
+### Strategy
+- [PASS] PEAD strategy detail page loaded
+- [PASS] Equity curve chart rendered
+- [PASS] SPY benchmark overlay on equity curve
+- [PASS] Time period filters: 1M, 3M, 6M, YTD, ALL
+- [PASS] Detail tabs: About, Positions, Trade History, Analytics
+- [PASS] Strategy thesis / edge documentation present
+- [PASS] Strategies loaded: 4/4 spot-checked
+- [WARN] Strategies with benchmark: 2/4
+- [PASS] Strategies with equity curve: 4/4
+
+### DataQuality
+- [PASS] Real equity prices visible
+- [PASS] Bid/Ask spread data present
+- [PASS] Volume data present
+- [PASS] High/Low data present
+- [PASS] RSI indicator available
+- [PASS] MACD indicator available
+- [WARN] 37 instances of $0.01 -- possible placeholder option prices
+- [PASS] Chart panels differ per symbol -- data loads correctly
+
+### Stability
+- [PASS] Zero console errors during session
+
+### Performance
+- [PASS] dashboard: 4213ms
+- [PASS] trade: 4413ms
+- [PASS] pipeline: 4006ms
+- [PASS] strategy-pead: 4048ms
+- [PASS] trade-data-quality: 4185ms

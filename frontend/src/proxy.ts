@@ -4,11 +4,28 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get("access_token")?.value;
   const isLoginPage = request.nextUrl.pathname === "/login";
 
-  if (!token && !isLoginPage) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Check if token is structurally valid (3-part JWT, not expired)
+  let isValidToken = false;
+  if (token) {
+    try {
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        isValidToken = typeof payload.exp === "number" && payload.exp * 1000 > Date.now();
+      }
+    } catch {
+      // Malformed token — treat as no token
+    }
   }
 
-  if (token && isLoginPage) {
+  if (!isValidToken && !isLoginPage) {
+    // Clear stale cookies before redirecting to login
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("access_token");
+    return response;
+  }
+
+  if (isValidToken && isLoginPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

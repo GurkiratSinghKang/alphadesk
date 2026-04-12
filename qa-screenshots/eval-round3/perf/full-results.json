@@ -1,0 +1,834 @@
+{
+  "perfResults": [
+    {
+      "pageName": "home",
+      "pagePath": "/",
+      "loadTime": 752,
+      "apiCallCount": 32,
+      "apiCalls": [
+        "GET https://tradingalpha.net/api/v1/market-overview/regime",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AAPL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/MSFT",
+        "GET https://tradingalpha.net/api/v1/market/quotes/GOOGL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMZN",
+        "GET https://tradingalpha.net/api/v1/market/quotes/NVDA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/TSLA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/SPY",
+        "GET https://tradingalpha.net/api/v1/market/quotes/QQQ",
+        "GET https://tradingalpha.net/api/v1/market/quotes/META",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMD",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/trades/orders",
+        "GET https://tradingalpha.net/api/v1/portfolio/summary",
+        "GET https://tradingalpha.net/api/v1/portfolio/greeks",
+        "GET https://tradingalpha.net/api/v1/market-overview/indices",
+        "GET https://tradingalpha.net/api/v1/strategies/",
+        "GET https://tradingalpha.net/api/v1/portfolio/summary",
+        "GET https://tradingalpha.net/api/v1/market-overview/sectors",
+        "GET https://tradingalpha.net/api/v1/news/market",
+        "GET https://tradingalpha.net/api/v1/pipeline/status",
+        "GET https://tradingalpha.net/api/v1/pipeline/history",
+        "GET https://tradingalpha.net/api/v1/market-overview/sectors",
+        "GET https://tradingalpha.net/api/v1/news/market",
+        "GET https://tradingalpha.net/api/v1/pipeline/status",
+        "GET https://tradingalpha.net/api/v1/pipeline/history",
+        "GET https://tradingalpha.net/api/v1/market-overview/sectors",
+        "GET https://tradingalpha.net/api/v1/news/market",
+        "GET https://tradingalpha.net/api/v1/pipeline/status",
+        "GET https://tradingalpha.net/api/v1/pipeline/history",
+        "GET https://tradingalpha.net/api/v1/portfolio/performance",
+        "GET https://tradingalpha.net/api/v1/portfolio/calendar?year=2026&month=4"
+      ],
+      "duplicateApiCalls": [
+        [
+          "GET https://tradingalpha.net/api/v1/portfolio/summary",
+          2
+        ],
+        [
+          "GET https://tradingalpha.net/api/v1/market-overview/sectors",
+          3
+        ],
+        [
+          "GET https://tradingalpha.net/api/v1/news/market",
+          3
+        ],
+        [
+          "GET https://tradingalpha.net/api/v1/pipeline/status",
+          3
+        ],
+        [
+          "GET https://tradingalpha.net/api/v1/pipeline/history",
+          3
+        ]
+      ],
+      "domNodeCount": 738,
+      "resourceSizes": [
+        {
+          "url": "0zf0e506sl76z.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "03-ki962gfj7q.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0v_-uaib17a5t.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0wo25._7anyc_.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "02i7dfk78~t~2.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "turbopack-0.ya46kla_2pi.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0y9r1cet9~h-a.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0cat48n7t5cj8.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0kx3u3u77v4~r.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0x7siy.fmbnmt.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        }
+      ]
+    },
+    {
+      "pageName": "trade",
+      "pagePath": "/trade",
+      "loadTime": 1259,
+      "apiCallCount": 22,
+      "apiCalls": [
+        "GET https://tradingalpha.net/api/v1/market-overview/regime",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AAPL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/MSFT",
+        "GET https://tradingalpha.net/api/v1/market/quotes/GOOGL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMZN",
+        "GET https://tradingalpha.net/api/v1/market/quotes/NVDA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/TSLA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/SPY",
+        "GET https://tradingalpha.net/api/v1/market/quotes/QQQ",
+        "GET https://tradingalpha.net/api/v1/market/quotes/META",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMD",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/trades/orders",
+        "GET https://tradingalpha.net/api/v1/portfolio/summary",
+        "GET https://tradingalpha.net/api/v1/portfolio/greeks",
+        "GET https://tradingalpha.net/api/v1/market/bars/SPY?timeframe=1d&limit=500",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/pipeline/positions",
+        "GET https://tradingalpha.net/api/v1/options/chain/SPY?expiry=2026-05-01",
+        "GET https://tradingalpha.net/api/v1/options/iv/SPY",
+        "POST https://tradingalpha.net/api/v1/analysis/analyze/SPY",
+        "GET https://tradingalpha.net/api/v1/analysis/analysis/SPY"
+      ],
+      "duplicateApiCalls": [
+        [
+          "GET https://tradingalpha.net/api/v1/trades/positions",
+          2
+        ]
+      ],
+      "domNodeCount": 989,
+      "resourceSizes": [
+        {
+          "url": "0zf0e506sl76z.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0hjsomwwiolv6.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "03-ki962gfj7q.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0v_-uaib17a5t.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0wo25._7anyc_.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "02i7dfk78~t~2.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "turbopack-0.ya46kla_2pi.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0y9r1cet9~h-a.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0cat48n7t5cj8.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0kx3u3u77v4~r.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        }
+      ]
+    },
+    {
+      "pageName": "pipeline",
+      "pagePath": "/pipeline",
+      "loadTime": 665,
+      "apiCallCount": 20,
+      "apiCalls": [
+        "GET https://tradingalpha.net/api/v1/market-overview/regime",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AAPL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/MSFT",
+        "GET https://tradingalpha.net/api/v1/market/quotes/GOOGL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMZN",
+        "GET https://tradingalpha.net/api/v1/market/quotes/NVDA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/TSLA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/SPY",
+        "GET https://tradingalpha.net/api/v1/market/quotes/QQQ",
+        "GET https://tradingalpha.net/api/v1/market/quotes/META",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMD",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/trades/orders",
+        "GET https://tradingalpha.net/api/v1/portfolio/summary",
+        "GET https://tradingalpha.net/api/v1/portfolio/greeks",
+        "GET https://tradingalpha.net/api/v1/pipeline/status",
+        "GET https://tradingalpha.net/api/v1/pipeline/positions",
+        "GET https://tradingalpha.net/api/v1/pipeline/history",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/pipeline/history/2026-04-12"
+      ],
+      "duplicateApiCalls": [
+        [
+          "GET https://tradingalpha.net/api/v1/trades/positions",
+          2
+        ]
+      ],
+      "domNodeCount": 329,
+      "resourceSizes": [
+        {
+          "url": "0zf0e506sl76z.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0bgp9vw1_vgbs.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "03-ki962gfj7q.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0v_-uaib17a5t.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0wo25._7anyc_.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "02i7dfk78~t~2.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "turbopack-0.ya46kla_2pi.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0y9r1cet9~h-a.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0cat48n7t5cj8.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0kx3u3u77v4~r.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        }
+      ]
+    },
+    {
+      "pageName": "strategies-pead",
+      "pagePath": "/strategies/pead",
+      "loadTime": 776,
+      "apiCallCount": 19,
+      "apiCalls": [
+        "GET https://tradingalpha.net/api/v1/market-overview/regime",
+        "GET https://tradingalpha.net/api/v1/strategies/pead/performance",
+        "GET https://tradingalpha.net/api/v1/trades/history?strategy=pead&limit=100",
+        "GET https://tradingalpha.net/api/v1/strategies/pead/analytics",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AAPL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/MSFT",
+        "GET https://tradingalpha.net/api/v1/market/quotes/GOOGL",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMZN",
+        "GET https://tradingalpha.net/api/v1/market/quotes/NVDA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/TSLA",
+        "GET https://tradingalpha.net/api/v1/market/quotes/SPY",
+        "GET https://tradingalpha.net/api/v1/market/quotes/QQQ",
+        "GET https://tradingalpha.net/api/v1/market/quotes/META",
+        "GET https://tradingalpha.net/api/v1/market/quotes/AMD",
+        "GET https://tradingalpha.net/api/v1/trades/positions",
+        "GET https://tradingalpha.net/api/v1/trades/orders",
+        "GET https://tradingalpha.net/api/v1/portfolio/summary",
+        "GET https://tradingalpha.net/api/v1/portfolio/greeks",
+        "GET https://tradingalpha.net/api/v1/market/bars/SPY?timeframe=1d&limit=70"
+      ],
+      "duplicateApiCalls": [],
+      "domNodeCount": 244,
+      "resourceSizes": [
+        {
+          "url": "0zf0e506sl76z.js",
+          "size": 826,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "03-ki962gfj7q.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0v_-uaib17a5t.css",
+          "size": 0,
+          "contentType": "text/css; charset=UTF-8"
+        },
+        {
+          "url": "0wo25._7anyc_.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "02i7dfk78~t~2.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "turbopack-0.ya46kla_2pi.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0y9r1cet9~h-a.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0cat48n7t5cj8.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "0kx3u3u77v4~r.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        },
+        {
+          "url": "04mvxko68_ww2.js",
+          "size": 0,
+          "contentType": "application/javascript; charset=UTF-8"
+        }
+      ]
+    }
+  ],
+  "bundleData": {
+    "jsResources": [
+      {
+        "url": "0dw8t7hpfdysv.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0dw8t7hpfdysv.js",
+        "size": 274020,
+        "sizeKB": "267.6"
+      },
+      {
+        "url": "07o~osqztxvwt.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/07o~osqztxvwt.js",
+        "size": 227537,
+        "sizeKB": "222.2"
+      },
+      {
+        "url": "04mvxko68_ww2.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/04mvxko68_ww2.js",
+        "size": 143491,
+        "sizeKB": "140.1"
+      },
+      {
+        "url": "00v0m_iccj64a.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/00v0m_iccj64a.js",
+        "size": 116456,
+        "sizeKB": "113.7"
+      },
+      {
+        "url": "0dmjmw.ys5d.q.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0dmjmw.ys5d.q.js",
+        "size": 101062,
+        "sizeKB": "98.7"
+      },
+      {
+        "url": "16u0e-wjj4z8s.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/16u0e-wjj4z8s.js",
+        "size": 83166,
+        "sizeKB": "81.2"
+      },
+      {
+        "url": "0kx3u3u77v4~r.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0kx3u3u77v4~r.js",
+        "size": 57909,
+        "sizeKB": "56.6"
+      },
+      {
+        "url": "02i7dfk78~t~2.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/02i7dfk78~t~2.js",
+        "size": 53149,
+        "sizeKB": "51.9"
+      },
+      {
+        "url": "0x7siy.fmbnmt.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0x7siy.fmbnmt.js",
+        "size": 35954,
+        "sizeKB": "35.1"
+      },
+      {
+        "url": "0yftjjzoru94o.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0yftjjzoru94o.js",
+        "size": 34705,
+        "sizeKB": "33.9"
+      },
+      {
+        "url": "0cat48n7t5cj8.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0cat48n7t5cj8.js",
+        "size": 31707,
+        "sizeKB": "31.0"
+      },
+      {
+        "url": "0y9r1cet9~h-a.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0y9r1cet9~h-a.js",
+        "size": 21493,
+        "sizeKB": "21.0"
+      },
+      {
+        "url": "0wo25._7anyc_.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0wo25._7anyc_.js",
+        "size": 21063,
+        "sizeKB": "20.6"
+      },
+      {
+        "url": "0twe5x_zapwx~.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0twe5x_zapwx~.js",
+        "size": 17572,
+        "sizeKB": "17.2"
+      },
+      {
+        "url": "turbopack-0.ya46kla_2pi.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/turbopack-0.ya46kla_2pi.js",
+        "size": 10580,
+        "sizeKB": "10.3"
+      },
+      {
+        "url": "0zf0e506sl76z.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0zf0e506sl76z.js",
+        "size": 826,
+        "sizeKB": "0.8"
+      },
+      {
+        "url": "0hjsomwwiolv6.js",
+        "fullUrl": "https://tradingalpha.net/_next/static/chunks/0hjsomwwiolv6.js",
+        "size": 826,
+        "sizeKB": "0.8"
+      }
+    ],
+    "cssResources": [
+      {
+        "url": "0v_-uaib17a5t.css",
+        "size": 104182,
+        "sizeKB": "101.7"
+      },
+      {
+        "url": "03-ki962gfj7q.css",
+        "size": 4165,
+        "sizeKB": "4.1"
+      }
+    ],
+    "totalJS_KB": "1202.7",
+    "totalCSS_KB": "105.8",
+    "jsCount": 17,
+    "cssCount": 2
+  },
+  "a11yResults": {
+    "contrastIssues": [
+      {
+        "text": "Search symbols, commands...Ctr",
+        "color": "rgb(113, 113, 122)",
+        "bg": "rgb(10, 10, 15)",
+        "ratio": "4.09",
+        "threshold": 4.5,
+        "fontSize": "14.0"
+      },
+      {
+        "text": "Symbol Last Chg%",
+        "color": "rgb(113, 113, 122)",
+        "bg": "rgb(18, 18, 26)",
+        "ratio": "3.86",
+        "threshold": 4.5,
+        "fontSize": "10.0"
+      }
+    ],
+    "keyboardData": {
+      "tabbableCount": 89,
+      "interactiveCount": 84,
+      "notTabbable": [
+        {
+          "tag": "button",
+          "text": "Screener",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Signals",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Fund",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Sent",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Chat",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Order",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Positions",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Orders",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Journal",
+          "role": "tab"
+        },
+        {
+          "tag": "button",
+          "text": "Calendar",
+          "role": "tab"
+        }
+      ]
+    },
+    "srIssues": [
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "",
+        "html": "<button type=\"button\" tabindex=\"0\" data-base-ui-click-trigger=\"\" id=\"base-ui-_r_2_\" data-slot=\"popov"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "group/button inline-flex shrink-0 items-center jus",
+        "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline-flex shrink-0 items"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-fu",
+        "html": "<button type=\"button\" id=\"base-ui-_r_h_\" data-slot=\"tooltip-trigger\" class=\"inline-flex items-center"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_p_\" data-slot=\"dropdown-menu-"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_v_\" data-slot=\"dropdown-menu-"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_15_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_1b_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_1h_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_1n_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_1t_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_23_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_29_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "flex h-5 w-5 items-center justify-center rounded t",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_2f_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-fu",
+        "html": "<button type=\"button\" id=\"base-ui-_r_2k_\" data-slot=\"tooltip-trigger\" class=\"inline-flex items-cente"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-md",
+        "html": "<button type=\"button\" tabindex=\"0\" aria-haspopup=\"menu\" id=\"base-ui-_r_2p_\" data-slot=\"dropdown-menu"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-fu",
+        "html": "<button type=\"button\" id=\"base-ui-_r_37_\" data-slot=\"tooltip-trigger\" class=\"inline-flex items-cente"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-fu",
+        "html": "<button type=\"button\" id=\"base-ui-_r_3f_\" data-slot=\"tooltip-trigger\" class=\"inline-flex items-cente"
+      },
+      {
+        "tag": "button",
+        "role": null,
+        "classes": "inline-flex items-center justify-center rounded-fu",
+        "html": "<button type=\"button\" id=\"base-ui-_r_3n_\" data-slot=\"tooltip-trigger\" class=\"inline-flex items-cente"
+      }
+    ],
+    "formIssues": [
+      {
+        "tag": "input",
+        "type": null,
+        "name": null,
+        "hasLabel": false,
+        "hasAriaLabel": false,
+        "hasAriaLabelledBy": false,
+        "hasPlaceholder": true,
+        "accessible": false
+      }
+    ],
+    "focusData": {
+      "focusableCount": 89,
+      "hasCustomFocusStyles": false
+    },
+    "headingData": {
+      "headings": [
+        {
+          "level": 3,
+          "text": "Technical Score"
+        },
+        {
+          "level": 4,
+          "text": "Key Levels"
+        },
+        {
+          "level": 4,
+          "text": "Indicators"
+        }
+      ],
+      "issues": [],
+      "h1Count": 0
+    }
+  },
+  "loginFormA11y": [
+    {
+      "type": null,
+      "name": null,
+      "id": "login-username",
+      "ariaLabel": null,
+      "placeholder": "admin",
+      "hasLabel": true
+    },
+    {
+      "type": "password",
+      "name": null,
+      "id": "login-password",
+      "ariaLabel": null,
+      "placeholder": "Password",
+      "hasLabel": true
+    }
+  ],
+  "allHeadings": {
+    "home": [
+      {
+        "level": 1,
+        "text": "AlphaDesk Dashboard"
+      },
+      {
+        "level": 2,
+        "text": "Activity Feed"
+      },
+      {
+        "level": 2,
+        "text": "April P&L"
+      },
+      {
+        "level": 2,
+        "text": "Economic Calendar"
+      },
+      {
+        "level": 2,
+        "text": "Strategies"
+      },
+      {
+        "level": 3,
+        "text": "Market Indices"
+      },
+      {
+        "level": 3,
+        "text": "Sector Performance"
+      },
+      {
+        "level": 3,
+        "text": "Headlines"
+      }
+    ],
+    "trade": [
+      {
+        "level": 3,
+        "text": "Technical Score"
+      },
+      {
+        "level": 4,
+        "text": "Key Levels"
+      },
+      {
+        "level": 4,
+        "text": "Indicators"
+      }
+    ],
+    "pipeline": [
+      {
+        "level": 1,
+        "text": "Trading Pipeline"
+      },
+      {
+        "level": 2,
+        "text": "Current Positions"
+      },
+      {
+        "level": 2,
+        "text": "Today's Pipeline Run"
+      },
+      {
+        "level": 2,
+        "text": "Strategy Builder"
+      },
+      {
+        "level": 2,
+        "text": "Backtesting"
+      },
+      {
+        "level": 2,
+        "text": "History (Last 7 Days)"
+      },
+      {
+        "level": 2,
+        "text": "Performance Summary"
+      }
+    ],
+    "strategies-pead": [
+      {
+        "level": 1,
+        "text": "Post-Earnings Announcement Drift"
+      },
+      {
+        "level": 3,
+        "text": "Strategy Thesis"
+      },
+      {
+        "level": 3,
+        "text": "Parameters"
+      },
+      {
+        "level": 2,
+        "text": "Trade History"
+      }
+    ]
+  }
+}
