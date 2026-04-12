@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Quote } from "@/types";
 
 interface MarketState {
-  quotes: Map<string, Quote>;
+  quotes: Record<string, Quote>;
   watchlist: string[];
   selectedSymbol: string;
 
@@ -14,7 +14,7 @@ interface MarketState {
 }
 
 export const useMarketStore = create<MarketState>((set) => ({
-  quotes: new Map(),
+  quotes: {},
   watchlist: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"],
   selectedSymbol: "SPY",
 
@@ -34,18 +34,16 @@ export const useMarketStore = create<MarketState>((set) => ({
 
   updateQuote: (quote) =>
     set((state) => {
-      const next = new Map(state.quotes);
-      const existing = next.get(quote.symbol);
-      next.set(quote.symbol, existing ? { ...existing, ...quote } : quote);
-      return { quotes: next };
+      const existing = state.quotes[quote.symbol];
+      return { quotes: { ...state.quotes, [quote.symbol]: existing ? { ...existing, ...quote } : quote } };
     }),
 
   updateQuotes: (quotes) =>
     set((state) => {
-      const next = new Map(state.quotes);
+      const next = { ...state.quotes };
       for (const q of quotes) {
-        const existing = next.get(q.symbol);
-        next.set(q.symbol, existing ? { ...existing, ...q } : q);
+        const existing = next[q.symbol];
+        next[q.symbol] = existing ? { ...existing, ...q } : q;
       }
       return { quotes: next };
     }),

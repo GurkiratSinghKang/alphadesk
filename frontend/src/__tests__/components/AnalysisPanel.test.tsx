@@ -8,7 +8,9 @@ import { useUIStore } from '@/stores/ui';
 beforeEach(() => {
   useMarketStore.setState({
     selectedSymbol: 'SPY',
-    quotes: new Map([['SPY', { symbol: 'SPY', last: 679, bid: 678, ask: 680, change: 0, changePct: 0, volume: 1000000, high: 680, low: 678, open: 679, close: 679, timestamp: Date.now() }]]),
+    quotes: {
+      SPY: { symbol: 'SPY', last: 679, bid: 678, ask: 680, change: 0, changePct: 0, volume: 1000000, high: 680, low: 678, open: 679, close: 679, timestamp: Date.now() },
+    },
     watchlist: ['SPY', 'AAPL'],
   });
   useUIStore.setState({

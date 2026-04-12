@@ -257,6 +257,7 @@ function TradeBuilderTab() {
             </span>
             <div className="flex items-center gap-1">
               <button
+                aria-label="Decrease quantity"
                 onClick={() => updateLegQty(leg.id, -1)}
                 className="h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foreground hover:text-foreground"
               >
@@ -266,6 +267,7 @@ function TradeBuilderTab() {
                 {leg.quantity}
               </span>
               <button
+                aria-label="Increase quantity"
                 onClick={() => updateLegQty(leg.id, 1)}
                 className="h-5 w-5 flex items-center justify-center rounded bg-accent/50 text-muted-foreground hover:text-foreground"
               >
@@ -276,6 +278,7 @@ function TradeBuilderTab() {
               ${leg.price.toFixed(2)}
             </span>
             <button
+              aria-label="Remove leg"
               onClick={() => removeLeg(leg.id)}
               className="text-muted-foreground hover:text-[var(--loss)]"
             >
@@ -383,7 +386,7 @@ function PositionsTab() {
     import("@/lib/api").then(({ getPositions }) =>
       getPositions()
         .then((data) => { if (data.length) setPositions(data); })
-        .catch(() => {})
+        .catch((err) => { console.error("Failed to load positions:", err); })
         .finally(() => setLoading(false))
     );
   }, [fetched, setPositions]);
@@ -474,7 +477,7 @@ function OrdersTab() {
     import("@/lib/api").then(({ getOrders }) =>
       getOrders()
         .then((data) => { if (data.length) setOrders(data); })
-        .catch(() => {})
+        .catch((err) => { console.error("Failed to load orders:", err); })
         .finally(() => setLoading(false))
     );
   }, [fetched, setOrders]);
@@ -509,8 +512,8 @@ function OrdersTab() {
     try {
       await cancelOrder(id);
       updateOrderStatus(id, "cancelled");
-    } catch {
-      updateOrderStatus(id, "cancelled");
+    } catch (err) {
+      console.error("Failed to cancel order:", err);
     }
   };
 
@@ -565,6 +568,7 @@ function OrdersTab() {
             <span className="w-6 flex justify-end">
               {o.status === "pending" && (
                 <button
+                  aria-label="Cancel order"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCancel(o.id);
@@ -588,9 +592,15 @@ function OrdersTab() {
 function JournalTab() {
   const positions = usePortfolioStore((s) => s.positions);
   const orders = usePortfolioStore((s) => s.orders);
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('journal-notes') || '{}'); } catch { return {}; }
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem('journal-notes', JSON.stringify(notes));
+  }, [notes]);
 
   // Generate journal entries from recent orders
   const entries = useMemo(() => {

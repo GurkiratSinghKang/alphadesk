@@ -6,7 +6,7 @@ import { useMarketStore } from '@/stores/market';
 import { useUIStore } from '@/stores/ui';
 
 beforeEach(() => {
-  useMarketStore.setState({ selectedSymbol: 'SPY', quotes: new Map(), watchlist: ['SPY'] });
+  useMarketStore.setState({ selectedSymbol: 'SPY', quotes: {}, watchlist: ['SPY'] });
   usePortfolioStore.setState({
     positions: [],
     orders: [],

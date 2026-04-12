@@ -7,10 +7,10 @@ import { useUIStore } from '@/stores/ui';
 beforeEach(() => {
   useMarketStore.setState({
     selectedSymbol: 'SPY',
-    quotes: new Map([
-      ['AAPL', { symbol: 'AAPL', last: 260, bid: 259, ask: 261, change: -0.5, changePct: -0.19, volume: 500000, high: 262, low: 259, open: 260, close: 260.5, timestamp: Date.now() }],
-      ['SPY', { symbol: 'SPY', last: 679, bid: 678, ask: 680, change: 0, changePct: 0, volume: 1000000, high: 680, low: 678, open: 679, close: 679, timestamp: Date.now() }],
-    ]),
+    quotes: {
+      AAPL: { symbol: 'AAPL', last: 260, bid: 259, ask: 261, change: -0.5, changePct: -0.19, volume: 500000, high: 262, low: 259, open: 260, close: 260.5, timestamp: Date.now() },
+      SPY: { symbol: 'SPY', last: 679, bid: 678, ask: 680, change: 0, changePct: 0, volume: 1000000, high: 680, low: 678, open: 679, close: 679, timestamp: Date.now() },
+    },
     watchlist: ['AAPL', 'SPY'],
   });
   useUIStore.setState({

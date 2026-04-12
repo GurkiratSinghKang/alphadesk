@@ -7,14 +7,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePortfolioStore } from "@/stores/portfolio";
 import {
   getMarketNews,
-  getStrategies,
-  getMarketIndices,
-  getMarketRegime,
   getMarketSectors,
   getPipelineStatus,
   getPipelineHistory,
+  getPortfolioPerformance,
   type PipelineStatus,
 } from "@/lib/api";
+import { useRegime, useIndices, useStrategies, usePortfolioSummary } from "@/hooks/useQueries";
 
 import { generateSparkData } from "@/components/dashboard/Sparkline";
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
@@ -55,34 +54,86 @@ function CommandCenter() {
   const router = useRouter();
   const summary = usePortfolioStore((s) => s.summary);
 
-  // ─── State ─────────────────────────────────────────────────
-  const [strategies, setStrategies] = useState<StrategyData[]>([]);
-  const [indices, setIndices] = useState<MarketIndex[]>([]);
-  const [regime, setRegime] = useState<RegimeData | null>(null);
+  // ─── React Query hooks ────────────────────────────────────
+  const { data: regimeData } = useRegime();
+  const { data: indicesData } = useIndices();
+  const { data: strategiesData } = useStrategies();
+  const { data: portfolioSummaryData } = usePortfolioSummary();
+
+  // ─── State (for data without hooks) ───────────────────────
   const [sectors, setSectors] = useState<{ sector: string; change_pct: number }[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ─── Data Fetching ─────────────────────────────────────────
+  // ─── Derive strategies from hook data ─────────────────────
+  const strategies: StrategyData[] = useMemo(() => {
+    const apiStrategies = strategiesData;
+    if (apiStrategies && Array.isArray(apiStrategies)) {
+      return STRATEGY_ORDER.map((id) => {
+        const meta = STRATEGY_META[id];
+        const apiMatch = apiStrategies.find((s: any) => s.id === id);
+        return {
+          id,
+          name: meta?.name ?? id,
+          shortName: meta?.shortName ?? id,
+          status: apiMatch?.status === "active" ? "active" : "paused",
+          returnPct: apiMatch?.total_return_pct ?? 0,
+          positions: apiMatch?.active_positions_count ?? 0,
+          winRate: apiMatch?.win_rate ?? 0,
+          invested: apiMatch?.invested_amount ?? 0,
+          icon: meta?.icon ?? Activity,
+        } as StrategyData;
+      });
+    }
+    return STRATEGY_ORDER.map((id) => ({
+      id,
+      name: STRATEGY_META[id]?.name ?? id,
+      shortName: STRATEGY_META[id]?.shortName ?? id,
+      status: "active" as const,
+      returnPct: 0,
+      positions: 0,
+      winRate: 0,
+      invested: 0,
+      icon: STRATEGY_META[id]?.icon ?? Activity,
+    }));
+  }, [strategiesData]);
+
+  // ─── Derive indices from hook data ────────────────────────
+  const indices: MarketIndex[] = useMemo(() => {
+    const raw = indicesData?.indices ?? [];
+    const names: Record<string, string> = {
+      SPY: "S&P 500",
+      QQQ: "NASDAQ 100",
+      IWM: "Russell 2000",
+      VIX: "VIX",
+    };
+    return raw
+      .filter((idx: any) => names[idx.symbol])
+      .map((idx: any) => ({
+        symbol: idx.symbol,
+        name: names[idx.symbol] ?? idx.name,
+        price: idx.price,
+        change: idx.change ?? 0,
+        changePct: idx.change_pct ?? 0,
+      }));
+  }, [indicesData]);
+
+  // ─── Derive regime from hook data ─────────────────────────
+  const regime: RegimeData | null = regimeData?.regime ?? null;
+
+  // ─── Fetch remaining data (sectors, news, pipeline, equity curve) ──
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchAll() {
-      // Fire all requests in parallel
+    async function fetchRemaining() {
       const [
-        strategiesRes,
-        indicesRes,
-        regimeRes,
         sectorsRes,
         newsRes,
         pipelineStatusRes,
         pipelineHistoryRes,
       ] = await Promise.allSettled([
-        getStrategies(),
-        getMarketIndices(),
-        getMarketRegime(),
         getMarketSectors(),
         getMarketNews(),
         getPipelineStatus(),
@@ -92,68 +143,6 @@ function CommandCenter() {
       if (cancelled) return;
 
       try {
-      // Strategies
-      if (strategiesRes.status === "fulfilled" && Array.isArray(strategiesRes.value)) {
-        const apiStrategies = strategiesRes.value;
-        const mapped: StrategyData[] = STRATEGY_ORDER.map((id) => {
-          const meta = STRATEGY_META[id];
-          const apiMatch = apiStrategies.find((s: any) => s.id === id);
-          return {
-            id,
-            name: meta?.name ?? id,
-            shortName: meta?.shortName ?? id,
-            status: apiMatch?.status === "active" ? "active" : "paused",
-            returnPct: apiMatch?.total_return_pct ?? 0,
-            positions: apiMatch?.active_positions_count ?? 0,
-            winRate: apiMatch?.win_rate ?? 0,
-            invested: apiMatch?.invested_amount ?? 0,
-            icon: meta?.icon ?? Activity,
-          };
-        });
-        setStrategies(mapped);
-      } else {
-        // Fallback: show all with zeros
-        setStrategies(
-          STRATEGY_ORDER.map((id) => ({
-            id,
-            name: STRATEGY_META[id]?.name ?? id,
-            shortName: STRATEGY_META[id]?.shortName ?? id,
-            status: "active" as const,
-            returnPct: 0,
-            positions: 0,
-            winRate: 0,
-            invested: 0,
-            icon: STRATEGY_META[id]?.icon ?? Activity,
-          }))
-        );
-      }
-
-      // Market indices
-      if (indicesRes.status === "fulfilled") {
-        const raw = indicesRes.value.indices ?? [];
-        const names: Record<string, string> = {
-          SPY: "S&P 500",
-          QQQ: "NASDAQ 100",
-          IWM: "Russell 2000",
-          VIX: "VIX",
-        };
-        const filtered = raw
-          .filter((idx: any) => names[idx.symbol])
-          .map((idx: any) => ({
-            symbol: idx.symbol,
-            name: names[idx.symbol] ?? idx.name,
-            price: idx.price,
-            change: idx.change ?? 0,
-            changePct: idx.change_pct ?? 0,
-          }));
-        if (filtered.length > 0) setIndices(filtered);
-      }
-
-      // Regime
-      if (regimeRes.status === "fulfilled") {
-        setRegime(regimeRes.value.regime);
-      }
-
       // Sectors
       if (sectorsRes.status === "fulfilled") {
         setSectors(sectorsRes.value.sectors ?? []);
@@ -185,8 +174,7 @@ function CommandCenter() {
       }
 
       // Build feed
-      const regimeData = regimeRes.status === "fulfilled" ? regimeRes.value.regime : null;
-      const feed = buildFeedItems(pStatus, pLog, regimeData, newsItems);
+      const feed = buildFeedItems(pStatus, pLog, regime, newsItems);
       setFeedItems(feed);
       } catch (err) {
         console.error("[Dashboard] Data processing error:", err);
@@ -195,24 +183,21 @@ function CommandCenter() {
       // Fetch real equity curve from performance endpoint
       if (!cancelled) {
         try {
-          const perfResp = await fetch("/api/v1/portfolio/performance", { credentials: "include" });
+          const perfData = await getPortfolioPerformance();
           if (cancelled) return;
-          if (perfResp.ok) {
-            const perfData = await perfResp.json();
-            if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
-              const baseEquity = summary.equity > 0 ? summary.equity : 100000;
-              const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
-              const startEquity = baseEquity - totalPnl;
-              const history = perfData.equity_curve.map((pt: any, i: number) => {
-                const d = new Date();
-                d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
-                return {
-                  date: d.toISOString().slice(0, 10),
-                  value: startEquity + (pt.cumulative_pnl ?? 0),
-                };
-              });
-              if (!cancelled) setEquityHistory(history);
-            }
+          if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
+            const baseEquity = summary.equity > 0 ? summary.equity : 100000;
+            const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
+            const startEquity = baseEquity - totalPnl;
+            const history = perfData.equity_curve.map((pt, i: number) => {
+              const d = new Date();
+              d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
+              return {
+                date: d.toISOString().slice(0, 10),
+                value: startEquity + (pt.cumulative_pnl ?? 0),
+              };
+            });
+            if (!cancelled) setEquityHistory(history);
           }
         } catch (err) {
           console.error("[Dashboard] Equity curve fetch failed:", err);
@@ -222,20 +207,21 @@ function CommandCenter() {
       if (!cancelled) setLoading(false);
     }
 
-    fetchAll().catch((err) => {
-      console.error("[Dashboard] fetchAll error:", err);
+    fetchRemaining().catch((err) => {
+      console.error("[Dashboard] fetchRemaining error:", err);
       if (!cancelled) setLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [regime, summary.equity]);
 
   // ─── Derived values ────────────────────────────────────────
-  const portfolioValue = Number.isFinite(summary.equity) && summary.equity > 0 ? summary.equity : 0;
-  const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
-  const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
+  const activeSummary = portfolioSummaryData ?? summary;
+  const portfolioValue = Number.isFinite(activeSummary.equity) && activeSummary.equity > 0 ? activeSummary.equity : 0;
+  const dayPnl = Number.isFinite(activeSummary.dayPnl) ? activeSummary.dayPnl : 0;
+  const dayPnlPct = Number.isFinite(activeSummary.dayPnlPct) ? activeSummary.dayPnlPct : 0;
 
   // Sparkline data (deterministic per symbol)
   const sparkData = useMemo(() => {
@@ -300,7 +286,7 @@ function CommandCenter() {
           indices={indices}
           sectors={sectors}
           news={news}
-          summary={summary}
+          summary={activeSummary}
           sparkData={sparkData}
         />
       </div>

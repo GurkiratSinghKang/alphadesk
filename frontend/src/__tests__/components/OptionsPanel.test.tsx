@@ -6,9 +6,9 @@ import { useMarketStore } from '@/stores/market';
 beforeEach(() => {
   useMarketStore.setState({
     selectedSymbol: 'SPY',
-    quotes: new Map([
-      ['SPY', { symbol: 'SPY', last: 590, bid: 589, ask: 591, change: 0, changePct: 0, volume: 1000000, high: 592, low: 588, open: 590, close: 590, timestamp: Date.now() }],
-    ]),
+    quotes: {
+      SPY: { symbol: 'SPY', last: 590, bid: 589, ask: 591, change: 0, changePct: 0, volume: 1000000, high: 592, low: 588, open: 590, close: 590, timestamp: Date.now() },
+    },
     watchlist: ['SPY'],
   });
 });

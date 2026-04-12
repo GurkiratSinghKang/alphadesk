@@ -401,6 +401,7 @@ export function WatchlistPanel() {
             />
             <button
               type="submit"
+              aria-label="Add symbol to watchlist"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -418,14 +419,14 @@ export function WatchlistPanel() {
 
           {/* Column headers */}
           <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
-            <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
+            <button aria-label="Sort by symbol" onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>
             <div className="w-9" />
-            <button onClick={() => handleSort("last")} className="w-16 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+            <button aria-label="Sort by last price" onClick={() => handleSort("last")} className="w-16 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
               Last {sortKey === "last" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>
-            <button onClick={() => handleSort("changePct")} className="w-14 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+            <button aria-label="Sort by percent change" onClick={() => handleSort("changePct")} className="w-14 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
               Chg% {sortKey === "changePct" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>
             <div className="w-5" />

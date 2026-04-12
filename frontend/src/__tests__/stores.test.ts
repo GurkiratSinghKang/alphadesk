@@ -10,7 +10,7 @@ describe('Market Store', () => {
   beforeEach(() => {
     useMarketStore.setState({
       watchlist: ['AAPL', 'MSFT', 'SPY'],
-      quotes: new Map(),
+      quotes: {},
       selectedSymbol: 'SPY',
     });
   });
@@ -80,7 +80,7 @@ describe('Market Store', () => {
       timestamp: Date.now(),
     };
     useMarketStore.getState().updateQuote(quote);
-    expect(useMarketStore.getState().quotes.get('AAPL')?.last).toBe(150);
+    expect(useMarketStore.getState().quotes['AAPL']?.last).toBe(150);
   });
 
   it('updateQuote merges with existing quote', () => {
@@ -100,7 +100,7 @@ describe('Market Store', () => {
     };
     useMarketStore.getState().updateQuote(base);
     useMarketStore.getState().updateQuote({ ...base, last: 155, timestamp: 2000 });
-    const stored = useMarketStore.getState().quotes.get('AAPL');
+    const stored = useMarketStore.getState().quotes['AAPL'];
     expect(stored?.last).toBe(155);
     expect(stored?.bid).toBe(149.9);
   });
@@ -137,17 +137,17 @@ describe('Market Store', () => {
       },
     ];
     useMarketStore.getState().updateQuotes(quotes);
-    expect(useMarketStore.getState().quotes.get('AAPL')?.last).toBe(150);
-    expect(useMarketStore.getState().quotes.get('MSFT')?.last).toBe(400);
+    expect(useMarketStore.getState().quotes['AAPL']?.last).toBe(150);
+    expect(useMarketStore.getState().quotes['MSFT']?.last).toBe(400);
   });
 
   it('updateQuotes with empty array leaves map unchanged', () => {
     useMarketStore.getState().updateQuotes([]);
-    expect(useMarketStore.getState().quotes.size).toBe(0);
+    expect(Object.keys(useMarketStore.getState().quotes).length).toBe(0);
   });
 
   it('quotes map is initially empty', () => {
-    expect(useMarketStore.getState().quotes.size).toBe(0);
+    expect(Object.keys(useMarketStore.getState().quotes).length).toBe(0);
   });
 });
 

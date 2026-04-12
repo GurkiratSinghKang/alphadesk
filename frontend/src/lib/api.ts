@@ -513,6 +513,21 @@ export async function getMarketNews() {
   return resp.articles;
 }
 
+// ─── Alerts ────────────────────────────────────────────────
+
+export function createPriceAlert(symbol: string, price: number, condition: "above" | "below") {
+  return apiFetch<{ id: string }>(`/api/v1/trades/alerts`, {
+    method: "POST",
+    body: JSON.stringify({ symbol, price, condition }),
+  });
+}
+
+// ─── Portfolio Performance ──────────────────────────────────
+
+export function getPortfolioPerformance() {
+  return apiFetch<{ equity_curve: { date: string; cumulative_pnl: number }[] }>(`/api/v1/portfolio/performance`);
+}
+
 // ─── Chat / Agents ───────────────────────────────────────────
 
 export interface ChatResponse {

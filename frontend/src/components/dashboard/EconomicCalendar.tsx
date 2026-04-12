@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Calendar, TrendingUp, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CalendarEvent {
@@ -66,7 +66,11 @@ const impactDot = {
 };
 
 export function EconomicCalendar() {
-  const [events] = useState(generateUpcomingEvents);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+
+  useEffect(() => {
+    setEvents(generateUpcomingEvents());
+  }, []);
 
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">

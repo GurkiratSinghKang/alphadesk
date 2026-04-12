@@ -13,14 +13,14 @@ type SortDir = 'asc' | 'desc';
 
 function sortWatchlist(
   watchlist: string[],
-  quotes: Map<string, Quote>,
+  quotes: Record<string, Quote>,
   sortKey: SortKey,
   sortDir: SortDir,
 ): string[] {
   if (sortKey === 'default') return watchlist;
   const sorted = [...watchlist].sort((a, b) => {
-    const quoteA = quotes.get(a);
-    const quoteB = quotes.get(b);
+    const quoteA = quotes[a];
+    const quoteB = quotes[b];
     let valA = 0;
     let valB = 0;
     if (sortKey === 'symbol') {
@@ -40,13 +40,13 @@ function sortWatchlist(
 }
 
 const symbols = ['AAPL', 'MSFT', 'SPY', 'TSLA', 'GOOGL'];
-const quotes = new Map<string, Quote>([
-  ['AAPL', { last: 260, changePct: -0.5 }],
-  ['MSFT', { last: 370, changePct: 1.2 }],
-  ['SPY', { last: 679, changePct: -0.08 }],
-  ['TSLA', { last: 348, changePct: 2.5 }],
-  ['GOOGL', { last: 317, changePct: -0.3 }],
-]);
+const quotes: Record<string, Quote> = {
+  AAPL: { last: 260, changePct: -0.5 },
+  MSFT: { last: 370, changePct: 1.2 },
+  SPY: { last: 679, changePct: -0.08 },
+  TSLA: { last: 348, changePct: 2.5 },
+  GOOGL: { last: 317, changePct: -0.3 },
+};
 
 describe('Watchlist sorting', () => {
   // ─── default (preserve insertion order) ──────────────────────
@@ -143,7 +143,7 @@ describe('Watchlist sorting', () => {
   // ─── missing quote fallback ───────────────────────────────────
 
   it('sorts symbols with no quote to bottom (0) when sorting price desc', () => {
-    const sparse = new Map<string, Quote>([['SPY', { last: 500 }]]);
+    const sparse: Record<string, Quote> = { SPY: { last: 500 } };
     const sorted = sortWatchlist(['UNKNOWN', 'SPY', 'MISSING'], sparse, 'last', 'desc');
     expect(sorted[0]).toBe('SPY');
     // UNKNOWN and MISSING both default to 0 — both land after SPY
