@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Skull } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,9 +10,9 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { getPnlCalendar } from "@/lib/api";
 import type { CalendarData, CalendarDay } from "@/lib/api";
 import { formatCurrency, cn } from "@/lib/utils";
+import { usePnlCalendar } from "@/hooks/useQueries";
 
 // ─── Color scale for P&L ────────────────────────────────────
 
@@ -46,53 +46,48 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [data, setData] = useState<CalendarData | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    getPnlCalendar(year, month)
-      .then(setData)
-      .catch(() => {
-        // Generate demo calendar data when API is unavailable
-        const daysInMonth = new Date(year, month, 0).getDate();
-        let seed = year * 100 + month;
-        const rng = () => {
-          seed = (seed * 16807 + 0) % 2147483647;
-          return (seed - 1) / 2147483646;
-        };
-        const demoDays: CalendarDay[] = [];
-        let monthTotal = 0;
-        let winDays = 0;
-        let loseDays = 0;
-        let tradingDays = 0;
-        let bestDay: { date: string; pnl: number } | null = null;
-        let worstDay: { date: string; pnl: number } | null = null;
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-          const dow = new Date(year, month - 1, d).getDay();
-          if (dow === 0 || dow === 6) continue; // skip weekends
-          // Only generate data for days in the past
-          const dayDate = new Date(year, month - 1, d);
-          if (dayDate > new Date()) continue;
-          const pnl = Math.round((rng() - 0.42) * 2000);
-          const trades = Math.floor(rng() * 8) + 1;
-          const winRate = Math.round(rng() * 100);
-          demoDays.push({ date: dateStr, pnl, trades, winRate });
-          monthTotal += pnl;
-          tradingDays++;
-          if (pnl > 0) winDays++;
-          if (pnl < 0) loseDays++;
-          if (!bestDay || pnl > bestDay.pnl) bestDay = { date: dateStr, pnl };
-          if (!worstDay || pnl < worstDay.pnl) worstDay = { date: dateStr, pnl };
-        }
-        setData({
-          month, year, days: demoDays, monthTotal, tradingDays,
-          winningDays: winDays, losingDays: loseDays, bestDay, worstDay,
-        });
-      })
-      .finally(() => setLoading(false));
-  }, [year, month]);
+  const { data: apiData, isLoading: loading } = usePnlCalendar(month, year);
+
+  // Fall back to generated demo data when API returns nothing
+  const data: CalendarData | null = useMemo(() => {
+    if (apiData) return apiData;
+    // Generate demo calendar data when API is unavailable
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let seed = year * 100 + month;
+    const rng = () => {
+      seed = (seed * 16807 + 0) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    const demoDays: CalendarDay[] = [];
+    let monthTotal = 0;
+    let winDays = 0;
+    let loseDays = 0;
+    let tradingDays = 0;
+    let bestDay: { date: string; pnl: number } | null = null;
+    let worstDay: { date: string; pnl: number } | null = null;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow === 0 || dow === 6) continue;
+      const dayDate = new Date(year, month - 1, d);
+      if (dayDate > new Date()) continue;
+      const pnl = Math.round((rng() - 0.42) * 2000);
+      const trades = Math.floor(rng() * 8) + 1;
+      const winRate = Math.round(rng() * 100);
+      demoDays.push({ date: dateStr, pnl, trades, winRate });
+      monthTotal += pnl;
+      tradingDays++;
+      if (pnl > 0) winDays++;
+      if (pnl < 0) loseDays++;
+      if (!bestDay || pnl > bestDay.pnl) bestDay = { date: dateStr, pnl };
+      if (!worstDay || pnl < worstDay.pnl) worstDay = { date: dateStr, pnl };
+    }
+    return {
+      month, year, days: demoDays, monthTotal, tradingDays,
+      winningDays: winDays, losingDays: loseDays, bestDay, worstDay,
+    };
+  }, [apiData, year, month]);
 
   const prevMonth = () => {
     if (month === 1) {

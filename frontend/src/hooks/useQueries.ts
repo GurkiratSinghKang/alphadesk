@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -50,5 +50,34 @@ export function usePipelineStatus() {
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
     retry: 2,
+  });
+}
+
+export function useOptionsChain(symbol: string, expiration: string) {
+  return useQuery({
+    queryKey: ['optionsChain', symbol, expiration],
+    queryFn: () => getOptionsChain(symbol, expiration),
+    staleTime: 30 * 1000,
+    enabled: !!symbol && !!expiration,
+    retry: 1,
+  });
+}
+
+export function useIVData(symbol: string) {
+  return useQuery({
+    queryKey: ['ivData', symbol],
+    queryFn: () => getIVData(symbol),
+    staleTime: 60 * 1000,
+    enabled: !!symbol,
+    retry: 1,
+  });
+}
+
+export function usePnlCalendar(month: number, year: number) {
+  return useQuery({
+    queryKey: ['pnlCalendar', month, year],
+    queryFn: () => getPnlCalendar(month, year),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 }

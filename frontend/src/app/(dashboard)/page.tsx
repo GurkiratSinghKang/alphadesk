@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -42,8 +42,24 @@ export default function DashboardPage() {
 
   if (!mounted) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading command center...</div>
+      <div className="mx-auto max-w-[1800px] space-y-4 p-4 md:p-6 animate-pulse">
+        {/* Hero skeleton */}
+        <div className="h-40 rounded-xl bg-muted/30" />
+        {/* Main grid skeleton */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <div className="lg:col-span-3 space-y-4">
+            <div className="h-64 rounded-xl bg-muted/30" />
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="h-48 rounded-xl bg-muted/30" />
+              <div className="h-48 rounded-xl bg-muted/30" />
+            </div>
+          </div>
+          <div className="lg:col-span-2">
+            <div className="h-80 rounded-xl bg-muted/30" />
+          </div>
+        </div>
+        {/* Market context skeleton */}
+        <div className="h-32 rounded-xl bg-muted/30" />
       </div>
     );
   }
@@ -124,7 +140,10 @@ function CommandCenter() {
   const regime: RegimeData | null = regimeData?.regime ?? null;
 
   // ─── Fetch remaining data (sectors, news, pipeline, equity curve) ──
+  const hasFetched = useRef(false);
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     let cancelled = false;
 
     async function fetchRemaining() {
@@ -215,7 +234,7 @@ function CommandCenter() {
     return () => {
       cancelled = true;
     };
-  }, [regime, summary.equity]);
+  }, []);
 
   // ─── Derived values ────────────────────────────────────────
   const activeSummary = portfolioSummaryData ?? summary;

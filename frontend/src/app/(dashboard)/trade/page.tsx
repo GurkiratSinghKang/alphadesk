@@ -101,6 +101,7 @@ export default function TradePage() {
 
   return (
     <div style={{ width: "100%", height: totalH, overflow: "hidden", position: "relative" }}>
+      <h1 className="sr-only">Trade</h1>
 
       {/* ── Top Row (hidden in full-screen mode) ── */}
       {!optionsFullScreen && (

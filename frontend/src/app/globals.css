@@ -67,7 +67,7 @@
   --secondary: #1e1e32;
   --secondary-foreground: #e2e2ea;
   --muted: #16162a;
-  --muted-foreground: #71717a;
+  --muted-foreground: #9898a3;
   --accent: #1e1e32;
   --accent-foreground: #e2e2ea;
   --destructive: #ef4444;
@@ -111,7 +111,7 @@
   --secondary: #1e1e32;
   --secondary-foreground: #e2e2ea;
   --muted: #16162a;
-  --muted-foreground: #71717a;
+  --muted-foreground: #9898a3;
   --accent: #1e1e32;
   --accent-foreground: #e2e2ea;
   --destructive: #ef4444;
@@ -142,7 +142,11 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
   body {
     @apply bg-background text-foreground;

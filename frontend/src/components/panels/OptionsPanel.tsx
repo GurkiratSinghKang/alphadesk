@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { useMarketStore } from "@/stores/market";
 import { useOptionsStore } from "@/stores/options";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { cn, formatNumber, formatGreek } from "@/lib/utils";
-import { getOptionsChain, getIVData } from "@/lib/api";
+import { useOptionsChain, useIVData } from "@/hooks/useQueries";
 
 // ─── Generate demo options chain ─────────────────────────────
 
@@ -180,45 +180,34 @@ export function OptionsPanel() {
     quoteData?.last ??
     (selectedSymbol === "SPY" ? 590 : selectedSymbol === "AAPL" ? 230 : 175);
 
-  // Try to fetch real options chain from Polygon API, fall back to generated
-  const [apiChain, setApiChain] = useState<ChainRow[] | null>(null);
-  const [chainLoading, setChainLoading] = useState(false);
+  // Fetch real options chain via React Query, fall back to generated
+  const { data: chainData, isLoading: chainLoading } = useOptionsChain(selectedSymbol, selectedExpiry);
 
-  useEffect(() => {
-    setApiChain(null);
-    setChainLoading(true);
-    getOptionsChain(selectedSymbol, selectedExpiry)
-      .then((data) => {
-        if (data?.calls?.length || data?.puts?.length) {
-          // Convert API data to ChainRow format
-          const strikeMap = new Map<number, Partial<ChainRow>>();
-          for (const c of (data.calls ?? [])) {
-            const existing = strikeMap.get(c.strike) ?? { strike: c.strike };
-            existing.call = {
-              last: c.last, bid: c.bid, ask: c.ask,
-              vol: c.volume, oi: c.oi, iv: c.iv * 100, delta: c.delta,
-            };
-            strikeMap.set(c.strike, existing);
-          }
-          for (const p of (data.puts ?? [])) {
-            const existing = strikeMap.get(p.strike) ?? { strike: p.strike };
-            existing.put = {
-              last: p.last, bid: p.bid, ask: p.ask,
-              vol: p.volume, oi: p.oi, iv: p.iv * 100, delta: p.delta,
-            };
-            strikeMap.set(p.strike, existing);
-          }
-          const rows: ChainRow[] = Array.from(strikeMap.values())
-            .filter((r): r is ChainRow => !!(r.call && r.put && r.strike !== undefined))
-            .sort((a, b) => a.strike - b.strike);
-          if (rows.length) setApiChain(rows);
-        }
-      })
-      .catch(() => {
-        // Fall back to generated chain
-      })
-      .finally(() => setChainLoading(false));
-  }, [selectedSymbol, selectedExpiry]);
+  const apiChain = useMemo(() => {
+    const data = chainData;
+    if (!data?.calls?.length && !data?.puts?.length) return null;
+    const strikeMap = new Map<number, Partial<ChainRow>>();
+    for (const c of (data.calls ?? [])) {
+      const existing = strikeMap.get(c.strike) ?? { strike: c.strike };
+      existing.call = {
+        last: c.last, bid: c.bid, ask: c.ask,
+        vol: c.volume, oi: c.oi, iv: c.iv * 100, delta: c.delta,
+      };
+      strikeMap.set(c.strike, existing);
+    }
+    for (const p of (data.puts ?? [])) {
+      const existing = strikeMap.get(p.strike) ?? { strike: p.strike };
+      existing.put = {
+        last: p.last, bid: p.bid, ask: p.ask,
+        vol: p.volume, oi: p.oi, iv: p.iv * 100, delta: p.delta,
+      };
+      strikeMap.set(p.strike, existing);
+    }
+    const rows: ChainRow[] = Array.from(strikeMap.values())
+      .filter((r): r is ChainRow => !!(r.call && r.put && r.strike !== undefined))
+      .sort((a, b) => a.strike - b.strike);
+    return rows.length ? rows : null;
+  }, [chainData]);
 
   // BUG #23: chain depends on selectedExpiry
   const generatedChain = useMemo(
@@ -226,20 +215,12 @@ export function OptionsPanel() {
     [spotPrice, selectedExpiry]
   );
   const chain = apiChain ?? generatedChain;
+  const usingGeneratedChain = apiChain === null && !chainLoading;
 
-  // Try to fetch IV data from API, fall back to generated
-  const [ivData, setIvData] = useState({ ivRank: 42, ivPctl: 38 });
-
-  useEffect(() => {
-    getIVData(selectedSymbol)
-      .then((data) => setIvData({ ivRank: data.ivRank, ivPctl: data.ivPctl }))
-      .catch(() => {
-        // Use generated fallback
-        setIvData({ ivRank: 42, ivPctl: 38 });
-      });
-  }, [selectedSymbol]);
-
-  const { ivRank, ivPctl } = ivData;
+  // Fetch IV data via React Query with fallback
+  const { data: rawIvData } = useIVData(selectedSymbol);
+  const ivRank = rawIvData?.ivRank ?? 42;
+  const ivPctl = rawIvData?.ivPctl ?? 38;
   const expectedMove = spotPrice * 0.032;
 
   // BUG #21: Handle call cell click
@@ -326,6 +307,12 @@ export function OptionsPanel() {
       {chainLoading && (
         <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground shrink-0">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching options chain...
+        </div>
+      )}
+      {usingGeneratedChain && (
+        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-amber-300 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+          <span className="font-medium">Showing estimated prices</span>
+          <span className="text-amber-300/70">— live data unavailable</span>
         </div>
       )}
       <ScrollArea className="flex-1 overflow-auto">
