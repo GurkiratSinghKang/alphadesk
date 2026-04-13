@@ -1,0 +1,113 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+loss
+-$173.29(-0.17%)
+Regime
+Bear - High Volatility
+VIX
+29.1
+LIVE
+Alpaca (Paper)
+PAPER
+Trading Pipeline
+Idle
+Run Now
+CURRENT POSITIONS
+1
+Symbol	Shares	Entry	Current	P&L ($)	P&L (%)	Stop Loss	Take Profit	Entry Date	Signal
+MRK	43	$113.84	$119.36	+$237.15	+4.84%	$108.15	$125.22	Apr 8, 2026, 03:22 PM	HOLD
+TODAY'S PIPELINE RUN
+
+0
+
+SCREENED
+
+→
+
+0
+
+ANALYZED
+
+→
+
+0
+
+SIGNALS
+
+→
+
+0
+
+ORDERS
+
+Pipeline has not run today — awaiting next scheduled run
+
+STRATEGY BUILDER
+AI
+STRATEGY NAME
+ADD RULE (NATURAL LANGUAGE)
+Add
+
+EXAMPLES — CLICK TO ADD
+
+Buy when RSI(14) drops below 30
+Sell when price crosses above upper Bollinger Band
+Enter long when MACD crosses above signal line
+Exit when stop loss is hit at 3% below entry
+Only trade stocks with market cap > $10B
+Maximum position size: 5% of portfolio
+BACKTESTING
+SYMBOL
+STRATEGY
+SMA Crossover
+RSI Mean Reversion
+MACD Signal
+FAST SMA
+SLOW SMA
+CAPITAL ($)
+Run Backtest
+HISTORY (LAST 7 DAYS)
+	Date	Summary
+
+	2026-04-13	No activity
+
+	2026-04-10	No activity
+
+	2026-04-09	No activity
+
+	2026-04-08	No activity
+PERFORMANCE SUMMARY
+
+TOTAL P&L
+
+-$507.37
+
+WIN RATE
+
+N/A
+
+TOTAL TRADES
+
+1
+
+ACTIVE POSITIONS
+
+1
+
+BEST TRADE
+
++$237.15
+
+PG
+
+WORST TRADE
+
+-$744.52
+
+PG

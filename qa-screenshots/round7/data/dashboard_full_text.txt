@@ -1,0 +1,348 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+loss
+-$177.16(-0.18%)
+Regime
+Bear - High Volatility
+VIX
+29.1
+LIVE
+Alpaca (Paper)
+PAPER
+AlphaDesk Dashboard
+
+PORTFOLIO
+
+$99,884.52
+
+DAY P&L
+
+-$177.16 (-0.18%)
+
+1W
+1M
+3M
+YTD
+Activity Feed
+Today
+5 events
+
+Pipeline completed: 0 screened, 0 analyzed, 0 trades approved
+
+5:13 PM
+
+Risk manager rejected 9 trade(s)
+
+MRK: MRK already held by strategy 'pead' | WMT: Strategy 'pead' would exceed allocation (9858 > 8989) | INTC: Position size $4999 exceeds 5% limit ($4994)
+
+5:13 PM
+
+Sensex crashes 1,600 points as US-Iran war rattles markets
+
+Newsbytes
+
+5:05 AM
+
+Stock Market Crash Today: Rs 5 lakh crore market cap erodes as Nifty, Sensex slide over 2%; Oil shock returns after US‐Iran talks fail
+
+Et Now
+
+5:03 AM
+
+SPDR MSCI ACWI Climate Paris Aligned ETF (NASDAQ:NZAC) Short Interest Up 373.8% in March
+
+Defenseworld Net
+
+5:02 AM
+Open Positions
+1 position
+MRK
+86 shares
+
+$119.38
+
+avg $121.44
+
+-$177.61
+
+-1.70%
+
+April P&L
+-$744.52
+S
+M
+T
+W
+T
+F
+S
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+Economic Calendar
+
+FOMC Meeting Minutes
+
+Mon, Apr 13 · 2:00 PM
+
+HIGH
+
+Non-Farm Payrolls
+
+Mon, Apr 13 · 8:30 AM
+
+HIGH
+
+Non-Farm Payrolls
+
+Tue, Apr 14 · 8:30 AM
+
+HIGH
+
+CPI (YoY)
+
+Wed, Apr 15 · 8:30 AM
+
+Fcst: 3.2%
+
+Prev: 3.4%
+
+HIGH
+
+Initial Jobless Claims
+
+Wed, Apr 15 · 8:30 AM
+
+Fcst: 215K
+
+Prev: 210K
+
+MEDIUM
+
+Initial Jobless Claims
+
+Thu, Apr 16 · 8:30 AM
+
+Fcst: 215K
+
+Prev: 210K
+
+MEDIUM
+
+Retail Sales (MoM)
+
+Fri, Apr 17 · 8:30 AM
+
+Fcst: 0.3%
+
+Prev: 0.2%
+
+MEDIUM
+
+Consumer Confidence
+
+Fri, Apr 17 · 10:00 AM
+
+Fcst: 104.5
+
+Prev: 103.8
+
+MEDIUM
+Strategies
+10 active
+
+Momentum + Quality
+
+Active
+—
+No positions
+
+Thrives in bull trends
+
+PEAD
+
+Active
++4.80%
+1 pos
+
+Event-driven, all regimes
+
+No history
+
+VRP Harvesting
+
+Active
+—
+No positions
+
+Best in low-vol contango
+
+Earnings Vol
+
+Paused
+-15.50%
+0 pos
+
+Paused in high-vol regimes
+
+No history
+
+Regime Adaptive
+
+Active
+—
+No positions
+
+Adjusts to any regime
+
+Claude Alpha
+
+Active
+—
+No positions
+
+AI-driven, regime-aware
+
+Mean Reversion
+
+Active
+—
+No positions
+
+Favored in sideways markets
+
+VCP Breakout
+
+Active
+—
+No positions
+
+Needs bull momentum
+
+Pairs Trading
+
+Active
+—
+No positions
+
+Market-neutral, all regimes
+
+Dividend Capture
+
+Active
+—
+No positions
+
+Income-focused, stable markets
+
+Sector Rotation
+
+Active
+—
+No positions
+
+Trend-following across sectors
+
+Gap Fill
+
+Paused
+—
+No positions
+
+Intraday, paused after hours
+
+MARKET INDICES
+
+SPY
+
+S&P 500
+
+$682.21
+
++0.00%
+
+QQQ
+
+NASDAQ 100
+
+$614.11
+
++0.00%
+
+IWM
+
+Russell 2000
+
+$263.79
+
++0.02%
+
+SECTOR PERFORMANCE
+Energy
+-0.0%
+Healthcare
++0.0%
+Technology
++0.0%
+Financials
++0.0%
+Cons Disc
++0.0%
+Comm Svcs
++0.0%
+Industrials
++0.0%
+Cons Stpl
++0.0%
+Utilities
++0.0%
+Real Est
++0.0%
+Materials
++0.0%
+HEADLINES
+
+Sensex crashes 1,600 points as US-Iran war rattles markets
+
+Newsbytes • 5:05 AM
+
+Stock Market Crash Today: Rs 5 lakh crore market cap erodes as Nifty, Sensex slide over 2%; Oil shock returns after US‐Iran talks fail
+
+Et Now • 5:03 AM
+
+SPDR MSCI ACWI Climate Paris Aligned ETF (NASDAQ:NZAC) Short Interest Up 373.8% in March
+
+Defenseworld Net • 5:02 AM

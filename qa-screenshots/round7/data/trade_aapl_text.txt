@@ -1,0 +1,23 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+loss
+-$175.87(-0.18%)
+Regime
+Bear - High Volatility
+VIX
+29.1
+LIVE
+Alpaca (Paper)
+PAPER
+⚠
+Something went wrong
+
+Cannot read properties of undefined (reading 'toFixed')
+
+Try Again

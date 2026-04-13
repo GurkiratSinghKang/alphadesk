@@ -1,0 +1,100 @@
+AlphaDesk
+Dashboard
+Trade
+Pipeline
+Search symbols, commands...
+Ctrl+K
+A
+P&L
+loss
+-$173.29(-0.17%)
+Regime
+Bear - High Volatility
+VIX
+29.1
+LIVE
+Alpaca (Paper)
+PAPER
+Dashboard
+Post-Earnings Announcement Drift
+Post-Earnings Announcement Drift
+
+Post-Earnings Announcement Drift -- exploits the market's under-reaction to earnings surprises by entering after strong beats and holding 30-60 days.
+
+Active
+Pause
+1M
+3M
+6M
+YTD
+ALL
+Strategy
+SPY
+
+TOTAL RETURN
+
++4.80% ($237.15)
+
+SHARPE RATIO
+
+0.96
+
+MAX DRAWDOWN
+
+-1.9%
+
+WIN RATE
+
+60%
+
+ACTIVE POSITIONS
+
+1
+
+CALMAR RATIO
+
+Awaiting trades
+
+About
+Positions
+Sector Exposure
+Correlation
+Analytics
+Strategy Thesis
+
+Post-Earnings Announcement Drift is one of the most robust and persistent anomalies in empirical finance, first rigorously documented by Bernard & Thomas (1989, 1990). The phenomenon describes the tendency of stock prices to continue drifting in the direction of an earnings surprise for 60 to 90 days following the announcement, contradicting the semi-strong form of the Efficient Market Hypothesis. This strategy monetizes PEAD through defined-risk bull call spreads on companies that report earnings above consensus estimates, capturing the directional drift while capping downside exposure through the spread structure.
+
+The persistence of PEAD is attributed to a combination of investor underreaction to earnings news — rooted in anchoring bias and the slow diffusion of information through analyst revisions — and institutional constraints that prevent rapid price adjustment. Livnat & Mendenhall (2006) show that the drift is strongest for firms with lower analyst coverage, higher earnings surprise magnitude, and more persistent earnings processes. The strategy exploits this by filtering for surprise magnitude relative to historical standard deviation (SUE score) and targeting names where the informational gap between the earnings signal and full price incorporation is widest.
+
+The use of bull call spreads rather than outright equity positions reflects a deliberate risk management choice. Options allow the strategy to express a directional view with defined maximum loss, while benefiting from the favorable gamma profile in the days immediately following earnings when post-announcement volatility is often underpriced relative to realized moves. The 30-to-60-day holding period aligns with the empirically observed drift window while avoiding the decay of the signal documented by Ke & Ramalingegowda (2005) beyond the quarterly horizon.
+
+Edge
+
+Captures systematic investor underreaction to earnings surprises — a well-documented behavioral anomaly where prices take 60-90 days to fully incorporate the information content of earnings beats, amplified by anchoring bias in analyst estimate revisions.
+
+Parameters
+Rebalance Frequency
+Event-driven (triggered by earnings releases)
+Universe
+S&P 500 and Russell 1000 stocks reporting quarterly earnings with liquid options markets
+Position Sizing
+1-2% of portfolio NAV per spread, scaled by SUE score magnitude
+Entry Criteria
+EPS beat >= 1 standard deviation above consensus (SUE > 1.0), confirmed by revenue beat, with options IV percentile below 70
+Exit Criteria
+Spread expiration at 30-60 DTE, or early close at 80% of max profit
+Max Positions
+15
+
+Risk Profile
+
+Medium
+
+Risk is defined per trade by the spread width, but the strategy is exposed to broad market drawdowns that can overwhelm stock-specific earnings drift during periods of elevated systematic risk.
+
+Trade History
+All (1)
+Open (1)
+Closed (0)
+Date	Symbol	Side	Entry	Exit	P&L	P&L %	Hold	
+Apr 8	MRK	Long	$113.84	Open	—	—	—	

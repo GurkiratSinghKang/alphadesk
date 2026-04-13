@@ -1,0 +1,39 @@
+AI-Powered Trading Terminal
+AlphaDesk
+
+Institutional-grade trading terminal powered by Claude AI. Multi-strategy pipeline, real-time execution, and automated portfolio management — all in one platform.
+
+AI Analysis
+
+Claude-powered market analysis with real-time sentiment scoring and trade recommendations.
+
+Multi-Strategy Pipeline
+
+Run parallel strategies across equities and options with automated signal generation.
+
+Real-Time Trading
+
+Live order execution through Alpaca with position tracking, P&L monitoring, and risk controls.
+
+Portfolio Management
+
+Comprehensive portfolio analytics, calendar P&L, and exposure management in one terminal.
+
+Request Access
+|
+Invite-only platform
+Sign In
+
+Access your trading terminal
+
+Username
+Password
+Forgot password?
+Sign In
+
+© 2026 AlphaDesk. All rights reserved.
+
+Docs
+Privacy Policy
+Terms of Service
+Risk Disclosure
