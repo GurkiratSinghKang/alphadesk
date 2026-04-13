@@ -2,9 +2,46 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Loader2 } from "lucide-react";
+import {
+  Zap,
+  Loader2,
+  Brain,
+  Layers,
+  Activity,
+  ShieldCheck,
+  ArrowRight,
+  Mail,
+} from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+const features = [
+  {
+    icon: Brain,
+    title: "AI Analysis",
+    description:
+      "Claude-powered market analysis with real-time sentiment scoring and trade recommendations.",
+  },
+  {
+    icon: Layers,
+    title: "Multi-Strategy Pipeline",
+    description:
+      "Run parallel strategies across equities and options with automated signal generation.",
+  },
+  {
+    icon: Activity,
+    title: "Real-Time Trading",
+    description:
+      "Live order execution through Alpaca with position tracking, P&L monitoring, and risk controls.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Portfolio Management",
+    description:
+      "Comprehensive portfolio analytics, calendar P&L, and exposure management in one terminal.",
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,8 +71,6 @@ export default function LoginPage() {
       }
 
       await res.json();
-      // HttpOnly cookies are set by the backend via Set-Cookie headers
-      // No need to store tokens in JS-accessible cookies
       router.push("/");
     } catch {
       setError("Failed to connect to server");
@@ -45,50 +80,162 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative w-full max-w-sm space-y-6 rounded-2xl border border-border/50 bg-[var(--surface)]/80 p-8 backdrop-blur-sm shadow-2xl shadow-black/20">
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-          <Zap className="h-6 w-6 text-primary" />
+    <div className="flex min-h-screen w-full flex-col">
+      {/* Main content: hero + login */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-12 px-4 py-12 lg:flex-row lg:gap-20 lg:px-16">
+        {/* Left: hero + features */}
+        <div className="w-full max-w-xl space-y-8 text-center lg:text-left">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+              <Zap className="h-3 w-3" />
+              AI-Powered Trading Terminal
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              AlphaDesk
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              Institutional-grade trading terminal powered by Claude AI.
+              Multi-strategy pipeline, real-time execution, and automated
+              portfolio management — all in one platform.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {features.map((feature) => (
+              <div
+                key={feature.title}
+                className="card-glow rounded-xl border border-border/50 bg-[var(--surface)]/60 p-4 text-left backdrop-blur-sm"
+              >
+                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <feature.icon className="h-4 w-4 text-primary" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {feature.title}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  {feature.description}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground lg:justify-start">
+            <a
+              href="mailto:legal@tradingalpha.net"
+              className="inline-flex items-center gap-1.5 hover:text-foreground"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Request Access
+            </a>
+            <span className="text-border">|</span>
+            <span>Invite-only platform</span>
+          </div>
         </div>
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-foreground tracking-tight">AlphaDesk</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Sign in to your trading terminal</p>
+
+        {/* Right: login form */}
+        <div className="w-full max-w-sm mx-4">
+          <div className="space-y-6 rounded-2xl border border-border/50 bg-[var(--surface)]/80 p-8 backdrop-blur-sm shadow-2xl shadow-black/20">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                <Zap className="h-6 w-6 text-primary" />
+              </div>
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-foreground tracking-tight">
+                  Sign In
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Access your trading terminal
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4"
+              aria-describedby={error ? "login-error" : undefined}
+            >
+              <div>
+                <label
+                  htmlFor="login-username"
+                  className="text-xs text-muted-foreground"
+                >
+                  Username
+                </label>
+                <Input
+                  id="login-username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin"
+                  className="mt-1"
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="login-password"
+                  className="text-xs text-muted-foreground"
+                >
+                  Password
+                </label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  className="mt-1"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {error && (
+                <p
+                  id="login-error"
+                  role="alert"
+                  aria-live="assertive"
+                  className="text-xs text-[var(--loss)]"
+                >
+                  {error}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || !username || !password}
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                )}
+                Sign In
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="login-username" className="text-xs text-muted-foreground">Username</label>
-          <Input
-            id="login-username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="admin"
-            className="mt-1"
-            autoFocus
-          />
+      {/* Footer */}
+      <footer className="border-t border-border/30 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 sm:flex-row">
+          <p className="text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} AlphaDesk. All rights reserved.
+          </p>
+          <nav className="flex gap-4 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Terms of Service
+            </Link>
+            <Link href="/risk" className="hover:text-foreground">
+              Risk Disclosure
+            </Link>
+          </nav>
         </div>
-        <div>
-          <label htmlFor="login-password" className="text-xs text-muted-foreground">Password</label>
-          <Input
-            id="login-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="mt-1"
-          />
-        </div>
-
-        {error && (
-          <p className="text-xs text-[var(--loss)]">{error}</p>
-        )}
-
-        <Button type="submit" className="w-full" disabled={loading || !username || !password}>
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Sign In
-        </Button>
-      </form>
+      </footer>
     </div>
   );
 }

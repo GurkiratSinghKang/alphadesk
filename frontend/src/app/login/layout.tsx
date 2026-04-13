@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export default function LoginLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex h-screen items-center justify-center overflow-hidden bg-background">
+    <div className="relative min-h-screen overflow-hidden bg-background">
       {/* Ambient glow effects */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[128px]" />

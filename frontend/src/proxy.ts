@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("access_token")?.value;
-  const isLoginPage = request.nextUrl.pathname === "/login";
+  const { pathname } = request.nextUrl;
+  const isLoginPage = pathname === "/login";
+  const isPublicPage = ["/privacy", "/terms", "/risk"].includes(pathname);
 
   // Check if token is structurally valid (3-part JWT, not expired)
   let isValidToken = false;
@@ -18,7 +20,7 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  if (!isValidToken && !isLoginPage) {
+  if (!isValidToken && !isLoginPage && !isPublicPage) {
     // Clear stale cookies before redirecting to login
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("access_token");

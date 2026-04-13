@@ -18,7 +18,20 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "AlphaDesk — AI-Powered Trading Terminal",
   description:
-    "Claude-powered trading platform. AI-driven analysis, options flow, and portfolio management.",
+    "Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.",
+  openGraph: {
+    title: "AlphaDesk — AI-Powered Trading Terminal",
+    description:
+      "Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.",
+    url: "https://tradingalpha.net",
+    siteName: "AlphaDesk",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AlphaDesk — AI-Powered Trading Terminal",
+    description: "Claude-powered trading platform.",
+  },
 };
 
 export default function RootLayout({
