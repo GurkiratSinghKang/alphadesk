@@ -81,7 +81,10 @@ export function EconomicCalendar() {
         </div>
         <span className="text-[10px] font-medium text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">Sample Events — connect calendar API for real data</span>
       </div>
-      <div className="divide-y divide-border">
+      <div className="px-4 py-2 text-[10px] text-amber-400/80 bg-amber-400/5 border-b border-border">
+        These are illustrative events only. Actual economic calendar data requires a data provider subscription.
+      </div>
+      <div className="divide-y divide-border opacity-70">
         {events.map((evt, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-2">
             <span className={cn("h-2 w-2 rounded-full shrink-0", impactDot[evt.impact])} />

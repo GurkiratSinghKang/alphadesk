@@ -201,7 +201,38 @@ export default function TermsPage() {
 
           <section>
             <h2 className="mb-3 text-lg font-semibold text-foreground">
-              9. Contact
+              9. Dispute Resolution
+            </h2>
+            <p>
+              Any disputes arising from these terms or your use of AlphaDesk
+              shall be resolved through binding arbitration under the rules of
+              the American Arbitration Association.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              10. Governing Law
+            </h2>
+            <p>
+              These terms are governed by the laws of the State of Delaware,
+              United States.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              11. Refund Policy
+            </h2>
+            <p>
+              AlphaDesk is currently offered as an invite-only platform at no
+              cost. No refunds or credits apply.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              12. Contact
             </h2>
             <p>
               For questions about these terms, contact us at{" "}

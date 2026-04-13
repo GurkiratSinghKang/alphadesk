@@ -166,7 +166,64 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="mb-3 text-lg font-semibold text-foreground">
-              8. Contact
+              8. Children&apos;s Privacy
+            </h2>
+            <p>
+              AlphaDesk is not intended for users under 18. We do not knowingly
+              collect data from minors.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              9. GDPR Compliance
+            </h2>
+            <p>
+              If you are in the EU/EEA, you have rights under GDPR including
+              access, rectification, erasure, and portability. Contact{" "}
+              <a
+                href="mailto:legal@tradingalpha.net"
+                className="text-primary hover:underline"
+              >
+                legal@tradingalpha.net
+              </a>{" "}
+              to exercise these rights.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              10. CCPA Compliance
+            </h2>
+            <p>
+              California residents have additional rights under CCPA. Contact us
+              for data access or deletion requests.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              11. Data Breach Notification
+            </h2>
+            <p>
+              In the event of a data breach, we will notify affected users within
+              72 hours as required by applicable law.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              12. International Data Transfers
+            </h2>
+            <p>
+              Data may be processed in the United States. By using AlphaDesk, you
+              consent to data transfer to the US.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              13. Contact
             </h2>
             <p>
               For privacy-related inquiries, contact us at{" "}

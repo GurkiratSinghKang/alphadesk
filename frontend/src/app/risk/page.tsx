@@ -206,7 +206,50 @@ export default function RiskDisclosurePage() {
 
           <section>
             <h2 className="mb-3 text-lg font-semibold text-foreground">
-              8. Contact
+              8. Pattern Day Trader (PDT) Rule
+            </h2>
+            <p>
+              Accounts with less than $25,000 making 4+ day trades in 5 business
+              days may be flagged as pattern day traders, restricting trading
+              activity.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              9. Counterparty Risk
+            </h2>
+            <p>
+              AlphaDesk relies on Alpaca Securities LLC as its executing broker.
+              Alpaca is a member of FINRA/SIPC. Your securities are protected up
+              to $500,000 by SIPC.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              10. Tax Implications
+            </h2>
+            <p>
+              Trading profits are subject to capital gains tax. Consult a tax
+              professional. AlphaDesk does not provide tax advice.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              11. Order Execution Risk
+            </h2>
+            <p>
+              Market orders execute at the next available price, which may differ
+              from the displayed price. Limit orders may not fill if the price
+              target is not reached.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              12. Contact
             </h2>
             <p>
               For questions about this risk disclosure, contact us at{" "}

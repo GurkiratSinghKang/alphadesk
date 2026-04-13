@@ -72,6 +72,38 @@ const sections = [
     ],
   },
   {
+    id: "how-claude-works",
+    title: "How Claude AI Analysis Works",
+    content: [
+      "AlphaDesk leverages Anthropic's Claude AI to analyze market opportunities across all 12 strategies. When a pipeline run executes, relevant market data is sent to Claude for analysis.",
+      "Claude evaluates technical indicators (moving averages, RSI, MACD, volume profiles), fundamental data (earnings, revenue growth, valuation multiples), and sentiment signals (news flow, analyst revisions) to generate trade recommendations.",
+      "Each recommendation includes a conviction score (0-100) reflecting the AI's confidence in the trade thesis. Higher conviction scores indicate stronger alignment across multiple analytical factors.",
+      "The AI analysis is one input in the decision pipeline — risk management rules, position sizing constraints, and portfolio-level checks are applied after AI scoring before any order is placed.",
+    ],
+  },
+  {
+    id: "strategy-methodology",
+    title: "Strategy Methodology",
+    content: [
+      "AlphaDesk strategies are grounded in academic research and well-established market phenomena.",
+      "Post-Earnings Announcement Drift (PEAD) strategies exploit the documented tendency for stock prices to continue moving in the direction of an earnings surprise for weeks after the announcement.",
+      "Momentum strategies are based on the cross-sectional momentum effect first documented by Jegadeesh and Titman (1993), where recent winners tend to continue outperforming.",
+      "Volatility Risk Premium (VRP) strategies harvest the persistent spread between implied and realized volatility through systematic options selling.",
+      "Each strategy detail page includes full methodology notes and academic citations. Strategy parameters are calibrated using out-of-sample testing to reduce overfitting risk.",
+    ],
+  },
+  {
+    id: "faq",
+    title: "FAQ / Troubleshooting",
+    content: [
+      "Login problems: Ensure you are using the correct credentials. If you have forgotten your password, contact support@tradingalpha.net for a reset. Clear your browser cookies if you experience persistent session issues.",
+      "Data not loading: Check your internet connection. If the dashboard shows stale data, try a hard refresh (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows). If the issue persists, the backend service may be restarting — wait a few minutes and try again.",
+      "WebSocket disconnection: The real-time feed may disconnect during server deployments or network interruptions. The client will attempt to reconnect automatically. If the connection indicator stays red, refresh the page.",
+      "Clearing cache: If the UI behaves unexpectedly after an update, clear your browser cache and local storage. In Chrome: Settings > Privacy > Clear browsing data > Cached images and files.",
+      "Strategy not executing: Verify the strategy is toggled on in the Strategy Grid. Check that your Alpaca API keys are valid and that your account has sufficient buying power. Review the pipeline logs for error messages.",
+    ],
+  },
+  {
     id: "api-keys",
     title: "API Keys (Alpaca Setup)",
     content: [
