@@ -172,9 +172,11 @@ export function ChartPanel() {
   const displayData = apiBars ?? chartData;
   const usingDemoData = !barsLoading && apiBars === null;
 
-  const displayPrice = crosshairPrice ?? quote?.last ?? displayData[displayData.length - 1]?.close ?? 0;
-  const change = quote?.change ?? (displayData.length > 1 ? displayData[displayData.length - 1].close - displayData[displayData.length - 2].close : 0);
-  const changePct = quote?.changePct ?? (displayData.length > 1 && displayData[displayData.length - 2].close !== 0 ? (change / displayData[displayData.length - 2].close) * 100 : 0);
+  // Only use real quote data for header price — never fall back to demo chart data
+  const lastRealBar = apiBars && apiBars.length > 0 ? apiBars[apiBars.length - 1] : null;
+  const displayPrice = crosshairPrice ?? quote?.last ?? lastRealBar?.close ?? 0;
+  const change = quote?.change ?? 0;
+  const changePct = quote?.changePct ?? 0;
 
   const handleCrosshairMove = useCallback(
     (price: number | null) => setCrosshairPrice(price),
@@ -259,16 +261,16 @@ export function ChartPanel() {
             {quote && (
               <div className="flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground mt-0.5">
                 <span>
-                  <span className="text-foreground">{quote.bid.toFixed(2)}</span>
+                  <span className="text-foreground">{(quote.bid ?? 0).toFixed(2)}</span>
                   {" / "}
-                  <span className="text-foreground">{quote.ask.toFixed(2)}</span>
-                  <span className="ml-1.5 text-[#8a8a95]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
+                  <span className="text-foreground">{(quote.ask ?? 0).toFixed(2)}</span>
+                  <span className="ml-1.5 text-[#8a8a95]">spread: {((quote.ask ?? 0) - (quote.bid ?? 0)).toFixed(2)}</span>
                 </span>
                 <span className="text-border">|</span>
-                <span>Vol: {formatNumber(quote.volume, true)}</span>
+                <span>Vol: {formatNumber(quote.volume ?? 0, true)}</span>
                 <span className="text-border">|</span>
-                <span>H: {quote.high.toFixed(2)}</span>
-                <span>L: {quote.low.toFixed(2)}</span>
+                <span>H: {(quote.high ?? 0).toFixed(2)}</span>
+                <span>L: {(quote.low ?? 0).toFixed(2)}</span>
               </div>
             )}
             {alertOpen && (

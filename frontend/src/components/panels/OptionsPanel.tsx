@@ -143,6 +143,9 @@ function Cell({
       </td>
     );
   }
+  if (value == null || !isFinite(value)) {
+    return <td className={cn("px-1.5 py-1 text-right tabular-nums text-muted-foreground/40", className)}>{"\u2014"}</td>;
+  }
   let formatted: string;
   switch (format) {
     case "price":
