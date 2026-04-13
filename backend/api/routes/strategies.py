@@ -433,43 +433,77 @@ async def _get_strategy_data(strategy_id: str) -> dict[str, Any] | None:
 
 @router.get("/", response_model=list[StrategySummary])
 async def list_strategies() -> list[StrategySummary]:
-    """List all strategies with real ledger data including unrealized P&L."""
+    """List all strategies with real ledger data including unrealized P&L.
+
+    Fetches live Alpaca positions and syncs the ledger first so that
+    untracked positions, share mismatches, and stale entries are corrected
+    before computing performance numbers.
+    """
     import httpx
     from core.config import settings
     from data.ingestion.trade_ledger import TradeLedger
 
+    # ------------------------------------------------------------------
+    # 1. Fetch live Alpaca positions
+    # ------------------------------------------------------------------
+    alpaca_positions: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions",
+                headers={
+                    "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                    "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                },
+            )
+            if resp.status_code == 200:
+                alpaca_positions = resp.json()
+    except Exception:
+        logger.warning("Failed to fetch Alpaca positions for strategy sync", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # 2. Sync ledger with Alpaca (creates missing entries, fixes shares)
+    # ------------------------------------------------------------------
+    ledger = TradeLedger()
+    if alpaca_positions:
+        try:
+            ledger.sync_with_alpaca(alpaca_positions)
+            # Reload ledger data after sync so real_perf reflects updates
+            ledger = TradeLedger()
+        except Exception:
+            logger.warning("Ledger sync with Alpaca failed", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # 3. Compute real performance from the (now-synced) ledger
+    # ------------------------------------------------------------------
     real_perf = _get_real_strategy_performance()
 
-    # Fetch live prices for open positions to calculate unrealized P&L
-    ledger = TradeLedger()
-    open_trades = ledger.get_open_positions()
-    unrealized_by_strat: dict[str, float] = {}
-    if open_trades:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                for t in open_trades:
-                    sym = t.get("symbol", "")
-                    strat = t.get("strategy", "unknown")
-                    entry = t.get("entry_price", 0)
-                    shares = t.get("shares", 0)
-                    if not sym or not entry or not shares:
-                        continue
-                    try:
-                        resp = await client.get(
-                            f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
-                            headers={
-                                "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-                                "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-                            },
-                        )
-                        if resp.status_code == 200:
-                            cur = resp.json().get("trade", {}).get("p", 0)
-                            unrealized_by_strat[strat] = unrealized_by_strat.get(strat, 0) + (cur - entry) * shares
-                    except Exception:
-                        logger.warning("Failed to fetch live price for %s (unrealized P&L skipped)", sym, exc_info=True)
-        except Exception:
-            logger.warning("Failed to fetch live prices for open positions", exc_info=True)
+    # ------------------------------------------------------------------
+    # 4. Build Alpaca position map keyed by strategy for accurate counts
+    #    and unrealized P&L (Alpaca provides unrealized_pl per position)
+    # ------------------------------------------------------------------
+    alpaca_by_strategy: dict[str, list[dict]] = {}
+    for pos in alpaca_positions:
+        sym = pos.get("symbol", "")
+        # Determine strategy from ledger
+        strat_id = "manual-discretionary"
+        for t in ledger._data.get("trades", []):
+            if t["symbol"] == sym and t["status"] == "open":
+                strat_name = t.get("strategy", "manual")
+                strat_id = _STRATEGY_NAME_TO_ID.get(strat_name, "manual-discretionary")
+                break
+        alpaca_by_strategy.setdefault(strat_id, []).append(pos)
 
+    # Unrealized P&L per strategy from Alpaca position data
+    unrealized_by_strat_id: dict[str, float] = {}
+    for strat_id, positions in alpaca_by_strategy.items():
+        unrealized_by_strat_id[strat_id] = sum(
+            float(p.get("unrealized_pl", 0)) for p in positions
+        )
+
+    # ------------------------------------------------------------------
+    # 5. Build summaries
+    # ------------------------------------------------------------------
     summaries = []
     for sid, data in _STRATEGIES.items():
         d = await _get_strategy_data(sid)
@@ -478,17 +512,18 @@ async def list_strategies() -> list[StrategySummary]:
 
         # Start with sentinel values -- only real ledger data populates these
         win_rate = -1.0  # -1 = no closed trades (frontend shows "N/A")
-        active_count = 0
         total_return = 0.0
         invested = 0.0
         pnl_dollars = 0.0
+
+        # Active count from Alpaca positions (ground truth)
+        active_count = len(alpaca_by_strategy.get(sid, []))
 
         for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
             if strat_id == sid and strat_name in real_perf:
                 rp = real_perf[strat_name]
                 if rp["trades"] > 0:
-                    active_count = rp["open"]
-                    pnl_dollars = rp["pnl"] + unrealized_by_strat.get(strat_name, 0)
+                    pnl_dollars = rp["pnl"] + unrealized_by_strat_id.get(sid, 0)
                     invested = rp.get("invested", 0.0)
                     closed = rp["trades"] - rp["open"]
                     if closed > 0:
@@ -515,7 +550,11 @@ async def list_strategies() -> list[StrategySummary]:
 async def get_strategy_performance(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> StrategyPerformance:
-    """Get detailed performance data for a single strategy using real ledger data only."""
+    """Get detailed performance data for a single strategy.
+
+    Syncs the ledger with Alpaca positions first, then uses Alpaca
+    unrealized P&L directly for accuracy.
+    """
     import httpx
     from core.config import settings
     from data.ingestion.trade_ledger import TradeLedger
@@ -524,53 +563,68 @@ async def get_strategy_performance(
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
-    # Start with sentinels -- only real data populates
+    # ------------------------------------------------------------------
+    # Fetch Alpaca positions and sync ledger
+    # ------------------------------------------------------------------
+    alpaca_positions: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions",
+                headers={
+                    "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                    "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                },
+            )
+            if resp.status_code == 200:
+                alpaca_positions = resp.json()
+    except Exception:
+        logger.warning("Failed to fetch Alpaca positions for strategy performance", exc_info=True)
+
+    ledger = TradeLedger()
+    if alpaca_positions:
+        try:
+            ledger.sync_with_alpaca(alpaca_positions)
+            ledger = TradeLedger()
+        except Exception:
+            logger.warning("Ledger sync failed in strategy performance", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Map Alpaca positions to this strategy
+    # ------------------------------------------------------------------
+    ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
+    alpaca_for_strat: list[dict] = []
+    for pos in alpaca_positions:
+        sym = pos.get("symbol", "")
+        matched_strat_id = "manual-discretionary"
+        for t in ledger._data.get("trades", []):
+            if t["symbol"] == sym and t["status"] == "open":
+                matched_strat_id = _STRATEGY_NAME_TO_ID.get(
+                    t.get("strategy", "manual"), "manual-discretionary"
+                )
+                break
+        if matched_strat_id == strategy_id:
+            alpaca_for_strat.append(pos)
+
+    unrealized = sum(float(p.get("unrealized_pl", 0)) for p in alpaca_for_strat)
+    active_count = len(alpaca_for_strat)
+
+    # ------------------------------------------------------------------
+    # Compute performance from ledger
+    # ------------------------------------------------------------------
     invested = 0.0
     return_pct = 0.0
-    win_rate = -1.0  # -1 = no closed trades (frontend shows "N/A")
-    active_count = 0
+    win_rate = -1.0
     pnl_dollars = 0.0
     last_trade = ""
     first_trade = ""
 
     real_perf = _get_real_strategy_performance()
 
-    # Fetch unrealized P&L for open positions (same approach as list_strategies)
-    ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
-    unrealized = 0.0
-    try:
-        ledger = TradeLedger()
-        open_trades = ledger.get_open_positions()
-        strat_open = [t for t in open_trades if t.get("strategy") == ledger_name]
-        if strat_open:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                for t in strat_open:
-                    sym = t.get("symbol", "")
-                    entry = t.get("entry_price", 0)
-                    shares = t.get("shares", 0)
-                    if not sym or not entry or not shares:
-                        continue
-                    try:
-                        resp = await client.get(
-                            f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
-                            headers={
-                                "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-                                "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-                            },
-                        )
-                        if resp.status_code == 200:
-                            cur = resp.json().get("trade", {}).get("p", 0)
-                            unrealized += (cur - entry) * shares
-                    except Exception:
-                        logger.warning("Failed to fetch live price for %s", sym, exc_info=True)
-    except Exception:
-        logger.warning("Failed to compute unrealized P&L for strategy %s", strategy_id, exc_info=True)
-
     for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
         if strat_id == strategy_id and strat_name in real_perf:
             rp = real_perf[strat_name]
             if rp["trades"] > 0:
-                active_count = rp["open"]
                 pnl_dollars = rp["pnl"] + unrealized
                 invested = rp.get("invested", 0.0)
                 last_trade = rp.get("last_trade_date", "")

@@ -216,6 +216,93 @@ class TradeLedger:
             }
         return result
 
+    def sync_with_alpaca(self, alpaca_positions: list[dict[str, Any]]) -> dict[str, Any]:
+        """Sync ledger state with live Alpaca positions.
+
+        1. Untracked Alpaca positions -> create new ledger entries (manual-discretionary).
+        2. Share mismatches (e.g. pipeline ran twice) -> update ledger shares.
+        3. Ledger open trades whose symbol is absent from Alpaca -> mark closed.
+
+        Returns a summary dict of what changed.
+        """
+        alpaca_by_sym: dict[str, dict[str, Any]] = {}
+        for pos in alpaca_positions:
+            sym = pos.get("symbol", "")
+            if sym:
+                alpaca_by_sym[sym] = pos
+
+        created: list[str] = []
+        updated: list[str] = []
+        closed: list[str] = []
+
+        open_syms_in_ledger: set[str] = set()
+
+        for trade in self._data["trades"]:
+            if trade["status"] != "open":
+                continue
+            sym = trade["symbol"]
+            open_syms_in_ledger.add(sym)
+
+            if sym in alpaca_by_sym:
+                alpaca_qty = int(float(alpaca_by_sym[sym].get("qty", 0)))
+                if trade["shares"] != alpaca_qty and alpaca_qty > 0:
+                    logger.info(
+                        "Ledger sync: updating %s shares %d -> %d",
+                        sym, trade["shares"], alpaca_qty,
+                    )
+                    trade["shares"] = alpaca_qty
+                    updated.append(sym)
+            else:
+                # Position no longer exists on Alpaca -- mark closed
+                trade["status"] = "closed"
+                trade["exit_time"] = datetime.now(timezone.utc).isoformat()
+                trade["exit_reason"] = "alpaca_sync_closed"
+                closed.append(sym)
+                logger.info("Ledger sync: closed %s (not on Alpaca)", sym)
+
+        # Create ledger entries for Alpaca positions not in the ledger
+        for sym, pos in alpaca_by_sym.items():
+            if sym not in open_syms_in_ledger:
+                avg_price = float(pos.get("avg_entry_price", 0))
+                qty = int(float(pos.get("qty", 0)))
+                if qty <= 0:
+                    continue
+                trade = {
+                    "id": len(self._data["trades"]) + 1,
+                    "symbol": sym,
+                    "shares": qty,
+                    "entry_price": avg_price,
+                    "entry_time": datetime.now(timezone.utc).isoformat(),
+                    "stop_loss": None,
+                    "take_profit": None,
+                    "conviction": 0,
+                    "rationale": "Auto-created by Alpaca sync (untracked position)",
+                    "strategy": "manual",
+                    "status": "open",
+                    "exit_price": None,
+                    "exit_time": None,
+                    "exit_reason": None,
+                    "pnl": None,
+                    "pnl_pct": None,
+                }
+                self._data["trades"].append(trade)
+                created.append(sym)
+                logger.info(
+                    "Ledger sync: created entry for %s (%d shares @ %.2f)",
+                    sym, qty, avg_price,
+                )
+
+        if created or updated or closed:
+            self._persist()
+
+        summary = {
+            "created": created,
+            "updated": updated,
+            "closed": closed,
+        }
+        logger.info("Ledger sync complete: %s", summary)
+        return summary
+
     def count_today_trades(self) -> int:
         """Count trades opened today (UTC)."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
