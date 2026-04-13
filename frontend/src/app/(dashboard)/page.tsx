@@ -187,15 +187,39 @@ function CommandCenter() {
         pStatus = pipelineStatusRes.value;
       }
 
-      // Pipeline history: find today's log
+      // Pipeline history: find latest log and fetch its full details
       let pLog: Record<string, any> | null = null;
-      if (pipelineHistoryRes.status === "fulfilled" && Array.isArray(pipelineHistoryRes.value)) {
-        const today = todayDateStr();
-        const todayEntry = pipelineHistoryRes.value.find(
-          (entry: any) => entry.date === today
-        );
-        if (todayEntry) {
-          pLog = todayEntry;
+      if (pipelineHistoryRes.status === "fulfilled" && Array.isArray(pipelineHistoryRes.value) && pipelineHistoryRes.value.length > 0) {
+        // Use the most recent entry (already sorted newest-first from API)
+        const latestEntry = pipelineHistoryRes.value[0];
+        const latestDate = latestEntry?.date;
+        if (latestDate) {
+          try {
+            // Fetch full log for the latest date (summary endpoint only has counts)
+            const { getPipelineRun: fetchRun } = await import("@/lib/api");
+            const fullRun = await fetchRun(latestDate);
+            // Re-map into the shape buildFeedItems expects (snake_case keys + raw arrays)
+            pLog = {
+              date: fullRun.date,
+              timestamp: fullRun.timestamp,
+              orders_placed: fullRun.ordersPlaced?.map((o: any) => ({
+                symbol: o.symbol, side: o.side, qty: o.qty,
+                price: o.price, order_id: o.orderId,
+                timestamp: o.timestamp, strategy: o.strategy,
+              })) ?? [],
+              orders_closed: fullRun.ordersClosed?.map((o: any) => ({
+                symbol: o.symbol, side: o.side, qty: o.qty,
+                price: o.price, order_id: o.orderId,
+                timestamp: o.timestamp, pnl: o.pnl,
+              })) ?? [],
+              errors: fullRun.errors ?? [],
+              master_agent: fullRun.master_agent ?? {},
+              strategies_run: fullRun.strategies ?? {},
+            };
+          } catch {
+            // Fall back to the summary entry
+            pLog = latestEntry;
+          }
         }
       }
 

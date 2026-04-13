@@ -61,19 +61,19 @@ function SignalBadge({ signal }: { signal: string }) {
 // ─── Pipeline Flow Diagram ──────────────────────────────────
 
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
-  // Only show counts from today's actual run, not stale cached data
-  const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
-  const isToday = run?.date === today || run?.timestamp?.startsWith(today);
-  const activeRun = isToday ? run : null;
-
   const stages = [
-    { label: "Screened", count: activeRun?.screened?.length ?? 0 },
-    { label: "Analyzed", count: activeRun?.analyzed?.length ?? 0 },
-    { label: "Signals", count: activeRun?.signals?.length ?? 0 },
-    { label: "Orders", count: activeRun?.ordersPlaced?.length ?? 0 },
+    { label: "Screened", count: run?.screened?.length ?? 0 },
+    { label: "Analyzed", count: run?.analyzed?.length ?? 0 },
+    { label: "Signals", count: run?.signals?.length ?? 0 },
+    { label: "Orders", count: run?.ordersPlaced?.length ?? 0 },
   ];
 
   const allZero = stages.every((s) => s.count === 0);
+
+  // Determine if this run is from today or an earlier date
+  const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
+  const isToday = run?.date === today || run?.timestamp?.startsWith(today);
+  const runDateLabel = run?.date && !isToday ? ` (${run.date})` : "";
 
   return (
     <div>
@@ -100,6 +100,11 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
       {allZero && (
         <p className="text-xs text-muted-foreground mt-2 text-center">
           Pipeline has not run today &mdash; awaiting next scheduled run
+        </p>
+      )}
+      {!allZero && runDateLabel && (
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          Showing latest run{runDateLabel}
         </p>
       )}
     </div>
@@ -165,13 +170,24 @@ export default function PipelinePage() {
       }
       if (h.status === "fulfilled") setHistory(Array.isArray(h.value) ? h.value.slice(0, 7) : []);
 
-      // Try loading today's run
+      // Try loading today's run, fall back to latest run from history
       const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
       try {
         const run = await getPipelineRun(today);
         setTodayRun(run);
       } catch {
-        // no run today
+        // No run today — try loading the most recent run from history
+        if (h.status === "fulfilled" && Array.isArray(h.value) && h.value.length > 0) {
+          const latestDate = h.value[0]?.date;
+          if (latestDate && latestDate !== today) {
+            try {
+              const latestRun = await getPipelineRun(latestDate);
+              setTodayRun(latestRun);
+            } catch {
+              // no recent run available
+            }
+          }
+        }
       }
     } catch {
       // errors handled per-call
@@ -432,12 +448,12 @@ export default function PipelinePage() {
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Today&apos;s Pipeline Run
+                  Latest Pipeline Run
                 </h2>
               </div>
               <PipelineFlow run={todayRun} />
               {!todayRun && (
-                <p className="text-hint mt-2">No run today — click Run Now to trigger manually</p>
+                <p className="text-hint mt-2">No runs available — click Run Now to trigger manually</p>
               )}
             </section>
 

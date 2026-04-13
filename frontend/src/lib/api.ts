@@ -598,6 +598,10 @@ export interface PipelineRun {
   ordersClosed: PipelineOrder[];
   portfolioSnapshot: { equity: number; cash: number; positions: number };
   errors: string[];
+  /** Raw per-strategy breakdown from the pipeline log */
+  strategies?: Record<string, any>;
+  /** Master agent decisions/rejections */
+  master_agent?: Record<string, any>;
 }
 
 export interface PipelinePosition {
@@ -634,21 +638,75 @@ export async function getPipelineRun(date: string): Promise<PipelineRun> {
 
 export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
   const r = raw as Record<string, any>;
-  return {
-    date: r.date ?? "",
-    timestamp: r.timestamp ?? "",
-    screened: (r.screened ?? []).map((s: any) => ({
+
+  // Build screened/analyzed arrays — top-level arrays if available, otherwise
+  // aggregate from per-strategy data inside r.strategies
+  let screened: PipelineScreenedStock[] = [];
+  let analyzed: PipelineAnalysis[] = [];
+
+  if (Array.isArray(r.screened) && r.screened.length > 0) {
+    screened = r.screened.map((s: any) => ({
       symbol: s.symbol, name: s.name, price: s.price,
       compositeScore: s.composite_score ?? s.compositeScore ?? 0,
       sector: s.sector ?? "", changePct: s.change_pct ?? s.changePct ?? 0,
-    })),
-    analyzed: (r.analyzed ?? []).map((a: any) => ({
+    }));
+  }
+  if (Array.isArray(r.analyzed) && r.analyzed.length > 0) {
+    analyzed = r.analyzed.map((a: any) => ({
       symbol: a.symbol, signal: a.signal ?? "hold", conviction: a.conviction ?? 0,
       entryPrice: a.entry_price ?? a.entryPrice ?? null,
       stopLoss: a.stop_loss ?? a.stopLoss ?? null,
       takeProfit: a.take_profit ?? a.takeProfit ?? null,
       rationale: a.rationale ?? "",
-    })),
+    }));
+  }
+
+  // Aggregate from per-strategy data when top-level arrays are absent
+  const strategies = r.strategies ?? {};
+  if (screened.length === 0 && typeof strategies === "object") {
+    let totalScreened = 0;
+    for (const strat of Object.values(strategies) as any[]) {
+      if (typeof strat?.screened === "number") totalScreened += strat.screened;
+    }
+    // Create placeholder entries so PipelineFlow can show the count
+    if (totalScreened > 0) {
+      screened = Array.from({ length: totalScreened }, (_, i) => ({
+        symbol: `stock-${i}`, name: "", price: 0,
+        compositeScore: 0, sector: "", changePct: 0,
+      }));
+    }
+  }
+  if (analyzed.length === 0 && typeof strategies === "object") {
+    // Collect analyses from each strategy's analyses array
+    for (const [stratName, strat] of Object.entries(strategies) as [string, any][]) {
+      if (Array.isArray(strat?.analyses)) {
+        for (const a of strat.analyses) {
+          analyzed.push({
+            symbol: a.symbol ?? stratName, signal: a.signal ?? "hold",
+            conviction: a.conviction ?? 0,
+            entryPrice: a.entry_price ?? a.entryPrice ?? null,
+            stopLoss: a.stop_loss ?? a.stopLoss ?? null,
+            takeProfit: a.take_profit ?? a.takeProfit ?? null,
+            rationale: a.rationale ?? "",
+          });
+        }
+      } else if (typeof strat?.analyzed === "number" && strat.analyzed > 0) {
+        // Only have a count — create placeholders
+        for (let i = 0; i < strat.analyzed; i++) {
+          analyzed.push({
+            symbol: `${stratName}-${i}`, signal: "hold", conviction: 0,
+            entryPrice: null, stopLoss: null, takeProfit: null, rationale: "",
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    date: r.date ?? "",
+    timestamp: r.timestamp ?? "",
+    screened,
+    analyzed,
     signals: r.signals ?? [],
     ordersPlaced: (r.orders_placed ?? r.ordersPlaced ?? []).map((o: any) => ({
       symbol: o.symbol, side: o.side, qty: o.qty ?? 0, price: o.price ?? 0,
@@ -666,6 +724,8 @@ export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
       positions: r.portfolio_snapshot?.positions ?? r.portfolioSnapshot?.positions ?? 0,
     },
     errors: r.errors ?? [],
+    strategies: typeof strategies === "object" && strategies ? strategies : undefined,
+    master_agent: r.master_agent ?? undefined,
   };
 }
 

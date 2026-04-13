@@ -32,14 +32,22 @@ function generateUpcomingEvents(): CalendarEvent[] {
     { event: "Housing Starts", impact: "low" as const, time: "8:30 AM" },
   ];
 
-  for (let i = 0; i < 7; i++) {
+  const usedNames = new Set<string>();
+  let templateIdx = 0;
+
+  for (let i = 0; i < 14 && events.length < 8; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
     if (d.getDay() === 0 || d.getDay() === 6) continue;
 
-    // 1-2 events per trading day
-    const dayEvents = templates.slice(i % templates.length, (i % templates.length) + (i % 2 === 0 ? 2 : 1));
-    for (const tmpl of dayEvents) {
+    // 1-2 events per trading day, skipping duplicates
+    const count = i % 2 === 0 ? 2 : 1;
+    let added = 0;
+    while (added < count && templateIdx < templates.length) {
+      const tmpl = templates[templateIdx];
+      templateIdx++;
+      if (usedNames.has(tmpl.event)) continue;
+      usedNames.add(tmpl.event);
       events.push({
         date: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
         time: tmpl.time,
@@ -48,6 +56,7 @@ function generateUpcomingEvents(): CalendarEvent[] {
         forecast: tmpl.forecast,
         previous: tmpl.previous,
       });
+      added++;
     }
   }
   return events.slice(0, 8);

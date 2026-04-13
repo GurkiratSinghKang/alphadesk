@@ -46,7 +46,7 @@ export default function RootLayout({
       style={{ backgroundColor: "#0a0a0f" }}
       suppressHydrationWarning
     >
-      <body className="h-full bg-background text-foreground">
+      <body className="h-full bg-background text-foreground" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

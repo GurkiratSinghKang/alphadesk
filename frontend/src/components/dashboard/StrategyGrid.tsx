@@ -93,7 +93,7 @@ const StrategyCard = React.memo(function StrategyCard({
                   {strategy.returnPct.toFixed(2)}%
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {strategy.positions} pos
+                  {strategy.positions} active
                 </span>
               </>
             )}
