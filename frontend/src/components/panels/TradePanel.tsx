@@ -23,6 +23,7 @@ import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useOptionsStore, type SelectedStrike } from "@/stores/options";
 import { placeOrder, cancelOrder } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 import type { PlaceOrderPayload } from "@/lib/api";
 import {
   formatCurrency,
@@ -95,6 +96,7 @@ function TradeBuilderTab() {
   const selectedStrikes = useOptionsStore((s) => s.selectedStrikes);
 
   const [legs, setLegs] = useState<TradeLeg[]>([]);
+  const { toast } = useToast();
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -206,8 +208,7 @@ function TradeBuilderTab() {
       const order = await placeOrder(payload);
       addOrder(order);
     } catch (err: any) {
-      // Show error toast — do NOT create phantom orders
-      console.error("Order placement failed:", err);
+      toast({ type: "error", message: "Order failed: " + (err?.message || "Unknown error") });
     } finally {
       setSubmitting(false);
     }
@@ -466,6 +467,7 @@ function OrdersTab() {
   const setOrders = usePortfolioStore((s) => s.setOrders);
   const updateOrderStatus = usePortfolioStore((s) => s.updateOrderStatus);
   const { setSelectedSymbol } = useMarketStore();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
 
@@ -512,8 +514,8 @@ function OrdersTab() {
     try {
       await cancelOrder(id);
       updateOrderStatus(id, "cancelled");
-    } catch (err) {
-      console.error("Failed to cancel order:", err);
+    } catch (err: any) {
+      toast({ type: "error", message: "Cancel failed: " + (err?.message || "Unknown error") });
     }
   };
 

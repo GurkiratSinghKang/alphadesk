@@ -121,6 +121,11 @@ export function PortfolioHero({
 }: PortfolioHeroProps) {
   const [period, setPeriod] = useState<Period>("1M");
 
+  // Only apply demo opacity when data has actually loaded (portfolioValue > 0 or explicit demo flag)
+  // This prevents a brief flash of opacity-40 on initial load when equity defaults to 0
+  const hasLoaded = portfolioValue > 0 || dayPnl !== 0;
+  const showDemoOpacity = isDemo && hasLoaded;
+
   const filteredHistory = useMemo(
     () => filterByPeriod(equityHistory, period),
     [equityHistory, period]
@@ -136,7 +141,7 @@ export function PortfolioHero({
           {/* Portfolio Equity */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Portfolio</p>
-            <p className={cn("text-display tabular-nums text-gradient", isDemo && "opacity-40")} title={isDemo ? "Demo data — connect Alpaca API for live values" : undefined}>
+            <p className={cn("text-display tabular-nums text-gradient", showDemoOpacity && "opacity-40")} title={showDemoOpacity ? "Demo data — connect Alpaca API for live values" : undefined}>
               {portfolioValue ? formatCurrency(portfolioValue) : "\u2014"}
             </p>
           </div>
@@ -151,9 +156,9 @@ export function PortfolioHero({
                 className={cn(
                   "text-xl font-semibold tabular-nums leading-none",
                   dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground",
-                  isDemo && "opacity-40"
+                  showDemoOpacity && "opacity-40"
                 )}
-                title={isDemo ? "Demo data — connect Alpaca API for live values" : undefined}
+                title={showDemoOpacity ? "Demo data — connect Alpaca API for live values" : undefined}
               >
                 {dayPnl > 0 ? "+" : ""}
                 {formatCurrency(dayPnl)}{" "}

@@ -118,15 +118,20 @@ export function ChartPanel() {
 
   // Try to fetch real bars from API (best-effort)
   const [apiBars, setApiBars] = useState<OHLCVBar[] | null>(null);
+  const [barsLoading, setBarsLoading] = useState(false);
 
   useEffect(() => {
     setApiBars(null);
+    setBarsLoading(true);
     getBars(selectedSymbol, timeframe)
       .then((bars) => {
         if (bars?.length) setApiBars(bars);
       })
       .catch(() => {
         // Fall back to demo data
+      })
+      .finally(() => {
+        setBarsLoading(false);
       });
   }, [selectedSymbol, timeframe]);
 
@@ -165,7 +170,7 @@ export function ChartPanel() {
   }, [selectedSymbol]);
 
   const displayData = apiBars ?? chartData;
-  const usingDemoData = apiBars === null;
+  const usingDemoData = !barsLoading && apiBars === null;
 
   const displayPrice = crosshairPrice ?? quote?.last ?? displayData[displayData.length - 1]?.close ?? 0;
   const change = quote?.change ?? (displayData.length > 1 ? displayData[displayData.length - 1].close - displayData[displayData.length - 2].close : 0);
@@ -254,9 +259,9 @@ export function ChartPanel() {
             {quote && (
               <div className="flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground mt-0.5">
                 <span>
-                  <span className="text-[var(--profit)]">{quote.bid.toFixed(2)}</span>
+                  <span className="text-foreground">{quote.bid.toFixed(2)}</span>
                   {" / "}
-                  <span className="text-[var(--loss)]">{quote.ask.toFixed(2)}</span>
+                  <span className="text-foreground">{quote.ask.toFixed(2)}</span>
                   <span className="ml-1.5 text-[#8a8a95]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
                 </span>
                 <span className="text-border">|</span>
@@ -419,7 +424,7 @@ export function ChartPanel() {
 
       {/* Chart — BUG #11: pass chartType, BUG #12: pass indicators */}
       <div className="flex-1 min-h-0 relative">
-        <div className={cn("absolute inset-0", usingDemoData && "opacity-40")}>
+        <div className={cn("absolute inset-0", usingDemoData && !barsLoading && "opacity-40")}>
         <TradingChart
           ref={chartHandleRef}
           data={displayData}

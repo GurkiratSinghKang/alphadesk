@@ -20,8 +20,8 @@ export function Sparkline({
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
-  // If all values are identical (flat line), show a label instead of rendering nothing
-  if (min === max) return <span className="text-[10px] text-muted-foreground italic">No history</span>;
+  // If all values are identical (flat line), render nothing — the strategy card already shows return %
+  if (min === max) return null;
   const range = max - min;
   const points = data
     .map((v, i) => {

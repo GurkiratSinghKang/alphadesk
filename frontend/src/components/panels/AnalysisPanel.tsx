@@ -503,7 +503,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
         <h4 className="text-[11px] font-medium text-muted-foreground mb-2">
           News
         </h4>
-        <div className="space-y-1.5">
+        <div className={cn("space-y-1.5", !analysis && "opacity-40")}>
           {newsItems.map((n, i) => (
             <div key={i} className="rounded px-2 py-1.5 text-xs">
               <div className="flex items-start gap-1.5">

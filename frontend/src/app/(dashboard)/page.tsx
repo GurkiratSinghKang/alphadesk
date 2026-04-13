@@ -212,7 +212,8 @@ function CommandCenter() {
           const perfData = await getPortfolioPerformance();
           if (cancelled) return;
           if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
-            const baseEquity = summary.equity > 0 ? summary.equity : 100000;
+            const freshEquity = usePortfolioStore.getState().summary.equity;
+            const baseEquity = freshEquity > 0 ? freshEquity : 100000;
             const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
             const startEquity = baseEquity - totalPnl;
             const history = perfData.equity_curve.map((pt, i: number) => {

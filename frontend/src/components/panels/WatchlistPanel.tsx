@@ -20,13 +20,37 @@ import type { Quote } from "@/types";
 
 // ─── Mock sparkline (tiny SVG) ───────────────────────────────
 
-function MiniSparkline({ trend }: { trend: number }) {
-  const points =
-    trend > 0
-      ? "0,12 4,10 8,11 12,8 16,6 20,7 24,4 28,3 32,2"
-      : trend < 0
-      ? "0,2 4,3 8,4 12,6 16,8 20,7 24,10 28,11 32,12"
-      : "0,7 4,6 8,8 12,7 16,7 20,6 24,8 28,7 32,7";
+function MiniSparkline({ trend, symbol }: { trend: number; symbol: string }) {
+  // Generate unique sparkline shape per symbol using a simple hash seed
+  let seed = 0;
+  for (let i = 0; i < symbol.length; i++) seed += symbol.charCodeAt(i) * (i + 1);
+
+  const rng = () => {
+    seed = (seed * 16807 + 11) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  const numPoints = 9;
+  const rawValues: number[] = [];
+  for (let i = 0; i < numPoints; i++) rawValues.push(rng());
+
+  // Bias toward upward or downward trend
+  const biased = rawValues.map((v, i) => {
+    const trendBias = trend > 0 ? (i / numPoints) * 0.4 : trend < 0 ? ((numPoints - i) / numPoints) * 0.4 : 0;
+    return v * 0.6 + trendBias;
+  });
+
+  const minV = Math.min(...biased);
+  const maxV = Math.max(...biased);
+  const range = maxV - minV || 1;
+
+  const points = biased
+    .map((v, i) => {
+      const x = (i / (numPoints - 1)) * 32;
+      const y = 12 - ((v - minV) / range) * 10 + 1;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
 
   const color = trend > 0 ? "var(--profit)" : trend < 0 ? "var(--loss)" : "var(--neutral)";
 
@@ -103,7 +127,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
         <div className="font-medium text-foreground tabular-nums">{symbol}</div>
       </div>
 
-      <MiniSparkline trend={hasRealChange ? change : 0} />
+      <MiniSparkline trend={hasRealChange ? change : 0} symbol={symbol} />
 
       <div className="w-16 text-right tabular-nums">
         {quote ? formatCurrency(quote.last) : "---"}
