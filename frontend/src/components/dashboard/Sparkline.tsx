@@ -20,7 +20,9 @@ export function Sparkline({
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
-  const range = max - min || 1;
+  // If all values are identical (flat line), don't render — it looks like a rendering bug
+  if (min === max) return null;
+  const range = max - min;
   const points = data
     .map((v, i) => {
       const x = (i / (data.length - 1)) * width;

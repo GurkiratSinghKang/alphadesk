@@ -125,7 +125,7 @@ export function PnlCalendarMini() {
               {new Date(hovered.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </p>
             <p className={cn("text-sm font-semibold tabular-nums mt-0.5", hovered.pnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
-              {hovered.pnl >= 0 ? "+" : ""}${Math.abs(hovered.pnl).toFixed(0)}
+              {hovered.pnl >= 0 ? "+" : "-"}{formatCurrency(Math.abs(hovered.pnl))}
             </p>
             <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
               <span>{hovered.trades} trades</span>

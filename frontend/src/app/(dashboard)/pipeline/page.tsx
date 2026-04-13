@@ -657,7 +657,7 @@ export default function PipelinePage() {
                       Total Trades
                     </p>
                     <p className="text-lg font-bold tabular-nums text-foreground">
-                      {perfData ? perfData.totalTrades + displayPositions.length : displayPositions.length}
+                      {perfData ? perfData.totalTrades : displayPositions.length}
                     </p>
                   </CardContent>
                 </Card>
@@ -701,7 +701,7 @@ export default function PipelinePage() {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                       Worst Trade
                     </p>
-                    <p className="text-lg font-bold tabular-nums text-[var(--loss)]">
+                    <p className={cn("text-lg font-bold tabular-nums", (perfData?.worstTrade || (worstTrade && (worstTrade.pnl ?? 0) < 0)) ? "text-[var(--loss)]" : "text-muted-foreground")}>
                       {perfData?.worstTrade
                         ? formatCurrency(perfData.worstTrade.pnl)
                         : worstTrade && (worstTrade.pnl ?? 0) < 0

@@ -379,14 +379,14 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
   const revGrowth = (-5 + rng() * 30).toFixed(1);
   const opMargin = (10 + rng() * 25).toFixed(1);
   const metrics = [
-    { label: "P/E Ratio", value: `${peRatio}x`, benchmark: `${(15 + rng() * 20).toFixed(1)}x` },
-    { label: "P/S Ratio", value: `${(3 + rng() * 8).toFixed(1)}x`, benchmark: `${(3 + rng() * 6).toFixed(1)}x` },
-    { label: "EV/EBITDA", value: `${(12 + rng() * 18).toFixed(1)}x`, benchmark: `${(10 + rng() * 14).toFixed(1)}x` },
-    { label: "Profit Margin", value: `${opMargin}%`, benchmark: `${(8 + rng() * 20).toFixed(1)}%` },
-    { label: "ROE", value: `${roe}%`, benchmark: `${(10 + rng() * 25).toFixed(1)}%` },
-    { label: "Debt/Equity", value: `${debtEquity}x`, benchmark: `${(0.3 + rng() * 1.2).toFixed(2)}x` },
-    { label: "FCF Yield", value: `${(1 + rng() * 5).toFixed(1)}%`, benchmark: `${(2 + rng() * 4).toFixed(1)}%` },
-    { label: "Revenue Growth", value: `${Number(revGrowth) >= 0 ? "+" : ""}${revGrowth}%`, benchmark: `+${(3 + rng() * 12).toFixed(1)}%` },
+    { label: "P/E Ratio", value: `${peRatio}x` },
+    { label: "P/S Ratio", value: `${(3 + rng() * 8).toFixed(1)}x` },
+    { label: "EV/EBITDA", value: `${(12 + rng() * 18).toFixed(1)}x` },
+    { label: "Profit Margin", value: `${opMargin}%` },
+    { label: "ROE", value: `${roe}%` },
+    { label: "Debt/Equity", value: `${debtEquity}x` },
+    { label: "FCF Yield", value: `${(1 + rng() * 5).toFixed(1)}%` },
+    { label: "Revenue Growth", value: `${Number(revGrowth) >= 0 ? "+" : ""}${revGrowth}%` },
   ];
 
   return (
@@ -422,7 +422,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
               <div className="flex items-center gap-3">
                 <span className="text-foreground tabular-nums">{m.value}</span>
                 <span className="text-muted-foreground tabular-nums text-[10px]">
-                  vs {m.benchmark}
+                  (est.)
                 </span>
               </div>
             </div>
@@ -450,10 +450,17 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
       </div>
     );
   }
+  // Vary estimated flow amounts by symbol charCode seed so different symbols show different amounts
+  let flowSeed = 0;
+  for (let c = 0; c < symbol.length; c++) flowSeed += symbol.charCodeAt(c);
+  const flowRng = () => { flowSeed = (flowSeed * 16807) % 2147483647; return (flowSeed - 1) / 2147483646; };
+  const callSweep = (1.5 + flowRng() * 3.0).toFixed(1);
+  const putBuy = (0.5 + flowRng() * 1.5).toFixed(1);
+  const unusualVol = (400 + Math.floor(flowRng() * 1200));
   const flowItems = [
-    { text: `Large call sweep ${symbol} (Estimated)`, type: "bullish" as const, size: "$2.4M" },
-    { text: `Put buying in ${symbol} (Estimated)`, type: "bearish" as const, size: "$1.1M" },
-    { text: `Unusual volume in ${symbol} calls (Estimated)`, type: "bullish" as const, size: "$890K" },
+    { text: `Large call sweep ${symbol} (Estimated)`, type: "bullish" as const, size: `$${callSweep}M` },
+    { text: `Put buying in ${symbol} (Estimated)`, type: "bearish" as const, size: `$${putBuy}M` },
+    { text: `Unusual volume in ${symbol} calls (Estimated)`, type: "bullish" as const, size: `$${unusualVol}K` },
   ];
   const newsItems = [
     { headline: `${symbol}: Analysts raise price target following earnings beat`, sentiment: "positive" as const, time: "2h ago" },

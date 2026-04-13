@@ -129,6 +129,18 @@ export function useWebSocket(): UseWebSocketReturn {
     };
   }, [connect]);
 
+  // Reset retry counter and reconnect when the tab becomes visible again
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && retriesRef.current >= MAX_RETRIES) {
+        retriesRef.current = 0;
+        connect();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [connect]);
+
   const subscribe = useCallback((channel: WsChannel) => {
     subscribedChannels.current.add(channel);
     if (wsRef.current?.readyState === WebSocket.OPEN) {

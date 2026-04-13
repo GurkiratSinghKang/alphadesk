@@ -40,6 +40,7 @@ export function formatCurrency(value: number, compact = false): string {
 }
 
 export function formatPercent(value: number): string {
+  if (Math.abs(value) < 0.005) return "0.00%";
   return percentFmt.format(value / 100);
 }
 

@@ -25,7 +25,7 @@ describe('formatPercent', () => {
     expect(formatPercent(-3.2)).toBe('-3.20%');
   });
   it('formats zero', () => {
-    expect(formatPercent(0)).toBe('+0.00%');
+    expect(formatPercent(0)).toBe('0.00%');
   });
 });
 

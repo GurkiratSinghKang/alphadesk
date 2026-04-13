@@ -29,8 +29,10 @@ describe('Keyboard Shortcuts', () => {
 
     it('has number keys for chart timeframes', () => {
       expect(DEFAULT_BINDINGS['1']).toBe('chart:timeframe:1m');
-      expect(DEFAULT_BINDINGS['5']).toBe('chart:timeframe:D');
-      expect(DEFAULT_BINDINGS['6']).toBe('chart:timeframe:W');
+      expect(DEFAULT_BINDINGS['5']).toBe('chart:timeframe:4H');
+      expect(DEFAULT_BINDINGS['6']).toBe('chart:timeframe:D');
+      expect(DEFAULT_BINDINGS['7']).toBe('chart:timeframe:W');
+      expect(DEFAULT_BINDINGS['8']).toBe('chart:timeframe:M');
     });
 
     it('has j/k for watchlist navigation', () => {
@@ -103,9 +105,9 @@ describe('Keyboard Shortcuts', () => {
       }
     });
 
-    it('Chart group has 6 timeframe items', () => {
+    it('Chart group has 8 timeframe items', () => {
       const chart = SHORTCUT_GROUPS.find(g => g.name === 'Chart');
-      expect(chart?.items.length).toBe(6);
+      expect(chart?.items.length).toBe(8);
     });
 
     it('Global group contains the command palette action', () => {

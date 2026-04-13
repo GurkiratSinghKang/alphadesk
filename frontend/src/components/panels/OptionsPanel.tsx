@@ -97,17 +97,24 @@ function generateChain(spotPrice: number, _expiry: string): ChainRow[] {
 function generateExpirations(): string[] {
   const dates: string[] = [];
   const now = new Date();
+  // Market close is 16:00 ET — after that, today's expiry is no longer valid
+  const marketCloseToday = new Date();
+  marketCloseToday.setHours(16, 0, 0, 0);
+  const pastMarketClose = now > marketCloseToday;
+
   for (let w = 0; w < 12; w++) {
     const d = new Date(now);
     // Calculate days until next Friday (day 5). If today is Sat/Sun, skip to next week's Friday.
     let daysUntilFriday = (5 - d.getDay() + 7) % 7;
     if (daysUntilFriday === 0 && w === 0) {
-      // Today is Friday — include today as the first expiry
+      // Today is Friday — include today only if before market close
       daysUntilFriday = 0;
     }
     d.setDate(d.getDate() + daysUntilFriday + w * 7);
-    // Only include future dates (skip if somehow in the past)
-    if (d >= now || d.toDateString() === now.toDateString()) {
+    // Skip dates in the past, and skip today if past market close
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday && pastMarketClose) continue;
+    if (d >= now || isToday) {
       dates.push(d.toISOString().slice(0, 10));
     }
   }
@@ -189,6 +196,7 @@ export function OptionsPanel() {
     const strikeMap = new Map<number, Partial<ChainRow>>();
     for (const c of (data.calls ?? [])) {
       const existing = strikeMap.get(c.strike) ?? { strike: c.strike };
+      // Backend returns IV as a decimal (e.g. 0.25 = 25%), convert to percentage for display
       existing.call = {
         last: c.last, bid: c.bid, ask: c.ask,
         vol: c.volume, oi: c.oi, iv: c.iv * 100, delta: c.delta,
@@ -197,6 +205,7 @@ export function OptionsPanel() {
     }
     for (const p of (data.puts ?? [])) {
       const existing = strikeMap.get(p.strike) ?? { strike: p.strike };
+      // Backend returns IV as a decimal (e.g. 0.25 = 25%), convert to percentage for display
       existing.put = {
         last: p.last, bid: p.bid, ask: p.ask,
         vol: p.volume, oi: p.oi, iv: p.iv * 100, delta: p.delta,

@@ -7,9 +7,9 @@ import { ChartPanel } from "@/components/panels/ChartPanel";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { OptionsPanel } from "@/components/panels/OptionsPanel";
 import { TradePanel } from "@/components/panels/TradePanel";
-import type { TimeFrame } from "@/types";
 
-const TOPBAR_H = 72; // px - TopBar h-11 (44px) + StatusStrip h-7 (28px)
+// TopBar h-11 (44px) + StatusStrip h-7 (28px) = 72px
+const TOPBAR_H = 72;
 const WATCHLIST_W = 240;
 const ANALYSIS_W = 300;
 const TRADE_PANEL_W = 380;
@@ -21,29 +21,8 @@ export default function TradePage() {
   const startY = useRef(0);
   const startHeight = useRef(0);
 
-  // NOTE: keys 1-6 overlap with useKeyboardShortcuts (global alphadesk:shortcut events).
-  // Keys 7-8 (W/M timeframes) are trade-page-only extras. Guard against input fields and
-  // drawing mode to avoid firing during annotation interactions.
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-      const tfMap: Record<string, TimeFrame> = {
-        "1": "1m", "2": "5m", "3": "15m", "4": "1H",
-        "5": "4H", "6": "D", "7": "W", "8": "M",
-      };
-      if (tfMap[e.key]) {
-        window.dispatchEvent(
-          new CustomEvent("timeframeChange", { detail: { timeframe: tfMap[e.key] } })
-        );
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+  // Timeframe shortcuts 1-8 are handled globally by useKeyboardShortcuts,
+  // which dispatches alphadesk:shortcut events consumed by ChartPanel.
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;

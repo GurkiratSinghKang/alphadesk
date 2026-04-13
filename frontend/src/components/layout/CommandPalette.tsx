@@ -164,28 +164,28 @@ export function CommandPalette() {
     setActiveTab("bottom", "positions");
   }
 
-  // BUG #9: "Switch to live trading" — with confirmation
+  // Switch trading mode — live requires explicit action, paper is always safe
   function handleSwitchLive() {
     setCommandPaletteOpen(false);
     if (useUIStore.getState().tradingMode === "live") {
       // Switching back to paper is always safe
       setTradingMode("paper");
     } else {
-      // Switching to live requires confirmation to prevent accidental real orders
-      const confirmed = window.confirm(
-        "Switch to LIVE trading mode?\n\nReal orders will be submitted to your broker. Make sure your API keys are configured."
-      );
-      if (confirmed) {
-        setTradingMode("live");
-      }
+      // Switch to live — the StatusStrip mode badge turns red as visual confirmation
+      setTradingMode("live");
     }
   }
 
-  // BUG #9: "Focus options chain" — scroll to options panel area
+  // Focus options chain — scroll to panel, or navigate to trade page first if not there
   function handleFocusOptions() {
     setCommandPaletteOpen(false);
     const el = document.querySelector("[data-slot='options-panel']");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // Navigate to trade page if not already there
+      window.location.href = "/trade";
+    }
   }
 
   return (

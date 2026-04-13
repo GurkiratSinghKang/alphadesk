@@ -248,14 +248,14 @@ function CommandCenter() {
   const portfolioValue = Number.isFinite(activeSummary.equity) && activeSummary.equity > 0 ? activeSummary.equity : 0;
   const dayPnl = Number.isFinite(activeSummary.dayPnl) ? activeSummary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(activeSummary.dayPnlPct) ? activeSummary.dayPnlPct : 0;
-  const isDemo = !!(activeSummary as any).is_demo;
+  const isDemo = !!activeSummary.is_demo;
 
-  // Sparkline data — flat lines since we don't have real intraday index data
+  // Sparkline data — empty arrays since we don't have real intraday index data.
+  // The Sparkline component returns null for flat/empty data, avoiding misleading flat lines.
   const sparkData = useMemo(() => {
-    const flat = Array(20).fill(100);
     const result: Record<string, number[]> = {};
     for (const idx of indices) {
-      result[idx.symbol] = flat;
+      result[idx.symbol] = [];
     }
     return result;
   }, [indices]);

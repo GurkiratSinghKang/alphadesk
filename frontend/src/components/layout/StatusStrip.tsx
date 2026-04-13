@@ -35,7 +35,7 @@ export function StatusStrip() {
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">Regime</span>
-        <span className={cn("font-medium", regime ? regimeColor : "text-[#8a8a95]")}>
+        <span className={cn("font-medium truncate max-w-[160px]", regime ? regimeColor : "text-[#8a8a95]")}>
           {regime?.regime ?? "---"}
           {regimeData?.is_demo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
         </span>

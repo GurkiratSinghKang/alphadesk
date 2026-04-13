@@ -126,9 +126,9 @@ describe('Sparkline component', () => {
 
   // ─── Flat data (all-same values) ─────────────────────────────
 
-  it('renders without crashing when all data values are identical', () => {
+  it('returns null when all data values are identical (flat line)', () => {
     const { container } = render(<Sparkline data={[5, 5, 5, 5, 5]} color="#22c55e" />);
-    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('svg')).toBeNull();
   });
 
   // ─── Color prop propagated to polyline stroke ─────────────────
