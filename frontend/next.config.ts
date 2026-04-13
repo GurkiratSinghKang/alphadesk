@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns"],
   },
+  async redirects() {
+    return [
+      { source: "/dashboard", destination: "/", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

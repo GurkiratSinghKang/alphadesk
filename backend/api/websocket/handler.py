@@ -87,7 +87,11 @@ class ConnectionManager:
             logger.info("Cleaned up %d dead WebSocket clients (%d active)", len(dead), count)
 
     async def _send(self, ws: WebSocket, data: dict[str, Any]) -> None:
-        await ws.send_text(orjson.dumps(data).decode())
+        try:
+            await ws.send_text(orjson.dumps(data).decode())
+        except RuntimeError:
+            # WebSocket already closed — silently ignore
+            pass
 
 
 # Singleton manager

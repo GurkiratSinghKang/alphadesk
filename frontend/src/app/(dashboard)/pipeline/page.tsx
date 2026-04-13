@@ -170,23 +170,25 @@ export default function PipelinePage() {
       }
       if (h.status === "fulfilled") setHistory(Array.isArray(h.value) ? h.value.slice(0, 7) : []);
 
-      // Try loading today's run, fall back to latest run from history
-      const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
-      try {
-        const run = await getPipelineRun(today);
-        setTodayRun(run);
-      } catch {
-        // No run today — try loading the most recent run from history
-        if (h.status === "fulfilled" && Array.isArray(h.value) && h.value.length > 0) {
-          const latestDate = h.value[0]?.date;
-          if (latestDate && latestDate !== today) {
-            try {
-              const latestRun = await getPipelineRun(latestDate);
-              setTodayRun(latestRun);
-            } catch {
-              // no recent run available
-            }
+      // Load the most recent pipeline run — try today first, then latest from history
+      if (h.status === "fulfilled" && Array.isArray(h.value) && h.value.length > 0) {
+        const latestDate = h.value[0]?.date;
+        if (latestDate) {
+          try {
+            const run = await getPipelineRun(latestDate);
+            setTodayRun(run);
+          } catch {
+            // no run data available for latest date
           }
+        }
+      } else {
+        // No history available — try today's date as last resort
+        const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
+        try {
+          const run = await getPipelineRun(today);
+          setTodayRun(run);
+        } catch {
+          // no run today either
         }
       }
     } catch {

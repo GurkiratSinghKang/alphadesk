@@ -261,10 +261,16 @@ export function ChartPanel() {
             {quote && (
               <div className="flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground mt-0.5">
                 <span>
-                  <span className="text-foreground">{(quote.bid ?? 0).toFixed(2)}</span>
-                  {" / "}
-                  <span className="text-foreground">{(quote.ask ?? 0).toFixed(2)}</span>
-                  <span className="ml-1.5 text-[#8a8a95]">spread: {((quote.ask ?? 0) - (quote.bid ?? 0)).toFixed(2)}</span>
+                  {quote.bid && quote.ask ? (
+                    <>
+                      <span className="text-foreground">{quote.bid.toFixed(2)}</span>
+                      {" / "}
+                      <span className="text-foreground">{quote.ask.toFixed(2)}</span>
+                      <span className="ml-1.5 text-[#8a8a95]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">Mkt Closed</span>
+                  )}
                 </span>
                 <span className="text-border">|</span>
                 <span>Vol: {formatNumber(quote.volume ?? 0, true)}</span>
