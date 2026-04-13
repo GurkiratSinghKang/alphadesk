@@ -123,27 +123,26 @@ async def get_indices() -> IndicesResponse:
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
         async with httpx.AsyncClient(timeout=10) as client:
+            # Fetch snapshots in one batch — much faster and gives accurate prev_close
+            syms = [d["symbol"] for d in _DEMO_INDICES if d["symbol"] != "VIX"]
+            snap_resp = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/snapshots?symbols={','.join(syms)}",
+                headers=headers,
+            )
+            snapshots = snap_resp.json() if snap_resp.status_code == 200 else {}
+
             for demo in _DEMO_INDICES:
                 sym = demo["symbol"]
                 if sym == "VIX":
-                    # VIX index is not tradable on Alpaca; use demo fallback
                     indices.append(IndexData(**demo, is_demo=True))
                     continue
-                try:
-                    bar_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym}/bars?timeframe=1Day&limit=2&feed=iex",
-                        headers=headers,
-                    )
-                    trade_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
-                        headers=headers,
-                    )
-                    if bar_resp.status_code == 200 and trade_resp.status_code == 200:
-                        bars = bar_resp.json().get("bars", [])
-                        price = trade_resp.json().get("trade", {}).get("p", 0)
-                        prev_close = bars[-2]["c"] if len(bars) >= 2 else bars[0]["c"] if bars else demo["prev_close"]
+                snap = snapshots.get(sym)
+                if snap:
+                    price = snap.get("latestTrade", {}).get("p", 0)
+                    prev_close = snap.get("prevDailyBar", {}).get("c", 0)
+                    if price and prev_close:
                         change = round(price - prev_close, 2)
-                        change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+                        change_pct = round((change / prev_close) * 100, 2)
                         indices.append(IndexData(
                             symbol=sym, name=demo["name"],
                             price=round(price, 2), change=change,
@@ -152,8 +151,7 @@ async def get_indices() -> IndicesResponse:
                         ))
                     else:
                         indices.append(IndexData(**demo, is_demo=True))
-                except Exception:
-                    logger.warning("Failed to fetch live data for %s, using demo fallback", sym, exc_info=True)
+                else:
                     indices.append(IndexData(**demo, is_demo=True))
     except Exception:
         logger.warning("Failed to fetch index data from Alpaca, falling back to demo", exc_info=True)
@@ -192,38 +190,33 @@ async def get_sectors() -> SectorsResponse:
         }
         sectors: list[SectorPerformance] = []
         async with httpx.AsyncClient(timeout=10) as client:
+            # Fetch all sector ETF snapshots in one batch
+            etf_syms = list(_SECTOR_ETFS.keys())
+            snap_resp = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/snapshots?symbols={','.join(etf_syms)}",
+                headers=headers,
+            )
+            snapshots = snap_resp.json() if snap_resp.status_code == 200 else {}
+
             for etf_sym, info in _SECTOR_ETFS.items():
-                try:
-                    trade_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/trades/latest",
-                        headers=headers,
-                    )
-                    bar_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/bars?timeframe=1Day&limit=2&feed=iex",
-                        headers=headers,
-                    )
-                    if trade_resp.status_code == 200 and bar_resp.status_code == 200:
-                        price = trade_resp.json().get("trade", {}).get("p", 0)
-                        bars = bar_resp.json().get("bars", [])
-                        prev_close = bars[-2]["c"] if len(bars) >= 2 else bars[0]["c"] if bars else price
-                        change_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
+                snap = snapshots.get(etf_sym)
+                if snap:
+                    price = snap.get("latestTrade", {}).get("p", 0)
+                    prev_close = snap.get("prevDailyBar", {}).get("c", 0)
+                    if price and prev_close:
+                        change_pct = round((price - prev_close) / prev_close * 100, 2)
                         sectors.append(SectorPerformance(
                             sector=info["sector"],
                             change_pct=change_pct,
-                            ytd_pct=0.0,  # YTD requires longer history; omit for now
+                            ytd_pct=0.0,
                             leader=info["leader"],
-                            leader_change_pct=change_pct,  # approximate with ETF change
+                            leader_change_pct=change_pct,
                         ))
-                    else:
-                        # Fallback for this single ETF
-                        demo = next((d for d in _DEMO_SECTORS if d["sector"] == info["sector"]), None)
-                        if demo:
-                            sectors.append(SectorPerformance(**demo))
-                except Exception:
-                    logger.warning("Failed to fetch sector data for %s", etf_sym, exc_info=True)
-                    demo = next((d for d in _DEMO_SECTORS if d["sector"] == info["sector"]), None)
-                    if demo:
-                        sectors.append(SectorPerformance(**demo))
+                        continue
+                # Fallback for this ETF
+                demo = next((d for d in _DEMO_SECTORS if d["sector"] == info["sector"]), None)
+                if demo:
+                    sectors.append(SectorPerformance(**demo))
 
         if sectors:
             return SectorsResponse(sectors=sectors, as_of=datetime.now(timezone.utc), is_demo=False)
@@ -250,41 +243,27 @@ async def get_regime() -> RegimeResponse:
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
         async with httpx.AsyncClient(timeout=10) as client:
-            # Fetch SPY latest trade + bars for previous close
-            spy_trade_resp = await client.get(
-                "https://data.alpaca.markets/v2/stocks/SPY/trades/latest",
+            # Use snapshot API for accurate prev_close
+            snap_resp = await client.get(
+                "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
                 headers=headers,
             )
-            spy_bar_resp = await client.get(
-                "https://data.alpaca.markets/v2/stocks/SPY/bars?timeframe=1Day&limit=2&feed=iex",
-                headers=headers,
-            )
+            if snap_resp.status_code != 200:
+                raise ValueError("Failed to fetch snapshot data from Alpaca")
 
-            if spy_trade_resp.status_code != 200 or spy_bar_resp.status_code != 200:
-                raise ValueError("Failed to fetch SPY data from Alpaca")
+            snapshots = snap_resp.json()
+            spy_snap = snapshots.get("SPY", {})
+            spy_price = spy_snap.get("latestTrade", {}).get("p", 0)
+            spy_prev_close = spy_snap.get("prevDailyBar", {}).get("c", 0)
+            if not spy_price or not spy_prev_close:
+                raise ValueError("Incomplete SPY snapshot data")
 
-            spy_price = spy_trade_resp.json().get("trade", {}).get("p", 0)
-            spy_bars = spy_bar_resp.json().get("bars", [])
-            spy_prev_close = spy_bars[-2]["c"] if len(spy_bars) >= 2 else spy_bars[0]["c"] if spy_bars else spy_price
-
-            # Try to get VIX from the indices that are already fetched, or use a fallback
-            # VIX is not tradable on Alpaca, so we fetch VIXY (VIX Short-Term ETF) as proxy
-            # or fall back to a default threshold
+            # Use VIXY from the same snapshot batch
             vix_level = 18.0  # default mid-range
-            try:
-                # Use UVXY bars as a VIX proxy - if price is elevated, vol is high
-                vix_bar_resp = await client.get(
-                    "https://data.alpaca.markets/v2/stocks/VIXY/trades/latest",
-                    headers=headers,
-                )
-                if vix_bar_resp.status_code == 200:
-                    vixy_price = vix_bar_resp.json().get("trade", {}).get("p", 0)
-                    # VIXY roughly tracks VIX; use it as an approximation
-                    # When VIXY > 20, VIX is typically elevated
-                    if vixy_price > 0:
-                        vix_level = vixy_price
-            except Exception:
-                logger.debug("Could not fetch VIXY for VIX proxy")
+            vixy_snap = snapshots.get("VIXY", {})
+            vixy_price = vixy_snap.get("latestTrade", {}).get("p", 0)
+            if vixy_price > 0:
+                vix_level = vixy_price
 
             # Determine regime
             spy_up = spy_price > spy_prev_close
