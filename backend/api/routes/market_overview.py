@@ -123,8 +123,9 @@ async def get_indices() -> IndicesResponse:
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
         async with httpx.AsyncClient(timeout=10) as client:
-            # Fetch snapshots in one batch — much faster and gives accurate prev_close
+            # Fetch snapshots in one batch — include VIXY as VIX proxy
             syms = [d["symbol"] for d in _DEMO_INDICES if d["symbol"] != "VIX"]
+            syms.append("VIXY")  # VIX proxy ETF
             snap_resp = await client.get(
                 f"https://data.alpaca.markets/v2/stocks/snapshots?symbols={','.join(syms)}",
                 headers=headers,
@@ -134,6 +135,22 @@ async def get_indices() -> IndicesResponse:
             for demo in _DEMO_INDICES:
                 sym = demo["symbol"]
                 if sym == "VIX":
+                    # Use VIXY snapshot as VIX proxy for consistency with regime endpoint
+                    vixy_snap = snapshots.get("VIXY")
+                    if vixy_snap:
+                        vixy_price = vixy_snap.get("latestTrade", {}).get("p", 0)
+                        vixy_prev = vixy_snap.get("prevDailyBar", {}).get("c", 0)
+                        if vixy_price and vixy_prev:
+                            change = round(vixy_price - vixy_prev, 2)
+                            change_pct = round((change / vixy_prev) * 100, 2)
+                            indices.append(IndexData(
+                                symbol="VIX", name="VIX (VIXY proxy)",
+                                price=round(vixy_price, 2), change=change,
+                                change_pct=change_pct, prev_close=round(vixy_prev, 2),
+                                is_demo=False,
+                            ))
+                            continue
+                    # Fallback to demo VIX if VIXY unavailable
                     indices.append(IndexData(**demo, is_demo=True))
                     continue
                 snap = snapshots.get(sym)
@@ -198,6 +215,23 @@ async def get_sectors() -> SectorsResponse:
             )
             snapshots = snap_resp.json() if snap_resp.status_code == 200 else {}
 
+            # Fetch YTD start-of-year bars for all ETFs in one pass
+            current_year = datetime.now(timezone.utc).year
+            ytd_start = f"{current_year}-01-02T00:00:00Z"
+            ytd_prices: dict[str, float] = {}
+            for etf_sym in etf_syms:
+                try:
+                    ytd_resp = await client.get(
+                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/bars?timeframe=1Day&start={ytd_start}&limit=1",
+                        headers=headers,
+                    )
+                    if ytd_resp.status_code == 200:
+                        bars = ytd_resp.json().get("bars", [])
+                        if bars:
+                            ytd_prices[etf_sym] = bars[0]["c"]
+                except Exception:
+                    pass
+
             for etf_sym, info in _SECTOR_ETFS.items():
                 snap = snapshots.get(etf_sym)
                 if snap:
@@ -205,10 +239,13 @@ async def get_sectors() -> SectorsResponse:
                     prev_close = snap.get("prevDailyBar", {}).get("c", 0)
                     if price and prev_close:
                         change_pct = round((price - prev_close) / prev_close * 100, 2)
+                        # Compute YTD from Jan 2 close
+                        jan_close = ytd_prices.get(etf_sym)
+                        ytd_pct = round((price - jan_close) / jan_close * 100, 2) if jan_close and jan_close > 0 else 0.0
                         sectors.append(SectorPerformance(
                             sector=info["sector"],
                             change_pct=change_pct,
-                            ytd_pct=0.0,
+                            ytd_pct=ytd_pct,
                             leader=info["leader"],
                             leader_change_pct=change_pct,
                         ))

@@ -318,7 +318,7 @@ async def _execute_approved_orders(
                 strategy=order.get("strategy", "unknown"),
             )
 
-            # Poll for actual fill price and update the ledger
+            # Poll for actual fill price and recalculate stop/take-profit
             if order_id:
                 fill_price = await _poll_fill_price(client, order_id)
                 if fill_price is not None:
@@ -327,6 +327,24 @@ async def _execute_approved_orders(
                         "Updated %s ledger entry_price to fill price $%.2f",
                         sym, fill_price,
                     )
+                    # Recalculate stop/take-profit relative to actual fill
+                    old_entry = order.get("entry_price", 0)
+                    old_stop = order.get("stop_loss", 0)
+                    old_tp = order.get("take_profit", 0)
+                    if old_entry and old_entry > 0:
+                        stop_pct = (old_entry - old_stop) / old_entry if old_stop else 0.05
+                        tp_pct = (old_tp - old_entry) / old_entry if old_tp else 0.10
+                    else:
+                        stop_pct = 0.05
+                        tp_pct = 0.10
+                    order["stop_loss"] = round(fill_price * (1 - stop_pct), 2)
+                    order["take_profit"] = round(fill_price * (1 + tp_pct), 2)
+                    logger.info(
+                        "Recalculated %s levels from fill $%.2f: "
+                        "stop=$%.2f, target=$%.2f",
+                        sym, fill_price,
+                        order["stop_loss"], order["take_profit"],
+                    )
                 else:
                     logger.warning(
                         "Could not get fill price for %s order %s; "
@@ -334,10 +352,16 @@ async def _execute_approved_orders(
                         sym, order_id,
                     )
 
+            # Compute effective stop_loss: use order value, fall back to 5% below entry
+            effective_stop = order.get("stop_loss")
+            if not effective_stop or effective_stop <= 0:
+                effective_entry = order.get("entry_price", 0)
+                effective_stop = round(effective_entry * 0.95, 2) if effective_entry > 0 else None
+
             # Place stop-loss order on Alpaca immediately
-            if order.get("stop_loss"):
+            if effective_stop and effective_stop > 0:
                 try:
-                    stop_oid = await _place_stop_order(client, sym, shares, order["stop_loss"])
+                    stop_oid = await _place_stop_order(client, sym, shares, effective_stop)
                     logger.info("Stop-loss order placed for %s: %s", sym, stop_oid.get("id") if isinstance(stop_oid, dict) else stop_oid)
                 except Exception as e:
                     logger.error("Stop-loss order failed for %s: %s", sym, e)

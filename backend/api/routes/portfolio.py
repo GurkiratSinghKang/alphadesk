@@ -135,11 +135,17 @@ def _demo_performance(period: str) -> PerformanceMetrics:
     equity_curve = []
     cumulative = 0.0
     daily_pnls = []
+    today = date.today()
     for i in range(n_points):
         daily = rng.gauss(35, 200)  # mean $35/day, stdev $200
         daily_pnls.append(daily)
         cumulative += daily
-        equity_curve.append({"index": i, "cumulative_pnl": round(cumulative, 2)})
+        d = today - timedelta(days=(n_points - 1 - i))
+        equity_curve.append({
+            "date": d.isoformat(),
+            "value": round(cumulative, 2),
+            "cumulative_pnl": round(cumulative, 2),
+        })
 
     wins = [p for p in daily_pnls if p > 0]
     losses = [p for p in daily_pnls if p < 0]
@@ -330,6 +336,18 @@ async def get_performance(
         gross_losses = abs(float(np.sum(losses))) if len(losses) else 1
         profit_factor = gross_wins / gross_losses if gross_losses > 0 else None
 
+        # Build equity curve with date and cumulative_pnl
+        today = date.today()
+        n_points = len(cumulative)
+        equity_curve_data = []
+        for i, c in enumerate(cumulative):
+            d = today - timedelta(days=(n_points - 1 - i))
+            equity_curve_data.append({
+                "date": d.isoformat(),
+                "value": round(float(c), 2),
+                "cumulative_pnl": round(float(c), 2),
+            })
+
         return PerformanceMetrics(
             period=period,
             total_return=round(total_return, 2),
@@ -344,10 +362,7 @@ async def get_performance(
             best_trade=round(float(np.max(returns)), 2) if len(returns) else None,
             worst_trade=round(float(np.min(returns)), 2) if len(returns) else None,
             total_trades=len(trades),
-            equity_curve=[
-                {"index": i, "cumulative_pnl": round(float(c), 2)}
-                for i, c in enumerate(cumulative)
-            ],
+            equity_curve=equity_curve_data,
         )
     except Exception:
         logger.warning("Failed to compute performance from DB, falling back to demo", exc_info=True)

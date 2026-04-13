@@ -568,12 +568,35 @@ async def _check_duplicate_order(request: CreateOrderRequest) -> None:
 
 
 async def _get_current_price(symbol: str) -> float:
-    """Get current price for notional calculation."""
+    """Get current price for notional calculation.
+
+    Checks Redis cache first, then falls back to Alpaca market data API.
+    Returns 0.0 only if both sources fail.
+    """
     from core.redis import cache_get
     cached = await cache_get(f"quote:{symbol}")
     if cached and cached.get("last"):
         return float(cached["last"])
-    # Fallback: use a reasonable estimate
+
+    # Fallback: fetch latest trade from Alpaca
+    try:
+        from core.config import settings
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                price = resp.json().get("trade", {}).get("p", 0)
+                if price and price > 0:
+                    return float(price)
+    except Exception:
+        logger.warning("Failed to fetch price from Alpaca for %s", symbol)
+
     return 0.0
 
 

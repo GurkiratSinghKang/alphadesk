@@ -81,6 +81,10 @@ async def cache_get(key: str) -> Any | None:
 async def cache_set(key: str, data: Any, ttl_seconds: int = 300) -> None:
     try:
         r = await get_redis()
-        await r.set(key, orjson.dumps(data).decode(), ex=ttl_seconds)
+        if ttl_seconds <= 0:
+            # No expiry — persist indefinitely (survives restarts)
+            await r.set(key, orjson.dumps(data).decode())
+        else:
+            await r.set(key, orjson.dumps(data).decode(), ex=ttl_seconds)
     except Exception:
         pass
