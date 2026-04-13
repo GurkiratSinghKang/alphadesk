@@ -167,15 +167,28 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         volumeSeriesRef.current?.update(toChartVolume(bar));
       },
       updateLastClose: (close: number) => {
-        // Update the last bar's close price without changing the timestamp
-        // This prevents the chart from jumping when WebSocket ticks arrive
-        if (lastBarRef.current) {
-          const updated = { ...lastBarRef.current, close, high: Math.max(lastBarRef.current.high, close), low: Math.min(lastBarRef.current.low, close) };
+        // Get today's date as a Unix timestamp at midnight UTC (for daily bars)
+        const now = new Date();
+        const todayTs = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 1000);
+        const lastBar = lastBarRef.current;
+
+        if (lastBar && lastBar.time === todayTs) {
+          // Today's bar exists — update it in place
+          const updated = { ...lastBar, close, high: Math.max(lastBar.high, close), low: Math.min(lastBar.low, close) };
           lastBarRef.current = updated;
           if (chartType === "candle") {
             mainSeriesRef.current?.update(toChartCandle(updated));
           } else {
             mainSeriesRef.current?.update(toLineData(updated));
+          }
+        } else {
+          // Today's bar doesn't exist yet — create a new one
+          const newBar: OHLCVBar = { time: todayTs, open: close, high: close, low: close, close, volume: 0 };
+          lastBarRef.current = newBar;
+          if (chartType === "candle") {
+            mainSeriesRef.current?.update(toChartCandle(newBar));
+          } else {
+            mainSeriesRef.current?.update(toLineData(newBar));
           }
         }
       },
