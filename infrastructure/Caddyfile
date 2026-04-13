@@ -1,4 +1,20 @@
 {$DOMAIN:localhost} {
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{$DOMAIN:localhost} ws://{$DOMAIN:localhost}; frame-ancestors 'none'"
+        -Server
+        -X-Powered-By
+    }
+
+    # Compression
+    encode zstd gzip
+
     handle /api/* {
         reverse_proxy backend:8000
     }
@@ -6,6 +22,9 @@
         reverse_proxy backend:8000
     }
     handle /status/* {
+        basic_auth {
+            {$STATUS_USER:admin} {$STATUS_PASS_HASH}
+        }
         reverse_proxy uptime-kuma:3001
     }
     handle {

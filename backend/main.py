@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.auth import require_auth
 from api.routes import auth as auth_routes
 
@@ -117,9 +119,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])  # Caddy is the only upstream
 
 # --- Routers ---
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])
@@ -140,6 +144,23 @@ app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
 
 # --- WebSocket ---
 app.websocket("/ws")(websocket_endpoint)
+
+
+# --- Middleware (function-based) ---
+@app.middleware("http")
+async def remove_server_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.pop("server", None)
+    return response
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 # --- Health ---
