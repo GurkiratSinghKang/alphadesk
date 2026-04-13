@@ -122,7 +122,7 @@ export default function DocsPage() {
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
         <nav className="mb-8">
           <Link
-            href="/login"
+            href="/"
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             &larr; Back to AlphaDesk
@@ -171,17 +171,30 @@ export default function DocsPage() {
           ))}
         </div>
 
-        <div className="mt-16 border-t border-border/30 pt-6 text-center text-xs text-muted-foreground">
-          <p>
-            Need help? Contact{" "}
-            <a
-              href="mailto:support@tradingalpha.net"
-              className="text-primary hover:text-primary/80"
-            >
-              support@tradingalpha.net
-            </a>
-          </p>
-        </div>
+        <footer className="mt-16 border-t border-border/30 pt-6">
+          <div className="text-center text-xs text-muted-foreground mb-4">
+            <p>
+              Need help? Contact{" "}
+              <a
+                href="mailto:support@tradingalpha.net"
+                className="text-primary hover:text-primary/80"
+              >
+                support@tradingalpha.net
+              </a>
+            </p>
+          </div>
+          <nav className="flex gap-4 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Terms of Service
+            </Link>
+            <Link href="/risk" className="hover:text-foreground">
+              Risk Disclosure
+            </Link>
+          </nav>
+        </footer>
       </div>
     </div>
   );

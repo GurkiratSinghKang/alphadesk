@@ -363,7 +363,7 @@ export function WatchlistPanel() {
     (e: React.FormEvent) => {
       e.preventDefault();
       const sym = addInput.trim().toUpperCase();
-      if (sym) {
+      if (sym && /^[A-Z]{1,5}$/i.test(sym)) {
         addToWatchlist(sym);
         setAddInput("");
       }

@@ -162,7 +162,7 @@ export function PortfolioHero({
               >
                 {dayPnl > 0 ? "+" : ""}
                 {formatCurrency(dayPnl)}{" "}
-                <span className="text-sm font-normal text-secondary">
+                <span className="text-sm font-normal text-muted-foreground">
                   ({dayPnlPct > 0 ? "+" : ""}
                   {dayPnlPct.toFixed(2)}%)
                 </span>

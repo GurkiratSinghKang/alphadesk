@@ -136,7 +136,7 @@ function Cell({
   onClick?: () => void;
   displayDash?: boolean;
 }) {
-  if (displayDash) {
+  if (displayDash || value == null || !isFinite(value)) {
     return (
       <td className={cn("px-1.5 py-1 text-right tabular-nums text-muted-foreground/40", className)}>
         {"\u2014"}
