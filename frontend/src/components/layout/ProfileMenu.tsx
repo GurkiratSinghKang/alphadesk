@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { formatCurrency, cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
 
 export function ProfileMenu() {
   const { tradingMode, setTradingMode } = useUIStore();
   const summary = usePortfolioStore((s) => s.summary);
+  const { toast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
   const pathname = usePathname();
@@ -74,7 +76,7 @@ export function ProfileMenu() {
           <DialogHeader><DialogTitle>Switch to Live Trading?</DialogTitle><DialogDescription>Real orders will be submitted to your broker.</DialogDescription></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModeConfirmOpen(false)} className="text-xs">Cancel</Button>
-            <Button onClick={() => { setTradingMode("live"); setModeConfirmOpen(false); }} className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs">Confirm Live Mode</Button>
+            <Button onClick={() => { setTradingMode("live"); setModeConfirmOpen(false); toast({ type: "warning", message: "Trading mode is configured server-side. Contact admin to switch between paper and live." }); }} className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs">Confirm Live Mode</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

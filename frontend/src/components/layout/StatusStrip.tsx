@@ -22,12 +22,8 @@ export function StatusStrip() {
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
   const hasPnl = Number.isFinite(summary.dayPnl);
 
-  // Determine if US equity market is likely open (ET hours, approximate)
-  const now = new Date();
-  const etHour = now.getUTCHours() - 4; // rough ET offset
-  const dayOfWeek = now.getUTCDay();
-  const isMarketOpen = dayOfWeek >= 1 && dayOfWeek <= 5 && etHour >= 9.5 && etHour < 16;
-  const demoLabel = isMarketOpen ? "{demoLabel}" : "(Market closed)";
+  // Let the backend decide demo vs live — no client-side market hours check
+  const demoLabel = "(Demo)";
 
   const regimeColor = regime?.label === "bull" ? "text-[var(--profit)]" : regime?.label === "bear" ? "text-[var(--loss)]" : "text-amber-400";
 

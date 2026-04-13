@@ -27,8 +27,8 @@ export function useStrategies() {
   return useQuery({
     queryKey: ["strategies"],
     queryFn: getStrategies,
-    staleTime: 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
     retry: 2,
   });
 }

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import calendar as _calendar
+import logging
 from datetime import datetime, date, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -235,7 +237,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
                     positions_unrealized = sum(float(p.get("unrealized_pl", 0)) for p in positions_data)
                     positions_count_from_api = len(positions_data)
             except Exception:
-                pass
+                logger.warning("Failed to fetch positions from Alpaca for unrealized P&L", exc_info=True)
 
         equity = float(data.get("equity", 0))
         last_equity = float(data.get("last_equity", equity))
@@ -265,6 +267,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
     except HTTPException:
         raise
     except Exception:
+        logger.warning("Failed to fetch portfolio summary from Alpaca, falling back to demo", exc_info=True)
         return _demo_portfolio_summary()
 
 
@@ -347,6 +350,7 @@ async def get_performance(
             ],
         )
     except Exception:
+        logger.warning("Failed to compute performance from DB, falling back to demo", exc_info=True)
         return _demo_performance(period)
 
 
@@ -408,6 +412,7 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
             by_position=by_position,
         )
     except Exception:
+        logger.warning("Failed to compute portfolio greeks, falling back to demo", exc_info=True)
         return _demo_greeks()
 
 
@@ -490,19 +495,117 @@ async def get_pnl_calendar(
     if demo:
         return _demo_calendar(y, m)
 
-    # Return honest empty response — no real trade history available yet
+    # Attempt to build calendar from trade ledger (closed trades)
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+        from collections import defaultdict
+
+        ledger = TradeLedger()
+
+        # Date range for the requested month
+        month_start = f"{y:04d}-{m:02d}-01"
+        last_day = _calendar.monthrange(y, m)[1]
+        month_end = f"{y:04d}-{m:02d}-{last_day:02d}T23:59:59"
+
+        closed = ledger.get_closed_trades(start_date=month_start, end_date=month_end)
+
+        # Also gather open trades for today's unrealized P&L
+        today = date.today()
+        today_str = today.isoformat()
+
+        # Group closed trades by exit date
+        daily_pnl: dict[str, float] = defaultdict(float)
+        daily_trades: dict[str, int] = defaultdict(int)
+        daily_wins: dict[str, int] = defaultdict(int)
+
+        for t in closed:
+            exit_time = t.get("exit_time", "")
+            if not exit_time:
+                continue
+            day_str = exit_time[:10]
+            pnl = t.get("pnl") or 0
+            daily_pnl[day_str] += pnl
+            daily_trades[day_str] += 1
+            if pnl > 0:
+                daily_wins[day_str] += 1
+
+        # If we have no closed trades but do have open positions, show today's
+        # unrealized P&L from the portfolio summary
+        if not daily_pnl and y == today.year and m == today.month:
+            try:
+                open_positions = ledger.get_open_positions()
+                if open_positions:
+                    import httpx
+                    from core.config import settings
+
+                    headers = {
+                        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                    }
+                    total_unrealized = 0.0
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        for pos in open_positions:
+                            sym = pos.get("symbol", "")
+                            entry = pos.get("entry_price", 0)
+                            shares = pos.get("shares", 0)
+                            if not sym or not entry or not shares:
+                                continue
+                            try:
+                                resp = await client.get(
+                                    f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
+                                    headers=headers,
+                                )
+                                if resp.status_code == 200:
+                                    cur = resp.json().get("trade", {}).get("p", 0)
+                                    total_unrealized += (cur - entry) * shares
+                            except Exception:
+                                pass
+                    if total_unrealized != 0:
+                        daily_pnl[today_str] = round(total_unrealized, 2)
+                        daily_trades[today_str] = len(open_positions)
+                        daily_wins[today_str] = 1 if total_unrealized > 0 else 0
+            except Exception:
+                logger.warning("Failed to compute today unrealized P&L for calendar", exc_info=True)
+
+        if not daily_pnl:
+            return CalendarResponse(
+                month=m, year=y, days=[], month_total=0,
+                trading_days=0, winning_days=0, losing_days=0,
+                best_day=None, worst_day=None, is_demo=False, has_data=False,
+            )
+
+        days: list[CalendarDayEntry] = []
+        for day_str in sorted(daily_pnl.keys()):
+            pnl = round(daily_pnl[day_str], 2)
+            trades = daily_trades[day_str]
+            wins = daily_wins[day_str]
+            win_rate = round(wins / trades * 100, 1) if trades > 0 else 0.0
+            days.append(CalendarDayEntry(date=day_str, pnl=pnl, trades=trades, win_rate=win_rate))
+
+        month_total = round(sum(d.pnl for d in days), 2)
+        winning = [d for d in days if d.pnl > 0]
+        losing = [d for d in days if d.pnl < 0]
+        best = max(days, key=lambda d: d.pnl) if days else None
+        worst = min(days, key=lambda d: d.pnl) if days else None
+
+        return CalendarResponse(
+            month=m, year=y, days=days,
+            month_total=month_total,
+            trading_days=len(days),
+            winning_days=len(winning),
+            losing_days=len(losing),
+            best_day=CalendarBestWorst(date=best.date, pnl=best.pnl) if best else None,
+            worst_day=CalendarBestWorst(date=worst.date, pnl=worst.pnl) if worst else None,
+            is_demo=False,
+            has_data=True,
+        )
+    except Exception:
+        logger.warning("Failed to build P&L calendar from trade ledger", exc_info=True)
+
     return CalendarResponse(
-        month=m,
-        year=y,
-        days=[],
-        month_total=0,
-        trading_days=0,
-        winning_days=0,
-        losing_days=0,
-        best_day=None,
-        worst_day=None,
-        is_demo=False,
-        has_data=False,
+        month=m, year=y, days=[], month_total=0,
+        trading_days=0, winning_days=0, losing_days=0,
+        best_day=None, worst_day=None, is_demo=False, has_data=False,
     )
 
 
@@ -543,4 +646,5 @@ async def get_journal(
             for t in trades
         ]
     except Exception:
+        logger.warning("Failed to fetch journal entries from DB", exc_info=True)
         return []

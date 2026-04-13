@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -425,7 +426,78 @@ async def get_trade_history(
     strategy: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[TradeHistoryEntry]:
-    """Retrieve historical trades from the local database."""
+    """Retrieve historical trades from the trade ledger (primary) and local database (fallback)."""
+
+    # Strategy route ID -> ledger strategy name mapping
+    _ID_TO_LEDGER_NAME: dict[str, str] = {
+        "momentum-quality": "momentum_quality",
+        "pead": "pead",
+        "vrp-harvesting": "vrp_harvest",
+        "earnings-vol-premium": "earnings_vol",
+        "regime-adaptive": "regime_adaptive",
+        "claude-alpha": "claude_alpha",
+        "mean-reversion": "mean_reversion",
+        "vcp-breakout": "vcp_breakout",
+        "manual-discretionary": "manual",
+        "pairs-trading": "pairs_trading",
+        "dividend-capture": "dividend_capture",
+        "sector-rotation": "sector_rotation",
+        "gap-fill": "gap_fill",
+    }
+
+    # Try trade ledger first (this is where pipeline trades live)
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+        ledger = TradeLedger()
+        all_trades = ledger._data.get("trades", [])
+
+        # Filter by strategy if provided (map route ID to ledger name)
+        if strategy:
+            ledger_name = _ID_TO_LEDGER_NAME.get(strategy, strategy)
+            all_trades = [t for t in all_trades if t.get("strategy") == ledger_name]
+
+        # Filter by symbol if provided
+        if symbol:
+            sym_upper = symbol.upper()
+            all_trades = [t for t in all_trades if t.get("symbol") == sym_upper]
+
+        # Sort by entry_time descending, limit
+        all_trades = sorted(all_trades, key=lambda t: t.get("entry_time", ""), reverse=True)[:limit]
+
+        if all_trades:
+            results: list[TradeHistoryEntry] = []
+            for t in all_trades:
+                entry_time_str = t.get("entry_time", "")
+                exit_time_str = t.get("exit_time")
+                try:
+                    entry_dt = datetime.fromisoformat(entry_time_str) if entry_time_str else datetime.now(timezone.utc)
+                except (ValueError, TypeError):
+                    entry_dt = datetime.now(timezone.utc)
+                try:
+                    exit_dt = datetime.fromisoformat(exit_time_str) if exit_time_str else None
+                except (ValueError, TypeError):
+                    exit_dt = None
+
+                results.append(TradeHistoryEntry(
+                    id=t.get("id", 0),
+                    symbol=t.get("symbol", ""),
+                    strategy=t.get("strategy"),
+                    side="buy",
+                    quantity=float(t.get("shares", 0)),
+                    entry_price=float(t.get("entry_price", 0)),
+                    exit_price=float(t["exit_price"]) if t.get("exit_price") else None,
+                    pnl=float(t["pnl"]) if t.get("pnl") is not None else None,
+                    pnl_pct=float(t["pnl_pct"]) if t.get("pnl_pct") is not None else None,
+                    entry_time=entry_dt,
+                    exit_time=exit_dt,
+                    status=t.get("status", "open"),
+                    notes=t.get("rationale"),
+                ))
+            return results
+    except Exception:
+        logger.warning("Failed to retrieve trades from trade ledger, trying DB", exc_info=True)
+
+    # Fallback to database
     from core.config import settings
     if settings.SKIP_DB_INIT:
         return []
@@ -586,9 +658,12 @@ async def create_alert(
     condition: str = Query("above", regex="^(above|below)$"),
     username: str = Depends(require_auth),
 ):
+    symbol = symbol.upper()
+    if not re.match(r"^[A-Z]{1,10}$", symbol):
+        raise HTTPException(status_code=422, detail="Invalid symbol: must be 1-10 uppercase letters")
     alert = {
         "id": f"alert-{len(_price_alerts)+1}",
-        "symbol": symbol.upper(),
+        "symbol": symbol,
         "price": price,
         "condition": condition,
         "triggered": False,

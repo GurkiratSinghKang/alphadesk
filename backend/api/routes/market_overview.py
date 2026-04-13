@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -150,8 +153,10 @@ async def get_indices() -> IndicesResponse:
                     else:
                         indices.append(IndexData(**demo, is_demo=True))
                 except Exception:
+                    logger.warning("Failed to fetch live data for %s, using demo fallback", sym, exc_info=True)
                     indices.append(IndexData(**demo, is_demo=True))
     except Exception:
+        logger.warning("Failed to fetch index data from Alpaca, falling back to demo", exc_info=True)
         indices = [IndexData(**d, is_demo=True) for d in _DEMO_INDICES]
 
     return IndicesResponse(
@@ -162,10 +167,72 @@ async def get_indices() -> IndicesResponse:
 
 @router.get("/sectors", response_model=SectorsResponse)
 async def get_sectors() -> SectorsResponse:
-    """Get sector performance heatmap data."""
-    sectors = [SectorPerformance(**d) for d in _DEMO_SECTORS]
+    """Get sector performance heatmap data with live Alpaca data."""
+    import httpx
+    from core.config import settings
+
+    _SECTOR_ETFS: dict[str, dict[str, str]] = {
+        "XLK": {"sector": "Technology", "leader": "NVDA"},
+        "XLV": {"sector": "Healthcare", "leader": "LLY"},
+        "XLF": {"sector": "Financials", "leader": "JPM"},
+        "XLY": {"sector": "Consumer Discretionary", "leader": "AMZN"},
+        "XLC": {"sector": "Communication Services", "leader": "META"},
+        "XLI": {"sector": "Industrials", "leader": "CAT"},
+        "XLP": {"sector": "Consumer Staples", "leader": "COST"},
+        "XLE": {"sector": "Energy", "leader": "XOM"},
+        "XLU": {"sector": "Utilities", "leader": "NEE"},
+        "XLRE": {"sector": "Real Estate", "leader": "AMT"},
+        "XLB": {"sector": "Materials", "leader": "LIN"},
+    }
+
+    try:
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        sectors: list[SectorPerformance] = []
+        async with httpx.AsyncClient(timeout=10) as client:
+            for etf_sym, info in _SECTOR_ETFS.items():
+                try:
+                    trade_resp = await client.get(
+                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/trades/latest",
+                        headers=headers,
+                    )
+                    bar_resp = await client.get(
+                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/bars?timeframe=1Day&limit=2&feed=iex",
+                        headers=headers,
+                    )
+                    if trade_resp.status_code == 200 and bar_resp.status_code == 200:
+                        price = trade_resp.json().get("trade", {}).get("p", 0)
+                        bars = bar_resp.json().get("bars", [])
+                        prev_close = bars[-2]["c"] if len(bars) >= 2 else bars[0]["c"] if bars else price
+                        change_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
+                        sectors.append(SectorPerformance(
+                            sector=info["sector"],
+                            change_pct=change_pct,
+                            ytd_pct=0.0,  # YTD requires longer history; omit for now
+                            leader=info["leader"],
+                            leader_change_pct=change_pct,  # approximate with ETF change
+                        ))
+                    else:
+                        # Fallback for this single ETF
+                        demo = next((d for d in _DEMO_SECTORS if d["sector"] == info["sector"]), None)
+                        if demo:
+                            sectors.append(SectorPerformance(**demo))
+                except Exception:
+                    logger.warning("Failed to fetch sector data for %s", etf_sym, exc_info=True)
+                    demo = next((d for d in _DEMO_SECTORS if d["sector"] == info["sector"]), None)
+                    if demo:
+                        sectors.append(SectorPerformance(**demo))
+
+        if sectors:
+            return SectorsResponse(sectors=sectors, as_of=datetime.now(timezone.utc), is_demo=False)
+    except Exception:
+        logger.warning("Failed to fetch sector data from Alpaca, falling back to demo", exc_info=True)
+
+    # Full demo fallback
     return SectorsResponse(
-        sectors=sectors,
+        sectors=[SectorPerformance(**d) for d in _DEMO_SECTORS],
         as_of=datetime.now(timezone.utc),
         is_demo=True,
     )
@@ -173,7 +240,99 @@ async def get_sectors() -> SectorsResponse:
 
 @router.get("/regime", response_model=RegimeResponse)
 async def get_regime() -> RegimeResponse:
-    """Get the current detected market regime."""
+    """Get the current detected market regime from live Alpaca data."""
+    import httpx
+    from core.config import settings
+
+    try:
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Fetch SPY latest trade + bars for previous close
+            spy_trade_resp = await client.get(
+                "https://data.alpaca.markets/v2/stocks/SPY/trades/latest",
+                headers=headers,
+            )
+            spy_bar_resp = await client.get(
+                "https://data.alpaca.markets/v2/stocks/SPY/bars?timeframe=1Day&limit=2&feed=iex",
+                headers=headers,
+            )
+
+            if spy_trade_resp.status_code != 200 or spy_bar_resp.status_code != 200:
+                raise ValueError("Failed to fetch SPY data from Alpaca")
+
+            spy_price = spy_trade_resp.json().get("trade", {}).get("p", 0)
+            spy_bars = spy_bar_resp.json().get("bars", [])
+            spy_prev_close = spy_bars[-2]["c"] if len(spy_bars) >= 2 else spy_bars[0]["c"] if spy_bars else spy_price
+
+            # Try to get VIX from the indices that are already fetched, or use a fallback
+            # VIX is not tradable on Alpaca, so we fetch VIXY (VIX Short-Term ETF) as proxy
+            # or fall back to a default threshold
+            vix_level = 18.0  # default mid-range
+            try:
+                # Use UVXY bars as a VIX proxy - if price is elevated, vol is high
+                vix_bar_resp = await client.get(
+                    "https://data.alpaca.markets/v2/stocks/VIXY/trades/latest",
+                    headers=headers,
+                )
+                if vix_bar_resp.status_code == 200:
+                    vixy_price = vix_bar_resp.json().get("trade", {}).get("p", 0)
+                    # VIXY roughly tracks VIX; use it as an approximation
+                    # When VIXY > 20, VIX is typically elevated
+                    if vixy_price > 0:
+                        vix_level = vixy_price
+            except Exception:
+                logger.debug("Could not fetch VIXY for VIX proxy")
+
+            # Determine regime
+            spy_up = spy_price > spy_prev_close
+            vol_high = vix_level >= 20
+
+            if spy_up and not vol_high:
+                regime_str = "Bull - Low Volatility"
+                label = "bull"
+                description = "Broad market uptrend with below-average volatility. Momentum and risk-on strategies favored."
+                confidence = 0.75
+            elif spy_up and vol_high:
+                regime_str = "Bull - High Volatility"
+                label = "bull"
+                description = "Market trending up but with elevated volatility. Caution on position sizing."
+                confidence = 0.60
+            elif not spy_up and not vol_high:
+                regime_str = "Sideways - Normal Volatility"
+                label = "sideways"
+                description = "Market flat to slightly down with normal volatility. Mean-reversion strategies may be favored."
+                confidence = 0.55
+            else:
+                regime_str = "Bear - High Volatility"
+                label = "bear"
+                description = "Market declining with elevated volatility. Defensive positioning and hedging recommended."
+                confidence = 0.65
+
+            spy_change_pct = round((spy_price - spy_prev_close) / spy_prev_close * 100, 2) if spy_prev_close else 0
+
+            return RegimeResponse(
+                regime=MarketRegime(
+                    regime=regime_str,
+                    label=label,
+                    confidence=confidence,
+                    vix_level=round(vix_level, 1),
+                    description=description,
+                    indicators={
+                        "spy_price": round(spy_price, 2),
+                        "spy_prev_close": round(spy_prev_close, 2),
+                        "spy_change_pct": spy_change_pct,
+                        "vix_proxy": round(vix_level, 1),
+                    },
+                ),
+                as_of=datetime.now(timezone.utc),
+                is_demo=False,
+            )
+    except Exception:
+        logger.warning("Failed to compute regime from Alpaca, falling back to demo", exc_info=True)
+
     return RegimeResponse(
         regime=MarketRegime(**_DEMO_REGIME),
         as_of=datetime.now(timezone.utc),
