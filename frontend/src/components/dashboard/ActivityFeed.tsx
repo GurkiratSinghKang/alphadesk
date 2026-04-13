@@ -124,14 +124,27 @@ export function buildFeedItems(
     const master = pipelineLog.master_agent ?? {};
     const rejections = master.rejections ?? [];
     if (rejections.length > 0) {
-      items.push({
-        id: "pipeline-rejections",
-        time: ts,
-        type: "pipeline",
-        severity: "info",
-        title: `Risk manager rejected ${rejections.length} trade(s)`,
-        detail: rejections.slice(0, 3).map((r: any) => `${r.symbol}: ${r.reason}`).join(" | "),
-      });
+      // Show each rejection with its remediation advice
+      for (const r of rejections.slice(0, 5) as any[]) {
+        items.push({
+          id: `rejection-${r.symbol}-${r.strategy}`,
+          time: ts,
+          type: "pipeline",
+          severity: "warning",
+          title: `Rejected: ${r.symbol} (${r.strategy})`,
+          detail: `${r.reason}${r.remediation ? ` → ${r.remediation}` : ""}`,
+        });
+      }
+      if (rejections.length > 5) {
+        items.push({
+          id: "pipeline-rejections-overflow",
+          time: ts,
+          type: "pipeline",
+          severity: "info",
+          title: `+${rejections.length - 5} more rejected trade(s)`,
+          detail: "Check pipeline logs for full details.",
+        });
+      }
     }
 
     // Individual trade executions

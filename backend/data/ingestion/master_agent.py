@@ -337,8 +337,9 @@ class MasterAgent:
         # -- P1: Check if strategy is halted due to drawdown --
         if strategy in self.halted_strategies:
             reason = f"Strategy '{strategy}' is halted (drawdown > {abs(self.STRATEGY_DRAWDOWN_LIMIT)*100}%)"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Wait for drawdown to recover above {abs(self.STRATEGY_RESUME_THRESHOLD)*100}% or manually resume the strategy."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # -- sells are always allowed (exit existing position) --
         if side == "sell":
@@ -370,17 +371,17 @@ class MasterAgent:
                         f"{self.MIN_REWARD_RISK_RATIO}:1 "
                         f"(risk=${risk:.2f}, reward=${reward:.2f})"
                     )
-                    self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-                    return {"approved": False, "reason": reason}
+                    remediation = f"Widen take-profit to >${entry_price + risk * self.MIN_REWARD_RISK_RATIO:.2f} or tighten stop-loss to >${entry_price - reward / self.MIN_REWARD_RISK_RATIO:.2f}."
+                    self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+                    return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 1: No duplicate symbols across strategies
         if symbol in self.existing_positions:
-            reason = (
-                f"{symbol} already held by strategy "
-                f"'{self.existing_positions[symbol].get('strategy', 'unknown')}'"
-            )
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            holding_strategy = self.existing_positions[symbol].get('strategy', 'unknown')
+            reason = f"{symbol} already held by strategy '{holding_strategy}'"
+            remediation = f"Close the existing {symbol} position in '{holding_strategy}' first, or choose a different symbol."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 2: Strategy allocation limit
         strategy_deployed = sum(
@@ -396,23 +397,27 @@ class MasterAgent:
         )
         strategy_limit = self.STRATEGY_LIMITS.get(strategy, 0.10) * self.equity
         if strategy_deployed + strategy_pending + notional > strategy_limit:
+            available = max(0, strategy_limit - strategy_deployed - strategy_pending)
             reason = (
                 f"Strategy '{strategy}' would exceed allocation "
                 f"({strategy_deployed + strategy_pending + notional:.0f} > {strategy_limit:.0f})"
             )
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Reduce position size to ${available:.0f} or close existing {strategy} positions to free allocation."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 3: Portfolio-wide deployment limit (P3: regime-adaptive)
         total_deployed = sum(p.get("notional", 0) for p in self.existing_positions.values())
         total_pending = sum(o["notional"] for o in self.pending_orders if o["side"] == "buy")
         if total_deployed + total_pending + notional > self.max_deployment * self.equity:
+            available = max(0, self.max_deployment * self.equity - total_deployed - total_pending)
             reason = (
                 f"Portfolio deployment would exceed {self.max_deployment * 100:.0f}% "
                 f"(regime: {self.regime}, VIX: {self.vix_level})"
             )
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Reduce position to ${available:.0f}, close existing positions, or wait for regime to improve (current VIX: {self.vix_level:.1f})."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 4: Max positions
         current_count = len(self.existing_positions) + len(
@@ -420,8 +425,9 @@ class MasterAgent:
         )
         if current_count >= self.MAX_POSITIONS:
             reason = f"Max {self.MAX_POSITIONS} positions reached"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Close one or more existing positions to free a slot. Currently holding {current_count} positions."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 5: Per-position limit
         max_pos_dollar = self.MAX_PER_POSITION * self.equity
@@ -430,14 +436,16 @@ class MasterAgent:
                 f"Position size ${notional:.0f} exceeds "
                 f"{self.MAX_PER_POSITION * 100:.0f}% limit (${max_pos_dollar:.0f})"
             )
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Reduce position size to ${max_pos_dollar:.0f} or below ({self.MAX_PER_POSITION * 100:.0f}% of ${self.equity:.0f} equity)."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 6: Minimum conviction
         if conviction < self.MIN_CONVICTION:
             reason = f"Conviction {conviction} below minimum {self.MIN_CONVICTION}"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Re-analyze with stricter criteria to increase conviction above {self.MIN_CONVICTION}, or wait for a stronger signal."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 6b: Absolute momentum gate (Antonacci Dual Momentum)
         # If 12-month return is significantly negative, don't go long
@@ -445,22 +453,25 @@ class MasterAgent:
             abs_mom = self.ABSOLUTE_MOMENTUM_DATA.get(symbol)
             if abs_mom is not None and abs_mom < -5:
                 reason = f"Absolute momentum gate: {symbol} 12-month return is {abs_mom:.1f}% (below -5% threshold). Not buying downtrends."
-                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-                return {"approved": False, "reason": reason}
+                remediation = f"Wait for {symbol} to establish positive 12-month momentum, or choose a symbol with positive absolute momentum."
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+                return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 6c: Require non-severely-negative 6-month momentum (avoid strong downtrends)
         if side == "buy":
             momentum = self.MOMENTUM_DATA.get(symbol)
             if momentum is not None and momentum < -10:
                 reason = f"Momentum gate: {symbol} has strongly negative momentum ({momentum:.1f}%, below -10% threshold)."
-                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-                return {"approved": False, "reason": reason}
+                remediation = f"Wait for {symbol} 6-month momentum to recover above -10%, or select a symbol with stronger relative strength."
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+                return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 7: Sufficient cash
         if notional > self.cash:
             reason = f"Insufficient cash (${self.cash:.0f} < ${notional:.0f})"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Reduce position size to ${self.cash:.0f} or close existing positions to free cash."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 8 (P2): Sector concentration limit
         # Only enforce when portfolio has enough positions for meaningful diversification
@@ -472,22 +483,27 @@ class MasterAgent:
 
             if projected_sector_pct > self.SECTOR_LIMIT:
                 reason = f"Sector '{sector}' would reach {projected_sector_pct*100:.0f}% (limit: {self.SECTOR_LIMIT*100}%)"
-                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-                return {"approved": False, "reason": reason}
+                other_sectors = [s for s in ["Technology", "Healthcare", "Financials", "Energy", "Consumer Staples", "Industrials"] if s != sector]
+                remediation = f"Choose a symbol from a different sector ({', '.join(other_sectors[:3])}) to diversify."
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+                return {"approved": False, "reason": reason, "remediation": remediation}
 
             if current_sector_pct > self.SECTOR_WARN and conviction < 70:
                 reason = f"Sector '{sector}' at {current_sector_pct*100:.0f}% -- conviction {conviction} < 70 required"
-                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-                return {"approved": False, "reason": reason}
+                remediation = f"Increase conviction above 70 (re-analyze with stronger signal) or pick a symbol from an underweight sector."
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+                return {"approved": False, "reason": reason, "remediation": remediation}
 
         # Check 9 (P4): VaR budget
         new_var = self._estimate_position_var(symbol, notional)
         portfolio_var_after = self._portfolio_var() + new_var * 0.7
         var_limit = self.MAX_PORTFOLIO_VAR * self.equity
         if portfolio_var_after > var_limit:
+            max_notional_for_var = max(0, (var_limit - self._portfolio_var()) / (self.VOL_MAP.get(symbol, 0.02) * 2.33 * 0.7))
             reason = f"Portfolio VaR would reach ${portfolio_var_after:.0f} (limit: ${var_limit:.0f})"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            remediation = f"Reduce position to ${max_notional_for_var:.0f} to stay within VaR budget, or close a high-vol position first."
+            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
+            return {"approved": False, "reason": reason, "remediation": remediation}
 
         # ---- Low-vol preference: log diversification benefit ----
         avg_portfolio_vol = (
