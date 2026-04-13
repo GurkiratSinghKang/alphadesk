@@ -181,10 +181,14 @@ export function SectorTreemap({ sectors, width: propWidth, height = 120, isDemo 
   const width = propWidth ?? measuredWidth;
   const rects = useMemo(() => {
     if (sectors.length === 0) return [];
-    // Equal weights since we don't have market cap data
-    const items = sectors.map((s) => ({ ...s, value: 1 }));
-    // Sort by absolute change for better layout
-    items.sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+    // Size by absolute change — bigger movers get bigger rectangles
+    // Use a minimum value so near-zero sectors still get a visible tile
+    const items = sectors.map((s) => ({
+      ...s,
+      value: Math.max(Math.abs(s.change_pct), 0.05),
+    }));
+    // Sort by value descending for better treemap layout
+    items.sort((a, b) => b.value - a.value);
     return squarify(items, width, height);
   }, [sectors, width, height]);
 
