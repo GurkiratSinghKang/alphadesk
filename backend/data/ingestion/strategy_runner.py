@@ -198,9 +198,46 @@ async def _fetch_news_headlines(symbol: str, limit: int = 5) -> list[str]:
 
 
 async def _call_claude(prompt: str, symbol: str) -> dict[str, Any]:
-    """Invoke Claude via CLI (if available) or Anthropic API (fallback)."""
+    """Invoke Claude via CLI (preferred) or Anthropic API (fallback)."""
 
-    # --- Try API first (more reliable in Docker) ---
+    # --- Try CLI first (uses OAuth credentials, no API key needed) ---
+    if CLAUDE_CLI is not None:
+        logger.info("Using Claude CLI for %s", symbol)
+        cmd = [
+            CLAUDE_CLI,
+            "--print",
+            "--model", "sonnet",
+            "--output-format", "json",
+            prompt,
+        ]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+
+            if proc.returncode != 0:
+                err = stderr.decode(errors="replace").strip()
+                logger.error("Claude CLI error for %s: %s", symbol, err[:300])
+                # Fall through to API fallback
+            else:
+                raw = stdout.decode(errors="replace").strip()
+                try:
+                    wrapper = json.loads(raw)
+                    text = wrapper.get("result", raw) if isinstance(wrapper, dict) else raw
+                except json.JSONDecodeError:
+                    text = raw
+                return _parse_claude_response(text, symbol)
+
+        except asyncio.TimeoutError:
+            logger.error("Claude CLI timeout for %s", symbol)
+        except Exception as e:
+            logger.error("Claude CLI error for %s: %s", symbol, e)
+
+    # --- Fallback to Anthropic API ---
     try:
         from core.config import settings
         api_key = settings.ANTHROPIC_API_KEY.get_secret_value()
@@ -209,47 +246,8 @@ async def _call_claude(prompt: str, symbol: str) -> dict[str, Any]:
     except Exception:
         pass
 
-    # --- Fallback to CLI ---
-    if CLAUDE_CLI is None:
-        logger.error("No Claude CLI or API key available for %s", symbol)
-        return {"symbol": symbol, "error": "no_claude"}
-
-    cmd = [
-        CLAUDE_CLI,
-        "--print",
-        "--model", "sonnet",
-        "--output-format", "json",
-        prompt,
-    ]
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-
-        if proc.returncode != 0:
-            err = stderr.decode(errors="replace").strip()
-            logger.error("Claude CLI error for %s: %s", symbol, err[:300])
-            return {"symbol": symbol, "error": err[:300]}
-
-        raw = stdout.decode(errors="replace").strip()
-        try:
-            wrapper = json.loads(raw)
-            text = wrapper.get("result", raw) if isinstance(wrapper, dict) else raw
-        except json.JSONDecodeError:
-            text = raw
-
-        return _parse_claude_response(text, symbol)
-
-    except asyncio.TimeoutError:
-        logger.error("Claude CLI timeout for %s", symbol)
-        return {"symbol": symbol, "error": "timeout"}
-    except Exception as e:
-        logger.error("Analysis error for %s: %s", symbol, e)
-        return {"symbol": symbol, "error": str(e)}
+    logger.error("No Claude CLI or API key available for %s", symbol)
+    return {"symbol": symbol, "error": "no_claude"}
 
 
 async def _call_claude_api(prompt: str, symbol: str, api_key: str) -> dict[str, Any]:
