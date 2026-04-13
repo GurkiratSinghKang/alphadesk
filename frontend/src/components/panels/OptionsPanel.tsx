@@ -128,12 +128,21 @@ function Cell({
   className,
   format = "price",
   onClick,
+  displayDash = false,
 }: {
   value: number;
   className?: string;
   format?: "price" | "number" | "pct" | "greek";
   onClick?: () => void;
+  displayDash?: boolean;
 }) {
+  if (displayDash) {
+    return (
+      <td className={cn("px-1.5 py-1 text-right tabular-nums text-muted-foreground/40", className)}>
+        {"\u2014"}
+      </td>
+    );
+  }
   let formatted: string;
   switch (format) {
     case "price":
@@ -333,26 +342,28 @@ export function OptionsPanel() {
         </div>
       )}
       <ScrollArea className="flex-1 overflow-auto">
-        <table className="w-full text-[11px] min-w-[700px]">
+        <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
           <thead className="sticky top-0 z-10 bg-[#14141e]">
             <tr className="border-b border-border">
               {colHeaders.map((h) => (
                 <th
+                  scope="col"
                   key={`c-${h}`}
                   className="px-1.5 py-1 text-right font-medium text-[var(--profit)]/70 whitespace-nowrap"
                 >
-                  {h}
+                  <span className="sr-only">Call </span>{h}
                 </th>
               ))}
-              <th className="px-2 py-1 text-center font-bold text-foreground bg-background/30 border-x border-border">
+              <th scope="col" className="px-2 py-1 text-center font-bold text-foreground bg-background/30 border-x border-border">
                 Strike
               </th>
               {colHeaders.map((h) => (
                 <th
+                  scope="col"
                   key={`p-${h}`}
                   className="px-1.5 py-1 text-right font-medium text-[var(--loss)]/70 whitespace-nowrap"
                 >
-                  {h}
+                  <span className="sr-only">Put </span>{h}
                 </th>
               ))}
             </tr>
@@ -362,6 +373,10 @@ export function OptionsPanel() {
               const callITM = row.strike < spotPrice;
               const putITM = row.strike > spotPrice;
               const atm = Math.abs(row.strike - spotPrice) < 2.5;
+              // Deep OTM strikes (>15% from spot) have meaningless generated prices
+              const pctFromSpot = Math.abs(row.strike - spotPrice) / spotPrice;
+              const callDeepOTM = !callITM && pctFromSpot > 0.15 && usingGeneratedChain;
+              const putDeepOTM = !putITM && pctFromSpot > 0.15 && usingGeneratedChain;
               const callKey = `call-${row.strike}`;
               const putKey = `put-${row.strike}`;
               const callSelected = selectedKeys.has(callKey);
@@ -370,6 +385,7 @@ export function OptionsPanel() {
               return (
                 <tr
                   key={row.strike}
+                  aria-current={atm ? "true" : undefined}
                   className={cn(
                     "border-b border-border/50 hover:bg-accent/30 transition-colors",
                     atm && "bg-primary/5"
@@ -378,19 +394,22 @@ export function OptionsPanel() {
                   {/* Calls — BUG #21: last cell clickable */}
                   <Cell
                     value={row.call.last}
+                    displayDash={callDeepOTM}
                     className={cn(
                       "cursor-pointer",
                       callITM && "bg-[var(--profit)]/5",
                       callSelected && "bg-primary/20 text-primary"
                     )}
-                    onClick={() => handleCallClick(row)}
+                    onClick={callDeepOTM ? undefined : () => handleCallClick(row)}
                   />
                   <Cell
                     value={row.call.bid}
+                    displayDash={callDeepOTM}
                     className={callITM ? "bg-[var(--profit)]/5" : ""}
                   />
                   <Cell
                     value={row.call.ask}
+                    displayDash={callDeepOTM}
                     className={callITM ? "bg-[var(--profit)]/5" : ""}
                   />
                   <Cell
@@ -406,11 +425,13 @@ export function OptionsPanel() {
                   <Cell
                     value={row.call.iv}
                     format="pct"
+                    displayDash={callDeepOTM}
                     className={callITM ? "bg-[var(--profit)]/5" : ""}
                   />
                   <Cell
                     value={row.call.delta}
                     format="greek"
+                    displayDash={callDeepOTM}
                     className={callITM ? "bg-[var(--profit)]/5" : ""}
                   />
 
@@ -427,16 +448,18 @@ export function OptionsPanel() {
                   {/* Puts — BUG #21: last cell clickable */}
                   <Cell
                     value={row.put.last}
+                    displayDash={putDeepOTM}
                     className={cn(
                       "cursor-pointer",
                       putITM && "bg-[var(--loss)]/5",
                       putSelected && "bg-primary/20 text-primary",
                       !putSelected && row.put.last <= 0.01 && "text-muted-foreground/50"
                     )}
-                    onClick={() => handlePutClick(row)}
+                    onClick={putDeepOTM ? undefined : () => handlePutClick(row)}
                   />
                   <Cell
                     value={row.put.bid}
+                    displayDash={putDeepOTM}
                     className={cn(
                       putITM ? "bg-[var(--loss)]/5" : "",
                       row.put.bid <= 0.01 && "text-muted-foreground/50"
@@ -444,6 +467,7 @@ export function OptionsPanel() {
                   />
                   <Cell
                     value={row.put.ask}
+                    displayDash={putDeepOTM}
                     className={cn(
                       putITM ? "bg-[var(--loss)]/5" : "",
                       row.put.ask <= 0.01 && "text-muted-foreground/50"
@@ -462,11 +486,13 @@ export function OptionsPanel() {
                   <Cell
                     value={row.put.iv}
                     format="pct"
+                    displayDash={putDeepOTM}
                     className={putITM ? "bg-[var(--loss)]/5" : ""}
                   />
                   <Cell
                     value={row.put.delta}
                     format="greek"
+                    displayDash={putDeepOTM}
                     className={putITM ? "bg-[var(--loss)]/5" : ""}
                   />
                 </tr>

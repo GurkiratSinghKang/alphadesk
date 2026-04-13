@@ -34,11 +34,13 @@ function ScoreGauge({
   max = 100,
   label,
   size = 80,
+  placeholder = false,
 }: {
   value: number;
   max?: number;
   label: string;
   size?: number;
+  placeholder?: boolean;
 }) {
   const pct = Math.min(Math.max(value / max, 0), 1);
   const color =
@@ -81,7 +83,7 @@ function ScoreGauge({
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-sm font-bold text-foreground tabular-nums">
-            {Math.round(value)}
+            {placeholder ? "\u2014" : Math.round(value)}
           </span>
         </div>
       </div>
@@ -180,7 +182,9 @@ function useAnalysisData(symbol: string) {
 
 function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
   const quote = useMarketStore((s) => s.quotes[symbol]);
-  const score = analysis?.technicalScore ?? 50;
+  const rawScore = analysis?.technicalScore;
+  const isPlaceholderScore = rawScore == null;
+  const score = rawScore ?? 50;
   // Derive key levels from the actual quote price
   const currentPrice = quote?.last ?? quote?.close ?? 0;
   const step = currentPrice * 0.03; // ~3% increments for S/R levels
@@ -279,7 +283,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             {analysis.summary}
           </p>
         </div>
-        <ScoreGauge value={score} label="Technical" />
+        <ScoreGauge value={score} label="Technical" placeholder={isPlaceholderScore} />
       </div>
 
       <Separator className="bg-border" />

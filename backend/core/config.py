@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     JWT_SECRET: SecretStr = SecretStr("")
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""  # bcrypt hash
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — trading terminal stays open all day
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # --- Production ---

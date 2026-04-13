@@ -469,9 +469,9 @@ export function ChartPanel() {
           />
         )}
 
-        {/* Quick trade buttons — right edge, translucent until hovered */}
+        {/* Quick trade buttons — fixed top-right, translucent until hovered */}
         {quote && (
-          <div className="absolute right-2 top-1/3 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
+          <div className="absolute right-2 top-2 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
             <button
               aria-label="Quick buy"
               onClick={() => {

@@ -49,6 +49,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [failCount, setFailCount] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +67,8 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.detail ?? "Invalid credentials");
+        setError(body.detail ?? "Invalid username or password");
+        setFailCount((c) => c + 1);
         return;
       }
 
@@ -151,6 +153,8 @@ export default function LoginPage() {
 
             <form
               onSubmit={handleSubmit}
+              method="POST"
+              action="#"
               className="space-y-4"
               aria-describedby={error ? "login-error" : undefined}
             >
@@ -165,7 +169,7 @@ export default function LoginPage() {
                   id="login-username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="Enter username"
                   className="mt-1"
                   autoComplete="username"
                   autoFocus
@@ -205,6 +209,12 @@ export default function LoginPage() {
                   className="text-xs text-[var(--loss)]"
                 >
                   {error}
+                </p>
+              )}
+
+              {failCount >= 3 && (
+                <p className="text-[11px] text-amber-400">
+                  Too many attempts may result in temporary lockout.
                 </p>
               )}
 

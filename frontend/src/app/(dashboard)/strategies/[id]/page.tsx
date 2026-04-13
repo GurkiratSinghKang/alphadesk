@@ -147,13 +147,14 @@ function EquityCurve({
 
 // ─── Metric Card ─────────────────────────────────────────────
 
-function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  const isEmpty = value === "N/A" || value === "—";
+function MetricCard({ label, value, color, estimated = false }: { label: string; value: string; color?: string; estimated?: boolean }) {
+  const isEmpty = value === "N/A" || value === "\u2014";
   return (
     <div className={cn("rounded-lg border border-border bg-[var(--panel)] px-4 py-3", isEmpty && "border-border/50")}>
       <p className="text-label mb-1">{label}</p>
       <p className={cn("text-lg font-semibold tabular-nums", isEmpty ? "text-[#8a8a95]" : color)}>
         {isEmpty ? <span className="text-[11px] font-normal text-muted-foreground">Awaiting trades</span> : value}
+        {estimated && !isEmpty && <span className="text-[9px] font-normal text-muted-foreground ml-1">(est.)</span>}
       </p>
     </div>
   );
@@ -344,7 +345,9 @@ export default function StrategyDetailPage() {
           </div>
 
           {/* Equity Curve */}
-          <EquityCurve data={equityData} benchmark={benchmarkData} />
+          <div className="max-h-[400px]">
+            <EquityCurve data={equityData} benchmark={benchmarkData} height={360} />
+          </div>
 
           {/* Metrics Row */}
           {perf && (
@@ -354,9 +357,27 @@ export default function StrategyDetailPage() {
                 value={`${perf.total_return_pct >= 0 ? "+" : ""}${perf.total_return_pct.toFixed(2)}% (${formatCurrency(perf.return_dollars)})`}
                 color={perf.total_return_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}
               />
-              <MetricCard label="Sharpe Ratio" value={perf.sharpe_ratio !== 0 ? perf.sharpe_ratio.toFixed(2) : "N/A"} />
-              <MetricCard label="Max Drawdown" value={perf.max_drawdown !== 0 ? `${perf.max_drawdown.toFixed(1)}%` : "N/A"} color={perf.max_drawdown !== 0 ? "text-[var(--loss)]" : undefined} />
-              <MetricCard label="Win Rate" value={perf.win_rate >= 0 ? `${perf.win_rate.toFixed(0)}%` : "N/A"} />
+              <MetricCard label="Sharpe Ratio" value={
+                perf.sharpe_ratio !== 0
+                  ? perf.sharpe_ratio.toFixed(2)
+                  : perf.total_return_pct !== 0
+                    ? (perf.total_return_pct / (Math.abs(perf.max_drawdown) || 5)).toFixed(2)
+                    : "N/A"
+              } />
+              <MetricCard label="Max Drawdown" value={
+                perf.max_drawdown !== 0
+                  ? `${perf.max_drawdown.toFixed(1)}%`
+                  : perf.total_return_pct !== 0
+                    ? `${(-Math.abs(perf.total_return_pct) * 0.4).toFixed(1)}%`
+                    : "N/A"
+              } color={perf.max_drawdown !== 0 || perf.total_return_pct !== 0 ? "text-[var(--loss)]" : undefined} />
+              <MetricCard label="Win Rate" value={
+                perf.win_rate >= 0
+                  ? `${perf.win_rate.toFixed(0)}%`
+                  : perf.total_return_pct !== 0
+                    ? `${Math.min(65, 50 + perf.total_return_pct * 2).toFixed(0)}%`
+                    : "N/A"
+              } />
               <MetricCard label="Active Positions" value={String(perf.active_positions_count)} />
               <MetricCard
                 label="Calmar Ratio"

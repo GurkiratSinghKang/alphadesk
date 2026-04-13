@@ -31,9 +31,9 @@ export function PnlCalendarMini() {
   );
 
   if (days.length === 0) return (
-    <div className="rounded-xl border border-border bg-[var(--panel)] flex flex-col items-center justify-center h-48">
-      <BarChart3 className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">No trading data for this month</p>
+    <div className="rounded-xl border border-border bg-[var(--panel)] flex items-center justify-center gap-2 h-32 px-4">
+      <BarChart3 className="h-4 w-4 opacity-30 text-muted-foreground shrink-0" />
+      <p className="text-xs text-muted-foreground">No trading data this month</p>
     </div>
   );
 

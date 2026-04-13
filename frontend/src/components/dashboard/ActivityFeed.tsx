@@ -252,9 +252,10 @@ const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }
 interface ActivityFeedProps {
   feedItems: FeedItem[];
   onNavigate: (path: string) => void;
+  isLoading?: boolean;
 }
 
-export function ActivityFeed({ feedItems, onNavigate }: ActivityFeedProps) {
+export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedProps) {
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -268,12 +269,24 @@ export function ActivityFeed({ feedItems, onNavigate }: ActivityFeedProps) {
           </Badge>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {feedItems.length} event{feedItems.length !== 1 ? "s" : ""}
+          {isLoading ? "\u2014" : `${feedItems.length} event${feedItems.length !== 1 ? "s" : ""}`}
         </span>
       </div>
       <ScrollArea className={feedItems.length <= 3 ? "max-h-[200px]" : "h-[320px]"}>
         <div className="space-y-1 p-3">
-          {feedItems.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-2 py-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-start gap-3 rounded-lg px-3 py-2.5 animate-pulse">
+                  <div className="h-4 w-4 rounded bg-muted-foreground/20 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-3/4 rounded bg-muted-foreground/20" />
+                    <div className="h-2.5 w-1/2 rounded bg-muted-foreground/10" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : feedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
               <Info className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
               <p className="text-body">No activity yet today</p>
