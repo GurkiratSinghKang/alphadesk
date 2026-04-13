@@ -274,6 +274,12 @@
   }
 }
 
+/* Prevent white flash on overscroll — dark background on html */
+html {
+  background-color: #0a0a0f;
+  overscroll-behavior: none;
+}
+
 /* Subtle page background gradient */
 body {
   background: linear-gradient(180deg, #0a0a0f 0%, #0d0d16 50%, #0a0a12 100%);
@@ -291,4 +297,27 @@ button, a, [role="button"], input, select, .transition-colors, .transition-all, 
   transition-property: color, background-color, border-color, box-shadow, opacity;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
+}
+
+/* Screen-reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Respect user motion preferences (WCAG 2.1 AA) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -172,12 +172,20 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label
-                  htmlFor="login-password"
-                  className="text-xs text-muted-foreground"
-                >
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="login-password"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Password
+                  </label>
+                  <a
+                    href="mailto:support@tradingalpha.net"
+                    className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
                 <Input
                   id="login-password"
                   type="password"
@@ -224,6 +232,9 @@ export default function LoginPage() {
             &copy; {new Date().getFullYear()} AlphaDesk. All rights reserved.
           </p>
           <nav className="flex gap-4 text-xs text-muted-foreground">
+            <Link href="/docs" className="hover:text-foreground">
+              Docs
+            </Link>
             <Link href="/privacy" className="hover:text-foreground">
               Privacy Policy
             </Link>

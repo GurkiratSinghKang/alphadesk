@@ -4,7 +4,7 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get("access_token")?.value;
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/login";
-  const isPublicPage = ["/privacy", "/terms", "/risk"].includes(pathname);
+  const isPublicPage = ["/privacy", "/terms", "/risk", "/docs"].includes(pathname);
 
   // Check if token is structurally valid (3-part JWT, not expired)
   let isValidToken = false;

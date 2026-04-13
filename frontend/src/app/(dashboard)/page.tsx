@@ -88,7 +88,7 @@ function CommandCenter() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [remainingLoaded, setRemainingLoaded] = useState(false);
 
   // ─── Derive strategies from hook data ─────────────────────
   const strategies: StrategyData[] = useMemo(() => {
@@ -230,12 +230,12 @@ function CommandCenter() {
         }
       }
 
-      if (!cancelled) setLoading(false);
+      if (!cancelled) setRemainingLoaded(true);
     }
 
     fetchRemaining().catch((err) => {
       console.error("[Dashboard] fetchRemaining error:", err);
-      if (!cancelled) setLoading(false);
+      if (!cancelled) setRemainingLoaded(true);
     });
 
     return () => {
@@ -261,15 +261,8 @@ function CommandCenter() {
   }, [indices]);
 
   // ─── Render ────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading command center...</span>
-      </div>
-    );
-  }
-
+  // Show the dashboard immediately using React Query data.
+  // Remaining sections (activity feed, market context) load independently.
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-[1800px] space-y-4 p-4 md:p-6">
@@ -286,10 +279,17 @@ function CommandCenter() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Activity Feed (left ~60%) */}
           <div className="lg:col-span-3 space-y-4">
-            <ActivityFeed
-              feedItems={feedItems}
-              onNavigate={(path) => router.push(path)}
-            />
+            {remainingLoaded ? (
+              <ActivityFeed
+                feedItems={feedItems}
+                onNavigate={(path) => router.push(path)}
+              />
+            ) : (
+              <div className="flex h-48 items-center justify-center rounded-xl border border-border bg-[var(--surface)]">
+                <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-xs text-muted-foreground">Loading activity...</span>
+              </div>
+            )}
 
             {/* Positions + Calendar (below feed) */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -310,14 +310,18 @@ function CommandCenter() {
         </div>
 
         {/* Section 4: Market Context */}
-        <MarketContext
-          indices={indices}
-          sectors={sectors}
-          news={news}
-          summary={activeSummary}
-          sparkData={sparkData}
-          isDemo={isDemo}
-        />
+        {remainingLoaded ? (
+          <MarketContext
+            indices={indices}
+            sectors={sectors}
+            news={news}
+            summary={activeSummary}
+            sparkData={sparkData}
+            isDemo={isDemo}
+          />
+        ) : (
+          <div className="h-32 animate-pulse rounded-xl bg-muted/30" />
+        )}
       </div>
     </ScrollArea>
   );

@@ -43,6 +43,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`dark ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      style={{ backgroundColor: "#0a0a0f" }}
       suppressHydrationWarning
     >
       <body className="h-full bg-background text-foreground">
