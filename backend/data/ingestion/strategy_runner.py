@@ -18,7 +18,7 @@ from typing import Any
 logger = logging.getLogger("alphadesk.strategy_runner")
 
 CLAUDE_CLI = shutil.which("claude")
-MAX_POSITION_DOLLAR = 5_000.0
+MAX_POSITION_DOLLAR = 6_000.0
 
 
 # =====================================================================
@@ -352,7 +352,7 @@ class BaseStrategyRunner:
                 continue
             sig = (a.get("signal") or "").lower()
             conv = int(a.get("conviction", 0))
-            if sig != "buy" or conv < 60:
+            if sig != "buy" or conv < 50:
                 continue
 
             price = a.get("entry_price") or a.get("price", 0)
@@ -900,8 +900,8 @@ class MeanReversionRunner(BaseStrategyRunner):
             conviction = min(90, int(30 + change * 5 + f_score * 3 + composite * 0.2))
 
             price = stock.get("price", 100)
-            stop_loss = round(price * 0.93, 2)  # 7% stop (wider for mean reversion)
-            take_profit = round(price * 1.08, 2)  # 8% target (reversion to mean)
+            stop_loss = round(price * 0.95, 2)  # 5% stop (tighter for mean reversion)
+            take_profit = round(price * 1.10, 2)  # 10% target (reversion to mean, 2:1 R/R)
 
             analyses.append({
                 "symbol": stock["symbol"],

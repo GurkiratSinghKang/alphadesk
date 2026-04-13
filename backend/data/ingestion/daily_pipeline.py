@@ -37,13 +37,13 @@ logger = logging.getLogger("alphadesk.pipeline")
 ET = ZoneInfo("America/New_York")
 
 # ----- Safety constants -----
-MAX_POSITION_PCT = 0.05          # 5 % of equity per position
-MAX_POSITION_DOLLAR = 5_000.0    # hard cap per position
+MAX_POSITION_PCT = 0.06          # 6 % of equity per position (avoids rounding rejections)
+MAX_POSITION_DOLLAR = 6_000.0    # hard cap per position
 MAX_OPEN_POSITIONS = 15
 MAX_DAILY_TRADES = 30
 CIRCUIT_BREAKER_PCT = -0.02      # stop if daily P&L < -2 %
-MIN_CONVICTION = 60
-ANALYZE_TOP_N = 15               # total analysis budget across all strategies
+MIN_CONVICTION = 50
+ANALYZE_TOP_N = 40               # total analysis budget across all strategies
 SCREEN_TOP_N = 100               # screen more, strategies will filter
 
 CLAUDE_CLI = os.environ.get("CLAUDE_CLI_PATH", "claude")

@@ -21,7 +21,7 @@ LOG_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "pipeline_log
 @router.post("/run")
 async def trigger_pipeline(
     screen_limit: int = Query(100, ge=1, le=500, description="Number of stocks to screen"),
-    analyze_limit: int = Query(15, ge=1, le=200, description="Total analysis budget across all strategies"),
+    analyze_limit: int = Query(40, ge=1, le=200, description="Total analysis budget across all strategies"),
 ) -> dict[str, Any]:
     """Manually trigger a full multi-strategy pipeline run.
 

@@ -64,9 +64,9 @@ class MasterAgent:
     # Total: 1.00
     MAX_POSITIONS = 15
     MAX_DEPLOYED_PCT = 0.60  # max 60% of equity deployed (fallback)
-    MAX_PER_POSITION = 0.05  # max 5% per position
-    MIN_CONVICTION = 60
-    MIN_REWARD_RISK_RATIO = 1.5  # Minimum 1.5:1 reward-to-risk
+    MAX_PER_POSITION = 0.06  # max 6% per position (avoids rounding rejections near 5%)
+    MIN_CONVICTION = 50
+    MIN_REWARD_RISK_RATIO = 1.2  # Minimum 1.2:1 reward-to-risk (accommodates mean reversion)
 
     # P1: Per-strategy drawdown limits
     STRATEGY_DRAWDOWN_LIMIT = -0.05  # -5% from peak
@@ -440,19 +440,19 @@ class MasterAgent:
             return {"approved": False, "reason": reason}
 
         # Check 6b: Absolute momentum gate (Antonacci Dual Momentum)
-        # If 12-month return is negative, NEVER go long — most impactful filter
+        # If 12-month return is significantly negative, don't go long
         if side == "buy":
             abs_mom = self.ABSOLUTE_MOMENTUM_DATA.get(symbol)
-            if abs_mom is not None and abs_mom < 0:
-                reason = f"Absolute momentum gate: {symbol} 12-month return is {abs_mom:.1f}% (negative). Not buying downtrends."
+            if abs_mom is not None and abs_mom < -5:
+                reason = f"Absolute momentum gate: {symbol} 12-month return is {abs_mom:.1f}% (below -5% threshold). Not buying downtrends."
                 self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
                 return {"approved": False, "reason": reason}
 
-        # Check 6c: Require positive 6-month momentum (avoid downtrends)
+        # Check 6c: Require non-severely-negative 6-month momentum (avoid strong downtrends)
         if side == "buy":
             momentum = self.MOMENTUM_DATA.get(symbol)
-            if momentum is not None and momentum < 0:
-                reason = f"Absolute momentum gate: {symbol} has negative momentum ({momentum:.1f}%). Dual momentum requires positive absolute return."
+            if momentum is not None and momentum < -10:
+                reason = f"Momentum gate: {symbol} has strongly negative momentum ({momentum:.1f}%, below -10% threshold)."
                 self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
                 return {"approved": False, "reason": reason}
 
@@ -462,23 +462,23 @@ class MasterAgent:
             self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
             return {"approved": False, "reason": reason}
 
-        # Check 8 (P2): Sector concentration limit (only enforced with existing positions)
-        exposure = self._get_sector_exposure()
-        current_sector_pct = exposure.get(sector, 0)
-        if total_deployed > 0:
+        # Check 8 (P2): Sector concentration limit
+        # Only enforce when portfolio has enough positions for meaningful diversification
+        num_positions = len(self.existing_positions)
+        if num_positions >= 3:
+            exposure = self._get_sector_exposure()
+            current_sector_pct = exposure.get(sector, 0)
             projected_sector_pct = (current_sector_pct * total_deployed + notional) / (total_deployed + notional)
-        else:
-            projected_sector_pct = 0  # no concentration risk on empty portfolio
 
-        if projected_sector_pct > self.SECTOR_LIMIT:
-            reason = f"Sector '{sector}' would reach {projected_sector_pct*100:.0f}% (limit: {self.SECTOR_LIMIT*100}%)"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            if projected_sector_pct > self.SECTOR_LIMIT:
+                reason = f"Sector '{sector}' would reach {projected_sector_pct*100:.0f}% (limit: {self.SECTOR_LIMIT*100}%)"
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
+                return {"approved": False, "reason": reason}
 
-        if current_sector_pct > self.SECTOR_WARN and conviction < 70:
-            reason = f"Sector '{sector}' at {current_sector_pct*100:.0f}% — conviction {conviction} < 70 required"
-            self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
-            return {"approved": False, "reason": reason}
+            if current_sector_pct > self.SECTOR_WARN and conviction < 70:
+                reason = f"Sector '{sector}' at {current_sector_pct*100:.0f}% -- conviction {conviction} < 70 required"
+                self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason})
+                return {"approved": False, "reason": reason}
 
         # Check 9 (P4): VaR budget
         new_var = self._estimate_position_var(symbol, notional)
