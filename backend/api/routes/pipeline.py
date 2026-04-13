@@ -101,6 +101,7 @@ async def pipeline_history() -> list[dict[str, Any]]:
                     "portfolio_snapshot": data.get("portfolio_snapshot", {}),
                 })
             except Exception:
+                logger.warning("Failed to parse pipeline log for %s", date, exc_info=True)
                 entries.append({"date": str(date), "error": "corrupt_log"})
 
     return entries

@@ -189,7 +189,7 @@ class BaseAgent(ABC):
         model_map = {
             "opus": "claude-opus-4-20250514",
             "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-haiku-4-20250514",
+            "haiku": "claude-haiku-4-5-20251001",
         }
         model_id = model_map.get(self.model, self.model)
 
@@ -229,7 +229,7 @@ class BaseAgent(ABC):
         model_map = {
             "opus": "claude-opus-4-20250514",
             "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-haiku-4-20250514",
+            "haiku": "claude-haiku-4-5-20251001",
         }
         model_id = model_map.get(self.model, self.model)
         messages = [{"role": "user", "content": prompt}]
@@ -288,6 +288,34 @@ class BaseAgent(ABC):
                     parts.append(f"\nConversation history:\n{history_text}")
 
         return "\n".join(parts)
+
+    # ------------------------------------------------------------------
+    # Shared extraction helpers (used by all agent subclasses)
+    # ------------------------------------------------------------------
+
+    def _extract_score(self, text: str) -> float:
+        """Extract a numeric score from agent response text."""
+        import re
+        match = re.search(r'"?score"?\s*[:=]\s*([-\d.]+)', text)
+        return float(match.group(1)) if match else 0.0
+
+    def _extract_conviction(self, text: str) -> str:
+        """Extract conviction level from agent response text.
+
+        Uses negation-aware matching to avoid misclassifying
+        phrases like 'not high conviction' as 'high'.
+        """
+        tl = text.lower()
+        # Check for explicit negation patterns first
+        if any(neg in tl for neg in ["not high", "no high", "low conviction", "conviction: low", "conviction:low"]):
+            return "low"
+        if any(neg in tl for neg in ["not medium", "moderate conviction", "conviction: medium", "conviction:medium"]):
+            return "medium"
+        if any(phrase in tl for phrase in ["high conviction", "conviction: high", "conviction:high", "strong conviction"]):
+            return "high"
+        if any(phrase in tl for phrase in ["medium conviction", "conviction: medium", "conviction:medium", "moderate"]):
+            return "medium"
+        return "low"  # Default to low
 
     async def _execute_tool(self, tool_name: str, tool_input: dict) -> Any:
         """Execute a tool by name. Override in subclasses for real tool dispatch."""

@@ -64,7 +64,7 @@ describe('Login Page', () => {
   it('username input has correct placeholder', async () => {
     const LoginPage = (await import('@/app/login/page')).default;
     render(<LoginPage />);
-    expect(screen.getByPlaceholderText('admin')).toBeDefined();
+    expect(screen.getByPlaceholderText('Enter username')).toBeDefined();
   });
 
   it('password input has correct placeholder', async () => {

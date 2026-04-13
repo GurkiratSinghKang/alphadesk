@@ -10,7 +10,8 @@ python-dotenv>=1.0.0
 orjson>=3.10.0
 
 # Auth
-python-jose[cryptography]>=3.3.0
+PyJWT>=2.8.0
+bcrypt>=4.0.0
 passlib[bcrypt]>=1.7.4
 
 # Database

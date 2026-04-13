@@ -66,7 +66,7 @@ def _define_models() -> dict[str, Any]:
         id = Column(Integer, primary_key=True, autoincrement=True)
         symbol = Column(String(40), nullable=False, index=True)
         underlying = Column(String(20), nullable=False, index=True)
-        expiry = Column(DateTime, nullable=False)
+        expiry = Column(DateTime(timezone=True), nullable=False)
         strike = Column(Float, nullable=False)
         call_put = Column(String(4), nullable=False)  # "call" or "put"
         bid = Column(Float, default=0)

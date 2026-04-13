@@ -13,6 +13,7 @@ from core.auth import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    is_token_revoked,
     verify_password,
 )
 from core.config import settings
@@ -21,6 +22,8 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Login rate limiting: max 5 attempts per IP per 5-minute window (Redis-backed)
+# TODO: /agents/chat and /pipeline/run are expensive endpoints and should also
+#       be rate limited (those routes live in separate files).
 # ---------------------------------------------------------------------------
 _RATE_LIMIT_WINDOW = 300  # 5 minutes
 _RATE_LIMIT_MAX = 15
@@ -46,12 +49,12 @@ async def _check_rate_limit(client_ip: str) -> None:
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning("Rate limit check failed (Redis unavailable): %s", e)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+        # Degrade gracefully — allow login when Redis is unavailable
+        logger.warning("Rate limit check failed (Redis unavailable), allowing login: %s", e)
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
-    is_prod = settings.ENVIRONMENT == "prod"
+    is_prod = settings.is_production
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -124,6 +127,11 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
     username = payload.get("sub", "")
     if not username:
         raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    # Check if the old refresh token was already revoked (replay attack detection)
+    jti = payload.get("jti")
+    if jti and await is_token_revoked(jti):
+        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
     new_tokens = TokenResponse(
         access_token=create_access_token(username),

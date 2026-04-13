@@ -7,6 +7,8 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      STATUS_USER: ${STATUS_USER:-admin}
+      STATUS_PASS_HASH: ${STATUS_PASS_HASH}
     volumes:
       - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -16,6 +18,8 @@ services:
         condition: service_healthy
     networks:
       - alphadesk
+    mem_limit: 256m
+    cpus: 0.25
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/OWNER/alphadesk-frontend:latest}
@@ -28,6 +32,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    mem_limit: 512m
+    cpus: 0.5
 
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/OWNER/alphadesk-backend:latest}
@@ -38,7 +44,7 @@ services:
       ENVIRONMENT: prod
       DEBUG: "false"
       DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:-alphadesk_dev}@timescaledb:5432/alphadesk
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
       - /var/lib/alphadesk/pipeline_logs:/app/data/pipeline_logs
     healthcheck:
@@ -54,6 +60,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    mem_limit: 1536m
+    cpus: 1.0
 
   timescaledb:
     volumes:
@@ -73,10 +81,18 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    mem_limit: 2g
+    cpus: 1.5
 
   redis:
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     volumes:
       - /var/lib/alphadesk/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - alphadesk
     logging:
@@ -84,6 +100,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    mem_limit: 640m
+    cpus: 0.5
 
   uptime-kuma:
     image: louislam/uptime-kuma:1
@@ -92,6 +110,8 @@ services:
       - /var/lib/alphadesk/uptime-kuma:/app/data
     networks:
       - alphadesk
+    mem_limit: 256m
+    cpus: 0.25
 
 networks:
   alphadesk:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from datetime import datetime, date, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -141,7 +144,7 @@ async def _generate_risk_dashboard() -> RiskDashboard:
             if pos.status_code == 200:
                 position_count = len(pos.json())
     except Exception:
-        pass
+        logger.warning("Failed to fetch account/positions from Alpaca for risk dashboard", exc_info=True)
 
     # Beta and VaR require real position/return data to compute meaningfully.
     # Return null with estimated flag when no real data is available.

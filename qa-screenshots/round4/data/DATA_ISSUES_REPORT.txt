@@ -1,0 +1,176 @@
+AlphaDesk Data Verification Report - Round 4
+==============================================
+Date: 2026-04-12
+Method: Full code path analysis of every data element across all pages
+
+ISSUES FOUND:
+
+1. CROSS-PAGE PORTFOLIO INCONSISTENCY (StatusStrip vs Dashboard vs ProfileMenu)
+   Files: frontend/src/components/layout/StatusStrip.tsx (line 10)
+          frontend/src/components/layout/ProfileMenu.tsx (line 16)
+          frontend/src/app/(dashboard)/page.tsx (line 240)
+   StatusStrip and ProfileMenu read dayPnl from usePortfolioStore (Zustand),
+   which is fetched ONCE on mount by useDataPipeline.
+   Dashboard Hero reads from usePortfolioSummary() React Query hook, which
+   refetches every 60 seconds.
+   After the first 60-second refetch, Dashboard and StatusStrip/ProfileMenu
+   will show DIFFERENT P&L and equity values until the next page reload.
+
+2. REGIME "(Demo)" INDICATOR NEVER APPEARS
+   File: frontend/src/components/layout/StatusStrip.tsx (lines 40, 47)
+   The StatusStrip checks (regime as any)?.is_demo but "regime" is set to
+   regimeData?.regime which is the inner MarketRegime object.
+   The backend puts is_demo on RegimeResponse (outer), NOT on MarketRegime (inner).
+   Fix: Should check (regimeData as any)?.is_demo instead of (regime as any)?.is_demo.
+   Result: Regime label and VIX never show "(Demo)" even though all regime data is demo.
+
+3. VIX DATA MISLABELED - VIXY PRICE SHOWN AS VIX INDEX
+   File: backend/api/routes/market_overview.py (lines 126-147)
+   When Alpaca API is available, the backend fetches VIXY (a VIX-linked ETF) price
+   and labels it as "VIX" / "CBOE Volatility Index (via VIXY)".
+   VIXY trades at ~$22-30 while actual VIX index trades at ~13-25.
+   They are fundamentally different instruments. Users see an ETF price labeled as
+   a volatility index value.
+
+4. DEMO PORTFOLIO: $1,570 DAY P&L WITH 0 POSITIONS
+   File: backend/api/routes/portfolio.py (lines 108-121)
+   Demo portfolio summary has positions_count=0 but unrealized_pnl=1250 and
+   realized_pnl_today=320. Frontend calculates dayPnl=$1,570.
+   Contradictory: you cannot have unrealized P&L with zero positions.
+   The PositionsSummary component correctly says "No open positions" while the
+   PortfolioHero and StatusStrip show +$1,570 P&L.
+
+5. PEAD STRATEGY MISSING FROM STRATEGY_CONTENT
+   File: frontend/src/lib/strategy-content.ts
+   The "pead" strategy is in STRATEGY_ORDER and STRATEGY_META but has no entry
+   in STRATEGY_CONTENT. Navigating to /strategies/pead shows "Strategy documentation
+   loading..." instead of actual thesis/parameters/risk content.
+
+6. STRATEGY SPARKLINES ARE FLAT LINES (MEANINGLESS VISUAL)
+   Files: frontend/src/components/dashboard/Sparkline.tsx (line 57)
+          frontend/src/components/dashboard/StrategyGrid.tsx (line 108)
+   generateSparkData() returns Array(count).fill(100) - all flat lines.
+   When strategies have active positions (returnPct > 0.01), a sparkline renders
+   but it's just a horizontal line, giving no visual information about performance
+   trajectory. Misleading because it implies zero variance.
+
+7. MARKET INDEX SPARKLINES ARE FLAT LINES
+   File: frontend/src/app/(dashboard)/page.tsx (lines 247-254)
+   Dashboard MarketContext receives sparkData where every index gets Array(20).fill(100).
+   The sparklines next to SPY/QQQ/IWM show flat horizontal lines even though the
+   indices have real change percentages displayed. Visual contradicts the data.
+
+8. ANNUALIZED RETURN USES HARDCODED START DATE
+   File: backend/api/routes/strategies.py (line 288)
+   _annualized_return() hardcodes date(2026, 4, 1) as the start date.
+   As of today (April 12), this is only 11 days. Any non-zero return gets
+   extrapolated by 365/11 = 33x for the annualized figure.
+   A 1% return would show as ~33% annualized. Extremely misleading if any
+   strategy has trades.
+
+9. ECONOMIC CALENDAR SHOWS HARDCODED SAMPLE EVENTS
+   File: frontend/src/components/dashboard/EconomicCalendar.tsx (lines 18-54)
+   Events are generated from static templates with cycling selection (i % templates.length).
+   The label says "Sample Events -- connect calendar API for real data" but the events
+   themselves look realistic with forecasts/previous values, which could confuse users
+   into thinking they're real macro data.
+
+10. NEWS LINKS ARE EMPTY STRINGS IN DEMO MODE
+    File: backend/api/routes/news.py (line 222)
+    Demo news articles have url="" (empty string).
+    Frontend in MarketContext.tsx (line 129) checks article.url.trim() !== "" but
+    this still passes because empty string IS empty. The check actually works correctly
+    to prevent rendering links. However, in the ActivityFeed, demo news items show
+    up as feed items with no click handler - they look interactive but do nothing.
+
+11. P&L CALENDAR SHOWS "No trading data" WHEN REAL DATA EXISTS
+    File: backend/api/routes/portfolio.py (lines 492-506)
+    The non-demo path of get_pnl_calendar() returns an EMPTY CalendarResponse
+    with has_data=False, regardless of whether trades exist in the ledger.
+    It says "Return honest empty response -- no real trade history available yet"
+    but the trade ledger may have actual trades. The calendar ignores them.
+
+12. DEMO PORTFOLIO VALUE IN PROFILE MENU CAN SHOW $0.00
+    File: frontend/src/components/layout/ProfileMenu.tsx (line 42)
+    Shows formatCurrency(summary.equity > 0 ? summary.equity : 0).
+    If usePortfolioStore hasn't been populated yet (race condition on page load),
+    it shows $0.00 momentarily. The dashboard uses portfolioSummaryData as primary
+    source, so it may show $100,000 while ProfileMenu shows $0.00 briefly.
+
+13. SECTOR TREEMAP USES HARDCODED DEMO DATA WITHOUT CLEAR LABELING
+    File: backend/api/routes/market_overview.py (lines 187-195)
+    get_sectors() ALWAYS returns demo data (_DEMO_SECTORS) regardless of
+    whether Alpaca keys exist. It sets is_demo=True but the frontend only
+    shows a tiny "Demo" label on the SectorTreemap.
+
+14. OPTIONS IV DATA FALLBACK SHOWS HARDCODED VALUES
+    File: frontend/src/components/panels/OptionsPanel.tsx (line 222)
+    When useIVData() returns no data, ivRank defaults to 42 and ivPctl defaults
+    to 38. These specific numbers have no basis - they're arbitrary fallbacks
+    that look like real data to the user. The badges show "IV Rank: 42" and
+    "IV Pctl: 38" with no indication these are defaults.
+
+15. EXPECTED MOVE CALCULATION IS NOT BASED ON REAL IV
+    File: frontend/src/components/panels/OptionsPanel.tsx (line 224)
+    expectedMove = spotPrice * 0.032 is a hardcoded 3.2% of spot price.
+    It does not use the actual IV data from the options chain or the rawIvData
+    hook. It should use currentIV * spotPrice * sqrt(DTE/365) for accuracy.
+
+16. MANUAL/DISCRETIONARY STRATEGY EXISTS IN BACKEND BUT NOT IN FRONTEND
+    Backend: backend/api/routes/strategies.py (line 268) defines "manual-discretionary"
+    Frontend: frontend/src/lib/strategies.ts STRATEGY_ORDER has 12 strategies,
+    missing "manual-discretionary". The backend list_strategies() returns it,
+    but the frontend maps only STRATEGY_ORDER entries.
+    Result: backend returns 13 strategies, frontend only renders 12.
+
+17. EQUITY CURVE MAY USE WRONG BASE VALUE
+    File: frontend/src/app/(dashboard)/page.tsx (lines 207-208)
+    The equity curve computation uses summary.equity from the Zustand store.
+    But this useEffect runs on mount with hasFetched ref guard. At mount time,
+    the Zustand store may still have the default equity=0 because useDataPipeline
+    hasn't completed its fetch yet. In that case, baseEquity falls back to 100000,
+    which may not match the actual portfolio equity.
+
+18. STRATEGY DETAIL WIN RATE SHOWS "N/A" INCORRECTLY
+    File: frontend/src/app/(dashboard)/strategies/[id]/page.tsx (line 359)
+    Backend sends win_rate = -1 as sentinel for "no closed trades".
+    Frontend checks: perf.win_rate > 0 ? show : "N/A"
+    If win_rate is exactly 0.0 (all trades lost), it shows "N/A" unless
+    active_positions_count > 0. A 0% win rate is valid data, not "N/A".
+
+19. STRATEGY CARD returnPct FORMAT INCONSISTENCY
+    File: frontend/src/components/dashboard/StrategyGrid.tsx (line 93)
+    Shows returnPct.toFixed(2) with explicit +/- sign.
+    But strategy detail page (line 353) shows total_return_pct.toFixed(2).
+    These should be the same value but come from different API calls
+    (list strategies vs performance endpoint) which compute them independently
+    and can produce different values due to unrealized P&L timing.
+
+20. CHART PANEL DEMO DATA WATERMARK IS ABSENT
+    File: frontend/src/components/panels/ChartPanel.tsx (line 168)
+    Variable usingDemoData = apiBars === null is set but never rendered
+    as a visible watermark or banner on the chart. The options panel shows
+    "Showing estimated prices" but the chart panel has no equivalent
+    indicator when displaying demo OHLCV bars.
+
+21. ALLOCATION DONUT SHOWS DEMO DATA WITHOUT CONTEXT
+    File: frontend/src/components/dashboard/AllocationDonut.tsx
+    When news is empty, the MarketContext falls back to showing AllocationDonut.
+    The donut shows Cash=$45,000 and Invested=$55,000 from demo data.
+    While there is a "Demo data" label, the specific dollar amounts look
+    authoritative and real.
+
+22. PORTFOLIO HERO isDemo FLAG DEPENDS ON WRONG DATA SOURCE
+    File: frontend/src/app/(dashboard)/page.tsx (line 244)
+    isDemo = !!(activeSummary as any).is_demo
+    If portfolioSummaryData (React Query) is available, activeSummary uses it.
+    But if the Zustand store summary is used instead, the is_demo property
+    is NOT set because the default summary in portfolio.ts has no is_demo field.
+    Result: Demo badge may not show when it should.
+
+SUMMARY:
+- 6 issues are data inconsistency bugs (items 1, 2, 4, 12, 17, 22)
+- 5 issues are misleading visualizations (items 6, 7, 9, 14, 15)
+- 4 issues are missing content/features (items 5, 11, 16, 20)
+- 3 issues are incorrect data/labels (items 3, 8, 18)
+- 4 issues are data quality concerns (items 10, 13, 19, 21)

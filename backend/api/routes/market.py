@@ -393,6 +393,18 @@ async def get_bars(
     effective_end = end or date.today()
     effective_start = start or (effective_end - timedelta(days=365))
 
+    # --- Redis cache check ---
+    from core.redis import cache_get, cache_set
+
+    cache_key = f"bars:{symbol.upper()}:{timeframe.value}:{limit}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return [Bar(**b) for b in cached]
+
+    # Intraday timeframes get 30s TTL; daily+ get 5min TTL
+    _INTRADAY_TFS = {"1min", "5min", "15min", "30min", "1h"}
+    cache_ttl = 30 if timeframe.value in _INTRADAY_TFS else 300
+
     # --- 1. Polygon ---
     if not _polygon_key_empty():
         try:
@@ -421,7 +433,7 @@ async def get_bars(
                 resp = await client.get(url, params=params)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [
+                    bars = [
                         Bar(
                             timestamp=datetime.fromtimestamp(r["t"] / 1000, tz=timezone.utc),
                             open=r["o"],
@@ -433,6 +445,12 @@ async def get_bars(
                         )
                         for r in data.get("results", [])
                     ]
+                    await cache_set(
+                        cache_key,
+                        [b.model_dump(mode="json") for b in bars],
+                        ttl_seconds=cache_ttl,
+                    )
+                    return bars
         except Exception:
             pass  # fall through to Alpaca
 
@@ -460,7 +478,7 @@ async def get_bars(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [
+                    bars = [
                         Bar(
                             timestamp=datetime.fromisoformat(r["t"].replace("Z", "+00:00")),
                             open=r["o"],
@@ -472,6 +490,12 @@ async def get_bars(
                         )
                         for r in data.get("bars", []) or []
                     ]
+                    await cache_set(
+                        cache_key,
+                        [b.model_dump(mode="json") for b in bars],
+                        ttl_seconds=cache_ttl,
+                    )
+                    return bars
         except Exception:
             pass  # fall through to demo
 

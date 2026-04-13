@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 import websockets
 
@@ -22,6 +23,24 @@ logger = logging.getLogger(__name__)
 _stream_task: asyncio.Task | None = None
 _should_stop = False
 _last_quotes: dict[str, dict] = {}  # track last bid/ask per symbol
+
+# --- Quote throttling / last-value coalescing ---
+_last_published: dict[str, tuple[float, float]] = {}  # symbol -> (monotonic_ts, price)
+MIN_PUBLISH_INTERVAL = 0.1  # 100 ms
+
+
+async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) -> None:
+    """Publish only if price moved >0.01 % or >=100 ms elapsed since last publish."""
+    now = time.monotonic()
+    last = _last_published.get(symbol)
+    if last:
+        elapsed = now - last[0]
+        price_change = abs(price - last[1]) / last[1] if last[1] else 1
+        if elapsed < MIN_PUBLISH_INTERVAL and price_change < 0.0001:
+            return  # Skip -- too soon and price hasn't moved
+    _last_published[symbol] = (now, price)
+    await publish(channel, data)
+
 
 WATCHLIST = [
     "AAPL", "NVDA", "TSLA", "SPY", "QQQ",
@@ -110,7 +129,7 @@ async def _run_stream() -> None:
                             ask = msg.get("ap", 0)
                             mid = (bid + ask) / 2 if bid and ask else bid or ask
                             _last_quotes[sym] = {"bid": bid, "ask": ask}
-                            await publish("quotes", {
+                            await _maybe_publish("quotes", sym, round(mid, 4), {
                                 "symbol": sym,
                                 "bid": bid,
                                 "ask": ask,
@@ -123,11 +142,12 @@ async def _run_stream() -> None:
                             # Trade message — include last known bid/ask
                             sym = msg["S"]
                             prev = _last_quotes.get(sym, {})
-                            await publish("quotes", {
+                            trade_price = msg.get("p", 0)
+                            await _maybe_publish("quotes", sym, trade_price, {
                                 "symbol": sym,
                                 "bid": prev.get("bid", 0),
                                 "ask": prev.get("ask", 0),
-                                "last": msg.get("p", 0),
+                                "last": trade_price,
                                 "volume": msg.get("s", 0),
                                 "timestamp": msg.get("t", ""),
                             })

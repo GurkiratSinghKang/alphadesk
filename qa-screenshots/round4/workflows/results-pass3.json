@@ -1,0 +1,144 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "status": "PASS",
+      "section": "Keyboard Shortcuts",
+      "description": "? key opens Keyboard Shortcuts overlay",
+      "details": ""
+    },
+    {
+      "id": 2,
+      "status": "FAIL",
+      "section": "Keyboard Shortcuts",
+      "description": "Profile Menu → Keyboard Shortcuts → nothing opened",
+      "details": ""
+    },
+    {
+      "id": 3,
+      "status": "PASS",
+      "section": "Chat",
+      "description": "AI response is properly formatted text",
+      "details": "What is the trend for SPY?"
+    },
+    {
+      "id": 4,
+      "status": "FAIL",
+      "section": "Chat",
+      "description": "AI response shows raw JSON/error instead of formatted text",
+      "details": "API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZzZeVgSW2tFMe4gQA6kR'}"
+    },
+    {
+      "id": 5,
+      "status": "PASS",
+      "section": "Chart",
+      "description": "Chart type dropdown opens with Candlestick/Line/Area options",
+      "details": " Candlestick,  Line,  Area"
+    },
+    {
+      "id": 6,
+      "status": "PASS",
+      "section": "Chart",
+      "description": "Indicator dropdown opens with all indicators",
+      "details": "EMA, SMA, Bollinger, RSI, MACD, Volume"
+    },
+    {
+      "id": 7,
+      "status": "PASS",
+      "section": "Chart",
+      "description": "Drawing tools present: H-Line, Trendline, Fibonacci",
+      "details": ""
+    },
+    {
+      "id": 8,
+      "status": "PASS",
+      "section": "Chart",
+      "description": "Quick BUY button present on chart (translucent until hover)",
+      "details": ""
+    },
+    {
+      "id": 9,
+      "status": "PASS",
+      "section": "Chart",
+      "description": "Quick SELL button present on chart",
+      "details": ""
+    },
+    {
+      "id": 10,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tab \"Trade\" found and clicked",
+      "details": ""
+    },
+    {
+      "id": 11,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tab \"Positions\" found and clicked",
+      "details": ""
+    },
+    {
+      "id": 12,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tab \"Orders\" found and clicked",
+      "details": ""
+    },
+    {
+      "id": 13,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tab \"Journal\" found and clicked",
+      "details": ""
+    },
+    {
+      "id": 14,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tab \"Calendar\" found and clicked",
+      "details": ""
+    },
+    {
+      "id": 15,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Full screen toggle button works for options panel",
+      "details": ""
+    },
+    {
+      "id": 16,
+      "status": "PASS",
+      "section": "Watchlist",
+      "description": "Add symbol NFLX to watchlist works",
+      "details": ""
+    },
+    {
+      "id": 17,
+      "status": "PASS",
+      "section": "Options",
+      "description": "Options chain visible with Bid/Ask/Strike data",
+      "details": ""
+    },
+    {
+      "id": 18,
+      "status": "PASS",
+      "section": "Options",
+      "description": "Expiry date tabs found: 2 options",
+      "details": ""
+    },
+    {
+      "id": 19,
+      "status": "PASS",
+      "section": "Options",
+      "description": "Switched to different expiry date",
+      "details": ""
+    },
+    {
+      "id": 20,
+      "status": "PASS",
+      "section": "Screener",
+      "description": "Screener tab content",
+      "details": "Screener results visible"
+    }
+  ]
+}

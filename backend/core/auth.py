@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import bcrypt
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from core.config import settings
 
@@ -49,7 +50,7 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     """Decode and validate a JWT. Raises HTTPException on failure."""
     try:
         payload = jwt.decode(token, settings.jwt_secret_value, algorithms=[ALGORITHM])
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     if payload.get("type") != expected_type:

@@ -16,7 +16,10 @@ interface UseWebSocketReturn {
   unsubscribe: (channel: WsChannel) => void;
   send: (channel: WsChannel, event: string, data?: unknown) => void;
   isConnected: boolean;
+  /** @deprecated Use onMessage instead — lastMessage triggers re-renders on every WS message */
   lastMessage: WsMessage | null;
+  /** Subscribe to messages on a specific channel. Returns an unsubscribe function. */
+  onMessage: (channel: WsChannel, callback: (data: WsMessage) => void) => () => void;
 }
 
 const MAX_RETRIES = 10;
@@ -30,7 +33,11 @@ export function useWebSocket(): UseWebSocketReturn {
   const subscribedChannels = useRef<Set<WsChannel>>(new Set());
 
   const [isConnected, setIsConnected] = useState(false);
+  /** @deprecated kept for backward compat — prefer onMessage */
   const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+
+  // Channel-based callback system: dispatches to subscribers without triggering React re-renders
+  const channelCallbacksRef = useRef<Map<WsChannel, Set<(data: WsMessage) => void>>>(new Map());
 
   const connect = useCallback(() => {
     // Cancel any pending reconnect
@@ -77,6 +84,15 @@ export function useWebSocket(): UseWebSocketReturn {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as WsMessage;
+          // Dispatch to channel-specific callbacks (no React re-render)
+          const channel = msg.channel ?? (msg as unknown as Record<string, unknown>).type as WsChannel | undefined;
+          if (channel) {
+            const callbacks = channelCallbacksRef.current.get(channel);
+            if (callbacks) {
+              callbacks.forEach(cb => cb(msg));
+            }
+          }
+          // Also update lastMessage for backward compat (deprecated path)
           setLastMessage(msg);
         } catch {
           // ignore malformed messages
@@ -164,5 +180,15 @@ export function useWebSocket(): UseWebSocketReturn {
     []
   );
 
-  return { subscribe, unsubscribe, send, isConnected, lastMessage };
+  const onMessage = useCallback((channel: WsChannel, callback: (data: WsMessage) => void) => {
+    if (!channelCallbacksRef.current.has(channel)) {
+      channelCallbacksRef.current.set(channel, new Set());
+    }
+    channelCallbacksRef.current.get(channel)!.add(callback);
+    return () => {
+      channelCallbacksRef.current.get(channel)?.delete(callback);
+    };
+  }, []);
+
+  return { subscribe, unsubscribe, send, isConnected, lastMessage, onMessage };
 }

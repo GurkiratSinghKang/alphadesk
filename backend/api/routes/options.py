@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import random
 from datetime import date, datetime, timedelta, timezone
@@ -10,6 +11,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.routes.market import _is_valid_demo_symbol
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -409,6 +412,7 @@ async def get_options_chain(
     except HTTPException:
         raise
     except Exception:
+        logger.warning("Failed to fetch options chain from Polygon for %s, falling back to demo", symbol, exc_info=True)
         if not _is_valid_demo_symbol(symbol):
             raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
         return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
@@ -467,6 +471,7 @@ async def get_iv_analysis(symbol: str) -> IVData:
             hv_100=round(hv_100, 4),
         )
     except Exception:
+        logger.warning("Failed to compute IV analysis for %s, falling back to demo", symbol, exc_info=True)
         return _demo_iv(symbol)
 
 

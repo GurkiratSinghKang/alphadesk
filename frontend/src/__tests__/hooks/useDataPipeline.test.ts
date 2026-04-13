@@ -1,19 +1,38 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useMarketStore } from '@/stores/market';
 import { usePortfolioStore } from '@/stores/portfolio';
 import { useAlertsStore } from '@/stores/alerts';
 
-// Track the subscribe calls and lastMessage via a controllable mock
+// Track subscribe calls and capture onMessage callbacks for simulation
 const mockSubscribe = vi.fn();
-let mockLastMessage: { channel: string; event: string; data: unknown } | null = null;
+const mockOnMessageCallbacks = new Map<string, Set<(msg: { channel: string; event: string; data: unknown }) => void>>();
+
+const mockOnMessage = vi.fn((channel: string, callback: (msg: { channel: string; event: string; data: unknown }) => void) => {
+  if (!mockOnMessageCallbacks.has(channel)) {
+    mockOnMessageCallbacks.set(channel, new Set());
+  }
+  mockOnMessageCallbacks.get(channel)!.add(callback);
+  return () => {
+    mockOnMessageCallbacks.get(channel)?.delete(callback);
+  };
+});
+
+// Simulate sending a WS message to registered callbacks
+function simulateMessage(channel: string, event: string, data: unknown) {
+  const callbacks = mockOnMessageCallbacks.get(channel);
+  if (callbacks) {
+    callbacks.forEach(cb => cb({ channel, event, data }));
+  }
+}
 
 vi.mock('@/lib/providers', () => ({
   useWs: () => ({
     isConnected: true,
     subscribe: mockSubscribe,
     unsubscribe: vi.fn(),
-    lastMessage: mockLastMessage,
+    lastMessage: null,
+    onMessage: mockOnMessage,
   }),
 }));
 
@@ -34,7 +53,8 @@ vi.mock('@/lib/api', () => ({
 describe('useDataPipeline', () => {
   beforeEach(() => {
     mockSubscribe.mockClear();
-    mockLastMessage = null;
+    mockOnMessage.mockClear();
+    mockOnMessageCallbacks.clear();
     useMarketStore.setState({
       watchlist: ['SPY', 'AAPL'],
       selectedSymbol: 'SPY',
@@ -72,44 +92,44 @@ describe('useDataPipeline', () => {
       changePct: 0.58, volume: 500000, high: 262, low: 258,
       open: 259, close: 260, timestamp: Date.now(),
     };
-    mockLastMessage = { channel: 'quotes', event: 'update', data: quote };
 
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     renderHook(() => useDataPipeline());
 
-    // The hook processes lastMessage in useEffect, which runs synchronously in test
+    act(() => {
+      simulateMessage('quotes', 'update', quote);
+    });
+
     const stored = useMarketStore.getState().quotes['AAPL'];
     expect(stored).toBeDefined();
     expect(stored?.last).toBe(260);
   });
 
   it('routes alert WS messages to alerts store', async () => {
-    mockLastMessage = {
-      channel: 'alerts',
-      event: 'new',
-      data: { id: 'alert-1', type: 'system', message: 'Test alert', time: Date.now(), acknowledged: false },
-    };
-
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     renderHook(() => useDataPipeline());
+
+    act(() => {
+      simulateMessage('alerts', 'new', {
+        id: 'alert-1', type: 'system', message: 'Test alert', time: Date.now(), acknowledged: false,
+      });
+    });
 
     const alerts = useAlertsStore.getState().alerts;
     expect(alerts.some((a) => a.id === 'alert-1')).toBe(true);
   });
 
   it('routes portfolio positions WS messages to portfolio store', async () => {
-    mockLastMessage = {
-      channel: 'portfolio',
-      event: 'update',
-      data: {
+    const { useDataPipeline } = await import('@/hooks/useDataPipeline');
+    renderHook(() => useDataPipeline());
+
+    act(() => {
+      simulateMessage('portfolio', 'update', {
         positions: [
           { symbol: 'TSLA', quantity: 5, avg_cost: 200, current_price: 210, unrealized_pnl: 50, market_value: 1050 },
         ],
-      },
-    };
-
-    const { useDataPipeline } = await import('@/hooks/useDataPipeline');
-    renderHook(() => useDataPipeline());
+      });
+    });
 
     const positions = usePortfolioStore.getState().positions;
     expect(positions.length).toBe(1);
@@ -117,30 +137,28 @@ describe('useDataPipeline', () => {
   });
 
   it('ignores quote messages without a symbol', async () => {
-    mockLastMessage = { channel: 'quotes', event: 'update', data: { last: 100 } };
-
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     renderHook(() => useDataPipeline());
+
+    act(() => {
+      simulateMessage('quotes', 'update', { last: 100 });
+    });
 
     expect(Object.keys(useMarketStore.getState().quotes).length).toBe(0);
   });
 
   it('ignores alert messages without an id', async () => {
-    mockLastMessage = {
-      channel: 'alerts',
-      event: 'new',
-      data: { type: 'system', message: 'No id alert' },
-    };
-
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     renderHook(() => useDataPipeline());
+
+    act(() => {
+      simulateMessage('alerts', 'new', { type: 'system', message: 'No id alert' });
+    });
 
     expect(useAlertsStore.getState().alerts.length).toBe(0);
   });
 
-  it('handles null lastMessage gracefully', async () => {
-    mockLastMessage = null;
-
+  it('handles no messages gracefully', async () => {
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     expect(() => renderHook(() => useDataPipeline())).not.toThrow();
   });

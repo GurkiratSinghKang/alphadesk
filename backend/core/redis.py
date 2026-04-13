@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -48,6 +49,7 @@ ALL_CHANNELS = [CHANNEL_QUOTES, CHANNEL_PORTFOLIO, CHANNEL_ALERTS, CHANNEL_AGENT
 
 async def publish(channel: str, data: dict[str, Any]) -> int:
     """Publish a JSON-serialised message to a Redis channel."""
+    data["_ts"] = time.time()  # Add timestamp for staleness detection
     r = await get_redis()
     payload = orjson.dumps(data).decode()
     return await r.publish(channel, payload)

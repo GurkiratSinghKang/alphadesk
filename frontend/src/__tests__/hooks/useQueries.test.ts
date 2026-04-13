@@ -69,10 +69,10 @@ describe('useQueries hooks', () => {
     }));
   });
 
-  it('useStrategies has staleTime of 1 minute', () => {
+  it('useStrategies has staleTime of 30 seconds', () => {
     useStrategies();
     expect(mockUseQuery).toHaveBeenCalledWith(expect.objectContaining({
-      staleTime: 60 * 1000,
+      staleTime: 30 * 1000,
     }));
   });
 
@@ -83,10 +83,10 @@ describe('useQueries hooks', () => {
     }));
   });
 
-  it('useStrategies has refetchInterval of 5 minutes', () => {
+  it('useStrategies has refetchInterval of 1 minute', () => {
     useStrategies();
     expect(mockUseQuery).toHaveBeenCalledWith(expect.objectContaining({
-      refetchInterval: 5 * 60 * 1000,
+      refetchInterval: 60 * 1000,
     }));
   });
 

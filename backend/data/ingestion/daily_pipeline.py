@@ -293,7 +293,7 @@ async def _execute_approved_orders(
         )
         return orders_placed
 
-    for order in master.pending_orders:
+    for order in list(master.pending_orders):
         if order["side"] != "buy":
             continue
         sym = order["symbol"]
@@ -337,14 +337,16 @@ async def _execute_approved_orders(
             # Place stop-loss order on Alpaca immediately
             if order.get("stop_loss"):
                 try:
-                    stop_order = await _place_stop_order(client, sym, shares, order["stop_loss"])
+                    stop_oid = await _place_stop_order(client, sym, shares, order["stop_loss"])
+                    logger.info("Stop-loss order placed for %s: %s", sym, stop_oid.get("id") if isinstance(stop_oid, dict) else stop_oid)
                 except Exception as e:
                     logger.error("Stop-loss order failed for %s: %s", sym, e)
 
             # Place take-profit limit order on Alpaca immediately
             if order.get("take_profit"):
                 try:
-                    take_profit_order = await _place_limit_order(client, sym, shares, order["take_profit"])
+                    tp_oid = await _place_limit_order(client, sym, shares, order["take_profit"])
+                    logger.info("Take-profit order placed for %s: %s", sym, tp_oid.get("id") if isinstance(tp_oid, dict) else tp_oid)
                 except Exception as e:
                     logger.error("Take-profit order failed for %s: %s", sym, e)
 
@@ -359,6 +361,28 @@ async def _execute_approved_orders(
             })
         except Exception as e:
             logger.error("Order failed for %s: %s", sym, e)
+
+            # --- Ghost position rollback ---
+            # The MasterAgent already added this symbol to existing_positions
+            # and decremented cash during request_trade(). Roll back both so
+            # the symbol is not permanently blocked and cash is accurate.
+            notional = order.get("notional", 0)
+            if sym in master.existing_positions:
+                del master.existing_positions[sym]
+                logger.warning(
+                    "Rollback: removed %s from master.existing_positions", sym,
+                )
+            if notional:
+                master.cash += notional
+                logger.warning(
+                    "Rollback: restored $%.0f to master.cash (now $%.0f)",
+                    notional, master.cash,
+                )
+            # Remove from pending_orders so it isn't retried
+            master.pending_orders = [
+                o for o in master.pending_orders if o.get("symbol") != sym
+            ]
+
             orders_placed.append({
                 "symbol": sym,
                 "side": "buy",
@@ -407,7 +431,7 @@ async def _check_exits(
 
         # Time-based exit: Close positions held > 20 trading days (~28 calendar days)
         if not reason:
-            entry_date = datetime.fromisoformat(trade.get("entry_time", "2026-01-01"))
+            entry_date = datetime.fromisoformat(trade.get("entry_time", "2026-01-01T00:00:00+00:00"))
             days_held = (datetime.now(timezone.utc) - entry_date).days
             if days_held > 28:
                 reason = f"time_exit: held {days_held} days (max 20 trading days)"
@@ -455,6 +479,35 @@ async def _check_exits(
             try:
                 order = await _place_order(client, sym, trade["shares"], "sell")
                 ledger.record_exit(sym, trade["shares"], current_price, reason)
+
+                # --- Bracket order cleanup ---
+                # When one leg fills (stop-loss or take-profit), cancel
+                # the opposing open bracket leg to avoid orphaned orders.
+                try:
+                    resp = await client.get(
+                        f"{_base_url()}/v2/orders?status=open&symbols={sym}",
+                        headers=_alpaca_headers(),
+                    )
+                    if resp.status_code == 200:
+                        for open_order in resp.json():
+                            otype = open_order.get("type", "")
+                            oside = open_order.get("side", "")
+                            oid = open_order.get("id")
+                            if oside == "sell" and otype in ("stop", "limit") and oid:
+                                await client.delete(
+                                    f"{_base_url()}/v2/orders/{oid}",
+                                    headers=_alpaca_headers(),
+                                )
+                                logger.info(
+                                    "Cancelled orphaned %s order for %s (id=%s) after %s exit",
+                                    otype, sym, oid, reason,
+                                )
+                except Exception as cancel_err:
+                    logger.warning(
+                        "Failed to cancel bracket orders for %s: %s",
+                        sym, cancel_err,
+                    )
+
                 closed_orders.append({
                     "symbol": sym,
                     "side": "sell",
@@ -677,50 +730,60 @@ async def _run_pipeline_inner(
                 logger.error("Failed to populate momentum data: %s", e)
                 errors.append(f"Momentum data failed: {e}")
 
-            # ---- Run each strategy ----
+            # ---- Run each strategy (screening in parallel) ----
             strategy_instances = [cls() for cls in ALL_STRATEGIES]
             num_strategies = len(strategy_instances)
             per_strategy_limit = max(2, analyze_limit // num_strategies)
 
-            for strategy in strategy_instances:
+            async def _run_single_strategy(strategy: BaseStrategyRunner) -> tuple[str, dict[str, Any]]:
+                """Screen, analyze, and generate trades for one strategy."""
                 strat_name = strategy.name
                 logger.info("Running strategy: %s", strat_name)
 
-                try:
-                    # Screen
-                    candidates = await strategy.screen()
-                    logger.info(
-                        "  %s screened %d candidates", strat_name, len(candidates),
-                    )
+                # Screen
+                candidates = await strategy.screen()
+                logger.info(
+                    "  %s screened %d candidates", strat_name, len(candidates),
+                )
 
-                    # Analyze (limit per strategy to conserve CLI calls)
-                    to_analyze = candidates[:per_strategy_limit]
-                    analyses = await strategy.analyze(to_analyze)
-                    logger.info(
-                        "  %s analyzed %d candidates", strat_name, len(analyses),
-                    )
+                # Analyze (limit per strategy to conserve CLI calls)
+                to_analyze = candidates[:per_strategy_limit]
+                analyses = await strategy.analyze(to_analyze)
+                logger.info(
+                    "  %s analyzed %d candidates", strat_name, len(analyses),
+                )
 
-                    # Generate trades (asks master for permission)
-                    trades = await strategy.generate_trades(analyses, master)
-                    approved = [t for t in trades if t.get("approved")]
-                    logger.info(
-                        "  %s: %d trades requested, %d approved",
-                        strat_name, len(trades), len(approved),
-                    )
+                # Generate trades (asks master for permission)
+                trades = await strategy.generate_trades(analyses, master)
+                approved = [t for t in trades if t.get("approved")]
+                logger.info(
+                    "  %s: %d trades requested, %d approved",
+                    strat_name, len(trades), len(approved),
+                )
 
-                    log["strategies"][strat_name] = {
-                        "screened": len(candidates),
-                        "analyzed": len(analyses),
-                        "analyses": analyses,
-                        "trades_requested": len(trades),
-                        "trades_approved": len(approved),
-                        "trades": trades,
-                    }
+                return strat_name, {
+                    "screened": len(candidates),
+                    "analyzed": len(analyses),
+                    "analyses": analyses,
+                    "trades_requested": len(trades),
+                    "trades_approved": len(approved),
+                    "trades": trades,
+                }
 
-                except Exception as e:
-                    logger.exception("Strategy %s failed: %s", strat_name, e)
-                    errors.append(f"Strategy {strat_name} failed: {e}")
-                    log["strategies"][strat_name] = {"error": str(e)}
+            results = await asyncio.gather(
+                *[_run_single_strategy(s) for s in strategy_instances],
+                return_exceptions=True,
+            )
+
+            for i, result in enumerate(results):
+                strat_name = strategy_instances[i].name
+                if isinstance(result, Exception):
+                    logger.exception("Strategy %s failed: %s", strat_name, result)
+                    errors.append(f"Strategy {strat_name} failed: {result}")
+                    log["strategies"][strat_name] = {"error": str(result)}
+                else:
+                    name, data = result
+                    log["strategies"][name] = data
 
             # ---- Update strategy PnL (P1) ----
             strategy_values: dict[str, float] = {}

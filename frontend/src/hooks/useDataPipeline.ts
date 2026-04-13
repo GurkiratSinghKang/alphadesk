@@ -12,10 +12,10 @@ import type { Quote, Alert } from "@/types";
  * Bridges the WebSocket + REST API to Zustand stores.
  * - Fetches initial market data for watchlist symbols
  * - Fetches initial portfolio data
- * - Routes incoming WS messages to the correct store
+ * - Routes incoming WS messages to the correct store via onMessage (no re-render)
  */
 export function useDataPipeline() {
-  const { lastMessage, subscribe } = useWs();
+  const { subscribe, onMessage } = useWs();
   const hasFetched = useRef(false);
 
   // Subscribe to WS channels on mount
@@ -106,22 +106,22 @@ export function useDataPipeline() {
     return () => { cancelled = true; };
   }, []);
 
-  // Route WS messages to stores
+  // Route WS messages to stores via channel callbacks (no React re-renders)
   useEffect(() => {
-    if (!lastMessage) return;
+    const unsubs: (() => void)[] = [];
 
-    const { channel, data } = lastMessage;
-
-    switch (channel) {
-      case "quotes": {
-        const quote = data as Quote;
+    unsubs.push(
+      onMessage("quotes", (msg) => {
+        const quote = msg.data as Quote;
         if (quote?.symbol) {
           useMarketStore.getState().updateQuote(quote);
         }
-        break;
-      }
-      case "portfolio": {
-        const payload = data as Record<string, unknown>;
+      })
+    );
+
+    unsubs.push(
+      onMessage("portfolio", (msg) => {
+        const payload = msg.data as Record<string, unknown>;
         if (payload?.positions) {
           const rawPositions = payload.positions as Record<string, unknown>[];
           const mapped = rawPositions.map((p) => ({
@@ -152,19 +152,21 @@ export function useDataPipeline() {
             .getState()
             .setGreeks(payload.greeks as import("@/types").PortfolioGreeks);
         }
-        break;
-      }
-      case "alerts": {
-        const alert = data as Alert;
+      })
+    );
+
+    unsubs.push(
+      onMessage("alerts", (msg) => {
+        const alert = msg.data as Alert;
         if (alert?.id) {
           useAlertsStore.getState().addAlert(alert);
         }
-        break;
-      }
-      case "agents": {
-        // Agent status updates can be handled here in the future
-        break;
-      }
-    }
-  }, [lastMessage]);
+      })
+    );
+
+    // "agents" channel — reserved for future use
+    unsubs.push(onMessage("agents", () => {}));
+
+    return () => unsubs.forEach(fn => fn());
+  }, [onMessage]);
 }

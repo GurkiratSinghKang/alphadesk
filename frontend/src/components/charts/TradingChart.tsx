@@ -30,6 +30,7 @@ import type { OHLCVBar, ChartType, Indicator } from "@/types";
 export interface TradingChartHandle {
   chart: IChartApi | null;
   updateBar: (bar: OHLCVBar) => void;
+  updateLastClose: (close: number) => void;
   setData: (bars: OHLCVBar[]) => void;
   fitContent: () => void;
 }
@@ -151,6 +152,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     const chartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+    const lastBarRef = useRef<OHLCVBar | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<SeriesType>[]>([]);
 
     // Expose imperative handle
@@ -164,6 +166,19 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         }
         volumeSeriesRef.current?.update(toChartVolume(bar));
       },
+      updateLastClose: (close: number) => {
+        // Update the last bar's close price without changing the timestamp
+        // This prevents the chart from jumping when WebSocket ticks arrive
+        if (lastBarRef.current) {
+          const updated = { ...lastBarRef.current, close, high: Math.max(lastBarRef.current.high, close), low: Math.min(lastBarRef.current.low, close) };
+          lastBarRef.current = updated;
+          if (chartType === "candle") {
+            mainSeriesRef.current?.update(toChartCandle(updated));
+          } else {
+            mainSeriesRef.current?.update(toLineData(updated));
+          }
+        }
+      },
       setData: (bars: OHLCVBar[]) => {
         if (chartType === "candle") {
           mainSeriesRef.current?.setData(bars.map(toChartCandle));
@@ -171,6 +186,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           mainSeriesRef.current?.setData(bars.map(toLineData));
         }
         volumeSeriesRef.current?.setData(bars.map(toChartVolume));
+        lastBarRef.current = bars.length > 0 ? bars[bars.length - 1] : null;
         chartRef.current?.timeScale().fitContent();
       },
       fitContent: () => chartRef.current?.timeScale().fitContent(),

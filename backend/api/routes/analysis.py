@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +10,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from core.redis import cache_get, cache_set
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -275,6 +278,7 @@ async def trigger_analysis(
         return response
     except Exception:
         # Fall back to demo analysis on any failure
+        logger.warning("Analysis pipeline failed for %s, falling back to demo", symbol, exc_info=True)
         response = _demo_analysis(symbol, request)
         await cache_set(f"analysis:{symbol}", response.model_dump(mode="json"), ttl_seconds=600)
         return response
@@ -339,6 +343,7 @@ async def get_analysis(
             analyzed_at=rows[0].timestamp,
         )
     except Exception:
+        logger.warning("Failed to retrieve analysis for %s from DB, falling back to demo", symbol, exc_info=True)
         return _demo_analysis(symbol, AnalysisRequest())
 
 

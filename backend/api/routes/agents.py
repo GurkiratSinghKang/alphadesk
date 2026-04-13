@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -221,6 +223,7 @@ async def get_agent_status() -> AgentPipelineStatus:
         )
     except Exception:
         # Redis not available — return unconfigured status
+        logger.warning("Failed to fetch agent status from Redis", exc_info=True)
         return AgentPipelineStatus(
             agents=[
                 AgentStatusEntry(

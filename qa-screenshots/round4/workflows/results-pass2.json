@@ -1,0 +1,295 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "status": "PASS",
+      "section": "Login",
+      "description": "Logged in successfully",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:20.593Z"
+    },
+    {
+      "id": 2,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality page loads correctly",
+      "details": "Has name: true, tabs: true, metrics: true",
+      "timestamp": "2026-04-12T21:06:24.439Z"
+    },
+    {
+      "id": 3,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality — 5/5 tabs clickable",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:28.976Z"
+    },
+    {
+      "id": 4,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality toggle works",
+      "details": " Pause →  Resume",
+      "timestamp": "2026-04-12T21:06:31.029Z"
+    },
+    {
+      "id": 5,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality — 16 SVG elements (charts)",
+      "details": "Equity curve text found",
+      "timestamp": "2026-04-12T21:06:33.154Z"
+    },
+    {
+      "id": 6,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality back button → dashboard",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:35.183Z"
+    },
+    {
+      "id": 7,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy pead page loads correctly",
+      "details": "Has name: true, tabs: true, metrics: true",
+      "timestamp": "2026-04-12T21:06:39.223Z"
+    },
+    {
+      "id": 8,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy pead — 5/5 tabs clickable",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:43.781Z"
+    },
+    {
+      "id": 9,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy pead toggle works",
+      "details": " Pause →  Resume",
+      "timestamp": "2026-04-12T21:06:45.831Z"
+    },
+    {
+      "id": 10,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy pead — 17 SVG elements (charts)",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:47.958Z"
+    },
+    {
+      "id": 11,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy pead back button → dashboard",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:49.999Z"
+    },
+    {
+      "id": 12,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting page loads correctly",
+      "details": "Has name: true, tabs: true, metrics: true",
+      "timestamp": "2026-04-12T21:06:53.937Z"
+    },
+    {
+      "id": 13,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting — 5/5 tabs clickable",
+      "details": "",
+      "timestamp": "2026-04-12T21:06:58.471Z"
+    },
+    {
+      "id": 14,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting toggle works",
+      "details": " Pause →  Resume",
+      "timestamp": "2026-04-12T21:07:00.513Z"
+    },
+    {
+      "id": 15,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting — 16 SVG elements (charts)",
+      "details": "Equity curve text found",
+      "timestamp": "2026-04-12T21:07:02.637Z"
+    },
+    {
+      "id": 16,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting back button → dashboard",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:04.665Z"
+    },
+    {
+      "id": 17,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha page loads correctly",
+      "details": "Has name: true, tabs: true, metrics: true",
+      "timestamp": "2026-04-12T21:07:08.649Z"
+    },
+    {
+      "id": 18,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha — 5/5 tabs clickable",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:13.179Z"
+    },
+    {
+      "id": 19,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha toggle works",
+      "details": " Pause →  Resume",
+      "timestamp": "2026-04-12T21:07:15.227Z"
+    },
+    {
+      "id": 20,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha — 16 SVG elements (charts)",
+      "details": "Equity curve text found",
+      "timestamp": "2026-04-12T21:07:17.346Z"
+    },
+    {
+      "id": 21,
+      "status": "PASS",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha back button → dashboard",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:19.381Z"
+    },
+    {
+      "id": 22,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Right panel tabs: found 5/5, clicked 5",
+      "details": "Tech, Fund, Sent, Chat, Order",
+      "timestamp": "2026-04-12T21:07:31.089Z"
+    },
+    {
+      "id": 23,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Chat tab — message + response",
+      "details": "3 messages visible",
+      "timestamp": "2026-04-12T21:07:37.158Z"
+    },
+    {
+      "id": 24,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Bottom panel tabs: found 5/5",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:40.252Z"
+    },
+    {
+      "id": 25,
+      "status": "WARN",
+      "section": "Trade Page",
+      "description": "Chart type dropdown not found — may use direct toggle buttons",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:40.266Z"
+    },
+    {
+      "id": 26,
+      "status": "WARN",
+      "section": "Trade Page",
+      "description": "Indicator toggle buttons: 0/6 found",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:40.313Z"
+    },
+    {
+      "id": 27,
+      "status": "WARN",
+      "section": "Trade Page",
+      "description": "Drawing tool buttons not found (may require interaction)",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:40.315Z"
+    },
+    {
+      "id": 28,
+      "status": "WARN",
+      "section": "Keyboard Shortcuts",
+      "description": "? key opened a dialog but content unclear",
+      "details": "Popular SymbolsSPYQQQAAPLMSFTGOOGLAMZNNVDATSLAMETAAMDNFLXJPMVBADISCOINSOFIPLTRSMCIAVGOCommandsAnalyz",
+      "timestamp": "2026-04-12T21:07:45.938Z"
+    },
+    {
+      "id": 29,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Found 6 input/textarea elements",
+      "details": "[{\"tag\":\"INPUT\",\"type\":null,\"placeholder\":null,\"name\":null,\"y\":552.640625},{\"tag\":\"INPUT\",\"type\":null,\"placeholder\":\"e.g. \\\"Buy when RSI drops below 30\\\"\",\"name\":null,\"y\":624.640625},{\"tag\":\"INPUT\",\"type\":null,\"placeholder\":null,\"name\":null,\"y\":881.640625},{\"tag\":\"INPUT\",\"type\":\"number\",\"placeholder\":null,\"name\":null,\"y\":881.640625},{\"tag\":\"INPUT\",\"type\":\"number\",\"placeholder\":null,\"name\":null,\"y\":881.640625},{\"tag\":\"INPUT\",\"type\":\"number\",\"placeholder\":null,\"name\":null,\"y\":953.640625}]",
+      "timestamp": "2026-04-12T21:07:50.048Z"
+    },
+    {
+      "id": 30,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Strategy Builder uses button-based rule interface",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:50.051Z"
+    },
+    {
+      "id": 31,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Trade/Order Builder elements found",
+      "details": "Add Leg: true, Submit: false",
+      "timestamp": "2026-04-12T21:07:55.224Z"
+    },
+    {
+      "id": 32,
+      "status": "PASS",
+      "section": "Trade Page",
+      "description": "Paper trading mode indicator visible",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:55.227Z"
+    },
+    {
+      "id": 33,
+      "status": "PASS",
+      "section": "Edge Case",
+      "description": "Non-existent strategy shows error page",
+      "details": "",
+      "timestamp": "2026-04-12T21:07:59.277Z"
+    },
+    {
+      "id": 34,
+      "status": "WARN",
+      "section": "Edge Case",
+      "description": "WebSocket status indicator present",
+      "details": "",
+      "timestamp": "2026-04-12T21:08:03.592Z"
+    },
+    {
+      "id": 35,
+      "status": "WARN",
+      "section": "Console",
+      "description": "1 console errors detected",
+      "details": "Failed to load resource: the server responded with a status of 400 ()",
+      "timestamp": "2026-04-12T21:08:03.592Z"
+    }
+  ],
+  "summary": {
+    "total": 35,
+    "pass": 29,
+    "fail": 0,
+    "warn": 6
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 400 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ]
+}

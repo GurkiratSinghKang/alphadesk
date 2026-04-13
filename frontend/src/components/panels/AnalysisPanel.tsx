@@ -42,7 +42,7 @@ function ScoreGauge({
   size?: number;
   placeholder?: boolean;
 }) {
-  const pct = Math.min(Math.max(value / max, 0), 1);
+  const pct = placeholder ? 0 : Math.min(Math.max(value / max, 0), 1);
   const color =
     pct > 0.65
       ? "var(--profit)"

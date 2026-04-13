@@ -115,15 +115,4 @@ Output JSON with: structure (dict), legs (list), risk_reward (dict), rationale (
             "max_risk": max_risk,
         }
 
-    def _extract_score(self, text: str) -> float:
-        import re
-        match = re.search(r'"?score"?\s*[:=]\s*([-\d.]+)', text)
-        return float(match.group(1)) if match else 0.0
-
-    def _extract_conviction(self, text: str) -> str:
-        tl = text.lower()
-        if "high" in tl and "conviction" in tl:
-            return "high"
-        elif "low" in tl and "conviction" in tl:
-            return "low"
-        return "medium"
+    # _extract_score and _extract_conviction inherited from BaseAgent

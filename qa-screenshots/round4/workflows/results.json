@@ -1,0 +1,393 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "status": "PASS",
+      "section": "Login",
+      "description": "Login with admin/alphaDesk2025!",
+      "details": "Redirected to https://tradingalpha.net/",
+      "timestamp": "2026-04-12T21:02:14.027Z"
+    },
+    {
+      "id": 2,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Click logo → goes to dashboard",
+      "details": "https://tradingalpha.net/",
+      "timestamp": "2026-04-12T21:02:20.153Z"
+    },
+    {
+      "id": 3,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Click Dashboard tab → navigates to /",
+      "details": "https://tradingalpha.net/",
+      "timestamp": "2026-04-12T21:02:22.269Z"
+    },
+    {
+      "id": 4,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Click Trade tab → navigates to /trade",
+      "details": "https://tradingalpha.net/trade",
+      "timestamp": "2026-04-12T21:02:25.401Z"
+    },
+    {
+      "id": 5,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Click Pipeline tab → navigates to /pipeline",
+      "details": "https://tradingalpha.net/pipeline",
+      "timestamp": "2026-04-12T21:02:28.501Z"
+    },
+    {
+      "id": 6,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Strategy cards found on dashboard",
+      "details": "Found 12 cards",
+      "timestamp": "2026-04-12T21:02:31.615Z"
+    },
+    {
+      "id": 7,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Click strategy card → navigates to strategy detail",
+      "details": "https://tradingalpha.net/strategies/momentum-quality",
+      "timestamp": "2026-04-12T21:02:34.664Z"
+    },
+    {
+      "id": 8,
+      "status": "PASS",
+      "section": "Navigation",
+      "description": "Back button returns to dashboard",
+      "details": "https://tradingalpha.net/",
+      "timestamp": "2026-04-12T21:02:37.742Z"
+    },
+    {
+      "id": 9,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "Ctrl+K opens command palette",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:42.908Z"
+    },
+    {
+      "id": 10,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "Search AAPL → results appear",
+      "details": "13 results, AAPL found",
+      "timestamp": "2026-04-12T21:02:44.559Z"
+    },
+    {
+      "id": 11,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "Select AAPL symbol → palette closes",
+      "details": "Palette closed",
+      "timestamp": "2026-04-12T21:02:46.729Z"
+    },
+    {
+      "id": 12,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "'Analyze current symbol' command found and clicked",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:49.836Z"
+    },
+    {
+      "id": 13,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "'Screen momentum stocks' command executed",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:51.987Z"
+    },
+    {
+      "id": 14,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "'Show portfolio' command executed",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:54.163Z"
+    },
+    {
+      "id": 15,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "'Switch to live trading' shows confirmation dialog",
+      "details": "Switch to LIVE trading mode?\n\nReal orders will be submitted to your broker. Make sure your API keys are configured.",
+      "timestamp": "2026-04-12T21:02:55.368Z"
+    },
+    {
+      "id": 16,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "'Switch to live trading' command executed",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:57.374Z"
+    },
+    {
+      "id": 17,
+      "status": "PASS",
+      "section": "Command Palette",
+      "description": "Escape closes command palette",
+      "details": "",
+      "timestamp": "2026-04-12T21:02:58.495Z"
+    },
+    {
+      "id": 18,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Watchlist panel visible",
+      "details": "Found 60 items",
+      "timestamp": "2026-04-12T21:03:03.774Z"
+    },
+    {
+      "id": 19,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Click watchlist symbol → chart should update",
+      "details": "Clicked: MSFT$370",
+      "timestamp": "2026-04-12T21:03:05.826Z"
+    },
+    {
+      "id": 20,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Timeframe buttons present and clickable",
+      "details": "Found 6/6, clicked 6",
+      "timestamp": "2026-04-12T21:03:09.826Z"
+    },
+    {
+      "id": 21,
+      "status": "WARN",
+      "section": "Trade",
+      "description": "Right panel tabs",
+      "details": "Found 0 total tabs: ",
+      "timestamp": "2026-04-12T21:03:09.920Z"
+    },
+    {
+      "id": 22,
+      "status": "FAIL",
+      "section": "Trade",
+      "description": "Chat tab not found in right panel",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:09.920Z"
+    },
+    {
+      "id": 23,
+      "status": "FAIL",
+      "section": "Trade",
+      "description": "Order tab not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:09.921Z"
+    },
+    {
+      "id": 24,
+      "status": "WARN",
+      "section": "Trade",
+      "description": "Bottom panel tabs",
+      "details": "Found 0 matching tabs. All tabs: ",
+      "timestamp": "2026-04-12T21:03:09.923Z"
+    },
+    {
+      "id": 25,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Pipeline status is visible with flow stages",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:13.975Z"
+    },
+    {
+      "id": 26,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Run Pipeline button clicked",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:17.018Z"
+    },
+    {
+      "id": 27,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Strategy Builder section present",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:17.076Z"
+    },
+    {
+      "id": 28,
+      "status": "WARN",
+      "section": "Pipeline",
+      "description": "Strategy Builder rule input not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:17.077Z"
+    },
+    {
+      "id": 29,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Holdings/Positions section visible",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:17.078Z"
+    },
+    {
+      "id": 30,
+      "status": "PASS",
+      "section": "Pipeline",
+      "description": "Backtest section present",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:17.126Z"
+    },
+    {
+      "id": 31,
+      "status": "PASS",
+      "section": "Profile Menu",
+      "description": "Click avatar → dropdown menu opens",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:21.194Z"
+    },
+    {
+      "id": 32,
+      "status": "PASS",
+      "section": "Profile Menu",
+      "description": "Trading mode displayed in menu",
+      "details": "Paper mode",
+      "timestamp": "2026-04-12T21:03:21.280Z"
+    },
+    {
+      "id": 33,
+      "status": "WARN",
+      "section": "Profile Menu",
+      "description": "Keyboard Shortcuts clicked but no dialog detected",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:22.824Z"
+    },
+    {
+      "id": 34,
+      "status": "PASS",
+      "section": "Profile Menu",
+      "description": "Settings → sheet/dialog opens",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:24.945Z"
+    },
+    {
+      "id": 35,
+      "status": "FAIL",
+      "section": "Strategy Detail",
+      "description": "Strategy momentum-quality → 404 / not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:29.799Z"
+    },
+    {
+      "id": 36,
+      "status": "FAIL",
+      "section": "Strategy Detail",
+      "description": "Strategy pead → 404 / not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:33.845Z"
+    },
+    {
+      "id": 37,
+      "status": "FAIL",
+      "section": "Strategy Detail",
+      "description": "Strategy vrp-harvesting → 404 / not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:37.868Z"
+    },
+    {
+      "id": 38,
+      "status": "FAIL",
+      "section": "Strategy Detail",
+      "description": "Strategy claude-alpha → 404 / not found",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:41.694Z"
+    },
+    {
+      "id": 39,
+      "status": "PASS",
+      "section": "Notifications",
+      "description": "Bell icon → notification popover opens",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:45.899Z"
+    },
+    {
+      "id": 40,
+      "status": "PASS",
+      "section": "Search",
+      "description": "Click search bar → command palette opens",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:47.555Z"
+    },
+    {
+      "id": 41,
+      "status": "PASS",
+      "section": "Status Strip",
+      "description": "Status indicators found in page",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:48.069Z"
+    },
+    {
+      "id": 42,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Options chain panel visible with data",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:52.348Z"
+    },
+    {
+      "id": 43,
+      "status": "PASS",
+      "section": "Trade",
+      "description": "Price alert UI opens when bell icon clicked",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:53.459Z"
+    },
+    {
+      "id": 44,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Economic Calendar widget present",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:57.587Z"
+    },
+    {
+      "id": 45,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "Market context with indices visible",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:57.591Z"
+    },
+    {
+      "id": 46,
+      "status": "PASS",
+      "section": "Dashboard",
+      "description": "PnL Calendar widget present",
+      "details": "",
+      "timestamp": "2026-04-12T21:03:57.594Z"
+    },
+    {
+      "id": 47,
+      "status": "PASS",
+      "section": "Profile Menu",
+      "description": "Logout → redirects to /login",
+      "details": "https://tradingalpha.net/login",
+      "timestamp": "2026-04-12T21:04:01.683Z"
+    }
+  ],
+  "summary": {
+    "total": 47,
+    "pass": 37,
+    "fail": 6,
+    "warn": 4
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ],
+  "networkErrors": [
+    "POST https://tradingalpha.net/api/v1/auth/logout - net::ERR_ABORTED"
+  ]
+}

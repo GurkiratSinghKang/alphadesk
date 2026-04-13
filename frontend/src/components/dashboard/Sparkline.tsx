@@ -20,8 +20,8 @@ export function Sparkline({
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
-  // If all values are identical (flat line), don't render — it looks like a rendering bug
-  if (min === max) return null;
+  // If all values are identical (flat line), show a label instead of rendering nothing
+  if (min === max) return <span className="text-[10px] text-muted-foreground italic">No history</span>;
   const range = max - min;
   const points = data
     .map((v, i) => {

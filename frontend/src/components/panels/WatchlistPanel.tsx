@@ -115,6 +115,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
         hasRealChange && change > 0 && "bg-[var(--profit)]/10",
         hasRealChange && change < 0 && "bg-[var(--loss)]/10",
       )}>
+        {hasRealChange && <span className="sr-only">{change >= 0 ? "gain" : "loss"}</span>}
         {hasRealChange ? formatPercent(change) : "\u2014"}
       </div>
 
@@ -191,6 +192,7 @@ function ScreenerTab() {
         <select
           value={preset}
           onChange={(e) => setPreset(e.target.value)}
+          aria-label="Screener preset"
           className="w-full h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground"
         >
           {presets.map((p) => (
@@ -390,6 +392,7 @@ export function WatchlistPanel() {
           <form onSubmit={handleAdd} className="flex gap-1 px-2 py-1.5">
             <Input
               placeholder="Add symbol..."
+              aria-label="Add symbol to watchlist"
               value={addInput}
               onChange={(e) => setAddInput(e.target.value.toUpperCase())}
               className="h-7 bg-[var(--background)] text-xs border-border placeholder:text-muted-foreground/60"

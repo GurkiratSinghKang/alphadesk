@@ -198,15 +198,9 @@ export function ChartPanel() {
     if (!quote) return;
     const prev = prevQuoteRef.current;
     if (prev && quote.last !== prev.last && chartHandleRef.current) {
-      const now = Math.floor(Date.now() / 1000);
-      chartHandleRef.current.updateBar({
-        time: now,
-        open: quote.open || quote.last,
-        high: Math.max(quote.high || quote.last, quote.last),
-        low: Math.min(quote.low || quote.last, quote.last),
-        close: quote.last,
-        volume: quote.volume || 0,
-      });
+      // Update the LAST bar's close price instead of creating a new bar at current timestamp.
+      // Creating bars at Date.now() would place them far right of historical data, causing chart jumps.
+      chartHandleRef.current.updateLastClose(quote.last);
     }
     prevQuoteRef.current = { last: quote.last, volume: quote.volume };
   }, [quote]);
@@ -471,7 +465,7 @@ export function ChartPanel() {
 
         {/* Quick trade buttons — fixed top-right, translucent until hovered */}
         {quote && (
-          <div className="absolute right-2 top-2 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
+          <div className="absolute right-16 top-2 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
             <button
               aria-label="Quick buy"
               onClick={() => {

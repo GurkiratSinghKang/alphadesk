@@ -32,8 +32,8 @@ class ConnectionManager:
     def active_count(self) -> int:
         return len(self._connections)
 
-    async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
+    async def register(self, ws: WebSocket) -> None:
+        """Register an already-accepted WebSocket connection."""
         async with self._lock:
             self._connections[ws] = set()
             count = len(self._connections)
@@ -72,7 +72,10 @@ class ConnectionManager:
 
         for ws in targets:
             try:
-                await self._send(ws, {"channel": channel, "data": data})
+                await asyncio.wait_for(
+                    self._send(ws, {"channel": channel, "data": data}),
+                    timeout=2.0,
+                )
             except Exception:
                 dead.append(ws)
 
@@ -84,7 +87,7 @@ class ConnectionManager:
             logger.info("Cleaned up %d dead WebSocket clients (%d active)", len(dead), count)
 
     async def _send(self, ws: WebSocket, data: dict[str, Any]) -> None:
-        await ws.send_bytes(orjson.dumps(data))
+        await ws.send_text(orjson.dumps(data).decode())
 
 
 # Singleton manager
@@ -184,37 +187,42 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
     try:
         # Require auth as first message within 5 seconds
-        from core.auth import decode_token
+        from core.auth import decode_token, is_token_revoked
 
         try:
             # Try cookie-based auth first (from HttpOnly cookies in handshake)
             cookie_token = ws.cookies.get("access_token")
             if cookie_token:
-                decode_token(cookie_token, expected_type="access")
-                await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
+                payload = decode_token(cookie_token, expected_type="access")
+                jti = payload.get("jti")
+                if jti and await is_token_revoked(jti):
+                    await ws.close(code=1008, reason="Token revoked")
+                    return
+                await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
             else:
                 # Fall back to message-based auth
                 raw = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
                 msg = orjson.loads(raw)
                 if msg.get("action") != "auth" or not msg.get("token"):
-                    await ws.send_bytes(orjson.dumps({"error": "First message must be auth"}))
+                    await ws.send_text(orjson.dumps({"error": "First message must be auth"}).decode())
                     await ws.close(code=4001, reason="Auth required")
                     return
-                decode_token(msg["token"], expected_type="access")
-                await ws.send_bytes(orjson.dumps({"type": "authenticated"}))
+                payload = decode_token(msg["token"], expected_type="access")
+                jti = payload.get("jti")
+                if jti and await is_token_revoked(jti):
+                    await ws.close(code=1008, reason="Token revoked")
+                    return
+                await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
         except asyncio.TimeoutError:
             await ws.close(code=4001, reason="Auth timeout")
             return
         except Exception:
-            await ws.send_bytes(orjson.dumps({"error": "Invalid token"}))
+            await ws.send_text(orjson.dumps({"error": "Invalid token"}).decode())
             await ws.close(code=4001, reason="Auth failed")
             return
 
         # Auth passed — register connection
-        async with manager._lock:
-            manager._connections[ws] = set()
-            count = len(manager._connections)
-        logger.info("WebSocket client authenticated (%d active)", count)
+        await manager.register(ws)
 
         await _ensure_listener_started()
 

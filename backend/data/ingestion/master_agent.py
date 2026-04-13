@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 from typing import Any
 
 logger = logging.getLogger("alphadesk.master_agent")
@@ -189,13 +190,7 @@ class MasterAgent:
 
     def _estimate_position_var(self, symbol: str, notional: float) -> float:
         """Estimate daily VaR for a position. Uses typical daily volatilities."""
-        VOL_MAP = {
-            "TSLA": 0.035, "NVDA": 0.030, "AMD": 0.030, "COIN": 0.040,
-            "META": 0.025, "NFLX": 0.025, "AAPL": 0.015, "MSFT": 0.014,
-            "AMZN": 0.020, "GOOGL": 0.018, "SPY": 0.010, "QQQ": 0.013,
-            "JPM": 0.015, "BAC": 0.018, "XOM": 0.016, "DIS": 0.020,
-        }
-        daily_vol = VOL_MAP.get(symbol, 0.020)  # default 2% daily vol
+        daily_vol = self.VOL_MAP.get(symbol, 0.020)  # default 2% daily vol
         return notional * daily_vol * 2.33  # 99% confidence
 
     def _portfolio_var(self) -> float:
@@ -308,15 +303,7 @@ class MasterAgent:
 
     def calculate_vol_targeted_size(self, symbol: str, max_notional: float = 5000) -> float:
         """Size position inversely to volatility (risk parity at position level)."""
-        VOL_MAP = {
-            "TSLA": 0.035, "NVDA": 0.030, "AMD": 0.030, "COIN": 0.040,
-            "META": 0.025, "NFLX": 0.025, "AAPL": 0.015, "MSFT": 0.014,
-            "AMZN": 0.020, "GOOGL": 0.018, "SPY": 0.010, "QQQ": 0.013,
-            "JPM": 0.015, "BAC": 0.018, "XOM": 0.016, "DIS": 0.020,
-            "WMT": 0.012, "INTC": 0.035, "CSCO": 0.015, "ABBV": 0.016,
-            "UNH": 0.028, "PG": 0.010, "MRK": 0.014, "KO": 0.009,
-        }
-        vol = VOL_MAP.get(symbol, 0.020)
+        vol = self.VOL_MAP.get(symbol, 0.020)
 
         # Target: 1% daily portfolio risk per position
         target_risk = 0.01 * self.equity  # $1,000 for $100K portfolio
@@ -583,9 +570,11 @@ class MasterAgent:
         )
 
         try:
-            CLAUDE_CLI = r"C:\Users\gurki\.local\bin\claude.EXE"
+            claude_cli = shutil.which("claude")
+            if not claude_cli:
+                return {"claude_decision": "approve", "claude_reason": "Claude CLI not found, rules-based approval", "size_adjustment": 1.0}
             proc = await asyncio.create_subprocess_exec(
-                CLAUDE_CLI, "--print", "--model", "haiku", "--output-format", "json", prompt,
+                claude_cli, "--print", "--model", "haiku", "--output-format", "json", prompt,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)

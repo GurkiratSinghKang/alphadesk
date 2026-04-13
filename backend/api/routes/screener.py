@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from datetime import datetime, timezone
 from enum import Enum
@@ -13,6 +14,8 @@ from core.database import get_db
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -325,6 +328,7 @@ async def list_presets() -> list[PresetResponse]:
                 for p in presets
             ]
     except Exception:
+        logger.warning("Failed to list screener presets from DB", exc_info=True)
         return []
 
 

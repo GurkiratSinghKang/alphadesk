@@ -685,6 +685,7 @@ function JournalTab() {
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Add a note..."
+                  aria-label="Trade notes"
                   className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground"
                   autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}

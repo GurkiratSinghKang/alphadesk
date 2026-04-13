@@ -98,6 +98,20 @@ async def init_db() -> None:
         await conn.run_sync(base.metadata.create_all)
     logger.info("Database tables initialised")
 
+    # Convert ohlcv_bars to a TimescaleDB hypertable (if the extension exists)
+    try:
+        from sqlalchemy import text
+
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "SELECT create_hypertable('ohlcv_bars', 'timestamp', if_not_exists => TRUE)"
+            ))
+        logger.info("TimescaleDB hypertable ensured for ohlcv_bars")
+    except Exception as e:
+        # TimescaleDB may not be installed, or table may not exist yet --
+        # either way, non-fatal.
+        logger.debug("Hypertable creation skipped: %s", e)
+
 
 async def close_db() -> None:
     global _engine, _async_session_factory
