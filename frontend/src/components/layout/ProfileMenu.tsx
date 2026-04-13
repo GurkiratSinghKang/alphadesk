@@ -31,7 +31,7 @@ export function ProfileMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors">
+        <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors" aria-label="User menu">
           A
         </DropdownMenuTrigger>
         <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">

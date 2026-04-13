@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
@@ -7,6 +8,9 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { useRegime } from "@/hooks/useQueries";
 
 export function StatusStrip() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const summary = usePortfolioStore((s) => s.summary);
   const { isConnected } = useWs();
   const tradingMode = useUIStore((s) => s.tradingMode);
@@ -19,6 +23,10 @@ export function StatusStrip() {
   const hasPnl = Number.isFinite(summary.dayPnl);
 
   const regimeColor = regime?.label === "bull" ? "text-[var(--profit)]" : regime?.label === "bear" ? "text-[var(--loss)]" : "text-amber-400";
+
+  if (!mounted) {
+    return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-[11px]" />;
+  }
 
   return (
     <div className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[11px]">

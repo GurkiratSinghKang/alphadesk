@@ -62,7 +62,7 @@ function SignalBadge({ signal }: { signal: string }) {
 
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
   // Only show counts from today's actual run, not stale cached data
-  const today = new Date().toISOString().slice(0, 10);
+  const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
   const isToday = run?.date === today || run?.timestamp?.startsWith(today);
   const activeRun = isToday ? run : null;
 
@@ -166,7 +166,7 @@ export default function PipelinePage() {
       if (h.status === "fulfilled") setHistory(Array.isArray(h.value) ? h.value.slice(0, 7) : []);
 
       // Try loading today's run
-      const today = new Date().toISOString().slice(0, 10);
+      const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
       try {
         const run = await getPipelineRun(today);
         setTodayRun(run);
