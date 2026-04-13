@@ -193,12 +193,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 120, isDemo 
   }
 
   return (
-    <div ref={containerRef} className="relative w-full" style={{ height }}>
-      {isDemo && (
-        <span className="absolute top-1 right-1 z-10 text-[9px] font-medium text-amber-400 bg-black/60 rounded px-1.5 py-0.5">
-          Demo
-        </span>
-      )}
+    <div ref={containerRef} className={cn("relative w-full", isDemo && "opacity-40")} style={{ height }}>
       {rects.map((rect) => {
         const showText = rect.w > 45 && rect.h > 30;
         const val = rect.change_pct;

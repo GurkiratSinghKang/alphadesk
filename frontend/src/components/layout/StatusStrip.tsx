@@ -45,16 +45,14 @@ export function StatusStrip() {
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">Regime</span>
-        <span className={cn("font-medium truncate max-w-[160px]", regime ? regimeColor : "text-[#8a8a95]")}>
+        <span className={cn("font-medium truncate max-w-[160px]", regime ? regimeColor : "text-[#8a8a95]", isDemo && "opacity-40")}>
           {regime?.regime ?? "---"}
-          {isDemo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
         </span>
       </div>
       <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">VIX</span>
-        <span className={cn("tabular-nums font-medium", isDemo ? "text-muted-foreground" : "text-foreground")}>
+        <span className={cn("tabular-nums font-medium", isDemo ? "text-muted-foreground opacity-40" : "text-foreground")}>
           {regime?.vix_level ? regime.vix_level.toFixed(1) : "--.-"}
-          {isDemo && <span className="ml-1 text-amber-400 text-[9px] font-normal">(Demo)</span>}
         </span>
       </div>
       <span role="status" aria-live="polite" className="flex items-center gap-1.5 px-4 border-r border-border/50">

@@ -229,7 +229,6 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
         <div className="flex flex-col items-center justify-center py-6 text-center">
           <Activity className="h-6 w-6 text-muted-foreground/40 mb-2" />
           <p className="text-xs text-muted-foreground">No analysis available for {symbol}</p>
-          <p className="text-[10px] text-muted-foreground/60 mt-1">Connect live analysis API for real-time scores</p>
         </div>
 
         <Separator className="bg-border" />
@@ -257,11 +256,8 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
                   }
                 >
                   {l.label}
-                  {l.label !== "Current" && (
-                    <span className="text-[10px] text-[#8a8a95] ml-1">(est.)</span>
-                  )}
                 </span>
-                <span className="tabular-nums text-foreground">
+                <span className={cn("tabular-nums text-foreground", l.label !== "Current" && "opacity-40")}>
                   ${l.price.toFixed(2)}
                 </span>
               </div>
@@ -311,11 +307,8 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
                 }
               >
                 {l.label}
-                {l.label !== "Current" && (
-                  <span className="text-[10px] text-[#8a8a95] ml-1">(est.)</span>
-                )}
               </span>
-              <span className="tabular-nums text-foreground">
+              <span className={cn("tabular-nums text-foreground", l.label !== "Current" && "opacity-40")}>
                 ${l.price.toFixed(2)}
               </span>
             </div>
@@ -398,14 +391,11 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
       <div>
         <h3 className="text-xs font-medium text-muted-foreground mb-2 flex items-center">
           Piotroski F-Score
-          {!analysis && (
-            <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
-              Estimated
-            </span>
-          )}
         </h3>
-        <FScoreDots score={fScore} />
-        <p className="text-[11px] text-muted-foreground mt-2">
+        <div className={!analysis ? "opacity-40" : undefined}>
+          <FScoreDots score={fScore} />
+        </div>
+        <p className={cn("text-[11px] text-muted-foreground mt-2", !analysis && "opacity-40")}>
           {symbol} has {fScore <= 3 ? "weak" : fScore <= 6 ? "moderate" : "strong"} fundamentals with {fScore <= 3 ? "concerning profitability and declining financial health" : fScore <= 6 ? "mixed profitability and stable financial health" : "high profitability and improving financial health"}.
         </p>
       </div>
@@ -424,10 +414,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
             >
               <span className="text-muted-foreground">{m.label}</span>
               <div className="flex items-center gap-3">
-                <span className="text-foreground tabular-nums">{m.value}</span>
-                <span className="text-muted-foreground tabular-nums text-[10px]">
-                  (est.)
-                </span>
+                <span className={cn("text-foreground tabular-nums", !analysis && "opacity-40")}>{m.value}</span>
               </div>
             </div>
           ))}
@@ -462,9 +449,9 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
   const putBuy = (0.5 + flowRng() * 1.5).toFixed(1);
   const unusualVol = (400 + Math.floor(flowRng() * 1200));
   const flowItems = [
-    { text: `Large call sweep ${symbol} (Estimated)`, type: "bullish" as const, size: `$${callSweep}M` },
-    { text: `Put buying in ${symbol} (Estimated)`, type: "bearish" as const, size: `$${putBuy}M` },
-    { text: `Unusual volume in ${symbol} calls (Estimated)`, type: "bullish" as const, size: `$${unusualVol}K` },
+    { text: `Large call sweep ${symbol}`, type: "bullish" as const, size: `$${callSweep}M` },
+    { text: `Put buying in ${symbol}`, type: "bearish" as const, size: `$${putBuy}M` },
+    { text: `Unusual volume in ${symbol} calls`, type: "bullish" as const, size: `$${unusualVol}K` },
   ];
   const newsItems = [
     { headline: `${symbol}: Analysts raise price target following earnings beat`, sentiment: "positive" as const, time: "2h ago" },
@@ -478,11 +465,6 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
         <div>
           <h3 className="text-xs font-medium text-muted-foreground flex items-center">
             Sentiment Score
-            {!analysis && (
-              <span className="text-[10px] text-[#8a8a95] bg-[var(--panel)] px-1.5 py-0.5 rounded ml-2">
-                Estimated
-              </span>
-            )}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1">
             Moderately bullish sentiment. Analysts positive, options flow mixed.
@@ -508,8 +490,8 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
               ) : (
                 <TrendingDown className="h-3 w-3 shrink-0 text-[var(--loss)]" />
               )}
-              <span className="flex-1 text-foreground">{f.text}</span>
-              <span className="text-muted-foreground">{f.size}</span>
+              <span className={cn("flex-1 text-foreground", !analysis && "opacity-40")}>{f.text}</span>
+              <span className={cn("text-muted-foreground", !analysis && "opacity-40")}>{f.size}</span>
             </div>
           ))}
         </div>

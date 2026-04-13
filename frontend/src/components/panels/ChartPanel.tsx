@@ -419,7 +419,7 @@ export function ChartPanel() {
 
       {/* Chart — BUG #11: pass chartType, BUG #12: pass indicators */}
       <div className="flex-1 min-h-0 relative">
-        <div className="absolute inset-0">
+        <div className={cn("absolute inset-0", usingDemoData && "opacity-40")}>
         <TradingChart
           ref={chartHandleRef}
           data={displayData}
@@ -430,13 +430,6 @@ export function ChartPanel() {
           drawingPriceLines={drawingPriceLines}
         />
         </div>
-
-        {/* Demo data watermark */}
-        {usingDemoData && (
-          <div className="absolute top-2 left-2 z-[6] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20">
-            <span className="text-[10px] font-medium text-amber-300/70">Demo data</span>
-          </div>
-        )}
 
         {/* Drawing overlay — captures clicks when a drawing mode is active */}
         {drawingMode === "hline" && (

@@ -335,13 +335,7 @@ export function OptionsPanel() {
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching options chain...
         </div>
       )}
-      {usingGeneratedChain && (
-        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-amber-300 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
-          <span className="font-medium">Showing estimated prices</span>
-          <span className="text-amber-300/70">— live data unavailable</span>
-        </div>
-      )}
-      <ScrollArea className="flex-1 overflow-auto">
+      <ScrollArea className={cn("flex-1 overflow-auto", usingGeneratedChain && "opacity-40")}>
         <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
           <thead className="sticky top-0 z-10 bg-[#14141e]">
             <tr className="border-b border-border">

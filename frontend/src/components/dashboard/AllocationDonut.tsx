@@ -30,13 +30,8 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
     <div>
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-label">Allocation</h3>
-        {isDemo && (
-          <span className="text-[9px] font-medium text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5">
-            Demo data
-          </span>
-        )}
       </div>
-      <div className="flex items-start gap-4">
+      <div className={cn("flex items-start gap-4", isDemo && "opacity-40")}>
         {/* Donut SVG */}
         <div className="shrink-0">
           <svg width={120} height={120} viewBox="0 0 120 120">

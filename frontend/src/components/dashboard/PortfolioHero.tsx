@@ -136,31 +136,24 @@ export function PortfolioHero({
           {/* Portfolio Equity */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Portfolio</p>
-            <p className="text-display tabular-nums text-gradient">
+            <p className={cn("text-display tabular-nums text-gradient", isDemo && "opacity-40")} title={isDemo ? "Demo data — connect Alpaca API for live values" : undefined}>
               {portfolioValue ? formatCurrency(portfolioValue) : "\u2014"}
-              {isDemo && (
-                <span className="ml-2 align-middle inline-block text-xs font-medium text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5">
-                  Demo
-                </span>
-              )}
             </p>
           </div>
 
           {/* Day P&L */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Day P&L</p>
-            {isDemo ? (
-              <p className="text-sm text-amber-400">
-                Demo data — connect Alpaca API for live portfolio
-              </p>
-            ) : !portfolioValue ? (
+            {!portfolioValue && !isDemo ? (
               <p className="text-xl font-semibold tabular-nums leading-none text-muted-foreground">{"\u2014"}</p>
             ) : (
               <p
                 className={cn(
                   "text-xl font-semibold tabular-nums leading-none",
-                  dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
+                  dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground",
+                  isDemo && "opacity-40"
                 )}
+                title={isDemo ? "Demo data — connect Alpaca API for live values" : undefined}
               >
                 {dayPnl > 0 ? "+" : ""}
                 {formatCurrency(dayPnl)}{" "}

@@ -270,9 +270,6 @@ function SignalsTab() {
 
   return (
     <div className="p-2 space-y-1">
-      <div className="px-3 py-1.5 mb-1 text-[10px] text-amber-300/70 bg-amber-500/10 rounded border border-amber-500/20">
-        Sample signals — connect live scanner for real-time signals
-      </div>
       {signals.map((s, i) => (
         <div
           key={i}
@@ -282,7 +279,7 @@ function SignalsTab() {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") setSelectedSymbol(s.symbol);
           }}
-          className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer"
+          className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer opacity-40"
         >
           {s.type === "bullish" ? (
             <TrendingUp className="h-3.5 w-3.5 text-[var(--profit)]" />
