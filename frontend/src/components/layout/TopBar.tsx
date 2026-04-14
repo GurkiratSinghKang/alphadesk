@@ -30,11 +30,13 @@ export function TopBar() {
   const isTrade = pathname === "/trade";
   const isPipeline = pathname === "/pipeline";
   const isAnalytics = pathname === "/analytics";
+  const isAlerts = pathname === "/alerts";
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard, active: isHome },
     { path: "/trade", label: "Trade", icon: BarChart3, active: isTrade },
     { path: "/analytics", label: "Analytics", icon: LineChart, active: isAnalytics },
+    { path: "/alerts", label: "Alerts", icon: Bell, active: isAlerts },
     { path: "/pipeline", label: "Pipeline", icon: Bot, active: isPipeline },
   ];
 

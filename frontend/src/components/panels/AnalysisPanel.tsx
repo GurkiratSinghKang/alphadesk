@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { PositionSizer } from "@/components/panels/PositionSizer";
 import type { ChatMessage, Analysis, QuickOrderEvent } from "@/types";
 
 // ─── Score Gauge ─────────────────────────────────────────────
@@ -640,68 +641,6 @@ function ChatTab({ symbol }: { symbol: string }) {
         >
           <Send className="h-3.5 w-3.5" />
         </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Position Sizer ──────────────────────────────────────────
-
-function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice: number }) {
-  const [riskPct, setRiskPct] = useState(2);
-  const [stopLossPct, setStopLossPct] = useState(5);
-  const summary = usePortfolioStore((s) => s.summary);
-
-  const accountSize = summary.equity > 0 ? summary.equity : 100000;
-  const riskAmount = accountSize * (riskPct / 100);
-  const stopLossDistance = currentPrice * (stopLossPct / 100);
-  const shares = stopLossDistance > 0 ? Math.floor(riskAmount / stopLossDistance) : 0;
-  const positionValue = shares * currentPrice;
-  const pctOfPortfolio = accountSize > 0 ? ((positionValue / accountSize) * 100).toFixed(1) : "0";
-  const isOverRisk = positionValue > accountSize * 0.1; // over 10% of portfolio
-
-  return (
-    <div className="border border-border rounded-lg p-2.5 mb-3 bg-[var(--panel)]/50">
-      <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] mb-2 font-semibold">Position Sizer</p>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label htmlFor="position-risk-pct" className="text-[10px] text-muted-foreground">Risk %</label>
-          <input
-            id="position-risk-pct"
-            type="number" value={riskPct} onChange={(e) => setRiskPct(parseFloat(e.target.value) || 1)}
-            min={0.5} max={10} step={0.5}
-            className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
-          />
-        </div>
-        <div>
-          <label htmlFor="position-stop-loss" className="text-[10px] text-muted-foreground">Stop Loss %</label>
-          <input
-            id="position-stop-loss"
-            type="number" value={stopLossPct} onChange={(e) => setStopLossPct(parseFloat(e.target.value) || 1)}
-            min={0.5} max={20} step={0.5}
-            className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
-          />
-        </div>
-      </div>
-      <div className="mt-2 space-y-0.5 text-[11px]">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Shares</span>
-          <span className="text-foreground font-semibold tabular-nums">{shares}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Position Value</span>
-          <span className="text-foreground tabular-nums">${positionValue.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Risk Amount</span>
-          <span className="text-[var(--loss)] tabular-nums">${riskAmount.toFixed(0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">% of Portfolio</span>
-          <span className={cn("text-foreground tabular-nums", isOverRisk && "text-[var(--loss)] font-semibold")}>
-            {pctOfPortfolio}% {isOverRisk && "⚠"}
-          </span>
-        </div>
       </div>
     </div>
   );
