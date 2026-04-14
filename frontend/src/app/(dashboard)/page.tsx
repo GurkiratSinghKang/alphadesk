@@ -27,6 +27,7 @@ import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketCo
 import { MarketBreadth } from "@/components/dashboard/MarketBreadth";
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { RiskDashboard } from "@/components/dashboard/RiskDashboard";
+import { StressTest } from "@/components/dashboard/StressTest";
 
 // Lazy-load heavy below-the-fold components to reduce initial bundle
 const StrategyCorrelation = dynamic(
@@ -381,6 +382,7 @@ function CommandCenter() {
             </div>
             {/* Risk Overview */}
             <RiskDashboard regime={regime} />
+            <StressTest />
             <EconomicCalendar />
           </div>
 

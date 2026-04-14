@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Activity,
   ShoppingCart,
+  Layers,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,6 +27,7 @@ import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { PositionSizer } from "@/components/panels/PositionSizer";
+import { MultiTimeframe } from "@/components/panels/MultiTimeframe";
 import type { ChatMessage, Analysis, QuickOrderEvent } from "@/types";
 
 // ─── Score Gauge ─────────────────────────────────────────────
@@ -935,6 +937,9 @@ export function AnalysisPanel() {
             <TabsTrigger value="order" className="text-[10px] h-6 px-1.5 gap-0.5">
               <ShoppingCart className="h-3 w-3" /> Order
             </TabsTrigger>
+            <TabsTrigger value="mtf" className="text-[10px] h-6 px-1.5 gap-0.5">
+              <Layers className="h-3 w-3" /> MTF
+            </TabsTrigger>
           </TabsList>
           <HelpCircle text="AI-powered analysis of the selected symbol. Technical, fundamental, and sentiment scores updated by Claude agents." />
         </div>
@@ -965,6 +970,10 @@ export function AnalysisPanel() {
           <ScrollArea className="h-full">
             <OrderTab symbol={selectedSymbol} />
           </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="mtf" className="flex-1 mt-0 overflow-hidden">
+          <MultiTimeframe />
         </TabsContent>
       </Tabs>
     </div>
