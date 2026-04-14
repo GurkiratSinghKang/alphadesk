@@ -73,6 +73,10 @@ enum Endpoint: Sendable {
     case strategyPositions(id: String)
     case strategyToggle(id: String)
 
+    // Price Alerts
+    case alerts
+    case deleteAlert(id: String)
+
     // Agent / AI Chat
     case agentChat
 
@@ -132,6 +136,10 @@ enum Endpoint: Sendable {
         // Strategy management
         case .strategyPositions(let id):        "/api/v1/strategies/\(id)/positions"
         case .strategyToggle(let id):           "/api/v1/strategies/\(id)/toggle"
+
+        // Price Alerts
+        case .alerts:                           "/api/v1/trades/alerts"
+        case .deleteAlert(let id):              "/api/v1/trades/alerts/\(id)"
 
         // Agent / AI Chat
         case .agentChat:                        "/api/v1/agents/chat"

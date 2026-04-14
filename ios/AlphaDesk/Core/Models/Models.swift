@@ -414,6 +414,18 @@ struct PerformanceData: Codable, Sendable {
     let period: String?
 }
 
+// MARK: - Price Alerts
+
+struct PriceAlert: Codable, Sendable, Identifiable {
+    let id: String
+    let symbol: String
+    let condition: String // "above" or "below"
+    let price: Double
+    let createdAt: String
+    let triggered: Bool
+    let triggeredAt: String?
+}
+
 // MARK: - WebSocket Messages
 
 struct WSOutgoingMessage: Encodable, Sendable {

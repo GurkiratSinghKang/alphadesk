@@ -224,9 +224,13 @@ struct PortfolioView: View {
     @State private var showChat = false
     @State private var showPerformance = false
     @State private var showNews = false
+    @State private var showRisk = false
+    @State private var showAlerts = false
+    @State private var showAnalytics = false
     @State private var tradeSymbol: String?
     @State private var tradeSide: TradeViewModel.OrderSide = .buy
     @State private var showTradeSheet = false
+    @State private var alertBadgeCount = 0
     @Environment(AuthManager.self) private var authManager
 
     var body: some View {
@@ -283,6 +287,44 @@ struct PortfolioView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        showAlerts = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "bell")
+                                .font(.system(size: 16))
+                                .foregroundStyle(AD.textSecondary)
+
+                            if alertBadgeCount > 0 {
+                                Text("\(alertBadgeCount)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .frame(minWidth: 16)
+                                    .background(AD.loss)
+                                    .clipShape(Capsule())
+                                    .offset(x: 6, y: -6)
+                            }
+                        }
+                    }
+
+                    Button {
+                        showRisk = true
+                    } label: {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
+                    Button {
+                        showAnalytics = true
+                    } label: {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
+                    Button {
                         showNews = true
                     } label: {
                         Image(systemName: "newspaper")
@@ -299,7 +341,10 @@ struct PortfolioView: View {
                     }
                 }
             }
-            .task { await vm.refresh() }
+            .task {
+                await vm.refresh()
+                await fetchAlertBadge()
+            }
             .sheet(isPresented: $showChat) {
                 ChatView(
                     contextPortfolioValue: vm.equity
@@ -310,6 +355,15 @@ struct PortfolioView: View {
             }
             .sheet(isPresented: $showNews) {
                 NewsView()
+            }
+            .sheet(isPresented: $showRisk) {
+                RiskDashboardView()
+            }
+            .sheet(isPresented: $showAlerts) {
+                AlertsView()
+            }
+            .sheet(isPresented: $showAnalytics) {
+                AnalyticsSummaryView()
             }
             .sheet(isPresented: $showTradeSheet) {
                 if let symbol = tradeSymbol {
@@ -330,6 +384,19 @@ struct PortfolioView: View {
             .navigationDestination(for: String.self) { symbol in
                 SymbolDetailView(symbol: symbol)
             }
+        }
+    }
+
+    // MARK: - Alert Badge
+
+    private func fetchAlertBadge() async {
+        do {
+            let alerts: [PriceAlert] = try await APIClient.shared.request(.alerts)
+            await MainActor.run {
+                alertBadgeCount = alerts.filter { !$0.triggered }.count
+            }
+        } catch {
+            // Non-fatal
         }
     }
 
