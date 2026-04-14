@@ -3,7 +3,7 @@ import { buildFeedItems } from '@/components/dashboard/ActivityFeed';
 
 describe('buildFeedItems', () => {
   it('returns empty array with no inputs', () => {
-    const items = buildFeedItems(null, null, null, []);
+    const items = buildFeedItems(null, null, null);
     expect(items).toEqual([]);
   });
 
@@ -12,7 +12,6 @@ describe('buildFeedItems', () => {
       null,
       null,
       { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16.5, description: 'Uptrend' },
-      [],
     );
     expect(items.length).toBe(1);
     expect(items[0].type).toBe('regime');
@@ -24,7 +23,6 @@ describe('buildFeedItems', () => {
       null,
       null,
       { regime: 'Bull Market', label: 'bull', confidence: 0.9, vix_level: 14, description: 'Strong uptrend' },
-      [],
     );
     expect(items[0].severity).toBe('success');
   });
@@ -34,7 +32,6 @@ describe('buildFeedItems', () => {
       null,
       null,
       { regime: 'Bear Market', label: 'bear', confidence: 0.85, vix_level: 30, description: 'Downtrend' },
-      [],
     );
     expect(items[0].severity).toBe('danger');
   });
@@ -52,7 +49,7 @@ describe('buildFeedItems', () => {
       errors: [],
       master_agent: { rejections: [] },
     };
-    const items = buildFeedItems(null, log, null, []);
+    const items = buildFeedItems(null, log, null);
     expect(items.length).toBeGreaterThan(0);
     expect(items.some(i => i.type === 'pipeline')).toBe(true);
   });
@@ -68,7 +65,7 @@ describe('buildFeedItems', () => {
       errors: [],
       master_agent: { rejections: [] },
     };
-    const items = buildFeedItems(null, log, null, []);
+    const items = buildFeedItems(null, log, null);
     const tradeItem = items.find(i => i.type === 'trade');
     expect(tradeItem).toBeDefined();
     expect(tradeItem!.title).toContain('TSLA');
@@ -84,7 +81,7 @@ describe('buildFeedItems', () => {
       errors: ['Connection timeout'],
       master_agent: { rejections: [] },
     };
-    const items = buildFeedItems(null, log, null, []);
+    const items = buildFeedItems(null, log, null);
     const pipelineSummary = items.find(i => i.type === 'pipeline');
     expect(pipelineSummary!.severity).toBe('warning');
   });
@@ -98,49 +95,30 @@ describe('buildFeedItems', () => {
       errors: ['Error A', 'Error B'],
       master_agent: { rejections: [] },
     };
-    const items = buildFeedItems(null, log, null, []);
+    const items = buildFeedItems(null, log, null);
     const alerts = items.filter(i => i.type === 'alert');
     expect(alerts.length).toBe(2);
-  });
-
-  it('creates news events', () => {
-    const news = [
-      { title: 'Market Update', source: 'Reuters', published_at: new Date().toISOString(), url: 'https://example.com' },
-    ];
-    const items = buildFeedItems(null, null, null, news);
-    expect(items.length).toBe(1);
-    expect(items[0].type).toBe('news');
-  });
-
-  it('news item carries source as detail', () => {
-    const news = [
-      { title: 'Fed Holds Rates', source: 'Bloomberg', published_at: new Date().toISOString(), url: 'https://bloomberg.com' },
-    ];
-    const items = buildFeedItems(null, null, null, news);
-    expect(items[0].detail).toBe('Bloomberg');
   });
 
   it('sorts items by time descending', () => {
     const now = new Date();
     const earlier = new Date(now.getTime() - 60000);
-    const news = [
-      { title: 'Old', source: 'A', published_at: earlier.toISOString(), url: '' },
-      { title: 'New', source: 'B', published_at: now.toISOString(), url: '' },
-    ];
-    const items = buildFeedItems(null, null, null, news);
-    expect(items[0].title).toBe('New');
-  });
-
-  it('limits news to 3 items', () => {
-    const news = Array.from({ length: 10 }, (_, i) => ({
-      title: `News ${i}`,
-      source: 'S',
-      published_at: new Date().toISOString(),
-      url: '',
-    }));
-    const items = buildFeedItems(null, null, null, news);
-    const newsItems = items.filter(i => i.type === 'news');
-    expect(newsItems.length).toBeLessThanOrEqual(3);
+    const log = {
+      timestamp: earlier.toISOString(),
+      strategies_run: {},
+      orders_placed: [],
+      orders_closed: [],
+      errors: ['Earlier error'],
+      master_agent: { rejections: [] },
+    };
+    const regime = { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16, description: 'Up' };
+    const items = buildFeedItems(null, log, regime);
+    // Regime uses "now" internally, pipeline log uses the earlier timestamp
+    // Items should be sorted by time descending
+    expect(items.length).toBeGreaterThan(1);
+    for (let i = 1; i < items.length; i++) {
+      expect(items[i - 1].time.getTime()).toBeGreaterThanOrEqual(items[i].time.getTime());
+    }
   });
 
   it('combines all source types together', () => {
@@ -153,10 +131,8 @@ describe('buildFeedItems', () => {
       master_agent: { rejections: [] },
     };
     const regime = { regime: 'Neutral', label: 'neutral', confidence: 0.5, vix_level: 20, description: '' };
-    const news = [{ title: 'Headline', source: 'AP', published_at: new Date().toISOString(), url: '' }];
-    const items = buildFeedItems(null, log, regime, news);
+    const items = buildFeedItems(null, log, regime);
     expect(items.some(i => i.type === 'pipeline')).toBe(true);
     expect(items.some(i => i.type === 'regime')).toBe(true);
-    expect(items.some(i => i.type === 'news')).toBe(true);
   });
 });

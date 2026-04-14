@@ -35,6 +35,6 @@ describe('StrategyGrid', () => {
 
   it('shows position count', () => {
     render(<StrategyGrid strategies={strategies} regimeLabel="bull" onStrategyClick={vi.fn()} />);
-    expect(screen.getByText(/1 pos/)).toBeDefined();
+    expect(screen.getByText(/1 active/)).toBeDefined();
   });
 });

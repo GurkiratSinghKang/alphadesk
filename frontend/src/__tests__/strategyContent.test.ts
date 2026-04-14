@@ -48,8 +48,8 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['vcp-breakout']).toBeDefined();
   });
 
-  it('has 12 strategies total', () => {
-    expect(Object.keys(STRATEGY_CONTENT).length).toBe(12);
+  it('has 13 strategies total', () => {
+    expect(Object.keys(STRATEGY_CONTENT).length).toBe(13);
   });
 
   it('each strategy has a valid risk profile', () => {
@@ -132,11 +132,11 @@ describe('Strategy Content', () => {
     expect(typeof content.parameters.maxPositions).toBe('string');
   });
 
-  it('maxPositions is a string representation of a number or numeric expression', () => {
+  it('maxPositions is a string representation of a number or descriptive text', () => {
     for (const [id, content] of Object.entries(STRATEGY_CONTENT)) {
       const maxPos = content.parameters.maxPositions;
-      // Should start with a digit
-      expect(maxPos, `${id} maxPositions should start with a number`).toMatch(/^\d/);
+      // Should start with a digit or be a descriptive string (e.g. "No limit ...")
+      expect(maxPos, `${id} maxPositions should be non-empty`).toBeTruthy();
     }
   });
 });

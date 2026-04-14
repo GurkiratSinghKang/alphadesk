@@ -126,9 +126,13 @@ describe('Sparkline component', () => {
 
   // ─── Flat data (all-same values) ─────────────────────────────
 
-  it('returns null when all data values are identical (flat line)', () => {
+  it('renders a dashed SVG line when all data values are identical (flat line)', () => {
     const { container } = render(<Sparkline data={[5, 5, 5, 5, 5]} color="#22c55e" />);
-    expect(container.querySelector('svg')).toBeNull();
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    const line = container.querySelector('line');
+    expect(line).not.toBeNull();
+    expect(line?.getAttribute('stroke-dasharray')).toBe('3,3');
   });
 
   // ─── Color prop propagated to polyline stroke ─────────────────

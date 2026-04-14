@@ -1,3 +1,4 @@
+import '../setup-mocks';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PositionsSummary } from '@/components/dashboard/PositionsSummary';
