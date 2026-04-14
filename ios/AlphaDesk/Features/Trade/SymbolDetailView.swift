@@ -165,6 +165,7 @@ struct SymbolDetailView: View {
     @State private var vm: SymbolDetailViewModel
     @State private var showBuySheet = false
     @State private var showSellSheet = false
+    @State private var showPositionSizer = false
 
     init(symbol: String) {
         self.symbol = symbol
@@ -194,6 +195,22 @@ struct SymbolDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(AD.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showPositionSizer = true
+                } label: {
+                    Image(systemName: "function")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AD.textSecondary)
+                }
+            }
+        }
+        .sheet(isPresented: $showPositionSizer) {
+            NavigationStack {
+                PositionSizerView(prefillPrice: vm.price)
+            }
+        }
         .task { await vm.load() }
         .sheet(isPresented: $showBuySheet) {
             NavigationStack {

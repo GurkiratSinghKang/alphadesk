@@ -278,6 +278,7 @@ struct TradeView: View {
 
     @State private var vm = TradeViewModel()
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var showPositionSizer = false
     @FocusState private var isSearchFocused: Bool
 
     // State preservation
@@ -334,6 +335,14 @@ struct TradeView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showPositionSizer = true
+                    } label: {
+                        Image(systemName: "function")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
                     NavigationLink {
                         WatchlistView()
                     } label: {
@@ -349,6 +358,11 @@ struct TradeView: View {
                             .font(.system(size: 16))
                             .foregroundStyle(AD.textSecondary)
                     }
+                }
+            }
+            .sheet(isPresented: $showPositionSizer) {
+                NavigationStack {
+                    PositionSizerView(prefillPrice: vm.price)
                 }
             }
             .overlay {

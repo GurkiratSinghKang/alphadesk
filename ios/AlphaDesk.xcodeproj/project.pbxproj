@@ -32,6 +32,8 @@
 		A1505E2E9243ED9DFDC2DBF8 /* StrategiesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3EA5CAD5EA8374CB3C46C3 /* StrategiesListView.swift */; };
 		A3ACF9A5D2AB9B6FB4376B94 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832CBE1BF076F6418F574E76 /* Models.swift */; };
 		A7811C35FF9C29F8B7E9A2E0 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A00AFF700480159A127F965 /* AppTheme.swift */; };
+		B82E2BCC41DAA0D92F7063D0 /* BacktestResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC910E8428E317CCA9E8CB15 /* BacktestResultView.swift */; };
+		BD23EE32153E00E86786EC2F /* PositionSizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF7AC46A3F6CC9A5AE98204 /* PositionSizerView.swift */; };
 		BE91BDE5220EB78ADBEE78B5 /* AlphaDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6041C36C456165D3B81090D8 /* AlphaDeskApp.swift */; };
 		C0D3A8F3D41DCF7166A8912B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B1A9830C0A54E14CB732BC /* APIClient.swift */; };
 		CB7765CC7BB26125DDAB18F8 /* SparklineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C0B6316212229780886D15 /* SparklineView.swift */; };
@@ -73,6 +75,7 @@
 		AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
 		B2C0B6316212229780886D15 /* SparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparklineView.swift; sourceTree = "<group>"; };
 		B6975924448CADF12A02D44C /* ReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsView.swift; sourceTree = "<group>"; };
+		BBF7AC46A3F6CC9A5AE98204 /* PositionSizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionSizerView.swift; sourceTree = "<group>"; };
 		BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		BD44914BD7F6844CF5B55906 /* AnalyticsSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsSummaryView.swift; sourceTree = "<group>"; };
 		C3D1479C62C9F0502A3838FC /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
@@ -83,6 +86,7 @@
 		F717CD74EEC71B2CA108C94C /* AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertsView.swift; sourceTree = "<group>"; };
 		F8E8CE29A0FB0130A619C843 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		F9E7FC7F6C915EC30FEDD399 /* QuoteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRow.swift; sourceTree = "<group>"; };
+		FC910E8428E317CCA9E8CB15 /* BacktestResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacktestResultView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -106,6 +110,7 @@
 		0B2430D9B3216A288C9EB1EE /* Pipeline */ = {
 			isa = PBXGroup;
 			children = (
+				FC910E8428E317CCA9E8CB15 /* BacktestResultView.swift */,
 				BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */,
 			);
 			path = Pipeline;
@@ -135,6 +140,7 @@
 			isa = PBXGroup;
 			children = (
 				CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */,
+				BBF7AC46A3F6CC9A5AE98204 /* PositionSizerView.swift */,
 				152D130F8210C420C6BC9D9D /* SymbolDetailView.swift */,
 				57BC2426BFF8EEB45381B4E4 /* TradeView.swift */,
 			);
@@ -397,6 +403,7 @@
 				0F4DCC87620F70B5429393BA /* AnalyticsSummaryView.swift in Sources */,
 				A7811C35FF9C29F8B7E9A2E0 /* AppTheme.swift in Sources */,
 				2DA8F89BB900F179D4621509 /* AuthManager.swift in Sources */,
+				B82E2BCC41DAA0D92F7063D0 /* BacktestResultView.swift in Sources */,
 				FD2D49F4157790C78121BC6F /* BiometricManager.swift in Sources */,
 				1AB4454B81131D3233721B5B /* ChatView.swift in Sources */,
 				943F2B92D01ECA0048968D52 /* Color+Hex.swift in Sources */,
@@ -414,6 +421,7 @@
 				8C356EDB3ECDFB328F544C98 /* PipelineView.swift in Sources */,
 				045915C20095902573ECD30D /* PnLText.swift in Sources */,
 				F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */,
+				BD23EE32153E00E86786EC2F /* PositionSizerView.swift in Sources */,
 				9CBDBE05C250A4D6E0C7BBF0 /* QuoteRow.swift in Sources */,
 				CBC79A46AB642ABDE71A05BC /* ReportsView.swift in Sources */,
 				DB45C61C5B8F95167BBD6F4C /* RiskDashboardView.swift in Sources */,

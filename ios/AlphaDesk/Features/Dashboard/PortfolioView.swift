@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 // MARK: - View Model
 
@@ -228,6 +229,7 @@ struct PortfolioView: View {
     @State private var showAlerts = false
     @State private var showAnalytics = false
     @State private var showReports = false
+    @State private var showShareSheet = false
     @State private var tradeSymbol: String?
     @State private var tradeSide: TradeViewModel.OrderSide = .buy
     @State private var showTradeSheet = false
@@ -287,6 +289,14 @@ struct PortfolioView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
                     Button {
                         showAlerts = true
                     } label: {
@@ -376,6 +386,9 @@ struct PortfolioView: View {
             }
             .sheet(isPresented: $showReports) {
                 ReportsView()
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: [portfolioSummaryText])
             }
             .sheet(isPresented: $showTradeSheet) {
                 if let symbol = tradeSymbol {
@@ -759,6 +772,26 @@ struct PortfolioView: View {
             RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
                 .stroke(AD.border, lineWidth: 1)
         )
+    }
+
+    // MARK: - Share Summary
+
+    private var portfolioSummaryText: String {
+        let symbols = vm.positions.map(\.symbol).joined(separator: ", ")
+        let positionList = symbols.isEmpty ? "None" : symbols
+        let equityStr = vm.equity.formatCurrency()
+        let pnlStr = String(format: "%@$%.2f (%@%.2f%%)",
+                            vm.dayPnL >= 0 ? "+" : "-",
+                            abs(vm.dayPnL),
+                            vm.dayPnLPercent >= 0 ? "+" : "",
+                            vm.dayPnLPercent)
+
+        return """
+        \u{1F4CA} AlphaDesk Portfolio Summary
+        \u{1F4B0} Equity: \(equityStr)
+        \u{1F4C8} Day P&L: \(pnlStr)
+        \u{1F4CB} Positions: \(vm.positions.count) (\(positionList))
+        """
     }
 
     // MARK: - Floating Actions

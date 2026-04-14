@@ -229,6 +229,7 @@ struct PipelineRunSummary {
 struct PipelineView: View {
 
     @State private var vm = PipelineViewModel()
+    @State private var showBacktest = false
 
     var body: some View {
         NavigationStack {
@@ -282,6 +283,22 @@ struct PipelineView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showBacktest = true
+                    } label: {
+                        Image(systemName: "clock.arrow.2.circlepath")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+                }
+            }
+            .sheet(isPresented: $showBacktest) {
+                NavigationStack {
+                    BacktestResultView()
+                }
+            }
             .task { await vm.refresh() }
         }
     }
