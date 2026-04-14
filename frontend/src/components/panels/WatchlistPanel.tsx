@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { Plus, X, TrendingUp, TrendingDown, Minus, MoreHorizontal } from "lucide-react";
+import { Plus, X, TrendingUp, TrendingDown, Minus, MoreHorizontal, ChevronUp, ChevronDown, Save, ShoppingCart } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
-import type { Quote } from "@/types";
+import type { Quote, QuickOrderEvent } from "@/types";
 
 // ─── Mock sparkline (tiny SVG) ───────────────────────────────
 
@@ -88,7 +88,9 @@ const WatchlistRow = React.memo(function WatchlistRow({
   onTrade: () => void;
 }) {
   const [flashClass, setFlashClass] = useState("");
+  const [showQuickTrade, setShowQuickTrade] = useState(false);
   const prevPrice = useRef(quote?.last);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (quote && prevPrice.current !== undefined && quote.last !== prevPrice.current) {
@@ -100,12 +102,30 @@ const WatchlistRow = React.memo(function WatchlistRow({
     prevPrice.current = quote?.last;
   }, [quote?.last]);
 
-  // Calculate change from quote data — show "—" when no real data exists
+  // Close popover on outside click
+  useEffect(() => {
+    if (!showQuickTrade) return;
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowQuickTrade(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showQuickTrade]);
+
+  const emitQuickOrder = useCallback((side: "buy" | "sell") => {
+    if (!quote) return;
+    const detail: QuickOrderEvent = { symbol, side, price: quote.last };
+    window.dispatchEvent(new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail }));
+    setShowQuickTrade(false);
+  }, [symbol, quote]);
+
+  // Calculate change from quote data
   const hasRealChange = quote?.changePct != null;
   const change = (() => {
     if (!hasRealChange) return 0;
     let raw = quote!.changePct!;
-    // Clamp near-zero to exactly zero to avoid "-0.00%"
     if (Math.abs(raw) < 0.005) raw = 0;
     return raw;
   })();
@@ -129,8 +149,37 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
       <MiniSparkline trend={hasRealChange ? change : 0} symbol={symbol} />
 
-      <div className="w-16 text-right tabular-nums">
-        {quote ? formatCurrency(quote.last) : "---"}
+      {/* Price area — click to open quick-trade popover */}
+      <div className="relative">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowQuickTrade((v) => !v);
+          }}
+          aria-label={`Quick trade ${symbol}`}
+          className="w-16 text-right tabular-nums hover:text-primary transition-colors"
+        >
+          {quote ? formatCurrency(quote.last) : "---"}
+        </button>
+        {showQuickTrade && quote && (
+          <div
+            ref={popoverRef}
+            className="absolute right-0 top-full mt-1 z-50 flex gap-1 rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg"
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
+              className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors"
+            >
+              BUY
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
+              className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors"
+            >
+              SELL
+            </button>
+          </div>
+        )}
       </div>
 
       <div className={cn(
@@ -173,13 +222,87 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
 // ─── Screener tab content ─────────────────────────────────────
 
+// ─── Screener filter types & presets ─────────────────────────
+
+interface ScreenerFilters {
+  marketCap: string;
+  sector: string;
+  minChange: string;
+  maxChange: string;
+  minVolume: string;
+  minPrice: string;
+  maxPrice: string;
+}
+
+const EMPTY_FILTERS: ScreenerFilters = {
+  marketCap: "",
+  sector: "",
+  minChange: "",
+  maxChange: "",
+  minVolume: "",
+  minPrice: "",
+  maxPrice: "",
+};
+
+const MARKET_CAP_OPTIONS = ["", "Mega", "Large", "Mid", "Small", "Micro"];
+const SECTOR_OPTIONS = [
+  "",
+  "Technology",
+  "Healthcare",
+  "Financials",
+  "Consumer Discretionary",
+  "Consumer Staples",
+  "Energy",
+  "Industrials",
+  "Materials",
+  "Utilities",
+  "Real Estate",
+  "Communication Services",
+];
+
+interface SavedPreset {
+  name: string;
+  apiPreset: string;
+  filters: ScreenerFilters;
+}
+
+const BUILTIN_PRESETS: SavedPreset[] = [
+  { name: "Momentum", apiPreset: "momentum-quality", filters: { ...EMPTY_FILTERS, minChange: "0" } },
+  { name: "Oversold", apiPreset: "oversold", filters: { ...EMPTY_FILTERS, maxChange: "0" } },
+  { name: "High Volume", apiPreset: "momentum-quality", filters: { ...EMPTY_FILTERS, minVolume: "1000000" } },
+];
+
+function loadSavedPresets(): SavedPreset[] {
+  try {
+    const raw = localStorage.getItem("alphadesk-screener-presets");
+    if (raw) return JSON.parse(raw) as SavedPreset[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveSavedPresets(presets: SavedPreset[]) {
+  try {
+    localStorage.setItem("alphadesk-screener-presets", JSON.stringify(presets));
+  } catch { /* ignore */ }
+}
+
+type SortColumn = "symbol" | "score" | "changePct" | "price";
+type SortDirection = "asc" | "desc";
+
 function ScreenerTab() {
   const { addToWatchlist } = useMarketStore();
-  const [preset, setPreset] = useState("momentum-quality");
-  const [results, setResults] = useState<Array<{ symbol: string; name: string; price: number; changePct: number; compositeScore: number; sector: string }>>([]);
+  const [apiPreset, setApiPreset] = useState("momentum-quality");
+  const [filters, setFilters] = useState<ScreenerFilters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  const [results, setResults] = useState<Array<{ symbol: string; name: string; price: number; changePct: number; compositeScore: number; sector: string; volume: number }>>([]);
   const [loading, setLoading] = useState(false);
+  const [sortCol, setSortCol] = useState<SortColumn>("score");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+  const [userPresets, setUserPresets] = useState<SavedPreset[]>(() => loadSavedPresets());
+  const [saveName, setSaveName] = useState("");
+  const [showSave, setShowSave] = useState(false);
 
-  const presets = [
+  const apiPresets = [
     { id: "momentum-quality", name: "Momentum + Quality" },
     { id: "high-iv", name: "High IV Rank" },
     { id: "earnings", name: "Earnings Plays" },
@@ -190,14 +313,15 @@ function ScreenerTab() {
   const runScreener = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await screenStocks(preset);
-      const mapped = data.slice(0, 15).map((r) => ({
+      const data = await screenStocks(apiPreset);
+      const mapped = data.slice(0, 50).map((r) => ({
         symbol: r.symbol,
         name: r.symbol,
         price: r.price ?? 0,
         changePct: r.changePct ?? 0,
         compositeScore: r.composite ?? 0,
-        sector: r.sector ?? "—",
+        sector: r.sector ?? "Unknown",
+        volume: 0, // backend doesn't return volume, client-side filter only
       }));
       setResults(mapped);
     } catch (err) {
@@ -205,24 +329,223 @@ function ScreenerTab() {
     } finally {
       setLoading(false);
     }
-  }, [preset]);
+  }, [apiPreset]);
 
   useEffect(() => { runScreener(); }, [runScreener]);
 
+  // Client-side filtering
+  const filtered = useMemo(() => {
+    return results.filter((r) => {
+      if (filters.sector && r.sector !== filters.sector) return false;
+      if (filters.minChange && r.changePct < parseFloat(filters.minChange)) return false;
+      if (filters.maxChange && r.changePct > parseFloat(filters.maxChange)) return false;
+      if (filters.minPrice && r.price < parseFloat(filters.minPrice)) return false;
+      if (filters.maxPrice && r.price > parseFloat(filters.maxPrice)) return false;
+      if (filters.minVolume && r.volume < parseFloat(filters.minVolume)) return false;
+      // Market cap is a server-side hint — we pass it but can't precisely filter client-side
+      return true;
+    });
+  }, [results, filters]);
+
+  // Sort
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let valA = 0, valB = 0;
+      if (sortCol === "symbol") return sortDir === "asc" ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol);
+      if (sortCol === "score") { valA = a.compositeScore; valB = b.compositeScore; }
+      if (sortCol === "changePct") { valA = a.changePct; valB = b.changePct; }
+      if (sortCol === "price") { valA = a.price; valB = b.price; }
+      return sortDir === "asc" ? valA - valB : valB - valA;
+    });
+    return arr;
+  }, [filtered, sortCol, sortDir]);
+
+  const handleSort = (col: SortColumn) => {
+    if (col === sortCol) setSortDir((d) => d === "desc" ? "asc" : "desc");
+    else { setSortCol(col); setSortDir("desc"); }
+  };
+
+  const applyPreset = (preset: SavedPreset) => {
+    setApiPreset(preset.apiPreset);
+    setFilters(preset.filters);
+  };
+
+  const handleSavePreset = () => {
+    if (!saveName.trim()) return;
+    const newPreset: SavedPreset = { name: saveName.trim(), apiPreset, filters };
+    const updated = [...userPresets.filter((p) => p.name !== newPreset.name), newPreset];
+    setUserPresets(updated);
+    saveSavedPresets(updated);
+    setSaveName("");
+    setShowSave(false);
+  };
+
+  const deletePreset = (name: string) => {
+    const updated = userPresets.filter((p) => p.name !== name);
+    setUserPresets(updated);
+    saveSavedPresets(updated);
+  };
+
+  const SortIcon = ({ col }: { col: SortColumn }) => {
+    if (sortCol !== col) return null;
+    return sortDir === "asc" ? <ChevronUp className="h-2.5 w-2.5 inline" /> : <ChevronDown className="h-2.5 w-2.5 inline" />;
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Preset selector */}
-      <div className="px-3 py-2 border-b border-border">
-        <select
-          value={preset}
-          onChange={(e) => setPreset(e.target.value)}
-          aria-label="Screener preset"
-          className="w-full h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground"
-        >
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+      {/* Preset selector + filter toggle */}
+      <div className="px-3 py-2 border-b border-border space-y-1.5">
+        <div className="flex gap-1.5">
+          <select
+            value={apiPreset}
+            onChange={(e) => setApiPreset(e.target.value)}
+            aria-label="Screener preset"
+            className="flex-1 h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground"
+          >
+            {apiPresets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            aria-label="Toggle filters"
+            className={cn(
+              "h-7 px-2 rounded border border-border text-[10px] transition-colors",
+              showFilters ? "bg-primary/20 text-primary border-primary/40" : "bg-background text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Filters
+          </button>
+          <button
+            onClick={() => setShowSave((v) => !v)}
+            aria-label="Save preset"
+            className="h-7 px-1.5 rounded border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Save className="h-3 w-3" />
+          </button>
+        </div>
+
+        {/* Quick preset chips */}
+        <div className="flex gap-1 flex-wrap">
+          {[...BUILTIN_PRESETS, ...userPresets].map((p) => (
+            <button
+              key={p.name}
+              onClick={() => applyPreset(p)}
+              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[9px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+            >
+              {p.name}
+              {userPresets.some((u) => u.name === p.name) && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); deletePreset(p.name); }}
+                  className="text-[var(--loss)] hover:text-[var(--loss)]/80 ml-0.5"
+                  aria-label={`Delete ${p.name} preset`}
+                >
+                  x
+                </span>
+              )}
+            </button>
           ))}
-        </select>
+        </div>
+
+        {/* Save preset input */}
+        {showSave && (
+          <div className="flex gap-1">
+            <input
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Preset name..."
+              className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); }}
+            />
+            <button onClick={handleSavePreset} className="h-6 px-2 rounded bg-primary text-primary-foreground text-[10px] font-medium">
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Filter panel */}
+      {showFilters && (
+        <div className="px-3 py-2 border-b border-border bg-[var(--surface)]">
+          <div className="grid grid-cols-2 gap-1.5">
+            <select
+              value={filters.marketCap}
+              onChange={(e) => setFilters((f) => ({ ...f, marketCap: e.target.value }))}
+              aria-label="Market cap filter"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground"
+            >
+              <option value="">Market Cap</option>
+              {MARKET_CAP_OPTIONS.filter(Boolean).map((mc) => (
+                <option key={mc} value={mc}>{mc}</option>
+              ))}
+            </select>
+            <select
+              value={filters.sector}
+              onChange={(e) => setFilters((f) => ({ ...f, sector: e.target.value }))}
+              aria-label="Sector filter"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground"
+            >
+              <option value="">Sector</option>
+              {SECTOR_OPTIONS.filter(Boolean).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <input
+              value={filters.minChange}
+              onChange={(e) => setFilters((f) => ({ ...f, minChange: e.target.value }))}
+              placeholder="Min Chg%"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
+            <input
+              value={filters.maxChange}
+              onChange={(e) => setFilters((f) => ({ ...f, maxChange: e.target.value }))}
+              placeholder="Max Chg%"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
+            <input
+              value={filters.minPrice}
+              onChange={(e) => setFilters((f) => ({ ...f, minPrice: e.target.value }))}
+              placeholder="Min Price"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
+            <input
+              value={filters.maxPrice}
+              onChange={(e) => setFilters((f) => ({ ...f, maxPrice: e.target.value }))}
+              placeholder="Max Price"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
+            <input
+              value={filters.minVolume}
+              onChange={(e) => setFilters((f) => ({ ...f, minVolume: e.target.value }))}
+              placeholder="Min Volume"
+              className="col-span-2 h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+            />
+          </div>
+          <button
+            onClick={() => setFilters(EMPTY_FILTERS)}
+            className="mt-1.5 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Clear all filters
+          </button>
+        </div>
+      )}
+
+      {/* Sortable column headers */}
+      <div className="flex items-center gap-2 px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+        <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors">
+          Symbol <SortIcon col="symbol" />
+        </button>
+        <button onClick={() => handleSort("price")} className="w-14 text-right hover:text-foreground transition-colors">
+          Price <SortIcon col="price" />
+        </button>
+        <button onClick={() => handleSort("changePct")} className="w-12 text-right hover:text-foreground transition-colors">
+          Chg% <SortIcon col="changePct" />
+        </button>
+        <button onClick={() => handleSort("score")} className="w-8 text-center hover:text-foreground transition-colors">
+          Score <SortIcon col="score" />
+        </button>
       </div>
 
       {/* Results */}
@@ -231,13 +554,13 @@ function ScreenerTab() {
           <div className="flex items-center justify-center py-8">
             <div className="text-xs text-muted-foreground">Screening...</div>
           </div>
-        ) : results.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-xs text-muted-foreground">No results</div>
+            <div className="text-xs text-muted-foreground">No results match filters</div>
           </div>
         ) : (
           <div className="py-1">
-            {results.map((r) => (
+            {sorted.map((r) => (
               <button
                 key={r.symbol}
                 onClick={() => addToWatchlist(r.symbol)}
@@ -273,7 +596,8 @@ function ScreenerTab() {
 
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-border text-[9px] text-muted-foreground">
-        Click a result to add to watchlist · {results.length} results
+        Click to add to watchlist | {sorted.length}/{results.length} results
+        {Object.values(filters).some(Boolean) && " (filtered)"}
       </div>
     </div>
   );

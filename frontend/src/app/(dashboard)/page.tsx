@@ -25,6 +25,7 @@ import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketCo
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { StrategyCorrelation } from "@/components/dashboard/StrategyCorrelation";
 import { PnlAttribution } from "@/components/dashboard/PnlAttribution";
+import { RiskDashboard } from "@/components/dashboard/RiskDashboard";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -357,6 +358,8 @@ function CommandCenter() {
               <PositionsSummary />
               <PnlCalendarMini />
             </div>
+            {/* Risk Overview */}
+            <RiskDashboard regime={regime} />
             <EconomicCalendar />
           </div>
 
