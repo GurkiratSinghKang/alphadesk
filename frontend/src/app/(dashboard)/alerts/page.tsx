@@ -253,6 +253,7 @@ export default function AlertsPage() {
   const { toast } = useToast();
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -354,15 +355,46 @@ export default function AlertsPage() {
                 Clear Triggered
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs h-8 text-[var(--loss)] hover:text-[var(--loss)] hover:bg-[var(--loss)]/10"
-              onClick={handleDeleteAll}
-            >
-              <Trash2 className="h-3 w-3 mr-1" />
-              Delete All
-            </Button>
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 text-[var(--loss)] hover:text-[var(--loss)] hover:bg-[var(--loss)]/10"
+                onClick={() => setShowDeleteAllConfirm(true)}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Delete All
+              </Button>
+              {showDeleteAllConfirm && (
+                <div className="absolute right-0 top-full mt-2 z-50 rounded-lg border border-border bg-[var(--panel)] p-4 shadow-lg min-w-[240px]">
+                  <p className="text-sm text-foreground font-medium mb-1">Delete all alerts?</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    This will permanently delete {alerts.length} alert{alerts.length !== 1 ? "s" : ""}. This action cannot be undone.
+                  </p>
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => setShowDeleteAllConfirm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => {
+                        setShowDeleteAllConfirm(false);
+                        handleDeleteAll();
+                      }}
+                    >
+                      Delete All
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

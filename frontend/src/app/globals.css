@@ -193,6 +193,15 @@
     animation: flash-red 0.6s ease-out;
   }
 
+  /* Hide scrollbar but keep scrollable */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Scrollbar styling for trading terminal */
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;

@@ -89,17 +89,25 @@ const WatchlistRow = React.memo(function WatchlistRow({
 }) {
   const [flashClass, setFlashClass] = useState("");
   const [showQuickTrade, setShowQuickTrade] = useState(false);
-  const prevPrice = useRef(quote?.last);
+  const prevPrice = useRef<number | undefined>(undefined);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const popoverRef = useRef<HTMLDivElement>(null);
 
+  // Flash green/red on price change — force re-trigger even for consecutive same-direction moves
   useEffect(() => {
-    if (quote && prevPrice.current !== undefined && quote.last !== prevPrice.current) {
-      setFlashClass(quote.last > prevPrice.current ? "flash-profit" : "flash-loss");
-      const t = setTimeout(() => setFlashClass(""), 600);
-      prevPrice.current = quote.last;
-      return () => clearTimeout(t);
+    const currentPrice = quote?.last;
+    if (currentPrice != null && prevPrice.current != null && currentPrice !== prevPrice.current) {
+      // Clear any pending flash so we can re-trigger the animation
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      // Briefly clear the class to force CSS animation restart on same-direction moves
+      setFlashClass("");
+      requestAnimationFrame(() => {
+        setFlashClass(currentPrice > prevPrice.current! ? "flash-profit" : "flash-loss");
+      });
+      flashTimerRef.current = setTimeout(() => setFlashClass(""), 600);
     }
-    prevPrice.current = quote?.last;
+    prevPrice.current = currentPrice;
+    return () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); };
   }, [quote?.last]);
 
   // Close popover on outside click

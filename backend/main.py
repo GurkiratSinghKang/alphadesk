@@ -23,10 +23,18 @@ from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeli
 from data.ingestion.continuous_monitor import start_continuous_monitor, stop_continuous_monitor
 
 logger = logging.getLogger("alphadesk")
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
+
+# Force application logs to stdout even under Gunicorn
+# (Gunicorn overrides the root logger, so basicConfig alone is not enough)
+_log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
+logging.basicConfig(level=_log_level, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", force=True)
+# Ensure all alphadesk loggers propagate correctly
+for _name in ("alphadesk", "data.ingestion", "api.websocket", "core"):
+    _lg = logging.getLogger(_name)
+    _lg.setLevel(_log_level)
+    if not _lg.handlers:
+        _lg.addHandler(logging.StreamHandler())
+    _lg.propagate = True
 
 
 @asynccontextmanager

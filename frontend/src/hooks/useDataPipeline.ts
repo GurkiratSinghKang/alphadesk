@@ -26,7 +26,7 @@ export function useDataPipeline() {
     subscribe("agents");
   }, [subscribe]);
 
-  // Fetch initial data on mount (with retry)
+  // Fetch initial data on mount (with retry) + periodic portfolio refresh
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
@@ -65,6 +65,12 @@ export function useDataPipeline() {
       }
 
       // Fetch portfolio data
+      fetchPortfolioData();
+    };
+
+    const fetchPortfolioData = () => {
+      if (cancelled) return;
+
       getPositions()
         .then((positions) => {
           if (cancelled) return;
@@ -103,7 +109,14 @@ export function useDataPipeline() {
     };
 
     fetchInitialData();
-    return () => { cancelled = true; };
+
+    // Refresh portfolio summary every 30s for real-time P&L updates
+    const portfolioInterval = setInterval(fetchPortfolioData, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(portfolioInterval);
+    };
   }, []);
 
   // Route WS messages to stores via channel callbacks (no React re-renders)

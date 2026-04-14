@@ -31,7 +31,7 @@ export function StatusStrip() {
   }
 
   return (
-    <div role="status" className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[11px]">
+    <div role="status" className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[11px] overflow-x-auto scrollbar-none whitespace-nowrap">
       <div className="flex items-center gap-1.5 pr-4 border-r border-border/50">
         <span className="text-[#8a8a95] font-medium">P&L</span>
         {hasPnl ? (
@@ -44,13 +44,13 @@ export function StatusStrip() {
           <span aria-live="polite" aria-atomic="true" className="text-[#8a8a95] tabular-nums">$--.--</span>
         )}
       </div>
-      <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
+      <div className="hidden md:flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">Regime</span>
         <span className={cn("font-medium truncate max-w-[160px]", regime ? regimeColor : "text-[#8a8a95]", isDemo && "opacity-40")}>
           {regime?.regime ?? "---"}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 px-4 border-r border-border/50">
+      <div className="hidden lg:flex items-center gap-1.5 px-4 border-r border-border/50">
         <span className="text-[#8a8a95]">VIX</span>
         <span className={cn("tabular-nums font-medium", isDemo ? "text-muted-foreground opacity-40" : "text-foreground")}>
           {regime?.vix_level ? regime.vix_level.toFixed(1) : "--.-"}
