@@ -160,6 +160,19 @@ export function useDataPipeline() {
         const alert = msg.data as Alert;
         if (alert?.id) {
           useAlertsStore.getState().addAlert(alert);
+
+          // Show toast notification for price alerts
+          if (alert.type === "price" && alert.message) {
+            // Dispatch a custom event for the toast system to pick up
+            // (useToast requires React context, so we use the event bridge)
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("alphadesk:price-alert", {
+                  detail: { message: alert.message, symbol: alert.symbol },
+                })
+              );
+            }
+          }
         }
       })
     );

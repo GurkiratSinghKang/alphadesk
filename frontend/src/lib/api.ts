@@ -546,10 +546,31 @@ export async function getMarketNews() {
 
 // ─── Alerts ────────────────────────────────────────────────
 
+export interface PriceAlert {
+  id: string;
+  symbol: string;
+  price: number;
+  condition: "above" | "below";
+  triggered: boolean;
+  triggered_at: string | null;
+  created_at: string;
+}
+
+export function getPriceAlerts(symbol?: string): Promise<PriceAlert[]> {
+  const qs = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
+  return apiFetch<PriceAlert[]>(`/api/v1/trades/alerts${qs}`);
+}
+
 export function createPriceAlert(symbol: string, price: number, condition: "above" | "below") {
-  return apiFetch<{ id: string }>(`/api/v1/trades/alerts`, {
+  return apiFetch<PriceAlert>(`/api/v1/trades/alerts`, {
     method: "POST",
     body: JSON.stringify({ symbol, price, condition }),
+  });
+}
+
+export function deletePriceAlert(alertId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/v1/trades/alerts/${alertId}`, {
+    method: "DELETE",
   });
 }
 

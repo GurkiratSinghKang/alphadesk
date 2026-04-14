@@ -1,0 +1,80 @@
+[
+  {
+    "widget": "Allocation Donut",
+    "fn": "Allocation heading",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Cash label",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Invested label",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Total shown in donut center",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Journal Tab",
+    "fn": "Can add note to trade entry",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Journal Tab",
+    "fn": "Note persists after tab switch",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Rule input found",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Parses natural language rule",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Example chips visible",
+    "status": "FAIL",
+    "issue": "Found 0 example chips"
+  },
+  {
+    "widget": "Run Pipeline",
+    "fn": "\"Run Now\" button visible",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Run Pipeline",
+    "fn": "Triggers on click",
+    "status": "PASS",
+    "issue": "Running: true, Completed: false, Error: true"
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Logo/brand is clickable (goes home)",
+    "status": "FAIL",
+    "issue": "CONFIRMED BUG: Logo div has no onClick handler in TopBar.tsx line 73-76. The AlphaDesk text is a plain <div> with no navigation."
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Dashboard button goes home",
+    "status": "PASS",
+    "issue": "URL: https://tradingalpha.net/"
+  }
+]

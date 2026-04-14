@@ -1,0 +1,236 @@
+[
+  {
+    "widget": "Portfolio Hero",
+    "fn": "Shows portfolio equity value",
+    "status": "PASS",
+    "issue": "Found: $100,059.75"
+  },
+  {
+    "widget": "Strategy Grid",
+    "fn": "Cards navigate to strategy detail",
+    "status": "PASS",
+    "issue": "3/3 navigations succeeded"
+  },
+  {
+    "widget": "Sector Treemap",
+    "fn": "Shows sector names",
+    "status": "PASS",
+    "issue": "Found: Technology, Financial, Industrial, Consumer, Utilities, Materials"
+  },
+  {
+    "widget": "Sector Treemap",
+    "fn": "Shows sector percentages",
+    "status": "PASS",
+    "issue": "Found 27 percentages"
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Shows Cash label",
+    "status": "PASS",
+    "issue": "Cash: true, BuyingPower: false"
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Shows Invested label",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Allocation heading present",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "Strip renders (role=status)",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "P&L shown in strip",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Watchlist tab present",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Sparklines rendered",
+    "status": "PASS",
+    "issue": "Found 10 mini sparklines"
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Shows tracked symbols",
+    "status": "PASS",
+    "issue": "Found: AAPL, MSFT, GOOGL, AMZN, TSLA, SPY, QQQ, NVDA"
+  },
+  {
+    "widget": "Screener Tab",
+    "fn": "Has Run/Screen button",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Technical Analysis Tab",
+    "fn": "Shows indicators",
+    "status": "PASS",
+    "issue": "Found: RSI, MACD, EMA, BB, Support, Resistance"
+  },
+  {
+    "widget": "Technical Analysis Tab",
+    "fn": "Score gauge rendered",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Fundamental Tab",
+    "fn": "F-Score displayed",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Sentiment Tab",
+    "fn": "Shows sentiment data",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Sentiment Tab",
+    "fn": "Estimated items greyed",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chat Tab",
+    "fn": "Chat input exists",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chat Tab",
+    "fn": "AI responds to message",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Submit/Place order button",
+    "status": "PASS",
+    "issue": "Buttons found: Buy, Sell, Buy 10 SPY @ Market"
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Order type options",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Options panel visible",
+    "status": "PASS",
+    "issue": "Call: true, Put: true, Chain: true"
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Shows strikes",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "IV displayed",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Expected Move",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Bid/Ask columns",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Journal Tab",
+    "fn": "Textarea found",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Builder textarea found",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Equity curve rendered",
+    "status": "PASS",
+    "issue": "SVG paths: 45, Canvas: 0"
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Chart container present",
+    "status": "PASS",
+    "issue": "Found 21"
+  },
+  {
+    "widget": "Run Pipeline",
+    "fn": "Run Now button present",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Dashboard/Trade/Pipeline buttons",
+    "status": "PASS",
+    "issue": "Dashboard: true, Trade: true, Pipeline: true"
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Trade nav works",
+    "status": "PASS",
+    "issue": "URL: https://tradingalpha.net/trade"
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Pipeline nav works",
+    "status": "PASS",
+    "issue": "URL: https://tradingalpha.net/pipeline"
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Logo/brand goes home",
+    "status": "FAIL",
+    "issue": "URL: https://tradingalpha.net/pipeline"
+  },
+  {
+    "widget": "Profile Menu",
+    "fn": "Opens on click",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Profile Menu",
+    "fn": "Has logout option",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Profile Menu",
+    "fn": "Has shortcuts option",
+    "status": "PASS",
+    "issue": ""
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "widget": "Allocation Donut",
+    "fn": "\"Allocation\" heading (h3)",
+    "status": "FAIL",
+    "issue": "h3 not found in DOM"
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "\"Cash\" label in legend",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "\"Invested\" label in legend",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Donut SVG (120x120)",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Market Indices",
+    "fn": "DIA index shown",
+    "status": "FAIL",
+    "issue": "DIA not found, only SPY/QQQ/IWM"
+  },
+  {
+    "widget": "Open Positions",
+    "fn": "Position data with prices visible",
+    "status": "PASS",
+    "issue": "Found 4 positions"
+  },
+  {
+    "widget": "P&L Calendar",
+    "fn": "Shows month name",
+    "status": "PASS",
+    "issue": "April found"
+  },
+  {
+    "widget": "Chart",
+    "fn": "Header shows symbol and price",
+    "status": "PASS",
+    "issue": "Found: SPY$685.99"
+  },
+  {
+    "widget": "L1 Data Bar",
+    "fn": "Shows L1 fields",
+    "status": "PASS",
+    "issue": "Found 5/8 L1 fields"
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Click strike adds to builder",
+    "status": "PASS",
+    "issue": ""
+  }
+]

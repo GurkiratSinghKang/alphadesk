@@ -1,0 +1,72 @@
+QA ROUND 11 — FINAL REPORT
+Date: 2026-04-13T20:56:25.733Z
+Site: https://tradingalpha.net
+
+Total checks: 32
+PASSED: 30
+FAILED: 2
+
+FAIL [1] Dashboard loads without errors
+  Application error
+PASS [2] Portfolio value reasonable (not $0 or $100,000 default)
+  All $ values: $1, $1, $7, $8, $0, $0, $0, $0, $1, $12 | Reasonable: $99,983.71
+PASS [3] Day P&L visible, colored, with percentage
+  Percentages found: -0.08%, -0.08%, 93.3%, 30.0%, -10.8% | Color CSS: true | P&L keyword: true
+PASS [4] Status strip — Regime live, VIX real number
+  Regime: RegimeBull, VIX-like: VIX28.6, Status strip present: true
+PASS [5] Activity feed shows content
+  Activity keywords found: Activity, Pipeline completed, Signal, Trade, Short Interest, Strategic Move
+PASS [6] Strategy cards visible with returns
+  Strategies found: PEAD, Momentum, Mean Reversion, Mean Rev, Vol, Volatility, Pairs, Sector, Earnings, Quality, Event, Claude Alpha (12) | "active" label: true
+PASS [7] Open Positions — MRK, PG, WMT, NKE with P&L
+  Found: MRK, PG, WMT, NKE (4/4)
+PASS [8] P&L Calendar shows real data or "No trading data"
+  Calendar keywords: Calendar, Apr, April, Mon, Tue, Wed, Thu, Fri
+PASS [9] Market Indices SPY/QQQ/IWM with real changes
+  Indices: SPY, QQQ, IWM | 0.00% count: 0
+PASS [10] Sector Performance tiles with different sizes
+  Sector names found: Technology, Finance, Financial, Consumer, Industrial, Utilities, Real Estate, Comm, Sector
+PASS [11] Economic Calendar — no duplicates, styled
+  Economic keywords: Economic, FOMC, CPI, GDP, Retail Sales, PMI
+PASS [12] Dashboard scrollable, nothing cut off
+  Total page height: 1696px vs viewport 900px
+PASS [13] Trade page loads WITHOUT crashing
+  Page loaded. Critical console errors: 0
+PASS [14] Chart loads with real data, header price matches
+  Canvases: 7, Price header: checked next
+FAIL [15] Switch 3 symbols — chart updates each time
+  Successful switches: 0/3
+PASS [16] BUY/SELL buttons visible, not overlapping chart
+  Buy: yes, Sell: yes, Overlap: false
+PASS [17] Options chain visible, not all $0.01
+  Options present: true, $0.01 count: 0, Total prices: 243
+PASS [18] All right-panel tabs work (5)
+  Right panel tab names found: Tech, Technical, Order
+PASS [19] All bottom-panel tabs work (5)
+  Bottom panel tab names found: Trade, Positions, Orders, Journal, Calendar
+PASS [20] Watchlist sparklines unique per symbol
+  Watchlist symbols: AAPL, MSFT, GOOGL, AMZN, NVDA, Sparkline-sized SVGs: 54
+PASS [21] Pipeline shows real data (not all zeros)
+  Numbers: 12, Non-zero: 12
+PASS [22] Shows "Showing latest run (date)"
+  Date found: 2026-04-10, Run info: true
+PASS [23] Positions table correct
+  Tables: 2, Has position tickers: true
+PASS [24] Run Pipeline button present
+  Found
+PASS [25] Stats populated (not all "Awaiting trades")
+  Stats found: Win Rate, Sharpe, Return, Drawdown, Max, Total, Percentages: -0.08%, +5.50%, -2.2%, Awaiting: 1
+PASS [26] Equity curve renders
+  Chart elements: 0, SVGs: 18
+PASS [27] All 5 strategy tabs work
+  Tabs found: Positions, Risk, History, Analytics, Correlation, Parameters (6)
+PASS [28] Pause/Resume toggle present
+  Pause/Resume button: found, Toggle switch: no
+PASS [29] No "undefined", "null", "NaN", "(Demo)", "(est.)" visible
+  All clean
+PASS [30] No React hydration errors in console
+  Clean
+PASS [31] Portfolio value consistent across pages
+  Only found on 1 page(s): /=$99,983.71
+PASS [32] No crashes on rapid navigation
+  All 6 navigations clean

@@ -1,0 +1,291 @@
+[
+  {
+    "id": "28",
+    "desc": "Product preview mockup on landing page",
+    "status": "WARN",
+    "detail": "No preview/mockup image found"
+  },
+  {
+    "id": "29a",
+    "desc": "Login form visible on landing page",
+    "status": "PASS"
+  },
+  {
+    "id": "29",
+    "desc": "Login form works — redirected after login",
+    "status": "PASS"
+  },
+  {
+    "id": "1a",
+    "desc": "Status strip — P&L visible",
+    "status": "PASS"
+  },
+  {
+    "id": "1b",
+    "desc": "Status strip — Regime visible",
+    "status": "PASS"
+  },
+  {
+    "id": "1c",
+    "desc": "Status strip — VIX visible",
+    "status": "PASS"
+  },
+  {
+    "id": "1d",
+    "desc": "Status strip — LIVE indicator",
+    "status": "PASS"
+  },
+  {
+    "id": "1e",
+    "desc": "Status strip — Paper indicator",
+    "status": "PASS"
+  },
+  {
+    "id": "2a",
+    "desc": "Portfolio Hero — equity value visible",
+    "status": "PASS"
+  },
+  {
+    "id": "2b",
+    "desc": "Portfolio Hero — P&L visible",
+    "status": "PASS"
+  },
+  {
+    "id": "2c",
+    "desc": "Portfolio Hero — equity curve height 159px (target 160px)",
+    "status": "PASS"
+  },
+  {
+    "id": "3a",
+    "desc": "Activity Feed — section visible",
+    "status": "PASS"
+  },
+  {
+    "id": "3b",
+    "desc": "Activity Feed — timestamps present",
+    "status": "PASS"
+  },
+  {
+    "id": "3c",
+    "desc": "Activity Feed — news contamination",
+    "status": "FAIL",
+    "detail": "News content found mixed with pipeline events"
+  },
+  {
+    "id": "4a",
+    "desc": "Strategy Grid",
+    "status": "WARN",
+    "detail": "Only 9 strategies visible, expected 13"
+  },
+  {
+    "id": "4b",
+    "desc": "Strategy Grid — 26 sparklines found",
+    "status": "PASS"
+  },
+  {
+    "id": "4c",
+    "desc": "Strategy Grid — returns percentages visible",
+    "status": "PASS"
+  },
+  {
+    "id": "5a",
+    "desc": "Open Positions — section visible",
+    "status": "PASS"
+  },
+  {
+    "id": "5b",
+    "desc": "Open Positions — 9 positions: WMT, BA, SPY, QQQ, IWM, NVDA, JPM, AMZN, META",
+    "status": "PASS"
+  },
+  {
+    "id": "6a",
+    "desc": "P&L Calendar — visible",
+    "status": "PASS"
+  },
+  {
+    "id": "6b",
+    "desc": "P&L Calendar — 40 colored cells (dynamic scale)",
+    "status": "PASS"
+  },
+  {
+    "id": "7a",
+    "desc": "Market Indices — SPY visible",
+    "status": "PASS"
+  },
+  {
+    "id": "7b",
+    "desc": "Market Indices — QQQ visible",
+    "status": "PASS"
+  },
+  {
+    "id": "7c",
+    "desc": "Market Indices — IWM visible",
+    "status": "PASS"
+  },
+  {
+    "id": "7d",
+    "desc": "Market Indices — sparklines",
+    "status": "WARN",
+    "detail": "No sparkline charts found for indices"
+  },
+  {
+    "id": "8a",
+    "desc": "Sector Treemap — sectors visible",
+    "status": "PASS"
+  },
+  {
+    "id": "8b",
+    "desc": "Sector Treemap — Daily/YTD toggle present",
+    "status": "PASS"
+  },
+  {
+    "id": "8c",
+    "desc": "Sector Treemap — tile sizes",
+    "status": "WARN",
+    "detail": "Tiles may not have varying sizes"
+  },
+  {
+    "id": "8d",
+    "desc": "Sector Treemap — toggle clicked successfully",
+    "status": "PASS"
+  },
+  {
+    "id": "9a",
+    "desc": "Allocation Donut — visible",
+    "status": "PASS"
+  },
+  {
+    "id": "9b",
+    "desc": "Headlines — section visible",
+    "status": "PASS"
+  },
+  {
+    "id": "10a",
+    "desc": "Economic Calendar — visible",
+    "status": "PASS"
+  },
+  {
+    "id": "10b",
+    "desc": "Economic Calendar — no duplicates",
+    "status": "PASS"
+  },
+  {
+    "id": "11",
+    "desc": "Welcome Banner — visible",
+    "status": "PASS"
+  },
+  {
+    "id": "12",
+    "desc": "Trade page — full screenshot taken",
+    "status": "PASS"
+  },
+  {
+    "id": "13a",
+    "desc": "Chart header — price $5.98 visible",
+    "status": "PASS"
+  },
+  {
+    "id": "13b",
+    "desc": "Chart header — L1 bar populated",
+    "status": "PASS"
+  },
+  {
+    "id": "14",
+    "desc": "Symbol switching — tested AAPL, MSFT, TSLA",
+    "status": "PASS"
+  },
+  {
+    "id": "15-1m",
+    "desc": "Timeframe 1m — clicked and loaded",
+    "status": "PASS"
+  },
+  {
+    "id": "15-D",
+    "desc": "Timeframe D — clicked and loaded",
+    "status": "PASS"
+  },
+  {
+    "id": "15-W",
+    "desc": "Timeframe W — clicked and loaded",
+    "status": "PASS"
+  },
+  {
+    "id": "16",
+    "desc": "BUY/SELL buttons",
+    "status": "FAIL",
+    "detail": "Buy: false, Sell: false"
+  },
+  {
+    "id": "17",
+    "desc": "Order tab",
+    "status": "WARN",
+    "detail": "Order tab not found"
+  },
+  {
+    "id": "18",
+    "desc": "Options chain",
+    "status": "WARN",
+    "detail": "Options tab not found"
+  },
+  {
+    "id": "19",
+    "desc": "Trade page tabs",
+    "status": "WARN",
+    "detail": "Only 0 tabs found"
+  },
+  {
+    "id": "20a",
+    "desc": "Pipeline — flow diagram visible",
+    "status": "PASS"
+  },
+  {
+    "id": "20b",
+    "desc": "Pipeline — real data in flow",
+    "status": "PASS"
+  },
+  {
+    "id": "21",
+    "desc": "Pipeline positions — 4 rows, headers: Symbol, Shares, Entry, Current, P&L ($), P&L (%), Stop Loss, Take Profit, Entry Date, Signal",
+    "status": "PASS"
+  },
+  {
+    "id": "23a",
+    "desc": "Strategy Detail — \"How It Works\" visible",
+    "status": "PASS"
+  },
+  {
+    "id": "23b",
+    "desc": "Strategy Detail — \"When to Use\" visible",
+    "status": "PASS"
+  },
+  {
+    "id": "23c",
+    "desc": "Strategy Detail — \"Risks\" visible",
+    "status": "PASS"
+  },
+  {
+    "id": "24a",
+    "desc": "Strategy positions — enriched data visible",
+    "status": "PASS"
+  },
+  {
+    "id": "25",
+    "desc": "Strategy analytics — Best/Worst Trades card visible",
+    "status": "PASS"
+  },
+  {
+    "id": "26a",
+    "desc": "Trade page at 800px — tab layout present",
+    "status": "PASS"
+  },
+  {
+    "id": "26b",
+    "desc": "Trade page at 800px — no horizontal overflow",
+    "status": "PASS"
+  },
+  {
+    "id": "27",
+    "desc": "Dashboard at 800px — no horizontal overflow",
+    "status": "PASS"
+  }
+]

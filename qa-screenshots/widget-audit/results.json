@@ -1,0 +1,512 @@
+[
+  {
+    "widget": "Portfolio Hero",
+    "fn": "Shows dollar amount",
+    "status": "PASS",
+    "issue": "Found: $1, $1, $7"
+  },
+  {
+    "widget": "Portfolio Hero",
+    "fn": "P&L has color coding",
+    "status": "PASS",
+    "issue": "Green: true, Red: true"
+  },
+  {
+    "widget": "Portfolio Hero",
+    "fn": "Period buttons present",
+    "status": "PASS",
+    "issue": "Found 4 period buttons"
+  },
+  {
+    "widget": "Portfolio Hero",
+    "fn": "Period buttons change chart",
+    "status": "PASS",
+    "issue": "Clicked 1W and 3M"
+  },
+  {
+    "widget": "Equity Curve",
+    "fn": "Line chart renders",
+    "status": "PASS",
+    "issue": "Found 41 chart elements, 105 SVG paths"
+  },
+  {
+    "widget": "Activity Feed",
+    "fn": "Shows real events",
+    "status": "PASS",
+    "issue": "Events found"
+  },
+  {
+    "widget": "Activity Feed",
+    "fn": "Events have timestamps",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Activity Feed",
+    "fn": "Rejected trades show remediation",
+    "status": "PASS",
+    "issue": "Found"
+  },
+  {
+    "widget": "Strategy Grid",
+    "fn": "Shows strategy cards",
+    "status": "PASS",
+    "issue": "Found 7 strategy names, 0 card elements"
+  },
+  {
+    "widget": "Strategy Grid",
+    "fn": "Cards show position counts",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Grid",
+    "fn": "Cards show returns",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Grid",
+    "fn": "Card navigation",
+    "status": "FAIL",
+    "issue": "No strategy links found"
+  },
+  {
+    "widget": "Open Positions",
+    "fn": "Lists Alpaca positions",
+    "status": "PASS",
+    "issue": "Found: MRK, NKE, PG, WMT"
+  },
+  {
+    "widget": "Open Positions",
+    "fn": "P&L values shown",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "P&L Calendar",
+    "fn": "Calendar renders",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "P&L Calendar",
+    "fn": "Month navigation exists",
+    "status": "PASS",
+    "issue": "Nav buttons: 0, Month label: true"
+  },
+  {
+    "widget": "Market Indices",
+    "fn": "Shows index symbols",
+    "status": "PASS",
+    "issue": "Found: SPY, QQQ, IWM"
+  },
+  {
+    "widget": "Market Indices",
+    "fn": "Prices appear real",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Market Indices",
+    "fn": "VIX displayed",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Market Indices",
+    "fn": "Change percentages meaningful",
+    "status": "PASS",
+    "issue": "Found 2 zero percentages"
+  },
+  {
+    "widget": "Sector Treemap",
+    "fn": "Treemap renders",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Sector Treemap",
+    "fn": "Has tiles with varying sizes",
+    "status": "FAIL",
+    "issue": "Treemap not found"
+  },
+  {
+    "widget": "Sector Treemap",
+    "fn": "Shows sector ETF data",
+    "status": "FAIL",
+    "issue": "Found 0 sector ETFs"
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Donut chart renders",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Allocation Donut",
+    "fn": "Shows Cash vs Invested",
+    "status": "FAIL",
+    "issue": "Cash: false, Invested: true"
+  },
+  {
+    "widget": "Economic Calendar",
+    "fn": "Shows economic events",
+    "status": "PASS",
+    "issue": "Found 8 economic terms"
+  },
+  {
+    "widget": "Economic Calendar",
+    "fn": "Sample data has opacity",
+    "status": "PASS",
+    "issue": "Opacity < 1 found"
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "Strip renders",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "Regime displayed",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "VIX is real (not 16.5 default)",
+    "status": "PASS",
+    "issue": "VIX: 28.6"
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "LIVE indicator shown",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Status Strip",
+    "fn": "Alpaca (Paper) badge",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chart",
+    "fn": "Chart loads",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chart",
+    "fn": "Timeframe buttons present",
+    "status": "PASS",
+    "issue": "Found 8 timeframe buttons"
+  },
+  {
+    "widget": "Chart",
+    "fn": "Chart type buttons",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chart",
+    "fn": "Timeframe 5m works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chart",
+    "fn": "Timeframe 1H works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Chart",
+    "fn": "Timeframe D works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "L1 Data Bar",
+    "fn": "L1 data displayed",
+    "status": "PASS",
+    "issue": "Found 3/7 L1 terms"
+  },
+  {
+    "widget": "L1 Data Bar",
+    "fn": "Values populated (not all zero)",
+    "status": "PASS",
+    "issue": "Found 232 non-zero price values"
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Watchlist renders",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Sparklines rendered",
+    "status": "FAIL",
+    "issue": "Found 0 sparklines"
+  },
+  {
+    "widget": "Watchlist",
+    "fn": "Add symbol works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Screener Tab",
+    "fn": "Content loaded",
+    "status": "FAIL",
+    "issue": "\"Run Screen\" not found"
+  },
+  {
+    "widget": "Screener Tab",
+    "fn": "Run Screen returns results",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Signals Tab",
+    "fn": "Content loaded",
+    "status": "PASS",
+    "issue": "Found \"Signal\""
+  },
+  {
+    "widget": "Technical Analysis Tab",
+    "fn": "Tab button found",
+    "status": "FAIL",
+    "issue": "No \"Technical\" tab found"
+  },
+  {
+    "widget": "Fundamental Tab",
+    "fn": "Tab button found",
+    "status": "FAIL",
+    "issue": "No \"Fundamental\" tab found"
+  },
+  {
+    "widget": "Sentiment Tab",
+    "fn": "Tab button found",
+    "status": "FAIL",
+    "issue": "No \"Sentiment\" tab found"
+  },
+  {
+    "widget": "Chat Tab",
+    "fn": "Tab test",
+    "status": "FAIL",
+    "issue": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[class*=\"chat\"] button[type=\"submit\"], [class*=\"Chat\"] button:has-text"
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Content loaded",
+    "status": "PASS",
+    "issue": "Found \"Buy\""
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Buy/Sell toggle present",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Quantity input present",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Order Tab",
+    "fn": "Submit button present",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Options Chain",
+    "fn": "Options tab found",
+    "status": "FAIL",
+    "issue": "No Options tab"
+  },
+  {
+    "widget": "Trade Builder",
+    "fn": "Trade Builder rendered",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Trade Builder",
+    "fn": "Add Leg works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Trade Builder",
+    "fn": "Shows Net Credit/Debit",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Positions Tab (bottom)",
+    "fn": "Lists positions",
+    "status": "PASS",
+    "issue": "Found 4 symbols"
+  },
+  {
+    "widget": "Orders Tab (bottom)",
+    "fn": "Orders section works",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Journal Tab (bottom)",
+    "fn": "Journal input found",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Calendar Tab (bottom)",
+    "fn": "Calendar renders",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Pipeline Positions",
+    "fn": "Positions table rendered",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Pipeline Positions",
+    "fn": "Shows entry price",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Pipeline Flow",
+    "fn": "Flow diagram rendered",
+    "status": "PASS",
+    "issue": "Found 5 flow terms"
+  },
+  {
+    "widget": "Pipeline Flow",
+    "fn": "Numbers are non-zero",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Builder rendered",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Strategy Builder",
+    "fn": "Example chips present",
+    "status": "PASS",
+    "issue": "Found 1 chips"
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Backtest section rendered",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Shows return",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Shows Sharpe ratio",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Shows max drawdown",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Backtest",
+    "fn": "Equity curve rendered",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Run Pipeline",
+    "fn": "Button present",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Performance Summary",
+    "fn": "Total P&L shown",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Performance Summary",
+    "fn": "Best/worst trade shown",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "TopBar Navigation",
+    "fn": "Nav links present",
+    "status": "FAIL",
+    "issue": ""
+  },
+  {
+    "widget": "Command Palette",
+    "fn": "Ctrl/Cmd+K opens",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Command Palette",
+    "fn": "Search returns results",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Profile Menu",
+    "fn": "Profile button found",
+    "status": "FAIL",
+    "issue": "No profile button found"
+  },
+  {
+    "widget": "Notifications Bell",
+    "fn": "Popover opens",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Notifications Bell",
+    "fn": "Shows alerts or empty state",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Keyboard Shortcuts",
+    "fn": "Overlay opens with ?",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Keyboard Shortcuts",
+    "fn": "Lists shortcuts",
+    "status": "PASS",
+    "issue": ""
+  },
+  {
+    "widget": "Keyboard Shortcuts",
+    "fn": "Escape closes overlay",
+    "status": "PASS",
+    "issue": ""
+  }
+]

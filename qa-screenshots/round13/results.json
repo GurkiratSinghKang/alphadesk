@@ -1,0 +1,170 @@
+[
+  {
+    "id": 9,
+    "name": "Dashboard loads without errors",
+    "passed": true,
+    "detail": "Dashboard loaded with content"
+  },
+  {
+    "id": 10,
+    "name": "Portfolio value real (from Alpaca)",
+    "passed": true,
+    "detail": "$1.93"
+  },
+  {
+    "id": 11,
+    "name": "P&L visible, correct color",
+    "passed": true,
+    "detail": "AlphaDesk\nDashboard\nTrade\nPipeline\nSearch symbols, commands...\n⌘K\nA\nP&L\nloss\n-$1.93(-0.00%)\nRegime\nB"
+  },
+  {
+    "id": 12,
+    "name": "Status strip: Regime, VIX, LIVE",
+    "passed": true,
+    "detail": "Regime:true VIX:true LIVE:true"
+  },
+  {
+    "id": 13,
+    "name": "Market indices: real prices, change%",
+    "passed": false,
+    "detail": "SPX:false NDX:false DOW:false %:true"
+  },
+  {
+    "id": 1,
+    "name": "Activity Feed shows pipeline events",
+    "passed": true,
+    "detail": "Activity:true Timestamps:true Items:0"
+  },
+  {
+    "id": 5,
+    "name": "Allocation Donut + News both visible",
+    "passed": false,
+    "detail": "Donut:true Allocation:false News:false BothVisible:false"
+  },
+  {
+    "id": 6,
+    "name": "Sector Treemap redesign",
+    "passed": false,
+    "detail": "Sector:true Toggle:true Height:0px Tech:false Health:false"
+  },
+  {
+    "id": 8,
+    "name": "Strategy data accurate",
+    "passed": true,
+    "detail": "PEAD:true Manual:true EarningsVol:true -15.5%:true NKE:true PG:true WMT:true MRK:true"
+  },
+  {
+    "id": 14,
+    "name": "P&L Calendar: real data",
+    "passed": true,
+    "detail": "Calendar:true MonthName:true"
+  },
+  {
+    "id": 2,
+    "name": "Clickable Positions navigate to /trade",
+    "passed": true,
+    "detail": "Tickers found: MRK, NKE, PG, WMT. Navigated to /trade: true"
+  },
+  {
+    "id": 3,
+    "name": "Logo clickable navigates to /",
+    "passed": false,
+    "detail": "el.click is not a function"
+  },
+  {
+    "id": 4,
+    "name": "Economic Calendar expandable",
+    "passed": true,
+    "detail": "Economic section:true Events:true Clicked:false Expanded:true"
+  },
+  {
+    "id": 15,
+    "name": "/trade page loads without crash",
+    "passed": true,
+    "detail": "Trade page loaded"
+  },
+  {
+    "id": 16,
+    "name": "Chart loads real data",
+    "passed": true,
+    "detail": "Chart:true Price:true Header:true"
+  },
+  {
+    "id": 17,
+    "name": "L1 bar: Mkt Closed or real data",
+    "passed": true,
+    "detail": "MktClosed:true Bid/Ask:true Last:true"
+  },
+  {
+    "id": 18,
+    "name": "Watchlist: prices, sparklines, clickable",
+    "passed": true,
+    "detail": "Watchlist:true Prices:true SVGs:55"
+  },
+  {
+    "id": 19,
+    "name": "Options chain visible",
+    "passed": true,
+    "detail": "Options:true Strike:true Prices:true"
+  },
+  {
+    "id": 20,
+    "name": "Right panel tabs (Tech/Fund/Sent/Chat/Order)",
+    "passed": true,
+    "detail": "Results: {\"Tech\":true,\"Fund\":true,\"Sent\":true,\"Chat\":true,\"Order\":true}"
+  },
+  {
+    "id": 21,
+    "name": "Bottom tabs (Trade/Positions/Orders/Journal/Calendar)",
+    "passed": true,
+    "detail": "Results: {\"Trade\":true,\"Positions\":true,\"Orders\":true,\"Journal\":true,\"Calendar\":true}"
+  },
+  {
+    "id": 22,
+    "name": "Command palette (Ctrl+K)",
+    "passed": true,
+    "detail": "Visible:true HasSearch:true"
+  },
+  {
+    "id": 23,
+    "name": "Profile menu: equity, shortcuts, logout",
+    "passed": false,
+    "detail": "Equity:true Logout:false Shortcuts:true"
+  },
+  {
+    "id": 24,
+    "name": "Pipeline page: flow, positions, run button",
+    "passed": true,
+    "detail": "Pipeline:true Flow:false Positions:true Run:true"
+  },
+  {
+    "id": 7,
+    "name": "Strategy pages enhanced (PEAD)",
+    "passed": true,
+    "detail": "PEAD:true HowItWorks:true WhenToUse:true Risks:true Positions:true Analytics:true BestWorst:false"
+  },
+  {
+    "id": 25,
+    "name": "Static pages load (/privacy, /terms, /risk, /docs)",
+    "passed": true,
+    "detail": "/privacy:OK | /terms:OK | /risk:OK | /docs:OK"
+  },
+  {
+    "id": 26,
+    "name": "No undefined/null/Demo text visible",
+    "passed": true,
+    "detail": "Clean — no bad text"
+  },
+  {
+    "id": 27,
+    "name": "No console errors",
+    "passed": true,
+    "detail": "No significant console errors"
+  },
+  {
+    "id": 28,
+    "name": "Portfolio value consistent across pages",
+    "passed": true,
+    "detail": "Dashboard:$1.93 Trade:$1.93 Profile:$1.93"
+  }
+]

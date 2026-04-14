@@ -665,41 +665,144 @@ async def resume_trading(username: str = Depends(require_auth)):
 
 
 # ---------------------------------------------------------------------------
-# Price Alerts
+# Price Alerts — Redis-persisted, real-time trigger checking
 # ---------------------------------------------------------------------------
 
-_price_alerts: list[dict] = []  # In-memory for now; move to Redis/DB later
+ALERTS_REDIS_KEY = "price_alerts"
+
+
+class CreateAlertRequest(BaseModel):
+    symbol: str = Field(..., pattern=r"^[A-Z]{1,10}$")
+    price: float = Field(..., gt=0)
+    condition: str = Field("above", pattern=r"^(above|below)$")
+
+
+async def _get_all_alerts() -> list[dict]:
+    """Retrieve all price alerts from Redis hash."""
+    from core.redis import get_redis
+    try:
+        r = await get_redis()
+        raw = await r.hgetall(ALERTS_REDIS_KEY)
+        alerts = []
+        for _id, data in raw.items():
+            try:
+                alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
+                alerts.append(alert)
+            except Exception:
+                continue
+        # Sort by created_at descending
+        alerts.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+        return alerts
+    except Exception:
+        logger.warning("Failed to retrieve alerts from Redis", exc_info=True)
+        return []
+
+
+async def _save_alert(alert: dict) -> None:
+    """Save a single alert to Redis hash."""
+    from core.redis import get_redis
+    try:
+        r = await get_redis()
+        await r.hset(ALERTS_REDIS_KEY, alert["id"], json.dumps(alert))
+    except Exception:
+        logger.warning("Failed to save alert to Redis", exc_info=True)
+
+
+async def _delete_alert_from_redis(alert_id: str) -> bool:
+    """Delete a single alert from Redis hash. Returns True if deleted."""
+    from core.redis import get_redis
+    try:
+        r = await get_redis()
+        removed = await r.hdel(ALERTS_REDIS_KEY, alert_id)
+        return removed > 0
+    except Exception:
+        logger.warning("Failed to delete alert from Redis", exc_info=True)
+        return False
+
 
 @router.get("/alerts")
-async def list_alerts(username: str = Depends(require_auth)):
-    return _price_alerts
-
-@router.post("/alerts")
-async def create_alert(
-    symbol: str = Query(...),
-    price: float = Query(...),
-    condition: str = Query("above", regex="^(above|below)$"),
+async def list_alerts(
+    symbol: str | None = Query(None),
     username: str = Depends(require_auth),
 ):
-    symbol = symbol.upper()
-    if not re.match(r"^[A-Z]{1,10}$", symbol):
-        raise HTTPException(status_code=422, detail="Invalid symbol: must be 1-10 uppercase letters")
+    """List all price alerts, optionally filtered by symbol."""
+    alerts = await _get_all_alerts()
+    if symbol:
+        alerts = [a for a in alerts if a["symbol"] == symbol.upper()]
+    return alerts
+
+
+@router.post("/alerts", status_code=201)
+async def create_alert(
+    body: CreateAlertRequest,
+    username: str = Depends(require_auth),
+):
+    """Create a new price alert. Persisted in Redis."""
+    import uuid
     alert = {
-        "id": f"alert-{len(_price_alerts)+1}",
-        "symbol": symbol,
-        "price": price,
-        "condition": condition,
+        "id": f"alert-{uuid.uuid4().hex[:8]}",
+        "symbol": body.symbol.upper(),
+        "price": body.price,
+        "condition": body.condition,
         "triggered": False,
+        "triggered_at": None,
         "created_at": datetime.now(ZoneInfo("America/New_York")).isoformat(),
     }
-    _price_alerts.append(alert)
+    await _save_alert(alert)
+    logger.info("Price alert created: %s %s $%.2f", alert["symbol"], alert["condition"], alert["price"])
     return alert
+
 
 @router.delete("/alerts/{alert_id}")
 async def delete_alert(alert_id: str, username: str = Depends(require_auth)):
-    global _price_alerts
-    _price_alerts = [a for a in _price_alerts if a["id"] != alert_id]
+    """Delete a price alert by ID."""
+    deleted = await _delete_alert_from_redis(alert_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Alert not found")
     return {"ok": True}
+
+
+async def check_alerts_for_symbol(symbol: str, price: float) -> None:
+    """Check if any alerts for this symbol should trigger.
+
+    Called from the Alpaca stream when a new quote/trade arrives.
+    When triggered, updates the alert in Redis and publishes a
+    notification on the 'alerts' channel for real-time delivery.
+    """
+    if price <= 0:
+        return
+
+    from core.redis import publish
+
+    alerts = await _get_all_alerts()
+    for alert in alerts:
+        if alert["symbol"] != symbol or alert.get("triggered"):
+            continue
+
+        should_trigger = (
+            (alert["condition"] == "above" and price >= alert["price"])
+            or (alert["condition"] == "below" and price <= alert["price"])
+        )
+
+        if should_trigger:
+            alert["triggered"] = True
+            alert["triggered_at"] = datetime.now(ZoneInfo("America/New_York")).isoformat()
+            await _save_alert(alert)
+
+            # Publish notification to all connected WebSocket clients
+            await publish("alerts", {
+                "id": f"triggered-{alert['id']}",
+                "type": "price",
+                "symbol": alert["symbol"],
+                "message": f"Price Alert: {alert['symbol']} crossed {alert['condition']} ${alert['price']:.2f}",
+                "time": int(datetime.now(timezone.utc).timestamp() * 1000),
+                "acknowledged": False,
+                "alert": alert,
+            })
+            logger.info(
+                "Price alert triggered: %s %s $%.2f (current: $%.2f)",
+                alert["symbol"], alert["condition"], alert["price"], price,
+            )
 
 
 async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:

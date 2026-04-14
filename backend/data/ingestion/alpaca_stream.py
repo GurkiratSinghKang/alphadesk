@@ -41,6 +41,13 @@ async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) ->
     _last_published[symbol] = (now, price)
     await publish(channel, data)
 
+    # Check price alerts for this symbol (best-effort, non-blocking)
+    try:
+        from api.routes.trades import check_alerts_for_symbol
+        await check_alerts_for_symbol(symbol, price)
+    except Exception:
+        pass  # Never let alert checking break the quote stream
+
 
 WATCHLIST = [
     "AAPL", "NVDA", "TSLA", "SPY", "QQQ",

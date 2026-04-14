@@ -1,0 +1,226 @@
+[
+  {
+    "persona": "Day Trader",
+    "tried": "Switch to 1m/5m charts, find quick BUY button",
+    "worked": [
+      "1m timeframe available"
+    ],
+    "issues": [
+      "No chart section found in navigation",
+      "No 5-minute timeframe selector found",
+      "No quick BUY button found for fast order entry"
+    ]
+  },
+  {
+    "persona": "Swing Trader",
+    "tried": "Check daily/weekly charts, RSI/MACD indicators",
+    "worked": [
+      "Daily timeframe available",
+      "Weekly timeframe available"
+    ],
+    "issues": [
+      "No RSI indicator data visible",
+      "No MACD indicator data visible"
+    ]
+  },
+  {
+    "persona": "Options Trader",
+    "tried": "Find options chain, IV data, multi-leg strategies",
+    "worked": [],
+    "issues": [
+      "No options chain or options page found",
+      "No IV Rank or implied volatility data visible",
+      "No multi-leg options strategy support (spreads, straddles)"
+    ]
+  },
+  {
+    "persona": "Portfolio Manager",
+    "tried": "Check dashboard, allocation charts, open positions, P&L",
+    "worked": [
+      "P&L data visible",
+      "Charts/visualizations present"
+    ],
+    "issues": [
+      "No portfolio equity or value displayed on dashboard"
+    ]
+  },
+  {
+    "persona": "Quant/Algo Trader",
+    "tried": "Check strategy pages, run backtest, check pipeline",
+    "worked": [],
+    "issues": [
+      "No strategies page found",
+      "No backtest page or button found",
+      "No pipeline page found"
+    ]
+  },
+  {
+    "persona": "Risk Manager",
+    "tried": "Check exposure data, drawdown, VaR, regime indicator",
+    "worked": [
+      "Regime/VIX indicator visible"
+    ],
+    "issues": [
+      "No VaR data visible",
+      "No drawdown metric visible",
+      "No exposure data visible"
+    ]
+  },
+  {
+    "persona": "New User",
+    "tried": "Understand landing page, find sign up, look for docs",
+    "worked": [
+      "Landing page explains what the app does",
+      "Documentation/help link found"
+    ],
+    "issues": [
+      "No sign up / register option found for new users"
+    ]
+  },
+  {
+    "persona": "Mobile User",
+    "tried": "Login on mobile, check dashboard, navigate",
+    "worked": [
+      "Page renders at mobile width (375px)",
+      "Mobile navigation found"
+    ],
+    "issues": [
+      "Horizontal scroll detected on mobile -- content overflows viewport"
+    ]
+  },
+  {
+    "persona": "Keyboard-Only User",
+    "tried": "Navigate full app using only Tab/Enter/Escape",
+    "worked": [
+      "Can Tab to form inputs",
+      "Can Tab through 11 interactive elements",
+      "Focus indicators visible"
+    ],
+    "issues": []
+  },
+  {
+    "persona": "Screen Reader User",
+    "tried": "Check aria labels, heading structure, landmarks",
+    "worked": [
+      "Found 1 h1 heading(s)",
+      "9 headings found",
+      "ARIA landmarks present"
+    ],
+    "issues": [
+      "1/12 buttons have no accessible label"
+    ]
+  },
+  {
+    "persona": "Impatient User",
+    "tried": "Rapidly switch pages, click before data loads",
+    "worked": [],
+    "issues": [
+      "Page shows error after rapid navigation",
+      "No loading indicators -- user gets no feedback while data loads"
+    ]
+  },
+  {
+    "persona": "Data-Skeptical PM",
+    "tried": "Verify P&L values, check data consistency",
+    "worked": [
+      "Found 10 dollar values",
+      "Found 10 percentage values",
+      "Dollar values appear realistic"
+    ],
+    "issues": []
+  },
+  {
+    "persona": "Compliance Officer",
+    "tried": "Check legal pages, risk disclaimers, audit trail",
+    "worked": [
+      "/privacy page exists",
+      "/terms page exists",
+      "/legal page exists",
+      "/disclaimer page exists"
+    ],
+    "issues": [
+      "No /risk-disclosure page found",
+      "No risk disclaimers visible in app",
+      "No trade history or audit trail page found"
+    ]
+  },
+  {
+    "persona": "API Power User",
+    "tried": "Test key API endpoints, check response formats",
+    "worked": [
+      "Login API returns valid token",
+      "/api/v1/trades/positions returns 200",
+      "/api/v1/pipeline/status returns 200",
+      "/api/v1/strategies returns 200"
+    ],
+    "issues": [
+      "/api/v1/screener returns 404",
+      "/api/v1/market-overview returns 404"
+    ]
+  },
+  {
+    "persona": "Backtester",
+    "tried": "Find backtest page, run SMA/RSI/MACD backtests",
+    "worked": [],
+    "issues": [
+      "No backtest page found"
+    ]
+  },
+  {
+    "persona": "News Trader",
+    "tried": "Check news section, activity feed, headline freshness",
+    "worked": [
+      "News items have timestamps"
+    ],
+    "issues": [
+      "No dedicated news page",
+      "No news headlines or activity feed visible"
+    ]
+  },
+  {
+    "persona": "Multi-Monitor Trader",
+    "tried": "Check layout at 2560x1440",
+    "worked": [
+      "Content uses ultrawide space (2560px)",
+      "Content stretches to fill screen"
+    ],
+    "issues": []
+  },
+  {
+    "persona": "Strategy Researcher",
+    "tried": "Check all strategy detail pages, read thesis/parameters",
+    "worked": [],
+    "issues": [
+      "Only 4 strategy cards found (expected 8+)",
+      "No strategy detail page links found",
+      "No strategy thesis or parameters documentation found"
+    ]
+  },
+  {
+    "persona": "Weekend Planner",
+    "tried": "Check what works when market is closed, data staleness",
+    "worked": [],
+    "issues": [
+      "No data freshness timestamps -- unclear if prices are current or stale",
+      "No market open/closed status indicator"
+    ]
+  },
+  {
+    "persona": "Security Auditor",
+    "tried": "Test auth, security headers, rate limiting, tokens",
+    "worked": [
+      "/dashboard redirects to login (protected)",
+      "/strategies redirects to login (protected)",
+      "/screener redirects to login (protected)",
+      "/portfolio redirects to login (protected)",
+      "x-frame-options header present",
+      "x-content-type-options header present",
+      "strict-transport-security header present",
+      "content-security-policy header present",
+      "x-xss-protection header present",
+      "Invalid tokens are rejected (401/403)",
+      "Rate limiting active on failed logins"
+    ],
+    "issues": []
+  }
+]

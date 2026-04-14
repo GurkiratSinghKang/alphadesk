@@ -1,0 +1,11 @@
+AlphaDesk QA Round 10 — Session Notes
+Date: 2026-04-13 (Sunday)
+Tester: Automated API-based QA session
+Login: admin / alphaDesk2025! (JWT auth successful)
+Environment: https://tradingalpha.net (production)
+API data captured via curl with Bearer token authentication.
+
+Note: WebFetch cannot render authenticated SPA pages (returns login page).
+All testing performed via direct API calls replicating what the frontend
+components fetch. Frontend rendering bugs may exist beyond what API
+testing can catch.

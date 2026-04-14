@@ -1,9 +1,61 @@
 import SwiftUI
 
+// MARK: - Tab Badge Provider
+
+/// Fetches badge counts for pipeline signals and open orders.
+@Observable
+final class TabBadgeProvider {
+    static let shared = TabBadgeProvider()
+
+    var pendingSignals: Int = 0
+    var openOrders: Int = 0
+
+    @MainActor
+    func refresh() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.fetchPipelineBadge() }
+            group.addTask { await self.fetchOrdersBadge() }
+        }
+    }
+
+    @MainActor
+    private func fetchPipelineBadge() async {
+        do {
+            let response: PipelinePositionsResponse = try await APIClient.shared.request(.pipelinePositions)
+            pendingSignals = response.openPositions.count
+        } catch {
+            // Non-fatal: badge stays at previous value
+        }
+    }
+
+    @MainActor
+    private func fetchOrdersBadge() async {
+        do {
+            let orders: [Order] = try await APIClient.shared.request(.orders)
+            openOrders = orders.filter {
+                let status = $0.status?.lowercased() ?? ""
+                return status == "new" || status == "partially_filled" || status == "accepted" || status == "pending_new"
+            }.count
+        } catch {
+            // Non-fatal
+        }
+    }
+}
+
+// MARK: - Scroll-to-top notification
+
+extension Notification.Name {
+    static let scrollToTop = Notification.Name("AlphaDeskScrollToTop")
+}
+
 struct MainTabView: View {
 
     @State private var selectedTab: Tab = .portfolio
     @State private var networkMonitor = NetworkMonitor.shared
+    @State private var badgeProvider = TabBadgeProvider.shared
+
+    // State preservation keys
+    private static let selectedTabKey = "AlphaDesk_selectedTab"
 
     enum Tab: Int, CaseIterable {
         case portfolio, trade, strategies, pipeline, settings
@@ -63,6 +115,22 @@ struct MainTabView: View {
         .background(AD.background)
         .ignoresSafeArea(.keyboard)
         .animation(.easeInOut(duration: 0.3), value: networkMonitor.isConnected)
+        .task {
+            // Restore saved tab
+            if let saved = UserDefaults.standard.object(forKey: Self.selectedTabKey) as? Int,
+               let tab = Tab(rawValue: saved) {
+                selectedTab = tab
+            }
+            // Fetch badge counts
+            await badgeProvider.refresh()
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            // Persist selected tab
+            UserDefaults.standard.set(newTab.rawValue, forKey: Self.selectedTabKey)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            UserDefaults.standard.set(selectedTab.rawValue, forKey: Self.selectedTabKey)
+        }
     }
 
     // MARK: - Offline Banner
@@ -113,28 +181,58 @@ struct MainTabView: View {
         }
     }
 
+    /// Badge count for a given tab. Returns 0 if no badge should be shown.
+    private func badgeCount(for tab: Tab) -> Int {
+        switch tab {
+        case .pipeline: return badgeProvider.pendingSignals
+        case .trade: return badgeProvider.openOrders
+        default: return 0
+        }
+    }
+
     private func tabItem(_ tab: Tab) -> some View {
         Button {
+            if selectedTab == tab {
+                // Re-tap: post scroll-to-top notification
+                NotificationCenter.default.post(name: .scrollToTop, object: tab)
+            }
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTab = tab
             }
         } label: {
             VStack(spacing: 4) {
-                ZStack {
-                    if selectedTab == tab {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(AD.accentDim)
-                            .frame(width: 48, height: 30)
+                ZStack(alignment: .topTrailing) {
+                    ZStack {
+                        if selectedTab == tab {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(AD.accentDim)
+                                .frame(width: 48, height: 30)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(
+                                selectedTab == tab ? AD.accent : AD.textTertiary
+                            )
+                            .symbolEffect(.bounce, value: selectedTab == tab)
+                    }
+                    .frame(width: 48, height: 30)
+
+                    // Badge
+                    let count = badgeCount(for: tab)
+                    if count > 0 {
+                        Text(count > 99 ? "99+" : "\(count)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .frame(minWidth: 16)
+                            .background(AD.loss)
+                            .clipShape(Capsule())
+                            .offset(x: 4, y: -4)
                             .transition(.scale.combined(with: .opacity))
                     }
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(
-                            selectedTab == tab ? AD.accent : AD.textTertiary
-                        )
-                        .symbolEffect(.bounce, value: selectedTab == tab)
                 }
-                .frame(height: 30)
 
                 Text(tab.title)
                     .font(.system(size: 10, weight: selectedTab == tab ? .semibold : .regular))

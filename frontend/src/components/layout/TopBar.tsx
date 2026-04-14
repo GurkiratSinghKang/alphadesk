@@ -24,6 +24,7 @@ export function TopBar() {
   const alerts = useAlertsStore((s) => s.alerts);
   const unacknowledgedCount = useAlertsStore((s) => s.alerts.filter((a) => !a.acknowledged).length);
   const acknowledgeAlert = useAlertsStore((s) => s.acknowledgeAlert);
+  const clearAlerts = useAlertsStore((s) => s.clearAlerts);
 
   const isHome = pathname === "/";
   const isTrade = pathname === "/trade";
@@ -106,17 +107,23 @@ export function TopBar() {
             </Button>
           </PopoverTrigger>
           <PopoverContent side="bottom" align="end" className="w-80 bg-[var(--surface)] border-border p-0">
-            <div className="border-b border-border px-3 py-2"><span className="text-xs font-medium text-foreground">Alerts & Notifications</span></div>
-            <ScrollArea className="max-h-64">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <span className="text-xs font-medium text-foreground">Alerts & Notifications</span>
+              {alerts.length > 0 && (
+                <button onClick={clearAlerts} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">Clear All</button>
+              )}
+            </div>
+            <ScrollArea className="max-h-80">
               {alerts.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">No alerts yet</div>
               ) : (
                 <div className="py-1">
-                  {alerts.slice(0, 20).map((alert) => (
+                  {alerts.slice(0, 30).map((alert) => (
                     <button key={alert.id} onClick={() => acknowledgeAlert(alert.id)} className={cn("flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50", alert.acknowledged && "opacity-50")}>
                       <span className={cn("mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full", alert.type === "price" ? "bg-primary" : alert.type === "order" ? "bg-[var(--profit)]" : alert.type === "signal" ? "bg-[var(--chart-4)]" : "bg-muted-foreground")} />
                       <div className="flex-1 min-w-0">
                         <p className="text-foreground leading-tight">{alert.message}</p>
+                        {alert.symbol && <span className="text-[10px] text-primary font-medium">{alert.symbol} </span>}
                         <span className="text-[10px] text-muted-foreground">{formatTimestamp(alert.time)}</span>
                       </div>
                     </button>

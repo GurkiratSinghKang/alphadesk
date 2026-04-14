@@ -9,6 +9,11 @@ final class TradeViewModel {
     var isSearching = false
     var searchResults: [SymbolSearchResult] = []
 
+    // Recent searches (persisted)
+    private static let recentSearchesKey = "AlphaDesk_recentSearches"
+    private static let maxRecentSearches = 8
+    var recentSearches: [SymbolSearchResult] = []
+
     // Current quote
     var symbol = "AAPL"
     var companyName = "AAPL"
@@ -137,12 +142,38 @@ final class TradeViewModel {
         }
     }
 
+    func loadRecentSearches() {
+        guard let data = UserDefaults.standard.data(forKey: Self.recentSearchesKey),
+              let decoded = try? JSONDecoder().decode([SymbolSearchResult].self, from: data) else {
+            return
+        }
+        recentSearches = decoded
+    }
+
+    private func saveRecentSearch(_ result: SymbolSearchResult) {
+        // Remove duplicates, prepend new result, trim to max
+        recentSearches.removeAll { $0.symbol == result.symbol }
+        recentSearches.insert(result, at: 0)
+        if recentSearches.count > Self.maxRecentSearches {
+            recentSearches = Array(recentSearches.prefix(Self.maxRecentSearches))
+        }
+        if let data = try? JSONEncoder().encode(recentSearches) {
+            UserDefaults.standard.set(data, forKey: Self.recentSearchesKey)
+        }
+    }
+
+    func clearRecentSearches() {
+        recentSearches = []
+        UserDefaults.standard.removeObject(forKey: Self.recentSearchesKey)
+    }
+
     @MainActor
     func selectSymbol(_ result: SymbolSearchResult) {
         symbol = result.symbol
         companyName = result.name ?? result.symbol
         searchText = ""
         searchResults = []
+        saveRecentSearch(result)
         Task { await refresh() }
     }
 
@@ -222,7 +253,11 @@ struct TradeView: View {
     var initialSide: TradeViewModel.OrderSide?
 
     @State private var vm = TradeViewModel()
+    @State private var scrollProxy: ScrollViewProxy?
     @FocusState private var isSearchFocused: Bool
+
+    // State preservation
+    private static let selectedSymbolKey = "AlphaDesk_selectedSymbol"
 
     var body: some View {
         NavigationStack {
@@ -231,30 +266,40 @@ struct TradeView: View {
                     LoadingView()
                         .transition(.opacity)
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: AD.spacingLG) {
-                            searchSection
-                            if let error = vm.error {
-                                errorBanner(error)
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: AD.spacingLG) {
+                                searchSection
+                                if let error = vm.error {
+                                    errorBanner(error)
+                                }
+                                quoteSection
+                                if !vm.priceHistory.isEmpty {
+                                    chartSection
+                                }
+                                if vm.support > 0 && vm.resistance > 0 {
+                                    keyLevelsSection
+                                }
+                                if let orderError = vm.orderError {
+                                    orderErrorBanner(orderError)
+                                }
+                                orderEntrySection
                             }
-                            quoteSection
-                            if !vm.priceHistory.isEmpty {
-                                chartSection
-                            }
-                            if vm.support > 0 && vm.resistance > 0 {
-                                keyLevelsSection
-                            }
-                            if let orderError = vm.orderError {
-                                orderErrorBanner(orderError)
-                            }
-                            orderEntrySection
+                            .id("tradeScrollTop")
+                            .padding(.horizontal, AD.spacingMD)
+                            .padding(.top, AD.spacingSM)
+                            .padding(.bottom, 100)
                         }
-                        .padding(.horizontal, AD.spacingMD)
-                        .padding(.top, AD.spacingSM)
-                        .padding(.bottom, 100)
+                        .refreshable { await vm.refresh() }
+                        .transition(.opacity)
+                        .onReceive(NotificationCenter.default.publisher(for: .scrollToTop)) { notification in
+                            if let tab = notification.object as? MainTabView.Tab, tab == .trade {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("tradeScrollTop", anchor: .top)
+                                }
+                            }
+                        }
                     }
-                    .refreshable { await vm.refresh() }
-                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut, value: vm.isLoading)
@@ -289,15 +334,24 @@ struct TradeView: View {
             }
             .sensoryFeedback(.success, trigger: vm.showConfirmation)
             .task {
+                vm.loadRecentSearches()
+
                 if let sym = initialSymbol {
                     vm.symbol = sym
                     vm.companyName = sym
+                } else if let saved = UserDefaults.standard.string(forKey: Self.selectedSymbolKey),
+                          !saved.isEmpty {
+                    vm.symbol = saved
+                    vm.companyName = saved
                 }
                 if let side = initialSide {
                     vm.orderSide = side
                 }
                 await vm.refresh()
                 vm.startWebSocketUpdates()
+            }
+            .onChange(of: vm.symbol) { _, newSymbol in
+                UserDefaults.standard.set(newSymbol, forKey: Self.selectedSymbolKey)
             }
             .onDisappear {
                 vm.stopWebSocketUpdates()

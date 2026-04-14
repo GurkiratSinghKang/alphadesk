@@ -323,26 +323,58 @@ export function ChartPanel() {
               </div>
             )}
             {alertOpen && (
-              <div className="flex items-center gap-2 mt-1 p-2 rounded border border-border bg-[var(--surface)]">
-                <select value={alertCondition} onChange={(e) => setAlertCondition(e.target.value as "above" | "below")} className="h-6 rounded border border-border bg-background px-1 text-[11px] text-foreground">
-                  <option value="above">Above</option>
-                  <option value="below">Below</option>
-                </select>
-                <input type="number" value={alertPrice} onChange={(e) => setAlertPrice(parseFloat(e.target.value) || 0)} step={0.01} className="h-6 w-24 rounded border border-border bg-background px-2 text-[11px] tabular-nums text-foreground" />
-                <button
-                  onClick={async () => {
-                    try {
-                      await createPriceAlert(selectedSymbol, alertPrice, alertCondition);
-                      setAlertOpen(false);
-                    } catch (err) {
-                      console.error("Failed to create price alert:", err);
-                    }
-                  }}
-                  className="h-6 px-2 rounded bg-primary text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Set Alert
-                </button>
-                <button aria-label="Close alert form" onClick={() => setAlertOpen(false)} className="h-6 w-6 rounded text-muted-foreground hover:text-foreground">✕</button>
+              <div className="absolute top-full left-0 mt-1 z-50 w-80 rounded-lg border border-border bg-[var(--surface)] shadow-xl shadow-black/30">
+                <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                  <span className="text-xs font-medium text-foreground">Price Alerts - {selectedSymbol}</span>
+                  <button aria-label="Close alert panel" onClick={() => setAlertOpen(false)} className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50 text-xs">&#10005;</button>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {alertsLoading ? (
+                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">Loading...</div>
+                  ) : symbolAlerts.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">No alerts for {selectedSymbol}</div>
+                  ) : (
+                    <div className="py-1">
+                      {symbolAlerts.map((a) => (
+                        <div key={a.id} className={cn("flex items-center gap-2 px-3 py-1.5 text-xs", a.triggered && "opacity-60")}>
+                          <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", a.triggered ? "bg-[var(--profit)]" : a.condition === "above" ? "bg-primary" : "bg-amber-500")} />
+                          <span className="flex-1 min-w-0 tabular-nums text-foreground">
+                            {a.condition === "above" ? "Above" : "Below"} ${a.price.toFixed(2)}
+                            {a.triggered && a.triggered_at && (
+                              <span className="ml-1.5 text-[10px] text-[var(--profit)]">
+                                Triggered {new Date(a.triggered_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            aria-label="Delete alert"
+                            onClick={async () => { try { await deletePriceAlert(a.id); refreshAlerts(); } catch { /* */ } }}
+                            className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-[var(--loss)] hover:bg-accent/50 text-[10px] shrink-0"
+                          >&#10005;</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-border px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <select value={alertCondition} onChange={(e) => setAlertCondition(e.target.value as "above" | "below")} className="h-7 rounded border border-border bg-background px-1.5 text-[11px] text-foreground">
+                      <option value="above">Above</option>
+                      <option value="below">Below</option>
+                    </select>
+                    <div className="relative flex-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">$</span>
+                      <input type="number" value={alertPrice} onChange={(e) => setAlertPrice(parseFloat(e.target.value) || 0)} step={0.01} className="h-7 w-full rounded border border-border bg-background pl-5 pr-2 text-[11px] tabular-nums text-foreground" />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (alertPrice <= 0) return;
+                        try { await createPriceAlert(selectedSymbol, alertPrice, alertCondition); refreshAlerts(); } catch { /* */ }
+                      }}
+                      className="h-7 px-3 rounded bg-primary text-[10px] font-medium text-primary-foreground hover:bg-primary/90 whitespace-nowrap"
+                    >Add Alert</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
