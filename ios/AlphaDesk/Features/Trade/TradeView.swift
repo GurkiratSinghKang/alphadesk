@@ -226,6 +226,7 @@ struct TradeView: View {
             Group {
                 if vm.isLoading {
                     LoadingView()
+                        .transition(.opacity)
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: AD.spacingLG) {
@@ -250,8 +251,10 @@ struct TradeView: View {
                         .padding(.bottom, 100)
                     }
                     .refreshable { await vm.refresh() }
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut, value: vm.isLoading)
             .background(AD.background)
             .navigationTitle("Trade")
             .navigationBarTitleDisplayMode(.large)
@@ -281,6 +284,7 @@ struct TradeView: View {
                     confirmationOverlay
                 }
             }
+            .sensoryFeedback(.success, trigger: vm.showConfirmation)
             .task {
                 if let sym = initialSymbol {
                     vm.selectSymbol(sym)

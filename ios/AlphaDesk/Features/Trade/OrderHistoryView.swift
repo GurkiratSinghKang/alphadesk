@@ -84,18 +84,27 @@ struct OrderHistoryView: View {
 
                 if vm.isLoading && vm.orders.isEmpty {
                     LoadingView()
+                        .transition(.opacity)
                 } else if let error = vm.errorMessage, vm.orders.isEmpty {
                     errorView(error)
+                        .transition(.opacity)
                 } else if vm.orders.isEmpty {
-                    emptyView
+                    ContentUnavailableView(
+                        "No Orders",
+                        systemImage: "doc.text.magnifyingglass",
+                        description: Text("Your order history will appear here")
+                    )
+                    .transition(.opacity)
                 } else {
                     orderList
+                        .transition(.opacity)
                 }
             }
             .navigationTitle("Order History")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .animation(.easeInOut, value: vm.isLoading)
             .task { await vm.loadOrders() }
         }
     }
@@ -276,21 +285,7 @@ struct OrderHistoryView: View {
         return formatter.string(from: parsed)
     }
 
-    // MARK: - Empty / Error
-
-    private var emptyView: some View {
-        VStack(spacing: AD.spacingMD) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 40))
-                .foregroundStyle(AD.textTertiary)
-            Text("No orders yet")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AD.textPrimary)
-            Text("Your order history will appear here.")
-                .font(.system(size: 13))
-                .foregroundStyle(AD.textTertiary)
-        }
-    }
+    // MARK: - Error
 
     private func errorView(_ message: String) -> some View {
         VStack(spacing: AD.spacingMD) {

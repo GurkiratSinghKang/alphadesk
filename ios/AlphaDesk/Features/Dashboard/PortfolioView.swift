@@ -187,8 +187,10 @@ struct PortfolioView: View {
                 Group {
                     if vm.isLoading {
                         LoadingView()
+                            .transition(.opacity)
                     } else if let error = vm.error, vm.positions.isEmpty {
                         errorView(error)
+                            .transition(.opacity)
                     } else {
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: AD.spacingLG) {
@@ -206,8 +208,10 @@ struct PortfolioView: View {
                             .padding(.bottom, 100)
                         }
                         .refreshable { await vm.refresh() }
+                        .transition(.opacity)
                     }
                 }
+                .animation(.easeInOut, value: vm.isLoading)
                 .background(AD.background)
 
                 if !vm.isLoading {
@@ -467,11 +471,13 @@ struct PortfolioView: View {
             }
 
             if vm.positions.isEmpty {
-                Text("No open positions")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AD.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, AD.spacingLG)
+                ContentUnavailableView(
+                    "No Positions",
+                    systemImage: "chart.bar.xaxis",
+                    description: Text("Your open positions will appear here")
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AD.spacingSM)
             } else {
                 ForEach(vm.positions) { position in
                     NavigationLink(value: position.symbol) {

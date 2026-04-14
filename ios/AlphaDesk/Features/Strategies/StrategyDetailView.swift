@@ -172,6 +172,7 @@ struct StrategyDetailView: View {
                         .tint(AD.accent)
                     Spacer()
                 }
+                .transition(.opacity)
             } else if let error = vm.error, vm.equityCurve.isEmpty {
                 errorView(error)
             } else {
@@ -189,8 +190,10 @@ struct StrategyDetailView: View {
                 .padding(.horizontal, AD.spacingMD)
                 .padding(.top, AD.spacingSM)
                 .padding(.bottom, 100)
+                .transition(.opacity)
             }
         }
+        .animation(.easeInOut, value: vm.isLoading)
         .background(AD.background)
         .navigationTitle(vm.name)
         .navigationBarTitleDisplayMode(.large)
@@ -480,6 +483,7 @@ struct StrategyDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: AD.radiusMD, style: .continuous))
         }
         .disabled(vm.isToggling)
+        .sensoryFeedback(.impact(weight: .medium), trigger: vm.status)
     }
 }
 

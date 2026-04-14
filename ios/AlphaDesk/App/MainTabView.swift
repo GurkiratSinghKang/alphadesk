@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
 
     @State private var selectedTab: Tab = .portfolio
+    @State private var networkMonitor = NetworkMonitor.shared
 
     enum Tab: Int, CaseIterable {
         case portfolio, trade, strategies, pipeline, settings
@@ -30,22 +31,30 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Content
-            Group {
-                switch selectedTab {
-                case .portfolio:
-                    PortfolioView()
-                case .trade:
-                    TradeView()
-                case .strategies:
-                    StrategiesListView()
-                case .pipeline:
-                    PipelineView()
-                case .settings:
-                    SettingsView()
+            VStack(spacing: 0) {
+                // Offline banner
+                if !networkMonitor.isConnected {
+                    offlineBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
+
+                // Content
+                Group {
+                    switch selectedTab {
+                    case .portfolio:
+                        PortfolioView()
+                    case .trade:
+                        TradeView()
+                    case .strategies:
+                        StrategiesListView()
+                    case .pipeline:
+                        PipelineView()
+                    case .settings:
+                        SettingsView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.bottom, 80)
 
             // Custom Tab Bar
@@ -53,6 +62,25 @@ struct MainTabView: View {
         }
         .background(AD.background)
         .ignoresSafeArea(.keyboard)
+        .animation(.easeInOut(duration: 0.3), value: networkMonitor.isConnected)
+    }
+
+    // MARK: - Offline Banner
+
+    private var offlineBanner: some View {
+        HStack(spacing: AD.spacingSM) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 14, weight: .semibold))
+            Text("No Internet Connection")
+                .font(.system(size: 13, weight: .semibold))
+            Spacer()
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, AD.spacingMD)
+        .padding(.vertical, 10)
+        .background(AD.loss.opacity(0.9))
     }
 
     // MARK: - Custom Tab Bar

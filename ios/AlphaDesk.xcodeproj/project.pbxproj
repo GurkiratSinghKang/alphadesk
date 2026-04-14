@@ -17,6 +17,7 @@
 		472E0E8ADE797194FEBFA42F /* Number+Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82503AA558FFE633E6681D7 /* Number+Format.swift */; };
 		4E1561C86A3C4105BF77FD75 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */; };
 		4F4255593679945BA99A8056 /* MetricCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730DBF29998BC5F366845530 /* MetricCard.swift */; };
+		592AE5A2EA8787FDF64E34D8 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D35536D1A8A13B2159DE44 /* NetworkMonitor.swift */; };
 		72886EC08FA13A88F77387A4 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002AC75518E0531DACB1C605 /* WebSocketClient.swift */; };
 		78E2538E6D60FA1D35DA3264 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A45DC2110DA761EBCDDACE47 /* Assets.xcassets */; };
 		7D940FCB0CBA1F853A98BACE /* SymbolDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152D130F8210C420C6BC9D9D /* SymbolDetailView.swift */; };
@@ -37,6 +38,7 @@
 		E737476BE1081D42CD7B7FDC /* StrategyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */; };
 		F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */; };
 		F237A2172C02795C4B000181 /* OrderHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */; };
+		FD2D49F4157790C78121BC6F /* BiometricManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FDCFF841BB9CB28DDD3E239 /* BiometricManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +48,7 @@
 		166493FEAB4C8DE3C1D49243 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategyDetailView.swift; sourceTree = "<group>"; };
 		2B3EA5CAD5EA8374CB3C46C3 /* StrategiesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategiesListView.swift; sourceTree = "<group>"; };
+		30D35536D1A8A13B2159DE44 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		4266B38345B5E5F7B715DD6A /* PnLText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PnLText.swift; sourceTree = "<group>"; };
 		45765C02F359CA7BFE1ABAA2 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		48949C40E0AEAD70A49B2D9A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -56,6 +59,7 @@
 		640CBC557B54E1C28941AF8F /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		730DBF29998BC5F366845530 /* MetricCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricCard.swift; sourceTree = "<group>"; };
 		76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
+		7FDCFF841BB9CB28DDD3E239 /* BiometricManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricManager.swift; sourceTree = "<group>"; };
 		832CBE1BF076F6418F574E76 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		8A00AFF700480159A127F965 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
@@ -132,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				E5B1A9830C0A54E14CB732BC /* APIClient.swift */,
+				30D35536D1A8A13B2159DE44 /* NetworkMonitor.swift */,
 				002AC75518E0531DACB1C605 /* WebSocketClient.swift */,
 			);
 			path = Network;
@@ -150,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				166493FEAB4C8DE3C1D49243 /* AuthManager.swift */,
+				7FDCFF841BB9CB28DDD3E239 /* BiometricManager.swift */,
 				640CBC557B54E1C28941AF8F /* KeychainHelper.swift */,
 				E2AE5C6E4A2BD523B35F9DC5 /* LoginView.swift */,
 			);
@@ -353,6 +359,7 @@
 				BE91BDE5220EB78ADBEE78B5 /* AlphaDeskApp.swift in Sources */,
 				A7811C35FF9C29F8B7E9A2E0 /* AppTheme.swift in Sources */,
 				2DA8F89BB900F179D4621509 /* AuthManager.swift in Sources */,
+				FD2D49F4157790C78121BC6F /* BiometricManager.swift in Sources */,
 				1AB4454B81131D3233721B5B /* ChatView.swift in Sources */,
 				943F2B92D01ECA0048968D52 /* Color+Hex.swift in Sources */,
 				814A29D6BC4FB84C8E456939 /* KeychainHelper.swift in Sources */,
@@ -361,6 +368,7 @@
 				283E3BAA79FA60C68EC85A99 /* MainTabView.swift in Sources */,
 				4F4255593679945BA99A8056 /* MetricCard.swift in Sources */,
 				A3ACF9A5D2AB9B6FB4376B94 /* Models.swift in Sources */,
+				592AE5A2EA8787FDF64E34D8 /* NetworkMonitor.swift in Sources */,
 				1066A3F721386CAFDD2E0AA9 /* NewsView.swift in Sources */,
 				472E0E8ADE797194FEBFA42F /* Number+Format.swift in Sources */,
 				F237A2172C02795C4B000181 /* OrderHistoryView.swift in Sources */,
@@ -394,6 +402,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AlphaDesk uses Face ID to secure your trading account";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -542,6 +551,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AlphaDesk uses Face ID to secure your trading account";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

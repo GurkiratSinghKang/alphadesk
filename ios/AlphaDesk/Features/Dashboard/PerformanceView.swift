@@ -208,6 +208,7 @@ struct PerformanceView: View {
 
                 if vm.isLoading && vm.equityCurve.isEmpty {
                     LoadingView()
+                        .transition(.opacity)
                 } else if let error = vm.errorMessage, vm.equityCurve.isEmpty {
                     VStack(spacing: AD.spacingMD) {
                         Image(systemName: "chart.xyaxis.line")
@@ -235,8 +236,10 @@ struct PerformanceView: View {
                     .padding(AD.spacingXL)
                 } else {
                     performanceContent
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeInOut, value: vm.isLoading)
             .navigationTitle("Performance")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)

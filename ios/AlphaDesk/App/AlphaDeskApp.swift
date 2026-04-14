@@ -6,21 +6,128 @@ import SwiftUI
 struct AlphaDeskApp: App {
 
     @State private var authManager = AuthManager.shared
+    @State private var biometricManager = BiometricManager.shared
+    @State private var isUnlocked = false
+    @State private var biometricFailed = false
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if authManager.isAuthenticated {
-                    MainTabView()
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    if biometricManager.isEnabled && !isUnlocked {
+                        LockScreenView(
+                            isUnlocked: $isUnlocked,
+                            biometricFailed: $biometricFailed
+                        )
+                        .transition(.opacity)
+                    } else {
+                        MainTabView()
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
                 } else {
                     LoginView()
                         .transition(.opacity.combined(with: .scale(scale: 1.02)))
                 }
             }
             .animation(.easeInOut(duration: 0.4), value: authManager.isAuthenticated)
+            .animation(.easeInOut(duration: 0.3), value: isUnlocked)
             .environment(authManager)
             .preferredColorScheme(.dark)
+            .onChange(of: authManager.isAuthenticated) { _, authenticated in
+                if !authenticated {
+                    isUnlocked = false
+                    biometricFailed = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Lock Screen
+
+struct LockScreenView: View {
+    @Binding var isUnlocked: Bool
+    @Binding var biometricFailed: Bool
+    @State private var isAuthenticating = false
+
+    var body: some View {
+        ZStack {
+            AD.background.ignoresSafeArea()
+
+            VStack(spacing: AD.spacingXL) {
+                Spacer()
+
+                // Logo
+                ZStack {
+                    Circle()
+                        .fill(AD.accent.opacity(0.1))
+                        .frame(width: 100, height: 100)
+
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 40, weight: .semibold))
+                        .foregroundStyle(AD.accent)
+                }
+
+                VStack(spacing: AD.spacingSM) {
+                    Text("AlphaDesk")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(AD.textPrimary)
+
+                    Text("Locked")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AD.textTertiary)
+                }
+
+                if biometricFailed {
+                    Text("Authentication failed. Try again.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AD.loss)
+                        .transition(.opacity)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await authenticate() }
+                } label: {
+                    HStack(spacing: AD.spacingSM) {
+                        if isAuthenticating {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.85)
+                        } else {
+                            Image(systemName: "faceid")
+                                .font(.system(size: 20))
+                            Text("Unlock with Face ID")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(AD.accent)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: AD.radiusMD, style: .continuous))
+                    .shadow(color: AD.accent.opacity(0.25), radius: 12, y: 6)
+                }
+                .disabled(isAuthenticating)
+                .padding(.horizontal, AD.spacingXL)
+                .padding(.bottom, AD.spacingXL)
+            }
+        }
+        .task {
+            await authenticate()
+        }
+    }
+
+    private func authenticate() async {
+        isAuthenticating = true
+        biometricFailed = false
+        let success = await BiometricManager.shared.authenticate()
+        isAuthenticating = false
+        if success {
+            isUnlocked = true
+        } else {
+            biometricFailed = true
         }
     }
 }

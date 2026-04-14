@@ -127,8 +127,17 @@ struct StrategiesListView: View {
             Group {
                 if vm.isLoading {
                     LoadingView()
+                        .transition(.opacity)
                 } else if let error = vm.error, vm.strategies.isEmpty {
                     errorView(error)
+                        .transition(.opacity)
+                } else if vm.strategies.isEmpty {
+                    ContentUnavailableView(
+                        "No Strategies",
+                        systemImage: "brain.head.profile",
+                        description: Text("Your trading strategies will appear here")
+                    )
+                    .transition(.opacity)
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: AD.spacingLG) {
@@ -140,8 +149,10 @@ struct StrategiesListView: View {
                         .padding(.bottom, 100)
                     }
                     .refreshable { await vm.refresh() }
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut, value: vm.isLoading)
             .background(AD.background)
             .navigationTitle("Strategies")
             .navigationBarTitleDisplayMode(.large)

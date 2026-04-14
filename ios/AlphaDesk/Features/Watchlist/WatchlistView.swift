@@ -119,8 +119,17 @@ struct WatchlistView: View {
 
                 if vm.isLoading && vm.quotes.isEmpty {
                     LoadingView()
+                        .transition(.opacity)
+                } else if vm.symbols.isEmpty {
+                    ContentUnavailableView(
+                        "No Watchlist",
+                        systemImage: "star",
+                        description: Text("Add symbols to track their prices")
+                    )
+                    .transition(.opacity)
                 } else {
                     watchlistContent
+                        .transition(.opacity)
                 }
             }
             .navigationTitle("Watchlist")
@@ -138,6 +147,7 @@ struct WatchlistView: View {
                     }
                 }
             }
+            .animation(.easeInOut, value: vm.isLoading)
             .task { await vm.fetchAllQuotes() }
             .sheet(isPresented: $vm.showAddSheet) {
                 addSymbolSheet

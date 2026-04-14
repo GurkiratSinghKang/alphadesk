@@ -47,16 +47,27 @@ struct NewsView: View {
 
                 if vm.isLoading && vm.articles.isEmpty {
                     LoadingView()
+                        .transition(.opacity)
                 } else if let error = vm.errorMessage, vm.articles.isEmpty {
                     errorView(error)
+                        .transition(.opacity)
+                } else if vm.articles.isEmpty {
+                    ContentUnavailableView(
+                        "No News",
+                        systemImage: "newspaper",
+                        description: Text("Market news will appear here when available")
+                    )
+                    .transition(.opacity)
                 } else {
                     articleList
+                        .transition(.opacity)
                 }
             }
             .navigationTitle("Market News")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .animation(.easeInOut, value: vm.isLoading)
             .task { await vm.loadNews() }
             .sheet(item: $vm.selectedURL) { url in
                 SafariView(url: url)

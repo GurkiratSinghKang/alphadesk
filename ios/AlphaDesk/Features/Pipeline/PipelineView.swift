@@ -235,15 +235,23 @@ struct PipelineView: View {
             Group {
                 if vm.isLoading {
                     LoadingView()
+                        .transition(.opacity)
                 } else if let error = vm.error, vm.positions.isEmpty && vm.lastRunSummary == nil {
                     errorView(error)
+                        .transition(.opacity)
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: AD.spacingLG) {
                             statusCard
                             runButton
                             performanceCards
-                            if !vm.positions.isEmpty {
+                            if vm.positions.isEmpty {
+                                ContentUnavailableView(
+                                    "No Managed Positions",
+                                    systemImage: "bolt.badge.clock",
+                                    description: Text("Run the pipeline to generate AI-managed trades")
+                                )
+                            } else {
                                 positionsTable
                             }
                             if let _ = vm.lastRunSummary {
@@ -255,8 +263,10 @@ struct PipelineView: View {
                         .padding(.bottom, 100)
                     }
                     .refreshable { await vm.refresh() }
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut, value: vm.isLoading)
             .background(AD.background)
             .navigationTitle("Pipeline")
             .navigationBarTitleDisplayMode(.large)

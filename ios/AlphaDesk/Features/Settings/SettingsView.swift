@@ -271,6 +271,7 @@ struct SettingsView: View {
                     Toggle("", isOn: $biometricLockEnabled)
                         .labelsHidden()
                         .tint(AD.accent)
+                        .sensoryFeedback(.impact(weight: .light), trigger: biometricLockEnabled)
                         .onChange(of: biometricLockEnabled) { _, newValue in
                             UserDefaults.standard.set(newValue, forKey: "biometric_lock_enabled")
                         }
