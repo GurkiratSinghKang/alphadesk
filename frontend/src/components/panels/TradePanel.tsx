@@ -314,7 +314,7 @@ function TradeBuilderTab() {
               </button>
             </div>
             <span className="w-14 text-right tabular-nums text-foreground">
-              ${leg.price.toFixed(2)}
+              ${(leg.price ?? 0).toFixed(2)}
             </span>
             <button
               aria-label="Remove leg"
@@ -374,7 +374,7 @@ function TradeBuilderTab() {
           <div className="flex justify-between">
             <span className="text-muted-foreground">Breakeven</span>
             <span className="text-foreground tabular-nums">
-              ${breakeven.toFixed(2)}
+              ${(breakeven ?? 0).toFixed(2)}
             </span>
           </div>
         )}
@@ -923,7 +923,7 @@ function JournalTab() {
         rawDate,
         type: order.side === "buy" ? "BUY" : "SELL",
         symbol: order.symbol,
-        detail: `${order.quantity} shares @ ${order.type === "market" ? "Market" : "$" + (order.price?.toFixed(2) ?? "--")}`,
+        detail: `${order.quantity} shares @ ${order.type === "market" ? "Market" : "$" + ((order.price ?? 0).toFixed(2) ?? "--")}`,
         strategy: strategyHint,
         rationale: order.status === "filled" ? "Order filled" : `Status: ${order.status}`,
         tags: tagMap[order.id] ?? [],
@@ -939,7 +939,7 @@ function JournalTab() {
         rawDate: new Date().toISOString(),
         type: "HOLD",
         symbol: pos.symbol,
-        detail: `${pos.quantity} shares, avg $${pos.avgCost.toFixed(2)}`,
+        detail: `${pos.quantity} shares, avg $${(pos.avgCost ?? 0).toFixed(2)}`,
         strategy: pos.side === "long" ? "Long" : pos.side === "short" ? "Short" : "Position",
         pnl: pos.unrealizedPnl,
         tags: tagMap[entryId] ?? [],
@@ -1094,7 +1094,7 @@ function JournalTab() {
                 {/* P&L */}
                 {entry.pnl !== undefined && (
                   <p className={cn("text-[11px] font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    P&L: {entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}
+                    P&L: {entry.pnl >= 0 ? "+" : ""}${(entry.pnl ?? 0).toFixed(2)}
                   </p>
                 )}
 

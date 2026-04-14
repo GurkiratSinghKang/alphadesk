@@ -135,7 +135,7 @@ export function PnlCalendarMini() {
             </p>
             <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
               <span>{hovered.trades} trades</span>
-              <span>Win: {hovered.winRate > 0 ? `${hovered.winRate.toFixed(0)}%` : "N/A"}</span>
+              <span>Win: {(hovered.winRate ?? 0) > 0 ? `${(hovered.winRate ?? 0).toFixed(0)}%` : "N/A"}</span>
             </div>
           </div>
         )}

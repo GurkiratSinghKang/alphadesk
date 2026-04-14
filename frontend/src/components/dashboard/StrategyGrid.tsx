@@ -93,8 +93,8 @@ const StrategyCard = React.memo(function StrategyCard({
                       : "text-[var(--loss)]"
                   )}
                 >
-                  {strategy.returnPct >= 0 ? "+" : ""}
-                  {strategy.returnPct.toFixed(2)}%
+                  {(strategy.returnPct ?? 0) >= 0 ? "+" : ""}
+                  {(strategy.returnPct ?? 0).toFixed(2)}%
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {strategy.positions} active
@@ -159,7 +159,7 @@ const CompactStrategyRow = React.memo(function CompactStrategyRow({
         <span className="w-14 text-right text-[10px] tabular-nums text-muted-foreground">&mdash;</span>
       ) : (
         <span className={cn("w-14 text-right text-[10px] font-semibold tabular-nums", strategy.returnPct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-          {strategy.returnPct >= 0 ? "+" : ""}{strategy.returnPct.toFixed(2)}%
+          {(strategy.returnPct ?? 0) >= 0 ? "+" : ""}{(strategy.returnPct ?? 0).toFixed(2)}%
         </span>
       )}
       <span className="w-8 text-right text-[10px] tabular-nums text-muted-foreground">{strategy.positions}p</span>

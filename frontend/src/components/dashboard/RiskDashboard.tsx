@@ -160,29 +160,29 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Portfolio Exposure</span>
             <span className="text-[10px] tabular-nums text-muted-foreground">
-              {metrics.longExposure.toFixed(0)}% invested
+              {(metrics.longExposure ?? 0).toFixed(0)}% invested
             </span>
           </div>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted/30">
             <div
               className="bg-[var(--profit)] transition-all duration-500 rounded-l-full"
               style={{ width: `${metrics.longExposure}%` }}
-              title={`Long: ${metrics.longExposure.toFixed(1)}%`}
+              title={`Long: ${(metrics.longExposure ?? 0).toFixed(1)}%`}
             />
             <div
               className="bg-[var(--neutral)]/40 transition-all duration-500"
               style={{ width: `${metrics.cashPct}%` }}
-              title={`Cash: ${metrics.cashPct.toFixed(1)}%`}
+              title={`Cash: ${(metrics.cashPct ?? 0).toFixed(1)}%`}
             />
           </div>
           <div className="flex items-center gap-3 mt-1">
             <div className="flex items-center gap-1">
               <div className="h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
-              <span className="text-[9px] text-muted-foreground">Long {metrics.longExposure.toFixed(0)}%</span>
+              <span className="text-[9px] text-muted-foreground">Long {(metrics.longExposure ?? 0).toFixed(0)}%</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="h-1.5 w-1.5 rounded-full bg-[var(--neutral)]/40" />
-              <span className="text-[9px] text-muted-foreground">Cash {metrics.cashPct.toFixed(0)}%</span>
+              <span className="text-[9px] text-muted-foreground">Cash {(metrics.cashPct ?? 0).toFixed(0)}%</span>
             </div>
           </div>
         </div>
@@ -199,7 +199,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               "text-lg font-bold tabular-nums",
               metrics.beta > 1.3 ? "text-amber-400" : metrics.beta > 0.5 ? "text-foreground" : "text-muted-foreground"
             )}>
-              {positions.length > 0 ? metrics.beta.toFixed(2) : "--"}
+              {positions.length > 0 ? (metrics.beta ?? 0).toFixed(2) : "--"}
             </p>
           </div>
 
@@ -227,7 +227,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               "text-lg font-bold tabular-nums",
               metrics.maxPosPct > 20 ? "text-amber-400" : "text-foreground"
             )}>
-              {positions.length > 0 ? `${metrics.maxPosPct.toFixed(1)}%` : "--"}
+              {positions.length > 0 ? `${(metrics.maxPosPct ?? 0).toFixed(1)}%` : "--"}
             </p>
             {positions.length > 0 && (
               <p className="text-[9px] text-muted-foreground truncate">{metrics.maxPosSymbol}</p>
@@ -244,7 +244,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               "text-lg font-bold tabular-nums",
               metrics.maxSectorPct > 30 ? "text-amber-400" : "text-foreground"
             )}>
-              {positions.length > 0 ? `${metrics.maxSectorPct.toFixed(1)}%` : "--"}
+              {positions.length > 0 ? `${(metrics.maxSectorPct ?? 0).toFixed(1)}%` : "--"}
             </p>
             {positions.length > 0 && (
               <p className="text-[9px] text-muted-foreground truncate">{metrics.maxSectorName}</p>
@@ -262,7 +262,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               regime.vix_level > 18 ? "text-amber-400" :
               "text-[var(--profit)]"
             )}>
-              {regime.vix_level.toFixed(1)}
+              {(regime.vix_level ?? 0).toFixed(1)}
             </span>
           </div>
         )}

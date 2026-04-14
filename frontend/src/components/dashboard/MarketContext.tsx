@@ -91,7 +91,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                       <p className="text-sm font-medium tabular-nums text-foreground">
                         {idx.price > 0
                           ? idx.symbol === "VIX"
-                            ? idx.price.toFixed(2)
+                            ? (idx.price ?? 0).toFixed(2)
                             : formatCurrency(idx.price)
                           : "\u2014"}
                       </p>
@@ -104,7 +104,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                         )}
                       >
                         {positive ? "+" : ""}
-                        {idx.changePct.toFixed(2)}%
+                        {(idx.changePct ?? 0).toFixed(2)}%
                       </p>
                     </div>
                   </div>

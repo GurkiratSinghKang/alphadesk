@@ -585,7 +585,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
-          title: `Entry $${positionLines.entry.toFixed(2)}`,
+          title: `Entry $${(positionLines.entry ?? 0).toFixed(2)}`,
         }));
       }
       if (positionLines?.stopLoss != null) {
@@ -595,7 +595,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
-          title: `SL $${positionLines.stopLoss.toFixed(2)}`,
+          title: `SL $${(positionLines.stopLoss ?? 0).toFixed(2)}`,
         }));
       }
       if (positionLines?.takeProfit != null) {
@@ -605,7 +605,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
-          title: `TP $${positionLines.takeProfit.toFixed(2)}`,
+          title: `TP $${(positionLines.takeProfit ?? 0).toFixed(2)}`,
         }));
       }
 
@@ -627,7 +627,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           lineWidth: 1,
           lineStyle: 0, // Solid
           axisLabelVisible: true,
-          title: d.label ?? `$${d.price.toFixed(2)}`,
+          title: d.label ?? `$${(d.price ?? 0).toFixed(2)}`,
         })
       );
       return () => lines.forEach((l) => { try { series.removePriceLine(l); } catch {} });

@@ -95,13 +95,13 @@ function PortfolioStatement({
     let csv = "PORTFOLIO STATEMENT\n";
     csv += `Generated,${new Date().toISOString()}\n\n`;
     csv += "ACCOUNT SUMMARY\n";
-    csv += `Equity,${summary.equity.toFixed(2)}\n`;
-    csv += `Cash,${summary.cash.toFixed(2)}\n`;
-    csv += `Buying Power,${summary.buyingPower.toFixed(2)}\n`;
+    csv += `Equity,${(summary.equity ?? 0).toFixed(2)}\n`;
+    csv += `Cash,${(summary.cash ?? 0).toFixed(2)}\n`;
+    csv += `Buying Power,${(summary.buyingPower ?? 0).toFixed(2)}\n`;
     csv += `Positions Count,${summary.positionsCount}\n`;
-    csv += `Total Unrealized P&L,${totalUnrealizedPnl.toFixed(2)}\n`;
-    csv += `Total Realized P&L,${totalRealizedPnl.toFixed(2)}\n`;
-    csv += `Total P&L,${totalPnl.toFixed(2)}\n\n`;
+    csv += `Total Unrealized P&L,${(totalUnrealizedPnl ?? 0).toFixed(2)}\n`;
+    csv += `Total Realized P&L,${(totalRealizedPnl ?? 0).toFixed(2)}\n`;
+    csv += `Total P&L,${(totalPnl ?? 0).toFixed(2)}\n\n`;
 
     // Current positions
     csv += "CURRENT POSITIONS\n";
@@ -110,10 +110,10 @@ function PortfolioStatement({
       positions.map(p => [
         p.symbol,
         p.quantity,
-        p.avgCost.toFixed(2),
-        p.currentPrice.toFixed(2),
-        p.marketValue.toFixed(2),
-        p.unrealizedPnl.toFixed(2),
+        (p.avgCost ?? 0).toFixed(2),
+        (p.currentPrice ?? 0).toFixed(2),
+        (p.marketValue ?? 0).toFixed(2),
+        (p.unrealizedPnl ?? 0).toFixed(2),
         p.avgCost > 0 ? ((p.currentPrice - p.avgCost) / p.avgCost * 100).toFixed(2) + "%" : "0%",
       ])
     );
@@ -127,10 +127,10 @@ function PortfolioStatement({
         t.symbol,
         t.side,
         t.quantity,
-        t.entry_price.toFixed(2),
+        (t.entry_price ?? 0).toFixed(2),
         (t.exit_price ?? 0).toFixed(2),
         (t.pnl ?? 0).toFixed(2),
-        t.pnl_pct ? `${t.pnl_pct.toFixed(2)}%` : "N/A",
+        t.pnl_pct ? `${(t.pnl_pct ?? 0).toFixed(2)}%` : "N/A",
         t.entry_time,
         t.exit_time ?? "",
         t.strategy ?? "",
@@ -325,12 +325,12 @@ function StrategyPerformanceReport({
       strategyRows.map(s => [
         s.name,
         s.status,
-        s.total_return_pct.toFixed(2),
-        s.sharpe.toFixed(2),
-        s.maxDd.toFixed(2),
+        (s.total_return_pct ?? 0).toFixed(2),
+        (s.sharpe ?? 0).toFixed(2),
+        (s.maxDd ?? 0).toFixed(2),
         s.tradeCount,
-        s.winRate.toFixed(1),
-        s.invested_amount.toFixed(2),
+        (s.winRate ?? 0).toFixed(1),
+        (s.invested_amount ?? 0).toFixed(2),
       ])
     );
     downloadCsv(`strategy-performance-${new Date().toISOString().slice(0, 10)}.csv`, csv);
@@ -364,12 +364,12 @@ function StrategyPerformanceReport({
                   </span>
                 </td>
                 <td className={cn("px-3 py-2 text-right tabular-nums font-medium", s.total_return_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                  {s.total_return_pct >= 0 ? "+" : ""}{s.total_return_pct.toFixed(1)}%
+                  {(s.total_return_pct ?? 0) >= 0 ? "+" : ""}{(s.total_return_pct ?? 0).toFixed(1)}%
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.sharpe.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-[var(--loss)]">-{s.maxDd.toFixed(1)}%</td>
+                <td className="px-3 py-2 text-right tabular-nums text-foreground">{(s.sharpe ?? 0).toFixed(2)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--loss)]">-{(s.maxDd ?? 0).toFixed(1)}%</td>
                 <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.tradeCount}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.winRate.toFixed(0)}%</td>
+                <td className="px-3 py-2 text-right tabular-nums text-foreground">{(s.winRate ?? 0).toFixed(0)}%</td>
               </tr>
             ))}
             {strategyRows.length === 0 && (
@@ -425,13 +425,13 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
     let csv = `TAX REPORT - ${taxYear}\n`;
     csv += `Generated,${new Date().toISOString()}\n\n`;
     csv += "SUMMARY\n";
-    csv += `Short-Term Gains,${shortTermGains.toFixed(2)}\n`;
-    csv += `Short-Term Losses,${shortTermLosses.toFixed(2)}\n`;
+    csv += `Short-Term Gains,${(shortTermGains ?? 0).toFixed(2)}\n`;
+    csv += `Short-Term Losses,${(shortTermLosses ?? 0).toFixed(2)}\n`;
     csv += `Short-Term Net,${(shortTermGains + shortTermLosses).toFixed(2)}\n`;
-    csv += `Long-Term Gains,${longTermGains.toFixed(2)}\n`;
-    csv += `Long-Term Losses,${longTermLosses.toFixed(2)}\n`;
+    csv += `Long-Term Gains,${(longTermGains ?? 0).toFixed(2)}\n`;
+    csv += `Long-Term Losses,${(longTermLosses ?? 0).toFixed(2)}\n`;
     csv += `Long-Term Net,${(longTermGains + longTermLosses).toFixed(2)}\n`;
-    csv += `Total Realized,${totalRealized.toFixed(2)}\n\n`;
+    csv += `Total Realized,${(totalRealized ?? 0).toFixed(2)}\n\n`;
     csv += "ALL REALIZED TRADES\n";
     csv += arrayToCsv(
       ["Symbol", "Side", "Quantity", "Entry Price", "Exit Price", "P&L", "Entry Date", "Exit Date", "Holding Days", "Classification", "Strategy"],
@@ -439,7 +439,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
         t.symbol,
         t.side,
         t.quantity,
-        t.entry_price.toFixed(2),
+        (t.entry_price ?? 0).toFixed(2),
         (t.exit_price ?? 0).toFixed(2),
         (t.pnl ?? 0).toFixed(2),
         t.entry_time,

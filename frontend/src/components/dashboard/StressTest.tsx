@@ -318,7 +318,7 @@ export function StressTest() {
                   {formatCurrency(result.totalImpact)}
                   <span className="text-[10px] ml-1">
                     ({result.totalImpactPct >= 0 ? "+" : ""}
-                    {result.totalImpactPct.toFixed(1)}%)
+                    {(result.totalImpactPct ?? 0).toFixed(1)}%)
                   </span>
                 </p>
               </div>

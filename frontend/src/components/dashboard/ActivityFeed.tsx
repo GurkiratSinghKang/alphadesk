@@ -168,7 +168,7 @@ export function buildFeedItems(
         time: orderTs,
         type: "trade",
         severity: "info",
-        title: `${order.side === "buy" ? "Bought" : "Sold"} ${order.qty} ${order.symbol} @ $${Number(order.price).toFixed(2)}`,
+        title: `${order.side === "buy" ? "Bought" : "Sold"} ${order.qty} ${order.symbol} @ $${(Number(order.price) ?? 0).toFixed(2)}`,
         detail: order.strategy ? `via ${order.strategy}` : undefined,
       });
     }
@@ -182,8 +182,8 @@ export function buildFeedItems(
         time: orderTs,
         type: "trade",
         severity: pnl !== null ? (pnl >= 0 ? "success" : "danger") : "info",
-        title: `Closed ${order.symbol}: ${order.side === "sell" ? "Sold" : "Covered"} ${order.qty} @ $${Number(order.price).toFixed(2)}`,
-        detail: pnl !== null ? `P&L: ${pnl >= 0 ? "+" : ""}$${Number(pnl).toFixed(2)}` : undefined,
+        title: `Closed ${order.symbol}: ${order.side === "sell" ? "Sold" : "Covered"} ${order.qty} @ $${(Number(order.price) ?? 0).toFixed(2)}`,
+        detail: pnl !== null ? `P&L: ${pnl >= 0 ? "+" : ""}$${(Number(pnl) ?? 0).toFixed(2)}` : undefined,
       });
     }
 

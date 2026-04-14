@@ -487,15 +487,15 @@ function MetricCard({ label, value, sub, color }: { label: string; value: string
 
 function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
   const rows: { label: string; valA: string; valB: string; highlight: "higher" | "lower" | "none" }[] = [
-    { label: "Total Return", valA: `${a.totalReturnPct >= 0 ? "+" : ""}${a.totalReturnPct.toFixed(1)}%`, valB: `${b.totalReturnPct >= 0 ? "+" : ""}${b.totalReturnPct.toFixed(1)}%`, highlight: "higher" },
-    { label: "Sharpe Ratio", valA: a.sharpe.toFixed(2), valB: b.sharpe.toFixed(2), highlight: "higher" },
-    { label: "Max Drawdown", valA: `-${a.maxDrawdown.toFixed(1)}%`, valB: `-${b.maxDrawdown.toFixed(1)}%`, highlight: "lower" },
+    { label: "Total Return", valA: `${(a.totalReturnPct ?? 0) >= 0 ? "+" : ""}${(a.totalReturnPct ?? 0).toFixed(1)}%`, valB: `${(b.totalReturnPct ?? 0) >= 0 ? "+" : ""}${(b.totalReturnPct ?? 0).toFixed(1)}%`, highlight: "higher" },
+    { label: "Sharpe Ratio", valA: (a.sharpe ?? 0).toFixed(2), valB: (b.sharpe ?? 0).toFixed(2), highlight: "higher" },
+    { label: "Max Drawdown", valA: `-${(a.maxDrawdown ?? 0).toFixed(1)}%`, valB: `-${(b.maxDrawdown ?? 0).toFixed(1)}%`, highlight: "lower" },
     { label: "Win Rate", valA: `${a.trades > 0 ? ((a.wins / a.trades) * 100).toFixed(0) : 0}%`, valB: `${b.trades > 0 ? ((b.wins / b.trades) * 100).toFixed(0) : 0}%`, highlight: "higher" },
-    { label: "Profit Factor", valA: a.profitFactor === Infinity ? "Inf" : a.profitFactor.toFixed(2), valB: b.profitFactor === Infinity ? "Inf" : b.profitFactor.toFixed(2), highlight: "higher" },
-    { label: "Calmar Ratio", valA: a.calmarRatio.toFixed(2), valB: b.calmarRatio.toFixed(2), highlight: "higher" },
+    { label: "Profit Factor", valA: a.profitFactor === Infinity ? "Inf" : (a.profitFactor ?? 0).toFixed(2), valB: b.profitFactor === Infinity ? "Inf" : (b.profitFactor ?? 0).toFixed(2), highlight: "higher" },
+    { label: "Calmar Ratio", valA: (a.calmarRatio ?? 0).toFixed(2), valB: (b.calmarRatio ?? 0).toFixed(2), highlight: "higher" },
     { label: "Trades", valA: String(a.trades), valB: String(b.trades), highlight: "none" },
-    { label: "Avg Duration", valA: `${a.avgTradeDuration.toFixed(0)} bars`, valB: `${b.avgTradeDuration.toFixed(0)} bars`, highlight: "none" },
-    { label: "Exposure", valA: `${a.exposureTimePct.toFixed(0)}%`, valB: `${b.exposureTimePct.toFixed(0)}%`, highlight: "none" },
+    { label: "Avg Duration", valA: `${(a.avgTradeDuration ?? 0).toFixed(0)} bars`, valB: `${(b.avgTradeDuration ?? 0).toFixed(0)} bars`, highlight: "none" },
+    { label: "Exposure", valA: `${(a.exposureTimePct ?? 0).toFixed(0)}%`, valB: `${(b.exposureTimePct ?? 0).toFixed(0)}%`, highlight: "none" },
   ];
 
   function getBetter(valA: string, valB: string, highlight: "higher" | "lower" | "none"): "a" | "b" | "none" {
@@ -717,7 +717,7 @@ export function BacktestPanel() {
             <MetricCard
               label="Total Return"
               value={`${activeResult.totalReturn >= 0 ? "+" : ""}${formatCurrency(activeResult.totalReturn)}`}
-              sub={`${activeResult.totalReturnPct >= 0 ? "+" : ""}${activeResult.totalReturnPct.toFixed(1)}%`}
+              sub={`${(activeResult.totalReturnPct ?? 0) >= 0 ? "+" : ""}${(activeResult.totalReturnPct ?? 0).toFixed(1)}%`}
               color={activeResult.totalReturn >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}
             />
             <MetricCard
@@ -727,12 +727,12 @@ export function BacktestPanel() {
             />
             <MetricCard
               label="Max Drawdown"
-              value={`-${activeResult.maxDrawdown.toFixed(1)}%`}
+              value={`-${(activeResult.maxDrawdown ?? 0).toFixed(1)}%`}
               color="text-[var(--loss)]"
             />
             <MetricCard
               label="Sharpe Ratio"
-              value={activeResult.sharpe.toFixed(2)}
+              value={(activeResult.sharpe ?? 0).toFixed(2)}
             />
           </div>
 
@@ -740,11 +740,11 @@ export function BacktestPanel() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <MetricCard
               label="Profit Factor"
-              value={activeResult.profitFactor === Infinity ? "Inf" : activeResult.profitFactor.toFixed(2)}
+              value={activeResult.profitFactor === Infinity ? "Inf" : (activeResult.profitFactor ?? 0).toFixed(2)}
             />
             <MetricCard
               label="Calmar Ratio"
-              value={activeResult.calmarRatio.toFixed(2)}
+              value={(activeResult.calmarRatio ?? 0).toFixed(2)}
             />
             <MetricCard
               label="# Trades"
@@ -752,11 +752,11 @@ export function BacktestPanel() {
             />
             <MetricCard
               label="Avg Duration"
-              value={`${activeResult.avgTradeDuration.toFixed(0)} bars`}
+              value={`${(activeResult.avgTradeDuration ?? 0).toFixed(0)} bars`}
             />
             <MetricCard
               label="Exposure"
-              value={`${activeResult.exposureTimePct.toFixed(0)}%`}
+              value={`${(activeResult.exposureTimePct ?? 0).toFixed(0)}%`}
               sub="time in market"
             />
           </div>

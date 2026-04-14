@@ -96,7 +96,7 @@ function MiniChart({
         </div>
         <div className="flex items-center gap-1">
           <span className="text-[10px] tabular-nums font-medium text-foreground">
-            ${current.toFixed(2)}
+            ${(current ?? 0).toFixed(2)}
           </span>
           <span
             className={cn(
@@ -105,7 +105,7 @@ function MiniChart({
             )}
           >
             {trending ? "+" : ""}
-            {changePct.toFixed(2)}%
+            {(changePct ?? 0).toFixed(2)}%
           </span>
         </div>
       </div>

@@ -277,7 +277,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     levels.forEach((level, i) => {
       const price = high - range * level;
       const rounded = Math.round(price * 100) / 100;
-      addHLine(rounded, colors[i], `Fib ${labels[i]} $${rounded.toFixed(2)}`);
+      addHLine(rounded, colors[i], `Fib ${labels[i]} $${(rounded ?? 0).toFixed(2)}`);
     });
   };
 
@@ -386,10 +386,10 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                 <span>
                   {quote.bid && quote.ask ? (
                     <>
-                      <span className="text-foreground">{quote.bid.toFixed(2)}</span>
+                      <span className="text-foreground">{(quote.bid ?? 0).toFixed(2)}</span>
                       {" / "}
-                      <span className="text-foreground">{quote.ask.toFixed(2)}</span>
-                      <span className="ml-1.5 text-[#8a8a95]">spread: {(quote.ask - quote.bid).toFixed(2)}</span>
+                      <span className="text-foreground">{(quote.ask ?? 0).toFixed(2)}</span>
+                      <span className="ml-1.5 text-[#8a8a95]">spread: {((quote.ask ?? 0) - (quote.bid ?? 0)).toFixed(2)}</span>
                     </>
                   ) : (
                     <span className="text-muted-foreground">Mkt Closed</span>
@@ -419,7 +419,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                         <div key={a.id} className={cn("flex items-center gap-2 px-3 py-1.5 text-xs", a.triggered && "opacity-60")}>
                           <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", a.triggered ? "bg-[var(--profit)]" : a.condition === "above" ? "bg-primary" : "bg-amber-500")} />
                           <span className="flex-1 min-w-0 tabular-nums text-foreground">
-                            {a.condition === "above" ? "Above" : "Below"} ${a.price.toFixed(2)}
+                            {a.condition === "above" ? "Above" : "Below"} ${(a.price ?? 0).toFixed(2)}
                             {a.triggered && a.triggered_at && (
                               <span className="ml-1.5 text-[10px] text-[var(--profit)]">
                                 Triggered {new Date(a.triggered_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
@@ -742,7 +742,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                   fontSize={10}
                   fontFamily="Inter, sans-serif"
                 >
-                  ${line.startPrice.toFixed(2)}
+                  ${(line.startPrice ?? 0).toFixed(2)}
                 </text>
                 {/* Price label at end */}
                 <text
@@ -752,7 +752,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                   fontSize={10}
                   fontFamily="Inter, sans-serif"
                 >
-                  ${line.endPrice.toFixed(2)}
+                  ${(line.endPrice ?? 0).toFixed(2)}
                 </text>
               </g>
             ))}
@@ -770,7 +770,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
               fontSize={10}
               fontFamily="Inter, sans-serif"
             >
-              ${trendlineStart.price.toFixed(2)} — click end point
+              ${(trendlineStart.price ?? 0).toFixed(2)} — click end point
             </text>
           </svg>
         )}
@@ -778,7 +778,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
         {/* Fibonacci in-progress indicator */}
         {trendlineStart && drawingMode === "fib" && (
           <div className="absolute top-2 left-2 z-[6] bg-[var(--surface)]/90 border border-border rounded px-2 py-1 text-[10px] text-muted-foreground">
-            Fib high: ${trendlineStart.price.toFixed(2)} — click to set low point
+            Fib high: ${(trendlineStart.price ?? 0).toFixed(2)} — click to set low point
           </div>
         )}
 

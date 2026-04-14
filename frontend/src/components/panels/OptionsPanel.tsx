@@ -149,13 +149,13 @@ function Cell({
   let formatted: string;
   switch (format) {
     case "price":
-      formatted = value.toFixed(2);
+      formatted = (value ?? 0).toFixed(2);
       break;
     case "number":
       formatted = formatNumber(value, true);
       break;
     case "pct":
-      formatted = `${value.toFixed(1)}%`;
+      formatted = `${(value ?? 0).toFixed(1)}%`;
       break;
     case "greek":
       formatted = formatGreek(value, 2);
@@ -298,7 +298,7 @@ export function OptionsPanel() {
             IV Pctl: {ivPctl != null ? ivPctl : "\u2014"}
           </Badge>
           <span className="text-[10px] text-muted-foreground">
-            Expected Move: {expectedMove != null ? `\u00B1$${expectedMove.toFixed(2)}` : "\u2014"}
+            Expected Move: {expectedMove != null ? `\u00B1$${(expectedMove ?? 0).toFixed(2)}` : "\u2014"}
           </span>
         </div>
       </div>
@@ -442,7 +442,7 @@ export function OptionsPanel() {
                       atm ? "text-primary" : "text-foreground"
                     )}
                   >
-                    {row.strike.toFixed(0)}
+                    {(row.strike ?? 0).toFixed(0)}
                   </td>
 
                   {/* Puts — BUG #21: last cell clickable */}

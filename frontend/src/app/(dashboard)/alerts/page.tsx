@@ -59,7 +59,7 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
     setSubmitting(true);
     try {
       await createPriceAlert(sym, p, condition);
-      toast({ type: "success", message: `Alert created: ${sym} ${condition} $${p.toFixed(2)}` });
+      toast({ type: "success", message: `Alert created: ${sym} ${condition} $${(p ?? 0).toFixed(2)}` });
       setSymbol("");
       setPrice("");
       onCreated();
@@ -209,7 +209,7 @@ function AlertRow({
 
       {/* Target Price */}
       <span className="w-24 shrink-0 tabular-nums text-foreground">
-        ${alert.price.toFixed(2)}
+        ${(alert.price ?? 0).toFixed(2)}
       </span>
 
       {/* Status */}

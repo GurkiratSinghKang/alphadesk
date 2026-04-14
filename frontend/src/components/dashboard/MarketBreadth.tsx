@@ -143,7 +143,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
         {/* A/D Ratio */}
         <div className="text-center">
           <div className="text-lg font-bold tabular-nums text-foreground">
-            {advDecRatio.toFixed(2)}
+            {(advDecRatio ?? 0).toFixed(2)}
           </div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
             A/D Ratio
@@ -180,7 +180,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
                     )}
                   >
                     {s.sector} {positive ? "+" : ""}
-                    {s.change_pct.toFixed(1)}%
+                    {(s.change_pct ?? 0).toFixed(1)}%
                   </span>
                 );
               })}

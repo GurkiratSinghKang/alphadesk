@@ -27,9 +27,9 @@ export function TickerTape() {
         {doubled.map((item, i) => (
           <span key={`${item.symbol}-${i}`} className="flex items-center gap-1">
             <span className="font-medium text-foreground">{item.symbol}</span>
-            <span className="text-foreground">${item.price.toFixed(2)}</span>
-            <span className={item.change >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}>
-              {item.change >= 0 ? "\u25B2" : "\u25BC"}{item.changePct >= 0 ? "+" : ""}{item.changePct.toFixed(2)}%
+            <span className="text-foreground">${(item.price ?? 0).toFixed(2)}</span>
+            <span className={(item.change ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}>
+              {(item.change ?? 0) >= 0 ? "\u25B2" : "\u25BC"}{(item.changePct ?? 0) >= 0 ? "+" : ""}{(item.changePct ?? 0).toFixed(2)}%
             </span>
             {i < doubled.length - 1 && <span className="text-border ml-2">|</span>}
           </span>

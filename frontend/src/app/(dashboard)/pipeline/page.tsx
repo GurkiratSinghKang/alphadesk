@@ -675,7 +675,7 @@ export default function PipelinePage() {
                       Win Rate
                     </p>
                     <p className="text-lg font-bold tabular-nums text-foreground">
-                      {perfData ? (perfData.winRate > 0 ? `${perfData.winRate.toFixed(1)}%` : "N/A") : winRate !== "N/A" ? `${winRate}%` : "N/A"}
+                      {perfData ? ((perfData.winRate ?? 0) > 0 ? `${(perfData.winRate ?? 0).toFixed(1)}%` : "N/A") : winRate !== "N/A" ? `${winRate}%` : "N/A"}
                     </p>
                   </CardContent>
                 </Card>

@@ -191,13 +191,13 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Dollar Risk</span>
               <span className="text-[var(--loss)] tabular-nums">
-                ${riskAmount.toFixed(0)}
+                ${(riskAmount ?? 0).toFixed(0)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Stop Price</span>
               <span className="text-muted-foreground tabular-nums">
-                ${effectiveStopPrice.toFixed(2)}
+                ${(effectiveStopPrice ?? 0).toFixed(2)}
               </span>
             </div>
             <div className="flex justify-between">

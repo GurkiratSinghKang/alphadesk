@@ -145,9 +145,9 @@ function computeTradeStats(trades: TradeHistoryEntry[]) {
 function formatDuration(ms: number): string {
   if (ms === 0) return "--";
   const hours = ms / (1000 * 60 * 60);
-  if (hours < 24) return `${hours.toFixed(1)}h`;
+  if (hours < 24) return `${(hours ?? 0).toFixed(1)}h`;
   const days = hours / 24;
-  return `${days.toFixed(1)}d`;
+  return `${(days ?? 0).toFixed(1)}d`;
 }
 
 // ─── SVG Chart Components ───────────────────────────────────
@@ -159,8 +159,8 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
   const yScale = (v: number) => py + ((0 - v) / (0 - minDD || 1)) * (h - 2 * py);
   const xScale = (i: number) => px + (i / (data.length - 1 || 1)) * (w - 2 * px);
 
-  const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${xScale(i).toFixed(1)},${yScale(d.dd).toFixed(1)}`).join(" ");
-  const areaD = `${pathD} L${xScale(data.length - 1).toFixed(1)},${yScale(0).toFixed(1)} L${xScale(0).toFixed(1)},${yScale(0).toFixed(1)} Z`;
+  const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${(xScale(i) ?? 0).toFixed(1)},${(yScale(d.dd) ?? 0).toFixed(1)}`).join(" ");
+  const areaD = `${pathD} L${(xScale(data.length - 1) ?? 0).toFixed(1)},${(yScale(0) ?? 0).toFixed(1)} L${(xScale(0) ?? 0).toFixed(1)},${(yScale(0) ?? 0).toFixed(1)} Z`;
 
   // Y-axis labels
   const yTicks = [0, minDD / 2, minDD];
@@ -200,7 +200,7 @@ function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[]
   const yScale = (v: number) => py + ((maxV - v) / range) * (h - 2 * py);
   const xScale = (i: number) => px + (i / (data.length - 1 || 1)) * (w - 2 * px);
 
-  const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${xScale(i).toFixed(1)},${yScale(d.sharpe).toFixed(1)}`).join(" ");
+  const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${(xScale(i) ?? 0).toFixed(1)},${(yScale(d.sharpe) ?? 0).toFixed(1)}`).join(" ");
 
   const yTicks = [maxV, (maxV + minV) / 2, minV];
   const zeroY = yScale(0);
@@ -211,7 +211,7 @@ function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[]
         <g key={i}>
           <line x1={px} y1={yScale(t)} x2={w - px} y2={yScale(t)} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="4 4" />
           <text x={px - 4} y={yScale(t) + 3} textAnchor="end" fill="var(--muted-foreground)" fontSize="9" fontFamily="monospace">
-            {t.toFixed(1)}
+            {(t ?? 0).toFixed(1)}
           </text>
         </g>
       ))}
@@ -247,7 +247,7 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
     const midVal = (b.min + b.max) / 2;
     const density = normalPDF(midVal, mean, std) * normalScale;
     const normY = py + ((maxCount - density) / maxCount) * (h - 2 * py);
-    return `${i === 0 ? "M" : "L"}${midX.toFixed(1)},${Math.max(py, normY).toFixed(1)}`;
+    return `${i === 0 ? "M" : "L"}${(midX ?? 0).toFixed(1)},${(Math.max(py, normY) ?? 0).toFixed(1)}`;
   }).join(" ");
 
   return (
@@ -325,7 +325,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                           className="inline-block w-full rounded px-1 py-0.5 tabular-nums font-medium"
                           style={{ backgroundColor: cellColor(val), color: Math.abs(val) > maxAbs * 0.3 ? "#fff" : "var(--foreground)" }}
                         >
-                          {val >= 0 ? "+" : ""}{val.toFixed(1)}%
+                          {(val ?? 0) >= 0 ? "+" : ""}{(val ?? 0).toFixed(1)}%
                         </span>
                       ) : (
                         <span className="text-muted-foreground/30">--</span>
@@ -335,7 +335,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                 })}
                 <td className="px-2 py-1 text-center">
                   <span className={cn("tabular-nums font-semibold", ytd >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {ytd >= 0 ? "+" : ""}{ytd.toFixed(1)}%
+                    {(ytd ?? 0) >= 0 ? "+" : ""}{(ytd ?? 0).toFixed(1)}%
                   </span>
                 </td>
               </tr>
@@ -374,12 +374,12 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: Rea
 function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats> }) {
   const rows: [string, string][] = [
     ["Total Trades", String(stats.totalTrades)],
-    ["Win Rate", `${stats.winRate.toFixed(1)}%`],
-    ["Profit Factor", stats.profitFactor === Infinity ? "Inf" : stats.profitFactor.toFixed(2)],
-    ["Avg Win", `$${stats.avgWin.toFixed(2)}`],
-    ["Avg Loss", `-$${stats.avgLoss.toFixed(2)}`],
-    ["Largest Win", `$${stats.largestWin.toFixed(2)}`],
-    ["Largest Loss", `$${Math.abs(stats.largestLoss).toFixed(2)}`],
+    ["Win Rate", `${(stats.winRate ?? 0).toFixed(1)}%`],
+    ["Profit Factor", stats.profitFactor === Infinity ? "Inf" : (stats.profitFactor ?? 0).toFixed(2)],
+    ["Avg Win", `$${(stats.avgWin ?? 0).toFixed(2)}`],
+    ["Avg Loss", `-$${(stats.avgLoss ?? 0).toFixed(2)}`],
+    ["Largest Win", `$${(stats.largestWin ?? 0).toFixed(2)}`],
+    ["Largest Loss", `$${(Math.abs(stats.largestLoss) ?? 0).toFixed(2)}`],
     ["Avg Hold Time", formatDuration(stats.avgHoldMs)],
     ["Max Hold Time", formatDuration(stats.maxHoldMs)],
     ["Max Consec. Wins", String(stats.maxConsecWins)],

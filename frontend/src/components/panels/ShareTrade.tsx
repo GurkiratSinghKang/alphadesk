@@ -60,7 +60,7 @@ function buildTextSummary(data: ShareCardData): string {
   if (data.pnl != null) {
     const pnlSign = data.pnl >= 0 ? "+" : "";
     lines.push(
-      `P&L: ${pnlSign}${formatCurrency(data.pnl)}${data.pnlPct != null ? ` (${pnlSign}${data.pnlPct.toFixed(2)}%)` : ""}`
+      `P&L: ${pnlSign}${formatCurrency(data.pnl)}${data.pnlPct != null ? ` (${pnlSign}${(data.pnlPct ?? 0).toFixed(2)}%)` : ""}`
     );
   }
   if (data.summary) {
@@ -90,7 +90,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
           <div>
             <div className="text-base font-bold text-foreground">{data.symbol}</div>
             <div className="text-[11px] text-muted-foreground">
-              Vol: {formatVolume(data.volume)} | H: {data.high.toFixed(2)} L: {data.low.toFixed(2)}
+              Vol: {formatVolume(data.volume)} | H: {(data.high ?? 0).toFixed(2)} L: {(data.low ?? 0).toFixed(2)}
             </div>
           </div>
         </div>
@@ -102,7 +102,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
             "text-xs font-medium tabular-nums",
             isPositive ? "text-[var(--profit)]" : "text-[var(--loss)]"
           )}>
-            {changeSign}{data.change.toFixed(2)} ({changeSign}{formatPercent(data.changePct)})
+            {changeSign}{(data.change ?? 0).toFixed(2)} ({changeSign}{formatPercent(data.changePct)})
           </div>
         </div>
       </div>
@@ -165,7 +165,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
               {data.pnl >= 0 ? "+" : ""}{formatCurrency(data.pnl)}
               {data.pnlPct != null && (
                 <span className="ml-1 text-[10px]">
-                  ({data.pnl >= 0 ? "+" : ""}{data.pnlPct.toFixed(2)}%)
+                  ({data.pnl >= 0 ? "+" : ""}{(data.pnlPct ?? 0).toFixed(2)}%)
                 </span>
               )}
             </span>
@@ -307,14 +307,14 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       const changeColor = cardData.change >= 0 ? "#22c55e" : "#ef4444";
       ctx.fillStyle = changeColor;
       ctx.font = "500 11px Inter, system-ui, sans-serif";
-      const changeStr = `${changeSign}${cardData.change.toFixed(2)} (${changeSign}${formatPercent(cardData.changePct)})`;
+      const changeStr = `${changeSign}${(cardData.change ?? 0).toFixed(2)} (${changeSign}${formatPercent(cardData.changePct)})`;
       const changeWidth = ctx.measureText(changeStr).width;
       ctx.fillText(changeStr, width - 20 - changeWidth, 48);
 
       // Volume info
       ctx.fillStyle = "#71717a";
       ctx.font = "11px Inter, system-ui, sans-serif";
-      ctx.fillText(`Vol: ${formatVolume(cardData.volume)} | H: ${cardData.high.toFixed(2)} L: ${cardData.low.toFixed(2)}`, 60, 48);
+      ctx.fillText(`Vol: ${formatVolume(cardData.volume)} | H: ${(cardData.high ?? 0).toFixed(2)} L: ${(cardData.low ?? 0).toFixed(2)}`, 60, 48);
 
       // Metrics
       const metricsY = 75;

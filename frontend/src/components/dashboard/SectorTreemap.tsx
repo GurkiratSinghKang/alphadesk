@@ -345,7 +345,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                     displayPct >= 0 ? "text-emerald-200" : "text-red-200"
                   )}
                 >
-                  {displayPct >= 0 ? "+" : ""}{displayPct.toFixed(1)}%
+                  {(displayPct ?? 0) >= 0 ? "+" : ""}{(displayPct ?? 0).toFixed(1)}%
                 </span>
               )}
               {showYtd && viewMode === "daily" && (
@@ -377,7 +377,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                 "text-[11px] font-bold tabular-nums",
                 hoveredRect.change_pct >= 0 ? "text-emerald-400" : "text-red-400"
               )}>
-                {hoveredRect.change_pct >= 0 ? "+" : ""}{hoveredRect.change_pct.toFixed(2)}%
+                {(hoveredRect.change_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.change_pct ?? 0).toFixed(2)}%
               </span>
               <span className="text-[10px] text-zinc-500">today</span>
             </div>
@@ -387,7 +387,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                   "text-[11px] tabular-nums",
                   hoveredRect.ytd_pct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
                 )}>
-                  {hoveredRect.ytd_pct >= 0 ? "+" : ""}{hoveredRect.ytd_pct.toFixed(2)}%
+                  {(hoveredRect.ytd_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.ytd_pct ?? 0).toFixed(2)}%
                 </span>
                 <span className="text-[10px] text-zinc-500">YTD</span>
               </div>
@@ -400,7 +400,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                     "ml-1 tabular-nums",
                     hoveredRect.leader_change_pct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
                   )}>
-                    {hoveredRect.leader_change_pct >= 0 ? "+" : ""}{hoveredRect.leader_change_pct.toFixed(1)}%
+                    {(hoveredRect.leader_change_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.leader_change_pct ?? 0).toFixed(1)}%
                   </span>
                 )}
               </p>

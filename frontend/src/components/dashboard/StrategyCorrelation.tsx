@@ -115,7 +115,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                   : "text-foreground"
               )}
             >
-              {hoveredCell.value.toFixed(3)}
+              {(hoveredCell.value ?? 0).toFixed(3)}
             </span>
           </span>
         )}
@@ -167,7 +167,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                     }}
                     onMouseEnter={() => setHoveredCell({ row: i, col: j, value: val })}
                     onMouseLeave={() => setHoveredCell(null)}
-                    title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${val.toFixed(3)}`}
+                    title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${(val ?? 0).toFixed(3)}`}
                   />
                 ))}
               </div>

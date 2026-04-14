@@ -261,7 +261,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
                   {l.label}
                 </span>
                 <span className={cn("tabular-nums text-foreground", l.label !== "Current" && "opacity-40")}>
-                  ${l.price.toFixed(2)}
+                  ${(l.price ?? 0).toFixed(2)}
                 </span>
               </div>
             ))}
@@ -312,7 +312,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
                 {l.label}
               </span>
               <span className={cn("tabular-nums text-foreground", l.label !== "Current" && "opacity-40")}>
-                ${l.price.toFixed(2)}
+                ${(l.price ?? 0).toFixed(2)}
               </span>
             </div>
           ))}
@@ -697,10 +697,10 @@ function OrderTab({ symbol }: { symbol: string }) {
     const sideLabel = side === "buy" ? "Buy" : "Sell";
     switch (orderType) {
       case "market": return `${sideLabel} ${quantity} ${symbol} @ Market`;
-      case "limit": return `${sideLabel} ${quantity} ${symbol} @ $${limitPrice.toFixed(2)}`;
-      case "stop": return `${sideLabel} ${quantity} ${symbol} Stop $${stopPrice.toFixed(2)}`;
-      case "stop_limit": return `${sideLabel} ${quantity} ${symbol} Stop $${stopPrice.toFixed(2)} Lmt $${limitPrice.toFixed(2)}`;
-      case "trailing_stop": return `${sideLabel} ${quantity} ${symbol} Trail ${trailType === "dollar" ? "$" + trailAmount.toFixed(2) : trailAmount.toFixed(1) + "%"}`;
+      case "limit": return `${sideLabel} ${quantity} ${symbol} @ $${(limitPrice ?? 0).toFixed(2)}`;
+      case "stop": return `${sideLabel} ${quantity} ${symbol} Stop $${(stopPrice ?? 0).toFixed(2)}`;
+      case "stop_limit": return `${sideLabel} ${quantity} ${symbol} Stop $${(stopPrice ?? 0).toFixed(2)} Lmt $${(limitPrice ?? 0).toFixed(2)}`;
+      case "trailing_stop": return `${sideLabel} ${quantity} ${symbol} Trail ${trailType === "dollar" ? "$" + (trailAmount ?? 0).toFixed(2) : (trailAmount ?? 0).toFixed(1) + "%"}`;
     }
   }
 
@@ -876,7 +876,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       <div className="border-t border-border pt-3 space-y-1.5">
         <div className="flex justify-between text-xs">
           <span className="text-[#8a8a95]">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
-          <span className="text-foreground tabular-nums font-medium">${estimatedCost.toFixed(2)}</span>
+          <span className="text-foreground tabular-nums font-medium">${(estimatedCost ?? 0).toFixed(2)}</span>
         </div>
       </div>
 

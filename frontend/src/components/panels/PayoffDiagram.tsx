@@ -104,14 +104,14 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
   const toSvgY = (y: number) => PAD_T + (1 - (y - minY) / (maxY - minY)) * PLOT_H;
 
   // Build the payoff path
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${toSvgX(p.x).toFixed(1)},${toSvgY(p.y).toFixed(1)}`).join(" ");
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${(toSvgX(p.x) ?? 0).toFixed(1)},${(toSvgY(p.y) ?? 0).toFixed(1)}`).join(" ");
 
   // Build filled areas: green above zero, red below zero
   const zeroY = toSvgY(0);
 
   // Clip paths for green (above zero) and red (below zero)
-  const fillPathAbove = linePath + ` L${toSvgX(maxX).toFixed(1)},${zeroY.toFixed(1)} L${toSvgX(minX).toFixed(1)},${zeroY.toFixed(1)} Z`;
-  const fillPathBelow = linePath + ` L${toSvgX(maxX).toFixed(1)},${zeroY.toFixed(1)} L${toSvgX(minX).toFixed(1)},${zeroY.toFixed(1)} Z`;
+  const fillPathAbove = linePath + ` L${(toSvgX(maxX) ?? 0).toFixed(1)},${(zeroY ?? 0).toFixed(1)} L${(toSvgX(minX) ?? 0).toFixed(1)},${(zeroY ?? 0).toFixed(1)} Z`;
+  const fillPathBelow = linePath + ` L${(toSvgX(maxX) ?? 0).toFixed(1)},${(zeroY ?? 0).toFixed(1)} L${(toSvgX(minX) ?? 0).toFixed(1)},${(zeroY ?? 0).toFixed(1)} Z`;
 
   // Y-axis ticks
   const yRange = maxY - minY;
@@ -225,7 +225,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
               textAnchor="middle"
               fontFamily="Inter, system-ui, sans-serif"
             >
-              {currentPrice.toFixed(0)}
+              {(currentPrice ?? 0).toFixed(0)}
             </text>
           </>
         )}
@@ -249,7 +249,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
               textAnchor="middle"
               fontFamily="Inter, system-ui, sans-serif"
             >
-              BE ${bx.toFixed(0)}
+              BE ${(bx ?? 0).toFixed(0)}
             </text>
           </g>
         ))}
@@ -286,7 +286,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
           >
             {Math.abs(tick) >= 1000
               ? `$${(tick / 1000).toFixed(1)}k`
-              : `$${tick.toFixed(0)}`}
+              : `$${(tick ?? 0).toFixed(0)}`}
           </text>
         ))}
 
@@ -304,7 +304,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
               textAnchor="middle"
               fontFamily="Inter, system-ui, sans-serif"
             >
-              ${tick.toFixed(0)}
+              ${(tick ?? 0).toFixed(0)}
             </text>
           );
         })}
@@ -323,7 +323,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
         <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
           <span className="text-[var(--chart-4)]">Breakeven{breakevens.length > 1 ? "s" : ""}:</span>
           {breakevens.map((bx, i) => (
-            <span key={i} className="tabular-nums text-foreground">${bx.toFixed(2)}</span>
+            <span key={i} className="tabular-nums text-foreground">${(bx ?? 0).toFixed(2)}</span>
           ))}
         </div>
       )}

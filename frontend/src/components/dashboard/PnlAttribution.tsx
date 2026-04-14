@@ -103,7 +103,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
                   </span>
                   <span className="text-[10px] tabular-nums text-muted-foreground w-12 text-right">
                     {s.contributionPct >= 0 ? "+" : ""}
-                    {s.contributionPct.toFixed(1)}%
+                    {(s.contributionPct ?? 0).toFixed(1)}%
                   </span>
                 </div>
               </div>

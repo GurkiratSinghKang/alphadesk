@@ -65,7 +65,7 @@ export function PositionsSummary() {
                     {positive ? "+" : ""}{formatCurrency(pos.unrealizedPnl)}
                   </p>
                   <p className={cn("text-[11px] tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {positive ? "+" : ""}{pnlPct.toFixed(2)}%
+                    {positive ? "+" : ""}{(pnlPct ?? 0).toFixed(2)}%
                   </p>
                 </div>
               </div>

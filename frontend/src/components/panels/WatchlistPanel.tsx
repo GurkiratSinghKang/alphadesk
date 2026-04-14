@@ -48,7 +48,7 @@ function MiniSparkline({ trend, symbol }: { trend: number; symbol: string }) {
     .map((v, i) => {
       const x = (i / (numPoints - 1)) * 32;
       const y = 12 - ((v - minV) / range) * 10 + 1;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      return `${(x ?? 0).toFixed(1)},${(y ?? 0).toFixed(1)}`;
     })
     .join(" ");
 
@@ -587,9 +587,9 @@ function ScreenerTab() {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="tabular-nums text-foreground">${r.price.toFixed(2)}</div>
-                  <div className={cn("text-[10px] tabular-nums", r.changePct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {r.changePct >= 0 ? "+" : ""}{r.changePct.toFixed(1)}%
+                  <div className="tabular-nums text-foreground">${(r.price ?? 0).toFixed(2)}</div>
+                  <div className={cn("text-[10px] tabular-nums", (r.changePct ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                    {(r.changePct ?? 0) >= 0 ? "+" : ""}{(r.changePct ?? 0).toFixed(1)}%
                   </div>
                 </div>
                 <div className="w-8 text-center">

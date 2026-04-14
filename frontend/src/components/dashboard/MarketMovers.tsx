@@ -189,7 +189,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                   )}
                 >
                   {positive ? "+" : ""}
-                  {row.changePct.toFixed(2)}%
+                  {(row.changePct ?? 0).toFixed(2)}%
                 </span>
 
                 {/* Volume */}

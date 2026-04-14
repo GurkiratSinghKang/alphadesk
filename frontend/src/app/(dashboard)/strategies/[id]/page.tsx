@@ -180,7 +180,7 @@ function BarChart({ data, height = 200 }: { data: { label: string; value: number
           <g key={i}>
             <rect x={x} y={y} width={barWidth} height={barH} rx={3} fill={fill} opacity={0.8} />
             <text x={x + barWidth / 2} y={height - 10} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>{d.label}</text>
-            <text x={x + barWidth / 2} y={y - 5} textAnchor="middle" className="fill-foreground" fontSize={9}>{d.value > 0 ? "+" : ""}{d.value.toFixed(1)}%</text>
+            <text x={x + barWidth / 2} y={y - 5} textAnchor="middle" className="fill-foreground" fontSize={9}>{(d.value ?? 0) > 0 ? "+" : ""}{(d.value ?? 0).toFixed(1)}%</text>
           </g>
         );
       })}
@@ -198,7 +198,7 @@ function HeatmapCell({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center justify-center rounded border border-border p-2" style={{ backgroundColor: bg, minWidth: 60 }}>
       <span className="text-[10px] text-muted-foreground">{label}</span>
-      <span className="text-xs font-semibold tabular-nums">{value >= 0 ? "+" : ""}{value.toFixed(1)}%</span>
+      <span className="text-xs font-semibold tabular-nums">{(value ?? 0) >= 0 ? "+" : ""}{(value ?? 0).toFixed(1)}%</span>
     </div>
   );
 }
@@ -372,26 +372,26 @@ export default function StrategyDetailPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <MetricCard
                 label="Total Return"
-                value={`${perf.total_return_pct >= 0 ? "+" : ""}${perf.total_return_pct.toFixed(2)}% (${formatCurrency(perf.return_dollars)})`}
+                value={`${(perf.total_return_pct ?? 0) >= 0 ? "+" : ""}${(perf.total_return_pct ?? 0).toFixed(2)}% (${formatCurrency(perf.return_dollars)})`}
                 color={perf.total_return_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}
               />
               <MetricCard label="Sharpe Ratio" value={
                 perf.sharpe_ratio !== 0
-                  ? perf.sharpe_ratio.toFixed(2)
+                  ? (perf.sharpe_ratio ?? 0).toFixed(2)
                   : perf.total_return_pct !== 0
                     ? (perf.total_return_pct / (Math.abs(perf.max_drawdown) || 5)).toFixed(2)
                     : "N/A"
               } />
               <MetricCard label="Max Drawdown" value={
                 perf.max_drawdown !== 0
-                  ? `${perf.max_drawdown.toFixed(1)}%`
+                  ? `${(perf.max_drawdown ?? 0).toFixed(1)}%`
                   : perf.total_return_pct !== 0
                     ? `${(-Math.abs(perf.total_return_pct) * 0.4).toFixed(1)}%`
                     : "N/A"
               } color={perf.max_drawdown !== 0 || perf.total_return_pct !== 0 ? "text-[var(--loss)]" : undefined} />
               <MetricCard label="Win Rate" value={
                 perf.win_rate >= 0
-                  ? `${perf.win_rate.toFixed(0)}%`
+                  ? `${(perf.win_rate ?? 0).toFixed(0)}%`
                   : perf.total_return_pct !== 0
                     ? `${Math.min(65, 50 + perf.total_return_pct * 2).toFixed(0)}%`
                     : "N/A"
@@ -580,7 +580,7 @@ export default function StrategyDetailPage() {
                                   {trade.pnl != null ? `${trade.pnl >= 0 ? "+" : ""}${formatCurrency(trade.pnl)}` : "—"}
                                 </td>
                                 <td className={cn("px-4 py-2.5 text-right tabular-nums", trade.pnl_pct != null ? (trade.pnl_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]") : "")}>
-                                  {trade.pnl_pct != null ? `${trade.pnl_pct >= 0 ? "+" : ""}${trade.pnl_pct.toFixed(1)}%` : "—"}
+                                  {trade.pnl_pct != null ? `${trade.pnl_pct >= 0 ? "+" : ""}${(trade.pnl_pct ?? 0).toFixed(1)}%` : "—"}
                                 </td>
                                 <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
                                   {holdDays ? `${holdDays}d` : "—"}
@@ -677,7 +677,7 @@ export default function StrategyDetailPage() {
                               {p.unrealized_pnl >= 0 ? "+" : ""}{formatCurrency(p.unrealized_pnl)}
                             </td>
                             <td className={cn("px-4 py-2.5 text-right tabular-nums", p.unrealized_pnl_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                              {p.unrealized_pnl_pct >= 0 ? "+" : ""}{p.unrealized_pnl_pct.toFixed(2)}%
+                              {(p.unrealized_pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.unrealized_pnl_pct ?? 0).toFixed(2)}%
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{p.days_held}d</td>
                             <td className="px-4 py-2.5 text-right tabular-nums text-[var(--loss)]">{p.stop_loss ? formatCurrency(p.stop_loss) : "—"}</td>
@@ -764,7 +764,7 @@ export default function StrategyDetailPage() {
                             }}
                           />
                         </div>
-                        <span className="text-sm tabular-nums font-medium w-12 text-right">{corr.toFixed(2)}</span>
+                        <span className="text-sm tabular-nums font-medium w-12 text-right">{(corr ?? 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -830,15 +830,15 @@ export default function StrategyDetailPage() {
                     <h3 className="font-semibold mb-4">Hold Time Analysis</h3>
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
-                        <p className="text-2xl font-bold text-[var(--profit)]">{analytics.hold_time_stats.avg_win_days.toFixed(1)}d</p>
+                        <p className="text-2xl font-bold text-[var(--profit)]">{(analytics.hold_time_stats.avg_win_days ?? 0).toFixed(1)}d</p>
                         <p className="text-xs text-muted-foreground">Avg win hold</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-[var(--loss)]">{analytics.hold_time_stats.avg_loss_days.toFixed(1)}d</p>
+                        <p className="text-2xl font-bold text-[var(--loss)]">{(analytics.hold_time_stats.avg_loss_days ?? 0).toFixed(1)}d</p>
                         <p className="text-xs text-muted-foreground">Avg loss hold</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-foreground">{analytics.hold_time_stats.median_hold_days.toFixed(0)}d</p>
+                        <p className="text-2xl font-bold text-foreground">{(analytics.hold_time_stats.median_hold_days ?? 0).toFixed(0)}d</p>
                         <p className="text-xs text-muted-foreground">Median hold</p>
                       </div>
                     </div>
@@ -861,7 +861,7 @@ export default function StrategyDetailPage() {
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-[var(--profit)]">+{formatCurrency(analytics.best_trade.pnl)}</p>
-                              <p className="text-xs text-[var(--profit)]">+{analytics.best_trade.pnl_pct.toFixed(1)}%</p>
+                              <p className="text-xs text-[var(--profit)]">+{(analytics.best_trade.pnl_pct ?? 0).toFixed(1)}%</p>
                             </div>
                           </div>
                         )}
@@ -873,7 +873,7 @@ export default function StrategyDetailPage() {
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-[var(--loss)]">{formatCurrency(analytics.worst_trade.pnl)}</p>
-                              <p className="text-xs text-[var(--loss)]">{analytics.worst_trade.pnl_pct.toFixed(1)}%</p>
+                              <p className="text-xs text-[var(--loss)]">{(analytics.worst_trade.pnl_pct ?? 0).toFixed(1)}%</p>
                             </div>
                           </div>
                         )}

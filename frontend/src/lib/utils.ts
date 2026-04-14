@@ -52,8 +52,8 @@ export function formatNumber(value: number, compact = false): string {
  * Format greek values: +0.35 for delta, -0.02 for theta, etc.
  */
 export function formatGreek(value: number, decimals = 4): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(decimals)}`;
+  const sign = (value ?? 0) >= 0 ? "+" : "";
+  return `${sign}${(value ?? 0).toFixed(decimals)}`;
 }
 
 /**
@@ -93,6 +93,6 @@ export function formatDate(ts: number): string {
 }
 
 export function formatChangeWithSign(value: number, decimals = 2): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(decimals)}`;
+  const sign = (value ?? 0) >= 0 ? "+" : "";
+  return `${sign}${(value ?? 0).toFixed(decimals)}`;
 }
