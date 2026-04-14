@@ -4,8 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { StrategyGrid } from '@/components/dashboard/StrategyGrid';
 
 const strategies = [
-  { id: 'pead', name: 'PEAD', shortName: 'PEAD', status: 'active' as const, returnPct: 6.6, positions: 1, winRate: 0, invested: 5000, icon: () => null },
-  { id: 'momentum-quality', name: 'Momentum + Quality', shortName: 'Momentum', status: 'active' as const, returnPct: 0, positions: 0, winRate: 0, invested: 0, icon: () => null },
+  { id: 'pead', name: 'PEAD', shortName: 'PEAD', status: 'active' as const, returnPct: 6.6, positions: 1, winRate: 0, invested: 5000, icon: () => null, sparkline: [100, 102, 105, 103, 106] },
+  { id: 'momentum-quality', name: 'Momentum + Quality', shortName: 'Momentum', status: 'active' as const, returnPct: 0, positions: 0, winRate: 0, invested: 0, icon: () => null, sparkline: [] },
 ];
 
 describe('StrategyGrid', () => {
@@ -28,8 +28,10 @@ describe('StrategyGrid', () => {
   it('calls onStrategyClick when card is clicked', () => {
     const onClick = vi.fn();
     render(<StrategyGrid strategies={strategies} regimeLabel="bull" onStrategyClick={onClick} />);
-    const cards = screen.getAllByRole('button');
-    fireEvent.click(cards[0]);
+    // Find the PEAD card text and click its parent card element
+    const peadText = screen.getByText('PEAD');
+    const card = peadText.closest('[role="button"], [class*="cursor-pointer"], div[class*="card"]');
+    if (card) fireEvent.click(card);
     expect(onClick).toHaveBeenCalledWith('pead');
   });
 

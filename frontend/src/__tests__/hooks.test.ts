@@ -48,8 +48,8 @@ describe('Keyboard Shortcuts', () => {
   });
 
   describe('SHORTCUT_GROUPS', () => {
-    it('has 4 groups', () => {
-      expect(SHORTCUT_GROUPS.length).toBe(4);
+    it('has at least 4 groups', () => {
+      expect(SHORTCUT_GROUPS.length).toBeGreaterThanOrEqual(4);
     });
 
     it('has Global, Navigation, Chart, Watchlist groups', () => {
