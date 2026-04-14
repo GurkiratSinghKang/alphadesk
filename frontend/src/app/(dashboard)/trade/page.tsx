@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { WatchlistPanel } from "@/components/panels/WatchlistPanel";
 import { ChartPanel } from "@/components/panels/ChartPanel";
-import { MultiChart, LayoutSelector, type ChartLayout } from "@/components/panels/MultiChart";
+import { LayoutSelector, type ChartLayout } from "@/components/panels/LayoutSelector";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { OptionsPanel } from "@/components/panels/OptionsPanel";
 import { TradePanel } from "@/components/panels/TradePanel";
