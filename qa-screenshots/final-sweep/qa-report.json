@@ -1,0 +1,735 @@
+{
+  "date": "2026-04-14T08:07:42.105Z",
+  "total": 121,
+  "passed": 109,
+  "failed": 12,
+  "passRate": "90.1%",
+  "results": [
+    {
+      "category": "Login",
+      "check": "Page loads without crash",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "Feature cards present",
+      "passed": true,
+      "detail": "Cards found in text"
+    },
+    {
+      "category": "Login",
+      "check": "Product preview / hero",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "Login form present",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "Footer with legal links",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Login",
+      "check": "Login succeeds with valid credentials",
+      "passed": true,
+      "detail": "URL: https://tradingalpha.net/"
+    },
+    {
+      "category": "Dashboard",
+      "check": "Page loads (authenticated)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Ticker tape present",
+      "passed": true,
+      "detail": "AAPL$259.22▼-0.46%|MSFT$384.33▲+3.62%|GOOGL$321.35▲+1.28%|AMZN$239.95▲+0.64%|NVDA$189.49▲+0.47%|TSLA"
+    },
+    {
+      "category": "Dashboard",
+      "check": "Widgets rendering (target: 17)",
+      "passed": true,
+      "detail": "112 widget elements found"
+    },
+    {
+      "category": "Dashboard",
+      "check": "Risk dashboard section",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Market movers widget",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Market breadth gauge",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Portfolio value with $ displayed",
+      "passed": true,
+      "detail": "Values: $259.22, $384.33, $321.35, $239.95, $189.49"
+    },
+    {
+      "category": "Dashboard",
+      "check": "Strategies section",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "P&L / Performance data",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Strategy compact/expanded toggle",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Card entrance animations",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Dashboard",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Page loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Chart loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Multi-chart layout selector",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Tabs present",
+      "passed": true,
+      "detail": "14 tab elements; text contains tab-like sections"
+    },
+    {
+      "category": "Trade",
+      "check": "Order panel (Buy/Sell/Quantity)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Options section",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Quick order (B key)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Position sizing calculator",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Trade",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Page loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Drawdown chart",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Sharpe ratio",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Distribution chart",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Trade statistics (win rate, etc.)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Monthly heatmap",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Trade journal with tags",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Backtest compare mode",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Analytics",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "Page loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "Create alert button",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "Alert list / view",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "Delete/remove option",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Alerts",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "Page loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "Flow diagram",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "Run button",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "Positions display",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Pipeline",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "Page loads",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "Portfolio statement",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "Strategy report",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "Tax report",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "CSV / Export / Download",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No \"undefined\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No \"NaN\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No standalone \"null\" text",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No layout overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "Footer visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No JS console errors",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Reports",
+      "check": "No crash / error boundary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Strategy Detail",
+      "check": "Page loads",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Strategy Detail",
+      "check": "BLOCKED — could not navigate to strategy",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Command Palette",
+      "check": "Opens with Cmd/Ctrl+K",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Command Palette",
+      "check": "Search symbols",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Command Palette",
+      "check": "Search shows results",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Header/navbar found",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Header buttons present",
+      "passed": true,
+      "detail": "11 buttons"
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Dropdown menu opens",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Settings option",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Logout option",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Notification bell icon",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Keyboard shortcuts modal (?)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Profile Menu",
+      "check": "Settings page loads",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Legal Pages",
+      "check": "Privacy Policy loads",
+      "passed": true,
+      "detail": "3151 chars, status 200"
+    },
+    {
+      "category": "Legal Pages",
+      "check": "Terms of Service loads",
+      "passed": true,
+      "detail": "3651 chars, status 200"
+    },
+    {
+      "category": "Legal Pages",
+      "check": "Risk Disclosure loads",
+      "passed": false,
+      "detail": "404"
+    },
+    {
+      "category": "Legal Pages",
+      "check": "Documentation loads",
+      "passed": true,
+      "detail": "7361 chars, status 200"
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Rapid switching (10x) no crashes",
+      "passed": true,
+      "detail": "0 failures"
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Browser back",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Browser forward",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Logo link to home",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Navigation links",
+      "passed": false,
+      "detail": "0 links in nav"
+    },
+    {
+      "category": "Cross-Page",
+      "check": "Page transition animations",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Keyboard Shortcuts",
+      "check": "? opens shortcuts help",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Keyboard Shortcuts",
+      "check": "Escape closes modals",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Keyboard Shortcuts",
+      "check": "N key (notifications)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "category": "Portfolio",
+      "check": "Dollar values found across pages",
+      "passed": true,
+      "detail": "{\"/dashboard\":[\"$259.22\",\"$384.33\",\"$321.35\",\"$239.95\",\"$189.49\",\"$352.46\",\"$685.99\",\"$618.14\"],\"/trade\":[\"$259.22\",\"$384.33\",\"$321.35\",\"$239.95\",\"$189.49\",\"$352.46\",\"$685.99\",\"$618.14\"],\"/reports\":[\"$259.22\",\"$384.33\",\"$321.35\",\"$239.95\",\"$189.49\",\"$352.46\",\"$685.99\",\"$618.14\"]}"
+    },
+    {
+      "category": "Loading States",
+      "check": "Loading UI exists (skeleton/spinner)",
+      "passed": true,
+      "detail": "Page may load too fast to capture"
+    },
+    {
+      "category": "Loading States",
+      "check": "No stuck spinners after load",
+      "passed": false,
+      "detail": ""
+    }
+  ]
+}
