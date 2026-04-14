@@ -8,6 +8,8 @@ final class PortfolioViewModel {
     var equity: Double = 0
     var dayPnL: Double = 0
     var dayPnLPercent: Double = 0
+    var unrealizedPnl: Double = 0
+    var unrealizedPnlPct: Double = 0
     var cash: Double = 0
     var buyingPower: Double = 0
     var positionsCount: Int = 0
@@ -46,8 +48,10 @@ final class PortfolioViewModel {
             equity = summary.equity
             cash = summary.cash
             buyingPower = summary.buyingPower
-            dayPnL = summary.unrealizedPnl
-            dayPnLPercent = summary.unrealizedPnlPct
+            dayPnL = summary.realizedPnlToday
+            dayPnLPercent = equity > 0 ? (summary.realizedPnlToday / equity) * 100 : 0
+            unrealizedPnl = summary.unrealizedPnl
+            unrealizedPnlPct = summary.unrealizedPnlPct
             positionsCount = summary.positionsCount
         } catch {
             self.error = error.localizedDescription
@@ -320,6 +324,24 @@ struct PortfolioView: View {
                     .foregroundStyle(AD.textTertiary)
             }
             .foregroundStyle(AD.pnlColor(vm.dayPnL))
+
+            HStack(spacing: 6) {
+                Image(systemName: vm.unrealizedPnl >= 0 ? "arrow.up.right" : "arrow.down.right")
+                    .font(.system(size: 11, weight: .medium))
+
+                Text("\(AD.pnlSign(vm.unrealizedPnl))\(vm.unrealizedPnl, specifier: "%.2f")")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .contentTransition(.numericText())
+
+                Text("(\(AD.pnlSign(vm.unrealizedPnlPct))\(vm.unrealizedPnlPct, specifier: "%.2f")%)")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AD.pnlColor(vm.unrealizedPnl).opacity(0.8))
+
+                Text("unrealized")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(AD.textTertiary)
+            }
+            .foregroundStyle(AD.pnlColor(vm.unrealizedPnl))
 
             // Quick stats
             HStack(spacing: AD.spacingXL) {

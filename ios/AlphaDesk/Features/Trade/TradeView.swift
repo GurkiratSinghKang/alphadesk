@@ -7,11 +7,11 @@ import Charts
 final class TradeViewModel {
     var searchText = ""
     var isSearching = false
-    var searchResults: [String] = []
+    var searchResults: [SymbolSearchResult] = []
 
     // Current quote
     var symbol = "AAPL"
-    var companyName = "Apple Inc."
+    var companyName = "AAPL"
     var price: Double = 0
     var change: Double = 0
     var changePercent: Double = 0
@@ -123,21 +123,24 @@ final class TradeViewModel {
                 let results: [SymbolSearchResult] = try await APIClient.shared.request(
                     .searchSymbols(query: searchText)
                 )
-                searchResults = results.map(\.symbol)
+                searchResults = results
             } catch {
                 // Fallback: local filter
                 let allSymbols = ["AAPL", "AMZN", "GOOGL", "GOOG", "META", "MSFT", "NVDA", "TSLA",
                                   "AMD", "NFLX", "CRM", "ADBE", "INTC", "PYPL", "SQ", "SHOP"]
                 let query = searchText.uppercased()
-                searchResults = allSymbols.filter { $0.contains(query) }
+                searchResults = allSymbols.filter { $0.contains(query) }.map {
+                    SymbolSearchResult(symbol: $0, name: nil, type: nil)
+                }
             }
             isSearching = false
         }
     }
 
     @MainActor
-    func selectSymbol(_ sym: String) {
-        symbol = sym
+    func selectSymbol(_ result: SymbolSearchResult) {
+        symbol = result.symbol
+        companyName = result.name ?? result.symbol
         searchText = ""
         searchResults = []
         Task { await refresh() }
@@ -287,7 +290,8 @@ struct TradeView: View {
             .sensoryFeedback(.success, trigger: vm.showConfirmation)
             .task {
                 if let sym = initialSymbol {
-                    vm.selectSymbol(sym)
+                    vm.symbol = sym
+                    vm.companyName = sym
                 }
                 if let side = initialSide {
                     vm.orderSide = side
@@ -384,7 +388,7 @@ struct TradeView: View {
             // Search Results Dropdown
             if !vm.searchResults.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(vm.searchResults, id: \.self) { result in
+                    ForEach(vm.searchResults) { result in
                         Button {
                             vm.selectSymbol(result)
                             isSearchFocused = false
@@ -393,9 +397,17 @@ struct TradeView: View {
                                 Image(systemName: "magnifyingglass")
                                     .font(.system(size: 12))
                                     .foregroundStyle(AD.textTertiary)
-                                Text(result)
-                                    .font(.system(size: 15, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(AD.textPrimary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(result.symbol)
+                                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(AD.textPrimary)
+                                    if let name = result.name {
+                                        Text(name)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(AD.textTertiary)
+                                            .lineLimit(1)
+                                    }
+                                }
                                 Spacer()
                                 Image(systemName: "arrow.up.left")
                                     .font(.system(size: 12))
@@ -405,7 +417,7 @@ struct TradeView: View {
                             .padding(.vertical, 10)
                         }
 
-                        if result != vm.searchResults.last {
+                        if result.id != vm.searchResults.last?.id {
                             Divider()
                                 .background(AD.border)
                         }

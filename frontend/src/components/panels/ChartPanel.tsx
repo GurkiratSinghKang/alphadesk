@@ -27,7 +27,7 @@ import {
   formatNumber,
   getChangeTextClass,
 } from "@/lib/utils";
-import { getBars, getPositions, getPipelinePositions, createPriceAlert } from "@/lib/api";
+import { getBars, getPositions, getPipelinePositions, createPriceAlert, getPriceAlerts, deletePriceAlert, type PriceAlert } from "@/lib/api";
 import type { TimeFrame, ChartType, Indicator, OHLCVBar, QuickOrderEvent } from "@/types";
 
 // ─── Timeframes ──────────────────────────────────────────────
@@ -97,6 +97,8 @@ export function ChartPanel() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState(0);
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
+  const [symbolAlerts, setSymbolAlerts] = useState<PriceAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
   const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib">("none");
   const [drawings, setDrawings] = useState<Array<{
     type: "hline" | "trendline" | "fib";
@@ -107,6 +109,15 @@ export function ChartPanel() {
     endTime?: number;
     color?: string;
   }>>([]);
+
+  // Trendline drawing: two-click state
+  const [trendlineStart, setTrendlineStart] = useState<{ x: number; y: number; price: number; time: number } | null>(null);
+
+  // Trendline SVG lines stored separately (pixel coords + prices for labels)
+  const [trendlines, setTrendlines] = useState<Array<{
+    startX: number; startY: number; endX: number; endY: number;
+    startPrice: number; endPrice: number;
+  }>>([]);;
 
   const quote = quotes[selectedSymbol];
 
@@ -189,8 +200,18 @@ export function ChartPanel() {
     );
   };
 
-  const addHLine = (price: number) => {
-    setDrawings((prev) => [...prev, { type: "hline", price, color: "#3b82f6" }]);
+  const addHLine = (price: number, color = "#3b82f6") => {
+    setDrawings((prev) => [...prev, { type: "hline", price, color }]);
+  };
+
+  const addFibLines = (high: number, low: number) => {
+    const range = high - low;
+    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+    const colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ef4444"];
+    levels.forEach((level, i) => {
+      const price = high - range * level;
+      addHLine(Math.round(price * 100) / 100, colors[i]);
+    });
   };
 
   const drawingPriceLines = drawings
@@ -211,6 +232,19 @@ export function ChartPanel() {
     }
     prevQuoteRef.current = { last: quote.last, volume: quote.volume };
   }, [quote]);
+
+  // Fetch alerts for current symbol when popover opens
+  const refreshAlerts = useCallback(() => {
+    setAlertsLoading(true);
+    getPriceAlerts(selectedSymbol)
+      .then(setSymbolAlerts)
+      .catch(() => setSymbolAlerts([]))
+      .finally(() => setAlertsLoading(false));
+  }, [selectedSymbol]);
+
+  useEffect(() => {
+    if (alertOpen) refreshAlerts();
+  }, [alertOpen, refreshAlerts]);
 
   // BUG #25: Listen for timeframe change events dispatched by keyboard shortcuts
   useEffect(() => {
@@ -417,10 +451,10 @@ export function ChartPanel() {
           >
             Fib
           </button>
-          {drawings.length > 0 && (
+          {(drawings.length > 0 || trendlines.length > 0) && (
             <button
               aria-label="Clear all drawings"
-              onClick={() => setDrawings([])}
+              onClick={() => { setDrawings([]); setTrendlines([]); setTrendlineStart(null); }}
               className="h-6 px-1.5 rounded text-[10px] text-muted-foreground hover:text-[var(--loss)]"
               title="Clear all drawings"
             >
@@ -432,7 +466,7 @@ export function ChartPanel() {
 
       {/* Chart — BUG #11: pass chartType, BUG #12: pass indicators */}
       <div className="flex-1 min-h-0 relative">
-        <div className={cn("absolute inset-0", usingDemoData && !barsLoading && "opacity-40")}>
+        <div className="absolute inset-0">
         <TradingChart
           ref={chartHandleRef}
           data={displayData}
@@ -443,6 +477,15 @@ export function ChartPanel() {
           drawingPriceLines={drawingPriceLines}
         />
         </div>
+
+        {/* Demo data overlay — shown when API bars fail to load */}
+        {usingDemoData && !barsLoading && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[4]">
+            <span className="text-sm text-muted-foreground bg-[var(--surface)]/80 px-3 py-1.5 rounded-md border border-border">
+              Historical data unavailable
+            </span>
+          </div>
+        )}
 
         {/* Drawing overlay — captures clicks when a drawing mode is active */}
         {drawingMode === "hline" && (

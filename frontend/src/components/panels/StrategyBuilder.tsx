@@ -142,11 +142,12 @@ export function StrategyBuilder() {
                 <div className="flex-1">
                   <p className="text-xs text-foreground">{rule.condition}</p>
                   {rule.parsed && (
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 items-center">
                       {rule.parsed.action && <span className="text-[9px] rounded bg-[var(--profit)]/20 text-[var(--profit)] px-1.5 py-0.5 font-bold">{rule.parsed.action}</span>}
                       {rule.parsed.indicator && <span className="text-[9px] rounded bg-primary/20 text-primary px-1.5 py-0.5">{rule.parsed.indicator}</span>}
                       {rule.parsed.operator && <span className="text-[9px] rounded bg-[var(--panel)] text-muted-foreground px-1.5 py-0.5">{rule.parsed.operator}</span>}
                       {rule.parsed.value && <span className="text-[9px] rounded bg-[var(--panel)] text-foreground px-1.5 py-0.5 tabular-nums">{rule.parsed.value}</span>}
+                      <span className="text-[8px] text-muted-foreground italic ml-1">NLP parsing</span>
                     </div>
                   )}
                 </div>
@@ -164,7 +165,7 @@ export function StrategyBuilder() {
         <div className="flex gap-2">
           <Button onClick={handleAiRefine} variant="outline" size="sm" className="text-xs gap-1.5" disabled={aiThinking}>
             {aiThinking ? <Sparkles className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
-            {aiThinking ? "Analyzing..." : "AI Refine"}
+            {aiThinking ? "Analyzing..." : "Refine"}
           </Button>
           <Button size="sm" className="text-xs gap-1.5">
             <Play className="h-3 w-3" /> Backtest
