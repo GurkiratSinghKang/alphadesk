@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 // MARK: - View Model
 
@@ -41,6 +42,11 @@ final class TradeViewModel {
     var showConfirmation = false
     var orderError: String?
 
+    // Crosshair state
+    var crosshairDate: Date?
+    var crosshairPrice: Double?
+    private var lastCrosshairIndex: Int?
+
     // Loading states
     var isLoading = true
     var error: String?
@@ -73,13 +79,31 @@ final class TradeViewModel {
         return price > 0
     }
 
+    func clearCrosshair() {
+        crosshairDate = nil
+        crosshairPrice = nil
+        lastCrosshairIndex = nil
+    }
+
+    func updateCrosshair(date: Date, price: Double, index: Int) {
+        crosshairDate = date
+        crosshairPrice = price
+        if index != lastCrosshairIndex {
+            lastCrosshairIndex = index
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+    }
+
     @MainActor
     func refresh() async {
         isLoading = priceHistory.isEmpty
         error = nil
         await fetchQuote()
         await fetchBars()
-        isLoading = false
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isLoading = false
+        }
     }
 
     @MainActor
@@ -573,7 +597,8 @@ struct TradeView: View {
                     Text(vm.price, format: .currency(code: "USD"))
                         .font(.system(size: 28, weight: .bold, design: .monospaced))
                         .foregroundStyle(AD.textPrimary)
-                        .contentTransition(.numericText())
+                        .contentTransition(.numericText(value: vm.price))
+                        .animation(.spring(duration: 0.3), value: vm.price)
 
                     HStack(spacing: 4) {
                         Image(systemName: vm.change >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -618,17 +643,35 @@ struct TradeView: View {
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: AD.spacingSM) {
             HStack {
-                Text("Price")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AD.textPrimary)
+                if let crosshairPrice = vm.crosshairPrice {
+                    Text(crosshairPrice, format: .currency(code: "USD"))
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AD.textPrimary)
+                        .contentTransition(.numericText(value: crosshairPrice))
+                        .animation(.spring(duration: 0.2), value: crosshairPrice)
+                } else {
+                    Text("Price")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AD.textPrimary)
+                }
                 Spacer()
-                Text("30D")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AD.textTertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(AD.surfaceElevated)
-                    .clipShape(Capsule())
+                if let crosshairDate = vm.crosshairDate {
+                    Text(crosshairDate, format: .dateTime.month(.abbreviated).day())
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(AD.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AD.accentDim)
+                        .clipShape(Capsule())
+                } else {
+                    Text("30D")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AD.textTertiary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AD.surfaceElevated)
+                        .clipShape(Capsule())
+                }
             }
 
             Chart(vm.priceHistory) { point in
@@ -656,6 +699,33 @@ struct TradeView: View {
                 .foregroundStyle(AD.pnlColor(vm.change))
                 .lineStyle(StrokeStyle(lineWidth: 2))
                 .interpolationMethod(.catmullRom)
+
+                if let crosshairDate = vm.crosshairDate,
+                   let crosshairPrice = vm.crosshairPrice {
+                    RuleMark(x: .value("Crosshair", crosshairDate))
+                        .foregroundStyle(AD.textSecondary.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+                    PointMark(
+                        x: .value("Date", crosshairDate),
+                        y: .value("Price", crosshairPrice)
+                    )
+                    .foregroundStyle(AD.accent)
+                    .symbolSize(60)
+                    .annotation(position: .top, spacing: 6) {
+                        Text(crosshairPrice, format: .currency(code: "USD"))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(AD.textPrimary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(AD.surfaceElevated)
+                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .stroke(AD.border, lineWidth: 1)
+                            )
+                    }
+                }
             }
             .chartXAxis(.hidden)
             .chartYAxis {
@@ -673,6 +743,30 @@ struct TradeView: View {
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 160)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle().fill(.clear)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    let originX = geometry[proxy.plotFrame!].origin.x
+                                    let x = value.location.x - originX
+                                    if let date: Date = proxy.value(atX: x) {
+                                        // Find nearest bar
+                                        let sorted = vm.priceHistory.sorted { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+                                        if let nearest = sorted.first,
+                                           let idx = vm.priceHistory.firstIndex(where: { $0.id == nearest.id }) {
+                                            vm.updateCrosshair(date: nearest.date, price: nearest.price, index: idx)
+                                        }
+                                    }
+                                }
+                                .onEnded { _ in
+                                    vm.clearCrosshair()
+                                }
+                        )
+                }
+            }
         }
         .cardStyle()
     }

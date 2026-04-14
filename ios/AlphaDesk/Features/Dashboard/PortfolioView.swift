@@ -37,8 +37,10 @@ final class PortfolioViewModel {
             group.addTask { await self.fetchIndices() }
         }
 
-        isLoading = false
-        isRefreshing = false
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isLoading = false
+            isRefreshing = false
+        }
     }
 
     @MainActor
@@ -222,6 +224,9 @@ struct PortfolioView: View {
     @State private var showChat = false
     @State private var showPerformance = false
     @State private var showNews = false
+    @State private var tradeSymbol: String?
+    @State private var tradeSide: TradeViewModel.OrderSide = .buy
+    @State private var showTradeSheet = false
     @Environment(AuthManager.self) private var authManager
 
     var body: some View {
@@ -306,6 +311,22 @@ struct PortfolioView: View {
             .sheet(isPresented: $showNews) {
                 NewsView()
             }
+            .sheet(isPresented: $showTradeSheet) {
+                if let symbol = tradeSymbol {
+                    NavigationStack {
+                        TradeView(initialSymbol: symbol, initialSide: tradeSide)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    Button { showTradeSheet = false } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 22))
+                                            .foregroundStyle(AD.textTertiary)
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
             .navigationDestination(for: String.self) { symbol in
                 SymbolDetailView(symbol: symbol)
             }
@@ -354,7 +375,8 @@ struct PortfolioView: View {
             Text(vm.equity, format: .currency(code: "USD"))
                 .font(.system(size: 42, weight: .bold, design: .default))
                 .foregroundStyle(AD.textPrimary)
-                .contentTransition(.numericText())
+                .contentTransition(.numericText(value: vm.equity))
+                .animation(.spring(duration: 0.3), value: vm.equity)
 
             HStack(spacing: 6) {
                 Image(systemName: vm.dayPnL >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -362,7 +384,8 @@ struct PortfolioView: View {
 
                 Text("\(AD.pnlSign(vm.dayPnL))\(vm.dayPnL, specifier: "%.2f")")
                     .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: vm.dayPnL))
+                    .animation(.spring(duration: 0.3), value: vm.dayPnL)
 
                 Text("(\(AD.pnlSign(vm.dayPnLPercent))\(vm.dayPnLPercent, specifier: "%.2f")%)")
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
@@ -380,7 +403,8 @@ struct PortfolioView: View {
 
                 Text("\(AD.pnlSign(vm.unrealizedPnl))\(vm.unrealizedPnl, specifier: "%.2f")")
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: vm.unrealizedPnl))
+                    .animation(.spring(duration: 0.3), value: vm.unrealizedPnl)
 
                 Text("(\(AD.pnlSign(vm.unrealizedPnlPct))\(vm.unrealizedPnlPct, specifier: "%.2f")%)")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -550,12 +574,39 @@ struct PortfolioView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AD.spacingSM)
             } else {
-                ForEach(vm.positions) { position in
-                    NavigationLink(value: position.symbol) {
-                        positionRow(position)
+                List {
+                    ForEach(vm.positions) { position in
+                        NavigationLink(value: position.symbol) {
+                            positionRow(position)
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                tradeSymbol = position.symbol
+                                tradeSide = .sell
+                                showTradeSheet = true
+                            } label: {
+                                Label("Sell", systemImage: "arrow.down.circle.fill")
+                            }
+                            .tint(AD.loss)
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                tradeSymbol = position.symbol
+                                tradeSide = .buy
+                                showTradeSheet = true
+                            } label: {
+                                Label("Buy", systemImage: "arrow.up.circle.fill")
+                            }
+                            .tint(AD.profit)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .frame(minHeight: CGFloat(vm.positions.count) * 76)
             }
         }
     }
@@ -607,10 +658,14 @@ struct PortfolioView: View {
                 Text(position.currentPrice, format: .currency(code: "USD"))
                     .font(.system(size: 15, weight: .semibold, design: .monospaced))
                     .foregroundStyle(AD.textPrimary)
+                    .contentTransition(.numericText(value: position.currentPrice))
+                    .animation(.spring(duration: 0.3), value: position.currentPrice)
 
                 Text("\(AD.pnlSign(position.pnl))\(position.pnl, specifier: "%.2f")")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(AD.pnlColor(position.pnl))
+                    .contentTransition(.numericText(value: position.pnl))
+                    .animation(.spring(duration: 0.3), value: position.pnl)
             }
 
             Image(systemName: "chevron.right")

@@ -29,6 +29,7 @@ final class StrategiesListViewModel {
 
         do {
             let apiStrategies: [Strategy] = try await APIClient.shared.request(.strategies)
+            withAnimation(.easeInOut(duration: 0.25)) {
             strategies = apiStrategies.map { s in
                 let status: StrategyListStatus
                 switch s.status {
@@ -48,6 +49,7 @@ final class StrategiesListViewModel {
                     positionsCount: s.activePositionsCount,
                     sparkline: s.sparkline ?? generateSparkline(seed: s.id.hashValue, trend: s.totalReturnPct / 50.0)
                 )
+            }
             }
         } catch {
             self.error = error.localizedDescription
@@ -237,7 +239,7 @@ struct StrategiesListView: View {
                 NavigationLink(value: strategy.id) {
                     strategyCard(strategy)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(StrategyCardButtonStyle())
             }
         }
         .navigationDestination(for: String.self) { id in
@@ -339,6 +341,16 @@ struct StrategiesListView: View {
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartYScale(domain: .automatic(includesZero: false))
+    }
+}
+
+// MARK: - Strategy Card Button Style
+
+struct StrategyCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
     }
 }
 

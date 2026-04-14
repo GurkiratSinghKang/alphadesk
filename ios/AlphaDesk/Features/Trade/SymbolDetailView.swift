@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 // MARK: - View Model
 
@@ -23,6 +24,27 @@ final class SymbolDetailViewModel {
     var selectedTimeframe: Timeframe = .oneDay
     var isLoadingQuote = true
     var isLoadingBars = true
+
+    // Crosshair state
+    var crosshairDate: Date?
+    var crosshairPrice: Double?
+    private var lastCrosshairIndex: Int?
+
+    func clearCrosshair() {
+        crosshairDate = nil
+        crosshairPrice = nil
+        lastCrosshairIndex = nil
+    }
+
+    func updateCrosshair(date: Date, price: Double, index: Int) {
+        crosshairDate = date
+        crosshairPrice = price
+        if index != lastCrosshairIndex {
+            lastCrosshairIndex = index
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+    }
 
     var news: [NewsArticle] = []
 
@@ -221,7 +243,8 @@ struct SymbolDetailView: View {
                 Text(vm.price, format: .currency(code: "USD"))
                     .font(.system(size: 42, weight: .bold, design: .monospaced))
                     .foregroundStyle(AD.textPrimary)
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: vm.price))
+                    .animation(.spring(duration: 0.3), value: vm.price)
 
                 HStack(spacing: 6) {
                     Image(systemName: vm.change >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -229,7 +252,8 @@ struct SymbolDetailView: View {
 
                     Text("\(AD.pnlSign(vm.change))\(vm.change, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .contentTransition(.numericText())
+                        .contentTransition(.numericText(value: vm.change))
+                        .animation(.spring(duration: 0.3), value: vm.change)
 
                     Text("(\(AD.pnlSign(vm.changePct))\(vm.changePct, specifier: "%.2f")%)")
                         .font(.system(size: 14, weight: .medium, design: .monospaced))
@@ -269,6 +293,25 @@ struct SymbolDetailView: View {
             .background(AD.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM + 3, style: .continuous))
 
+            // Crosshair info
+            if let crosshairPrice = vm.crosshairPrice {
+                HStack {
+                    Text(crosshairPrice, format: .currency(code: "USD"))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AD.textPrimary)
+                        .contentTransition(.numericText(value: crosshairPrice))
+                        .animation(.spring(duration: 0.2), value: crosshairPrice)
+                    Spacer()
+                    if let crosshairDate = vm.crosshairDate {
+                        Text(crosshairDate, format: .dateTime.month(.abbreviated).day().hour(.defaultDigits(amPM: .abbreviated)).minute())
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(AD.accent)
+                    }
+                }
+                .padding(.horizontal, 2)
+                .transition(.opacity)
+            }
+
             // Chart
             if vm.isLoadingBars && vm.bars.isEmpty {
                 RoundedRectangle(cornerRadius: AD.radiusSM)
@@ -301,6 +344,20 @@ struct SymbolDetailView: View {
                     .foregroundStyle(AD.pnlColor(vm.change))
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     .interpolationMethod(.catmullRom)
+
+                    if let crosshairDate = vm.crosshairDate,
+                       let crosshairPrice = vm.crosshairPrice {
+                        RuleMark(x: .value("Crosshair", crosshairDate))
+                            .foregroundStyle(AD.textSecondary.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+                        PointMark(
+                            x: .value("Time", crosshairDate),
+                            y: .value("Close", crosshairPrice)
+                        )
+                        .foregroundStyle(AD.accent)
+                        .symbolSize(60)
+                    }
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -318,6 +375,29 @@ struct SymbolDetailView: View {
                 }
                 .chartYScale(domain: .automatic(includesZero: false))
                 .frame(height: 200)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear)
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let originX = geometry[proxy.plotFrame!].origin.x
+                                        let x = value.location.x - originX
+                                        if let date: Date = proxy.value(atX: x) {
+                                            let sorted = vm.bars.sorted { abs($0.timestamp.timeIntervalSince(date)) < abs($1.timestamp.timeIntervalSince(date)) }
+                                            if let nearest = sorted.first,
+                                               let idx = vm.bars.firstIndex(where: { $0.id == nearest.id }) {
+                                                vm.updateCrosshair(date: nearest.timestamp, price: nearest.close, index: idx)
+                                            }
+                                        }
+                                    }
+                                    .onEnded { _ in
+                                        vm.clearCrosshair()
+                                    }
+                            )
+                    }
+                }
             } else {
                 VStack {
                     Image(systemName: "chart.line.downtrend.xyaxis")
