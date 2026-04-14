@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter
@@ -353,4 +353,58 @@ async def get_regime() -> RegimeResponse:
         regime=MarketRegime(**_DEMO_REGIME),
         as_of=datetime.now(timezone.utc),
         is_demo=True,
+    )
+
+
+class IndexSparklinesResponse(BaseModel):
+    sparklines: dict[str, list[float]]
+    as_of: datetime
+
+
+@router.get("/indices/sparklines", response_model=IndexSparklinesResponse)
+async def get_index_sparklines() -> IndexSparklinesResponse:
+    """Fetch 20-day closing prices for major index ETFs (SPY, QQQ, IWM, DIA).
+
+    Used by the dashboard to render mini sparkline charts next to each index.
+    """
+    import httpx
+    from core.config import settings
+
+    symbols = ["SPY", "QQQ", "IWM", "DIA"]
+    sparklines: dict[str, list[float]] = {}
+
+    try:
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        # Go back ~30 calendar days to ensure we get 20 trading days
+        start_date = (datetime.now(timezone.utc) - timedelta(days=35)).strftime("%Y-%m-%dT00:00:00Z")
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            for sym in symbols:
+                try:
+                    resp = await client.get(
+                        f"https://data.alpaca.markets/v2/stocks/{sym}/bars"
+                        f"?timeframe=1Day&start={start_date}&limit=25&sort=asc",
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        bars = resp.json().get("bars", [])
+                        closes = [b["c"] for b in bars]
+                        # Take the last 20
+                        sparklines[sym] = closes[-20:] if len(closes) > 20 else closes
+                    else:
+                        sparklines[sym] = []
+                except Exception:
+                    logger.warning("Failed to fetch bars for %s", sym, exc_info=True)
+                    sparklines[sym] = []
+    except Exception:
+        logger.warning("Failed to fetch index sparkline data from Alpaca", exc_info=True)
+        for sym in symbols:
+            sparklines.setdefault(sym, [])
+
+    return IndexSparklinesResponse(
+        sparklines=sparklines,
+        as_of=datetime.now(timezone.utc),
     )

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -79,5 +79,15 @@ export function usePnlCalendar(month: number, year: number) {
     queryFn: () => getPnlCalendar(month, year),
     staleTime: 5 * 60 * 1000,
     retry: 1,
+  });
+}
+
+export function useIndexSparklines() {
+  return useQuery({
+    queryKey: ['indexSparklines'],
+    queryFn: getIndexSparklines,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    retry: 2,
   });
 }

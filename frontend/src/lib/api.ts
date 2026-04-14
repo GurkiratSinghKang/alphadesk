@@ -69,8 +69,14 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 // ─── Strategies ─────────────────────────────────────────────
 
 export function getStrategies() {
-  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; total_return_pct: number; win_rate: number; active_positions_count: number }[]>(
+  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; total_return_pct: number; win_rate: number; active_positions_count: number; sparkline: number[] }[]>(
     `/api/v1/strategies/`
+  );
+}
+
+export function getIndexSparklines() {
+  return apiFetch<{ sparklines: Record<string, number[]>; as_of: string }>(
+    `/api/v1/market-overview/indices/sparklines`
   );
 }
 

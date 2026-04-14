@@ -5,7 +5,7 @@ import { Activity, Target } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Sparkline, generateSparkData } from "@/components/dashboard/Sparkline";
+import { Sparkline } from "@/components/dashboard/Sparkline";
 import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
 
 export { STRATEGY_META, STRATEGY_ORDER };
@@ -22,6 +22,7 @@ export interface StrategyData {
   winRate: number;
   invested: number;
   icon: typeof Activity;
+  sparkline: number[];
 }
 
 // ─── Strategy Card Component ─────────────────────────────────
@@ -105,7 +106,7 @@ const StrategyCard = React.memo(function StrategyCard({
         {(Math.abs(strategy.returnPct) > 0.01 || strategy.positions > 0) ? (
           <div className="mt-2 -mx-1">
             <Sparkline
-              data={generateSparkData(strategy.id.length * 31 + strategy.id.charCodeAt(0), 30)}
+              data={strategy.sparkline ?? []}
               color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
               width={140}
               height={28}

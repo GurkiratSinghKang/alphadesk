@@ -55,6 +55,7 @@ class StrategySummary(BaseModel):
     sharpe_ratio: float
     win_rate: float
     active_positions_count: int
+    sparkline: list[float] = []
 
 
 class ToggleResponse(BaseModel):
@@ -572,6 +573,12 @@ async def list_strategies() -> list[StrategySummary]:
                         total_return = round(pnl_dollars / invested * 100, 1)
                 break
 
+        # Build compact sparkline (last 20 equity curve points)
+        sparkline_data: list[float] = []
+        if invested > 0:
+            curve = _generate_equity_curve(sid, max(invested, 1), total_return)
+            sparkline_data = [p["value"] for p in curve[-20:]] if curve else []
+
         summaries.append(StrategySummary(
             id=sid,
             name=d["name"],
@@ -582,6 +589,7 @@ async def list_strategies() -> list[StrategySummary]:
             sharpe_ratio=0,
             win_rate=win_rate,
             active_positions_count=active_count,
+            sparkline=sparkline_data,
         ))
     return summaries
 

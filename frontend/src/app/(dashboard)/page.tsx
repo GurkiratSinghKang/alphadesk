@@ -13,7 +13,7 @@ import {
   getPortfolioPerformance,
   type PipelineStatus,
 } from "@/lib/api";
-import { useRegime, useIndices, useStrategies, usePortfolioSummary } from "@/hooks/useQueries";
+import { useRegime, useIndices, useStrategies, usePortfolioSummary, useIndexSparklines } from "@/hooks/useQueries";
 
 // generateSparkData removed — using flat arrays instead of fake random walks
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
@@ -86,6 +86,7 @@ function CommandCenter() {
   const { data: indicesData } = useIndices();
   const { data: strategiesData } = useStrategies();
   const { data: portfolioSummaryData } = usePortfolioSummary();
+  const { data: indexSparklinesData } = useIndexSparklines();
 
   // Sync React Query portfolio data into Zustand so StatusStrip/ProfileMenu stay current
   useEffect(() => {
@@ -118,6 +119,7 @@ function CommandCenter() {
           winRate: apiMatch?.win_rate ?? 0,
           invested: apiMatch?.invested_amount ?? 0,
           icon: meta?.icon ?? Activity,
+          sparkline: apiMatch?.sparkline ?? [],
         } as StrategyData;
       });
     }
@@ -131,6 +133,7 @@ function CommandCenter() {
       winRate: 0,
       invested: 0,
       icon: STRATEGY_META[id]?.icon ?? Activity,
+      sparkline: [],
     }));
   }, [strategiesData]);
 
@@ -286,15 +289,15 @@ function CommandCenter() {
   const dayPnlPct = Number.isFinite(activeSummary.dayPnlPct) ? activeSummary.dayPnlPct : 0;
   const isDemo = !!activeSummary.is_demo;
 
-  // Sparkline data — empty arrays since we don't have real intraday index data.
-  // The Sparkline component returns null for flat/empty data, avoiding misleading flat lines.
+  // Sparkline data — 20-day closing prices from the indices sparklines endpoint.
   const sparkData = useMemo(() => {
+    const apiSparklines = indexSparklinesData?.sparklines ?? {};
     const result: Record<string, number[]> = {};
     for (const idx of indices) {
-      result[idx.symbol] = [];
+      result[idx.symbol] = apiSparklines[idx.symbol] ?? [];
     }
     return result;
-  }, [indices]);
+  }, [indices, indexSparklinesData]);
 
   // ─── Render ────────────────────────────────────────────────
   // Show the dashboard immediately using React Query data.
