@@ -70,7 +70,10 @@ export function TopBar() {
           </SheetContent>
         </Sheet>
 
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => router.push("/")}
+        >
           <Zap className="h-5 w-5 text-primary" />
           <span className="text-base font-bold tracking-tight text-foreground">AlphaDesk</span>
         </div>

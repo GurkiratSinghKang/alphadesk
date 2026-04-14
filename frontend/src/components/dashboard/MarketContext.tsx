@@ -21,6 +21,9 @@ export interface MarketIndex {
 export interface SectorData {
   sector: string;
   change_pct: number;
+  ytd_pct?: number;
+  leader?: string;
+  leader_change_pct?: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -109,18 +112,16 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
 
         {/* Sector Treemap */}
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Sector Performance
-          </h3>
           <div className="w-full">
-            <SectorTreemap sectors={sectors} height={120} isDemo={isDemo} />
+            <SectorTreemap sectors={sectors} height={160} isDemo={isDemo} />
           </div>
         </div>
 
-        {/* Headlines or Account Overview */}
-        <div>
-          {news.length > 0 ? (
-            <>
+        {/* Headlines + Allocation Donut */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          {/* Headlines */}
+          {news.length > 0 && (
+            <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Headlines
               </h3>
@@ -169,8 +170,11 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                   );
                 })}
               </div>
-            </>
-          ) : (
+            </div>
+          )}
+
+          {/* Allocation Donut — always visible */}
+          <div>
             <AllocationDonut
               cash={summary.cash}
               invested={summary.totalMarketValue}
@@ -180,7 +184,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
               realizedPnlToday={summary.realizedPnlToday}
               isDemo={isDemo}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>

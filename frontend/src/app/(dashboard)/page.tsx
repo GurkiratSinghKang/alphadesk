@@ -84,7 +84,7 @@ function CommandCenter() {
   }, [portfolioSummaryData]);
 
   // ─── State (for data without hooks) ───────────────────────
-  const [sectors, setSectors] = useState<{ sector: string; change_pct: number }[]>([]);
+  const [sectors, setSectors] = useState<{ sector: string; change_pct: number; ytd_pct?: number; leader?: string; leader_change_pct?: number }[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
@@ -223,8 +223,8 @@ function CommandCenter() {
         }
       }
 
-      // Build feed
-      const feed = buildFeedItems(pStatus, pLog, regime, newsItems);
+      // Build feed (news excluded — shown in MarketContext instead)
+      const feed = buildFeedItems(pStatus, pLog, regime);
       setFeedItems(feed);
       } catch (err) {
         console.error("[Dashboard] Data processing error:", err);

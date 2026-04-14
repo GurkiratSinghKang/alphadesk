@@ -7,7 +7,6 @@ import {
   BarChart3,
   AlertTriangle,
   Info,
-  Newspaper,
   Radio,
   RefreshCw,
 } from "lucide-react";
@@ -21,7 +20,7 @@ import type { PipelineStatus } from "@/lib/api";
 export interface FeedItem {
   id: string;
   time: Date;
-  type: "pipeline" | "trade" | "position" | "news" | "regime" | "alert";
+  type: "pipeline" | "trade" | "position" | "regime" | "alert";
   severity: "success" | "danger" | "info" | "warning";
   title: string;
   detail?: string;
@@ -42,13 +41,14 @@ export interface NewsItem {
   url: string;
 }
 
+const MAX_FEED_ITEMS = 10;
+
 // ─── Constants ───────────────────────────────────────────────
 
 const FEED_ICONS: Record<FeedItem["type"], typeof Activity> = {
   pipeline: RefreshCw,
   trade: TrendingUp,
   position: BarChart3,
-  news: Newspaper,
   regime: Radio,
   alert: AlertTriangle,
 };
@@ -70,11 +70,25 @@ const SEVERITY_BORDER: Record<FeedItem["severity"], string> = {
 // ─── Helpers ─────────────────────────────────────────────────
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  const time = date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
+
+  if (isToday) return time;
+
+  const dateStr = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  return `${dateStr} ${time}`;
 }
 
 // ─── Feed Builder ────────────────────────────────────────────
@@ -83,7 +97,6 @@ export function buildFeedItems(
   pipelineStatus: PipelineStatus | null,
   pipelineLog: Record<string, any> | null,
   regime: RegimeData | null,
-  news: NewsItem[],
 ): FeedItem[] {
   const items: FeedItem[] = [];
   const now = new Date();
@@ -211,23 +224,9 @@ export function buildFeedItems(
     });
   }
 
-  // News headlines
-  for (let i = 0; i < Math.min(news.length, 3); i++) {
-    const article = news[i];
-    const pubDate = article.published_at ? new Date(article.published_at) : now;
-    items.push({
-      id: `news-${i}`,
-      time: pubDate,
-      type: "news",
-      severity: "info",
-      title: article.title,
-      detail: article.source,
-    });
-  }
-
-  // Sort by time descending
+  // Sort by time descending and limit to most recent items
   items.sort((a, b) => b.time.getTime() - a.time.getTime());
-  return items;
+  return items.slice(0, MAX_FEED_ITEMS);
 }
 
 // ─── Feed Item Component ─────────────────────────────────────

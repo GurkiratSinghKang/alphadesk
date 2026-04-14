@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar } from "lucide-react";
+import { Calendar, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CalendarEvent {
@@ -74,8 +74,22 @@ const impactDot = {
   low: "bg-[var(--primary)]",
 };
 
+const EVENT_DESCRIPTIONS: Record<string, string> = {
+  "FOMC Meeting Minutes": "Federal Reserve policy decisions on interest rates. High impact on bonds, USD, and equities.",
+  "Non-Farm Payrolls": "Monthly jobs report measuring employment changes excluding farm workers. Strong numbers signal economic strength and hawkish Fed expectations. High impact on all markets.",
+  "CPI (YoY)": "Consumer Price Index measures year-over-year inflation. Above forecast readings increase rate hike expectations, pressuring equities and strengthening USD.",
+  "Initial Jobless Claims": "Weekly count of new unemployment insurance claims. Rising claims signal labor market weakness. Watched as a leading recession indicator.",
+  "Retail Sales (MoM)": "Monthly change in consumer spending at retail outlets. Reflects consumer confidence and spending trends. Stronger data supports growth expectations.",
+  "Consumer Confidence": "Survey measuring household optimism about the economy. Higher confidence correlates with increased consumer spending and economic growth.",
+  "PMI Manufacturing": "Purchasing Managers Index for manufacturing sector. Readings above 50 indicate expansion. A leading indicator of industrial activity and GDP.",
+  "GDP (QoQ)": "Gross Domestic Product measures overall economic output quarter-over-quarter. The broadest measure of economic health. Major market mover.",
+  "Core PCE Price Index": "The Fed's preferred inflation gauge, excluding food and energy. Directly influences monetary policy decisions. Critical for rate expectations.",
+  "Housing Starts": "Number of new residential construction projects begun. Indicator of housing market health and broader economic activity.",
+};
+
 export function EconomicCalendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   useEffect(() => {
     setEvents(generateUpcomingEvents());
@@ -89,25 +103,40 @@ export function EconomicCalendar() {
           <h2 className="text-sm font-semibold text-foreground">Economic Calendar</h2>
         </div>
       </div>
-      <div className="divide-y divide-border opacity-50">
-        {events.map((evt, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-2">
-            <span className={cn("h-2 w-2 rounded-full shrink-0", impactDot[evt.impact])} />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-foreground truncate">{evt.event}</p>
-              <p className="text-[10px] text-muted-foreground">{evt.date} · {evt.time}</p>
-            </div>
-            {evt.forecast && (
-              <div className="text-right shrink-0">
-                <p className="text-[10px] text-muted-foreground">Fcst: {evt.forecast}</p>
-                {evt.previous && <p className="text-[10px] text-muted-foreground">Prev: {evt.previous}</p>}
+      <div className="divide-y divide-border">
+        {events.map((evt, i) => {
+          const isExpanded = expandedIdx === i;
+          const description = EVENT_DESCRIPTIONS[evt.event];
+          return (
+            <div key={i}>
+              <div
+                className="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors hover:bg-accent/30"
+                onClick={() => setExpandedIdx(isExpanded ? null : i)}
+              >
+                <span className={cn("h-2 w-2 rounded-full shrink-0", impactDot[evt.impact])} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{evt.event}</p>
+                  <p className="text-[10px] text-muted-foreground">{evt.date} · {evt.time}</p>
+                </div>
+                {evt.forecast && (
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] text-muted-foreground">Fcst: {evt.forecast}</p>
+                    {evt.previous && <p className="text-[10px] text-muted-foreground">Prev: {evt.previous}</p>}
+                  </div>
+                )}
+                <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded", impactColors[evt.impact])}>
+                  {evt.impact}
+                </span>
+                <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
               </div>
-            )}
-            <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded", impactColors[evt.impact])}>
-              {evt.impact}
-            </span>
-          </div>
-        ))}
+              {isExpanded && description && (
+                <div className="px-4 pb-3 pt-1 pl-9">
+                  <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,10 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { usePortfolioStore } from "@/stores/portfolio";
+import { useMarketStore } from "@/stores/market";
 
 export function PositionsSummary() {
+  const router = useRouter();
   const positions = usePortfolioStore((s) => s.positions);
 
   if (positions.length === 0) {
@@ -38,7 +41,14 @@ export function PositionsSummary() {
             : 0;
           const positive = pos.unrealizedPnl >= 0;
           return (
-            <div key={pos.symbol} className="flex items-center justify-between gap-4 px-4 py-2.5">
+            <div
+              key={pos.symbol}
+              className="flex items-center justify-between gap-4 px-4 py-2.5 cursor-pointer hover:bg-accent/30 transition-colors"
+              onClick={() => {
+                useMarketStore.getState().setSelectedSymbol(pos.symbol);
+                router.push("/trade");
+              }}
+            >
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-sm font-semibold text-foreground">{pos.symbol}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{pos.quantity} shares</span>
