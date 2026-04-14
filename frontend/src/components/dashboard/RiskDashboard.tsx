@@ -19,15 +19,17 @@ interface RiskDashboardProps {
 
 // ─── Regime mapping ─────────────────────────────────────────
 
-function getRegimeDisplay(label: string): {
+function getRegimeDisplay(_label: string, vixLevel?: number): {
   text: string;
   indicator: string;
   color: string;
   bgColor: string;
   borderColor: string;
 } {
-  const normalized = label.toLowerCase();
-  if (normalized.includes("crisis")) {
+  // HIGH-10: Use VIX thresholds for regime label instead of text matching
+  const vix = vixLevel ?? 15;
+
+  if (vix > 35) {
     return {
       text: "Defensive",
       indicator: "\u26ab",
@@ -36,7 +38,7 @@ function getRegimeDisplay(label: string): {
       borderColor: "border-[var(--neutral)]/30",
     };
   }
-  if (normalized.includes("bear")) {
+  if (vix >= 25) {
     return {
       text: "Risk Off",
       indicator: "\ud83d\udd34",
@@ -45,7 +47,7 @@ function getRegimeDisplay(label: string): {
       borderColor: "border-[var(--loss)]/30",
     };
   }
-  if (normalized.includes("high") || normalized.includes("volatile")) {
+  if (vix >= 18) {
     return {
       text: "Caution",
       indicator: "\ud83d\udfe1",
@@ -54,7 +56,7 @@ function getRegimeDisplay(label: string): {
       borderColor: "border-amber-500/30",
     };
   }
-  // Default: bull / low vol
+  // VIX < 18: Risk On
   return {
     text: "Risk On",
     indicator: "\ud83d\udfe2",
@@ -131,7 +133,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
   }, [positions, summary, regime]);
 
   const regimeDisplay = regime
-    ? getRegimeDisplay(regime.label)
+    ? getRegimeDisplay(regime.label, regime.vix_level)
     : { text: "Unknown", indicator: "\u26aa", color: "text-muted-foreground", bgColor: "bg-muted/10", borderColor: "border-border" };
 
   return (

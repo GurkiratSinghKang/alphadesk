@@ -243,6 +243,12 @@ export function OptionsPanel() {
   const chain = apiChain ?? generatedChain;
   const usingGeneratedChain = apiChain === null && !chainLoading;
 
+  // HIGH-2: Auto-scroll to ATM strike when chain data changes
+  useEffect(() => {
+    const atm = document.querySelector('[aria-current="true"]');
+    if (atm) atm.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [chain]);
+
   // Fetch IV data via React Query with fallback
   const { data: rawIvData } = useIVData(selectedSymbol);
   const ivRank = rawIvData?.ivRank ?? null;

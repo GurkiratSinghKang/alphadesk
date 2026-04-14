@@ -920,8 +920,8 @@ export function AnalysisPanel() {
         onValueChange={(v) => setActiveTab("right", v)}
         className="flex flex-col h-full"
       >
-        <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-hidden border border-[#2a2a3e]">
+        <div className="flex items-center justify-between mx-2 mt-2 shrink-0 relative z-20">
+          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-hidden border border-[#2a2a3e] relative z-20">
             <TabsTrigger value="technical" className="text-[10px] h-6 px-1.5 gap-0.5">
               <Activity className="h-3 w-3" /> Tech
             </TabsTrigger>

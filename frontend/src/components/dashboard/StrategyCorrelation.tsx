@@ -34,20 +34,26 @@ function toReturns(sparkline: number[]): number[] {
   return returns;
 }
 
-/** Interpolate from blue (-1) through white (0) to red (+1) */
+/** Interpolate correlation value to muted professional color
+ *  -1 = muted blue hsl(220, 60%, 45%)
+ *   0 = dark gray   hsl(0, 0%, 25%)
+ *  +1 = muted red   hsl(0, 60%, 45%)
+ */
 function correlationColor(r: number): string {
   const clamped = Math.max(-1, Math.min(1, r));
   if (clamped >= 0) {
-    // White to red
-    const g = Math.round(255 * (1 - clamped));
-    const b = Math.round(255 * (1 - clamped));
-    return `rgb(255, ${g}, ${b})`;
+    // Dark gray to muted red
+    const hue = 0;
+    const sat = 60 * clamped;            // 0% at 0 -> 60% at +1
+    const light = 25 + 20 * clamped;     // 25% at 0 -> 45% at +1
+    return `hsl(${hue}, ${sat}%, ${light}%)`;
   } else {
-    // White to blue
+    // Dark gray to muted blue
     const abs = Math.abs(clamped);
-    const r2 = Math.round(255 * (1 - abs));
-    const g = Math.round(255 * (1 - abs));
-    return `rgb(${r2}, ${g}, 255)`;
+    const hue = 220;
+    const sat = 60 * abs;                // 0% at 0 -> 60% at -1
+    const light = 25 + 20 * abs;         // 25% at 0 -> 45% at -1
+    return `hsl(${hue}, ${sat}%, ${light}%)`;
   }
 }
 
@@ -147,7 +153,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                   style={{ width: cellSize, transform: "rotate(-45deg) translateX(4px)", transformOrigin: "bottom left", whiteSpace: "nowrap" }}
                   title={s.name}
                 >
-                  {s.shortName.slice(0, 6)}
+                  {s.shortName}
                 </div>
               ))}
             </div>

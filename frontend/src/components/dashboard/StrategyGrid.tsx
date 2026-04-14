@@ -59,7 +59,7 @@ const StrategyCard = React.memo(function StrategyCard({
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-foreground" title={strategy.name}>
-                {strategy.shortName}
+                {strategy.name}
               </p>
             </div>
           </div>
