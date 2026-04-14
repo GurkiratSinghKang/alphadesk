@@ -26,11 +26,13 @@ import {
   getStrategyPerformance,
   getStrategyTrades,
   getStrategyAnalytics,
+  getStrategyPositions,
   toggleStrategy,
   getBars,
   type StrategyPerformance,
   type StrategyTrade,
   type StrategyAnalytics,
+  type StrategyPositionDetail,
 } from "@/lib/api";
 import { STRATEGY_CONTENT } from "@/lib/strategy-content";
 import { STRATEGY_META } from "@/lib/strategies";
@@ -221,6 +223,7 @@ export default function StrategyDetailPage() {
   const [perf, setPerf] = useState<StrategyPerformance | null>(null);
   const [trades, setTrades] = useState<StrategyTrade[]>([]);
   const [analytics, setAnalytics] = useState<StrategyAnalytics | null>(null);
+  const [positions, setPositions] = useState<StrategyPositionDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<TimePeriod>("3M");
   const [activeTab, setActiveTab] = useState<"about" | "positions" | "sectors" | "correlation" | "analytics">("about");
@@ -235,14 +238,16 @@ export default function StrategyDetailPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [p, t, a] = await Promise.allSettled([
+    const [p, t, a, pos] = await Promise.allSettled([
       getStrategyPerformance(strategyId),
       getStrategyTrades(strategyId),
       getStrategyAnalytics(strategyId),
+      getStrategyPositions(strategyId),
     ]);
     if (p.status === "fulfilled") setPerf(p.value);
     if (t.status === "fulfilled") setTrades(t.value);
     if (a.status === "fulfilled") setAnalytics(a.value);
+    if (pos.status === "fulfilled") setPositions(pos.value);
     setLoading(false);
   }, [strategyId]);
 
@@ -413,38 +418,86 @@ export default function StrategyDetailPage() {
           {activeTab === "about" && (
             <div className="space-y-6">
               {strategyContent ? (
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <Card className="border-border bg-[var(--surface)]">
-                    <CardContent className="p-5 space-y-4">
-                      <h3 className="font-semibold">Strategy Thesis</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                        {strategyContent.thesis}
-                      </p>
-                      <div className="pt-2">
-                        <p className="text-xs text-muted-foreground font-medium mb-1">Edge</p>
-                        <p className="text-sm text-foreground">{strategyContent.edge}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border bg-[var(--surface)]">
-                    <CardContent className="p-5 space-y-4">
-                      <h3 className="font-semibold">Parameters</h3>
-                      <div className="space-y-2 text-sm">
-                        {Object.entries(strategyContent.parameters || {}).map(([key, val]) => (
-                          <div key={key} className="flex justify-between py-1 border-b border-border/50">
-                            <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</span>
-                            <span className="text-foreground font-medium text-right max-w-[60%]">{val as string}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="pt-2">
-                        <p className="text-xs text-muted-foreground font-medium mb-1">Risk Profile</p>
-                        <Badge variant="outline">{strategyContent.riskProfile?.level}</Badge>
-                        <p className="text-sm text-muted-foreground mt-1">{strategyContent.riskProfile?.description}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                <>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Card className="border-border bg-[var(--surface)]">
+                      <CardContent className="p-5 space-y-4">
+                        <h3 className="font-semibold">Strategy Thesis</h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                          {strategyContent.thesis}
+                        </p>
+                        <div className="pt-2">
+                          <p className="text-xs text-muted-foreground font-medium mb-1">Edge</p>
+                          <p className="text-sm text-foreground">{strategyContent.edge}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border bg-[var(--surface)]">
+                      <CardContent className="p-5 space-y-4">
+                        <h3 className="font-semibold">Parameters</h3>
+                        <div className="space-y-2 text-sm">
+                          {Object.entries(strategyContent.parameters || {}).map(([key, val]) => (
+                            <div key={key} className="flex justify-between py-1 border-b border-border/50">
+                              <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</span>
+                              <span className="text-foreground font-medium text-right max-w-[60%]">{val as string}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="pt-2">
+                          <p className="text-xs text-muted-foreground font-medium mb-1">Risk Profile</p>
+                          <Badge variant="outline">{strategyContent.riskProfile?.level}</Badge>
+                          <p className="text-sm text-muted-foreground mt-1">{strategyContent.riskProfile?.description}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* How It Works */}
+                  {strategyContent.howItWorks && strategyContent.howItWorks.length > 0 && (
+                    <Card className="border-border bg-[var(--surface)]">
+                      <CardContent className="p-5 space-y-3">
+                        <h3 className="font-semibold">How It Works</h3>
+                        <ol className="space-y-2 text-sm text-muted-foreground">
+                          {strategyContent.howItWorks.map((step, i) => (
+                            <li key={i} className="flex gap-3">
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">{i + 1}</span>
+                              <span className="leading-relaxed">{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {/* When to Use */}
+                    {strategyContent.whenToUse && (
+                      <Card className="border-border bg-[var(--surface)]">
+                        <CardContent className="p-5 space-y-3">
+                          <h3 className="font-semibold">When to Use</h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{strategyContent.whenToUse}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Risks */}
+                    {strategyContent.risks && strategyContent.risks.length > 0 && (
+                      <Card className="border-border bg-[var(--surface)]">
+                        <CardContent className="p-5 space-y-3">
+                          <h3 className="font-semibold">Risks</h3>
+                          <ul className="space-y-2 text-sm text-muted-foreground">
+                            {strategyContent.risks.map((risk, i) => (
+                              <li key={i} className="flex gap-2">
+                                <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--loss)]" />
+                                <span className="leading-relaxed">{risk}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </>
               ) : (
                 <Card className="border-border bg-[var(--surface)]">
                   <CardContent className="py-8 text-center">
@@ -570,45 +623,83 @@ export default function StrategyDetailPage() {
 
           {/* Tab: Positions */}
           {activeTab === "positions" && (() => {
-            const openTrades = trades.filter((t) => t.status === "open" || t.status === "submitted");
-            return openTrades.length === 0 ? (
+            return positions.length === 0 ? (
               <Card className="border-border bg-[var(--surface)]">
                 <CardContent className="py-8 text-center">
                   <Briefcase className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
                   <p className="text-sm text-muted-foreground">No open positions for this strategy.</p>
+                  <p className="text-hint mt-1">Positions will appear here when the strategy enters trades.</p>
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-border bg-[var(--surface)] overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border text-muted-foreground">
-                        <th className="px-4 py-2 text-left font-medium">Symbol</th>
-                        <th className="px-4 py-2 text-right font-medium">Shares</th>
-                        <th className="px-4 py-2 text-right font-medium">Entry</th>
-                        <th className="px-4 py-2 text-right font-medium">Stop</th>
-                        <th className="px-4 py-2 text-right font-medium">Target</th>
-                        <th className="px-4 py-2 text-right font-medium">Entry Date</th>
-                        <th className="px-4 py-2 text-left font-medium">Rationale</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {openTrades.map((t) => (
-                        <tr key={t.id} className="border-b border-border/50">
-                          <td className="px-4 py-2.5 font-medium">{t.symbol}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">{t.quantity}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(t.entry_price)}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-[var(--loss)]">{t.stop_loss ? formatCurrency(t.stop_loss) : "—"}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-[var(--profit)]">{t.take_profit ? formatCurrency(t.take_profit) : "—"}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{new Date(t.entry_time).toLocaleDateString()}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground max-w-xs truncate">{t.rationale || "—"}</td>
+              <div className="space-y-4">
+                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground">
+                          <th className="px-4 py-2 text-left font-medium">Symbol</th>
+                          <th className="px-4 py-2 text-right font-medium">Shares</th>
+                          <th className="px-4 py-2 text-right font-medium">Entry</th>
+                          <th className="px-4 py-2 text-right font-medium">Current</th>
+                          <th className="px-4 py-2 text-right font-medium">P&L</th>
+                          <th className="px-4 py-2 text-right font-medium">P&L %</th>
+                          <th className="px-4 py-2 text-right font-medium">Days Held</th>
+                          <th className="px-4 py-2 text-right font-medium">Stop</th>
+                          <th className="px-4 py-2 text-right font-medium">Target</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
+                      </thead>
+                      <tbody>
+                        {positions.map((p) => (
+                          <tr
+                            key={p.symbol}
+                            className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors"
+                            onClick={() => router.push(`/trade?symbol=${p.symbol}`)}
+                          >
+                            <td className="px-4 py-2.5 font-medium text-primary hover:underline">{p.symbol}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{p.shares}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(p.entry_price)}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(p.current_price)}</td>
+                            <td className={cn("px-4 py-2.5 text-right tabular-nums font-medium", p.unrealized_pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                              {p.unrealized_pnl >= 0 ? "+" : ""}{formatCurrency(p.unrealized_pnl)}
+                            </td>
+                            <td className={cn("px-4 py-2.5 text-right tabular-nums", p.unrealized_pnl_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                              {p.unrealized_pnl_pct >= 0 ? "+" : ""}{p.unrealized_pnl_pct.toFixed(2)}%
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{p.days_held}d</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--loss)]">{p.stop_loss ? formatCurrency(p.stop_loss) : "—"}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--profit)]">{p.take_profit ? formatCurrency(p.take_profit) : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                {/* Position details cards */}
+                {positions.filter((p) => p.rationale || p.conviction).map((p) => (
+                  <Card key={p.symbol} className="border-border bg-[var(--panel)]">
+                    <CardContent className="p-4 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{p.symbol}</span>
+                        <span className="text-muted-foreground">Entry: {new Date(p.entry_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      </div>
+                      {p.rationale && (
+                        <p className="text-muted-foreground leading-relaxed">{p.rationale}</p>
+                      )}
+                      {p.conviction != null && p.conviction > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Conviction:</span>
+                          <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-border">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${p.conviction}%` }} />
+                          </div>
+                          <span className="tabular-nums font-medium">{p.conviction}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             );
           })()}
 
@@ -742,24 +833,63 @@ export default function StrategyDetailPage() {
                 </Card>
               </div>
 
-              {/* Conviction Distribution */}
-              <Card className="border-border bg-[var(--surface)]">
-                <CardContent className="p-5">
-                  <h3 className="font-semibold mb-4">Conviction Distribution</h3>
-                  {analytics.conviction_distribution.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No conviction data available.</p>
-                  ) : (
-                    <BarChart
-                      data={analytics.conviction_distribution.map((d) => ({
-                        label: d.bucket,
-                        value: d.wins + d.losses,
-                        color: d.wins >= d.losses ? "var(--profit)" : "var(--loss)",
-                      }))}
-                      height={160}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {/* Best & Worst Trades */}
+                <Card className="border-border bg-[var(--surface)]">
+                  <CardContent className="p-5">
+                    <h3 className="font-semibold mb-4">Best & Worst Trades</h3>
+                    {analytics.best_trade || analytics.worst_trade ? (
+                      <div className="space-y-3">
+                        {analytics.best_trade && (
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--profit)]/20 bg-[var(--profit)]/5">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Best Trade</p>
+                              <p className="text-sm font-semibold">{analytics.best_trade.symbol}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-[var(--profit)]">+{formatCurrency(analytics.best_trade.pnl)}</p>
+                              <p className="text-xs text-[var(--profit)]">+{analytics.best_trade.pnl_pct.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        )}
+                        {analytics.worst_trade && (
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--loss)]/20 bg-[var(--loss)]/5">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Worst Trade</p>
+                              <p className="text-sm font-semibold">{analytics.worst_trade.symbol}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-[var(--loss)]">{formatCurrency(analytics.worst_trade.pnl)}</p>
+                              <p className="text-xs text-[var(--loss)]">{analytics.worst_trade.pnl_pct.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No closed trades yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Conviction Distribution */}
+                <Card className="border-border bg-[var(--surface)]">
+                  <CardContent className="p-5">
+                    <h3 className="font-semibold mb-4">Conviction Distribution</h3>
+                    {analytics.conviction_distribution.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No conviction data available.</p>
+                    ) : (
+                      <BarChart
+                        data={analytics.conviction_distribution.map((d) => ({
+                          label: d.bucket,
+                          value: d.wins + d.losses,
+                          color: d.wins >= d.losses ? "var(--profit)" : "var(--loss)",
+                        }))}
+                        height={160}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </div>

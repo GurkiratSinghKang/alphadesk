@@ -133,10 +133,32 @@ export interface StrategyAnalytics {
   hold_time_stats: { avg_win_days: number; avg_loss_days: number; median_hold_days: number };
   correlations: Record<string, number>;
   rolling_beta: { date: string; beta: number }[];
+  best_trade: { symbol: string; pnl: number; pnl_pct: number } | null;
+  worst_trade: { symbol: string; pnl: number; pnl_pct: number } | null;
 }
 
 export function getStrategyAnalytics(strategyId: string) {
   return apiFetch<StrategyAnalytics>(`/api/v1/strategies/${strategyId}/analytics`);
+}
+
+export interface StrategyPositionDetail {
+  symbol: string;
+  shares: number;
+  entry_price: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  entry_date: string;
+  days_held: number;
+  conviction: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  rationale: string | null;
+}
+
+export function getStrategyPositions(strategyId: string) {
+  return apiFetch<StrategyPositionDetail[]>(`/api/v1/strategies/${strategyId}/positions`);
 }
 
 // ─── Market Overview ────────────────────────────────────────

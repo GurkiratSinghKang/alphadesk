@@ -102,6 +102,24 @@ class StrategyAnalytics(BaseModel):
     hold_time_stats: HoldTimeStats
     correlations: dict[str, float]
     rolling_beta: list[Any]
+    best_trade: dict[str, Any] | None = None
+    worst_trade: dict[str, Any] | None = None
+
+
+class StrategyPosition(BaseModel):
+    symbol: str
+    shares: int
+    entry_price: float
+    current_price: float
+    market_value: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    entry_date: str
+    days_held: int
+    conviction: int | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    rationale: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -341,17 +359,26 @@ def _generate_equity_curve(
     return curve
 
 
-def _get_real_strategy_performance() -> dict[str, dict]:
-    """Compute actual performance from trade ledger."""
+def _get_real_strategy_performance(ledger_instance: Any | None = None) -> dict[str, dict]:
+    """Compute actual performance from trade ledger.
+
+    Accepts an optional pre-loaded ledger instance to avoid re-reading
+    the file (useful when the caller has already performed a sync).
+    """
     try:
-        from data.ingestion.trade_ledger import TradeLedger
-        ledger = TradeLedger()
+        if ledger_instance is None:
+            from data.ingestion.trade_ledger import TradeLedger
+            ledger_instance = TradeLedger()
 
         perf: dict[str, dict] = {}
-        for trade in ledger._data.get("trades", []):
+        for trade in ledger_instance._data.get("trades", []):
             strat = trade.get("strategy", "unknown")
             if strat not in perf:
-                perf[strat] = {"trades": 0, "pnl": 0.0, "wins": 0, "open": 0, "invested": 0.0, "last_trade_date": "", "first_trade_date": ""}
+                perf[strat] = {
+                    "trades": 0, "pnl": 0.0, "wins": 0, "open": 0,
+                    "invested": 0.0, "last_trade_date": "", "first_trade_date": "",
+                    "best_trade": None, "worst_trade": None,
+                }
             perf[strat]["trades"] += 1
             entry_price = trade.get("entry_price", 0)
             shares = trade.get("shares", 0)
@@ -363,11 +390,24 @@ def _get_real_strategy_performance() -> dict[str, dict]:
                 perf[strat]["first_trade_date"] = trade_date[:10] if len(trade_date) >= 10 else trade_date
             if trade.get("status") == "open":
                 perf[strat]["open"] += 1
-            if trade.get("status") == "closed" and trade.get("exit_price") and entry_price:
-                pnl = (trade["exit_price"] - entry_price) * shares
-                perf[strat]["pnl"] += pnl
-                if pnl > 0:
-                    perf[strat]["wins"] += 1
+            if trade.get("status") == "closed" and entry_price:
+                # Prefer stored pnl/pnl_pct; fall back to calculation
+                pnl = trade.get("pnl")
+                if pnl is None and trade.get("exit_price"):
+                    pnl = (trade["exit_price"] - entry_price) * shares
+                if pnl is not None:
+                    perf[strat]["pnl"] += pnl
+                    if pnl > 0:
+                        perf[strat]["wins"] += 1
+                    # Track best/worst trades
+                    pnl_pct = trade.get("pnl_pct")
+                    if pnl_pct is None and trade.get("exit_price"):
+                        pnl_pct = round(((trade["exit_price"] - entry_price) / entry_price) * 100, 2)
+                    trade_summary = {"symbol": trade.get("symbol", ""), "pnl": pnl, "pnl_pct": pnl_pct or 0}
+                    if perf[strat]["best_trade"] is None or pnl > perf[strat]["best_trade"]["pnl"]:
+                        perf[strat]["best_trade"] = trade_summary
+                    if perf[strat]["worst_trade"] is None or pnl < perf[strat]["worst_trade"]["pnl"]:
+                        perf[strat]["worst_trade"] = trade_summary
 
         return perf
     except Exception:
@@ -476,7 +516,7 @@ async def list_strategies() -> list[StrategySummary]:
     # ------------------------------------------------------------------
     # 3. Compute real performance from the (now-synced) ledger
     # ------------------------------------------------------------------
-    real_perf = _get_real_strategy_performance()
+    real_perf = _get_real_strategy_performance(ledger)
 
     # ------------------------------------------------------------------
     # 4. Build Alpaca position map keyed by strategy for accurate counts
@@ -863,6 +903,12 @@ async def get_strategy_analytics(
     correlations = {"SPY": 0.0, "QQQ": 0.0}
     rolling_beta: list[Any] = []
 
+    # -- Best / worst trade --
+    real_perf = _get_real_strategy_performance()
+    rp = real_perf.get(ledger_name, {})
+    best_trade = rp.get("best_trade")
+    worst_trade = rp.get("worst_trade")
+
     return StrategyAnalytics(
         strategy_id=strategy_id,
         sector_exposure={"current": current_sector},
@@ -876,4 +922,92 @@ async def get_strategy_analytics(
         hold_time_stats=hold_time_stats,
         correlations=correlations,
         rolling_beta=rolling_beta,
+        best_trade=best_trade,
+        worst_trade=worst_trade,
     )
+
+
+@router.get("/{strategy_id}/positions", response_model=list[StrategyPosition])
+async def get_strategy_positions(
+    strategy_id: str = Path(..., description="Strategy identifier"),
+) -> list[StrategyPosition]:
+    """Return live positions for a single strategy, enriched with Alpaca data."""
+    import httpx
+    from core.config import settings
+    from data.ingestion.trade_ledger import TradeLedger
+
+    data = await _get_strategy_data(strategy_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+
+    # Fetch live Alpaca positions
+    alpaca_positions: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions",
+                headers={
+                    "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                    "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                },
+            )
+            if resp.status_code == 200:
+                alpaca_positions = resp.json()
+    except Exception:
+        logger.warning("Failed to fetch Alpaca positions for strategy positions", exc_info=True)
+
+    ledger = TradeLedger()
+    if alpaca_positions:
+        try:
+            ledger.sync_with_alpaca(alpaca_positions)
+            ledger = TradeLedger()
+        except Exception:
+            pass
+
+    # Build alpaca price map
+    alpaca_by_sym: dict[str, dict] = {}
+    for pos in alpaca_positions:
+        alpaca_by_sym[pos.get("symbol", "")] = pos
+
+    # Find open trades for this strategy
+    ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
+    open_trades = [
+        t for t in ledger._data.get("trades", [])
+        if t.get("status") == "open" and t.get("strategy") == ledger_name
+    ]
+
+    today = date.today()
+    results: list[StrategyPosition] = []
+    for t in open_trades:
+        sym = t.get("symbol", "")
+        entry_price = t.get("entry_price", 0)
+        shares = t.get("shares", 0)
+        alpaca_pos = alpaca_by_sym.get(sym, {})
+        current_price = float(alpaca_pos.get("current_price", entry_price))
+        unrealized_pnl = float(alpaca_pos.get("unrealized_pl", 0))
+        unrealized_pnl_pct = float(alpaca_pos.get("unrealized_plpc", 0)) * 100
+
+        entry_date_str = t.get("entry_time", "")[:10]
+        try:
+            entry_d = date.fromisoformat(entry_date_str)
+            days_held = (today - entry_d).days
+        except (ValueError, TypeError):
+            days_held = 0
+
+        results.append(StrategyPosition(
+            symbol=sym,
+            shares=shares,
+            entry_price=round(entry_price, 2),
+            current_price=round(current_price, 2),
+            market_value=round(current_price * shares, 2),
+            unrealized_pnl=round(unrealized_pnl, 2),
+            unrealized_pnl_pct=round(unrealized_pnl_pct, 2),
+            entry_date=entry_date_str,
+            days_held=days_held,
+            conviction=t.get("conviction"),
+            stop_loss=t.get("stop_loss"),
+            take_profit=t.get("take_profit"),
+            rationale=t.get("rationale"),
+        ))
+
+    return results

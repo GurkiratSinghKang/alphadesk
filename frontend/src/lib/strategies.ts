@@ -11,6 +11,7 @@ import {
   DollarSign,
   PieChart,
   ArrowLeftRight,
+  User,
 } from "lucide-react";
 
 export const STRATEGY_META: Record<
@@ -89,6 +90,12 @@ export const STRATEGY_META: Record<
     icon: ArrowLeftRight,
     regimeNote: "Intraday, paused after hours",
   },
+  "manual-discretionary": {
+    name: "Manual / Discretionary",
+    shortName: "Manual",
+    icon: User,
+    regimeNote: "Trader-initiated, all regimes",
+  },
 };
 
 export const STRATEGY_ORDER: string[] = [
@@ -104,4 +111,5 @@ export const STRATEGY_ORDER: string[] = [
   "dividend-capture",
   "sector-rotation",
   "gap-fill",
+  "manual-discretionary",
 ];
