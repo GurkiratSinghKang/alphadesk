@@ -103,19 +103,15 @@ const StrategyCard = React.memo(function StrategyCard({
             {regimeNote}
           </p>
         </div>
-        {(Math.abs(strategy.returnPct) > 0.01 || strategy.positions > 0) ? (
-          <div className="mt-2 -mx-1">
-            <Sparkline
-              data={strategy.sparkline ?? []}
-              color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
-              width={140}
-              height={28}
-              className="w-full"
-            />
-          </div>
-        ) : (
-          <div className="mt-2 h-[28px]" />
-        )}
+        <div className="mt-2 -mx-1">
+          <Sparkline
+            data={(strategy.sparkline && strategy.sparkline.length > 0) ? strategy.sparkline : [0, 0, 0, 0, 0]}
+            color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
+            width={140}
+            height={28}
+            className="w-full"
+          />
+        </div>
       </CardContent>
     </Card>
   );

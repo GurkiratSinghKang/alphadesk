@@ -369,7 +369,10 @@ export function OptionsPanel() {
             {chain.map((row) => {
               const callITM = row.strike < spotPrice;
               const putITM = row.strike > spotPrice;
-              const atm = Math.abs(row.strike - spotPrice) < 2.5;
+              const closestStrike = chain.reduce((best, r) =>
+                Math.abs(r.strike - spotPrice) < Math.abs(best.strike - spotPrice) ? r : best
+              );
+              const atm = row.strike === closestStrike.strike;
               // Deep OTM strikes (>15% from spot) have meaningless generated prices
               const pctFromSpot = Math.abs(row.strike - spotPrice) / spotPrice;
               const callDeepOTM = !callITM && pctFromSpot > 0.15 && usingGeneratedChain;

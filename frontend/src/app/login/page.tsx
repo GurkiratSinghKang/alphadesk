@@ -84,9 +84,9 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen w-full flex-col">
       {/* Main content: hero + login */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-12 px-4 py-12 lg:flex-row lg:gap-20 lg:px-16">
+      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-6 lg:flex-row lg:gap-16 lg:px-16">
         {/* Left: hero + features */}
-        <div className="w-full max-w-xl space-y-8 text-center lg:text-left">
+        <div className="w-full max-w-xl space-y-5 text-center lg:text-left">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
               <Zap className="h-3 w-3" />
@@ -122,7 +122,7 @@ export default function LoginPage() {
           </div>
 
           {/* Mock product preview */}
-          <div className="mt-8 w-full max-w-xl rounded-xl border border-border/30 bg-[var(--surface)]/40 p-4 backdrop-blur-sm overflow-hidden">
+          <div className="mt-4 w-full max-w-xl rounded-xl border border-border/30 bg-[var(--surface)]/40 p-4 backdrop-blur-sm overflow-hidden">
             <div className="text-[10px] text-muted-foreground mb-2 flex items-center gap-2">
               <div className="flex gap-1">
                 <div className="w-2 h-2 rounded-full bg-red-500/50" />

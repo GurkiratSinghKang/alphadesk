@@ -219,18 +219,29 @@ async def _call_claude(prompt: str, symbol: str) -> dict[str, Any]:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
 
+            raw = stdout.decode(errors="replace").strip()
             if proc.returncode != 0:
-                err = stderr.decode(errors="replace").strip()
-                logger.error("Claude CLI error for %s: %s", symbol, err[:300])
-                # Fall through to API fallback
-            else:
-                raw = stdout.decode(errors="replace").strip()
+                # CLI returns JSON on stdout even on error; parse it for a better message
+                err_msg = stderr.decode(errors="replace").strip()
                 try:
                     wrapper = json.loads(raw)
-                    text = wrapper.get("result", raw) if isinstance(wrapper, dict) else raw
+                    if isinstance(wrapper, dict) and wrapper.get("is_error"):
+                        err_msg = wrapper.get("result", err_msg) or err_msg
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                logger.error("Claude CLI error for %s (exit %d): %s", symbol, proc.returncode, err_msg[:300])
+                # Fall through to API fallback
+            else:
+                try:
+                    wrapper = json.loads(raw)
+                    if isinstance(wrapper, dict) and wrapper.get("is_error"):
+                        logger.error("Claude CLI returned error for %s: %s", symbol, wrapper.get("result", "")[:300])
+                        # Fall through to API fallback
+                    else:
+                        text = wrapper.get("result", raw) if isinstance(wrapper, dict) else raw
+                        return _parse_claude_response(text, symbol)
                 except json.JSONDecodeError:
-                    text = raw
-                return _parse_claude_response(text, symbol)
+                    return _parse_claude_response(raw, symbol)
 
         except asyncio.TimeoutError:
             logger.error("Claude CLI timeout for %s", symbol)
