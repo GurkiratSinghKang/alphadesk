@@ -8,9 +8,10 @@ final class StrategyDetailViewModel {
     let strategyId: String
     var name = ""
     var description = ""
-    var thesis = ""
     var status: StrategyListStatus = .active
     var isLoading = true
+    var error: String?
+    var isToggling = false
 
     // Metrics
     var totalReturn: Double = 0
@@ -21,152 +22,115 @@ final class StrategyDetailViewModel {
     var profitFactor: Double = 0
     var totalTrades: Int = 0
     var avgHoldDays: Double = 0
+    var investedAmount: Double = 0
+    var currentValue: Double = 0
+    var returnDollars: Double = 0
 
     // Equity curve
     var equityCurve: [DetailEquityPoint] = []
 
-    // Trade history
-    var trades: [StrategyTradeItem] = []
+    // Positions
+    var positions: [StrategyPositionItem] = []
 
     init(strategyId: String) {
         self.strategyId = strategyId
-        loadData()
     }
 
-    func loadData() {
-        isLoading = true
+    @MainActor
+    func refresh() async {
+        if equityCurve.isEmpty { isLoading = true }
+        error = nil
 
-        let strategyData: [String: (String, String, String, Double, Double, Double, Double, Double, Double, Int, Double)] = [
-            "momentum-quality": (
-                "Momentum + Quality",
-                "Combines relative strength momentum with quality factor screens (high ROE, low debt, earnings stability). Rebalances monthly.",
-                "Academic research shows persistent alpha in the intersection of momentum and quality factors. By selecting stocks with strong relative strength AND high quality metrics, we avoid momentum crashes that plague pure momentum strategies. Monthly rebalancing captures medium-term trends while filtering noise.",
-                12.4, 24.8, 1.82, -8.5, 64.2, 1.95, 42, 18.5
-            ),
-            "pead": (
-                "PEAD",
-                "Post-Earnings Announcement Drift -- exploits under-reaction to earnings surprises.",
-                "Markets systematically under-react to earnings surprises. This strategy enters positions after strong earnings beats (>10% surprise) and holds for 30-60 days to capture the drift. Entry timing is refined using volume confirmation and analyst revision momentum.",
-                8.7, 17.4, 1.45, -6.2, 58.3, 1.62, 38, 35.0
-            ),
-            "vrp-harvesting": (
-                "VRP Harvesting",
-                "Volatility Risk Premium through systematic short options strategies.",
-                "Implied volatility consistently exceeds realized volatility, creating a persistent risk premium. We harvest this by selling put spreads on liquid large-caps when IV rank exceeds 40. Position sizing is dynamic based on portfolio VaR constraints. The strategy benefits from the structural demand for portfolio insurance.",
-                15.1, 30.2, 2.10, -11.3, 72.0, 2.45, 65, 22.0
-            ),
-            "earnings-vol-premium": (
-                "Earnings Vol Premium",
-                "Captures IV vs RV spread around earnings events.",
-                "Earnings events are associated with a predictable spike in implied volatility that frequently exceeds the actual realized move. By systematically selling straddles/strangles 1-2 days before earnings on names with historically overstated IV, we capture this premium. Risk is managed through strict position limits and spread structures.",
-                -2.3, -4.6, 0.42, -15.8, 45.0, 0.78, 28, 3.0
-            ),
-            "regime-adaptive": (
-                "Regime Adaptive",
-                "ML-based regime detection with dynamic strategy rotation.",
-                "Uses a hidden Markov model trained on volatility, breadth, and credit spreads to classify market regimes (bull, bear, sideways). In bull regimes, we tilt toward momentum; in bear regimes, toward defensive/short strategies; in sideways markets, we favor mean-reversion. Transitions are smoothed to avoid whipsaws.",
-                6.9, 13.8, 1.21, -9.1, 55.8, 1.38, 52, 15.0
-            ),
-            "claude-alpha": (
-                "Claude Alpha",
-                "AI-driven opportunistic stock picking powered by Claude.",
-                "Leverages Claude's ability to synthesize technical analysis, fundamental data, news sentiment, and market context into high-conviction trade ideas. Each pick is scored on a multi-factor basis with explicit entry, stop, and target levels. The AI adapts its approach based on current market conditions and recent performance feedback.",
-                18.6, 37.2, 1.95, -7.8, 61.5, 2.15, 48, 12.0
-            ),
-            "mean-reversion": (
-                "Mean Reversion",
-                "Buy oversold quality stocks with strong fundamentals.",
-                "Identifies quality stocks (F-Score >= 5) that have experienced significant pullbacks (>2 sigma moves). Entry occurs on the first sign of stabilization with wider stops (10-15%) and targets (20-30%). Works best in range-bound or mildly bullish markets. Pairs naturally with the momentum strategy.",
-                4.2, 8.4, 0.88, -12.5, 52.1, 1.15, 31, 28.0
-            ),
-            "vcp-breakout": (
-                "VCP Breakout",
-                "Volatility contraction pattern breakouts (Minervini SEPA).",
-                "Scans for Stage 2 uptrend stocks forming tight VCP bases with successively lower volume on each contraction. Entry is on the pivot breakout with tight 3% stops and 10% initial targets. The strategy thrives in strong bull markets and is systematically paused when market breadth deteriorates.",
-                9.8, 19.6, 1.32, -5.4, 48.6, 1.55, 56, 8.0
-            ),
-        ]
-
-        guard let data = strategyData[strategyId] else {
-            isLoading = false
-            return
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.fetchPerformance() }
+            group.addTask { await self.fetchPositions() }
         }
-
-        name = data.0
-        description = data.1
-        thesis = data.2
-        totalReturn = data.3
-        annualizedReturn = data.4
-        sharpe = data.5
-        maxDrawdown = data.6
-        winRate = data.7
-        profitFactor = data.8
-        totalTrades = data.9
-        avgHoldDays = data.10
-
-        status = strategyId == "earnings-vol-premium" ? .paused : .active
-
-        // Generate equity curve
-        var pts: [DetailEquityPoint] = []
-        var value: Double = 10_000
-        let endValue = 10_000 * (1 + totalReturn / 100)
-        let days = 90
-        let dailyDrift = pow(endValue / value, 1.0 / Double(days)) - 1.0
-        let cal = Calendar.current
-        let today = Date()
-
-        for i in 0..<days {
-            guard let date = cal.date(byAdding: .day, value: -days + i, to: today) else { continue }
-            let wd = cal.component(.weekday, from: date)
-            if wd == 1 || wd == 7 { continue }
-            let noise = Double.random(in: -0.012...0.015)
-            value *= (1 + dailyDrift + noise)
-            value = max(value, 8_000)
-            pts.append(DetailEquityPoint(date: date, value: value))
-        }
-        if let last = pts.indices.last {
-            pts[last].value = endValue
-        }
-        equityCurve = pts
-
-        // Generate trade history
-        trades = generateTrades()
 
         isLoading = false
     }
 
-    private func generateTrades() -> [StrategyTradeItem] {
-        let symbols = ["AAPL", "NVDA", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "AMD", "CRM", "NFLX"]
-        let cal = Calendar.current
-        let today = Date()
-
-        return (0..<min(totalTrades, 15)).map { i in
-            let daysBack = Int.random(in: 1...60)
-            let entryDate = cal.date(byAdding: .day, value: -daysBack, to: today) ?? today
-            let holdDays = Int.random(in: 1...Int(avgHoldDays * 2))
-            let exitDate = cal.date(byAdding: .day, value: holdDays, to: entryDate) ?? today
-            let symbol = symbols[i % symbols.count]
-            let entryPrice = Double.random(in: 100...500)
-            let pnlPercent = Double.random(in: -8...15)
-            let exitPrice = entryPrice * (1 + pnlPercent / 100)
-            let shares = Int.random(in: 5...50)
-            let pnl = (exitPrice - entryPrice) * Double(shares)
-            let isClosed = daysBack > holdDays
-
-            return StrategyTradeItem(
-                symbol: symbol,
-                side: "Long",
-                entryDate: entryDate,
-                exitDate: isClosed ? exitDate : nil,
-                entryPrice: entryPrice,
-                exitPrice: isClosed ? exitPrice : nil,
-                shares: shares,
-                pnl: isClosed ? pnl : nil,
-                pnlPercent: isClosed ? pnlPercent : nil,
-                isClosed: isClosed
+    @MainActor
+    private func fetchPerformance() async {
+        do {
+            let perf: StrategyPerformance = try await APIClient.shared.request(
+                .strategyPerformance(id: strategyId)
             )
+            name = perf.name
+            description = perf.description
+            totalReturn = perf.totalReturnPct
+            annualizedReturn = perf.annualizedReturnPct ?? 0
+            sharpe = perf.sharpeRatio ?? 0
+            maxDrawdown = perf.maxDrawdown ?? 0
+            winRate = perf.winRate
+            totalTrades = perf.activePositionsCount
+            investedAmount = perf.investedAmount
+            currentValue = perf.currentValue
+            returnDollars = perf.returnDollars ?? 0
+
+            switch perf.status {
+            case .active: status = .active
+            case .paused: status = .paused
+            case .backtest: status = .backtest
+            }
+
+            // Parse equity curve
+            let dateFormatter = DateFormatter()
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
+
+            equityCurve = perf.equityCurve.compactMap { point in
+                guard let value = point.value ?? point.cumulativePnl else { return nil }
+                let date: Date
+                if let d = point.date, let parsed = dateFormatter.date(from: d) {
+                    date = parsed
+                } else if let idx = point.index {
+                    date = Calendar.current.date(byAdding: .day, value: -perf.equityCurve.count + idx, to: Date()) ?? Date()
+                } else {
+                    return nil
+                }
+                return DetailEquityPoint(date: date, value: value)
+            }
+        } catch {
+            self.error = error.localizedDescription
         }
-        .sorted { ($0.entryDate) > ($1.entryDate) }
+    }
+
+    @MainActor
+    private func fetchPositions() async {
+        do {
+            let apiPositions: [StrategyPosition] = try await APIClient.shared.request(
+                .strategyPositions(id: strategyId)
+            )
+            positions = apiPositions.map { p in
+                StrategyPositionItem(
+                    symbol: p.symbol,
+                    side: p.side ?? "Long",
+                    shares: Int(p.shares ?? p.quantity ?? 0),
+                    entryPrice: p.entryPrice ?? 0,
+                    currentPrice: p.currentPrice ?? 0,
+                    pnl: p.pnl ?? 0,
+                    pnlPercent: p.pnlPct ?? 0
+                )
+            }
+        } catch {
+            // Positions are non-fatal
+        }
+    }
+
+    @MainActor
+    func toggleStrategy() async {
+        isToggling = true
+        do {
+            try await APIClient.shared.requestVoid(
+                .strategyToggle(id: strategyId),
+                method: .post
+            )
+            status = (status == .active) ? .paused : .active
+        } catch {
+            self.error = "Toggle failed: \(error.localizedDescription)"
+        }
+        isToggling = false
     }
 }
 
@@ -176,18 +140,15 @@ struct DetailEquityPoint: Identifiable {
     var value: Double
 }
 
-struct StrategyTradeItem: Identifiable {
+struct StrategyPositionItem: Identifiable {
     let id = UUID()
     let symbol: String
     let side: String
-    let entryDate: Date
-    let exitDate: Date?
-    let entryPrice: Double
-    let exitPrice: Double?
     let shares: Int
-    let pnl: Double?
-    let pnlPercent: Double?
-    let isClosed: Bool
+    let entryPrice: Double
+    let currentPrice: Double
+    let pnl: Double
+    let pnlPercent: Double
 }
 
 // MARK: - View
@@ -196,7 +157,6 @@ struct StrategyDetailView: View {
 
     let strategyId: String
     @State private var vm: StrategyDetailViewModel
-    @State private var expandedTradeId: UUID?
 
     init(strategyId: String) {
         self.strategyId = strategyId
@@ -212,13 +172,19 @@ struct StrategyDetailView: View {
                         .tint(AD.accent)
                     Spacer()
                 }
+            } else if let error = vm.error, vm.equityCurve.isEmpty {
+                errorView(error)
             } else {
                 VStack(spacing: AD.spacingLG) {
                     headerSection
-                    equityCurveSection
+                    if !vm.equityCurve.isEmpty {
+                        equityCurveSection
+                    }
                     metricsGrid
-                    tradeHistorySection
-                    aboutSection
+                    if !vm.positions.isEmpty {
+                        positionsSection
+                    }
+                    toggleSection
                 }
                 .padding(.horizontal, AD.spacingMD)
                 .padding(.top, AD.spacingSM)
@@ -230,6 +196,36 @@ struct StrategyDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(AD.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .refreshable { await vm.refresh() }
+        .task { await vm.refresh() }
+    }
+
+    // MARK: - Error
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: AD.spacingMD) {
+            Spacer(minLength: 150)
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(AD.loss)
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(AD.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AD.spacingXL)
+            Button {
+                Task { await vm.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AD.spacingXL)
+                    .padding(.vertical, 12)
+                    .background(AD.accent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
+        }
     }
 
     // MARK: - Header
@@ -239,7 +235,7 @@ struct StrategyDetailView: View {
             HStack {
                 detailStatusBadge(vm.status)
                 Spacer()
-                Text("\(vm.totalTrades) trades")
+                Text("\(vm.totalTrades) positions")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AD.textTertiary)
             }
@@ -290,7 +286,7 @@ struct StrategyDetailView: View {
             Chart(vm.equityCurve) { point in
                 AreaMark(
                     x: .value("Date", point.date),
-                    yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 8_000),
+                    yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 0),
                     y: .value("Value", point.value)
                 )
                 .foregroundStyle(
@@ -363,7 +359,7 @@ struct StrategyDetailView: View {
                        color: AD.loss,
                        icon: "arrow.down.right")
             detailMetricCard("Win Rate", value: String(format: "%.1f%%", vm.winRate),
-                       subtitle: "PF \(String(format: "%.2f", vm.profitFactor))",
+                       subtitle: "Active positions: \(vm.totalTrades)",
                        color: vm.winRate >= 55 ? AD.profit : AD.textSecondary,
                        icon: "target")
         }
@@ -394,111 +390,63 @@ struct StrategyDetailView: View {
         .cardStyle()
     }
 
-    // MARK: - Trade History
+    // MARK: - Positions
 
-    private var tradeHistorySection: some View {
+    private var positionsSection: some View {
         VStack(alignment: .leading, spacing: AD.spacingSM) {
             HStack {
-                Text("Trade History")
+                Text("Positions")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AD.textPrimary)
                 Spacer()
-                Text("\(vm.trades.count) trades")
+                Text("\(vm.positions.count) open")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AD.textTertiary)
             }
 
-            ForEach(vm.trades) { trade in
-                tradeRow(trade)
+            ForEach(vm.positions) { pos in
+                positionRow(pos)
             }
         }
     }
 
-    private func tradeRow(_ trade: StrategyTradeItem) -> some View {
-        let isExpanded = expandedTradeId == trade.id
+    private func positionRow(_ pos: StrategyPositionItem) -> some View {
+        HStack(spacing: AD.spacingSM) {
+            Circle()
+                .fill(pos.pnl >= 0 ? AD.profit : AD.loss)
+                .frame(width: 8, height: 8)
 
-        return VStack(spacing: 0) {
-            // Main row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    expandedTradeId = isExpanded ? nil : trade.id
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(pos.symbol)
+                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(AD.textPrimary)
+                    Text(pos.side)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AD.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AD.accentDim)
+                        .clipShape(Capsule())
                 }
-            } label: {
-                HStack(spacing: AD.spacingSM) {
-                    // Status indicator
-                    Circle()
-                        .fill(!trade.isClosed ? AD.accent : (trade.pnl ?? 0) >= 0 ? AD.profit : AD.loss)
-                        .frame(width: 8, height: 8)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(trade.symbol)
-                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(AD.textPrimary)
-                            Text(trade.side)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(AD.accent)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(AD.accentDim)
-                                .clipShape(Capsule())
-                        }
-                        Text(trade.entryDate, format: .dateTime.month(.abbreviated).day())
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundStyle(AD.textTertiary)
-                    }
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if let pnl = trade.pnl {
-                            Text("\(AD.pnlSign(pnl))\(pnl, specifier: "%.2f")")
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(AD.pnlColor(pnl))
-                        } else {
-                            Text("Open")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AD.accent)
-                        }
-
-                        if let pct = trade.pnlPercent {
-                            Text("\(AD.pnlSign(pct))\(pct, specifier: "%.1f")%")
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(AD.pnlColor(pct).opacity(0.7))
-                        }
-                    }
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AD.textTertiary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                }
-                .padding(.vertical, AD.spacingSM)
-                .padding(.horizontal, AD.spacingMD)
-                .contentShape(Rectangle())
+                Text("\(pos.shares) shares @ \(String(format: "$%.2f", pos.entryPrice))")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(AD.textTertiary)
             }
-            .buttonStyle(.plain)
-            .sensoryFeedback(.selection, trigger: expandedTradeId)
 
-            // Expanded details
-            if isExpanded {
-                VStack(spacing: AD.spacingSM) {
-                    Divider().background(AD.border)
+            Spacer()
 
-                    HStack(spacing: AD.spacingLG) {
-                        detailColumn("Entry", value: String(format: "$%.2f", trade.entryPrice))
-                        if let exit = trade.exitPrice {
-                            detailColumn("Exit", value: String(format: "$%.2f", exit))
-                        }
-                        detailColumn("Shares", value: "\(trade.shares)")
-                        detailColumn("Status", value: trade.isClosed ? "Closed" : "Open")
-                    }
-                }
-                .padding(.horizontal, AD.spacingMD)
-                .padding(.bottom, AD.spacingSM)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(AD.pnlSign(pos.pnl))\(pos.pnl, specifier: "%.2f")")
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(AD.pnlColor(pos.pnl))
+                Text("\(AD.pnlSign(pos.pnlPercent))\(pos.pnlPercent, specifier: "%.1f")%")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AD.pnlColor(pos.pnlPercent).opacity(0.7))
             }
         }
+        .padding(.vertical, AD.spacingSM)
+        .padding(.horizontal, AD.spacingMD)
         .background(AD.surface)
         .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous))
         .overlay(
@@ -507,36 +455,31 @@ struct StrategyDetailView: View {
         )
     }
 
-    private func detailColumn(_ label: String, value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AD.textTertiary)
-            Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(AD.textSecondary)
-        }
-    }
+    // MARK: - Toggle
 
-    // MARK: - About
-
-    private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: AD.spacingSM) {
+    private var toggleSection: some View {
+        Button {
+            Task { await vm.toggleStrategy() }
+        } label: {
             HStack(spacing: AD.spacingSM) {
-                Image(systemName: "lightbulb.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "F59E0B"))
-                Text("Strategy Thesis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AD.textPrimary)
+                if vm.isToggling {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(0.85)
+                } else {
+                    Image(systemName: vm.status == .active ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 18))
+                    Text(vm.status == .active ? "Pause Strategy" : "Resume Strategy")
+                        .font(.system(size: 16, weight: .semibold))
+                }
             }
-
-            Text(vm.thesis)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(AD.textSecondary)
-                .lineSpacing(4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(vm.status == .active ? Color(hex: "F59E0B") : AD.profit)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: AD.radiusMD, style: .continuous))
         }
-        .cardStyle()
+        .disabled(vm.isToggling)
     }
 }
 

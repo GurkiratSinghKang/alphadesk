@@ -6,45 +6,26 @@ import Charts
 @Observable
 final class PipelineViewModel {
     var pipelineState: PipelineState = .idle
-    var lastRunTime: Date? = Calendar.current.date(byAdding: .hour, value: -2, to: Date())
-    var nextScheduledRun: Date? = Calendar.current.date(byAdding: .hour, value: 4, to: Date())
+    var lastRunTime: Date? = nil
+    var nextScheduledRun: Date? = nil
     var isRunning = false
     var runProgress: String = ""
+    var isLoading = true
+    var error: String?
 
-    var positions: [PipelineManagedPosition] = [
-        PipelineManagedPosition(symbol: "NVDA", strategy: "Claude Alpha", shares: 25, entryPrice: 875.00,
-                         currentPrice: 912.30, stopLoss: 840.00, target: 950.00,
-                         entryDate: Calendar.current.date(byAdding: .day, value: -5, to: Date())!),
-        PipelineManagedPosition(symbol: "AAPL", strategy: "Momentum + Quality", shares: 50, entryPrice: 178.25,
-                         currentPrice: 182.40, stopLoss: 172.00, target: 192.00,
-                         entryDate: Calendar.current.date(byAdding: .day, value: -3, to: Date())!),
-        PipelineManagedPosition(symbol: "CRM", strategy: "VCP Breakout", shares: 30, entryPrice: 285.60,
-                         currentPrice: 291.45, stopLoss: 277.00, target: 310.00,
-                         entryDate: Calendar.current.date(byAdding: .day, value: -7, to: Date())!),
-        PipelineManagedPosition(symbol: "AMD", strategy: "PEAD", shares: 40, entryPrice: 165.80,
-                         currentPrice: 162.15, stopLoss: 158.00, target: 180.00,
-                         entryDate: Calendar.current.date(byAdding: .day, value: -2, to: Date())!),
-    ]
+    var positions: [PipelineManagedPosition] = []
 
     var performanceSummary = PipelinePerfSummary(
-        totalPnL: 1_847.50,
-        totalPnLPercent: 2.31,
-        winRate: 68.5,
-        tradesPlaced: 23,
-        tradesWon: 16,
-        tradesLost: 7,
-        avgHoldDays: 14.2
+        totalPnL: 0,
+        totalPnLPercent: 0,
+        winRate: 0,
+        tradesPlaced: 0,
+        tradesWon: 0,
+        tradesLost: 0,
+        avgHoldDays: 0
     )
 
-    var lastRunSummary = PipelineRunSummary(
-        strategiesRun: 7,
-        symbolsScreened: 100,
-        symbolsAnalyzed: 15,
-        ordersPlaced: 3,
-        ordersClosed: 1,
-        errors: 0,
-        duration: 42.5
-    )
+    var lastRunSummary: PipelineRunSummary?
 
     enum PipelineState: String {
         case idle, running, error
@@ -72,30 +53,137 @@ final class PipelineViewModel {
     }
 
     @MainActor
+    func refresh() async {
+        if positions.isEmpty { isLoading = true }
+        error = nil
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.fetchStatus() }
+            group.addTask { await self.fetchPositions() }
+            group.addTask { await self.fetchHistory() }
+        }
+
+        isLoading = false
+    }
+
+    @MainActor
+    private func fetchStatus() async {
+        do {
+            let status: PipelineStatus = try await APIClient.shared.request(.pipelineStatus)
+            pipelineState = status.running ? .running : .idle
+            isRunning = status.running
+
+            if let lastRun = status.lastRun {
+                let dateFormatter = DateFormatter()
+                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
+                // Try multiple formats
+                for fmt in ["yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
+                    dateFormatter.dateFormat = fmt
+                    if let date = dateFormatter.date(from: lastRun) {
+                        lastRunTime = date
+                        break
+                    }
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func fetchPositions() async {
+        do {
+            let response: PipelinePositionsResponse = try await APIClient.shared.request(.pipelinePositions)
+            positions = response.openPositions.map { p in
+                PipelineManagedPosition(
+                    symbol: p.symbol,
+                    strategy: p.strategy ?? "Unknown",
+                    shares: Int(p.shares ?? 0),
+                    entryPrice: p.entryPrice ?? 0,
+                    currentPrice: p.currentPrice ?? 0,
+                    stopLoss: p.stopLoss ?? 0,
+                    target: p.targetPrice ?? 0,
+                    entryDate: parseDateString(p.entryTime) ?? Date()
+                )
+            }
+
+            if let perf = response.performance {
+                let won = perf.openTrades ?? 0
+                let lost = (perf.totalTrades ?? 0) - won
+                performanceSummary = PipelinePerfSummary(
+                    totalPnL: perf.totalPnl ?? 0,
+                    totalPnLPercent: 0,
+                    winRate: perf.winRate ?? 0,
+                    tradesPlaced: perf.totalTrades ?? 0,
+                    tradesWon: won,
+                    tradesLost: max(lost, 0),
+                    avgHoldDays: 0
+                )
+            }
+        } catch {
+            // Positions error is non-fatal if status loaded
+        }
+    }
+
+    @MainActor
+    private func fetchHistory() async {
+        do {
+            let history: [PipelineHistoryEntry] = try await APIClient.shared.request(.pipelineHistory)
+            if let latest = history.first {
+                lastRunSummary = PipelineRunSummary(
+                    strategiesRun: latest.strategiesRun ?? 0,
+                    symbolsScreened: latest.symbolsScreened ?? 0,
+                    symbolsAnalyzed: latest.symbolsAnalyzed ?? 0,
+                    ordersPlaced: latest.ordersPlaced ?? 0,
+                    ordersClosed: latest.ordersClosed ?? 0,
+                    errors: latest.errors ?? 0,
+                    duration: latest.duration ?? 0
+                )
+            }
+        } catch {
+            // History error is non-fatal
+        }
+    }
+
+    @MainActor
     func runPipeline() async {
         isRunning = true
         pipelineState = .running
+        runProgress = "Starting pipeline..."
 
-        let steps = [
-            "Screening 100 symbols...",
-            "Running Momentum + Quality...",
-            "Running PEAD analysis...",
-            "Running Claude Alpha...",
-            "Running VRP Harvesting...",
-            "Master agent reviewing...",
-            "Placing orders...",
-            "Pipeline complete",
-        ]
-
-        for step in steps {
-            runProgress = step
-            try? await Task.sleep(for: .milliseconds(600))
+        do {
+            let response: PipelineRunResponse = try await APIClient.shared.request(
+                .pipelineRun,
+                method: .post,
+                body: PipelineRunRequest(force: false)
+            )
+            runProgress = response.message ?? "Pipeline started"
+            lastRunTime = Date()
+        } catch {
+            self.error = "Pipeline run failed: \(error.localizedDescription)"
+            pipelineState = .error
         }
 
-        lastRunTime = Date()
-        pipelineState = .idle
+        // Short delay then refresh to get latest state
+        try? await Task.sleep(for: .seconds(2))
+        await refresh()
+
         isRunning = false
+        pipelineState = .idle
         runProgress = ""
+    }
+
+    private func parseDateString(_ str: String?) -> Date? {
+        guard let str else { return nil }
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
+        for fmt in ["yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
+            dateFormatter.dateFormat = fmt
+            if let date = dateFormatter.date(from: str) { return date }
+        }
+        return nil
     }
 }
 
@@ -113,7 +201,7 @@ struct PipelineManagedPosition: Identifiable {
     let entryDate: Date
 
     var pnl: Double { (currentPrice - entryPrice) * Double(shares) }
-    var pnlPercent: Double { (currentPrice - entryPrice) / entryPrice * 100 }
+    var pnlPercent: Double { entryPrice > 0 ? (currentPrice - entryPrice) / entryPrice * 100 : 0 }
 }
 
 struct PipelinePerfSummary {
@@ -144,23 +232,68 @@ struct PipelineView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: AD.spacingLG) {
-                    statusCard
-                    runButton
-                    performanceCards
-                    positionsTable
-                    lastRunCard
+            Group {
+                if vm.isLoading {
+                    LoadingView()
+                } else if let error = vm.error, vm.positions.isEmpty && vm.lastRunSummary == nil {
+                    errorView(error)
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: AD.spacingLG) {
+                            statusCard
+                            runButton
+                            performanceCards
+                            if !vm.positions.isEmpty {
+                                positionsTable
+                            }
+                            if let _ = vm.lastRunSummary {
+                                lastRunCard
+                            }
+                        }
+                        .padding(.horizontal, AD.spacingMD)
+                        .padding(.top, AD.spacingSM)
+                        .padding(.bottom, 100)
+                    }
+                    .refreshable { await vm.refresh() }
                 }
-                .padding(.horizontal, AD.spacingMD)
-                .padding(.top, AD.spacingSM)
-                .padding(.bottom, 100)
             }
             .background(AD.background)
             .navigationTitle("Pipeline")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .task { await vm.refresh() }
+        }
+    }
+
+    // MARK: - Error
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: AD.spacingMD) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(AD.loss)
+            Text("Failed to load pipeline")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AD.textPrimary)
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(AD.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AD.spacingXL)
+            Button {
+                Task { await vm.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AD.spacingXL)
+                    .padding(.vertical, 12)
+                    .background(AD.accent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
         }
     }
 
@@ -419,7 +552,9 @@ struct PipelineView: View {
             }
 
             // Price level bar
-            priceLevelBar(pos)
+            if pos.target > pos.stopLoss {
+                priceLevelBar(pos)
+            }
 
             // Bottom stats
             HStack(spacing: AD.spacingLG) {
@@ -490,42 +625,44 @@ struct PipelineView: View {
                     .foregroundStyle(AD.textPrimary)
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: AD.spacingSM) {
-                runStat("Strategies", value: "\(vm.lastRunSummary.strategiesRun)")
-                runStat("Screened", value: "\(vm.lastRunSummary.symbolsScreened)")
-                runStat("Analyzed", value: "\(vm.lastRunSummary.symbolsAnalyzed)")
-                runStat("Orders", value: "\(vm.lastRunSummary.ordersPlaced)")
-            }
-
-            HStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "timer")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AD.textTertiary)
-                    Text(String(format: "%.1fs", vm.lastRunSummary.duration))
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(AD.textSecondary)
+            if let summary = vm.lastRunSummary {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: AD.spacingSM) {
+                    runStat("Strategies", value: "\(summary.strategiesRun)")
+                    runStat("Screened", value: "\(summary.symbolsScreened)")
+                    runStat("Analyzed", value: "\(summary.symbolsAnalyzed)")
+                    runStat("Orders", value: "\(summary.ordersPlaced)")
                 }
 
-                Spacer()
-
-                if vm.lastRunSummary.errors > 0 {
+                HStack {
                     HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                        Image(systemName: "timer")
                             .font(.system(size: 11))
-                            .foregroundStyle(AD.loss)
-                        Text("\(vm.lastRunSummary.errors) errors")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AD.loss)
+                            .foregroundStyle(AD.textTertiary)
+                        Text(String(format: "%.1fs", summary.duration))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(AD.textSecondary)
                     }
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(AD.profit)
-                        Text("Clean run")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AD.profit)
+
+                    Spacer()
+
+                    if summary.errors > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(AD.loss)
+                            Text("\(summary.errors) errors")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AD.loss)
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(AD.profit)
+                            Text("Clean run")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AD.profit)
+                        }
                     }
                 }
             }

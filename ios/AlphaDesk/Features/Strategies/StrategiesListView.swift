@@ -5,96 +5,9 @@ import Charts
 
 @Observable
 final class StrategiesListViewModel {
-    var strategies: [StrategySummaryItem] = [
-        StrategySummaryItem(
-            id: "momentum-quality",
-            name: "Momentum + Quality",
-            description: "Relative strength with quality factor screens",
-            status: .active,
-            returnPercent: 12.4,
-            winRate: 64.2,
-            sharpe: 1.82,
-            positionsCount: 3,
-            sparkline: generateSparkline(seed: 1, trend: 0.4)
-        ),
-        StrategySummaryItem(
-            id: "pead",
-            name: "PEAD",
-            description: "Post-earnings announcement drift",
-            status: .active,
-            returnPercent: 8.7,
-            winRate: 58.3,
-            sharpe: 1.45,
-            positionsCount: 2,
-            sparkline: generateSparkline(seed: 2, trend: 0.3)
-        ),
-        StrategySummaryItem(
-            id: "vrp-harvesting",
-            name: "VRP Harvesting",
-            description: "Systematic short options vol premium",
-            status: .active,
-            returnPercent: 15.1,
-            winRate: 72.0,
-            sharpe: 2.10,
-            positionsCount: 4,
-            sparkline: generateSparkline(seed: 3, trend: 0.5)
-        ),
-        StrategySummaryItem(
-            id: "earnings-vol-premium",
-            name: "Earnings Vol Premium",
-            description: "IV vs RV spread around earnings events",
-            status: .paused,
-            returnPercent: -2.3,
-            winRate: 45.0,
-            sharpe: 0.42,
-            positionsCount: 0,
-            sparkline: generateSparkline(seed: 4, trend: -0.15)
-        ),
-        StrategySummaryItem(
-            id: "regime-adaptive",
-            name: "Regime Adaptive",
-            description: "ML regime detection with strategy rotation",
-            status: .active,
-            returnPercent: 6.9,
-            winRate: 55.8,
-            sharpe: 1.21,
-            positionsCount: 2,
-            sparkline: generateSparkline(seed: 5, trend: 0.2)
-        ),
-        StrategySummaryItem(
-            id: "claude-alpha",
-            name: "Claude Alpha",
-            description: "AI-driven opportunistic stock picking",
-            status: .active,
-            returnPercent: 18.6,
-            winRate: 61.5,
-            sharpe: 1.95,
-            positionsCount: 5,
-            sparkline: generateSparkline(seed: 6, trend: 0.6)
-        ),
-        StrategySummaryItem(
-            id: "mean-reversion",
-            name: "Mean Reversion",
-            description: "Buy oversold quality stocks on reversion",
-            status: .active,
-            returnPercent: 4.2,
-            winRate: 52.1,
-            sharpe: 0.88,
-            positionsCount: 1,
-            sparkline: generateSparkline(seed: 7, trend: 0.1)
-        ),
-        StrategySummaryItem(
-            id: "vcp-breakout",
-            name: "VCP Breakout",
-            description: "Volatility contraction pattern breakouts",
-            status: .active,
-            returnPercent: 9.8,
-            winRate: 48.6,
-            sharpe: 1.32,
-            positionsCount: 3,
-            sparkline: generateSparkline(seed: 8, trend: 0.35)
-        ),
-    ]
+    var strategies: [StrategySummaryItem] = []
+    var isLoading = true
+    var error: String?
 
     var totalReturn: Double {
         guard !strategies.isEmpty else { return 0 }
@@ -107,6 +20,40 @@ final class StrategiesListViewModel {
 
     var totalPositions: Int {
         strategies.reduce(0) { $0 + $1.positionsCount }
+    }
+
+    @MainActor
+    func refresh() async {
+        if strategies.isEmpty { isLoading = true }
+        error = nil
+
+        do {
+            let apiStrategies: [Strategy] = try await APIClient.shared.request(.strategies)
+            strategies = apiStrategies.map { s in
+                let status: StrategyListStatus
+                switch s.status {
+                case .active: status = .active
+                case .paused: status = .paused
+                case .backtest: status = .backtest
+                }
+
+                return StrategySummaryItem(
+                    id: s.id,
+                    name: s.name,
+                    description: s.description,
+                    status: status,
+                    returnPercent: s.totalReturnPct,
+                    winRate: s.winRate,
+                    sharpe: s.sharpeRatio,
+                    positionsCount: s.activePositionsCount,
+                    sparkline: generateSparkline(seed: s.id.hashValue, trend: s.totalReturnPct / 50.0)
+                )
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+
+        isLoading = false
     }
 }
 
@@ -139,7 +86,7 @@ enum StrategyListStatus: String {
 }
 
 private func generateSparkline(seed: Int, trend: Double) -> [Double] {
-    var rng = SparklineRNG(seed: UInt64(seed * 12345))
+    var rng = SparklineRNG(seed: UInt64(abs(seed) &* 12345))
     var values: [Double] = []
     var current: Double = 100
     for _ in 0..<20 {
@@ -177,20 +124,61 @@ struct StrategiesListView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: AD.spacingLG) {
-                    summaryBar
-                    strategyCards
+            Group {
+                if vm.isLoading {
+                    LoadingView()
+                } else if let error = vm.error, vm.strategies.isEmpty {
+                    errorView(error)
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: AD.spacingLG) {
+                            summaryBar
+                            strategyCards
+                        }
+                        .padding(.horizontal, AD.spacingMD)
+                        .padding(.top, AD.spacingSM)
+                        .padding(.bottom, 100)
+                    }
+                    .refreshable { await vm.refresh() }
                 }
-                .padding(.horizontal, AD.spacingMD)
-                .padding(.top, AD.spacingSM)
-                .padding(.bottom, 100)
             }
             .background(AD.background)
             .navigationTitle("Strategies")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .task { await vm.refresh() }
+        }
+    }
+
+    // MARK: - Error
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: AD.spacingMD) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(AD.loss)
+            Text("Failed to load strategies")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AD.textPrimary)
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(AD.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AD.spacingXL)
+            Button {
+                Task { await vm.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AD.spacingXL)
+                    .padding(.vertical, 12)
+                    .background(AD.accent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
         }
     }
 

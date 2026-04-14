@@ -20,7 +20,14 @@ struct SettingsView: View {
 
     @Environment(AuthManager.self) private var authManager
     @State private var showLogoutConfirmation = false
-    @State private var tradingMode: TradingMode = .paper
+    @State private var tradingMode: TradingMode
+    @State private var biometricLockEnabled: Bool
+
+    init() {
+        let savedMode = UserDefaults.standard.string(forKey: "trading_mode") ?? "paper"
+        _tradingMode = State(initialValue: TradingMode(rawValue: savedMode) ?? .paper)
+        _biometricLockEnabled = State(initialValue: UserDefaults.standard.bool(forKey: "biometric_lock_enabled"))
+    }
 
     var body: some View {
         NavigationStack {
@@ -179,6 +186,7 @@ struct SettingsView: View {
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 tradingMode = mode
+                                UserDefaults.standard.set(mode.rawValue, forKey: "trading_mode")
                             }
                         } label: {
                             HStack(spacing: 6) {
@@ -240,7 +248,31 @@ struct SettingsView: View {
                 Divider().background(AD.border).padding(.leading, 56)
                 settingsRow(icon: "moon.fill", label: "Appearance", detail: "Dark", color: Color(hex: "F59E0B"))
                 Divider().background(AD.border).padding(.leading, 56)
-                settingsRow(icon: "lock.shield.fill", label: "Biometric Lock", detail: "Off", color: AD.profit)
+
+                // Biometric Lock Toggle
+                HStack(spacing: AD.spacingMD) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AD.profit)
+                        .frame(width: 32, height: 32)
+                        .background(AD.profit.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                    Text("Biometric Lock")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AD.textPrimary)
+
+                    Spacer()
+
+                    Toggle("", isOn: $biometricLockEnabled)
+                        .labelsHidden()
+                        .tint(AD.accent)
+                        .onChange(of: biometricLockEnabled) { _, newValue in
+                            UserDefaults.standard.set(newValue, forKey: "biometric_lock_enabled")
+                        }
+                }
+                .padding(.horizontal, AD.spacingMD)
+                .padding(.vertical, 14)
             }
             .cardStyle(padding: 0)
         }
@@ -313,7 +345,7 @@ struct SettingsView: View {
                     .foregroundStyle(AD.textTertiary)
             }
 
-            Text("Version 1.0.0 (Build 1)")
+            Text("Version \(appVersion) (Build \(buildNumber))")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(AD.textTertiary.opacity(0.7))
 
@@ -338,6 +370,14 @@ struct SettingsView: View {
                 .textCase(.uppercase)
                 .tracking(0.8)
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 }
 
