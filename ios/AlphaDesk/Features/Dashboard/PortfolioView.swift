@@ -70,7 +70,8 @@ final class PortfolioViewModel {
                     avgCost: p.avgCost,
                     currentPrice: p.currentPrice,
                     pnl: p.unrealizedPnl,
-                    pnlPercent: p.unrealizedPnlPct
+                    pnlPercent: p.unrealizedPnlPct,
+                    sparklineData: generatePositionSparkline(symbol: p.symbol, pnlPercent: p.unrealizedPnlPct)
                 )
             }
         } catch {
@@ -171,8 +172,46 @@ struct PortfolioPosition: Identifiable {
     let currentPrice: Double
     let pnl: Double
     let pnlPercent: Double
+    var sparklineData: [Double]
 
     var marketValue: Double { Double(shares) * currentPrice }
+
+    /// Position weight as a percentage of total equity.
+    func weight(totalEquity: Double) -> Double {
+        guard totalEquity > 0 else { return 0 }
+        return (marketValue / totalEquity) * 100
+    }
+}
+
+/// Generate a synthetic mini sparkline from symbol hash for display
+/// until real intraday data is available from the API.
+private func generatePositionSparkline(symbol: String, pnlPercent: Double) -> [Double] {
+    var rng = PositionSparkRNG(seed: UInt64(abs(symbol.hashValue) &* 54321))
+    var values: [Double] = []
+    var current: Double = 100
+    let trend = pnlPercent / 40.0
+    for _ in 0..<12 {
+        let noise = (rng.nextDouble() - 0.5) * 3
+        current += trend + noise
+        current = max(current, 85)
+        values.append(current)
+    }
+    return values
+}
+
+private struct PositionSparkRNG: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+    mutating func nextDouble() -> Double {
+        Double(next() >> 11) / Double(1 << 53)
+    }
 }
 
 // MARK: - Portfolio View
@@ -196,6 +235,7 @@ struct PortfolioView: View {
                         errorView(error)
                             .transition(.opacity)
                     } else {
+                        ScrollViewReader { proxy in
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: AD.spacingLG) {
                                 heroSection
@@ -207,12 +247,21 @@ struct PortfolioView: View {
                                 }
                                 positionsSection
                             }
+                            .id("portfolioScrollTop")
                             .padding(.horizontal, AD.spacingMD)
                             .padding(.top, AD.spacingSM)
                             .padding(.bottom, 100)
                         }
                         .refreshable { await vm.refresh() }
                         .transition(.opacity)
+                        .onReceive(NotificationCenter.default.publisher(for: .scrollToTop)) { notification in
+                            if let tab = notification.object as? MainTabView.Tab, tab == .portfolio {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("portfolioScrollTop", anchor: .top)
+                                }
+                            }
+                        }
+                    }
                     }
                 }
                 .animation(.easeInOut, value: vm.isLoading)
@@ -512,7 +561,7 @@ struct PortfolioView: View {
     }
 
     private func positionRow(_ position: PortfolioPosition) -> some View {
-        HStack(spacing: AD.spacingMD) {
+        HStack(spacing: AD.spacingSM) {
             // Symbol badge
             ZStack {
                 RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
@@ -528,12 +577,31 @@ struct PortfolioView: View {
                 Text(position.symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AD.textPrimary)
-                Text("\(position.shares) shares")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(AD.textTertiary)
+                HStack(spacing: 4) {
+                    Text("\(position.shares) shares")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(AD.textTertiary)
+
+                    let weight = position.weight(totalEquity: vm.equity)
+                    if weight > 0 {
+                        Text("\(String(format: "%.1f", weight))%")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(AD.accent)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(AD.accentDim)
+                            .clipShape(Capsule())
+                    }
+                }
             }
 
             Spacer()
+
+            // Mini sparkline
+            if position.sparklineData.count >= 2 {
+                SparklineView(data: position.sparklineData, height: 24, lineWidth: 1.2)
+                    .frame(width: 44, height: 24)
+            }
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(position.currentPrice, format: .currency(code: "USD"))

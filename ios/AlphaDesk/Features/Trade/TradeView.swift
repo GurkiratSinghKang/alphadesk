@@ -486,6 +486,72 @@ struct TradeView: View {
                 .padding(.top, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            // Recent Searches (shown when focused with empty search text)
+            if isSearchFocused && vm.searchText.isEmpty && !vm.recentSearches.isEmpty {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Recent")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AD.textTertiary)
+                        Spacer()
+                        Button {
+                            vm.clearRecentSearches()
+                        } label: {
+                            Text("Clear")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AD.accent)
+                        }
+                    }
+                    .padding(.horizontal, AD.spacingMD)
+                    .padding(.vertical, 8)
+
+                    Divider().background(AD.border)
+
+                    ForEach(vm.recentSearches) { result in
+                        Button {
+                            vm.selectSymbol(result)
+                            isSearchFocused = false
+                        } label: {
+                            HStack {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AD.textTertiary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(result.symbol)
+                                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(AD.textPrimary)
+                                    if let name = result.name {
+                                        Text(name)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(AD.textTertiary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.up.left")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AD.textTertiary)
+                            }
+                            .padding(.horizontal, AD.spacingMD)
+                            .padding(.vertical, 10)
+                        }
+
+                        if result.id != vm.recentSearches.last?.id {
+                            Divider()
+                                .background(AD.border)
+                        }
+                    }
+                }
+                .background(AD.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
+                        .stroke(AD.border, lineWidth: 1)
+                )
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 

@@ -139,17 +139,27 @@ struct StrategiesListView: View {
                     )
                     .transition(.opacity)
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: AD.spacingLG) {
-                            summaryBar
-                            strategyCards
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: AD.spacingLG) {
+                                summaryBar
+                                strategyCards
+                            }
+                            .id("strategiesScrollTop")
+                            .padding(.horizontal, AD.spacingMD)
+                            .padding(.top, AD.spacingSM)
+                            .padding(.bottom, 100)
                         }
-                        .padding(.horizontal, AD.spacingMD)
-                        .padding(.top, AD.spacingSM)
-                        .padding(.bottom, 100)
+                        .refreshable { await vm.refresh() }
+                        .transition(.opacity)
+                        .onReceive(NotificationCenter.default.publisher(for: .scrollToTop)) { notification in
+                            if let tab = notification.object as? MainTabView.Tab, tab == .strategies {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("strategiesScrollTop", anchor: .top)
+                                }
+                            }
+                        }
                     }
-                    .refreshable { await vm.refresh() }
-                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut, value: vm.isLoading)
@@ -270,9 +280,18 @@ struct StrategiesListView: View {
                 metricPill("Pos.", value: "\(strategy.positionsCount)", color: AD.accent)
             }
 
-            // Bottom row
+            // Bottom row: positions count + view details
             HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 10))
+                    Text("\(strategy.positionsCount) position\(strategy.positionsCount == 1 ? "" : "s")")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(AD.accent.opacity(0.8))
+
                 Spacer()
+
                 HStack(spacing: 4) {
                     Text("View Details")
                         .font(.system(size: 12, weight: .medium))

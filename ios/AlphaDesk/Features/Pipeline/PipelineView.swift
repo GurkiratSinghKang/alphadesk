@@ -240,30 +240,40 @@ struct PipelineView: View {
                     errorView(error)
                         .transition(.opacity)
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: AD.spacingLG) {
-                            statusCard
-                            runButton
-                            performanceCards
-                            if vm.positions.isEmpty {
-                                ContentUnavailableView(
-                                    "No Managed Positions",
-                                    systemImage: "bolt.badge.clock",
-                                    description: Text("Run the pipeline to generate AI-managed trades")
-                                )
-                            } else {
-                                positionsTable
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: AD.spacingLG) {
+                                statusCard
+                                runButton
+                                performanceCards
+                                if vm.positions.isEmpty {
+                                    ContentUnavailableView(
+                                        "No Managed Positions",
+                                        systemImage: "bolt.badge.clock",
+                                        description: Text("Run the pipeline to generate AI-managed trades")
+                                    )
+                                } else {
+                                    positionsTable
+                                }
+                                if let _ = vm.lastRunSummary {
+                                    lastRunCard
+                                }
                             }
-                            if let _ = vm.lastRunSummary {
-                                lastRunCard
+                            .id("pipelineScrollTop")
+                            .padding(.horizontal, AD.spacingMD)
+                            .padding(.top, AD.spacingSM)
+                            .padding(.bottom, 100)
+                        }
+                        .refreshable { await vm.refresh() }
+                        .transition(.opacity)
+                        .onReceive(NotificationCenter.default.publisher(for: .scrollToTop)) { notification in
+                            if let tab = notification.object as? MainTabView.Tab, tab == .pipeline {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("pipelineScrollTop", anchor: .top)
+                                }
                             }
                         }
-                        .padding(.horizontal, AD.spacingMD)
-                        .padding(.top, AD.spacingSM)
-                        .padding(.bottom, 100)
                     }
-                    .refreshable { await vm.refresh() }
-                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut, value: vm.isLoading)
