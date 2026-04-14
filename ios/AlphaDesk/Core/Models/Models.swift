@@ -205,7 +205,7 @@ struct PipelinePositionsResponse: Codable, Sendable {
 
 // MARK: - WebSocket Messages
 
-enum WSIncomingMessage: Sendable {
+enum WSIncomingMessage: @unchecked Sendable {
     case authenticated
     case subscribed(channel: String)
     case unsubscribed(channel: String)
@@ -280,7 +280,14 @@ struct ChatResponse: Codable, Sendable {
 // MARK: - Order (for order history)
 
 struct Order: Codable, Sendable, Identifiable {
-    var id: String { orderId ?? UUID().uuidString }
+    /// Stable fallback ID when the server does not return an order ID.
+    private var _fallbackId: String?
+    var id: String {
+        if let orderId { return orderId }
+        if let fallback = _fallbackId { return fallback }
+        // Will be set during decoding via CodingKeys
+        return clientOrderId ?? symbol + side + (createdAt ?? "")
+    }
 
     let orderId: String?
     let clientOrderId: String?

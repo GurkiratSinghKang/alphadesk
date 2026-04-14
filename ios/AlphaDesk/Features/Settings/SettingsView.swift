@@ -146,13 +146,17 @@ struct SettingsView: View {
 
                 // Connection status
                 HStack(spacing: AD.spacingSM) {
-                    Image(systemName: "wifi")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AD.profit)
-                    Text("Server reachable")
+                    Circle()
+                        .fill(authManager.isAuthenticated ? AD.profit : AD.loss)
+                        .frame(width: 6, height: 6)
+                    Text(authManager.isAuthenticated ? "Connected" : "Not connected")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AD.profit)
+                        .foregroundStyle(authManager.isAuthenticated ? AD.profit : AD.loss)
                     Spacer()
+                    Text(authManager.serverURL)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(AD.textTertiary)
+                        .lineLimit(1)
                 }
             }
             .cardStyle()

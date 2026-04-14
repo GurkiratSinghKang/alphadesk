@@ -148,28 +148,22 @@ struct WatchlistView: View {
     // MARK: - Watchlist Content
 
     private var watchlistContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(vm.symbols, id: \.self) { symbol in
-                    NavigationLink(value: symbol) {
-                        watchlistRow(symbol)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            withAnimation { vm.removeSymbol(symbol) }
-                        } label: {
-                            Label("Remove", systemImage: "trash")
-                        }
-                    }
-
-                    if symbol != vm.symbols.last {
-                        QuoteDivider()
-                    }
+        List {
+            ForEach(vm.symbols, id: \.self) { symbol in
+                NavigationLink(value: symbol) {
+                    watchlistRow(symbol)
                 }
+                .listRowBackground(AD.background)
+                .listRowSeparatorTint(AD.border)
+                .listRowInsets(EdgeInsets())
             }
-            .padding(.bottom, 100)
+            .onDelete { offsets in
+                withAnimation { vm.removeSymbols(at: offsets) }
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AD.background)
         .refreshable { await vm.fetchAllQuotes() }
         .navigationDestination(for: String.self) { symbol in
             SymbolDetailView(symbol: symbol)
@@ -180,21 +174,28 @@ struct WatchlistView: View {
 
     private func watchlistRow(_ symbol: String) -> some View {
         HStack(spacing: 12) {
-            // Left: symbol
+            // Symbol badge
+            ZStack {
+                RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
+                    .fill(AD.surfaceElevated)
+                    .frame(width: 40, height: 40)
+
+                Text(String(symbol.prefix(2)))
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(AD.accent)
+            }
+
+            // Left: symbol + name
             VStack(alignment: .leading, spacing: 3) {
                 Text(symbol)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(AD.textPrimary)
 
-                if let quote = vm.quotes[symbol], let name = symbolName(symbol) {
+                if let name = symbolName(symbol) {
                     Text(name)
-                        .font(AppTheme.captionFont)
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AD.textTertiary)
                         .lineLimit(1)
-                } else {
-                    Text(symbol)
-                        .font(AppTheme.captionFont)
-                        .foregroundStyle(AD.textTertiary)
                 }
             }
 
@@ -204,13 +205,13 @@ struct WatchlistView: View {
             if let quote = vm.quotes[symbol] {
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(quote.last, format: .currency(code: "USD"))
-                        .font(AppTheme.monoFont)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
                         .foregroundStyle(AD.textPrimary)
                         .monospacedDigit()
 
                     if let pct = quote.changePct {
                         Text("\(AD.pnlSign(pct))\(pct, specifier: "%.2f")%")
-                            .font(AppTheme.monoSmall)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(AD.pnlColor(pct))
                             .monospacedDigit()
                     }
@@ -222,7 +223,7 @@ struct WatchlistView: View {
             }
         }
         .padding(.vertical, 10)
-        .padding(.horizontal, AppTheme.paddingM)
+        .padding(.horizontal, AD.spacingMD)
         .contentShape(Rectangle())
     }
 

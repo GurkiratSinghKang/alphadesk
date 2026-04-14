@@ -208,6 +208,31 @@ struct PerformanceView: View {
 
                 if vm.isLoading && vm.equityCurve.isEmpty {
                     LoadingView()
+                } else if let error = vm.errorMessage, vm.equityCurve.isEmpty {
+                    VStack(spacing: AD.spacingMD) {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.system(size: 40))
+                            .foregroundStyle(AD.textTertiary)
+                        Text("Unable to load performance")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AD.textPrimary)
+                        Text(error)
+                            .font(.system(size: 13))
+                            .foregroundStyle(AD.textTertiary)
+                            .multilineTextAlignment(.center)
+                        Button {
+                            Task { await vm.loadPerformance() }
+                        } label: {
+                            Text("Retry")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, AD.spacingLG)
+                                .padding(.vertical, 12)
+                                .background(AD.accent)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(AD.spacingXL)
                 } else {
                     performanceContent
                 }
@@ -363,10 +388,19 @@ struct PerformanceView: View {
                 .chartYScale(domain: .automatic(includesZero: false))
                 .frame(height: 240)
             } else {
-                RoundedRectangle(cornerRadius: AD.radiusSM)
-                    .fill(AD.surfaceElevated)
-                    .frame(height: 240)
-                    .shimmer()
+                VStack(spacing: AD.spacingSM) {
+                    Image(systemName: "chart.line.downtrend.xyaxis")
+                        .font(.system(size: 24))
+                        .foregroundStyle(AD.textTertiary)
+                    Text("Loading chart data...")
+                        .font(.system(size: 13))
+                        .foregroundStyle(AD.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 240)
+                .background(AD.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM))
+                .shimmer()
             }
         }
         .cardStyle()

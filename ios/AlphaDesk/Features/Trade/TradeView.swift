@@ -215,6 +215,9 @@ struct TradePricePoint: Identifiable {
 
 struct TradeView: View {
 
+    var initialSymbol: String?
+    var initialSide: TradeViewModel.OrderSide?
+
     @State private var vm = TradeViewModel()
     @FocusState private var isSearchFocused: Bool
 
@@ -279,6 +282,12 @@ struct TradeView: View {
                 }
             }
             .task {
+                if let sym = initialSymbol {
+                    vm.selectSymbol(sym)
+                }
+                if let side = initialSide {
+                    vm.orderSide = side
+                }
                 await vm.refresh()
                 vm.startWebSocketUpdates()
             }

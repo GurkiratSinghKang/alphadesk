@@ -173,6 +173,34 @@ struct SymbolDetailView: View {
         .toolbarBackground(AD.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await vm.load() }
+        .sheet(isPresented: $showBuySheet) {
+            NavigationStack {
+                TradeView(initialSymbol: symbol, initialSide: .buy)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { showBuySheet = false } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(AD.textTertiary)
+                            }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $showSellSheet) {
+            NavigationStack {
+                TradeView(initialSymbol: symbol, initialSide: .sell)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { showSellSheet = false } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(AD.textTertiary)
+                            }
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: - Price Header
@@ -346,13 +374,13 @@ struct SymbolDetailView: View {
 
     private var orderButtons: some View {
         HStack(spacing: AD.spacingSM) {
-            NavigationLink {
-                TradeView()
+            Button {
+                showBuySheet = true
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 16))
-                    Text("Buy")
+                    Text("Buy \(symbol)")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
@@ -363,13 +391,13 @@ struct SymbolDetailView: View {
                 .shadow(color: AD.profit.opacity(0.25), radius: 8, y: 4)
             }
 
-            NavigationLink {
-                TradeView()
+            Button {
+                showSellSheet = true
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.system(size: 16))
-                    Text("Sell")
+                    Text("Sell \(symbol)")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)

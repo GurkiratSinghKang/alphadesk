@@ -516,6 +516,10 @@ struct PortfolioView: View {
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(AD.pnlColor(position.pnl))
             }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AD.textTertiary.opacity(0.5))
         }
         .padding(.vertical, AD.spacingSM)
         .padding(.horizontal, AD.spacingMD)

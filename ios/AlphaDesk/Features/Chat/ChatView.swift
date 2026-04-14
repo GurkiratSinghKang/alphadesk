@@ -380,8 +380,10 @@ struct ChatView: View {
                 .sensoryFeedback(.impact(weight: .light), trigger: vm.messages.count)
             }
             .padding(.horizontal, AD.spacingMD)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
             .background(AD.surface.opacity(0.95))
+            .background(.ultraThinMaterial.opacity(0.3))
         }
     }
 }
