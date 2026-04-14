@@ -109,7 +109,7 @@ final class TradeViewModel {
     func fetchBars() async {
         do {
             let bars: [OHLCVBar] = try await APIClient.shared.request(
-                .bars(symbol: symbol, timeframe: "1D", limit: 30)
+                .bars(symbol: symbol, timeframe: "D", limit: 30)
             )
             priceHistory = bars.map { bar in
                 TradePricePoint(date: bar.timestamp, price: bar.close)

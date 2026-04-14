@@ -97,6 +97,7 @@ struct Strategy: Codable, Sendable, Identifiable {
     let sharpeRatio: Double
     let winRate: Double
     let activePositionsCount: Int
+    let sparkline: [Double]?
 }
 
 struct EquityCurvePoint: Codable, Sendable {
@@ -198,9 +199,25 @@ struct PipelinePerformance: Codable, Sendable {
     let avgLoss: Double?
 }
 
-struct PipelinePositionsResponse: Codable, Sendable {
-    let openPositions: [PipelinePosition]
+struct PipelinePositionsResponse: Sendable {
+    let positions: [PipelinePosition]
     let performance: PipelinePerformance?
+}
+
+extension PipelinePositionsResponse: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case positions, openPositions, performance
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        performance = try container.decodeIfPresent(PipelinePerformance.self, forKey: .performance)
+        if let p = try? container.decode([PipelinePosition].self, forKey: .positions) {
+            positions = p
+        } else {
+            positions = (try? container.decode([PipelinePosition].self, forKey: .openPositions)) ?? []
+        }
+    }
 }
 
 // MARK: - WebSocket Messages

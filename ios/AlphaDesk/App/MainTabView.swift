@@ -22,7 +22,7 @@ final class TabBadgeProvider {
     private func fetchPipelineBadge() async {
         do {
             let response: PipelinePositionsResponse = try await APIClient.shared.request(.pipelinePositions)
-            pendingSignals = response.openPositions.count
+            pendingSignals = response.positions.count
         } catch {
             // Non-fatal: badge stays at previous value
         }

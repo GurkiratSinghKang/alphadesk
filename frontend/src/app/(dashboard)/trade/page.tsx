@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { WatchlistPanel } from "@/components/panels/WatchlistPanel";
 import { ChartPanel } from "@/components/panels/ChartPanel";
+import { MultiChart, LayoutSelector, type ChartLayout } from "@/components/panels/MultiChart";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { OptionsPanel } from "@/components/panels/OptionsPanel";
 import { TradePanel } from "@/components/panels/TradePanel";
@@ -14,16 +15,42 @@ const WATCHLIST_W = 240;
 const ANALYSIS_W = 300;
 const TRADE_PANEL_W = 380;
 
+const CHART_LAYOUT_KEY = "alphadesk-chart-layout";
+
 export default function TradePage() {
   const [optionsPanelHeight, setOptionsPanelHeight] = useState(250);
   const [optionsFullScreen, setOptionsFullScreen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'chart' | 'watchlist' | 'analysis' | 'order'>('chart');
+  const [chartLayout, setChartLayout] = useState<ChartLayout>(() => {
+    if (typeof window === "undefined") return "1x1";
+    const stored = localStorage.getItem(CHART_LAYOUT_KEY);
+    if (stored && ["1x1", "2x1", "1x2", "2x2"].includes(stored)) return stored as ChartLayout;
+    return "1x1";
+  });
+  const [chartSymbols, setChartSymbols] = useState<string[]>(["SPY"]);
+
+  // Persist chart layout preference
+  useEffect(() => {
+    localStorage.setItem(CHART_LAYOUT_KEY, chartLayout);
+  }, [chartLayout]);
+
+  const chartCount = chartLayout === "2x2" ? 4 : chartLayout === "1x1" ? 1 : 2;
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
 
   // Timeframe shortcuts 1-8 are handled globally by useKeyboardShortcuts,
   // which dispatches alphadesk:shortcut events consumed by ChartPanel.
+
+  // Listen for chart layout changes dispatched by ChartPanel's LayoutSelector
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ layout: ChartLayout }>).detail;
+      if (detail?.layout) setChartLayout(detail.layout);
+    };
+    window.addEventListener("alphadesk:chart-layout", handler);
+    return () => window.removeEventListener("alphadesk:chart-layout", handler);
+  }, []);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
@@ -131,7 +158,7 @@ export default function TradePage() {
               <WatchlistPanel />
             </div>
 
-            {/* Chart — z-index 1 (behind other panels) */}
+            {/* Chart area — z-index 1 (behind other panels) */}
             <div
               style={{
                 position: "absolute",
@@ -143,7 +170,47 @@ export default function TradePage() {
                 zIndex: 1,
               }}
             >
-              <ChartPanel />
+              {/* Layout selector overlay — top-right of chart area */}
+              {chartLayout !== "1x1" && (
+                <div className="absolute top-1 right-1 z-20">
+                  <LayoutSelector layout={chartLayout} onLayoutChange={setChartLayout} />
+                </div>
+              )}
+              {chartLayout === "1x1" ? (
+                <ChartPanel />
+              ) : (
+                <div
+                  className="grid h-full w-full"
+                  style={{
+                    gridTemplateColumns: chartLayout === "2x1" || chartLayout === "2x2" ? "1fr 1fr" : "1fr",
+                    gridTemplateRows: chartLayout === "1x2" || chartLayout === "2x2" ? "1fr 1fr" : "1fr",
+                    gap: 1,
+                  }}
+                >
+                  {Array.from({ length: chartCount }).map((_, i) => (
+                    <div
+                      key={`chart-${i}`}
+                      className="min-h-0 min-w-0 overflow-hidden"
+                      style={{
+                        borderRight: (chartLayout === "2x1" || chartLayout === "2x2") && i % 2 === 0 ? "1px solid var(--border)" : undefined,
+                        borderBottom: (chartLayout === "1x2" || chartLayout === "2x2") && i < 2 && chartLayout === "2x2" ? "1px solid var(--border)" : chartLayout === "1x2" && i === 0 ? "1px solid var(--border)" : undefined,
+                      }}
+                    >
+                      <ChartPanel
+                        symbol={chartSymbols[i] || "SPY"}
+                        onSymbolChange={(sym) => {
+                          setChartSymbols((prev) => {
+                            const next = [...prev];
+                            while (next.length <= i) next.push("SPY");
+                            next[i] = sym;
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Analysis — z-index 10 (above chart) */}

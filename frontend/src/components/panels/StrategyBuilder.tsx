@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, Sparkles, Play, Plus, X } from "lucide-react";
+import { Brain, Sparkles, Play, Plus, X, AlertTriangle, Lightbulb, BarChart3, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { refineStrategy, type StrategyRefinement } from "@/lib/api";
 
 interface StrategyRule {
   id: string;
@@ -53,6 +54,8 @@ export function StrategyBuilder() {
   const [input, setInput] = useState("");
   const [strategyName, setStrategyName] = useState("My Custom Strategy");
   const [aiThinking, setAiThinking] = useState(false);
+  const [aiResult, setAiResult] = useState<StrategyRefinement | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const addRule = () => {
     if (!input.trim()) return;
@@ -75,9 +78,38 @@ export function StrategyBuilder() {
 
   const handleAiRefine = async () => {
     setAiThinking(true);
-    // Simulate AI processing
-    await new Promise(r => setTimeout(r, 1500));
-    setAiThinking(false);
+    setAiError(null);
+    try {
+      const data = await refineStrategy(
+        strategyName,
+        rules.map(r => r.condition),
+      );
+
+      if (data.error) {
+        setAiError(data.message ?? "AI refinement failed");
+        return;
+      }
+
+      // Apply refined rules from Claude
+      if (data.refined_rules && data.refined_rules.length > 0) {
+        const newRules: StrategyRule[] = data.refined_rules.map((r, i) => ({
+          id: `ai-rule-${Date.now()}-${i}`,
+          condition: `${r.condition} -> ${r.action}`,
+          parsed: {
+            indicator: r.condition.match(/[A-Z]+/)?.[0],
+            action: r.action,
+          },
+          valid: true,
+        }));
+        setRules(newRules);
+      }
+
+      setAiResult(data);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI refinement failed");
+    } finally {
+      setAiThinking(false);
+    }
   };
 
   return (
@@ -165,11 +197,103 @@ export function StrategyBuilder() {
         <div className="flex gap-2">
           <Button onClick={handleAiRefine} variant="outline" size="sm" className="text-xs gap-1.5" disabled={aiThinking}>
             {aiThinking ? <Sparkles className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
-            {aiThinking ? "Analyzing..." : "Refine"}
+            {aiThinking ? "Analyzing with Claude..." : "Refine with AI"}
           </Button>
           <Button size="sm" className="text-xs gap-1.5">
             <Play className="h-3 w-3" /> Backtest
           </Button>
+        </div>
+      )}
+
+      {/* AI Error */}
+      {aiError && (
+        <div className="rounded-lg border border-[var(--loss)]/30 bg-[var(--loss)]/5 p-3">
+          <div className="flex items-center gap-2 text-[var(--loss)]">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <p className="text-xs">{aiError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* AI Results Panel */}
+      {aiResult && !aiError && (
+        <div className="space-y-3">
+          {/* Summary */}
+          {aiResult.summary && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">AI Summary</p>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed">{aiResult.summary}</p>
+            </div>
+          )}
+
+          {/* Improvements */}
+          {aiResult.improvements.length > 0 && (
+            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Suggested Improvements</p>
+              </div>
+              <ul className="space-y-1.5">
+                {aiResult.improvements.map((imp, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-foreground">
+                    <span className="text-muted-foreground mt-0.5 shrink-0">-</span>
+                    <span>{imp}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Risk Warnings */}
+          {aiResult.risks.length > 0 && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <p className="text-[10px] uppercase tracking-wider text-amber-500 font-semibold">Risk Warnings</p>
+              </div>
+              <ul className="space-y-1.5">
+                {aiResult.risks.map((risk, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-amber-400/90">
+                    <span className="text-amber-500/50 mt-0.5 shrink-0">-</span>
+                    <span>{risk}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Backtest Parameters */}
+          {aiResult.backtest_params && Object.keys(aiResult.backtest_params).length > 0 && (
+            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Recommended Backtest Parameters</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {aiResult.backtest_params.suggested_timeframe && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground uppercase">Timeframe</p>
+                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.suggested_timeframe}</p>
+                  </div>
+                )}
+                {aiResult.backtest_params.lookback_period && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground uppercase">Lookback</p>
+                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.lookback_period}</p>
+                  </div>
+                )}
+                {aiResult.backtest_params.position_size && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground uppercase">Position Size</p>
+                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.position_size}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

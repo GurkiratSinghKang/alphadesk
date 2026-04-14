@@ -95,7 +95,7 @@ final class PipelineViewModel {
     private func fetchPositions() async {
         do {
             let response: PipelinePositionsResponse = try await APIClient.shared.request(.pipelinePositions)
-            positions = response.openPositions.map { p in
+            positions = response.positions.map { p in
                 PipelineManagedPosition(
                     symbol: p.symbol,
                     strategy: p.strategy ?? "Unknown",

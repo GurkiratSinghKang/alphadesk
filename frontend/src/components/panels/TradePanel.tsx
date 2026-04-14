@@ -33,6 +33,7 @@ import {
 } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
+import { PayoffDiagram, type OptionLeg } from "@/components/panels/PayoffDiagram";
 import {
   Dialog,
   DialogContent,
@@ -165,6 +166,23 @@ function TradeBuilderTab() {
     maxStrike > minStrike ? (maxStrike - minStrike) * 100 + netDebit : Math.abs(netDebit);
   const maxLoss = Math.abs(netDebit);
   const breakeven = minStrike > 0 ? minStrike + Math.abs(netDebit) / 100 : 0;
+
+  // Build option legs for payoff diagram (only options, not stock legs)
+  const payoffLegs = useMemo<OptionLeg[]>(() => {
+    return legs
+      .filter((l) => l.type === "call" || l.type === "put")
+      .filter((l) => l.strike != null && l.strike > 0)
+      .map((l) => ({
+        strike: l.strike!,
+        type: l.type as "call" | "put",
+        side: l.side,
+        premium: l.price,
+        quantity: l.quantity,
+      }));
+  }, [legs]);
+
+  const quotes = useMarketStore((s) => s.quotes);
+  const currentQuote = quotes[selectedSymbol];
 
   const updateLegQty = (id: string, delta: number) => {
     setLegs((prev) =>
@@ -359,6 +377,15 @@ function TradeBuilderTab() {
           </div>
         )}
       </div>
+
+      {/* Payoff Diagram — shown when 2+ option legs (spread detected) */}
+      {payoffLegs.length >= 2 && (
+        <PayoffDiagram
+          legs={payoffLegs}
+          currentPrice={currentQuote?.last}
+          className="mb-3"
+        />
+      )}
 
       <div className="mt-auto">
         <Button

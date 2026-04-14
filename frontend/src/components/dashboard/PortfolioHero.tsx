@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useId } from "react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { ExportButton } from "@/components/dashboard/ExportButton";
 
 type Period = "1W" | "1M" | "3M" | "YTD";
 
@@ -168,22 +169,25 @@ export function PortfolioHero({
           </div>
         </div>
 
-        {/* Period pills */}
-        <div className="flex gap-1 shrink-0">
-          {(["1W", "1M", "3M", "YTD"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={cn(
-                "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
-                period === p
-                  ? "bg-primary/20 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {p}
-            </button>
-          ))}
+        {/* Period pills + Export */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex gap-1">
+            {(["1W", "1M", "3M", "YTD"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  period === p
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <ExportButton />
         </div>
       </div>
 

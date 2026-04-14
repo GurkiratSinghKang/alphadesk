@@ -28,6 +28,7 @@ import {
   getChangeTextClass,
 } from "@/lib/utils";
 import { getBars, getPositions, getPipelinePositions, createPriceAlert, getPriceAlerts, deletePriceAlert, type PriceAlert } from "@/lib/api";
+import { LayoutSelector, type ChartLayout } from "@/components/panels/LayoutSelector";
 import type { TimeFrame, ChartType, Indicator, OHLCVBar, QuickOrderEvent } from "@/types";
 
 // ─── Timeframes ──────────────────────────────────────────────
@@ -81,9 +82,17 @@ function generateDemoOHLCV(symbol: string, timeframe: TimeFrame, count = 200): O
 
 // ─── Component ───────────────────────────────────────────────
 
-export function ChartPanel() {
+interface ChartPanelProps {
+  /** Override symbol — when set, the chart uses this symbol instead of the global store selection */
+  symbol?: string;
+  /** Callback when symbol changes via the internal selector (used in multi-chart mode) */
+  onSymbolChange?: (symbol: string) => void;
+}
+
+export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelProps = {}) {
   const chartHandleRef = useRef<TradingChartHandle>(null);
-  const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const globalSymbol = useMarketStore((s) => s.selectedSymbol);
+  const selectedSymbol = symbolProp ?? globalSymbol;
   const quotes = useMarketStore((s) => s.quotes);
   const [timeframe, setTimeframe] = useState<TimeFrame>("D");
   const [chartType, setChartType] = useState<ChartType>("candle");
@@ -99,6 +108,29 @@ export function ChartPanel() {
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
   const [symbolAlerts, setSymbolAlerts] = useState<PriceAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
+  const [chartLayout, setChartLayoutLocal] = useState<ChartLayout>(() => {
+    if (typeof window === "undefined") return "1x1";
+    const stored = localStorage.getItem("alphadesk-chart-layout");
+    if (stored && ["1x1", "2x1", "1x2", "2x2"].includes(stored)) return stored as ChartLayout;
+    return "1x1";
+  });
+
+  const handleLayoutChange = useCallback((layout: ChartLayout) => {
+    setChartLayoutLocal(layout);
+    localStorage.setItem("alphadesk-chart-layout", layout);
+    window.dispatchEvent(new CustomEvent("alphadesk:chart-layout", { detail: { layout } }));
+  }, []);
+
+  // Listen for layout changes from the trade page
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ layout: ChartLayout }>).detail;
+      if (detail?.layout) setChartLayoutLocal(detail.layout);
+    };
+    window.addEventListener("alphadesk:chart-layout", handler);
+    return () => window.removeEventListener("alphadesk:chart-layout", handler);
+  }, []);
+
   const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib">("none");
   const [drawings, setDrawings] = useState<Array<{
     type: "hline" | "trendline" | "fib";
@@ -426,6 +458,11 @@ export function ChartPanel() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Chart layout selector */}
+          <div className="ml-0.5 border-l border-border pl-1">
+            <LayoutSelector layout={chartLayout} onLayoutChange={handleLayoutChange} />
+          </div>
         </div>
       </div>
 

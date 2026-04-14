@@ -600,6 +600,57 @@ export function chatWithAgent(message: string, symbol?: string, context?: string
   });
 }
 
+// ─── Strategy Refinement ───────────────────────────────────
+
+export interface RefinedRule {
+  condition: string;
+  action: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface StrategyRefinement {
+  refined_rules: RefinedRule[];
+  improvements: string[];
+  risks: string[];
+  backtest_params: {
+    suggested_timeframe?: string;
+    lookback_period?: string;
+    position_size?: string;
+  };
+  summary: string;
+  error?: boolean;
+  message?: string;
+}
+
+export function refineStrategy(strategy: string, rules: string[]) {
+  return apiFetch<StrategyRefinement>(`/api/v1/agents/refine-strategy`, {
+    method: "POST",
+    body: JSON.stringify({ strategy, rules }),
+  });
+}
+
+// ─── Trade History (for export) ────────────────────────────
+
+export interface TradeHistoryEntry {
+  id: number;
+  symbol: string;
+  strategy: string | null;
+  side: string;
+  quantity: number;
+  entry_price: number;
+  exit_price: number | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+  entry_time: string;
+  exit_time: string | null;
+  status: string;
+  notes: string | null;
+}
+
+export function getTradeHistory(limit = 1000) {
+  return apiFetch<TradeHistoryEntry[]>(`/api/v1/trades/history?limit=${limit}`);
+}
+
 // ─── Pipeline ──────────────────────────────────────────────
 
 export interface PipelineStatus {
