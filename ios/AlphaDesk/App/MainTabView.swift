@@ -57,7 +57,7 @@ struct MainTabView: View {
     // State preservation keys
     private static let selectedTabKey = "AlphaDesk_selectedTab"
 
-    enum Tab: Int, CaseIterable {
+    enum Tab: Int, CaseIterable, Hashable {
         case portfolio, trade, strategies, pipeline, settings
 
         var title: String {
@@ -81,7 +81,182 @@ struct MainTabView: View {
         }
     }
 
+    /// Whether the current device is an iPad.
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
     var body: some View {
+        Group {
+            if isIPad {
+                iPadLayout
+            } else {
+                iPhoneLayout
+            }
+        }
+        .background(AD.background)
+        .animation(.easeInOut(duration: 0.3), value: networkMonitor.isConnected)
+        .task {
+            // Restore saved tab
+            if let saved = UserDefaults.standard.object(forKey: Self.selectedTabKey) as? Int,
+               let tab = Tab(rawValue: saved) {
+                selectedTab = tab
+            }
+            // Fetch badge counts
+            await badgeProvider.refresh()
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            // Persist selected tab
+            UserDefaults.standard.set(newTab.rawValue, forKey: Self.selectedTabKey)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            UserDefaults.standard.set(selectedTab.rawValue, forKey: Self.selectedTabKey)
+        }
+    }
+
+    // MARK: - iPad Layout (NavigationSplitView)
+
+    private var iPadLayout: some View {
+        NavigationSplitView {
+            sidebarContent
+        } detail: {
+            selectedView
+        }
+    }
+
+    // MARK: - iPad Sidebar
+
+    private var sidebarContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                // Header
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AD.accent)
+                        Text("AlphaDesk")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AD.textPrimary)
+                    }
+
+                    // Offline indicator
+                    if !networkMonitor.isConnected {
+                        HStack(spacing: 4) {
+                            Image(systemName: "wifi.slash")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Offline")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(AD.loss)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, AD.spacingMD)
+                .padding(.vertical, AD.spacingMD)
+
+                Divider().background(AD.border)
+
+                // Tab items
+                VStack(spacing: 4) {
+                    ForEach(Tab.allCases, id: \.self) { tab in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedTab = tab
+                            }
+                        } label: {
+                            sidebarItem(tab)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AD.spacingSM)
+                .padding(.vertical, AD.spacingSM)
+            }
+        }
+        .background(AD.surface)
+        .navigationTitle("")
+    }
+
+    private func sidebarItem(_ tab: Tab) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(selectedTab == tab ? AD.accent : AD.textTertiary)
+                .frame(width: 24)
+
+            Text(tab.title)
+                .font(.system(size: 15, weight: selectedTab == tab ? .semibold : .regular))
+                .foregroundStyle(selectedTab == tab ? AD.textPrimary : AD.textSecondary)
+
+            Spacer()
+
+            // Badge
+            let count = badgeCount(for: tab)
+            if count > 0 {
+                Text(count > 99 ? "99+" : "\(count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .frame(minWidth: 20)
+                    .background(AD.loss)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.vertical, 4)
+        .listRowBackground(
+            selectedTab == tab
+                ? AD.accentDim.clipShape(RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous))
+                : nil
+        )
+    }
+
+    // MARK: - iPad Detail View
+
+    @ViewBuilder
+    private var selectedView: some View {
+        switch selectedTab {
+        case .portfolio:
+            PortfolioView()
+        case .trade:
+            iPadTradeLayout
+        case .strategies:
+            StrategiesListView()
+        case .pipeline:
+            PipelineView()
+        case .settings:
+            SettingsView()
+        }
+    }
+
+    /// iPad-optimized trade layout: chart and order panel side by side.
+    private var iPadTradeLayout: some View {
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                // Left: chart / symbol detail
+                TradeView()
+                    .frame(width: geo.size.width * 0.6)
+
+                // Divider
+                Rectangle()
+                    .fill(AD.border)
+                    .frame(width: 1)
+
+                // Right: Order panel / history
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        OrderHistoryView()
+                    }
+                }
+                .frame(width: geo.size.width * 0.4 - 1)
+            }
+        }
+    }
+
+    // MARK: - iPhone Layout (Custom Tab Bar)
+
+    private var iPhoneLayout: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
                 // Offline banner
@@ -112,25 +287,7 @@ struct MainTabView: View {
             // Custom Tab Bar
             customTabBar
         }
-        .background(AD.background)
         .ignoresSafeArea(.keyboard)
-        .animation(.easeInOut(duration: 0.3), value: networkMonitor.isConnected)
-        .task {
-            // Restore saved tab
-            if let saved = UserDefaults.standard.object(forKey: Self.selectedTabKey) as? Int,
-               let tab = Tab(rawValue: saved) {
-                selectedTab = tab
-            }
-            // Fetch badge counts
-            await badgeProvider.refresh()
-        }
-        .onChange(of: selectedTab) { _, newTab in
-            // Persist selected tab
-            UserDefaults.standard.set(newTab.rawValue, forKey: Self.selectedTabKey)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            UserDefaults.standard.set(selectedTab.rawValue, forKey: Self.selectedTabKey)
-        }
     }
 
     // MARK: - Offline Banner

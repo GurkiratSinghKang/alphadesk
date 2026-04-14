@@ -227,6 +227,7 @@ struct PortfolioView: View {
     @State private var showRisk = false
     @State private var showAlerts = false
     @State private var showAnalytics = false
+    @State private var showReports = false
     @State private var tradeSymbol: String?
     @State private var tradeSide: TradeViewModel.OrderSide = .buy
     @State private var showTradeSheet = false
@@ -309,6 +310,14 @@ struct PortfolioView: View {
                     }
 
                     Button {
+                        showReports = true
+                    } label: {
+                        Image(systemName: "doc.text.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
+                    Button {
                         showRisk = true
                     } label: {
                         Image(systemName: "shield.lefthalf.filled")
@@ -364,6 +373,9 @@ struct PortfolioView: View {
             }
             .sheet(isPresented: $showAnalytics) {
                 AnalyticsSummaryView()
+            }
+            .sheet(isPresented: $showReports) {
+                ReportsView()
             }
             .sheet(isPresented: $showTradeSheet) {
                 if let symbol = tradeSymbol {

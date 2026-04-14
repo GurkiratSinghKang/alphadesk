@@ -35,6 +35,7 @@
 		BE91BDE5220EB78ADBEE78B5 /* AlphaDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6041C36C456165D3B81090D8 /* AlphaDeskApp.swift */; };
 		C0D3A8F3D41DCF7166A8912B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B1A9830C0A54E14CB732BC /* APIClient.swift */; };
 		CB7765CC7BB26125DDAB18F8 /* SparklineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C0B6316212229780886D15 /* SparklineView.swift */; };
+		CBC79A46AB642ABDE71A05BC /* ReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6975924448CADF12A02D44C /* ReportsView.swift */; };
 		D3BC923B0AAE4B69BBA97AE8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48949C40E0AEAD70A49B2D9A /* SettingsView.swift */; };
 		D9C5685C505E10D844940053 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */; };
 		DB45C61C5B8F95167BBD6F4C /* RiskDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF2EFBF08852D0A51DFFCEE /* RiskDashboardView.swift */; };
@@ -71,6 +72,7 @@
 		A82503AA558FFE633E6681D7 /* Number+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Number+Format.swift"; sourceTree = "<group>"; };
 		AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
 		B2C0B6316212229780886D15 /* SparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparklineView.swift; sourceTree = "<group>"; };
+		B6975924448CADF12A02D44C /* ReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsView.swift; sourceTree = "<group>"; };
 		BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		BD44914BD7F6844CF5B55906 /* AnalyticsSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsSummaryView.swift; sourceTree = "<group>"; };
 		C3D1479C62C9F0502A3838FC /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
@@ -204,6 +206,14 @@
 			path = Extensions;
 			sourceTree = "<group>";
 		};
+		642E1A1800416B9C8658211F /* Reports */ = {
+			isa = PBXGroup;
+			children = (
+				B6975924448CADF12A02D44C /* ReportsView.swift */,
+			);
+			path = Reports;
+			sourceTree = "<group>";
+		};
 		76499C0DF58190C41446C7F9 /* News */ = {
 			isa = PBXGroup;
 			children = (
@@ -251,6 +261,7 @@
 				15E44D7D70E02D9C3F4A9F35 /* Dashboard */,
 				76499C0DF58190C41446C7F9 /* News */,
 				0B2430D9B3216A288C9EB1EE /* Pipeline */,
+				642E1A1800416B9C8658211F /* Reports */,
 				492B665405EF17B523EDBC43 /* Risk */,
 				3ED6C13D30614CAE15C8C83B /* Settings */,
 				04ADB217931B656F4348C73A /* Strategies */,
@@ -404,6 +415,7 @@
 				045915C20095902573ECD30D /* PnLText.swift in Sources */,
 				F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */,
 				9CBDBE05C250A4D6E0C7BBF0 /* QuoteRow.swift in Sources */,
+				CBC79A46AB642ABDE71A05BC /* ReportsView.swift in Sources */,
 				DB45C61C5B8F95167BBD6F4C /* RiskDashboardView.swift in Sources */,
 				D3BC923B0AAE4B69BBA97AE8 /* SettingsView.swift in Sources */,
 				CB7765CC7BB26125DDAB18F8 /* SparklineView.swift in Sources */,
