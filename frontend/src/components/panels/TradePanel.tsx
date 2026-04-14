@@ -33,6 +33,14 @@ import {
 } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // ─── Trade Builder ───────────────────────────────────────────
 
@@ -99,6 +107,8 @@ function TradeBuilderTab() {
   const { toast } = useToast();
 
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState<PlaceOrderPayload | null>(null);
 
   useEffect(() => {
     setLegs((prev) =>
@@ -188,31 +198,39 @@ function TradeBuilderTab() {
     ]);
   };
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => {
     if (legs.length === 0 || submitting) return;
+    const payload: PlaceOrderPayload = {
+      symbol: selectedSymbol,
+      side: legs[0].side,
+      type: "limit",
+      quantity: legs[0].quantity,
+      price: legs[0].price,
+      legs: legs.map((l) => ({
+        symbol: l.symbol,
+        side: l.side,
+        quantity: l.quantity,
+        price: l.price,
+      })),
+    };
+    setPendingOrder(payload);
+    setConfirmOpen(true);
+  }, [legs, submitting, selectedSymbol]);
+
+  const confirmSubmit = useCallback(async () => {
+    if (!pendingOrder || submitting) return;
     setSubmitting(true);
+    setConfirmOpen(false);
     try {
-      const payload: PlaceOrderPayload = {
-        symbol: selectedSymbol,
-        side: legs[0].side,
-        type: "limit",
-        quantity: legs[0].quantity,
-        price: legs[0].price,
-        legs: legs.map((l) => ({
-          symbol: l.symbol,
-          side: l.side,
-          quantity: l.quantity,
-          price: l.price,
-        })),
-      };
-      const order = await placeOrder(payload);
+      const order = await placeOrder(pendingOrder);
       addOrder(order);
+      setPendingOrder(null);
     } catch (err: any) {
       toast({ type: "error", message: "Order failed: " + (err?.message || "Unknown error") });
     } finally {
       setSubmitting(false);
     }
-  }, [legs, submitting, selectedSymbol, addOrder]);
+  }, [pendingOrder, submitting, addOrder, toast]);
 
   return (
     <div className="flex h-full flex-col p-3">
@@ -366,6 +384,66 @@ function TradeBuilderTab() {
           )}
         </Button>
       </div>
+
+      {/* Order Confirmation Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Order</DialogTitle>
+            <DialogDescription>
+              Review your order details before submitting.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingOrder && (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Order</span>
+                <span className="font-medium text-foreground">
+                  {pendingOrder.side === "buy" ? "Buy" : "Sell"} {pendingOrder.quantity} {pendingOrder.symbol} @ {pendingOrder.type === "market" ? "Market" : `$${pendingOrder.price?.toFixed(2)}`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Estimated Cost</span>
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatCurrency(Math.abs(netDebit))}
+                </span>
+              </div>
+              {legs.length > 1 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Legs</span>
+                  <span className="text-foreground">{legs.length}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Strategy</span>
+                <span className="text-foreground">{strategyName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Net Delta</span>
+                <span className="tabular-nums text-foreground">{formatGreek(aggregateGreeks.delta, 2)}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmSubmit}
+              disabled={submitting}
+              className={cn(
+                "font-medium",
+                tradingMode === "paper"
+                  ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
+                  : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+              )}
+            >
+              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Confirm Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

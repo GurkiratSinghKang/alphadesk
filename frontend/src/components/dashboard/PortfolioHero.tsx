@@ -121,10 +121,9 @@ export function PortfolioHero({
 }: PortfolioHeroProps) {
   const [period, setPeriod] = useState<Period>("1M");
 
-  // Only apply demo opacity when data has actually loaded (portfolioValue > 0 or explicit demo flag)
-  // This prevents a brief flash of opacity-40 on initial load when equity defaults to 0
+  // Only show demo banner when data has actually loaded (portfolioValue > 0 or explicit demo flag)
+  // This prevents a brief flash on initial load when equity defaults to 0
   const hasLoaded = portfolioValue > 0 || dayPnl !== 0;
-  const showDemoOpacity = isDemo && hasLoaded;
 
   const filteredHistory = useMemo(
     () => filterByPeriod(equityHistory, period),
@@ -141,7 +140,7 @@ export function PortfolioHero({
           {/* Portfolio Equity */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Portfolio</p>
-            <p className={cn("text-display tabular-nums text-gradient", showDemoOpacity && "opacity-40")} title={showDemoOpacity ? "Demo data — connect Alpaca API for live values" : undefined}>
+            <p className="text-display tabular-nums text-gradient">
               {portfolioValue ? formatCurrency(portfolioValue) : "\u2014"}
             </p>
           </div>
@@ -155,10 +154,8 @@ export function PortfolioHero({
               <p
                 className={cn(
                   "text-xl font-semibold tabular-nums leading-none",
-                  dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground",
-                  showDemoOpacity && "opacity-40"
+                  dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
                 )}
-                title={showDemoOpacity ? "Demo data — connect Alpaca API for live values" : undefined}
               >
                 {dayPnl > 0 ? "+" : ""}
                 {formatCurrency(dayPnl)}{" "}
@@ -191,9 +188,12 @@ export function PortfolioHero({
       </div>
 
       {/* Chart strip — dedicated space below text */}
-      <div className="relative h-[56px] border-t border-border/30">
+      <div className="relative h-[160px] border-t border-border/30">
         <EquityCurveSVG data={filteredHistory} />
       </div>
+      {isDemo && hasLoaded && (
+        <div className="text-xs text-blue-400/70 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>
+      )}
     </div>
     </>
   );

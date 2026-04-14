@@ -266,7 +266,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
   const hoveredRect = hoveredSector ? rects.find((r) => r.sector === hoveredSector) : null;
 
   return (
-    <div className={cn(isDemo && "opacity-40")}>
+    <div>
       {/* Title row */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -408,6 +408,9 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
           </div>
         )}
       </div>
+      {isDemo && (
+        <div className="text-xs text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+      )}
     </div>
   );
 }

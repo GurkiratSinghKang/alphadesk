@@ -70,6 +70,17 @@ function CommandCenter() {
   const router = useRouter();
   const summary = usePortfolioStore((s) => s.summary);
 
+  // ─── First-login welcome banner ──────────────────────────
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return !localStorage.getItem('alphadesk-welcomed');
+  });
+
+  const dismissWelcome = () => {
+    localStorage.setItem('alphadesk-welcomed', '1');
+    setShowWelcome(false);
+  };
+
   // ─── React Query hooks ────────────────────────────────────
   const { data: regimeData } = useRegime();
   const { data: indicesData } = useIndices();
@@ -291,6 +302,26 @@ function CommandCenter() {
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-[1800px] space-y-4 p-4 md:p-6">
+        {/* Welcome banner for first-time users */}
+        {showWelcome && (
+          <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              Welcome to AlphaDesk! Use{' '}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">&#8984;K</kbd>{' '}
+              to search symbols,{' '}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">?</kbd>{' '}
+              for keyboard shortcuts, or click any strategy card to explore.
+            </p>
+            <button
+              onClick={dismissWelcome}
+              className="ml-4 shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dismiss welcome message"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Section 1: Command Bar */}
         <PortfolioHero
           portfolioValue={portfolioValue}

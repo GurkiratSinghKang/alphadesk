@@ -121,6 +121,44 @@ export default function LoginPage() {
             ))}
           </div>
 
+          {/* Mock product preview */}
+          <div className="mt-8 w-full max-w-xl rounded-xl border border-border/30 bg-[var(--surface)]/40 p-4 backdrop-blur-sm overflow-hidden">
+            <div className="text-[10px] text-muted-foreground mb-2 flex items-center gap-2">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 rounded-full bg-red-500/50" />
+                <div className="w-2 h-2 rounded-full bg-yellow-500/50" />
+                <div className="w-2 h-2 rounded-full bg-green-500/50" />
+              </div>
+              <span>tradingalpha.net</span>
+            </div>
+            {/* Mock dashboard preview */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 h-20 rounded bg-[var(--panel)] flex items-end p-2">
+                {/* Fake equity curve */}
+                <svg viewBox="0 0 200 40" className="w-full h-full">
+                  <polyline points="0,35 20,30 40,28 60,25 80,20 100,22 120,15 140,12 160,10 180,8 200,5" fill="none" stroke="var(--profit)" strokeWidth="1.5" />
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <div className="h-9 rounded bg-[var(--panel)] p-1.5">
+                  <div className="w-8 h-1 bg-muted-foreground/30 rounded mb-1" />
+                  <div className="w-12 h-1.5 bg-[var(--profit)]/40 rounded" />
+                </div>
+                <div className="h-9 rounded bg-[var(--panel)] p-1.5">
+                  <div className="w-10 h-1 bg-muted-foreground/30 rounded mb-1" />
+                  <div className="w-8 h-1.5 bg-[var(--loss)]/40 rounded" />
+                </div>
+              </div>
+              <div className="col-span-3 grid grid-cols-4 gap-1">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="h-6 rounded bg-[var(--panel)] p-1">
+                    <div className="w-6 h-1 bg-muted-foreground/20 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground lg:justify-start">
             <a
               href="mailto:legal@tradingalpha.net"

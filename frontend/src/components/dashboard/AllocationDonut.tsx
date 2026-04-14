@@ -31,7 +31,7 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-label">Allocation</h3>
       </div>
-      <div className={cn("flex items-start gap-4", isDemo && "opacity-40")}>
+      <div className="flex items-start gap-4">
         {/* Donut SVG */}
         <div className="shrink-0">
           <svg width={120} height={120} viewBox="0 0 120 120">
@@ -108,6 +108,9 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
           </div>
         </div>
       </div>
+      {isDemo && (
+        <div className="text-xs text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+      )}
     </div>
   );
 }

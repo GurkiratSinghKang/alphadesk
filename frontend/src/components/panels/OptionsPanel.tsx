@@ -385,7 +385,7 @@ export function OptionsPanel() {
                   aria-current={atm ? "true" : undefined}
                   className={cn(
                     "border-b border-border/50 hover:bg-accent/30 transition-colors",
-                    atm && "bg-primary/5"
+                    atm && "bg-primary/15"
                   )}
                 >
                   {/* Calls — BUG #21: last cell clickable */}

@@ -78,7 +78,8 @@ export function PnlCalendarMini() {
             const isToday = cell.day === now.getDate();
             const hasPnl = cell.pnl !== null;
             const positive = (cell.pnl ?? 0) >= 0;
-            const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / 500, 1) : 0;
+            const scaleMax = Math.max(...days.map(d => Math.abs(d.pnl)), 1);
+            const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / scaleMax, 1) : 0;
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
             return (
               <div

@@ -17,6 +17,7 @@ const TRADE_PANEL_W = 380;
 export default function TradePage() {
   const [optionsPanelHeight, setOptionsPanelHeight] = useState(250);
   const [optionsFullScreen, setOptionsFullScreen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'chart' | 'watchlist' | 'analysis' | 'order'>('chart');
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
@@ -78,119 +79,149 @@ export default function TradePage() {
     </button>
   );
 
+  const mobileTabs = ['chart', 'watchlist', 'analysis', 'order'] as const;
+
   return (
-    <div style={{ width: "100%", height: totalH, overflow: "hidden", position: "relative" }}>
-      <h1 className="sr-only">Trade</h1>
+    <>
+      {/* ── Mobile tab bar — visible below lg ── */}
+      <div className="flex lg:hidden border-b border-border bg-[var(--panel)]">
+        {mobileTabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setMobileTab(tab)}
+            className={`flex-1 px-3 py-2 text-xs font-medium capitalize transition-colors ${
+              mobileTab === tab
+                ? 'text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Top Row (hidden in full-screen mode) ── */}
-      {!optionsFullScreen && (
-        <>
-          {/* Watchlist */}
+      {/* ── Mobile layout — visible below lg ── */}
+      <div className="lg:hidden flex-1 min-h-0 overflow-auto" style={{ height: totalH }}>
+        {mobileTab === 'chart' && <ChartPanel />}
+        {mobileTab === 'watchlist' && <WatchlistPanel />}
+        {mobileTab === 'analysis' && <AnalysisPanel />}
+        {mobileTab === 'order' && <TradePanel />}
+      </div>
+
+      {/* ── Desktop layout — hidden below lg ── */}
+      <div className="hidden lg:block" style={{ width: "100%", height: totalH, overflow: "hidden", position: "relative" }}>
+        <h1 className="sr-only">Trade</h1>
+
+        {/* ── Top Row (hidden in full-screen mode) ── */}
+        {!optionsFullScreen && (
+          <>
+            {/* Watchlist */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: WATCHLIST_W,
+                height: topRowH,
+                overflow: "auto",
+                borderRight: "1px solid var(--border)",
+                background: "var(--panel)",
+              }}
+            >
+              <WatchlistPanel />
+            </div>
+
+            {/* Chart — z-index 1 (behind other panels) */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: WATCHLIST_W,
+                width: chartW,
+                height: topRowH,
+                overflow: "hidden",
+                zIndex: 1,
+              }}
+            >
+              <ChartPanel />
+            </div>
+
+            {/* Analysis — z-index 10 (above chart) */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: ANALYSIS_W,
+                height: topRowH,
+                overflow: "auto",
+                borderLeft: "1px solid var(--border)",
+                zIndex: 10,
+                background: "var(--panel)",
+              }}
+            >
+              <AnalysisPanel />
+            </div>
+          </>
+        )}
+
+        {/* ── Drag Handle ── */}
+        {!optionsFullScreen && (
           <div
+            onMouseDown={handleDragStart}
             style={{
               position: "absolute",
-              top: 0,
+              bottom: optionsPanelHeight,
               left: 0,
-              width: WATCHLIST_W,
-              height: topRowH,
-              overflow: "auto",
-              borderRight: "1px solid var(--border)",
-              background: "var(--panel)",
+              width: "100%",
+              height: 6,
+              zIndex: 20,
             }}
+            className="cursor-row-resize bg-border/50 hover:bg-primary/30 transition-colors flex items-center justify-center"
           >
-            <WatchlistPanel />
+            <div className="w-8 h-0.5 rounded-full bg-muted-foreground/30" />
           </div>
+        )}
 
-          {/* Chart — z-index 1 (behind other panels) */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: WATCHLIST_W,
-              width: chartW,
-              height: topRowH,
-              overflow: "hidden",
-              zIndex: 1,
-            }}
-          >
-            <ChartPanel />
-          </div>
+        {/* ── Bottom Row — z-index 10 (above chart) ── */}
 
-          {/* Analysis — z-index 10 (above chart) */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              width: ANALYSIS_W,
-              height: topRowH,
-              overflow: "auto",
-              borderLeft: "1px solid var(--border)",
-              zIndex: 10,
-              background: "var(--panel)",
-            }}
-          >
-            <AnalysisPanel />
-          </div>
-        </>
-      )}
-
-      {/* ── Drag Handle ── */}
-      {!optionsFullScreen && (
+        {/* Options Chain */}
         <div
-          onMouseDown={handleDragStart}
           style={{
             position: "absolute",
-            bottom: optionsPanelHeight,
+            bottom: 0,
             left: 0,
-            width: "100%",
-            height: 6,
-            zIndex: 20,
+            width: optionsW,
+            height: optionsFullScreen ? totalH : optionsPanelHeight,
+            minHeight: 200,
+            overflow: "auto",
+            borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
+            zIndex: 10,
+            background: "var(--panel)",
           }}
-          className="cursor-row-resize bg-border/50 hover:bg-primary/30 transition-colors flex items-center justify-center"
         >
-          <div className="w-8 h-0.5 rounded-full bg-muted-foreground/30" />
+          <OptionsPanel />
+          {fullScreenToggle}
         </div>
-      )}
 
-      {/* ── Bottom Row — z-index 10 (above chart) ── */}
-
-      {/* Options Chain */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          width: optionsW,
-          height: optionsFullScreen ? totalH : optionsPanelHeight,
-          minHeight: 200,
-          overflow: "auto",
-          borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
-          zIndex: 10,
-          background: "var(--panel)",
-        }}
-      >
-        <OptionsPanel />
-        {fullScreenToggle}
+        {/* Trade Panel */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            right: 0,
+            width: TRADE_PANEL_W,
+            height: optionsFullScreen ? totalH : optionsPanelHeight,
+            overflow: "auto",
+            borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
+            borderLeft: "1px solid var(--border)",
+            zIndex: 10,
+            background: "var(--panel)",
+          }}
+        >
+          <TradePanel />
+        </div>
       </div>
-
-      {/* Trade Panel */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          right: 0,
-          width: TRADE_PANEL_W,
-          height: optionsFullScreen ? totalH : optionsPanelHeight,
-          overflow: "auto",
-          borderTop: optionsFullScreen ? "none" : "1px solid var(--border)",
-          borderLeft: "1px solid var(--border)",
-          zIndex: 10,
-          background: "var(--panel)",
-        }}
-      >
-        <TradePanel />
-      </div>
-    </div>
+    </>
   );
 }
