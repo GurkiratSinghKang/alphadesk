@@ -102,16 +102,19 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
   ];
 
   return (
-    <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Market Movers
-        </h3>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
+            Market Movers
+          </h2>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-3">
+      <div className="flex gap-1 px-4 pt-3 mb-3">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -134,14 +137,14 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
 
       {/* Table */}
       {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-6">
+        <div className="flex flex-col items-center justify-center py-6 px-4">
           <BarChart3 className="h-5 w-5 mb-2 text-muted-foreground opacity-30" />
           <p className="text-[11px] text-muted-foreground">
             Market data loading...
           </p>
         </div>
       ) : (
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 px-4 pb-3">
           {/* Column headers */}
           <div className="flex items-center text-[9px] uppercase tracking-wider text-muted-foreground px-2 py-1">
             <span className="flex-1">Symbol</span>

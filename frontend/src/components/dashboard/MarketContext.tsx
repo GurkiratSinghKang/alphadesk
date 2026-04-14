@@ -54,8 +54,12 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
   const displayIndices = indices.filter((i) => i.symbol !== "VIX");
 
   return (
-    <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Newspaper className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold text-foreground">Market Context</h2>
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 p-4">
         {/* Indices */}
         <div>
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

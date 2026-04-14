@@ -31,6 +31,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <TickerTape />
       <StatusStrip />
       <main className="flex-1 overflow-y-auto">{children}</main>
+      <footer className="border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center">
+        AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
+      </footer>
       <CommandPalette />
       {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
     </div>

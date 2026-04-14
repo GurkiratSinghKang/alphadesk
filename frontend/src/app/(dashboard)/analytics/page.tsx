@@ -359,10 +359,10 @@ function EmptyState({ label }: { label: string }) {
 
 function SectionCard({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-[var(--surface)] overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <Icon className="h-3.5 w-3.5 text-primary" />
-        <h2 className="text-xs font-semibold text-foreground">{title}</h2>
+    <div className="rounded-xl border border-border bg-[var(--panel)] overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -440,9 +440,23 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading analytics...</span>
+      <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg animate-pulse bg-[var(--panel)]" />
+          <div className="space-y-1">
+            <div className="h-5 w-48 rounded animate-pulse bg-[var(--panel)]" />
+            <div className="h-3 w-72 rounded animate-pulse bg-[var(--panel)]" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
+          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
+          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
+        </div>
+        <div className="h-[200px] rounded-xl animate-pulse bg-[var(--panel)]" />
       </div>
     );
   }

@@ -27,13 +27,18 @@ export function PnlCalendarMini() {
   useEffect(() => { setMounted(true); }, []);
 
   if (!mounted || !fetched) return (
-    <div className="animate-pulse bg-[var(--panel)] rounded-lg h-48 border border-border" />
+    <div className="animate-pulse bg-[var(--panel)] rounded-xl h-48 border border-border" />
   );
 
   if (days.length === 0) return (
-    <div className="rounded-xl border border-border bg-[var(--panel)] flex items-center justify-center gap-2 h-32 px-4">
-      <BarChart3 className="h-4 w-4 opacity-30 text-muted-foreground shrink-0" />
-      <p className="text-xs text-muted-foreground">No trading data this month</p>
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold text-foreground">P&L Calendar</h2>
+      </div>
+      <div className="flex items-center justify-center gap-2 h-24 px-4">
+        <p className="text-xs text-muted-foreground">No trading data this month</p>
+      </div>
     </div>
   );
 

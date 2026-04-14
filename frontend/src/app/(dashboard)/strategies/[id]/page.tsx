@@ -286,8 +286,21 @@ export default function StrategyDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Activity className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="mx-auto max-w-[1400px] space-y-6 p-6">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg animate-pulse bg-[var(--panel)]" />
+          <div className="space-y-1">
+            <div className="h-5 w-48 rounded animate-pulse bg-[var(--panel)]" />
+            <div className="h-3 w-32 rounded animate-pulse bg-[var(--panel)]" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 rounded-xl animate-pulse bg-[var(--panel)]" />
+          ))}
+        </div>
+        <div className="h-[200px] rounded-xl animate-pulse bg-[var(--panel)]" />
+        <div className="h-[300px] rounded-xl animate-pulse bg-[var(--panel)]" />
       </div>
     );
   }

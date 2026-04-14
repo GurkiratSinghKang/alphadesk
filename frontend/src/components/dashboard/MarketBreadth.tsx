@@ -76,27 +76,29 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
 
   if (total === 0) {
     return (
-      <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="rounded-xl border border-border bg-[var(--panel)]">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
             Market Breadth
-          </h3>
+          </h2>
         </div>
-        <p className="text-[11px] text-muted-foreground">Loading sector data...</p>
+        <div className="p-4">
+          <p className="text-[11px] text-muted-foreground">Loading sector data...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
             Market Breadth
-          </h3>
+          </h2>
         </div>
         <span
           className={cn(
@@ -109,7 +111,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
       </div>
 
       {/* Gauge bar */}
-      <div className="mb-3">
+      <div className="px-4 pt-3 mb-3">
         <div className="h-2 rounded-full bg-[var(--loss)]/20 overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700 ease-out"
@@ -127,7 +129,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3 px-4">
         {/* Advancing */}
         <div className="text-center">
           <div className="text-lg font-bold tabular-nums text-[var(--profit)]">
@@ -161,7 +163,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
 
       {/* Sector breakdown */}
       {sectors.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border">
+        <div className="mx-4 mt-3 pt-3 pb-4 border-t border-border">
           <div className="flex flex-wrap gap-1">
             {sectors
               .sort((a, b) => b.change_pct - a.change_pct)

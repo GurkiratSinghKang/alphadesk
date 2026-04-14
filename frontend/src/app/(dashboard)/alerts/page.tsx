@@ -372,9 +372,19 @@ export default function AlertsPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          Loading alerts...
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-lg border border-border bg-[var(--panel)] p-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 rounded-full bg-muted-foreground/20" />
+                <div className="h-4 w-16 rounded bg-muted-foreground/20" />
+                <div className="h-4 w-20 rounded bg-muted-foreground/20" />
+                <div className="h-4 w-24 rounded bg-muted-foreground/20" />
+                <div className="flex-1" />
+                <div className="h-4 w-32 rounded bg-muted-foreground/20" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
