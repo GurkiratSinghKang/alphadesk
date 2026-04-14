@@ -108,6 +108,7 @@ export function ChartPanel() {
     startTime?: number;
     endTime?: number;
     color?: string;
+    label?: string;
   }>>([]);
 
   // Trendline drawing: two-click state
@@ -117,7 +118,7 @@ export function ChartPanel() {
   const [trendlines, setTrendlines] = useState<Array<{
     startX: number; startY: number; endX: number; endY: number;
     startPrice: number; endPrice: number;
-  }>>([]);;
+  }>>([]);
 
   const quote = quotes[selectedSymbol];
 
@@ -200,23 +201,31 @@ export function ChartPanel() {
     );
   };
 
-  const addHLine = (price: number, color = "#3b82f6") => {
-    setDrawings((prev) => [...prev, { type: "hline", price, color }]);
+  const addHLine = (price: number, color = "#3b82f6", label?: string) => {
+    setDrawings((prev) => [...prev, { type: "hline", price, color, label }]);
   };
 
   const addFibLines = (high: number, low: number) => {
     const range = high - low;
     const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+    const labels = ["0%", "23.6%", "38.2%", "50%", "61.8%", "78.6%", "100%"];
     const colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ef4444"];
     levels.forEach((level, i) => {
       const price = high - range * level;
-      addHLine(Math.round(price * 100) / 100, colors[i]);
+      const rounded = Math.round(price * 100) / 100;
+      addHLine(rounded, colors[i], `Fib ${labels[i]} $${rounded.toFixed(2)}`);
     });
+  };
+
+  // Toggle drawing mode, resetting partial trendline/fib state when switching modes
+  const toggleDrawingMode = (mode: "hline" | "trendline" | "fib") => {
+    setTrendlineStart(null);
+    setDrawingMode((prev) => (prev === mode ? "none" : mode));
   };
 
   const drawingPriceLines = drawings
     .filter((d) => d.type === "hline" && d.price != null)
-    .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6" }));
+    .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6", label: d.label }));
 
   // Real-time chart update: when quote updates via WebSocket, push new bar to chart.
   // chartHandleRef.current may be null on the first quote if the chart hasn't mounted yet;
@@ -429,7 +438,7 @@ export function ChartPanel() {
         <div className="flex items-center gap-0.5 ml-2 border-l border-border pl-2">
           <button
             aria-label="Draw horizontal line"
-            onClick={() => setDrawingMode(drawingMode === "hline" ? "none" : "hline")}
+            onClick={() => toggleDrawingMode("hline")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "hline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Horizontal Line"
           >
@@ -437,7 +446,7 @@ export function ChartPanel() {
           </button>
           <button
             aria-label="Draw trendline"
-            onClick={() => setDrawingMode(drawingMode === "trendline" ? "none" : "trendline")}
+            onClick={() => toggleDrawingMode("trendline")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "trendline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Trendline"
           >
@@ -445,7 +454,7 @@ export function ChartPanel() {
           </button>
           <button
             aria-label="Draw fibonacci retracement"
-            onClick={() => setDrawingMode(drawingMode === "fib" ? "none" : "fib")}
+            onClick={() => toggleDrawingMode("fib")}
             className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "fib" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
             title="Fibonacci"
           >
@@ -510,6 +519,150 @@ export function ChartPanel() {
               setDrawingMode("none");
             }}
           />
+        )}
+
+        {/* Trendline overlay — two clicks to draw a line */}
+        {drawingMode === "trendline" && (
+          <div
+            className="absolute inset-0 cursor-crosshair z-[5]"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+              const pctY = y / rect.height;
+
+              // Compute price from Y position
+              let price = 0;
+              if (quote) {
+                const high = quote.high || quote.last * 1.05;
+                const low = quote.low || quote.last * 0.95;
+                price = high - pctY * (high - low);
+              } else if (displayData.length) {
+                const high = Math.max(...displayData.map((b) => b.high));
+                const low = Math.min(...displayData.map((b) => b.low));
+                price = high - pctY * (high - low);
+              }
+              price = Math.round(price * 100) / 100;
+
+              if (!trendlineStart) {
+                // First click — record start point
+                setTrendlineStart({ x, y, price, time: Date.now() });
+              } else {
+                // Second click — create the trendline
+                setTrendlines((prev) => [...prev, {
+                  startX: trendlineStart.x,
+                  startY: trendlineStart.y,
+                  endX: x,
+                  endY: y,
+                  startPrice: trendlineStart.price,
+                  endPrice: price,
+                }]);
+                setTrendlineStart(null);
+                setDrawingMode("none");
+              }
+            }}
+          />
+        )}
+
+        {/* Fibonacci overlay — two clicks to set high and low */}
+        {drawingMode === "fib" && (
+          <div
+            className="absolute inset-0 cursor-crosshair z-[5]"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pctY = (e.clientY - rect.top) / rect.height;
+
+              let price = 0;
+              if (quote) {
+                const high = quote.high || quote.last * 1.05;
+                const low = quote.low || quote.last * 0.95;
+                price = high - pctY * (high - low);
+              } else if (displayData.length) {
+                const high = Math.max(...displayData.map((b) => b.high));
+                const low = Math.min(...displayData.map((b) => b.low));
+                price = high - pctY * (high - low);
+              }
+              price = Math.round(price * 100) / 100;
+
+              if (!trendlineStart) {
+                // First click — high point
+                setTrendlineStart({ x: 0, y: 0, price, time: Date.now() });
+              } else {
+                // Second click — low point, draw fib levels
+                const high = Math.max(trendlineStart.price, price);
+                const low = Math.min(trendlineStart.price, price);
+                addFibLines(high, low);
+                setTrendlineStart(null);
+                setDrawingMode("none");
+              }
+            }}
+          />
+        )}
+
+        {/* SVG overlay for trendlines */}
+        {trendlines.length > 0 && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-[3]">
+            {trendlines.map((line, i) => (
+              <g key={i}>
+                <line
+                  x1={line.startX}
+                  y1={line.startY}
+                  x2={line.endX}
+                  y2={line.endY}
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                />
+                {/* Start dot */}
+                <circle cx={line.startX} cy={line.startY} r={3} fill="#f59e0b" />
+                {/* End dot */}
+                <circle cx={line.endX} cy={line.endY} r={3} fill="#f59e0b" />
+                {/* Price label at start */}
+                <text
+                  x={line.startX + 6}
+                  y={line.startY - 6}
+                  fill="#f59e0b"
+                  fontSize={10}
+                  fontFamily="Inter, sans-serif"
+                >
+                  ${line.startPrice.toFixed(2)}
+                </text>
+                {/* Price label at end */}
+                <text
+                  x={line.endX + 6}
+                  y={line.endY - 6}
+                  fill="#f59e0b"
+                  fontSize={10}
+                  fontFamily="Inter, sans-serif"
+                >
+                  ${line.endPrice.toFixed(2)}
+                </text>
+              </g>
+            ))}
+          </svg>
+        )}
+
+        {/* Trendline in-progress indicator (first click placed, waiting for second) */}
+        {trendlineStart && drawingMode === "trendline" && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-[3]">
+            <circle cx={trendlineStart.x} cy={trendlineStart.y} r={4} fill="#f59e0b" opacity={0.8} />
+            <text
+              x={trendlineStart.x + 8}
+              y={trendlineStart.y - 8}
+              fill="#f59e0b"
+              fontSize={10}
+              fontFamily="Inter, sans-serif"
+            >
+              ${trendlineStart.price.toFixed(2)} — click end point
+            </text>
+          </svg>
+        )}
+
+        {/* Fibonacci in-progress indicator */}
+        {trendlineStart && drawingMode === "fib" && (
+          <div className="absolute top-2 left-2 z-[6] bg-[var(--surface)]/90 border border-border rounded px-2 py-1 text-[10px] text-muted-foreground">
+            Fib high: ${trendlineStart.price.toFixed(2)} — click to set low point
+          </div>
         )}
 
         {/* Quick trade buttons — fixed top-right, translucent until hovered */}
