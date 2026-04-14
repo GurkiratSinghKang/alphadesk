@@ -36,6 +36,7 @@ const PAGES = [
   { path: "/analytics", label: "Analytics", icon: LineChart },
   { path: "/alerts", label: "Alerts", icon: Bell },
   { path: "/pipeline", label: "Pipeline", icon: Bot },
+  { path: "/reports", label: "Reports", icon: FileText },
   { path: "/docs", label: "Documentation", icon: FileText },
 ];
 

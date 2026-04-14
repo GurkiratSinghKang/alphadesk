@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
-import { Settings, Keyboard, LogOut } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Settings, Keyboard, LogOut, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 
 export function ProfileMenu() {
+  const router = useRouter();
   const { tradingMode, setTradingMode } = useUIStore();
   const summary = usePortfolioStore((s) => s.summary);
   const { toast } = useToast();
@@ -53,6 +54,7 @@ export function ProfileMenu() {
             </div>
           </div>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => router.push("/reports")}><FileText className="mr-2 h-3.5 w-3.5" />Reports & Export</DropdownMenuItem>
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}><Settings className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
           <DropdownMenuItem onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
           <DropdownMenuSeparator />
