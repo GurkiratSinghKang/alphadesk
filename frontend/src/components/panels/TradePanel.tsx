@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Plus,
   Minus,
@@ -13,6 +13,7 @@ import {
   Briefcase,
   FileText,
 } from "lucide-react";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import { useOptionsStore, type SelectedStrike } from "@/stores/options";
 import { placeOrder, cancelOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import type { PlaceOrderPayload } from "@/lib/api";
+import type { Position } from "@/types";
 import {
   formatCurrency,
   formatGreek,
@@ -477,6 +479,58 @@ function TradeBuilderTab() {
 
 // ─── Positions Tab ────────────────────────────────────────────
 
+/** Single position row with real-time P&L from WebSocket quotes */
+function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => void }) {
+  const liveQuote = useMarketStore((s) => s.quotes[p.symbol.split(" ")[0]]);
+
+  // Compute live P&L: if we have a real-time quote, recalculate using the latest price
+  const livePrice = liveQuote?.last ?? p.currentPrice;
+  const livePnl = liveQuote
+    ? (liveQuote.last - p.avgCost) * p.quantity
+    : p.unrealizedPnl;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(p.symbol.split(" ")[0])}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onSelect(p.symbol.split(" ")[0]);
+      }}
+      className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
+    >
+      <span className="flex-1 font-medium text-foreground truncate">
+        {p.symbol}
+      </span>
+      <span className="w-12 text-right tabular-nums text-foreground">
+        {p.quantity}
+      </span>
+      <span className="w-16 text-right tabular-nums text-muted-foreground">
+        {formatCurrency(p.avgCost)}
+      </span>
+      <span className="w-16 text-right">
+        <AnimatedNumber
+          value={livePrice}
+          format={(n) => formatCurrency(n)}
+          className="tabular-nums text-foreground"
+          duration={200}
+        />
+      </span>
+      <span className="w-20 text-right">
+        <AnimatedNumber
+          value={livePnl}
+          format={(n) => `${n >= 0 ? "+" : ""}${formatCurrency(n)}`}
+          className={cn(
+            "tabular-nums font-medium",
+            getChangeTextClass(livePnl)
+          )}
+          duration={200}
+        />
+      </span>
+    </div>
+  );
+}
+
 function PositionsTab() {
   const positions = usePortfolioStore((s) => s.positions);
   const setPositions = usePortfolioStore((s) => s.setPositions);
@@ -496,6 +550,18 @@ function PositionsTab() {
         .finally(() => setLoading(false))
     );
   }, [fetched, setPositions]);
+
+  // Compute total live P&L across all positions
+  const quotes = useMarketStore((s) => s.quotes);
+  const totalLivePnl = useMemo(() => {
+    return positions.reduce((sum, p) => {
+      const liveQuote = quotes[p.symbol.split(" ")[0]];
+      const pnl = liveQuote
+        ? (liveQuote.last - p.avgCost) * p.quantity
+        : p.unrealizedPnl;
+      return sum + pnl;
+    }, 0);
+  }, [positions, quotes]);
 
   if (loading && positions.length === 0) {
     return (
@@ -517,48 +583,33 @@ function PositionsTab() {
 
   return (
     <div className="p-2">
+      {/* Portfolio total P&L bar */}
+      {positions.length > 0 && (
+        <div className="flex items-center justify-between rounded-md bg-background/50 px-2.5 py-1.5 mb-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Total P&L</span>
+          <AnimatedNumber
+            value={totalLivePnl}
+            format={(n) => `${n >= 0 ? "+" : ""}${formatCurrency(n)}`}
+            className={cn(
+              "text-xs font-semibold tabular-nums",
+              getChangeTextClass(totalLivePnl)
+            )}
+            duration={200}
+          />
+        </div>
+      )}
+
       <div className="space-y-1">
         <div className="flex items-center text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1">
           <span className="flex-1">Position</span>
           <span className="w-12 text-right">Qty</span>
           <span className="w-16 text-right">Avg</span>
           <span className="w-16 text-right">Last</span>
-          <span className="w-16 text-right">P&L</span>
+          <span className="w-20 text-right">P&L</span>
         </div>
 
         {positions.map((p) => (
-          <div
-            key={p.symbol}
-            role="button"
-            tabIndex={0}
-            onClick={() => setSelectedSymbol(p.symbol.split(" ")[0])}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setSelectedSymbol(p.symbol.split(" ")[0]);
-            }}
-            className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
-          >
-            <span className="flex-1 font-medium text-foreground truncate">
-              {p.symbol}
-            </span>
-            <span className="w-12 text-right tabular-nums text-foreground">
-              {p.quantity}
-            </span>
-            <span className="w-16 text-right tabular-nums text-muted-foreground">
-              {formatCurrency(p.avgCost)}
-            </span>
-            <span className="w-16 text-right tabular-nums text-foreground">
-              {formatCurrency(p.currentPrice)}
-            </span>
-            <span
-              className={cn(
-                "w-16 text-right tabular-nums font-medium",
-                getChangeTextClass(p.unrealizedPnl)
-              )}
-            >
-              {p.unrealizedPnl >= 0 ? "+" : ""}
-              {formatCurrency(p.unrealizedPnl)}
-            </span>
-          </div>
+          <PositionRow key={p.symbol} p={p} onSelect={setSelectedSymbol} />
         ))}
       </div>
     </div>

@@ -31,9 +31,9 @@ function getRegimeDisplay(label: string): {
     return {
       text: "Defensive",
       indicator: "\u26ab",
-      color: "text-zinc-400",
-      bgColor: "bg-zinc-500/10",
-      borderColor: "border-zinc-500/30",
+      color: "text-muted-foreground",
+      bgColor: "bg-[var(--neutral)]/10",
+      borderColor: "border-[var(--neutral)]/30",
     };
   }
   if (normalized.includes("bear")) {
@@ -170,7 +170,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               title={`Long: ${metrics.longExposure.toFixed(1)}%`}
             />
             <div
-              className="bg-zinc-500/40 transition-all duration-500"
+              className="bg-[var(--neutral)]/40 transition-all duration-500"
               style={{ width: `${metrics.cashPct}%` }}
               title={`Cash: ${metrics.cashPct.toFixed(1)}%`}
             />
@@ -181,7 +181,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               <span className="text-[9px] text-muted-foreground">Long {metrics.longExposure.toFixed(0)}%</span>
             </div>
             <div className="flex items-center gap-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-zinc-500/40" />
+              <div className="h-1.5 w-1.5 rounded-full bg-[var(--neutral)]/40" />
               <span className="text-[9px] text-muted-foreground">Cash {metrics.cashPct.toFixed(0)}%</span>
             </div>
           </div>

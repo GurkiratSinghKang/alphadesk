@@ -1,19 +1,116 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { SHORTCUT_GROUPS } from "@/hooks/useKeyboardShortcuts";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { SHORTCUT_GROUPS, type ShortcutGroup } from "@/hooks/useKeyboardShortcuts";
+import {
+  Globe,
+  Compass,
+  BarChart3,
+  List,
+  Zap,
+  Search,
+} from "lucide-react";
+
+const GROUP_ICONS: Record<string, typeof Globe> = {
+  globe: Globe,
+  compass: Compass,
+  chart: BarChart3,
+  list: List,
+  zap: Zap,
+};
 
 function KBD({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[24px] rounded bg-[var(--panel)] border border-border px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">
+    <kbd className="inline-flex items-center justify-center min-w-[24px] rounded-md bg-[var(--panel)] border border-border/60 px-1.5 py-0.5 text-[11px] font-mono text-foreground shadow-[0_1px_0_1px_rgba(0,0,0,0.4)]">
       {children}
     </kbd>
   );
 }
 
+function NewBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0 text-[8px] font-bold uppercase tracking-wider text-primary border border-primary/20">
+      New
+    </span>
+  );
+}
+
+function GroupSection({ group, filter }: { group: ShortcutGroup; filter: string }) {
+  const Icon = GROUP_ICONS[group.icon] ?? Globe;
+
+  const filteredItems = useMemo(() => {
+    if (!filter) return group.items;
+    const q = filter.toLowerCase();
+    return group.items.filter(
+      (item) =>
+        item.description.toLowerCase().includes(q) ||
+        item.key.toLowerCase().includes(q)
+    );
+  }, [group.items, filter]);
+
+  if (filteredItems.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/10">
+          <Icon className="h-3 w-3 text-primary" />
+        </div>
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {group.name}
+        </h3>
+      </div>
+      <div className="space-y-1">
+        {filteredItems.map((item) => (
+          <div
+            key={item.key}
+            className="flex items-center justify-between gap-4 rounded-md px-2 py-1.5 hover:bg-accent/20 transition-colors"
+          >
+            <span className="text-[13px] text-muted-foreground">
+              {item.description}
+              {item.isNew && <NewBadge />}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              {item.key.split(/(\+|\s)/).filter(k => k !== "+" && k.trim()).map((k, i, arr) => (
+                <span key={i} className="flex items-center gap-0.5">
+                  {i > 0 && (
+                    <span className="text-[9px] text-muted-foreground/50 mx-0.5">
+                      {item.key.includes("+") ? "+" : "then"}
+                    </span>
+                  )}
+                  <KBD>{k.trim()}</KBD>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { contentRef.current?.focus(); }, []);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    // Focus the search input on mount
+    searchRef.current?.focus();
+  }, []);
+
+  const visibleGroups = useMemo(() => {
+    if (!filter) return SHORTCUT_GROUPS;
+    const q = filter.toLowerCase();
+    return SHORTCUT_GROUPS.filter((g) =>
+      g.items.some(
+        (item) =>
+          item.description.toLowerCase().includes(q) ||
+          item.key.toLowerCase().includes(q)
+      )
+    );
+  }, [filter]);
+
   return (
     <div
       role="dialog"
@@ -24,42 +121,54 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
       <div
         ref={contentRef}
         tabIndex={-1}
-        className="w-full max-w-[600px] rounded-xl border border-border bg-[var(--surface)] p-6 shadow-2xl outline-none"
+        className="w-full max-w-[640px] max-h-[80vh] flex flex-col rounded-xl border border-border bg-[var(--surface)] shadow-2xl shadow-black/40 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-foreground">Keyboard Shortcuts</h2>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+          <h2 className="text-base font-semibold text-foreground">Keyboard Shortcuts</h2>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             Press <KBD>Esc</KBD> to close
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
-          {SHORTCUT_GROUPS.map((group) => (
-            <div key={group.name}>
-              <h3 className="text-label mb-3">{group.name}</h3>
-              <div className="space-y-2">
-                {group.items.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-muted-foreground">{item.description}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {item.key.split(" ").map((k, i) => (
-                        <span key={i} className="flex items-center gap-0.5">
-                          {i > 0 && <span className="text-[10px] text-muted-foreground mx-0.5">then</span>}
-                          <KBD>{k}</KBD>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+        {/* Search filter */}
+        <div className="px-6 pb-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Filter shortcuts..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full h-8 rounded-lg border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
         </div>
 
-        <p className="mt-6 text-[11px] text-[#8a8a95]">
-          Customize bindings in localStorage key &quot;alphadesk:keybindings&quot;
-        </p>
+        {/* Shortcut groups */}
+        <div className="flex-1 overflow-y-auto px-6 pb-5 scrollbar-thin">
+          {visibleGroups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Search className="h-5 w-5 mb-2 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No shortcuts match &ldquo;{filter}&rdquo;</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-6">
+              {visibleGroups.map((group) => (
+                <GroupSection key={group.name} group={group} filter={filter} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border px-6 py-3">
+          <p className="text-[11px] text-muted-foreground/60">
+            Customize bindings in localStorage key &quot;alphadesk:keybindings&quot;
+          </p>
+        </div>
       </div>
     </div>
   );

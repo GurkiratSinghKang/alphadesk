@@ -144,7 +144,7 @@ function getTileColor(changePct: number): string {
   if (changePct > 2) return "bg-emerald-600";
   if (changePct > 1) return "bg-emerald-500/70";
   if (changePct > 0.3) return "bg-emerald-400/50";
-  if (changePct >= -0.3) return "bg-zinc-700";
+  if (changePct >= -0.3) return "bg-[var(--neutral)]";
   if (changePct >= -1) return "bg-red-400/50";
   if (changePct >= -2) return "bg-red-500/70";
   return "bg-red-600";
@@ -273,14 +273,14 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
           Sector Performance
         </h3>
         {hasYtd && (
-          <div className="flex items-center gap-0.5 rounded-md bg-zinc-800/60 p-0.5">
+          <div className="flex items-center gap-0.5 rounded-md bg-[var(--panel)] p-0.5 border border-border/30">
             <button
               onClick={() => setViewMode("daily")}
               className={cn(
                 "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
                 viewMode === "daily"
-                  ? "bg-zinc-600 text-white"
-                  : "text-zinc-400 hover:text-zinc-300"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               Daily
@@ -290,8 +290,8 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
               className={cn(
                 "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
                 viewMode === "ytd"
-                  ? "bg-zinc-600 text-white"
-                  : "text-zinc-400 hover:text-zinc-300"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               YTD
@@ -365,7 +365,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
         {/* Hover tooltip */}
         {hoveredRect && tooltipPos && (
           <div
-            className="pointer-events-none absolute z-30 rounded-md border border-zinc-600 bg-zinc-900/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm"
+            className="pointer-events-none absolute z-30 rounded-md border border-border bg-[var(--surface)]/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm"
             style={{
               left: Math.min(tooltipPos.x + 12, width - 160),
               top: Math.max(tooltipPos.y - 60, 0),

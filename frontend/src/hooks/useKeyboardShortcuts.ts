@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
 
 export const DEFAULT_BINDINGS: Record<string, string> = {
@@ -11,6 +11,10 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "g d": "navigate:dashboard",
   "g t": "navigate:trade",
   "g p": "navigate:pipeline",
+  "n": "navigate:next-tab",
+  "p": "navigate:prev-tab",
+  "f": "focus:search",
+  "r": "refresh:page",
   "1": "chart:timeframe:1m",
   "2": "chart:timeframe:5m",
   "3": "chart:timeframe:15m",
@@ -25,26 +29,42 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "s": "chart:quick-sell",
 };
 
-export const SHORTCUT_GROUPS: { name: string; items: { key: string; action: string; description: string }[] }[] = [
+/** Shortcuts added after 2026-04-01 are flagged as new */
+export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r"]);
+
+export type ShortcutGroup = {
+  name: string;
+  icon: string;
+  items: { key: string; action: string; description: string; isNew?: boolean }[];
+};
+
+export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     name: "Global",
+    icon: "globe",
     items: [
       { key: "?", action: "toggle:shortcuts", description: "Show keyboard shortcuts" },
       { key: "Ctrl+K", action: "toggle:command-palette", description: "Command palette" },
       { key: "/", action: "focus:search", description: "Focus symbol search" },
-      { key: "Escape", action: "dismiss", description: "Close overlay / deselect" },
+      { key: "f", action: "focus:search", description: "Focus search / command palette", isNew: true },
+      { key: "Escape", action: "dismiss", description: "Close any modal / overlay" },
+      { key: "r", action: "refresh:page", description: "Refresh current page data", isNew: true },
     ],
   },
   {
     name: "Navigation",
+    icon: "compass",
     items: [
       { key: "g d", action: "navigate:dashboard", description: "Go to Dashboard" },
       { key: "g t", action: "navigate:trade", description: "Go to Trade" },
       { key: "g p", action: "navigate:pipeline", description: "Go to Pipeline" },
+      { key: "n", action: "navigate:next-tab", description: "Next tab", isNew: true },
+      { key: "p", action: "navigate:prev-tab", description: "Previous tab", isNew: true },
     ],
   },
   {
     name: "Chart",
+    icon: "chart",
     items: [
       { key: "1", action: "chart:timeframe:1m", description: "1 minute" },
       { key: "2", action: "chart:timeframe:5m", description: "5 minutes" },
@@ -58,6 +78,7 @@ export const SHORTCUT_GROUPS: { name: string; items: { key: string; action: stri
   },
   {
     name: "Watchlist",
+    icon: "list",
     items: [
       { key: "j", action: "watchlist:next", description: "Next symbol" },
       { key: "k", action: "watchlist:prev", description: "Previous symbol" },
@@ -65,6 +86,7 @@ export const SHORTCUT_GROUPS: { name: string; items: { key: string; action: stri
   },
   {
     name: "Quick Order",
+    icon: "zap",
     items: [
       { key: "b", action: "chart:quick-buy", description: "Quick buy at market" },
       { key: "s", action: "chart:quick-sell", description: "Quick sell at market" },
@@ -83,8 +105,11 @@ function loadBindings(): Record<string, string> {
   return { ...DEFAULT_BINDINGS };
 }
 
+const TAB_ORDER = ["/", "/trade", "/analytics", "/alerts", "/pipeline"];
+
 export function useKeyboardShortcuts() {
   const router = useRouter();
+  const pathname = usePathname();
   const { setCommandPaletteOpen } = useUIStore();
   const [overlayOpen, setOverlayOpen] = useState(false);
 
@@ -103,6 +128,8 @@ export function useKeyboardShortcuts() {
           break;
         case "dismiss":
           setOverlayOpen(false);
+          // Also close command palette if open
+          setCommandPaletteOpen(false);
           break;
         case "navigate:dashboard":
           router.push("/");
@@ -113,12 +140,27 @@ export function useKeyboardShortcuts() {
         case "navigate:pipeline":
           router.push("/pipeline");
           break;
+        case "navigate:next-tab": {
+          const currentIdx = TAB_ORDER.indexOf(pathname ?? "/");
+          const nextIdx = (currentIdx + 1) % TAB_ORDER.length;
+          router.push(TAB_ORDER[nextIdx]);
+          break;
+        }
+        case "navigate:prev-tab": {
+          const currentIdx = TAB_ORDER.indexOf(pathname ?? "/");
+          const prevIdx = (currentIdx - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+          router.push(TAB_ORDER[prevIdx]);
+          break;
+        }
+        case "refresh:page":
+          window.dispatchEvent(new CustomEvent("alphadesk:refresh"));
+          break;
         default:
           window.dispatchEvent(new CustomEvent("alphadesk:shortcut", { detail: actionId }));
           break;
       }
     },
-    [router, setCommandPaletteOpen]
+    [router, pathname, setCommandPaletteOpen]
   );
 
   useEffect(() => {

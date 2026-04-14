@@ -151,7 +151,7 @@ describe('SectorTreemap component', () => {
       />,
     );
     const rect = container.querySelector('.absolute') as HTMLElement;
-    expect(rect.className).toContain('bg-zinc-700');
+    expect(rect.className).toContain('bg-[var(--neutral)]');
   });
 
   // ─── Abbreviation map ─────────────────────────────────────────
