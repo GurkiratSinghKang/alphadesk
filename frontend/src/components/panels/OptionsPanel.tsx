@@ -246,7 +246,7 @@ export function OptionsPanel() {
   // HIGH-2: Auto-scroll to ATM strike when chain data changes
   useEffect(() => {
     const atm = document.querySelector('[aria-current="true"]');
-    if (atm) atm.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (atm && typeof atm.scrollIntoView === 'function') atm.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [chain]);
 
   // Fetch IV data via React Query with fallback
