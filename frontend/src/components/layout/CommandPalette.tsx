@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
   BarChart3,
@@ -12,15 +12,37 @@ import {
   Zap,
   ArrowRightLeft,
   Loader2,
+  Target,
+  LayoutDashboard,
+  Bell,
+  Bot,
+  FileText,
+  Clock,
 } from "lucide-react";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { analyzeSymbol, searchSymbols } from "@/lib/api";
+import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
 
 const POPULAR_SYMBOLS = [
   "SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "AMD",
   "NFLX", "JPM", "V", "BA", "DIS", "COIN", "SOFI", "PLTR", "SMCI", "AVGO",
+];
+
+const PAGES = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/trade", label: "Trade", icon: BarChart3 },
+  { path: "/analytics", label: "Analytics", icon: LineChart },
+  { path: "/alerts", label: "Alerts", icon: Bell },
+  { path: "/pipeline", label: "Pipeline", icon: Bot },
+  { path: "/docs", label: "Documentation", icon: FileText },
+];
+
+const RECENT_ACTIONS = [
+  { id: "last-order", label: "Last order submitted", keywords: ["last order", "recent order"] },
+  { id: "last-trade", label: "Last trade executed", keywords: ["last trade", "recent trade"] },
+  { id: "last-alert", label: "Last alert triggered", keywords: ["last alert", "recent alert"] },
 ];
 
 interface SymbolResult {
@@ -58,6 +80,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
 export function CommandPalette() {
   const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, setActiveTab, setTradingMode } = useUIStore();
   const { selectedSymbol, setSelectedSymbol, addToWatchlist } = useMarketStore();
+  const router = useRouter();
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SymbolResult[]>([]);
@@ -294,6 +317,113 @@ export function CommandPalette() {
                 onSelect={handleFocusOptions}
               />
             </Command.Group>
+
+            {/* Strategies — filtered by query */}
+            {(() => {
+              const q = query.toLowerCase();
+              const filteredStrategies = STRATEGY_ORDER
+                .map((id) => ({ id, ...STRATEGY_META[id] }))
+                .filter((s) =>
+                  !q ||
+                  s.name.toLowerCase().includes(q) ||
+                  s.shortName.toLowerCase().includes(q) ||
+                  s.id.toLowerCase().includes(q)
+                );
+              if (filteredStrategies.length === 0) return null;
+              return (
+                <>
+                  <Command.Separator className="my-1 h-px bg-border" />
+                  <Command.Group
+                    heading="Strategies"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                  >
+                    {filteredStrategies.slice(0, 6).map((s) => (
+                      <CommandItem
+                        key={s.id}
+                        icon={<Target className="h-4 w-4" />}
+                        label={s.shortName}
+                        onSelect={() => {
+                          router.push(`/strategies/${s.id}`);
+                          setCommandPaletteOpen(false);
+                        }}
+                      />
+                    ))}
+                  </Command.Group>
+                </>
+              );
+            })()}
+
+            {/* Pages — filtered by query */}
+            {(() => {
+              const q = query.toLowerCase();
+              const filteredPages = PAGES.filter(
+                (p) =>
+                  !q ||
+                  p.label.toLowerCase().includes(q) ||
+                  p.path.toLowerCase().includes(q)
+              );
+              if (filteredPages.length === 0) return null;
+              return (
+                <>
+                  <Command.Separator className="my-1 h-px bg-border" />
+                  <Command.Group
+                    heading="Pages"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                  >
+                    {filteredPages.map((p) => {
+                      const Icon = p.icon;
+                      return (
+                        <CommandItem
+                          key={p.path}
+                          icon={<Icon className="h-4 w-4" />}
+                          label={`Go to ${p.label}`}
+                          onSelect={() => {
+                            router.push(p.path);
+                            setCommandPaletteOpen(false);
+                          }}
+                        />
+                      );
+                    })}
+                  </Command.Group>
+                </>
+              );
+            })()}
+
+            {/* Recent Actions — shown when query matches */}
+            {(() => {
+              const q = query.toLowerCase();
+              if (!q) return null;
+              const matchedActions = RECENT_ACTIONS.filter((a) =>
+                a.keywords.some((kw) => kw.includes(q) || q.includes(kw)) ||
+                a.label.toLowerCase().includes(q)
+              );
+              if (matchedActions.length === 0) return null;
+              return (
+                <>
+                  <Command.Separator className="my-1 h-px bg-border" />
+                  <Command.Group
+                    heading="Recent Actions"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                  >
+                    {matchedActions.map((a) => (
+                      <CommandItem
+                        key={a.id}
+                        icon={<Clock className="h-4 w-4" />}
+                        label={a.label}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          if (a.id === "last-order" || a.id === "last-trade") {
+                            setActiveTab("bottom", "orders");
+                          } else if (a.id === "last-alert") {
+                            router.push("/alerts");
+                          }
+                        }}
+                      />
+                    ))}
+                  </Command.Group>
+                </>
+              );
+            })()}
           </Command.List>
 
           <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px] text-muted-foreground">

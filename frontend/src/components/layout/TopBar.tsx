@@ -4,13 +4,11 @@ import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Zap, LayoutDashboard, BarChart3, Bot, Search, Bell, Menu, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUIStore } from "@/stores/ui";
-import { useAlertsStore } from "@/stores/alerts";
-import { formatTimestamp, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
+import { NotificationCenter } from "./NotificationCenter";
 
 export function TopBar() {
   const router = useRouter();
@@ -21,10 +19,6 @@ export function TopBar() {
   useEffect(() => {
     setIsMac(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? ""));
   }, []);
-  const alerts = useAlertsStore((s) => s.alerts);
-  const unacknowledgedCount = useAlertsStore((s) => s.alerts.filter((a) => !a.acknowledged).length);
-  const acknowledgeAlert = useAlertsStore((s) => s.acknowledgeAlert);
-  const clearAlerts = useAlertsStore((s) => s.clearAlerts);
 
   const isHome = pathname === "/";
   const isTrade = pathname === "/trade";
@@ -99,44 +93,7 @@ export function TopBar() {
       </button>
 
       <div className="flex items-center gap-2">
-        <Popover>
-          <PopoverTrigger>
-            <Button variant="ghost" size="icon" className="relative h-8 w-8" aria-label="Notifications">
-              <Bell className="h-4 w-4 text-muted-foreground" />
-              {unacknowledgedCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-                  {unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="bottom" align="end" className="w-80 bg-[var(--surface)] border-border p-0">
-            <div className="flex items-center justify-between border-b border-border px-3 py-2">
-              <span className="text-xs font-medium text-foreground">Alerts & Notifications</span>
-              {alerts.length > 0 && (
-                <button onClick={clearAlerts} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">Clear All</button>
-              )}
-            </div>
-            <ScrollArea className="max-h-80">
-              {alerts.length === 0 ? (
-                <div className="px-3 py-6 text-center text-xs text-muted-foreground">No alerts yet</div>
-              ) : (
-                <div className="py-1">
-                  {alerts.slice(0, 30).map((alert) => (
-                    <button key={alert.id} onClick={() => acknowledgeAlert(alert.id)} className={cn("flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50", alert.acknowledged && "opacity-50")}>
-                      <span className={cn("mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full", alert.type === "price" ? "bg-primary" : alert.type === "order" ? "bg-[var(--profit)]" : alert.type === "signal" ? "bg-[var(--chart-4)]" : "bg-muted-foreground")} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-foreground leading-tight">{alert.message}</p>
-                        {alert.symbol && <span className="text-[10px] text-primary font-medium">{alert.symbol} </span>}
-                        <span className="text-[10px] text-muted-foreground">{formatTimestamp(alert.time)}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </PopoverContent>
-        </Popover>
+        <NotificationCenter />
         <ProfileMenu />
       </div>
     </header>
