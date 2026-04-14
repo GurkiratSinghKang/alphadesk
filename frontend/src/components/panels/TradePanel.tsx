@@ -747,54 +747,259 @@ function OrdersTab() {
 
 // ─── Journal Tab ─────────────────────────────────────────────
 
+const JOURNAL_TAGS = ["#winning", "#losing", "#lesson", "#setup", "#mistake"] as const;
+type JournalTag = (typeof JOURNAL_TAGS)[number];
+
+interface JournalEntry {
+  id: string;
+  date: string;
+  rawDate: string; // ISO string for filtering
+  type: string;
+  symbol: string;
+  detail: string;
+  strategy?: string;
+  rationale?: string;
+  pnl?: number;
+  tags: JournalTag[];
+}
+
+const JOURNAL_STORAGE_KEY = "alphadesk-journal";
+const JOURNAL_NOTES_KEY = "journal-notes";
+const JOURNAL_TAGS_KEY = "journal-tags";
+
+function loadJournalTags(): Record<string, JournalTag[]> {
+  try {
+    return JSON.parse(localStorage.getItem(JOURNAL_TAGS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveJournalTags(tags: Record<string, JournalTag[]>) {
+  localStorage.setItem(JOURNAL_TAGS_KEY, JSON.stringify(tags));
+}
+
+function JournalStats({ entries, tagMap }: { entries: JournalEntry[]; tagMap: Record<string, JournalTag[]> }) {
+  const stats = useMemo(() => {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let thisWeek = 0;
+    let thisMonth = 0;
+
+    for (const e of entries) {
+      const d = new Date(e.rawDate);
+      if (!isNaN(d.getTime())) {
+        if (d >= startOfWeek) thisWeek++;
+        if (d >= startOfMonth) thisMonth++;
+      }
+    }
+
+    // Tag counts
+    const tagCounts: Record<string, number> = {};
+    for (const tags of Object.values(tagMap)) {
+      for (const t of tags) {
+        tagCounts[t] = (tagCounts[t] || 0) + 1;
+      }
+    }
+    const topTags = Object.entries(tagCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    // Frequency: entries per day for the last 7 days
+    const dayBuckets: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString("en-US", { weekday: "short" });
+      dayBuckets[key] = 0;
+    }
+    for (const e of entries) {
+      const d = new Date(e.rawDate);
+      if (!isNaN(d.getTime())) {
+        const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
+        if (diff < 7 && diff >= 0) {
+          const key = d.toLocaleDateString("en-US", { weekday: "short" });
+          if (key in dayBuckets) dayBuckets[key]++;
+        }
+      }
+    }
+
+    const freqData = Object.entries(dayBuckets);
+    const maxFreq = Math.max(1, ...freqData.map(([, v]) => v));
+
+    return { total: entries.length, thisWeek, thisMonth, topTags, freqData, maxFreq };
+  }, [entries, tagMap]);
+
+  return (
+    <div className="p-2 space-y-2">
+      {/* Key stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-md bg-background/50 p-2 text-center">
+          <div className="text-sm font-bold tabular-nums text-foreground">{stats.total}</div>
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total</div>
+        </div>
+        <div className="rounded-md bg-background/50 p-2 text-center">
+          <div className="text-sm font-bold tabular-nums text-foreground">{stats.thisWeek}</div>
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">This Week</div>
+        </div>
+        <div className="rounded-md bg-background/50 p-2 text-center">
+          <div className="text-sm font-bold tabular-nums text-foreground">{stats.thisMonth}</div>
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">This Month</div>
+        </div>
+      </div>
+
+      {/* Top tags */}
+      {stats.topTags.length > 0 && (
+        <div>
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Top Tags</div>
+          <div className="flex flex-wrap gap-1">
+            {stats.topTags.map(([tag, count]) => (
+              <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                {tag} ({count})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Frequency chart */}
+      <div>
+        <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">7-Day Frequency</div>
+        <div className="flex items-end gap-1 h-10">
+          {stats.freqData.map(([day, count]) => (
+            <div key={day} className="flex-1 flex flex-col items-center gap-0.5">
+              <div
+                className="w-full rounded-t bg-primary/40 transition-all"
+                style={{ height: `${Math.max(2, (count / stats.maxFreq) * 28)}px` }}
+              />
+              <span className="text-[8px] text-muted-foreground">{day}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function JournalTab() {
   const positions = usePortfolioStore((s) => s.positions);
   const orders = usePortfolioStore((s) => s.orders);
   const [notes, setNotes] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('journal-notes') || '{}'); } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem(JOURNAL_NOTES_KEY) || "{}"); } catch { return {}; }
   });
+  const [tagMap, setTagMap] = useState<Record<string, JournalTag[]>>(loadJournalTags);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [filterTag, setFilterTag] = useState<JournalTag | null>(null);
+  const [showStats, setShowStats] = useState(false);
 
+  // Persist notes
   useEffect(() => {
-    localStorage.setItem('journal-notes', JSON.stringify(notes));
+    localStorage.setItem(JOURNAL_NOTES_KEY, JSON.stringify(notes));
   }, [notes]);
 
-  // Generate journal entries from recent orders
-  const entries = useMemo(() => {
-    const items: { id: string; date: string; type: string; symbol: string; detail: string; pnl?: number }[] = [];
+  // Persist tags
+  useEffect(() => {
+    saveJournalTags(tagMap);
+  }, [tagMap]);
 
-    // From orders
-    for (const order of orders.slice(0, 10)) {
+  // Generate journal entries from orders and positions
+  const entries: JournalEntry[] = useMemo(() => {
+    const items: JournalEntry[] = [];
+
+    // From orders — auto-generated trade entries
+    for (const order of orders.slice(0, 20)) {
+      const rawDate = order.createdAt || new Date().toISOString();
+      const strategyHint = order.legs && order.legs.length > 1 ? "Multi-leg" : "Single";
       items.push({
         id: order.id,
-        date: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—",
+        date: order.createdAt
+          ? new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+          : "--",
+        rawDate,
         type: order.side === "buy" ? "BUY" : "SELL",
         symbol: order.symbol,
-        detail: `${order.quantity} shares @ ${order.type === "market" ? "Market" : "$" + (order.price?.toFixed(2) ?? "—")}`,
+        detail: `${order.quantity} shares @ ${order.type === "market" ? "Market" : "$" + (order.price?.toFixed(2) ?? "--")}`,
+        strategy: strategyHint,
+        rationale: order.status === "filled" ? "Order filled" : `Status: ${order.status}`,
+        tags: tagMap[order.id] ?? [],
       });
     }
 
     // From positions (current holdings)
     for (const pos of positions) {
+      const entryId = `pos-${pos.symbol}`;
       items.push({
-        id: `pos-${pos.symbol}`,
+        id: entryId,
         date: "Active",
+        rawDate: new Date().toISOString(),
         type: "HOLD",
         symbol: pos.symbol,
         detail: `${pos.quantity} shares, avg $${pos.avgCost.toFixed(2)}`,
+        strategy: pos.side === "long" ? "Long" : pos.side === "short" ? "Short" : "Position",
         pnl: pos.unrealizedPnl,
+        tags: tagMap[entryId] ?? [],
       });
     }
 
     return items;
-  }, [orders, positions]);
+  }, [orders, positions, tagMap]);
+
+  // Apply tag filter
+  const filteredEntries = useMemo(() => {
+    if (!filterTag) return entries;
+    return entries.filter((e) => e.tags.includes(filterTag));
+  }, [entries, filterTag]);
 
   const handleSaveNote = (entryId: string) => {
     setNotes((prev) => ({ ...prev, [entryId]: noteText }));
     setEditingId(null);
     setNoteText("");
   };
+
+  const toggleTag = (entryId: string, tag: JournalTag) => {
+    setTagMap((prev) => {
+      const current = prev[entryId] ?? [];
+      const next = current.includes(tag)
+        ? current.filter((t) => t !== tag)
+        : [...current, tag];
+      return { ...prev, [entryId]: next };
+    });
+  };
+
+  const handleExport = () => {
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      entries: entries.map((e) => ({
+        ...e,
+        note: notes[e.id] ?? "",
+        tags: tagMap[e.id] ?? [],
+      })),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `trade-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Persist full journal to localStorage
+  useEffect(() => {
+    const data = entries.map((e) => ({
+      ...e,
+      note: notes[e.id] ?? "",
+      tags: tagMap[e.id] ?? [],
+    }));
+    localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(data));
+  }, [entries, notes, tagMap]);
 
   if (entries.length === 0) {
     return (
@@ -808,58 +1013,147 @@ function JournalTab() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-2 space-y-1">
-        {entries.map((entry) => (
-          <div key={entry.id} className="rounded-lg border border-border bg-[var(--surface)] p-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
-                  entry.type === "BUY" ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
-                  entry.type === "SELL" ? "bg-[var(--loss)]/15 text-[var(--loss)]" :
-                  "bg-primary/15 text-primary"
-                )}>
-                  {entry.type}
-                </span>
-                <span className="text-xs font-semibold text-foreground">{entry.symbol}</span>
-              </div>
-              <span className="text-[10px] text-muted-foreground">{entry.date}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">{entry.detail}</p>
-            {entry.pnl !== undefined && (
-              <p className={cn("text-[11px] font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                P&L: {entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}
-              </p>
+      <div className="p-2 space-y-2">
+        {/* Toolbar: stats toggle, tag filter, export */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <button
+            onClick={() => setShowStats(!showStats)}
+            className={cn(
+              "text-[9px] px-2 py-1 rounded font-medium transition-colors",
+              showStats ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
             )}
-            {/* Notes */}
-            {notes[entry.id] && editingId !== entry.id && (
-              <p className="text-[10px] text-muted-foreground mt-1.5 italic border-t border-border pt-1.5">
-                📝 {notes[entry.id]}
-              </p>
-            )}
-            {editingId === entry.id ? (
-              <div className="mt-1.5 flex gap-1">
-                <input
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Add a note..."
-                  aria-label="Trade notes"
-                  className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground"
-                  autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
-                />
-                <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-[9px] font-medium text-primary-foreground">Save</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => { setEditingId(entry.id); setNoteText(notes[entry.id] ?? ""); }}
-                className="text-[9px] text-primary hover:underline mt-1"
-              >
-                {notes[entry.id] ? "Edit note" : "Add note"}
-              </button>
-            )}
+          >
+            Stats
+          </button>
+          <div className="h-3 w-px bg-border mx-0.5" />
+          {JOURNAL_TAGS.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+              className={cn(
+                "text-[8px] px-1.5 py-0.5 rounded border transition-colors",
+                filterTag === tag
+                  ? "bg-primary/15 text-primary border-primary/30"
+                  : "text-muted-foreground border-transparent hover:text-foreground hover:border-border"
+              )}
+            >
+              {tag}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <button
+            onClick={handleExport}
+            className="text-[9px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+          >
+            Export JSON
+          </button>
+        </div>
+
+        {/* Stats panel */}
+        {showStats && <JournalStats entries={entries} tagMap={tagMap} />}
+
+        {/* Entries */}
+        {filteredEntries.length === 0 && filterTag ? (
+          <div className="flex flex-col items-center justify-center py-6">
+            <p className="text-[11px] text-muted-foreground">No entries tagged {filterTag}</p>
+            <button onClick={() => setFilterTag(null)} className="text-[10px] text-primary hover:underline mt-1">Clear filter</button>
           </div>
-        ))}
+        ) : (
+          <div className="space-y-1">
+            {filteredEntries.map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-border bg-[var(--surface)] p-2.5">
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
+                      entry.type === "BUY" ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
+                      entry.type === "SELL" ? "bg-[var(--loss)]/15 text-[var(--loss)]" :
+                      "bg-primary/15 text-primary"
+                    )}>
+                      {entry.type}
+                    </span>
+                    <span className="text-xs font-semibold text-foreground">{entry.symbol}</span>
+                    {entry.strategy && (
+                      <span className="text-[9px] text-muted-foreground bg-accent/30 px-1 py-0.5 rounded">
+                        {entry.strategy}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">{entry.date}</span>
+                </div>
+
+                {/* Detail */}
+                <p className="text-[11px] text-muted-foreground mt-1">{entry.detail}</p>
+
+                {/* Rationale */}
+                {entry.rationale && (
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5 italic">{entry.rationale}</p>
+                )}
+
+                {/* P&L */}
+                {entry.pnl !== undefined && (
+                  <p className={cn("text-[11px] font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                    P&L: {entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}
+                  </p>
+                )}
+
+                {/* Tags */}
+                <div className="flex flex-wrap gap-0.5 mt-1.5">
+                  {JOURNAL_TAGS.map((tag) => {
+                    const active = (tagMap[entry.id] ?? []).includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(entry.id, tag)}
+                        className={cn(
+                          "text-[8px] px-1 py-0.5 rounded border transition-colors",
+                          active
+                            ? tag === "#winning" ? "bg-[var(--profit)]/15 text-[var(--profit)] border-[var(--profit)]/30"
+                            : tag === "#losing" ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
+                            : tag === "#mistake" ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
+                            : "bg-primary/15 text-primary border-primary/30"
+                            : "text-muted-foreground/50 border-transparent hover:border-border hover:text-muted-foreground"
+                        )}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Notes */}
+                {notes[entry.id] && editingId !== entry.id && (
+                  <p className="text-[10px] text-muted-foreground mt-1.5 italic border-t border-border pt-1.5">
+                    {notes[entry.id]}
+                  </p>
+                )}
+                {editingId === entry.id ? (
+                  <div className="mt-1.5 flex gap-1">
+                    <input
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Add a note..."
+                      aria-label="Trade notes"
+                      className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
+                    />
+                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-[9px] font-medium text-primary-foreground">Save</button>
+                    <button onClick={() => { setEditingId(null); setNoteText(""); }} className="h-6 px-2 rounded border border-border text-[9px] text-muted-foreground">Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setEditingId(entry.id); setNoteText(notes[entry.id] ?? ""); }}
+                    className="text-[9px] text-primary hover:underline mt-1"
+                  >
+                    {notes[entry.id] ? "Edit note" : "Add note"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </ScrollArea>
   );

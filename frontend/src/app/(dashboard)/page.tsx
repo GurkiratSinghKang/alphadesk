@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, RefreshCw } from "lucide-react";
+import { useMarketStore } from "@/stores/market";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePortfolioStore } from "@/stores/portfolio";
 import {
@@ -22,6 +23,8 @@ import { StrategyGrid, STRATEGY_META, STRATEGY_ORDER, type StrategyData } from "
 import { PositionsSummary } from "@/components/dashboard/PositionsSummary";
 import { PnlCalendarMini } from "@/components/dashboard/PnlCalendarMini";
 import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketContext";
+import { MarketMovers } from "@/components/dashboard/MarketMovers";
+import { MarketBreadth } from "@/components/dashboard/MarketBreadth";
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { StrategyCorrelation } from "@/components/dashboard/StrategyCorrelation";
 import { PnlAttribution } from "@/components/dashboard/PnlAttribution";
@@ -72,6 +75,12 @@ export default function DashboardPage() {
 function CommandCenter() {
   const router = useRouter();
   const summary = usePortfolioStore((s) => s.summary);
+  const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+
+  const handleSelectSymbol = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    router.push("/trade");
+  };
 
   // ─── First-login welcome banner ──────────────────────────
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -390,6 +399,20 @@ function CommandCenter() {
         ) : (
           <div className="h-32 animate-pulse rounded-xl bg-muted/30" />
         )}
+
+        {/* Section 5: Market Movers + Breadth */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <MarketMovers onSelectSymbol={handleSelectSymbol} />
+          </div>
+          <div>
+            {remainingLoaded ? (
+              <MarketBreadth sectors={sectors} />
+            ) : (
+              <div className="h-48 animate-pulse rounded-xl bg-muted/30" />
+            )}
+          </div>
+        </div>
       </div>
     </ScrollArea>
   );
