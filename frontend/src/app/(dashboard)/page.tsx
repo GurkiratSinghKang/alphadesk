@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Activity, RefreshCw } from "lucide-react";
 import { useMarketStore } from "@/stores/market";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,12 +24,23 @@ import { StrategyGrid, STRATEGY_META, STRATEGY_ORDER, type StrategyData } from "
 import { PositionsSummary } from "@/components/dashboard/PositionsSummary";
 import { PnlCalendarMini } from "@/components/dashboard/PnlCalendarMini";
 import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketContext";
-import { MarketMovers } from "@/components/dashboard/MarketMovers";
 import { MarketBreadth } from "@/components/dashboard/MarketBreadth";
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
-import { StrategyCorrelation } from "@/components/dashboard/StrategyCorrelation";
-import { PnlAttribution } from "@/components/dashboard/PnlAttribution";
 import { RiskDashboard } from "@/components/dashboard/RiskDashboard";
+
+// Lazy-load heavy below-the-fold components to reduce initial bundle
+const StrategyCorrelation = dynamic(
+  () => import("@/components/dashboard/StrategyCorrelation").then((m) => ({ default: m.StrategyCorrelation })),
+  { ssr: false, loading: () => <div className="animate-pulse bg-[var(--panel)] rounded-lg h-[200px]" /> }
+);
+const PnlAttribution = dynamic(
+  () => import("@/components/dashboard/PnlAttribution").then((m) => ({ default: m.PnlAttribution })),
+  { ssr: false, loading: () => <div className="animate-pulse bg-[var(--panel)] rounded-lg h-[200px]" /> }
+);
+const MarketMovers = dynamic(
+  () => import("@/components/dashboard/MarketMovers").then((m) => ({ default: m.MarketMovers })),
+  { ssr: false, loading: () => <div className="animate-pulse bg-[var(--panel)] rounded-lg h-[300px]" /> }
+);
 
 // ─── Helpers ─────────────────────────────────────────────────
 

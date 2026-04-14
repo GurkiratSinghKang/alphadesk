@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { WatchlistPanel } from "@/components/panels/WatchlistPanel";
-import { ChartPanel } from "@/components/panels/ChartPanel";
 import { LayoutSelector, type ChartLayout } from "@/components/panels/LayoutSelector";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
-import { OptionsPanel } from "@/components/panels/OptionsPanel";
 import { TradePanel } from "@/components/panels/TradePanel";
+
+// Lazy-load heavy panels (charting engine, options chain) to reduce initial bundle
+const ChartPanel = dynamic(
+  () => import("@/components/panels/ChartPanel").then((m) => ({ default: m.ChartPanel })),
+  { ssr: false, loading: () => <div className="animate-pulse bg-[var(--panel)] rounded-lg h-full w-full" /> }
+);
+const OptionsPanel = dynamic(
+  () => import("@/components/panels/OptionsPanel").then((m) => ({ default: m.OptionsPanel })),
+  { ssr: false, loading: () => <div className="animate-pulse bg-[var(--panel)] rounded-lg h-full w-full" /> }
+);
 
 // TopBar h-11 (44px) + StatusStrip h-7 (28px) = 72px
 const TOPBAR_H = 72;
