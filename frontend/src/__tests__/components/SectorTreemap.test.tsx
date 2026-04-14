@@ -14,6 +14,14 @@ beforeAll(() => {
 });
 
 const sectors = [
+  { sector: 'Technology', change_pct: 1.2, ytd_pct: 8.5, leader: 'AAPL', leader_change_pct: 2.1 },
+  { sector: 'Healthcare', change_pct: 0.8, ytd_pct: 3.2, leader: 'UNH', leader_change_pct: 1.4 },
+  { sector: 'Financials', change_pct: 0.3, ytd_pct: 5.1, leader: 'JPM', leader_change_pct: 0.7 },
+  { sector: 'Energy', change_pct: -0.5, ytd_pct: -2.3, leader: 'XOM', leader_change_pct: -0.8 },
+  { sector: 'Utilities', change_pct: -0.3, ytd_pct: 1.1, leader: 'NEE', leader_change_pct: -0.1 },
+];
+
+const sectorsBasic = [
   { sector: 'Technology', change_pct: 1.2 },
   { sector: 'Healthcare', change_pct: 0.8 },
   { sector: 'Financials', change_pct: 0.3 },
@@ -25,22 +33,22 @@ describe('SectorTreemap component', () => {
   // ─── Empty state ─────────────────────────────────────────────
 
   it('shows "No sector data" when sectors array is empty', () => {
-    render(<SectorTreemap sectors={[]} height={120} />);
+    render(<SectorTreemap sectors={[]} height={160} />);
     expect(screen.getByText('No sector data')).toBeDefined();
   });
 
   it('renders no rectangles when sectors array is empty', () => {
-    const { container } = render(<SectorTreemap sectors={[]} height={120} />);
+    const { container } = render(<SectorTreemap sectors={[]} height={160} />);
     expect(container.querySelectorAll('.absolute').length).toBe(0);
   });
 
   // ─── Layout: one rect per sector ─────────────────────────────
 
-  it('renders one .absolute div per sector', () => {
-    // propWidth supplied so squarify gets a fixed known width (no ResizeObserver needed)
+  it('renders one tile per sector', () => {
     const { container } = render(
       <SectorTreemap sectors={sectors} width={600} height={200} />,
     );
+    // Each sector gets an .absolute tile div
     const rects = container.querySelectorAll('.absolute');
     expect(rects.length).toBe(sectors.length);
   });
@@ -66,14 +74,31 @@ describe('SectorTreemap component', () => {
     expect((outer as HTMLElement).style.height).toBe('150px');
   });
 
-  // ─── Text rendering (showText gate: w > 45 && h > 30) ────────
+  // ─── Title row ─────────────────────────────────────────────────
+
+  it('renders "Sector Performance" heading', () => {
+    render(<SectorTreemap sectors={sectors} width={600} height={200} />);
+    expect(screen.getByText('Sector Performance')).toBeDefined();
+  });
+
+  it('shows Daily/YTD toggle when YTD data is available', () => {
+    render(<SectorTreemap sectors={sectors} width={600} height={200} />);
+    expect(screen.getByText('Daily')).toBeDefined();
+    expect(screen.getByText('YTD')).toBeDefined();
+  });
+
+  it('hides Daily/YTD toggle when no YTD data', () => {
+    render(<SectorTreemap sectors={sectorsBasic} width={600} height={200} />);
+    expect(screen.queryByText('Daily')).toBeNull();
+    expect(screen.queryByText('YTD')).toBeNull();
+  });
+
+  // ─── Text rendering ──────────────────────────────────────────
 
   it('shows sector names in wide-enough container', () => {
-    // 600×400 gives each of the 5 equal-weight sectors ample space
     const { container } = render(
       <SectorTreemap sectors={sectors} width={600} height={400} />,
     );
-    // Technology should be visible with a wide rect
     expect(container.textContent).toContain('Technology');
   });
 
@@ -81,7 +106,6 @@ describe('SectorTreemap component', () => {
     const { container } = render(
       <SectorTreemap sectors={sectors} width={600} height={400} />,
     );
-    // Technology +1.2%
     expect(container.textContent).toContain('+1.2%');
   });
 
@@ -89,36 +113,45 @@ describe('SectorTreemap component', () => {
     const { container } = render(
       <SectorTreemap sectors={sectors} width={600} height={400} />,
     );
-    // Energy -0.5%
     expect(container.textContent).toContain('-0.5%');
   });
 
-  // ─── Color coding (backgroundColor) ──────────────────────────
+  // ─── Color coding (Tailwind classes) ─────────────────────────
 
-  it('applies green background style for positive sectors', () => {
+  it('applies emerald-600 class for > +2% change', () => {
     const { container } = render(
       <SectorTreemap
-        sectors={[{ sector: 'Tech', change_pct: 1.5 }]}
+        sectors={[{ sector: 'Tech', change_pct: 2.5 }]}
         width={400}
         height={200}
       />,
     );
     const rect = container.querySelector('.absolute') as HTMLElement;
-    // change_pct > 1 → rgba(34,197,94,0.7)
-    expect(rect.style.backgroundColor).toBe('rgba(34, 197, 94, 0.7)');
+    expect(rect.className).toContain('bg-emerald-600');
   });
 
-  it('applies red background style for negative sectors', () => {
+  it('applies red-600 class for < -2% change', () => {
     const { container } = render(
       <SectorTreemap
-        sectors={[{ sector: 'Energy', change_pct: -1.5 }]}
+        sectors={[{ sector: 'Energy', change_pct: -2.5 }]}
         width={400}
         height={200}
       />,
     );
     const rect = container.querySelector('.absolute') as HTMLElement;
-    // change_pct < -1 → rgba(239,68,68,0.7)
-    expect(rect.style.backgroundColor).toBe('rgba(239, 68, 68, 0.7)');
+    expect(rect.className).toContain('bg-red-600');
+  });
+
+  it('applies zinc-700 class for neutral changes', () => {
+    const { container } = render(
+      <SectorTreemap
+        sectors={[{ sector: 'Flat', change_pct: 0.1 }]}
+        width={400}
+        height={200}
+      />,
+    );
+    const rect = container.querySelector('.absolute') as HTMLElement;
+    expect(rect.className).toContain('bg-zinc-700');
   });
 
   // ─── Abbreviation map ─────────────────────────────────────────
@@ -161,7 +194,7 @@ describe('SectorTreemap component', () => {
 
   it('accepts an explicit width prop and renders without crash', () => {
     const { container } = render(
-      <SectorTreemap sectors={sectors} width={300} height={120} />,
+      <SectorTreemap sectors={sectors} width={300} height={160} />,
     );
     expect(container.querySelectorAll('.absolute').length).toBe(sectors.length);
   });
@@ -177,5 +210,30 @@ describe('SectorTreemap component', () => {
       <SectorTreemap sectors={manySectors} width={600} height={300} />,
     );
     expect(container.querySelectorAll('.absolute').length).toBe(11);
+  });
+
+  // ─── YTD + leader data rendering ─────────────────────────────
+
+  it('shows YTD data in large tiles', () => {
+    const { container } = render(
+      <SectorTreemap
+        sectors={[{ sector: 'Technology', change_pct: 1.2, ytd_pct: 8.5, leader: 'AAPL' }]}
+        width={600}
+        height={400}
+      />,
+    );
+    expect(container.textContent).toContain('YTD');
+    expect(container.textContent).toContain('+8.5%');
+  });
+
+  it('shows leader stock name in large tiles', () => {
+    const { container } = render(
+      <SectorTreemap
+        sectors={[{ sector: 'Technology', change_pct: 1.2, ytd_pct: 8.5, leader: 'AAPL' }]}
+        width={600}
+        height={400}
+      />,
+    );
+    expect(container.textContent).toContain('AAPL');
   });
 });
