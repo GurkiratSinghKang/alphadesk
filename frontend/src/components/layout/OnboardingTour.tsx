@@ -1,0 +1,283 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { useUIStore } from "@/stores/ui";
+
+// ─── Tour Step Definitions ──────────────────────────────────
+
+interface TourStep {
+  title: string;
+  description: string;
+  selector: string; // CSS selector to highlight
+  position: "top" | "bottom" | "left" | "right";
+  action?: () => void; // optional action on step enter
+}
+
+const STORAGE_KEY = "alphadesk-tour-complete";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    title: "Welcome to AlphaDesk!",
+    description:
+      "This is your portfolio dashboard. Track equity, daily P&L, and your overall performance at a glance.",
+    selector: "[data-tour='portfolio-hero']",
+    position: "bottom",
+  },
+  {
+    title: "Automated Strategies",
+    description:
+      "Your strategies run automatically based on market conditions. Click any card to see full details, positions, and performance.",
+    selector: "[data-tour='strategy-grid']",
+    position: "left",
+  },
+  {
+    title: "Real-Time Positions",
+    description:
+      "Monitor all active positions with live P&L tracking, entry prices, and strategy attribution.",
+    selector: "[data-tour='positions-summary']",
+    position: "top",
+  },
+  {
+    title: "Search Any Symbol",
+    description:
+      "Press Cmd+K (or Ctrl+K) to instantly search symbols, run commands, or navigate anywhere in the app.",
+    selector: "[data-tour='search-bar']",
+    position: "bottom",
+    action: () => {
+      // We'll open the command palette briefly
+    },
+  },
+  {
+    title: "Keyboard Shortcuts",
+    description:
+      "Press ? at any time to see all available keyboard shortcuts. Master them for a faster workflow.",
+    selector: "[data-tour='profile-menu']",
+    position: "bottom",
+  },
+];
+
+// ─── Component ──────────────────────────────────────────────
+
+export function OnboardingTour() {
+  const [active, setActive] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
+  const rafRef = useRef<number>(0);
+  const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+
+  // Check if tour should show on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const completed = localStorage.getItem(STORAGE_KEY);
+    if (!completed) {
+      // Delay slightly so the dashboard renders first
+      const timer = setTimeout(() => setActive(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Position the spotlight on the current step's element
+  const updateSpotlight = useCallback(() => {
+    if (!active) return;
+    const step = TOUR_STEPS[currentStep];
+    if (!step) return;
+
+    const el = document.querySelector(step.selector);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setSpotlightRect(rect);
+    } else {
+      // Element not found — use center fallback
+      setSpotlightRect(null);
+    }
+  }, [active, currentStep]);
+
+  useEffect(() => {
+    updateSpotlight();
+
+    // Update on scroll/resize
+    const handleUpdate = () => {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(updateSpotlight);
+    };
+    window.addEventListener("scroll", handleUpdate, true);
+    window.addEventListener("resize", handleUpdate);
+    return () => {
+      window.removeEventListener("scroll", handleUpdate, true);
+      window.removeEventListener("resize", handleUpdate);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [updateSpotlight]);
+
+  // Run step action when step changes
+  useEffect(() => {
+    if (!active) return;
+    const step = TOUR_STEPS[currentStep];
+    if (step?.action) {
+      step.action();
+    }
+  }, [active, currentStep]);
+
+  const completeTour = useCallback(() => {
+    localStorage.setItem(STORAGE_KEY, "1");
+    setActive(false);
+    setCommandPaletteOpen(false);
+  }, [setCommandPaletteOpen]);
+
+  const handleNext = useCallback(() => {
+    if (currentStep < TOUR_STEPS.length - 1) {
+      setCurrentStep((prev) => prev + 1);
+    } else {
+      completeTour();
+    }
+  }, [currentStep, completeTour]);
+
+  const handleSkip = useCallback(() => {
+    completeTour();
+  }, [completeTour]);
+
+  if (!active) return null;
+
+  const step = TOUR_STEPS[currentStep];
+  const isLastStep = currentStep === TOUR_STEPS.length - 1;
+  const padding = 8; // padding around the highlighted element
+
+  // Calculate tooltip position
+  const getTooltipStyle = (): React.CSSProperties => {
+    if (!spotlightRect) {
+      // Center fallback
+      return {
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+      };
+    }
+
+    const tooltipWidth = 320;
+    const tooltipHeight = 160;
+    const gap = 12;
+
+    switch (step.position) {
+      case "bottom":
+        return {
+          top: spotlightRect.bottom + gap + padding,
+          left: Math.max(
+            16,
+            Math.min(
+              spotlightRect.left + spotlightRect.width / 2 - tooltipWidth / 2,
+              window.innerWidth - tooltipWidth - 16
+            )
+          ),
+        };
+      case "top":
+        return {
+          top: spotlightRect.top - tooltipHeight - gap - padding,
+          left: Math.max(
+            16,
+            Math.min(
+              spotlightRect.left + spotlightRect.width / 2 - tooltipWidth / 2,
+              window.innerWidth - tooltipWidth - 16
+            )
+          ),
+        };
+      case "left":
+        return {
+          top: Math.max(
+            16,
+            spotlightRect.top + spotlightRect.height / 2 - tooltipHeight / 2
+          ),
+          left: Math.max(16, spotlightRect.left - tooltipWidth - gap - padding),
+        };
+      case "right":
+        return {
+          top: Math.max(
+            16,
+            spotlightRect.top + spotlightRect.height / 2 - tooltipHeight / 2
+          ),
+          left: spotlightRect.right + gap + padding,
+        };
+      default:
+        return {
+          top: spotlightRect.bottom + gap,
+          left: spotlightRect.left,
+        };
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100]" aria-modal="true" role="dialog">
+      {/* Dark overlay with cutout */}
+      <div className="absolute inset-0">
+        {/* Full overlay */}
+        <div className="absolute inset-0 bg-black/60 transition-all duration-300" />
+
+        {/* Spotlight cutout */}
+        {spotlightRect && (
+          <div
+            className="absolute rounded-lg transition-all duration-300 ease-out"
+            style={{
+              top: spotlightRect.top - padding,
+              left: spotlightRect.left - padding,
+              width: spotlightRect.width + padding * 2,
+              height: spotlightRect.height + padding * 2,
+              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6)",
+              zIndex: 1,
+            }}
+          >
+            {/* Glow ring */}
+            <div className="absolute inset-0 rounded-lg ring-2 ring-primary/50 animate-pulse" />
+          </div>
+        )}
+      </div>
+
+      {/* Tooltip */}
+      <div
+        className="absolute z-10 w-80 rounded-xl border border-primary/30 bg-[var(--surface)] p-5 shadow-2xl transition-all duration-300"
+        style={getTooltipStyle()}
+      >
+        {/* Step counter */}
+        <div className="flex items-center gap-1.5 mb-3">
+          {TOUR_STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 flex-1 rounded-full transition-colors ${
+                i <= currentStep ? "bg-primary" : "bg-border"
+              }`}
+            />
+          ))}
+        </div>
+
+        <h3 className="text-sm font-bold text-foreground mb-1.5">
+          {step.title}
+        </h3>
+        <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+          {step.description}
+        </p>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {currentStep + 1} of {TOUR_STEPS.length}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSkip}
+              className="text-xs h-7 text-muted-foreground hover:text-foreground"
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleNext}
+              className="text-xs h-7"
+            >
+              {isLastStep ? "Done" : "Next"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

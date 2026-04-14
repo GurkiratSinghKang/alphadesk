@@ -5,14 +5,17 @@ import { TopBar } from "@/components/layout/TopBar";
 import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
+import { usePreferencesStore } from "@/stores/preferences";
 import type { ReactNode } from "react";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
+  const tickerTapeOn = usePreferencesStore((s) => s.display.tickerTapeOn);
 
   useEffect(() => {
     function handleApiError(e: CustomEvent) {
@@ -36,7 +39,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </a>
 
       <TopBar />
-      <TickerTape />
+      {tickerTapeOn && <TickerTape />}
       <StatusStrip />
       <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
         {children}
@@ -46,6 +49,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </footer>
       <CommandPalette />
       {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
+      <OnboardingTour />
     </div>
   );
 }

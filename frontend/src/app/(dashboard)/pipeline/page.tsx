@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Zap,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
 import { BacktestPanel } from "@/components/panels/BacktestPanel";
+import { StrategyTemplates } from "@/components/panels/StrategyTemplates";
 import {
   getPipelineStatus,
   triggerPipeline,
@@ -117,6 +119,7 @@ export default function PipelinePage() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [todayRun, setTodayRun] = useState<PipelineRun | null>(null);
@@ -313,6 +316,15 @@ export default function PipelinePage() {
               Last run: {new Date(status.lastRun).toLocaleString()}
             </span>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setTemplatesOpen(true)}
+            className="h-7 text-[11px] gap-1.5"
+          >
+            <Sparkles className="h-3 w-3" />
+            Templates
+          </Button>
           <Button
             size="sm"
             onClick={handleRunNow}
@@ -739,6 +751,7 @@ export default function PipelinePage() {
           </>
         )}
       </div>
+      <StrategyTemplates open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
     </div>
   );
 }

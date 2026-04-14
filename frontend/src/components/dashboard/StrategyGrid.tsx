@@ -194,7 +194,7 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
   };
 
   return (
-    <div className="rounded-xl border border-border bg-[var(--panel)]">
+    <div data-tour="strategy-grid" className="rounded-xl border border-border bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-muted-foreground" />

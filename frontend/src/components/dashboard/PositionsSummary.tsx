@@ -12,7 +12,7 @@ export function PositionsSummary() {
 
   if (positions.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-[var(--panel)]">
+      <div data-tour="positions-summary" className="rounded-xl border border-border bg-[var(--panel)]">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Briefcase className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Open Positions</h2>
@@ -25,7 +25,7 @@ export function PositionsSummary() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-[var(--panel)]">
+    <div data-tour="positions-summary" className="rounded-xl border border-border bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Briefcase className="h-4 w-4 text-muted-foreground" />
