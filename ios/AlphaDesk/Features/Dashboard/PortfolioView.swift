@@ -189,7 +189,7 @@ struct PortfolioPosition: Identifiable {
 /// Generate a synthetic mini sparkline from symbol hash for display
 /// until real intraday data is available from the API.
 private func generatePositionSparkline(symbol: String, pnlPercent: Double) -> [Double] {
-    var rng = PositionSparkRNG(seed: UInt64(abs(symbol.hashValue) &* 54321))
+    var rng = PositionSparkRNG(seed: UInt64(bitPattern: Int64(symbol.hashValue &* 54321)))
     var values: [Double] = []
     var current: Double = 100
     let trend = pnlPercent / 40.0

@@ -138,7 +138,7 @@ final class WatchlistViewModel {
         let current = quote.last
 
         // Create a plausible intraday path
-        var rng = WatchlistSparkRNG(seed: UInt64(abs(symbol.hashValue) &* 12345))
+        var rng = WatchlistSparkRNG(seed: UInt64(bitPattern: Int64(symbol.hashValue &* 12345)))
         let steps = 12
         points.append(open)
         for i in 1..<steps {

@@ -88,7 +88,7 @@ enum StrategyListStatus: String {
 }
 
 private func generateSparkline(seed: Int, trend: Double) -> [Double] {
-    var rng = SparklineRNG(seed: UInt64(abs(seed) &* 12345))
+    var rng = SparklineRNG(seed: UInt64(bitPattern: Int64(seed &* 12345)))
     var values: [Double] = []
     var current: Double = 100
     for _ in 0..<20 {
