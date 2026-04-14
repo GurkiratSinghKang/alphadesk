@@ -38,9 +38,11 @@ async def _check_rate_limit(client_ip: str) -> None:
 
     key = f"login_attempts:{client_ip}"
     try:
-        count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, _RATE_LIMIT_WINDOW)
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _RATE_LIMIT_WINDOW, nx=True)
+        results = await pipe.execute()
+        count = results[0]
         if count > _RATE_LIMIT_MAX:
             raise HTTPException(
                 status_code=429,
@@ -156,6 +158,7 @@ async def logout(request: Request):
         await revoke_token(token)
 
     response = JSONResponse(content={"ok": True})
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/api/v1/auth")
+    is_prod = settings.is_production
+    response.delete_cookie("access_token", path="/", secure=is_prod, samesite="strict", httponly=True)
+    response.delete_cookie("refresh_token", path="/api/v1/auth", secure=is_prod, samesite="strict", httponly=True)
     return response

@@ -482,7 +482,7 @@ async def get_trade_history(
                     id=t.get("id", 0),
                     symbol=t.get("symbol", ""),
                     strategy=t.get("strategy"),
-                    side="buy",
+                    side=t.get("side", "buy"),
                     quantity=float(t.get("shares", 0)),
                     entry_price=float(t.get("entry_price", 0)),
                     exit_price=float(t["exit_price"]) if t.get("exit_price") else None,
@@ -518,8 +518,10 @@ async def get_trade_history(
             result = await db.execute(query)
             trades = result.scalars().all()
 
-        return [
-            TradeHistoryEntry(
+        results = []
+        for t in trades:
+            qty = t.legs[0].get("qty", 1) if t.legs else 1
+            results.append(TradeHistoryEntry(
                 id=t.id,
                 symbol=t.symbol,
                 strategy=t.strategy,
@@ -528,14 +530,13 @@ async def get_trade_history(
                 entry_price=t.entry_price or 0,
                 exit_price=t.exit_price,
                 pnl=t.pnl,
-                pnl_pct=(t.pnl / t.entry_price * 100) if t.pnl is not None and t.entry_price else None,
+                pnl_pct=round(t.pnl / (t.entry_price * qty) * 100, 2) if t.pnl is not None and t.entry_price and t.entry_price > 0 else None,
                 entry_time=t.entry_time,
                 exit_time=t.exit_time,
                 status=t.status,
                 notes=t.notes,
-            )
-            for t in trades
-        ]
+            ))
+        return results
     except Exception:
         logger.warning("Failed to retrieve trade history from DB", exc_info=True)
         return []

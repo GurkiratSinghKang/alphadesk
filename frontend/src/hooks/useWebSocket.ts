@@ -148,9 +148,12 @@ export function useWebSocket(): UseWebSocketReturn {
   // Reset retry counter and reconnect when the tab becomes visible again
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === "visible" && retriesRef.current >= MAX_RETRIES) {
-        retriesRef.current = 0;
-        connect();
+      if (document.visibilityState === "visible") {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+          retriesRef.current = 0;
+          connect();
+        }
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);

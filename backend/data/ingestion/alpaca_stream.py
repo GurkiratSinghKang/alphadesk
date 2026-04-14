@@ -98,8 +98,9 @@ async def _run_stream() -> None:
                             logger.error("Alpaca auth failed: %s — retrying in 60s", m.get("msg", "unknown"))
                             await asyncio.sleep(60)
                             raise ConnectionError("Alpaca auth failed")
-                except ConnectionError:
-                    break  # exits async-with block, outer while loop reconnects
+                except ConnectionError as e:
+                    logger.error("Auth/connection error: %s — will retry with backoff", e)
+                    raise  # Let the outer except handler apply backoff and retry
                 except Exception:
                     pass
 

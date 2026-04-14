@@ -180,13 +180,16 @@ async def _run_monitor() -> None:
                 # Check if we already ran this slot
                 slot_key = f"{hour}:{minute:02d}"
                 if slot_key != _last_eval_slot:
-                    _last_eval_slot = slot_key
-                    logger.info("Strategy evaluation triggered (%s ET)", slot_key)
-                    try:
-                        from data.ingestion.daily_pipeline import run_daily_pipeline
-                        await run_daily_pipeline(screen_limit=20, analyze_limit=5)
-                    except Exception as e:
-                        logger.error("Strategy evaluation failed: %s", e)
+                    from data.ingestion.daily_pipeline import run_daily_pipeline, _pipeline_lock
+                    if _pipeline_lock.locked():
+                        logger.info("Pipeline already running — skipping evaluation slot %s", slot_key)
+                    else:
+                        _last_eval_slot = slot_key
+                        logger.info("Strategy evaluation triggered (%s ET)", slot_key)
+                        try:
+                            await run_daily_pipeline(screen_limit=20, analyze_limit=5)
+                        except Exception as e:
+                            logger.error("Strategy evaluation failed: %s", e)
                     await asyncio.sleep(60)  # skip rest of this minute
 
             await asyncio.sleep(10)  # check every 10 seconds

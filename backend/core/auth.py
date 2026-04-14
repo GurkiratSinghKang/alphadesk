@@ -62,8 +62,10 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
 async def is_token_revoked(jti: str) -> bool:
     """Check if a token has been revoked. FAILS CLOSED — treats token as revoked if Redis unavailable."""
     try:
-        from core.redis import cache_get
-        return await cache_get(f"revoked:{jti}") is not None
+        from core.redis import get_redis
+        r = await get_redis()
+        raw = await r.get(f"revoked:{jti}")
+        return raw is not None
     except Exception:
         logger.warning("Redis unavailable — treating token as revoked (fail closed)")
         return True  # FAIL CLOSED: block auth when we can't check revocation
@@ -72,7 +74,7 @@ async def is_token_revoked(jti: str) -> bool:
 async def revoke_token(token: str) -> None:
     """Add a token to the revocation blocklist."""
     try:
-        payload = jwt.decode(token, settings.jwt_secret_value, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.jwt_secret_value, algorithms=[ALGORITHM], options={"verify_exp": False})
         jti = payload.get("jti")
         if jti:
             from core.redis import cache_set

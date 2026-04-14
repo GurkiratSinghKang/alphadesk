@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -183,6 +183,11 @@ export function OptionsPanel() {
   const today = new Date().toDateString();
   const expirations = useMemo(generateExpirations, [today]);
   const [selectedExpiry, setSelectedExpiry] = useState(expirations[2] ?? "");
+
+  // Reset selectedExpiry when expirations regenerate (e.g. after midnight)
+  useEffect(() => {
+    setSelectedExpiry(expirations[2] ?? expirations[0] ?? "");
+  }, [expirations]);
 
   // Track selected call/put keys locally for highlighting
   const selectedKeys = useMemo(() => {

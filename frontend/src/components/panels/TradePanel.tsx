@@ -164,9 +164,18 @@ function TradeBuilderTab() {
   const strikes = legs.filter((l) => l.strike).map((l) => l.strike!);
   const minStrike = Math.min(...(strikes.length ? strikes : [0]));
   const maxStrike = Math.max(...(strikes.length ? strikes : [0]));
-  const maxProfit =
-    maxStrike > minStrike ? (maxStrike - minStrike) * 100 + netDebit : Math.abs(netDebit);
-  const maxLoss = Math.abs(netDebit);
+  const spreadWidth = maxStrike > minStrike ? (maxStrike - minStrike) * 100 : 0;
+  let maxProfit: number;
+  let maxLoss: number;
+  if (netDebit >= 0) {
+    // Credit spread: profit is credit received, loss is spread width minus credit
+    maxProfit = netDebit;
+    maxLoss = spreadWidth > 0 ? spreadWidth - netDebit : netDebit;
+  } else {
+    // Debit spread: loss is debit paid, profit is spread width minus debit
+    maxLoss = Math.abs(netDebit);
+    maxProfit = spreadWidth > 0 ? spreadWidth - Math.abs(netDebit) : Math.abs(netDebit);
+  }
   const breakeven = minStrike > 0 ? minStrike + Math.abs(netDebit) / 100 : 0;
 
   // Build option legs for payoff diagram (only options, not stock legs)
@@ -486,7 +495,9 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
   // Compute live P&L: if we have a real-time quote, recalculate using the latest price
   const livePrice = liveQuote?.last ?? p.currentPrice;
   const livePnl = liveQuote
-    ? (liveQuote.last - p.avgCost) * p.quantity
+    ? p.side === "short"
+      ? (p.avgCost - liveQuote.last) * p.quantity
+      : (liveQuote.last - p.avgCost) * p.quantity
     : p.unrealizedPnl;
 
   return (
@@ -557,7 +568,9 @@ function PositionsTab() {
     return positions.reduce((sum, p) => {
       const liveQuote = quotes[p.symbol.split(" ")[0]];
       const pnl = liveQuote
-        ? (liveQuote.last - p.avgCost) * p.quantity
+        ? p.side === "short"
+          ? (p.avgCost - liveQuote.last) * p.quantity
+          : (liveQuote.last - p.avgCost) * p.quantity
         : p.unrealizedPnl;
       return sum + pnl;
     }, 0);

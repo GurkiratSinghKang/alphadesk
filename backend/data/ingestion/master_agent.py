@@ -479,7 +479,9 @@ class MasterAgent:
         if num_positions >= 3:
             exposure = self._get_sector_exposure()
             current_sector_pct = exposure.get(sector, 0)
-            projected_sector_pct = (current_sector_pct * total_deployed + notional) / (total_deployed + notional)
+            total_pending = sum(o.get("notional", 0) for o in self.pending_orders if o.get("side") == "buy")
+            total_base = total_deployed + total_pending
+            projected_sector_pct = (current_sector_pct * total_base + notional) / (total_base + notional)
 
             if projected_sector_pct > self.SECTOR_LIMIT:
                 reason = f"Sector '{sector}' would reach {projected_sector_pct*100:.0f}% (limit: {self.SECTOR_LIMIT*100}%)"
@@ -648,6 +650,7 @@ class MasterAgent:
                 if symbol in self.existing_positions:
                     del self.existing_positions[symbol]
                 self.pending_orders = [o for o in self.pending_orders if o["symbol"] != symbol]
+                self.cash += notional
                 self.rejections.append({
                     "symbol": symbol, "strategy": strategy,
                     "reason": f"Claude review rejected: {review['claude_reason']}",

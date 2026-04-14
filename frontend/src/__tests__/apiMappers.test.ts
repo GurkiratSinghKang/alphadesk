@@ -976,9 +976,9 @@ describe('getPortfolioSummary', () => {
     expect(result.unrealizedPnlPct).toBe(2);
     expect(result.realizedPnlToday).toBe(-50);
     expect(result.positionsCount).toBe(1);
-    expect(result.dayPnl).toBe(50); // 100 + (-50)
-    // lastEquity = 100000 - 50 = 99950; dayPnlPct = 50/99950*100
-    expect(result.dayPnlPct).toBeCloseTo(0.05003, 3);
+    expect(result.dayPnl).toBe(-50); // realized_pnl_today only (no day_pnl/profit_loss in response)
+    // lastEquity = 100000 - (-50) = 100050; dayPnlPct = -50/100050*100
+    expect(result.dayPnlPct).toBeCloseTo(-0.04998, 3);
   });
 
   it('computes dayPnl as 0 when both pnl fields are 0', async () => {
@@ -1015,7 +1015,7 @@ describe('getPortfolioSummary', () => {
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await getPortfolioSummary();
-    expect(result.dayPnl).toBe(300); // 500 + (-200)
+    expect(result.dayPnl).toBe(-200); // realized_pnl_today only (no day_pnl/profit_loss in response)
   });
 });
 

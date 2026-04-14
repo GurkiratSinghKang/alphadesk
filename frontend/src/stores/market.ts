@@ -40,7 +40,7 @@ export const useMarketStore = create<MarketState>()(
       updateQuote: (quote) =>
         set((state) => {
           const existing = state.quotes[quote.symbol];
-          const merged = existing ? { ...existing, ...quote } : quote;
+          const merged = existing ? { ...existing, ...quote } : { ...quote };
           // Recompute change/changePct from prev close when a real-time price arrives
           if (merged.last && merged.close && merged.close > 0) {
             merged.change = +(merged.last - merged.close).toFixed(4);

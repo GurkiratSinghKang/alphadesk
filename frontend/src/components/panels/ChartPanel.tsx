@@ -197,18 +197,20 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   const [barsLoading, setBarsLoading] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     setApiBars(null);
     setBarsLoading(true);
     getBars(selectedSymbol, timeframe)
       .then((bars) => {
-        if (bars?.length) setApiBars(bars);
+        if (!cancelled && bars?.length) setApiBars(bars);
       })
       .catch(() => {
         // Fall back to demo data
       })
       .finally(() => {
-        setBarsLoading(false);
+        if (!cancelled) setBarsLoading(false);
       });
+    return () => { cancelled = true; };
   }, [selectedSymbol, timeframe]);
 
   useEffect(() => {

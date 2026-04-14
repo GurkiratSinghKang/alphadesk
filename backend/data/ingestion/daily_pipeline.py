@@ -502,7 +502,16 @@ async def _check_exits(
         if reason:
             try:
                 order = await _place_order(client, sym, trade["shares"], "sell")
-                ledger.record_exit(sym, trade["shares"], current_price, reason)
+                order_id = order.get("id")
+                if order_id:
+                    fill_price = await _poll_fill_price(client, order_id)
+                    if fill_price is not None:
+                        ledger.record_exit(sym, trade["shares"], fill_price, reason)
+                    else:
+                        logger.warning("Sell order for %s may not have filled (order %s) — recording exit at snapshot price", sym, order_id)
+                        ledger.record_exit(sym, trade["shares"], current_price, reason)
+                else:
+                    ledger.record_exit(sym, trade["shares"], current_price, reason)
 
                 # --- Bracket order cleanup ---
                 # When one leg fills (stop-loss or take-profit), cancel
@@ -646,8 +655,8 @@ async def _run_pipeline_inner(
                 try:
                     discord_url = settings.DISCORD_WEBHOOK_URL.get_secret_value() if hasattr(settings.DISCORD_WEBHOOK_URL, 'get_secret_value') else settings.DISCORD_WEBHOOK_URL
                     if discord_url:
-                        async with httpx.AsyncClient() as client:
-                            await client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
+                        async with httpx.AsyncClient(timeout=5) as discord_client:
+                            await discord_client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
                 except Exception:
                     pass
 
@@ -714,8 +723,8 @@ async def _run_pipeline_inner(
                             bars = resp.json().get("bars", [])
                             if bars:
                                 price_6m_ago = bars[0]["c"]
-                                current_price = stock.get("price", price_6m_ago)
-                                if current_price and price_6m_ago:
+                                current_price = stock.get("price", 0)
+                                if current_price and current_price > 0 and price_6m_ago and price_6m_ago > 0:
                                     momentum_data[sym] = ((current_price / price_6m_ago) - 1) * 100
                     except Exception:
                         pass
@@ -753,6 +762,21 @@ async def _run_pipeline_inner(
             except Exception as e:
                 logger.error("Failed to populate momentum data: %s", e)
                 errors.append(f"Momentum data failed: {e}")
+
+            # ---- Update strategy PnL BEFORE running strategies (P1) ----
+            # Must run before new trades are approved, so drawdown peaks
+            # reflect only actual positions, not un-traded approvals.
+            pre_strategy_values: dict[str, float] = {}
+            for sym, pos in master.existing_positions.items():
+                strat = pos.get("strategy", "unknown")
+                pre_strategy_values[strat] = pre_strategy_values.get(strat, 0) + pos.get("notional", 0)
+            for strat, value in pre_strategy_values.items():
+                pnl_result = master.update_strategy_pnl(strat, value)
+                if pnl_result["action"] == "halt":
+                    logger.warning(
+                        "Strategy '%s' HALTED (pre-trade): drawdown %.1f%%",
+                        strat, pnl_result["drawdown"] * 100,
+                    )
 
             # ---- Run each strategy (screening in parallel) ----
             strategy_instances = [cls() for cls in ALL_STRATEGIES]

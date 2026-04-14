@@ -123,7 +123,8 @@ class TradeLedger:
                 trade["exit_price"] = price
                 trade["exit_time"] = datetime.now(timezone.utc).isoformat()
                 trade["exit_reason"] = reason
-                trade["pnl"] = round((price - trade["entry_price"]) * trade["shares"], 2)
+                trade["pnl"] = round((price - trade["entry_price"]) * shares, 2)
+                trade["shares"] = shares  # reflect actual exited quantity
                 trade["pnl_pct"] = round(
                     ((price - trade["entry_price"]) / trade["entry_price"]) * 100, 2
                 )

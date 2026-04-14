@@ -15,16 +15,22 @@ import type { Quote, Alert } from "@/types";
  * - Routes incoming WS messages to the correct store via onMessage (no re-render)
  */
 export function useDataPipeline() {
-  const { subscribe, onMessage } = useWs();
+  const { subscribe, unsubscribe, onMessage } = useWs();
   const hasFetched = useRef(false);
 
-  // Subscribe to WS channels on mount
+  // Subscribe to WS channels on mount, unsubscribe on unmount (prevents double-sub in Strict Mode)
   useEffect(() => {
     subscribe("quotes");
     subscribe("portfolio");
     subscribe("alerts");
     subscribe("agents");
-  }, [subscribe]);
+    return () => {
+      unsubscribe("quotes");
+      unsubscribe("portfolio");
+      unsubscribe("alerts");
+      unsubscribe("agents");
+    };
+  }, [subscribe, unsubscribe]);
 
   // Fetch initial data on mount (with retry) + periodic portfolio refresh
   useEffect(() => {

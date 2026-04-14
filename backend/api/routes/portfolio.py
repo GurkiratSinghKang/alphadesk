@@ -255,7 +255,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
 
         # Use position-level unrealized P&L from positions endpoint
         unrealized_pnl = positions_unrealized
-        total_mv = long_mv + short_mv
+        total_mv = long_mv + abs(short_mv)
         unrealized_pnl_pct = (unrealized_pnl / total_mv * 100) if total_mv > 0 else 0
         realized_pnl_today = day_pnl - unrealized_pnl
 
@@ -351,7 +351,7 @@ async def get_performance(
         return PerformanceMetrics(
             period=period,
             total_return=round(total_return, 2),
-            total_return_pct=round(total_return / 10000 * 100, 2),
+            total_return_pct=round(total_return / 100_000 * 100, 2),
             sharpe_ratio=round(float(sharpe), 2) if sharpe else None,
             sortino_ratio=round(float(sortino), 2) if sortino else None,
             max_drawdown=round(max_dd, 2),

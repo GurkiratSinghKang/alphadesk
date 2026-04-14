@@ -61,21 +61,24 @@ async def _get_technical_context(symbol: str) -> str:
             closes = [b["c"] for b in bars]
             volumes = [b["v"] for b in bars]
             current = closes[-1]
-            high_52w = max(closes)
-            low_52w = min(closes)
+            high_3m = max(closes)
+            low_3m = min(closes)
 
-            # 20-day EMA
-            ema20 = closes[-20]
-            mult = 2 / 21
-            for c in closes[-19:]:
-                ema20 = c * mult + ema20 * (1 - mult)
+            # 20-day EMA: seed with SMA of first 20 bars, then apply EMA to remaining
+            if len(closes) >= 20:
+                ema20 = sum(closes[:20]) / 20
+                mult = 2 / 21
+                for c in closes[20:]:
+                    ema20 = c * mult + ema20 * (1 - mult)
+            else:
+                ema20 = closes[-1]
 
-            # 50-day EMA (if enough data)
+            # 50-day EMA: same pattern
             ema50 = None
             if len(closes) >= 50:
-                ema50 = closes[-50]
+                ema50 = sum(closes[:50]) / 50
                 mult50 = 2 / 51
-                for c in closes[-49:]:
+                for c in closes[50:]:
                     ema50 = c * mult50 + ema50 * (1 - mult50)
 
             # RSI(14)
@@ -100,8 +103,8 @@ async def _get_technical_context(symbol: str) -> str:
             latest_vol = volumes[-1]
             vol_ratio = latest_vol / avg_vol if avg_vol > 0 else 1.0
 
-            # Distance from 52-week high
-            dist_from_high = ((current - high_52w) / high_52w) * 100
+            # Distance from 3-month high
+            dist_from_high = ((current - high_3m) / high_3m) * 100
 
             # Trend assessment
             trend = "UPTREND" if current > ema20 and (ema50 is None or current > ema50) else \
@@ -110,8 +113,8 @@ async def _get_technical_context(symbol: str) -> str:
             lines = [
                 f"TECHNICAL DATA for {symbol}:",
                 f"  Current Price: ${current:.2f}",
-                f"  52-Week High: ${high_52w:.2f} ({dist_from_high:+.1f}% from high)",
-                f"  52-Week Low: ${low_52w:.2f}",
+                f"  3-Month High: ${high_3m:.2f} ({dist_from_high:+.1f}% from high)",
+                f"  3-Month Low: ${low_3m:.2f}",
                 f"  20-day EMA: ${ema20:.2f} ({'above' if current > ema20 else 'below'})",
             ]
             if ema50:

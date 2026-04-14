@@ -76,7 +76,7 @@ export function useIVData(symbol: string) {
 export function usePnlCalendar(month: number, year: number) {
   return useQuery({
     queryKey: ['pnlCalendar', month, year],
-    queryFn: () => getPnlCalendar(month, year),
+    queryFn: () => getPnlCalendar(year, month),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
