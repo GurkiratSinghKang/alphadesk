@@ -6,205 +6,581 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		045915C20095902573ECD30D /* PnLText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4266B38345B5E5F7B715DD6A /* PnLText.swift */; };
+		08CDF2B5F6188B90E3007D2E /* TradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BC2426BFF8EEB45381B4E4 /* TradeView.swift */; };
+		1066A3F721386CAFDD2E0AA9 /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 099037FD3466FF4C8B94785B /* NewsView.swift */; };
+		1AB4454B81131D3233721B5B /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3E212A4C1F63F0FF56D429 /* ChatView.swift */; };
+		283E3BAA79FA60C68EC85A99 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A783D29B05CCE9DC91EB2 /* MainTabView.swift */; };
+		2DA8F89BB900F179D4621509 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166493FEAB4C8DE3C1D49243 /* AuthManager.swift */; };
+		3032108AEC713366A04DD8EA /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D1479C62C9F0502A3838FC /* WatchlistView.swift */; };
+		472E0E8ADE797194FEBFA42F /* Number+Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82503AA558FFE633E6681D7 /* Number+Format.swift */; };
+		4E1561C86A3C4105BF77FD75 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */; };
+		4F4255593679945BA99A8056 /* MetricCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730DBF29998BC5F366845530 /* MetricCard.swift */; };
+		72886EC08FA13A88F77387A4 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002AC75518E0531DACB1C605 /* WebSocketClient.swift */; };
+		78E2538E6D60FA1D35DA3264 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A45DC2110DA761EBCDDACE47 /* Assets.xcassets */; };
+		7D940FCB0CBA1F853A98BACE /* SymbolDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152D130F8210C420C6BC9D9D /* SymbolDetailView.swift */; };
+		814A29D6BC4FB84C8E456939 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640CBC557B54E1C28941AF8F /* KeychainHelper.swift */; };
+		818748814721A244BF19B953 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2AE5C6E4A2BD523B35F9DC5 /* LoginView.swift */; };
+		8C356EDB3ECDFB328F544C98 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */; };
+		90EB81751FDB2D310F1C4621 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45765C02F359CA7BFE1ABAA2 /* StatusBadge.swift */; };
+		943F2B92D01ECA0048968D52 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E8CE29A0FB0130A619C843 /* Color+Hex.swift */; };
+		9CBDBE05C250A4D6E0C7BBF0 /* QuoteRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9E7FC7F6C915EC30FEDD399 /* QuoteRow.swift */; };
+		A1505E2E9243ED9DFDC2DBF8 /* StrategiesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3EA5CAD5EA8374CB3C46C3 /* StrategiesListView.swift */; };
+		A3ACF9A5D2AB9B6FB4376B94 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832CBE1BF076F6418F574E76 /* Models.swift */; };
+		A7811C35FF9C29F8B7E9A2E0 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A00AFF700480159A127F965 /* AppTheme.swift */; };
+		BE91BDE5220EB78ADBEE78B5 /* AlphaDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6041C36C456165D3B81090D8 /* AlphaDeskApp.swift */; };
+		C0D3A8F3D41DCF7166A8912B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B1A9830C0A54E14CB732BC /* APIClient.swift */; };
+		CB7765CC7BB26125DDAB18F8 /* SparklineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C0B6316212229780886D15 /* SparklineView.swift */; };
+		D3BC923B0AAE4B69BBA97AE8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48949C40E0AEAD70A49B2D9A /* SettingsView.swift */; };
+		D9C5685C505E10D844940053 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */; };
+		E737476BE1081D42CD7B7FDC /* StrategyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */; };
+		F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */; };
+		F237A2172C02795C4B000181 /* OrderHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		002AC75518E0531DACB1C605 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
+		099037FD3466FF4C8B94785B /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
+		152D130F8210C420C6BC9D9D /* SymbolDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolDetailView.swift; sourceTree = "<group>"; };
+		166493FEAB4C8DE3C1D49243 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
+		180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategyDetailView.swift; sourceTree = "<group>"; };
+		2B3EA5CAD5EA8374CB3C46C3 /* StrategiesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategiesListView.swift; sourceTree = "<group>"; };
+		4266B38345B5E5F7B715DD6A /* PnLText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PnLText.swift; sourceTree = "<group>"; };
+		45765C02F359CA7BFE1ABAA2 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		48949C40E0AEAD70A49B2D9A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		4A3A783D29B05CCE9DC91EB2 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		565EE49375DB35A1C0B2A13A /* AlphaDesk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AlphaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		57BC2426BFF8EEB45381B4E4 /* TradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeView.swift; sourceTree = "<group>"; };
+		6041C36C456165D3B81090D8 /* AlphaDeskApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlphaDeskApp.swift; sourceTree = "<group>"; };
+		640CBC557B54E1C28941AF8F /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		730DBF29998BC5F366845530 /* MetricCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricCard.swift; sourceTree = "<group>"; };
+		76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
+		832CBE1BF076F6418F574E76 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		8A00AFF700480159A127F965 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
+		A45DC2110DA761EBCDDACE47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A82503AA558FFE633E6681D7 /* Number+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Number+Format.swift"; sourceTree = "<group>"; };
+		AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
+		B2C0B6316212229780886D15 /* SparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparklineView.swift; sourceTree = "<group>"; };
+		BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
+		C3D1479C62C9F0502A3838FC /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
+		CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderHistoryView.swift; sourceTree = "<group>"; };
+		DE3E212A4C1F63F0FF56D429 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		E2AE5C6E4A2BD523B35F9DC5 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		E5B1A9830C0A54E14CB732BC /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		F8E8CE29A0FB0130A619C843 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
+		F9E7FC7F6C915EC30FEDD399 /* QuoteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRow.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
 /* Begin PBXGroup section */
-		AAAAAA000000000000000001 /* AlphaDesk */ = {
+		04ADB217931B656F4348C73A /* Strategies */ = {
 			isa = PBXGroup;
 			children = (
-				AAAAAA000000000000000002 /* AlphaDesk */,
+				2B3EA5CAD5EA8374CB3C46C3 /* StrategiesListView.swift */,
+				180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */,
+			);
+			path = Strategies;
+			sourceTree = "<group>";
+		};
+		0688C88ABE67B96D2B126CFB /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				8A00AFF700480159A127F965 /* AppTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		0B2430D9B3216A288C9EB1EE /* Pipeline */ = {
+			isa = PBXGroup;
+			children = (
+				BC2CC67EABD8FC604698FDA9 /* PipelineView.swift */,
+			);
+			path = Pipeline;
+			sourceTree = "<group>";
+		};
+		15E44D7D70E02D9C3F4A9F35 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */,
+				AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		22EF51AB5FC28889472AEAC9 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B2505BFEACF54DA16D3670F7 /* Components */,
+				4E1DA5DAAB7866415EC49125 /* Extensions */,
+				0688C88ABE67B96D2B126CFB /* Theme */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		237DB98E6E7514415BCDC4C4 /* Trade */ = {
+			isa = PBXGroup;
+			children = (
+				CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */,
+				152D130F8210C420C6BC9D9D /* SymbolDetailView.swift */,
+				57BC2426BFF8EEB45381B4E4 /* TradeView.swift */,
+			);
+			path = Trade;
+			sourceTree = "<group>";
+		};
+		26110989064469B4C0E254A4 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				E5B1A9830C0A54E14CB732BC /* APIClient.swift */,
+				002AC75518E0531DACB1C605 /* WebSocketClient.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		28A9C0F7547C04F6DA8198FE /* App */ = {
+			isa = PBXGroup;
+			children = (
+				6041C36C456165D3B81090D8 /* AlphaDeskApp.swift */,
+				4A3A783D29B05CCE9DC91EB2 /* MainTabView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		2F7A43E2DC9AE59DD14172A1 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				166493FEAB4C8DE3C1D49243 /* AuthManager.swift */,
+				640CBC557B54E1C28941AF8F /* KeychainHelper.swift */,
+				E2AE5C6E4A2BD523B35F9DC5 /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		353F5BF9826B1B4917A3F840 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				2F7A43E2DC9AE59DD14172A1 /* Auth */,
+				C9A2910C856D6A934F9CB0A7 /* Models */,
+				26110989064469B4C0E254A4 /* Network */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		3ED6C13D30614CAE15C8C83B /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				48949C40E0AEAD70A49B2D9A /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		4E1DA5DAAB7866415EC49125 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				F8E8CE29A0FB0130A619C843 /* Color+Hex.swift */,
+				A82503AA558FFE633E6681D7 /* Number+Format.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		76499C0DF58190C41446C7F9 /* News */ = {
+			isa = PBXGroup;
+			children = (
+				099037FD3466FF4C8B94785B /* NewsView.swift */,
+			);
+			path = News;
+			sourceTree = "<group>";
+		};
+		78F39A9DFEAB9A1C41B88E92 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		90997A35522DB8BF87CB0F8D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				565EE49375DB35A1C0B2A13A /* AlphaDesk.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A6D16E5A1FC2DE37583B4A60 /* Watchlist */ = {
+			isa = PBXGroup;
+			children = (
+				C3D1479C62C9F0502A3838FC /* WatchlistView.swift */,
+			);
+			path = Watchlist;
+			sourceTree = "<group>";
+		};
+		A7651127B9D0E54A183A73C0 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				DE3E212A4C1F63F0FF56D429 /* ChatView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		A81924CE03DAC4770C6C855C /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				A7651127B9D0E54A183A73C0 /* Chat */,
+				15E44D7D70E02D9C3F4A9F35 /* Dashboard */,
+				76499C0DF58190C41446C7F9 /* News */,
+				0B2430D9B3216A288C9EB1EE /* Pipeline */,
+				3ED6C13D30614CAE15C8C83B /* Settings */,
+				04ADB217931B656F4348C73A /* Strategies */,
+				237DB98E6E7514415BCDC4C4 /* Trade */,
+				A6D16E5A1FC2DE37583B4A60 /* Watchlist */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		A8D928677C5EE56C38EAA9ED = {
+			isa = PBXGroup;
+			children = (
+				BB7DE028869F206440C79955 /* AlphaDesk */,
+				90997A35522DB8BF87CB0F8D /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		AAAAAA000000000000000002 /* AlphaDesk */ = {
+		B2505BFEACF54DA16D3670F7 /* Components */ = {
 			isa = PBXGroup;
+			children = (
+				76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */,
+				730DBF29998BC5F366845530 /* MetricCard.swift */,
+				4266B38345B5E5F7B715DD6A /* PnLText.swift */,
+				F9E7FC7F6C915EC30FEDD399 /* QuoteRow.swift */,
+				B2C0B6316212229780886D15 /* SparklineView.swift */,
+				45765C02F359CA7BFE1ABAA2 /* StatusBadge.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		BB7DE028869F206440C79955 /* AlphaDesk */ = {
+			isa = PBXGroup;
+			children = (
+				A45DC2110DA761EBCDDACE47 /* Assets.xcassets */,
+				28A9C0F7547C04F6DA8198FE /* App */,
+				353F5BF9826B1B4917A3F840 /* Core */,
+				A81924CE03DAC4770C6C855C /* Features */,
+				78F39A9DFEAB9A1C41B88E92 /* Preview Content */,
+				22EF51AB5FC28889472AEAC9 /* Shared */,
+			);
 			path = AlphaDesk;
+			sourceTree = "<group>";
+		};
+		C9A2910C856D6A934F9CB0A7 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				832CBE1BF076F6418F574E76 /* Models.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
-/* Begin PBXProject section */
-		AAAAAA000000000000000010 /* Project object */ = {
-			isa = PBXProject;
-			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
-			};
-			buildConfigurationList = AAAAAA000000000000000011 /* Build configuration list for PBXProject "AlphaDesk" */;
-			compatibilityVersion = "Xcode 16.0";
-			developmentRegion = en;
-			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-				Base,
-			);
-			mainGroup = AAAAAA000000000000000001;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = AAAAAA000000000000000001;
-			projectDirPath = "";
-			projectRoot = "";
-			targets = (
-				AAAAAA000000000000000020 /* AlphaDesk */,
-			);
-		};
-/* End PBXProject section */
-
 /* Begin PBXNativeTarget section */
-		AAAAAA000000000000000020 /* AlphaDesk */ = {
+		08736AFE8378FF438A3F53DA /* AlphaDesk */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AAAAAA000000000000000021 /* Build configuration list for PBXNativeTarget "AlphaDesk" */;
+			buildConfigurationList = D13F40BD936F5BA3793D5397 /* Build configuration list for PBXNativeTarget "AlphaDesk" */;
 			buildPhases = (
+				647F07AC0B32D87575814958 /* Sources */,
+				A83B039E85913E8763215BAB /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				AAAAAA000000000000000002 /* AlphaDesk */,
-			);
 			name = AlphaDesk;
 			packageProductDependencies = (
 			);
 			productName = AlphaDesk;
+			productReference = 565EE49375DB35A1C0B2A13A /* AlphaDesk.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
+/* Begin PBXProject section */
+		FCE9D1E2F80A0F80FC940DF2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1630;
+				TargetAttributes = {
+					08736AFE8378FF438A3F53DA = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = 6192C8187D14F788A0B02B66 /* Build configuration list for PBXProject "AlphaDesk" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A8D928677C5EE56C38EAA9ED;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 90997A35522DB8BF87CB0F8D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				08736AFE8378FF438A3F53DA /* AlphaDesk */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A83B039E85913E8763215BAB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78E2538E6D60FA1D35DA3264 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		647F07AC0B32D87575814958 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0D3A8F3D41DCF7166A8912B /* APIClient.swift in Sources */,
+				BE91BDE5220EB78ADBEE78B5 /* AlphaDeskApp.swift in Sources */,
+				A7811C35FF9C29F8B7E9A2E0 /* AppTheme.swift in Sources */,
+				2DA8F89BB900F179D4621509 /* AuthManager.swift in Sources */,
+				1AB4454B81131D3233721B5B /* ChatView.swift in Sources */,
+				943F2B92D01ECA0048968D52 /* Color+Hex.swift in Sources */,
+				814A29D6BC4FB84C8E456939 /* KeychainHelper.swift in Sources */,
+				D9C5685C505E10D844940053 /* LoadingView.swift in Sources */,
+				818748814721A244BF19B953 /* LoginView.swift in Sources */,
+				283E3BAA79FA60C68EC85A99 /* MainTabView.swift in Sources */,
+				4F4255593679945BA99A8056 /* MetricCard.swift in Sources */,
+				A3ACF9A5D2AB9B6FB4376B94 /* Models.swift in Sources */,
+				1066A3F721386CAFDD2E0AA9 /* NewsView.swift in Sources */,
+				472E0E8ADE797194FEBFA42F /* Number+Format.swift in Sources */,
+				F237A2172C02795C4B000181 /* OrderHistoryView.swift in Sources */,
+				4E1561C86A3C4105BF77FD75 /* PerformanceView.swift in Sources */,
+				8C356EDB3ECDFB328F544C98 /* PipelineView.swift in Sources */,
+				045915C20095902573ECD30D /* PnLText.swift in Sources */,
+				F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */,
+				9CBDBE05C250A4D6E0C7BBF0 /* QuoteRow.swift in Sources */,
+				D3BC923B0AAE4B69BBA97AE8 /* SettingsView.swift in Sources */,
+				CB7765CC7BB26125DDAB18F8 /* SparklineView.swift in Sources */,
+				90EB81751FDB2D310F1C4621 /* StatusBadge.swift in Sources */,
+				A1505E2E9243ED9DFDC2DBF8 /* StrategiesListView.swift in Sources */,
+				E737476BE1081D42CD7B7FDC /* StrategyDetailView.swift in Sources */,
+				7D940FCB0CBA1F853A98BACE /* SymbolDetailView.swift in Sources */,
+				08CDF2B5F6188B90E3007D2E /* TradeView.swift in Sources */,
+				3032108AEC713366A04DD8EA /* WatchlistView.swift in Sources */,
+				72886EC08FA13A88F77387A4 /* WebSocketClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
 /* Begin XCBuildConfiguration section */
-		AAAAAA000000000000000030 /* Debug */ = {
+		484D6113F6F1A07456A70679 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alphadesk.AlphaDesk;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5DB808A94EC45DF507A31592 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;
 		};
-		AAAAAA000000000000000031 /* Release */ = {
+		77BF3DD4E7F4534E287D200A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_VERSION = 6.0;
-				VALIDATE_PRODUCT = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
 		};
-		AAAAAA000000000000000032 /* Debug */ = {
+		9325838369E1A02ED45EEBC7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"AlphaDesk/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = AlphaDesk;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.tradingalpha.AlphaDesk;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.alphadesk.AlphaDesk;
+				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
-		};
-		AAAAAA000000000000000033 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"AlphaDesk/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = AlphaDesk;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.tradingalpha.AlphaDesk;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AAAAAA000000000000000011 /* Build configuration list for PBXProject "AlphaDesk" */ = {
+		6192C8187D14F788A0B02B66 /* Build configuration list for PBXProject "AlphaDesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				AAAAAA000000000000000030 /* Debug */,
-				AAAAAA000000000000000031 /* Release */,
+				5DB808A94EC45DF507A31592 /* Debug */,
+				77BF3DD4E7F4534E287D200A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
-		AAAAAA000000000000000021 /* Build configuration list for PBXNativeTarget "AlphaDesk" */ = {
+		D13F40BD936F5BA3793D5397 /* Build configuration list for PBXNativeTarget "AlphaDesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				AAAAAA000000000000000032 /* Debug */,
-				AAAAAA000000000000000033 /* Release */,
+				9325838369E1A02ED45EEBC7 /* Debug */,
+				484D6113F6F1A07456A70679 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = AAAAAA000000000000000010 /* Project object */;
+	rootObject = FCE9D1E2F80A0F80FC940DF2 /* Project object */;
 }

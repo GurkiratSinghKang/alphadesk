@@ -311,7 +311,7 @@ struct PerformanceView: View {
                     AreaMark(
                         x: .value("Date", point.date),
                         yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 0),
-                        y: .value("Value", point.value)
+                        yEnd: .value("Value", point.value)
                     )
                     .foregroundStyle(
                         LinearGradient(

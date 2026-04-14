@@ -371,7 +371,8 @@ struct PipelineView: View {
                     Image(systemName: "gearshape.2.fill")
                         .font(.system(size: 12))
                         .foregroundStyle(AD.accent)
-                        .symbolEffect(.rotate, isActive: vm.isRunning)
+                        .rotationEffect(.degrees(vm.isRunning ? 360 : 0))
+                        .animation(vm.isRunning ? .linear(duration: 2).repeatForever(autoreverses: false) : .default, value: vm.isRunning)
 
                     Text(vm.runProgress)
                         .font(.system(size: 13, weight: .medium))

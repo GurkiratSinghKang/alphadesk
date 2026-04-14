@@ -361,7 +361,7 @@ struct PortfolioView: View {
                 AreaMark(
                     x: .value("Date", point.date),
                     yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 0),
-                    y: .value("Equity", point.value)
+                    yEnd: .value("Equity", point.value)
                 )
                 .foregroundStyle(
                     LinearGradient(

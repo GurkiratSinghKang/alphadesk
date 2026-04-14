@@ -252,7 +252,7 @@ struct SymbolDetailView: View {
                     AreaMark(
                         x: .value("Time", bar.timestamp),
                         yStart: .value("Base", vm.bars.map(\.close).min() ?? 0),
-                        y: .value("Close", bar.close)
+                        yEnd: .value("Close", bar.close)
                     )
                     .foregroundStyle(
                         LinearGradient(

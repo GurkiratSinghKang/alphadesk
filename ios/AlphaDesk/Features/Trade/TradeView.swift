@@ -490,7 +490,7 @@ struct TradeView: View {
                 AreaMark(
                     x: .value("Date", point.date),
                     yStart: .value("Base", vm.priceHistory.map(\.price).min() ?? 0),
-                    y: .value("Price", point.price)
+                    yEnd: .value("Price", point.price)
                 )
                 .foregroundStyle(
                     LinearGradient(

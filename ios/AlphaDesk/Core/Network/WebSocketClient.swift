@@ -63,18 +63,22 @@ final class WebSocketClient: @unchecked Sendable {
 
     // MARK: - Event Stream
 
-    private var eventContinuation: AsyncStream<WebSocketEvent>.Continuation?
+    @ObservationIgnored private var eventContinuation: AsyncStream<WebSocketEvent>.Continuation?
+    @ObservationIgnored private var eventsStream: AsyncStream<WebSocketEvent>?
 
     /// An `AsyncStream` of WebSocket events. Subscribe to this to receive
     /// real-time data updates, state changes, and errors.
-    lazy var events: AsyncStream<WebSocketEvent> = {
-        AsyncStream { [weak self] continuation in
+    var events: AsyncStream<WebSocketEvent> {
+        if let existing = eventsStream { return existing }
+        let stream = AsyncStream<WebSocketEvent> { [weak self] continuation in
             self?.eventContinuation = continuation
             continuation.onTermination = { _ in
                 self?.eventContinuation = nil
             }
         }
-    }()
+        eventsStream = stream
+        return stream
+    }
 
     // MARK: - JSON Handling
 
