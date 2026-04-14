@@ -35,7 +35,7 @@ import type { TimeFrame, ChartType, Indicator, OHLCVBar, QuickOrderEvent } from 
 
 const TIMEFRAMES: TimeFrame[] = ["1m", "5m", "15m", "1H", "4H", "D", "W", "M"];
 
-const INDICATORS: Indicator[] = ["EMA", "SMA", "Bollinger", "RSI", "MACD", "Volume"];
+const INDICATORS: Indicator[] = ["EMA", "SMA", "Bollinger", "RSI", "MACD", "Volume", "VWAP", "Stochastic", "ATR"];
 
 // ─── Generate demo data (BUG #10: timeframe-aware) ───────────
 

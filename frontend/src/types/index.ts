@@ -182,7 +182,7 @@ export interface Alert {
 export type PanelId = "watchlist" | "chart" | "analysis" | "options" | "trade";
 export type TimeFrame = "1m" | "5m" | "15m" | "1H" | "4H" | "D" | "W" | "M";
 export type ChartType = "candle" | "line" | "area";
-export type Indicator = "EMA" | "SMA" | "Bollinger" | "RSI" | "MACD" | "Volume";
+export type Indicator = "EMA" | "SMA" | "Bollinger" | "RSI" | "MACD" | "Volume" | "VWAP" | "Stochastic" | "ATR";
 
 export interface ChatMessage {
   id: string;

@@ -1,0 +1,125 @@
+"use client";
+
+import { useMemo } from "react";
+import { BarChart3 } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
+import type { StrategyData } from "@/components/dashboard/StrategyGrid";
+
+// ─── Component ──────────────────────────────────────────────
+
+interface PnlAttributionProps {
+  strategies: StrategyData[];
+}
+
+interface StrategyPnl {
+  id: string;
+  shortName: string;
+  invested: number;
+  returnPct: number;
+  dollarPnl: number;
+  contributionPct: number;
+}
+
+export function PnlAttribution({ strategies }: PnlAttributionProps) {
+  const { items, totalPnl } = useMemo(() => {
+    // Compute dollar P&L from invested_amount and total_return_pct
+    const withPnl: StrategyPnl[] = strategies
+      .filter((s) => s.invested > 0 || s.returnPct !== 0)
+      .map((s) => ({
+        id: s.id,
+        shortName: s.shortName,
+        invested: s.invested,
+        returnPct: s.returnPct,
+        dollarPnl: s.invested * (s.returnPct / 100),
+        contributionPct: 0,
+      }))
+      .filter((s) => Math.abs(s.dollarPnl) > 0.01);
+
+    const total = withPnl.reduce((sum, s) => sum + s.dollarPnl, 0);
+
+    // Compute percentage contribution (of total absolute P&L for meaningful ratios)
+    const totalAbs = withPnl.reduce((sum, s) => sum + Math.abs(s.dollarPnl), 0);
+    for (const s of withPnl) {
+      s.contributionPct = totalAbs > 0 ? (s.dollarPnl / totalAbs) * 100 : 0;
+    }
+
+    // Sort by dollar P&L descending (most profitable first)
+    withPnl.sort((a, b) => b.dollarPnl - a.dollarPnl);
+
+    return { items: withPnl, totalPnl: total };
+  }, [strategies]);
+
+  if (items.length === 0) return null;
+
+  const maxAbsPnl = Math.max(...items.map((s) => Math.abs(s.dollarPnl)), 1);
+
+  return (
+    <div className="rounded-xl border border-border bg-[var(--panel)]">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
+            P&L Attribution
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Total:</span>
+          <span
+            className={cn(
+              "text-sm font-semibold tabular-nums",
+              totalPnl > 0
+                ? "text-[var(--profit)]"
+                : totalPnl < 0
+                ? "text-[var(--loss)]"
+                : "text-muted-foreground"
+            )}
+          >
+            {totalPnl >= 0 ? "+" : ""}
+            {formatCurrency(totalPnl)}
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-2">
+        {items.map((s) => {
+          const isPositive = s.dollarPnl >= 0;
+          const barWidth = Math.max((Math.abs(s.dollarPnl) / maxAbsPnl) * 100, 2);
+
+          return (
+            <div key={s.id} className="group">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-foreground truncate max-w-[140px]" title={s.shortName}>
+                  {s.shortName}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-xs tabular-nums font-medium",
+                      isPositive ? "text-[var(--profit)]" : "text-[var(--loss)]"
+                    )}
+                  >
+                    {isPositive ? "+" : ""}
+                    {formatCurrency(s.dollarPnl)}
+                  </span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground w-12 text-right">
+                    {s.contributionPct >= 0 ? "+" : ""}
+                    {s.contributionPct.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="h-4 w-full rounded-sm bg-[var(--surface)] overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-sm transition-all duration-300",
+                    isPositive ? "bg-emerald-500/60" : "bg-red-500/60"
+                  )}
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

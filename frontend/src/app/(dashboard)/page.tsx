@@ -23,6 +23,8 @@ import { PositionsSummary } from "@/components/dashboard/PositionsSummary";
 import { PnlCalendarMini } from "@/components/dashboard/PnlCalendarMini";
 import { MarketContext, type MarketIndex } from "@/components/dashboard/MarketContext";
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
+import { StrategyCorrelation } from "@/components/dashboard/StrategyCorrelation";
+import { PnlAttribution } from "@/components/dashboard/PnlAttribution";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -358,15 +360,19 @@ function CommandCenter() {
             <EconomicCalendar />
           </div>
 
-          {/* Strategy Grid (right ~40%) */}
-          <div className="lg:col-span-2">
+          {/* Strategy Grid + P&L Attribution (right ~40%) */}
+          <div className="lg:col-span-2 space-y-4">
             <StrategyGrid
               strategies={strategies}
               regimeLabel={regime?.label ?? "unknown"}
               onStrategyClick={(id) => router.push(`/strategies/${id}`)}
             />
+            <PnlAttribution strategies={strategies} />
           </div>
         </div>
+
+        {/* Strategy Correlation Matrix */}
+        <StrategyCorrelation strategies={strategies} />
 
         {/* Section 4: Market Context */}
         {remainingLoaded ? (

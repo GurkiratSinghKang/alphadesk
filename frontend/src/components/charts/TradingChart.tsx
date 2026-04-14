@@ -141,6 +141,84 @@ function computeBollinger(
   return { upper, middle, lower };
 }
 
+function computeVWAP(bars: OHLCVBar[]): SingleValueData<Time>[] {
+  const result: SingleValueData<Time>[] = [];
+  let cumPV = 0;
+  let cumVol = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const typicalPrice = (bars[i].high + bars[i].low + bars[i].close) / 3;
+    cumPV += typicalPrice * bars[i].volume;
+    cumVol += bars[i].volume;
+    if (cumVol > 0) {
+      result.push({
+        time: normalizeTime(bars[i].time) as unknown as Time,
+        value: cumPV / cumVol,
+      });
+    }
+  }
+  return result;
+}
+
+function computeStochastic(
+  bars: OHLCVBar[],
+  kPeriod = 14,
+  dPeriod = 3
+): { k: SingleValueData<Time>[]; d: SingleValueData<Time>[] } {
+  const kValues: SingleValueData<Time>[] = [];
+  for (let i = kPeriod - 1; i < bars.length; i++) {
+    let lowestLow = Infinity;
+    let highestHigh = -Infinity;
+    for (let j = 0; j < kPeriod; j++) {
+      lowestLow = Math.min(lowestLow, bars[i - j].low);
+      highestHigh = Math.max(highestHigh, bars[i - j].high);
+    }
+    const range = highestHigh - lowestLow;
+    const kVal = range > 0 ? ((bars[i].close - lowestLow) / range) * 100 : 50;
+    kValues.push({
+      time: normalizeTime(bars[i].time) as unknown as Time,
+      value: kVal,
+    });
+  }
+
+  // %D = 3-period SMA of %K
+  const dValues: SingleValueData<Time>[] = [];
+  for (let i = dPeriod - 1; i < kValues.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < dPeriod; j++) sum += kValues[i - j].value;
+    dValues.push({ time: kValues[i].time, value: sum / dPeriod });
+  }
+
+  return { k: kValues, d: dValues };
+}
+
+function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
+  if (bars.length < 2) return [];
+  const trValues: number[] = [];
+  // TR for first bar uses high-low only (no previous close)
+  trValues.push(bars[0].high - bars[0].low);
+  for (let i = 1; i < bars.length; i++) {
+    const prevClose = bars[i - 1].close;
+    const tr = Math.max(
+      bars[i].high - bars[i].low,
+      Math.abs(bars[i].high - prevClose),
+      Math.abs(bars[i].low - prevClose)
+    );
+    trValues.push(tr);
+  }
+
+  // ATR = SMA of TR over `period`
+  const result: SingleValueData<Time>[] = [];
+  for (let i = period - 1; i < trValues.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += trValues[i - j];
+    result.push({
+      time: normalizeTime(bars[i].time) as unknown as Time,
+      value: sum / period,
+    });
+  }
+  return result;
+}
+
 // ─── Component ───────────────────────────────────────────────
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
@@ -421,6 +499,66 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
               s.setData(bb[key]);
               overlaySeriesRef.current.push(s);
             }
+          }
+        }
+
+        // VWAP overlay
+        if (indicators.includes("VWAP")) {
+          const vwap = computeVWAP(bars);
+          if (vwap.length) {
+            const s = chart.addSeries(LineSeries, {
+              color: "#f472b6",
+              lineWidth: 2,
+              priceScaleId: "right",
+            });
+            s.setData(vwap);
+            overlaySeriesRef.current.push(s);
+          }
+        }
+
+        // Stochastic sub-panel (%K and %D, 0-100)
+        if (indicators.includes("Stochastic")) {
+          const stoch = computeStochastic(bars);
+          if (stoch.k.length) {
+            const sK = chart.addSeries(LineSeries, {
+              color: "#38bdf8",
+              lineWidth: 1,
+              priceScaleId: "stochastic",
+            });
+            sK.setData(stoch.k);
+            overlaySeriesRef.current.push(sK);
+
+            chart.priceScale("stochastic").applyOptions({
+              scaleMargins: { top: 0.78, bottom: 0.02 },
+            });
+          }
+          if (stoch.d.length) {
+            const sD = chart.addSeries(LineSeries, {
+              color: "#fb923c",
+              lineWidth: 1,
+              lineStyle: 2,
+              priceScaleId: "stochastic",
+            });
+            sD.setData(stoch.d);
+            overlaySeriesRef.current.push(sD);
+          }
+        }
+
+        // ATR sub-panel
+        if (indicators.includes("ATR")) {
+          const atr = computeATR(bars);
+          if (atr.length) {
+            const s = chart.addSeries(LineSeries, {
+              color: "#a78bfa",
+              lineWidth: 1,
+              priceScaleId: "atr",
+            });
+            s.setData(atr);
+            overlaySeriesRef.current.push(s);
+
+            chart.priceScale("atr").applyOptions({
+              scaleMargins: { top: 0.78, bottom: 0.02 },
+            });
           }
         }
 
