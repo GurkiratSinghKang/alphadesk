@@ -12,37 +12,20 @@ final class TradeViewModel {
     // Current quote
     var symbol = "AAPL"
     var companyName = "Apple Inc."
-    var price: Double = 182.40
-    var change: Double = 3.15
-    var changePercent: Double = 1.76
-    var volume: Double = 54_230_000
-    var quoteOpen: Double = 179.80
-    var quoteHigh: Double = 183.10
-    var quoteLow: Double = 179.25
-    var prevClose: Double = 179.25
-    var marketCap: String = "2.84T"
-    var support: Double = 176.50
-    var resistance: Double = 185.00
+    var price: Double = 0
+    var change: Double = 0
+    var changePercent: Double = 0
+    var volume: Double = 0
+    var quoteOpen: Double = 0
+    var quoteHigh: Double = 0
+    var quoteLow: Double = 0
+    var prevClose: Double = 0
+    var marketCap: String = "--"
+    var support: Double = 0
+    var resistance: Double = 0
 
-    // Price history (30 days)
-    var priceHistory: [TradePricePoint] = {
-        var pts: [TradePricePoint] = []
-        var px: Double = 172.00
-        let cal = Calendar.current
-        let now = Date()
-        for i in 0..<30 {
-            guard let date = cal.date(byAdding: .day, value: -29 + i, to: now) else { continue }
-            let wd = cal.component(.weekday, from: date)
-            if wd == 1 || wd == 7 { continue }
-            let drift = 0.35
-            let noise = Double.random(in: -2.5...3.0)
-            px += drift + noise
-            px = max(px, 165)
-            pts.append(TradePricePoint(date: date, price: px))
-        }
-        if let last = pts.indices.last { pts[last].price = 182.40 }
-        return pts
-    }()
+    // Price history
+    var priceHistory: [TradePricePoint] = []
 
     // Order entry
     var orderSide: OrderSide = .buy
@@ -51,6 +34,14 @@ final class TradeViewModel {
     var limitPrice: String = ""
     var isSubmitting = false
     var showConfirmation = false
+    var orderError: String?
+
+    // Loading states
+    var isLoading = true
+    var error: String?
+
+    // WebSocket listener task
+    private var wsTask: Task<Void, Never>?
 
     enum OrderSide: String, CaseIterable {
         case buy, sell
@@ -74,34 +65,143 @@ final class TradeViewModel {
         if orderType == .limit || orderType == .stop {
             guard let lp = Double(limitPrice), lp > 0 else { return false }
         }
-        return true
+        return price > 0
+    }
+
+    @MainActor
+    func refresh() async {
+        isLoading = priceHistory.isEmpty
+        error = nil
+        await fetchQuote()
+        await fetchBars()
+        isLoading = false
+    }
+
+    @MainActor
+    func fetchQuote() async {
+        do {
+            let quote: Quote = try await APIClient.shared.request(.quote(symbol: symbol))
+            price = quote.last
+            change = quote.change ?? 0
+            changePercent = quote.changePct ?? 0
+            volume = Double(quote.volume)
+            quoteOpen = quote.open ?? 0
+            quoteHigh = quote.high ?? 0
+            quoteLow = quote.low ?? 0
+            prevClose = quote.close ?? 0
+
+            // Derive support/resistance from quote data
+            if quoteHigh > 0 && quoteLow > 0 {
+                support = quoteLow
+                resistance = quoteHigh
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func fetchBars() async {
+        do {
+            let bars: [OHLCVBar] = try await APIClient.shared.request(
+                .bars(symbol: symbol, timeframe: "1D", limit: 30)
+            )
+            priceHistory = bars.map { bar in
+                TradePricePoint(date: bar.timestamp, price: bar.close)
+            }
+        } catch {
+            // Chart data is non-fatal
+        }
     }
 
     func search() {
         guard !searchText.isEmpty else { searchResults = []; return }
         isSearching = true
-        let allSymbols = ["AAPL", "AMZN", "GOOGL", "GOOG", "META", "MSFT", "NVDA", "TSLA",
-                          "AMD", "NFLX", "CRM", "ADBE", "INTC", "PYPL", "SQ", "SHOP"]
-        let query = searchText.uppercased()
-        searchResults = allSymbols.filter { $0.contains(query) }
-        isSearching = false
+
+        Task { @MainActor in
+            do {
+                let results: [SymbolSearchResult] = try await APIClient.shared.request(
+                    .searchSymbols(query: searchText)
+                )
+                searchResults = results.map(\.symbol)
+            } catch {
+                // Fallback: local filter
+                let allSymbols = ["AAPL", "AMZN", "GOOGL", "GOOG", "META", "MSFT", "NVDA", "TSLA",
+                                  "AMD", "NFLX", "CRM", "ADBE", "INTC", "PYPL", "SQ", "SHOP"]
+                let query = searchText.uppercased()
+                searchResults = allSymbols.filter { $0.contains(query) }
+            }
+            isSearching = false
+        }
     }
 
+    @MainActor
     func selectSymbol(_ sym: String) {
         symbol = sym
         searchText = ""
         searchResults = []
+        Task { await refresh() }
     }
 
     @MainActor
     func submitOrder() async {
         guard canSubmit else { return }
         isSubmitting = true
-        try? await Task.sleep(for: .seconds(1.5))
+        orderError = nil
+
+        do {
+            let order = OrderRequest(
+                symbol: symbol,
+                qty: Int(quantity) ?? 0,
+                side: orderSide.rawValue,
+                type: orderType.rawValue,
+                limitPrice: orderType == .limit ? Double(limitPrice) : nil,
+                stopPrice: orderType == .stop ? Double(limitPrice) : nil,
+                timeInForce: "day"
+            )
+            let _: OrderResponse = try await APIClient.shared.request(
+                .submitOrder,
+                method: .post,
+                body: order
+            )
+            showConfirmation = true
+            quantity = ""
+            limitPrice = ""
+        } catch {
+            orderError = error.localizedDescription
+        }
+
         isSubmitting = false
-        showConfirmation = true
-        quantity = ""
-        limitPrice = ""
+    }
+
+    func startWebSocketUpdates() {
+        wsTask?.cancel()
+        wsTask = Task { [weak self] in
+            guard let self else { return }
+            for await event in WebSocketClient.shared.events {
+                if Task.isCancelled { break }
+                if case .message(let msg) = event {
+                    if case .channelData(_, let data) = msg {
+                        await MainActor.run {
+                            if let last = data["last"] as? Double {
+                                self.price = last
+                            }
+                            if let ch = data["change"] as? Double {
+                                self.change = ch
+                            }
+                            if let chPct = data["change_pct"] as? Double {
+                                self.changePercent = chPct
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func stopWebSocketUpdates() {
+        wsTask?.cancel()
+        wsTask = nil
     }
 }
 
@@ -120,29 +220,113 @@ struct TradeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: AD.spacingLG) {
-                    searchSection
-                    quoteSection
-                    chartSection
-                    keyLevelsSection
-                    orderEntrySection
+            Group {
+                if vm.isLoading {
+                    LoadingView()
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: AD.spacingLG) {
+                            searchSection
+                            if let error = vm.error {
+                                errorBanner(error)
+                            }
+                            quoteSection
+                            if !vm.priceHistory.isEmpty {
+                                chartSection
+                            }
+                            if vm.support > 0 && vm.resistance > 0 {
+                                keyLevelsSection
+                            }
+                            if let orderError = vm.orderError {
+                                orderErrorBanner(orderError)
+                            }
+                            orderEntrySection
+                        }
+                        .padding(.horizontal, AD.spacingMD)
+                        .padding(.top, AD.spacingSM)
+                        .padding(.bottom, 100)
+                    }
+                    .refreshable { await vm.refresh() }
                 }
-                .padding(.horizontal, AD.spacingMD)
-                .padding(.top, AD.spacingSM)
-                .padding(.bottom, 100)
             }
             .background(AD.background)
             .navigationTitle("Trade")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        WatchlistView()
+                    } label: {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
+                    NavigationLink {
+                        OrderHistoryView()
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+                }
+            }
             .overlay {
                 if vm.showConfirmation {
                     confirmationOverlay
                 }
             }
+            .task {
+                await vm.refresh()
+                vm.startWebSocketUpdates()
+            }
+            .onDisappear {
+                vm.stopWebSocketUpdates()
+            }
         }
+    }
+
+    // MARK: - Error Banners
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: AD.spacingSM) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(AD.loss)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(AD.textSecondary)
+                .lineLimit(2)
+            Spacer()
+            Button {
+                Task { await vm.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AD.accent)
+            }
+        }
+        .padding(AD.spacingSM)
+        .background(AD.loss.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous))
+    }
+
+    private func orderErrorBanner(_ message: String) -> some View {
+        HStack(spacing: AD.spacingSM) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(AD.loss)
+            Text("Order failed: \(message)")
+                .font(.system(size: 13))
+                .foregroundStyle(AD.textSecondary)
+                .lineLimit(2)
+            Spacer()
+        }
+        .padding(AD.spacingSM)
+        .background(AD.loss.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous))
     }
 
     // MARK: - Search
@@ -305,7 +489,7 @@ struct TradeView: View {
             Chart(vm.priceHistory) { point in
                 AreaMark(
                     x: .value("Date", point.date),
-                    yStart: .value("Base", vm.priceHistory.map(\.price).min() ?? 165),
+                    yStart: .value("Base", vm.priceHistory.map(\.price).min() ?? 0),
                     y: .value("Price", point.price)
                 )
                 .foregroundStyle(

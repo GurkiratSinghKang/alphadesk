@@ -5,65 +5,138 @@ import Charts
 
 @Observable
 final class PortfolioViewModel {
-    var equity: Double = 100_036.31
-    var dayPnL: Double = 436.31
-    var dayPnLPercent: Double = 0.44
-    var cash: Double = 45_210.00
-    var buyingPower: Double = 90_420.00
-    var positionsCount: Int = 5
+    var equity: Double = 0
+    var dayPnL: Double = 0
+    var dayPnLPercent: Double = 0
+    var cash: Double = 0
+    var buyingPower: Double = 0
+    var positionsCount: Int = 0
+    var isLoading = true
     var isRefreshing = false
     var isPipelineRunning = false
+    var error: String?
 
-    var equityCurve: [PortfolioEquityPoint] = {
-        var points: [PortfolioEquityPoint] = []
-        var value: Double = 96_000
-        let calendar = Calendar.current
-        let today = Date()
-        for i in 0..<90 {
-            guard let date = calendar.date(byAdding: .day, value: -89 + i, to: today) else { continue }
-            let weekday = calendar.component(.weekday, from: date)
-            if weekday == 1 || weekday == 7 { continue }
-            let drift = 45.0
-            let noise = Double.random(in: -300...350)
-            value += drift + noise
-            value = max(value, 92_000)
-            points.append(PortfolioEquityPoint(date: date, value: value))
-        }
-        if let last = points.indices.last {
-            points[last].value = 100_036.31
-        }
-        return points
-    }()
+    var equityCurve: [PortfolioEquityPoint] = []
 
-    var marketIndices: [PortfolioMarketIndex] = [
-        PortfolioMarketIndex(symbol: "SPY", name: "S&P 500", price: 522.18, change: 3.42, changePercent: 0.66),
-        PortfolioMarketIndex(symbol: "QQQ", name: "Nasdaq 100", price: 441.56, change: -1.87, changePercent: -0.42),
-        PortfolioMarketIndex(symbol: "IWM", name: "Russell 2000", price: 204.33, change: 1.12, changePercent: 0.55),
-        PortfolioMarketIndex(symbol: "DIA", name: "Dow Jones", price: 394.21, change: 2.65, changePercent: 0.68),
-        PortfolioMarketIndex(symbol: "VIX", name: "Volatility", price: 14.82, change: -0.93, changePercent: -5.91),
-    ]
+    var marketIndices: [PortfolioMarketIndex] = []
 
-    var positions: [PortfolioPosition] = [
-        PortfolioPosition(symbol: "AAPL", name: "Apple Inc.", shares: 50, avgCost: 178.25, currentPrice: 182.40, pnl: 207.50, pnlPercent: 2.33),
-        PortfolioPosition(symbol: "NVDA", name: "NVIDIA Corp.", shares: 25, avgCost: 875.00, currentPrice: 912.30, pnl: 932.50, pnlPercent: 4.26),
-        PortfolioPosition(symbol: "MSFT", name: "Microsoft Corp.", shares: 30, avgCost: 415.50, currentPrice: 410.20, pnl: -159.00, pnlPercent: -1.28),
-        PortfolioPosition(symbol: "AMZN", name: "Amazon.com", shares: 20, avgCost: 185.60, currentPrice: 189.15, pnl: 71.00, pnlPercent: 1.91),
-        PortfolioPosition(symbol: "META", name: "Meta Platforms", shares: 15, avgCost: 502.30, currentPrice: 498.10, pnl: -63.00, pnlPercent: -0.84),
-    ]
+    var positions: [PortfolioPosition] = []
 
     @MainActor
     func refresh() async {
+        if !isRefreshing { isLoading = equityCurve.isEmpty }
         isRefreshing = true
-        try? await Task.sleep(for: .seconds(1))
-        dayPnL += Double.random(in: -50...50)
-        dayPnLPercent = dayPnL / (equity - dayPnL) * 100
+        error = nil
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.fetchSummary() }
+            group.addTask { await self.fetchPositions() }
+            group.addTask { await self.fetchPerformance() }
+            group.addTask { await self.fetchIndices() }
+        }
+
+        isLoading = false
         isRefreshing = false
+    }
+
+    @MainActor
+    private func fetchSummary() async {
+        do {
+            let summary: PortfolioSummary = try await APIClient.shared.request(.portfolioSummary)
+            equity = summary.equity
+            cash = summary.cash
+            buyingPower = summary.buyingPower
+            dayPnL = summary.unrealizedPnl
+            dayPnLPercent = summary.unrealizedPnlPct
+            positionsCount = summary.positionsCount
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func fetchPositions() async {
+        do {
+            let apiPositions: [Position] = try await APIClient.shared.request(.positions)
+            positions = apiPositions.map { p in
+                PortfolioPosition(
+                    symbol: p.symbol,
+                    name: p.symbol,
+                    shares: Int(p.quantity),
+                    avgCost: p.avgCost,
+                    currentPrice: p.currentPrice,
+                    pnl: p.unrealizedPnl,
+                    pnlPercent: p.unrealizedPnlPct
+                )
+            }
+        } catch {
+            // Positions error is non-fatal; summary already shown
+        }
+    }
+
+    @MainActor
+    private func fetchPerformance() async {
+        do {
+            let perf: PerformanceData = try await APIClient.shared.request(.portfolioPerformance(period: "90d"))
+            if let curve = perf.equityCurve {
+                let dateFormatter = DateFormatter()
+                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
+
+                equityCurve = curve.compactMap { point in
+                    guard let value = point.value ?? point.cumulativePnl else { return nil }
+                    let date: Date
+                    if let d = point.date, let parsed = dateFormatter.date(from: d) {
+                        date = parsed
+                    } else if let idx = point.index {
+                        date = Calendar.current.date(byAdding: .day, value: -90 + idx, to: Date()) ?? Date()
+                    } else {
+                        return nil
+                    }
+                    return PortfolioEquityPoint(date: date, value: value)
+                }
+            } else if let values = perf.values {
+                equityCurve = values.enumerated().map { i, v in
+                    let date = Calendar.current.date(byAdding: .day, value: -values.count + i, to: Date()) ?? Date()
+                    return PortfolioEquityPoint(date: date, value: v)
+                }
+            }
+        } catch {
+            // Performance chart error is non-fatal
+        }
+    }
+
+    @MainActor
+    private func fetchIndices() async {
+        do {
+            let response: IndicesResponse = try await APIClient.shared.request(.indices)
+            marketIndices = response.indices.map { idx in
+                PortfolioMarketIndex(
+                    symbol: idx.symbol,
+                    name: idx.name,
+                    price: idx.price,
+                    change: idx.change,
+                    changePercent: idx.changePct
+                )
+            }
+        } catch {
+            // Indices error is non-fatal
+        }
     }
 
     @MainActor
     func runPipeline() async {
         isPipelineRunning = true
-        try? await Task.sleep(for: .seconds(3))
+        do {
+            let _: PipelineRunResponse = try await APIClient.shared.request(
+                .pipelineRun,
+                method: .post,
+                body: PipelineRunRequest(force: false)
+            )
+        } catch {
+            // Pipeline run error is non-fatal for dashboard
+        }
         isPipelineRunning = false
     }
 }
@@ -103,31 +176,113 @@ struct PortfolioPosition: Identifiable {
 struct PortfolioView: View {
 
     @State private var vm = PortfolioViewModel()
+    @State private var showChat = false
+    @State private var showPerformance = false
+    @State private var showNews = false
     @Environment(AuthManager.self) private var authManager
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: AD.spacingLG) {
-                        heroSection
-                        equityChartSection
-                        marketOverviewSection
-                        positionsSection
+                Group {
+                    if vm.isLoading {
+                        LoadingView()
+                    } else if let error = vm.error, vm.positions.isEmpty {
+                        errorView(error)
+                    } else {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: AD.spacingLG) {
+                                heroSection
+                                if !vm.equityCurve.isEmpty {
+                                    equityChartSection
+                                }
+                                if !vm.marketIndices.isEmpty {
+                                    marketOverviewSection
+                                }
+                                positionsSection
+                            }
+                            .padding(.horizontal, AD.spacingMD)
+                            .padding(.top, AD.spacingSM)
+                            .padding(.bottom, 100)
+                        }
+                        .refreshable { await vm.refresh() }
                     }
-                    .padding(.horizontal, AD.spacingMD)
-                    .padding(.top, AD.spacingSM)
-                    .padding(.bottom, 100)
                 }
-                .refreshable { await vm.refresh() }
                 .background(AD.background)
 
-                floatingActions
+                if !vm.isLoading {
+                    floatingActions
+                }
             }
             .navigationTitle("Portfolio")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AD.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showNews = true
+                    } label: {
+                        Image(systemName: "newspaper")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+
+                    Button {
+                        showPerformance = true
+                    } label: {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AD.textSecondary)
+                    }
+                }
+            }
+            .task { await vm.refresh() }
+            .sheet(isPresented: $showChat) {
+                ChatView(
+                    contextPortfolioValue: vm.equity
+                )
+            }
+            .sheet(isPresented: $showPerformance) {
+                PerformanceView()
+            }
+            .sheet(isPresented: $showNews) {
+                NewsView()
+            }
+            .navigationDestination(for: String.self) { symbol in
+                SymbolDetailView(symbol: symbol)
+            }
+        }
+    }
+
+    // MARK: - Error View
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: AD.spacingMD) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(AD.loss)
+            Text("Failed to load portfolio")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AD.textPrimary)
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(AD.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AD.spacingXL)
+            Button {
+                Task { await vm.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AD.spacingXL)
+                    .padding(.vertical, 12)
+                    .background(AD.accent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
         }
     }
 
@@ -205,7 +360,7 @@ struct PortfolioView: View {
             Chart(vm.equityCurve) { point in
                 AreaMark(
                     x: .value("Date", point.date),
-                    yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 92_000),
+                    yStart: .value("Base", vm.equityCurve.map(\.value).min() ?? 0),
                     y: .value("Equity", point.value)
                 )
                 .foregroundStyle(
@@ -311,8 +466,19 @@ struct PortfolioView: View {
                     .foregroundStyle(AD.textTertiary)
             }
 
-            ForEach(vm.positions) { position in
-                positionRow(position)
+            if vm.positions.isEmpty {
+                Text("No open positions")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AD.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, AD.spacingLG)
+            } else {
+                ForEach(vm.positions) { position in
+                    NavigationLink(value: position.symbol) {
+                        positionRow(position)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -367,7 +533,7 @@ struct PortfolioView: View {
         VStack(spacing: AD.spacingSM) {
             // AI Chat
             Button {
-                // AI Chat action placeholder
+                showChat = true
             } label: {
                 Image(systemName: "bubble.left.and.text.bubble.right.fill")
                     .font(.system(size: 17, weight: .medium))

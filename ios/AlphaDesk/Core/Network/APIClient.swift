@@ -61,6 +61,29 @@ enum Endpoint: Sendable {
     case pipelineStatus
     case pipelinePositions
     case pipelineHistory
+    case pipelineRun
+
+    // Orders
+    case submitOrder
+
+    // Search
+    case searchSymbols(query: String)
+
+    // Strategy management
+    case strategyPositions(id: String)
+    case strategyToggle(id: String)
+
+    // Agent / AI Chat
+    case agentChat
+
+    // Order history
+    case orders
+
+    // Portfolio calendar
+    case portfolioCalendar(year: Int, month: Int)
+
+    // Index sparklines
+    case indexSparklines
 
     var path: String {
         switch self {
@@ -98,6 +121,29 @@ enum Endpoint: Sendable {
         case .pipelineStatus:                   "/api/v1/pipeline/status"
         case .pipelinePositions:                "/api/v1/pipeline/positions"
         case .pipelineHistory:                  "/api/v1/pipeline/history"
+        case .pipelineRun:                      "/api/v1/pipeline/run"
+
+        // Orders
+        case .submitOrder:                      "/api/v1/trades/orders"
+
+        // Search
+        case .searchSymbols(let q):             "/api/v1/market/search?q=\(q)"
+
+        // Strategy management
+        case .strategyPositions(let id):        "/api/v1/strategies/\(id)/positions"
+        case .strategyToggle(let id):           "/api/v1/strategies/\(id)/toggle"
+
+        // Agent / AI Chat
+        case .agentChat:                        "/api/v1/agents/chat"
+
+        // Order history
+        case .orders:                           "/api/v1/trades/orders"
+
+        // Portfolio calendar
+        case .portfolioCalendar(let y, let m):  "/api/v1/portfolio/calendar?year=\(y)&month=\(m)"
+
+        // Index sparklines
+        case .indexSparklines:                  "/api/v1/market-overview/sparklines"
         }
     }
 

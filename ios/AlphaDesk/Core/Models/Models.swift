@@ -215,6 +215,183 @@ enum WSIncomingMessage: Sendable {
     case unknown([String: Any])
 }
 
+// MARK: - Regime
+
+struct RegimeData: Codable, Sendable {
+    let regime: String
+    let confidence: Double?
+    let description: String?
+    let updatedAt: String?
+}
+
+// MARK: - Search
+
+struct SymbolSearchResult: Codable, Sendable, Identifiable {
+    var id: String { symbol }
+    let symbol: String
+    let name: String?
+    let type: String?
+}
+
+// MARK: - Order
+
+struct OrderRequest: Codable, Sendable {
+    let symbol: String
+    let qty: Int
+    let side: String
+    let type: String
+    let limitPrice: Double?
+    let stopPrice: Double?
+    let timeInForce: String
+}
+
+struct OrderResponse: Codable, Sendable {
+    let id: String?
+    let clientOrderId: String?
+    let status: String?
+    let symbol: String?
+    let qty: String?
+    let side: String?
+    let type: String?
+    let filledQty: String?
+    let filledAvgPrice: String?
+}
+
+// MARK: - AI Chat
+
+struct ChatRequest: Codable, Sendable {
+    let message: String
+    let context: ChatContext?
+}
+
+struct ChatContext: Codable, Sendable {
+    let symbol: String?
+    let portfolioValue: Double?
+}
+
+struct ChatResponse: Codable, Sendable {
+    let message: String
+    let actionsTaken: [String]?
+    let suggestions: [String]?
+    let conversationId: String?
+    let timestamp: String?
+}
+
+// MARK: - Order (for order history)
+
+struct Order: Codable, Sendable, Identifiable {
+    var id: String { orderId ?? UUID().uuidString }
+
+    let orderId: String?
+    let clientOrderId: String?
+    let symbol: String
+    let qty: String?
+    let side: String
+    let type: String?
+    let status: String?
+    let filledQty: String?
+    let filledAvgPrice: String?
+    let limitPrice: String?
+    let stopPrice: String?
+    let createdAt: String?
+    let updatedAt: String?
+    let submittedAt: String?
+    let filledAt: String?
+}
+
+// MARK: - Portfolio Performance (detailed)
+
+struct PortfolioPerformanceDetail: Codable, Sendable {
+    let totalReturn: Double?
+    let totalReturnPct: Double?
+    let sharpeRatio: Double?
+    let maxDrawdown: Double?
+    let maxDrawdownPct: Double?
+    let equityCurve: [EquityCurvePoint]?
+    let annualizedReturn: Double?
+    let volatility: Double?
+    let winRate: Double?
+    let calmarRatio: Double?
+}
+
+// MARK: - Monthly Returns
+
+struct MonthlyReturn: Codable, Sendable, Identifiable {
+    var id: String { "\(year)-\(month)" }
+
+    let year: Int
+    let month: Int
+    let returnPct: Double
+}
+
+struct PortfolioCalendarResponse: Codable, Sendable {
+    let monthlyReturns: [MonthlyReturn]?
+    let dailyReturns: [DailyReturn]?
+}
+
+struct DailyReturn: Codable, Sendable, Identifiable {
+    var id: String { date }
+
+    let date: String
+    let returnPct: Double
+    let pnl: Double?
+}
+
+// MARK: - Strategy Positions
+
+struct StrategyPosition: Codable, Sendable, Identifiable {
+    var id: String { symbol + (strategy ?? "") }
+    let symbol: String
+    let shares: Double?
+    let quantity: Double?
+    let entryPrice: Double?
+    let currentPrice: Double?
+    let pnl: Double?
+    let pnlPct: Double?
+    let strategy: String?
+    let side: String?
+    let entryDate: String?
+}
+
+// MARK: - Pipeline Run
+
+struct PipelineRunRequest: Codable, Sendable {
+    let force: Bool
+}
+
+struct PipelineRunResponse: Codable, Sendable {
+    let status: String?
+    let message: String?
+    let runId: String?
+}
+
+struct PipelineHistoryEntry: Codable, Sendable, Identifiable {
+    var id: String { (startedAt ?? "") + (status ?? "") }
+    let startedAt: String?
+    let completedAt: String?
+    let status: String?
+    let strategiesRun: Int?
+    let symbolsScreened: Int?
+    let symbolsAnalyzed: Int?
+    let ordersPlaced: Int?
+    let ordersClosed: Int?
+    let errors: Int?
+    let duration: Double?
+    let result: String?
+}
+
+// MARK: - Performance Data (for equity curve)
+
+struct PerformanceData: Codable, Sendable {
+    let equityCurve: [EquityCurvePoint]?
+    let dates: [String]?
+    let values: [Double]?
+    let totalReturn: Double?
+    let period: String?
+}
+
+// MARK: - WebSocket Messages
+
 struct WSOutgoingMessage: Encodable, Sendable {
     let action: String
     let token: String?
