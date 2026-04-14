@@ -1,10 +1,11 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, createContext, useContext, type ReactNode } from "react";
+import { useState, useEffect, createContext, useContext, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useDataPipeline } from "@/hooks/useDataPipeline";
+import { useToast } from "@/hooks/useToast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -41,11 +42,33 @@ function WebSocketProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// ─── Price Alert Toast Bridge ────────────────────────────────
+
+function PriceAlertToastBridge() {
+  const { toast } = useToast();
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ message: string; symbol?: string }>).detail;
+      if (detail?.message) {
+        toast({ type: "info", message: detail.message, duration: 8000 });
+      }
+    };
+    window.addEventListener("alphadesk:price-alert", handler);
+    return () => window.removeEventListener("alphadesk:price-alert", handler);
+  }, [toast]);
+  return null;
+}
+
 // ─── Data Pipeline (routes WS + REST to stores) ─────────────
 
 function DataPipelineBridge({ children }: { children: ReactNode }) {
   useDataPipeline();
-  return <>{children}</>;
+  return (
+    <>
+      <PriceAlertToastBridge />
+      {children}
+    </>
+  );
 }
 
 // ─── Combined Provider ───────────────────────────────────────
