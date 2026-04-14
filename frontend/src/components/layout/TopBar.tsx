@@ -37,7 +37,7 @@ export function TopBar() {
   ];
 
   return (
-    <header className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(--surface)] px-4">
+    <header role="banner" className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(--surface)] px-4">
       <div className="flex items-center gap-4">
         {/* Mobile hamburger menu */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -78,8 +78,8 @@ export function TopBar() {
           <Zap className="h-5 w-5 text-primary" />
           <span className="text-base font-bold tracking-tight text-foreground">AlphaDesk</span>
         </div>
-        {/* Desktop navigation — hidden on mobile */}
-        <nav className="hidden md:flex items-center gap-1 ml-2">
+        {/* Desktop navigation -- hidden on mobile */}
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1 ml-2">
           {navItems.map(({ path, label, icon: Icon, active }) => (
             <button key={path} onClick={() => router.push(path)} className={cn("flex items-center gap-1.5 rounded-md px-3 py-2 text-[11px] font-medium transition-colors", active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}>
               <Icon className="h-3.5 w-3.5" />{label}
@@ -88,8 +88,8 @@ export function TopBar() {
         </nav>
       </div>
 
-      <button onClick={() => setCommandPaletteOpen(true)} className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
-        <Search className="h-3.5 w-3.5" />
+      <button onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+        <Search className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
         <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>

@@ -456,6 +456,7 @@ function ScreenerTab() {
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               placeholder="Preset name..."
+              aria-label="Preset name"
               className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground placeholder:text-muted-foreground/60"
               onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); }}
             />
@@ -496,30 +497,35 @@ function ScreenerTab() {
               value={filters.minChange}
               onChange={(e) => setFilters((f) => ({ ...f, minChange: e.target.value }))}
               placeholder="Min Chg%"
+              aria-label="Minimum change percentage filter"
               className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.maxChange}
               onChange={(e) => setFilters((f) => ({ ...f, maxChange: e.target.value }))}
               placeholder="Max Chg%"
+              aria-label="Maximum change percentage filter"
               className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.minPrice}
               onChange={(e) => setFilters((f) => ({ ...f, minPrice: e.target.value }))}
               placeholder="Min Price"
+              aria-label="Minimum price filter"
               className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.maxPrice}
               onChange={(e) => setFilters((f) => ({ ...f, maxPrice: e.target.value }))}
               placeholder="Max Price"
+              aria-label="Maximum price filter"
               className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.minVolume}
               onChange={(e) => setFilters((f) => ({ ...f, minVolume: e.target.value }))}
               placeholder="Min Volume"
+              aria-label="Minimum volume filter"
               className="col-span-2 h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
             />
           </div>

@@ -639,6 +639,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         <div
           ref={containerRef}
           className="w-full h-full"
+          role="img"
+          aria-label="Interactive price chart with candlestick, line, and area views. Use mouse wheel to zoom and click-drag to pan."
         />
       </>
     );

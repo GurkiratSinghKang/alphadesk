@@ -22,7 +22,7 @@ export function TickerTape() {
   const doubled = [...items, ...items];
 
   return (
-    <div className="overflow-hidden whitespace-nowrap border-b border-border/30 bg-[var(--surface)]">
+    <div role="marquee" aria-label="Live market ticker tape" className="overflow-hidden whitespace-nowrap border-b border-border/30 bg-[var(--surface)]">
       <div className="animate-marquee inline-flex gap-6 py-1 px-4 text-[11px] tabular-nums">
         {doubled.map((item, i) => (
           <span key={`${item.symbol}-${i}`} className="flex items-center gap-1">

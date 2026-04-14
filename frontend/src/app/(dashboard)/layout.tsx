@@ -27,11 +27,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* Accessibility: skip-to-content link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+      >
+        Skip to content
+      </a>
+
       <TopBar />
       <TickerTape />
       <StatusStrip />
-      <main className="flex-1 overflow-y-auto">{children}</main>
-      <footer className="border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center">
+      <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
+        {children}
+      </main>
+      <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center">
         AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />

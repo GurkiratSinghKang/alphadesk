@@ -9,6 +9,7 @@ import {
   BellPlus,
   Minus,
   TrendingDown,
+  Share2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/utils";
 import { getBars, getPositions, getPipelinePositions, createPriceAlert, getPriceAlerts, deletePriceAlert, type PriceAlert } from "@/lib/api";
 import { LayoutSelector, type ChartLayout } from "@/components/panels/LayoutSelector";
+import { ShareTradeButton } from "@/components/panels/ShareTrade";
 import type { TimeFrame, ChartType, Indicator, OHLCVBar, QuickOrderEvent } from "@/types";
 
 // ─── Timeframes ──────────────────────────────────────────────
@@ -376,6 +378,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
               >
                 <BellPlus className="h-3.5 w-3.5" />
               </button>
+              <ShareTradeButton symbol={selectedSymbol} />
             </div>
             {/* L1 Data Bar */}
             {quote && (
@@ -435,13 +438,13 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                 </div>
                 <div className="border-t border-border px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <select value={alertCondition} onChange={(e) => setAlertCondition(e.target.value as "above" | "below")} className="h-7 rounded border border-border bg-background px-1.5 text-[11px] text-foreground">
+                    <select value={alertCondition} onChange={(e) => setAlertCondition(e.target.value as "above" | "below")} aria-label="Alert condition" className="h-7 rounded border border-border bg-background px-1.5 text-[11px] text-foreground">
                       <option value="above">Above</option>
                       <option value="below">Below</option>
                     </select>
                     <div className="relative flex-1">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">$</span>
-                      <input type="number" value={alertPrice} onChange={(e) => setAlertPrice(parseFloat(e.target.value) || 0)} step={0.01} className="h-7 w-full rounded border border-border bg-background pl-5 pr-2 text-[11px] tabular-nums text-foreground" />
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground" aria-hidden="true">$</span>
+                      <input type="number" value={alertPrice} onChange={(e) => setAlertPrice(parseFloat(e.target.value) || 0)} step={0.01} aria-label="Alert price" className="h-7 w-full rounded border border-border bg-background pl-5 pr-2 text-[11px] tabular-nums text-foreground" />
                     </div>
                     <button
                       onClick={async () => {
@@ -801,8 +804,9 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
                 <span className="text-xs tabular-nums text-foreground">{formatCurrency(quickOrder.price)}</span>
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground">Qty</label>
+                <label htmlFor="quick-order-qty" className="text-[10px] text-muted-foreground">Qty</label>
                 <input
+                  id="quick-order-qty"
                   ref={quickOrderInputRef}
                   type="number"
                   min={1}

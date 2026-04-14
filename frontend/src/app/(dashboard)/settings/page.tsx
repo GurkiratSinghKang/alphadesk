@@ -2,6 +2,7 @@
 
 import { Settings, Bell, Shield, Key, Palette, Monitor } from "lucide-react";
 import { useUIStore } from "@/stores/ui";
+import { PerformanceMetrics } from "@/components/dashboard/PerformanceMetrics";
 
 export default function SettingsPage() {
   const tradingMode = useUIStore((s) => s.tradingMode);
@@ -64,6 +65,9 @@ export default function SettingsPage() {
             AlphaDesk uses a dark OLED-optimized theme. Theme customization coming soon.
           </p>
         </div>
+
+        {/* Performance Monitoring — Admin/Debug */}
+        <PerformanceMetrics />
       </div>
     </div>
   );
