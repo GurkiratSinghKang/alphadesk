@@ -45,7 +45,7 @@ final class StrategiesListViewModel {
                     status: status,
                     returnPercent: s.totalReturnPct,
                     winRate: s.winRate,
-                    sharpe: s.sharpeRatio,
+                    sharpe: s.sharpeRatio ?? 0,
                     positionsCount: s.activePositionsCount,
                     sparkline: s.sparkline ?? generateSparkline(seed: s.id.hashValue, trend: s.totalReturnPct / 50.0)
                 )

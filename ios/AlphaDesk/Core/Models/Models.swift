@@ -92,9 +92,9 @@ struct Strategy: Codable, Sendable, Identifiable {
     let name: String
     let description: String
     let status: StrategyStatus
-    let investedAmount: Double
+    let investedAmount: Double?
     let totalReturnPct: Double
-    let sharpeRatio: Double
+    let sharpeRatio: Double?
     let winRate: Double
     let activePositionsCount: Int
     let sparkline: [Double]?
@@ -113,8 +113,8 @@ struct StrategyPerformance: Codable, Sendable, Identifiable {
     let name: String
     let description: String
     let status: StrategyStatus
-    let investedAmount: Double
-    let currentValue: Double
+    let investedAmount: Double?
+    let currentValue: Double?
     let totalReturnPct: Double
     let annualizedReturnPct: Double?
     let returnDollars: Double?
@@ -122,7 +122,7 @@ struct StrategyPerformance: Codable, Sendable, Identifiable {
     let maxDrawdown: Double?
     let winRate: Double
     let activePositionsCount: Int
-    let equityCurve: [EquityCurvePoint]
+    let equityCurve: [EquityCurvePoint]?
     let lastTradeDate: String?
 }
 

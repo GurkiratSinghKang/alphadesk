@@ -63,8 +63,8 @@ final class StrategyDetailViewModel {
             maxDrawdown = perf.maxDrawdown ?? 0
             winRate = perf.winRate
             totalTrades = perf.activePositionsCount
-            investedAmount = perf.investedAmount
-            currentValue = perf.currentValue
+            investedAmount = perf.investedAmount ?? 0
+            currentValue = perf.currentValue ?? 0
             returnDollars = perf.returnDollars ?? 0
 
             switch perf.status {
@@ -79,13 +79,13 @@ final class StrategyDetailViewModel {
             dateFormatter.dateFormat = "yyyy-MM-dd"
             dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
 
-            equityCurve = perf.equityCurve.compactMap { point in
+            equityCurve = (perf.equityCurve ?? []).compactMap { point in
                 guard let value = point.value ?? point.cumulativePnl else { return nil }
                 let date: Date
                 if let d = point.date, let parsed = dateFormatter.date(from: d) {
                     date = parsed
                 } else if let idx = point.index {
-                    date = Calendar.current.date(byAdding: .day, value: -perf.equityCurve.count + idx, to: Date()) ?? Date()
+                    date = Calendar.current.date(byAdding: .day, value: -(perf.equityCurve?.count ?? 0) + idx, to: Date()) ?? Date()
                 } else {
                     return nil
                 }
