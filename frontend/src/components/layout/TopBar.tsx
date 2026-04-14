@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Zap, LayoutDashboard, BarChart3, Bot, Search, Bell, Menu } from "lucide-react";
+import { Zap, LayoutDashboard, BarChart3, Bot, Search, Bell, Menu, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,10 +29,12 @@ export function TopBar() {
   const isHome = pathname === "/";
   const isTrade = pathname === "/trade";
   const isPipeline = pathname === "/pipeline";
+  const isAnalytics = pathname === "/analytics";
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard, active: isHome },
     { path: "/trade", label: "Trade", icon: BarChart3, active: isTrade },
+    { path: "/analytics", label: "Analytics", icon: LineChart, active: isAnalytics },
     { path: "/pipeline", label: "Pipeline", icon: Bot, active: isPipeline },
   ];
 

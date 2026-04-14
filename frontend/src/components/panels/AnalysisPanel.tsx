@@ -709,19 +709,27 @@ function PositionSizer({ symbol, currentPrice }: { symbol: string; currentPrice:
 
 // ─── Order Tab ───────────────────────────────────────────────
 
+type AdvancedOrderType = "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
+
 function OrderTab({ symbol }: { symbol: string }) {
   const quote = useMarketStore((s) => s.quotes[symbol]);
   const { toast } = useToast();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState(10);
-  const [orderType, setOrderType] = useState<"market" | "limit" | "stop" | "stop_limit">("market");
-  const [price, setPrice] = useState(quote?.last ?? 0);
+  const [orderType, setOrderType] = useState<AdvancedOrderType>("market");
+  const [limitPrice, setLimitPrice] = useState(quote?.last ?? 0);
+  const [stopPrice, setStopPrice] = useState(quote?.last ?? 0);
+  const [trailAmount, setTrailAmount] = useState(1);
+  const [trailType, setTrailType] = useState<"dollar" | "percent">("dollar");
   const [tif, setTif] = useState<"day" | "gtc">("day");
   const [submitting, setSubmitting] = useState(false);
 
-  // Update price when quote changes and order type is market
+  // Update prices when quote changes and order type is market
   useEffect(() => {
-    if (orderType === "market" && quote?.last) setPrice(quote.last);
+    if (orderType === "market" && quote?.last) {
+      setLimitPrice(quote.last);
+      setStopPrice(quote.last);
+    }
   }, [quote?.last, orderType]);
 
   // Listen for quick-order events from the chart BUY/SELL buttons
@@ -729,26 +737,47 @@ function OrderTab({ symbol }: { symbol: string }) {
     function handleQuickOrder(e: Event) {
       const { side: newSide, price: newPrice } = (e as CustomEvent<QuickOrderEvent>).detail;
       setSide(newSide);
-      setPrice(newPrice);
+      setLimitPrice(newPrice);
+      setStopPrice(newPrice);
       setOrderType("limit");
     }
     window.addEventListener("alphadesk:quick-order", handleQuickOrder);
     return () => window.removeEventListener("alphadesk:quick-order", handleQuickOrder);
   }, []);
 
-  const estimatedCost = quantity * price;
+  const displayPrice = orderType === "market" ? (quote?.last ?? 0)
+    : orderType === "limit" ? limitPrice
+    : orderType === "stop" ? stopPrice
+    : orderType === "stop_limit" ? limitPrice
+    : (quote?.last ?? 0); // trailing stop uses market
+  const estimatedCost = quantity * displayPrice;
+
+  function buildOrderLabel(): string {
+    const sideLabel = side === "buy" ? "Buy" : "Sell";
+    switch (orderType) {
+      case "market": return `${sideLabel} ${quantity} ${symbol} @ Market`;
+      case "limit": return `${sideLabel} ${quantity} ${symbol} @ $${limitPrice.toFixed(2)}`;
+      case "stop": return `${sideLabel} ${quantity} ${symbol} Stop $${stopPrice.toFixed(2)}`;
+      case "stop_limit": return `${sideLabel} ${quantity} ${symbol} Stop $${stopPrice.toFixed(2)} Lmt $${limitPrice.toFixed(2)}`;
+      case "trailing_stop": return `${sideLabel} ${quantity} ${symbol} Trail ${trailType === "dollar" ? "$" + trailAmount.toFixed(2) : trailAmount.toFixed(1) + "%"}`;
+    }
+  }
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      const apiType = orderType === "trailing_stop" ? "trailing_stop" : orderType;
       await placeOrder({
         symbol,
         side,
-        type: orderType,
+        type: apiType as any,
         quantity,
-        price: orderType !== "market" ? price : undefined,
+        price: orderType === "limit" ? limitPrice : orderType === "stop_limit" ? limitPrice : undefined,
+        stop_price: orderType === "stop" ? stopPrice : orderType === "stop_limit" ? stopPrice : undefined,
+        trail_price: orderType === "trailing_stop" && trailType === "dollar" ? trailAmount : undefined,
+        trail_percent: orderType === "trailing_stop" && trailType === "percent" ? trailAmount : undefined,
       });
-      toast({ type: "success", message: `Order placed: ${side === "buy" ? "Buy" : "Sell"} ${quantity} ${symbol} @ ${orderType === "market" ? "Market" : "$" + price.toFixed(2)}` });
+      toast({ type: "success", message: `Order placed: ${buildOrderLabel()}` });
     } catch (err: any) {
       toast({ type: "error", message: err?.message ?? "Order failed" });
     } finally {
@@ -800,31 +829,97 @@ function OrderTab({ symbol }: { symbol: string }) {
         <select
           id="order-type"
           value={orderType}
-          onChange={(e) => setOrderType(e.target.value as any)}
+          onChange={(e) => setOrderType(e.target.value as AdvancedOrderType)}
           className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-xs text-foreground"
         >
           <option value="market">Market</option>
           <option value="limit">Limit</option>
           <option value="stop">Stop</option>
           <option value="stop_limit">Stop Limit</option>
+          <option value="trailing_stop">Trailing Stop</option>
         </select>
       </div>
 
-      {/* Price (shown for limit/stop) */}
-      {orderType !== "market" && (
+      {/* Conditional price fields based on order type */}
+      {orderType === "limit" && (
         <div>
-          <label htmlFor="order-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
-            {orderType === "stop" ? "Stop Price" : "Limit Price"}
-          </label>
+          <label htmlFor="order-limit-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Limit Price</label>
           <input
-            id="order-price"
+            id="order-limit-price"
             type="number"
-            value={price}
-            onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+            value={limitPrice}
+            onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
             step={0.01}
             className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
           />
         </div>
+      )}
+
+      {orderType === "stop" && (
+        <div>
+          <label htmlFor="order-stop-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Stop Price</label>
+          <input
+            id="order-stop-price"
+            type="number"
+            value={stopPrice}
+            onChange={(e) => setStopPrice(parseFloat(e.target.value) || 0)}
+            step={0.01}
+            className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
+          />
+        </div>
+      )}
+
+      {orderType === "stop_limit" && (
+        <>
+          <div>
+            <label htmlFor="order-stop-price-sl" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Stop Price</label>
+            <input
+              id="order-stop-price-sl"
+              type="number"
+              value={stopPrice}
+              onChange={(e) => setStopPrice(parseFloat(e.target.value) || 0)}
+              step={0.01}
+              className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
+            />
+          </div>
+          <div>
+            <label htmlFor="order-limit-price-sl" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Limit Price</label>
+            <input
+              id="order-limit-price-sl"
+              type="number"
+              value={limitPrice}
+              onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
+              step={0.01}
+              className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
+            />
+          </div>
+        </>
+      )}
+
+      {orderType === "trailing_stop" && (
+        <>
+          <div>
+            <label htmlFor="trail-type" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Trail Type</label>
+            <div className="flex gap-1 mt-1">
+              <button onClick={() => setTrailType("dollar")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "dollar" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>$ Amount</button>
+              <button onClick={() => setTrailType("percent")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "percent" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>% Percent</button>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="trail-amount" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
+              Trail Amount {trailType === "dollar" ? "($)" : "(%)"}
+            </label>
+            <input
+              id="trail-amount"
+              type="number"
+              value={trailAmount}
+              onChange={(e) => setTrailAmount(parseFloat(e.target.value) || 0)}
+              step={trailType === "dollar" ? 0.01 : 0.1}
+              min={0}
+              className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
+            />
+          </div>
+        </>
       )}
 
       {/* Time in Force */}
@@ -855,7 +950,7 @@ function OrderTab({ symbol }: { symbol: string }) {
             : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-black"
         )}
       >
-        {submitting ? "Placing..." : `${side === "buy" ? "Buy" : "Sell"} ${quantity} ${symbol} @ ${orderType === "market" ? "Market" : "$" + price.toFixed(2)}`}
+        {submitting ? "Placing..." : buildOrderLabel()}
       </button>
     </div>
   );

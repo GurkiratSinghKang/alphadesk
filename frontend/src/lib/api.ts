@@ -370,21 +370,28 @@ export async function getIVData(symbol: string) {
 export interface PlaceOrderPayload {
   symbol: string;
   side: "buy" | "sell";
-  type: "market" | "limit" | "stop" | "stop_limit";
+  type: "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
   quantity: number;
   price?: number;
+  stop_price?: number;
+  trail_price?: number;
+  trail_percent?: number;
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
 }
 
 export function placeOrder(payload: PlaceOrderPayload) {
   // Transform frontend payload to backend CreateOrderRequest format
+  const isTrailing = payload.type === "trailing_stop";
   const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => ({
     symbol: leg.symbol,
     side: leg.side,
     qty: leg.quantity,
     order_type: payload.type,
-    limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (leg.price ?? null) : null,
-    stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (leg.price ?? null) : null,
+    limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (payload.price ?? leg.price ?? null) : null,
+    stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) :
+                isTrailing ? null : null,
+    trail_price: isTrailing && payload.trail_price ? payload.trail_price : undefined,
+    trail_percent: isTrailing && payload.trail_percent ? payload.trail_percent : undefined,
   }));
   return apiFetch<Order>(`/api/v1/trades/orders`, {
     method: "POST",
