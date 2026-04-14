@@ -462,7 +462,7 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`);
   // Use backend-provided day P&L if available; fall back to realized-only to avoid
   // double-counting accumulated unrealized P&L from positions held across days.
-  const rawAny = raw as Record<string, unknown>;
+  const rawAny = raw as unknown as Record<string, unknown>;
   const dayPnl = (rawAny.day_pnl as number) ?? (rawAny.profit_loss as number) ?? (raw.realized_pnl_today ?? 0);
   const lastEquity = (raw.equity ?? 0) - dayPnl;
   const dayPnlPct = lastEquity > 0 ? (dayPnl / lastEquity) * 100 : 0;

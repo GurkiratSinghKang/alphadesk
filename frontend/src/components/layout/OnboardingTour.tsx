@@ -60,22 +60,20 @@ const TOUR_STEPS: TourStep[] = [
 // ─── Component ──────────────────────────────────────────────
 
 export function OnboardingTour() {
+  // Check synchronously — never show if already completed
+  const alreadyCompleted = typeof window !== "undefined" && !!localStorage.getItem(STORAGE_KEY);
   const [active, setActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
   const rafRef = useRef<number>(0);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
 
-  // Check if tour should show on mount
+  // Show tour on first visit only, with delay for dashboard to render
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const completed = localStorage.getItem(STORAGE_KEY);
-    if (!completed) {
-      // Delay slightly so the dashboard renders first
-      const timer = setTimeout(() => setActive(true), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+    if (alreadyCompleted) return;
+    const timer = setTimeout(() => setActive(true), 1500);
+    return () => clearTimeout(timer);
+  }, [alreadyCompleted]);
 
   // Position the spotlight on the current step's element
   const updateSpotlight = useCallback(() => {
