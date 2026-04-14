@@ -131,6 +131,11 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     return () => window.removeEventListener("alphadesk:chart-layout", handler);
   }, []);
 
+  // ─── Quick Order Dialog (keyboard-driven) ────────────────
+  const [quickOrder, setQuickOrder] = useState<{ side: "buy" | "sell"; price: number } | null>(null);
+  const [quickOrderQty, setQuickOrderQty] = useState(1);
+  const quickOrderInputRef = useRef<HTMLInputElement>(null);
+
   const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib">("none");
   const [drawings, setDrawings] = useState<Array<{
     type: "hline" | "trendline" | "fib";
@@ -153,6 +158,31 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   }>>([]);
 
   const quote = quotes[selectedSymbol];
+
+  // Quick order keyboard shortcut listener (must be after `quote` definition)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const action = (e as CustomEvent<string>).detail;
+      if (action === "chart:quick-buy" && quote) {
+        setQuickOrder({ side: "buy", price: quote.last });
+        setQuickOrderQty(1);
+        setTimeout(() => quickOrderInputRef.current?.focus(), 50);
+      } else if (action === "chart:quick-sell" && quote) {
+        setQuickOrder({ side: "sell", price: quote.last });
+        setQuickOrderQty(1);
+        setTimeout(() => quickOrderInputRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener("alphadesk:shortcut", handler);
+    return () => window.removeEventListener("alphadesk:shortcut", handler);
+  }, [quote]);
+
+  const submitQuickOrder = useCallback(() => {
+    if (!quickOrder) return;
+    const detail: QuickOrderEvent = { symbol: selectedSymbol, side: quickOrder.side, price: quickOrder.price };
+    window.dispatchEvent(new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail }));
+    setQuickOrder(null);
+  }, [quickOrder, selectedSymbol]);
 
   // BUG #10: chartData depends on timeframe
   const chartData = useMemo(
@@ -298,6 +328,21 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     window.addEventListener("timeframeChange", handler);
     return () => window.removeEventListener("timeframeChange", handler);
   }, []);
+
+  // Escape key: cancel drawing mode or dismiss quick order
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (quickOrder) { setQuickOrder(null); return; }
+        if (drawingMode !== "none") {
+          setDrawingMode("none");
+          setTrendlineStart(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [quickOrder, drawingMode]);
 
   const ChartTypeIcon =
     chartType === "candle"
@@ -731,6 +776,56 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
         {trendlineStart && drawingMode === "fib" && (
           <div className="absolute top-2 left-2 z-[6] bg-[var(--surface)]/90 border border-border rounded px-2 py-1 text-[10px] text-muted-foreground">
             Fib high: ${trendlineStart.price.toFixed(2)} — click to set low point
+          </div>
+        )}
+
+        {/* Quick Order Dialog — keyboard-driven floating panel */}
+        {quickOrder && (
+          <div
+            className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 w-56 rounded-lg border border-border bg-[var(--surface)] shadow-2xl shadow-black/40 animate-in fade-in zoom-in-95 duration-150"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.stopPropagation(); setQuickOrder(null); }
+              if (e.key === "Enter") { e.preventDefault(); submitQuickOrder(); }
+            }}
+          >
+            <div className={cn(
+              "flex items-center justify-between rounded-t-lg px-3 py-2 text-xs font-bold",
+              quickOrder.side === "buy" ? "bg-[var(--profit)]/15 text-[var(--profit)]" : "bg-[var(--loss)]/15 text-[var(--loss)]"
+            )}>
+              <span>{quickOrder.side === "buy" ? "QUICK BUY" : "QUICK SELL"}</span>
+              <button onClick={() => setQuickOrder(null)} className="h-4 w-4 rounded flex items-center justify-center text-muted-foreground hover:text-foreground text-[10px]">&#10005;</button>
+            </div>
+            <div className="px-3 py-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">{selectedSymbol}</span>
+                <span className="text-xs tabular-nums text-foreground">{formatCurrency(quickOrder.price)}</span>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Qty</label>
+                <input
+                  ref={quickOrderInputRef}
+                  type="number"
+                  min={1}
+                  value={quickOrderQty}
+                  onChange={(e) => setQuickOrderQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="mt-0.5 h-7 w-full rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+                <span>Est. cost</span>
+                <span>{formatCurrency(quickOrder.price * quickOrderQty)}</span>
+              </div>
+              <button
+                onClick={submitQuickOrder}
+                className={cn(
+                  "btn-press w-full rounded-md py-1.5 text-xs font-bold text-black shadow-lg",
+                  quickOrder.side === "buy" ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90" : "bg-[var(--loss)] hover:bg-[var(--loss)]/90"
+                )}
+              >
+                {quickOrder.side === "buy" ? "Buy" : "Sell"} Market
+              </button>
+              <p className="text-center text-[9px] text-muted-foreground">Enter to confirm &middot; Esc to cancel</p>
+            </div>
           </div>
         )}
 

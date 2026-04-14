@@ -312,6 +312,55 @@ button, a, [role="button"], input, select, .transition-colors, .transition-all, 
   border-width: 0;
 }
 
+/* ─── Ticker tape marquee ──────────────────────────────────── */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* ─── Micro-animations for premium feel ────────────────────── */
+
+/* Button press feedback — subtle scale-down on click */
+.btn-press:active,
+button:active {
+  transform: scale(0.98);
+}
+
+/* Animated number transitions */
+.num-transition {
+  transition: color 0.3s ease, opacity 0.15s ease;
+}
+
+/* Card entrance stagger animation */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card-stagger {
+  animation: card-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Tab content fade transition */
+@keyframes tab-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-content-enter {
+  animation: tab-fade 0.2s ease-out both;
+}
+
 /* Respect user motion preferences (WCAG 2.1 AA) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

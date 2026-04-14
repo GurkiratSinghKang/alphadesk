@@ -5,6 +5,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { useRegime } from "@/hooks/useQueries";
 
 export function StatusStrip() {
@@ -36,8 +37,8 @@ export function StatusStrip() {
         {hasPnl ? (
           <span aria-live="polite" aria-atomic="true" className={cn("font-semibold tabular-nums", dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
             <span className="sr-only">{dayPnl >= 0 ? "gain" : "loss"}</span>
-            {dayPnl >= 0 ? "+" : ""}{formatCurrency(dayPnl)}
-            <span className="text-muted-foreground ml-1">({dayPnlPct >= 0 ? "+" : ""}{dayPnlPct.toFixed(2)}%)</span>
+            {dayPnl >= 0 ? "+" : ""}<AnimatedNumber value={dayPnl} format={(n) => formatCurrency(Math.abs(n))} />
+            <span className="text-muted-foreground ml-1">({dayPnlPct >= 0 ? "+" : ""}<AnimatedNumber value={dayPnlPct} format={(n) => n.toFixed(2)} />%)</span>
           </span>
         ) : (
           <span aria-live="polite" aria-atomic="true" className="text-[#8a8a95] tabular-nums">$--.--</span>

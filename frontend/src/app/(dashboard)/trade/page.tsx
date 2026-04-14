@@ -128,7 +128,7 @@ export default function TradePage() {
       </div>
 
       {/* ── Mobile layout — visible below lg ── */}
-      <div className="lg:hidden flex-1 min-h-0 overflow-auto" style={{ height: totalH }}>
+      <div key={mobileTab} className="lg:hidden flex-1 min-h-0 overflow-auto tab-content-enter" style={{ height: totalH }}>
         {mobileTab === 'chart' && <ChartPanel />}
         {mobileTab === 'watchlist' && <WatchlistPanel />}
         {mobileTab === 'analysis' && <AnalysisPanel />}

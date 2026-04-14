@@ -21,6 +21,8 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "8": "chart:timeframe:M",
   "j": "watchlist:next",
   "k": "watchlist:prev",
+  "b": "chart:quick-buy",
+  "s": "chart:quick-sell",
 };
 
 export const SHORTCUT_GROUPS: { name: string; items: { key: string; action: string; description: string }[] }[] = [
@@ -59,6 +61,13 @@ export const SHORTCUT_GROUPS: { name: string; items: { key: string; action: stri
     items: [
       { key: "j", action: "watchlist:next", description: "Next symbol" },
       { key: "k", action: "watchlist:prev", description: "Previous symbol" },
+    ],
+  },
+  {
+    name: "Quick Order",
+    items: [
+      { key: "b", action: "chart:quick-buy", description: "Quick buy at market" },
+      { key: "s", action: "chart:quick-sell", description: "Quick sell at market" },
     ],
   },
 ];

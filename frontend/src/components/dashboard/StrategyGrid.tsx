@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Activity, Target } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Activity, Target, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -31,10 +31,12 @@ const StrategyCard = React.memo(function StrategyCard({
   strategy,
   regimeLabel,
   onClick,
+  index = 0,
 }: {
   strategy: StrategyData;
   regimeLabel: string;
   onClick: () => void;
+  index?: number;
 }) {
   const meta = STRATEGY_META[strategy.id];
   const Icon = meta?.icon ?? Activity;
@@ -42,7 +44,8 @@ const StrategyCard = React.memo(function StrategyCard({
 
   return (
     <Card
-      className="cursor-pointer border-border bg-[var(--surface)] card-glow hover:bg-[var(--surface)]/80"
+      className="cursor-pointer border-border bg-[var(--surface)] card-glow hover:bg-[var(--surface)]/80 card-stagger"
+      style={{ animationDelay: `${index * 50}ms` }}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -117,7 +120,58 @@ const StrategyCard = React.memo(function StrategyCard({
   );
 });
 
+// ─── Compact Strategy Row ────────────────────────────────────
+
+const CompactStrategyRow = React.memo(function CompactStrategyRow({
+  strategy,
+  onClick,
+  index = 0,
+}: {
+  strategy: StrategyData;
+  onClick: () => void;
+  index?: number;
+}) {
+  const meta = STRATEGY_META[strategy.id];
+  const Icon = meta?.icon ?? Activity;
+
+  return (
+    <button
+      onClick={onClick}
+      className="card-stagger flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-accent/50"
+      style={{ animationDelay: `${index * 30}ms` }}
+    >
+      <div className="shrink-0 rounded bg-[var(--panel)] p-1">
+        <Icon className="h-3 w-3 text-muted-foreground" />
+      </div>
+      <span className="flex-1 truncate text-xs font-medium text-foreground">{strategy.shortName}</span>
+      <Badge
+        variant="outline"
+        className={cn(
+          "shrink-0 text-[9px] px-1.5 py-0",
+          strategy.status === "active"
+            ? "border-emerald-500/30 text-emerald-400"
+            : "border-amber-500/30 text-amber-400"
+        )}
+      >
+        {strategy.status === "active" ? "On" : "Off"}
+      </Badge>
+      {strategy.returnPct === 0 && strategy.positions === 0 ? (
+        <span className="w-14 text-right text-[10px] tabular-nums text-muted-foreground">&mdash;</span>
+      ) : (
+        <span className={cn("w-14 text-right text-[10px] font-semibold tabular-nums", strategy.returnPct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+          {strategy.returnPct >= 0 ? "+" : ""}{strategy.returnPct.toFixed(2)}%
+        </span>
+      )}
+      <span className="w-8 text-right text-[10px] tabular-nums text-muted-foreground">{strategy.positions}p</span>
+    </button>
+  );
+});
+
 // ─── Strategy Grid Panel ─────────────────────────────────────
+
+type ViewMode = "expanded" | "compact";
+
+const VIEW_MODE_KEY = "alphadesk-strategy-view";
 
 interface StrategyGridProps {
   strategies: StrategyData[];
@@ -126,6 +180,19 @@ interface StrategyGridProps {
 }
 
 export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: StrategyGridProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>("expanded");
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem(VIEW_MODE_KEY) : null;
+    if (stored === "compact" || stored === "expanded") setViewMode(stored);
+  }, []);
+
+  const toggleView = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  };
+
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -135,20 +202,60 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
             Strategies
           </h2>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {strategies.filter((s) => s.status === "active").length} active
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {strategies.filter((s) => s.status === "active").length} active
+          </span>
+          <div className="flex items-center rounded-md border border-border/50 p-0.5">
+            <button
+              onClick={() => toggleView("expanded")}
+              className={cn(
+                "rounded p-1 transition-colors",
+                viewMode === "expanded" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Expanded view"
+              aria-label="Expanded view"
+            >
+              <LayoutGrid className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => toggleView("compact")}
+              className={cn(
+                "rounded p-1 transition-colors",
+                viewMode === "compact" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Compact view"
+              aria-label="Compact view"
+            >
+              <List className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        {strategies.map((strategy) => (
-          <StrategyCard
-            key={strategy.id}
-            strategy={strategy}
-            regimeLabel={regimeLabel}
-            onClick={() => onStrategyClick(strategy.id)}
-          />
-        ))}
-      </div>
+      {viewMode === "expanded" ? (
+        <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          {strategies.map((strategy, i) => (
+            <StrategyCard
+              key={strategy.id}
+              strategy={strategy}
+              regimeLabel={regimeLabel}
+              onClick={() => onStrategyClick(strategy.id)}
+              index={i}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="divide-y divide-border/30 p-1.5">
+          {strategies.map((strategy, i) => (
+            <CompactStrategyRow
+              key={strategy.id}
+              strategy={strategy}
+              onClick={() => onStrategyClick(strategy.id)}
+              index={i}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

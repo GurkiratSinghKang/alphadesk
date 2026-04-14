@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
+import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
@@ -27,6 +28,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <TopBar />
+      <TickerTape />
       <StatusStrip />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CommandPalette />
