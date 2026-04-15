@@ -5,6 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -48,6 +49,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
+      <AICopilot />
       {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
       <OnboardingTour />
     </div>

@@ -590,6 +590,37 @@ export function getPortfolioPerformance() {
   return apiFetch<{ equity_curve: { date: string; cumulative_pnl: number }[] }>(`/api/v1/portfolio/performance`);
 }
 
+// ─── Morning Brief ────────────────────────────────────────────
+
+export interface MorningBriefMover {
+  symbol: string;
+  change_pct: number;
+  impact: number;
+}
+
+export interface MorningBriefData {
+  date: string;
+  portfolio: {
+    equity: number;
+    overnight_change: number;
+    overnight_change_pct: number;
+  };
+  top_movers: MorningBriefMover[];
+  market: {
+    regime: string;
+    vix: number;
+    vix_change: number;
+    spy_change_pct: number;
+  };
+  catalysts: string[];
+  ai_summary: string;
+  is_demo?: boolean;
+}
+
+export function getMorningBrief() {
+  return apiFetch<MorningBriefData>(`/api/v1/portfolio/morning-brief`);
+}
+
 // ─── Chat / Agents ───────────────────────────────────────────
 
 export interface ChatResponse {

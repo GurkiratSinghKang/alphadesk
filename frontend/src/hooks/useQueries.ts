@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -89,5 +89,14 @@ export function useIndexSparklines() {
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     retry: 2,
+  });
+}
+
+export function useMorningBrief() {
+  return useQuery({
+    queryKey: ['morningBrief'],
+    queryFn: getMorningBrief,
+    staleTime: 30 * 60 * 1000, // 30 min — brief doesn't change often
+    retry: 1,
   });
 }
