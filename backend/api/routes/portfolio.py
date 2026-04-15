@@ -441,21 +441,31 @@ async def get_performance(
         today = date.today()
         n_points = len(cumulative)
         equity_curve_data = []
+        trade_dates: list[str] = []
         for i, c in enumerate(cumulative):
             d = today - timedelta(days=(n_points - 1 - i))
+            d_str = d.isoformat()
+            trade_dates.append(d_str)
             equity_curve_data.append({
-                "date": d.isoformat(),
+                "date": d_str,
                 "value": round(float(c), 2),
                 "cumulative_pnl": round(float(c), 2),
             })
+
+        # Enhanced metrics (daily returns, rolling Sharpe, drawdown detail, Calmar)
+        enhanced = _compute_enhanced_metrics(pnls, trade_dates)
 
         return PerformanceMetrics(
             period=period,
             total_return=round(total_return, 2),
             total_return_pct=round(total_return / 100_000 * 100, 2),
             sharpe_ratio=round(float(sharpe), 2) if sharpe else None,
-            sortino_ratio=round(float(sortino), 2) if sortino else None,
+            sortino_ratio=enhanced["sortino_ratio"],
             max_drawdown=round(max_dd, 2),
+            calmar_ratio=enhanced["calmar_ratio"],
+            drawdown_detail=enhanced["drawdown_detail"],
+            rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
+            daily_returns=enhanced["daily_returns"],
             win_rate=round(len(wins) / len(returns) * 100, 1) if len(returns) else None,
             profit_factor=round(profit_factor, 2) if profit_factor else None,
             avg_win=round(float(np.mean(wins)), 2) if len(wins) else None,
