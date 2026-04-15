@@ -663,3 +663,291 @@ async def get_journal(
     except Exception:
         logger.warning("Failed to fetch journal entries from DB", exc_info=True)
         return []
+
+
+# ---------------------------------------------------------------------------
+# Morning Brief
+# ---------------------------------------------------------------------------
+
+class MorningBriefMover(BaseModel):
+    symbol: str
+    change_pct: float
+    impact: float
+
+
+class MorningBriefPortfolio(BaseModel):
+    equity: float
+    overnight_change: float
+    overnight_change_pct: float
+
+
+class MorningBriefMarket(BaseModel):
+    regime: str
+    vix: float
+    vix_change: float
+    spy_change_pct: float
+
+
+class MorningBriefResponse(BaseModel):
+    date: str
+    portfolio: MorningBriefPortfolio
+    top_movers: list[MorningBriefMover]
+    market: MorningBriefMarket
+    catalysts: list[str]
+    ai_summary: str
+    is_demo: bool = False
+
+
+def _generate_brief_summary(
+    portfolio: dict[str, float],
+    movers: list[dict[str, Any]],
+    market: dict[str, Any],
+) -> str:
+    """Template-based AI summary — fast, no external API call."""
+    parts: list[str] = []
+
+    # Portfolio direction
+    change = portfolio.get("overnight_change", 0)
+    if change > 0:
+        parts.append(f"Portfolio up ${change:.2f} overnight.")
+    elif change < 0:
+        parts.append(f"Portfolio down ${abs(change):.2f} overnight.")
+    else:
+        parts.append("Portfolio flat overnight.")
+
+    # VIX commentary
+    vix = market.get("vix", 0)
+    if vix > 30:
+        parts.append(f"VIX elevated at {vix:.1f} — consider defensive positioning and tightening stops.")
+    elif vix > 25:
+        parts.append(f"VIX elevated at {vix:.1f} — stay cautious with position sizing.")
+    elif vix > 20:
+        parts.append(f"VIX at {vix:.1f} indicates moderate uncertainty.")
+    elif vix > 0:
+        parts.append(f"VIX at {vix:.1f} — low volatility environment favors trend strategies.")
+
+    # SPY move
+    spy_pct = market.get("spy_change_pct", 0)
+    if abs(spy_pct) > 1:
+        direction = "rallied" if spy_pct > 0 else "declined"
+        parts.append(f"S&P 500 {direction} {abs(spy_pct):.1f}% — watch for follow-through.")
+
+    # Top mover callout
+    if movers:
+        top = movers[0]
+        direction = "up" if top.get("change_pct", 0) > 0 else "down"
+        parts.append(
+            f"{top['symbol']} {direction} {abs(top.get('change_pct', 0)):.1f}%"
+            f" (${abs(top.get('impact', 0)):.2f} portfolio impact)."
+        )
+
+    # Regime guidance
+    regime = market.get("regime", "")
+    if "bear" in regime.lower():
+        parts.append("Bear regime active — prioritize capital preservation.")
+    elif "bull" in regime.lower() and "high" in regime.lower():
+        parts.append("Bull regime with high volatility — size positions conservatively.")
+
+    return " ".join(parts)
+
+
+def _upcoming_catalysts() -> list[str]:
+    """Return a short list of upcoming economic catalysts based on day of week."""
+    catalysts_pool = [
+        ("FOMC Minutes", 2),       # Wednesday
+        ("Non-Farm Payrolls", 4),  # Friday
+        ("CPI Report", 1),         # Tuesday
+        ("Retail Sales", 3),       # Thursday
+        ("Initial Claims", 3),     # Thursday
+        ("Core PCE", 4),           # Friday
+        ("PMI Manufacturing", 0),  # Monday
+        ("Consumer Confidence", 1),# Tuesday
+        ("GDP (QoQ)", 3),          # Thursday
+    ]
+    today = date.today()
+    result: list[str] = []
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    for event, target_dow in catalysts_pool:
+        diff = target_dow - today.weekday()
+        if diff <= 0:
+            diff += 7
+        if diff <= 5:  # within next 5 trading days
+            d = today + timedelta(days=diff)
+            result.append(f"{event} ({day_names[d.weekday()]})")
+        if len(result) >= 4:
+            break
+    return result
+
+
+def _demo_morning_brief() -> MorningBriefResponse:
+    """Generate a deterministic demo morning brief."""
+    import random
+    rng = random.Random(date.today().toordinal())
+
+    equity = 100_000 + rng.uniform(-2000, 5000)
+    overnight = rng.uniform(-150, 200)
+    overnight_pct = overnight / equity * 100
+
+    demo_symbols = ["AAPL", "MSFT", "NVDA", "GOOGL", "BA", "MRK", "JPM", "AMZN"]
+    movers = []
+    for sym in rng.sample(demo_symbols, min(4, len(demo_symbols))):
+        chg = rng.uniform(-3.5, 4.0)
+        impact = rng.uniform(-50, 60)
+        movers.append({"symbol": sym, "change_pct": round(chg, 2), "impact": round(impact, 2)})
+    movers.sort(key=lambda m: abs(m["impact"]), reverse=True)
+
+    vix = round(rng.uniform(14, 32), 1)
+    vix_change = round(rng.uniform(-2, 2), 1)
+    spy_pct = round(rng.uniform(-1.5, 2.0), 2)
+    regime_options = [
+        "Bull - Low Volatility", "Bull - High Volatility",
+        "Bear - High Volatility", "Sideways - Low Volatility",
+    ]
+    regime = rng.choice(regime_options)
+
+    portfolio_data = {
+        "equity": round(equity, 2),
+        "overnight_change": round(overnight, 2),
+        "overnight_change_pct": round(overnight_pct, 2),
+    }
+    market_data = {
+        "regime": regime,
+        "vix": vix,
+        "vix_change": vix_change,
+        "spy_change_pct": spy_pct,
+    }
+
+    return MorningBriefResponse(
+        date=date.today().isoformat(),
+        portfolio=MorningBriefPortfolio(**portfolio_data),
+        top_movers=[MorningBriefMover(**m) for m in movers[:3]],
+        market=MorningBriefMarket(**market_data),
+        catalysts=_upcoming_catalysts(),
+        ai_summary=_generate_brief_summary(portfolio_data, movers[:3], market_data),
+        is_demo=True,
+    )
+
+
+@router.get("/morning-brief", response_model=MorningBriefResponse)
+async def get_morning_brief() -> MorningBriefResponse:
+    """Generate a personalized morning brief for the trader."""
+    if _alpaca_keys_empty():
+        return _demo_morning_brief()
+
+    try:
+        from core.config import settings
+        import httpx
+
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            # --- Fetch account + positions + market snapshots in parallel ---
+            import asyncio
+
+            account_coro = client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/account", headers=headers
+            )
+            positions_coro = client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers
+            )
+            spy_snap_coro = client.get(
+                "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
+                headers=headers,
+            )
+
+            acct_resp, pos_resp, snap_resp = await asyncio.gather(
+                account_coro, positions_coro, spy_snap_coro,
+                return_exceptions=True,
+            )
+
+            # --- Parse account ---
+            if isinstance(acct_resp, Exception) or acct_resp.status_code != 200:
+                return _demo_morning_brief()
+            acct = acct_resp.json()
+            equity = float(acct.get("equity", 0))
+            last_equity = float(acct.get("last_equity", equity))
+            overnight_change = round(equity - last_equity, 2)
+            overnight_pct = round(
+                (overnight_change / last_equity * 100) if last_equity > 0 else 0, 2
+            )
+
+            # --- Parse positions for top movers ---
+            movers: list[dict[str, Any]] = []
+            if not isinstance(pos_resp, Exception) and pos_resp.status_code == 200:
+                positions_data = pos_resp.json()
+                for p in positions_data:
+                    sym = p.get("symbol", "")
+                    change_pct = float(p.get("change_today", 0)) * 100
+                    unrealized = float(p.get("unrealized_intraday_pl", 0))
+                    movers.append({
+                        "symbol": sym,
+                        "change_pct": round(change_pct, 2),
+                        "impact": round(unrealized, 2),
+                    })
+                movers.sort(key=lambda m: abs(m["impact"]), reverse=True)
+
+            # --- Parse SPY/VIX snapshots ---
+            spy_change_pct = 0.0
+            vix_price = 0.0
+            vix_change = 0.0
+            if not isinstance(snap_resp, Exception) and snap_resp.status_code == 200:
+                snaps = snap_resp.json()
+                spy_snap = snaps.get("SPY", {})
+                if spy_snap:
+                    spy_price = spy_snap.get("latestTrade", {}).get("p", 0)
+                    spy_prev = spy_snap.get("prevDailyBar", {}).get("c", 0)
+                    if spy_prev > 0:
+                        spy_change_pct = round((spy_price - spy_prev) / spy_prev * 100, 2)
+
+                vixy_snap = snaps.get("VIXY", {})
+                if vixy_snap:
+                    vix_price = round(vixy_snap.get("latestTrade", {}).get("p", 0), 1)
+                    vixy_prev = vixy_snap.get("prevDailyBar", {}).get("c", 0)
+                    if vixy_prev > 0:
+                        vix_change = round(vix_price - vixy_prev, 1)
+
+            # --- Determine regime ---
+            regime_label = "Unknown"
+            try:
+                from core.redis import cache_get
+                cached_regime = await cache_get("market:regime")
+                if cached_regime and isinstance(cached_regime, dict):
+                    regime_label = cached_regime.get("regime", "Unknown")
+            except Exception:
+                # Infer from VIX level if cache unavailable
+                if vix_price > 25:
+                    regime_label = "High Volatility"
+                elif vix_price > 0:
+                    if spy_change_pct > 0:
+                        regime_label = "Bull - Low Volatility"
+                    else:
+                        regime_label = "Sideways"
+
+            portfolio_data = {
+                "equity": equity,
+                "overnight_change": overnight_change,
+                "overnight_change_pct": overnight_pct,
+            }
+            market_data = {
+                "regime": regime_label,
+                "vix": vix_price,
+                "vix_change": vix_change,
+                "spy_change_pct": spy_change_pct,
+            }
+
+            return MorningBriefResponse(
+                date=date.today().isoformat(),
+                portfolio=MorningBriefPortfolio(**portfolio_data),
+                top_movers=[MorningBriefMover(**m) for m in movers[:3]],
+                market=MorningBriefMarket(**market_data),
+                catalysts=_upcoming_catalysts(),
+                ai_summary=_generate_brief_summary(portfolio_data, movers[:3], market_data),
+                is_demo=False,
+            )
+
+    except Exception:
+        logger.warning("Failed to generate morning brief, falling back to demo", exc_info=True)
+        return _demo_morning_brief()

@@ -23,6 +23,7 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "6": "chart:timeframe:D",
   "7": "chart:timeframe:W",
   "8": "chart:timeframe:M",
+  "Ctrl+j": "copilot:toggle",
   "j": "watchlist:next",
   "k": "watchlist:prev",
   "b": "chart:quick-buy",
@@ -30,7 +31,7 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
 };
 
 /** Shortcuts added after 2026-04-01 are flagged as new */
-export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r"]);
+export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r", "Ctrl+j"]);
 
 export type ShortcutGroup = {
   name: string;
@@ -90,6 +91,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { key: "b", action: "chart:quick-buy", description: "Quick buy at market" },
       { key: "s", action: "chart:quick-sell", description: "Quick sell at market" },
+    ],
+  },
+  {
+    name: "AI",
+    icon: "brain",
+    items: [
+      { key: "Cmd+J", action: "copilot:toggle", description: "Toggle AI Copilot sidebar", isNew: true },
     ],
   },
 ];
