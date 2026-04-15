@@ -416,64 +416,118 @@ struct WatchlistView: View {
     // MARK: - Watchlist Row
 
     private func watchlistRow(_ symbol: String) -> some View {
-        HStack(spacing: 12) {
-            // Symbol badge
-            ZStack {
-                RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
-                    .fill(AD.surfaceElevated)
-                    .frame(width: 40, height: 40)
+        let quote = vm.quotes[symbol]
+        let changePct = quote?.changePct ?? 0
+        let changeAbs = quote?.change ?? 0
+        let directionColor = changePct >= 0 ? AD.profit : AD.loss
 
-                Text(String(symbol.prefix(2)))
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundStyle(AD.accent)
-            }
+        return VStack(spacing: 0) {
+            // Primary row
+            HStack(spacing: 12) {
+                // Symbol badge
+                ZStack {
+                    RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
+                        .fill(AD.surfaceElevated)
+                        .frame(width: 40, height: 40)
 
-            // Left: symbol + name
-            VStack(alignment: .leading, spacing: 3) {
-                Text(symbol)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AD.textPrimary)
-
-                if let name = symbolName(symbol) {
-                    Text(name)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AD.textTertiary)
-                        .lineLimit(1)
+                    Text(String(symbol.prefix(2)))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AD.accent)
                 }
-            }
 
-            Spacer(minLength: 4)
-
-            // Mini sparkline chart
-            if let sparkData = vm.sparklines[symbol], sparkData.count >= 2 {
-                SparklineView(data: sparkData, height: 24, lineWidth: 1.2)
-                    .frame(width: 48, height: 24)
-            }
-
-            // Right: price + change
-            if let quote = vm.quotes[symbol] {
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(quote.last, format: .currency(code: "USD"))
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                // Left: symbol + name
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(symbol)
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(AD.textPrimary)
-                        .monospacedDigit()
 
-                    if let pct = quote.changePct {
-                        Text("\(AD.pnlSign(pct))\(pct, specifier: "%.2f")%")
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(AD.pnlColor(pct))
-                            .monospacedDigit()
+                    if let name = symbolName(symbol) {
+                        Text(name)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AD.textTertiary)
+                            .lineLimit(1)
                     }
                 }
-            } else {
-                ProgressView()
-                    .tint(AD.textTertiary)
-                    .scaleEffect(0.7)
+
+                Spacer(minLength: 4)
+
+                // Mini sparkline chart
+                if let sparkData = vm.sparklines[symbol], sparkData.count >= 2 {
+                    SparklineView(data: sparkData, height: 24, lineWidth: 1.2)
+                        .frame(width: 48, height: 24)
+                }
+
+                // Right: price + change (absolute & percentage)
+                if let q = quote {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(q.last, format: .currency(code: "USD"))
+                            .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(AD.textPrimary)
+                            .monospacedDigit()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: changePct >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                .font(.system(size: 9))
+                            Text("\(AD.pnlSign(changeAbs))\(changeAbs, specifier: "%.2f")")
+                                .font(.system(size: 12, design: .monospaced))
+                            Text("(\(AD.pnlSign(changePct))\(changePct, specifier: "%.2f")%)")
+                                .font(.system(size: 12, design: .monospaced))
+                        }
+                        .foregroundStyle(directionColor)
+                        .monospacedDigit()
+                    }
+                } else {
+                    ProgressView()
+                        .tint(AD.textTertiary)
+                        .scaleEffect(0.7)
+                }
+            }
+
+            // Secondary row: Volume + Day Range
+            if let q = quote {
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 52) // align under text, past badge
+
+                    HStack(spacing: AD.spacingMD) {
+                        HStack(spacing: 4) {
+                            Text("Vol")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(AD.textTertiary)
+                            Text(formatWatchlistVolume(Double(q.volume)))
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(AD.textSecondary)
+                        }
+
+                        if let low = q.low, let high = q.high, low > 0, high > 0 {
+                            HStack(spacing: 4) {
+                                Text("Range")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(AD.textTertiary)
+                                Text("\(low, specifier: "%.2f") - \(high, specifier: "%.2f")")
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(AD.textSecondary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+                .padding(.top, 4)
             }
         }
         .padding(.vertical, 10)
         .padding(.horizontal, AD.spacingMD)
+        .background(
+            RoundedRectangle(cornerRadius: AD.radiusSM, style: .continuous)
+                .fill(quote != nil ? directionColor.opacity(0.04) : .clear)
+        )
         .contentShape(Rectangle())
+    }
+
+    private func formatWatchlistVolume(_ vol: Double) -> String {
+        if vol >= 1_000_000 { return String(format: "%.1fM", vol / 1_000_000) }
+        if vol >= 1_000 { return String(format: "%.1fK", vol / 1_000) }
+        return String(format: "%.0f", vol)
     }
 
     // MARK: - Add Symbol Sheet

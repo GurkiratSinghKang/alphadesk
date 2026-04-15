@@ -279,6 +279,7 @@ struct TradeView: View {
     @State private var vm = TradeViewModel()
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showPositionSizer = false
+    @State private var showOrderConfirm = false
     @FocusState private var isSearchFocused: Bool
 
     // State preservation
@@ -945,7 +946,7 @@ struct TradeView: View {
 
             // Submit Button
             Button {
-                Task { await vm.submitOrder() }
+                showOrderConfirm = true
             } label: {
                 HStack(spacing: AD.spacingSM) {
                     if vm.isSubmitting {
@@ -972,6 +973,22 @@ struct TradeView: View {
             }
             .disabled(!vm.canSubmit || vm.isSubmitting)
             .sensoryFeedback(.impact(weight: .heavy, intensity: 0.9), trigger: vm.isSubmitting)
+            .confirmationDialog("Confirm Order", isPresented: $showOrderConfirm, titleVisibility: .visible) {
+                Button("Confirm \(vm.orderSide.label) \(vm.quantity) \(vm.symbol)") {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                    Task { await vm.submitOrder() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                let qty = Int(vm.quantity) ?? 0
+                let px = vm.orderType == .limit ? (Double(vm.limitPrice) ?? vm.price) : vm.price
+                let cost = Double(qty) * px
+                Text("""
+                \(vm.orderSide.label.uppercased()) \(qty) x \(vm.symbol) @ \(px.formatted(.currency(code: "USD")))
+                Est. \(vm.orderSide == .buy ? "cost" : "proceeds"): \(cost.formatted(.currency(code: "USD")))
+                Order type: \(vm.orderType.label)
+                """)
+            }
         }
         .cardStyle()
     }
