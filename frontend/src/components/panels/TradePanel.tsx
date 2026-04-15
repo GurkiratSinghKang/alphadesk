@@ -516,16 +516,16 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
       }}
       className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
     >
-      <span className="flex-1 font-medium text-foreground truncate">
+      <span className="flex-1 min-w-[60px] font-medium text-foreground truncate" title={p.symbol}>
         {p.symbol}
       </span>
-      <span className="w-12 text-right tabular-nums text-foreground">
+      <span className="w-10 text-right tabular-nums text-foreground truncate" title={String(p.quantity)}>
         {p.quantity}
       </span>
-      <span className="w-16 text-right tabular-nums text-muted-foreground">
+      <span className="w-14 text-right tabular-nums text-muted-foreground truncate" title={formatCurrency(p.avgCost)}>
         {formatCurrency(p.avgCost)}
       </span>
-      <span className="w-16 text-right">
+      <span className="w-14 text-right">
         <AnimatedNumber
           value={livePrice}
           format={(n) => formatCurrency(n)}
@@ -533,7 +533,7 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
           duration={200}
         />
       </span>
-      <span className="w-20 text-right">
+      <span className="w-18 text-right">
         <AnimatedNumber
           value={livePnl}
           format={(n) => `${n >= 0 ? "+" : ""}${formatCurrency(n)}`}
@@ -620,11 +620,11 @@ function PositionsTab() {
 
       <div className="space-y-1">
         <div className="flex items-center text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1">
-          <span className="flex-1">Position</span>
-          <span className="w-12 text-right">Qty</span>
-          <span className="w-16 text-right">Avg</span>
-          <span className="w-16 text-right">Last</span>
-          <span className="w-20 text-right">P&L</span>
+          <span className="flex-1 min-w-[60px]">SYM</span>
+          <span className="w-10 text-right">QTY</span>
+          <span className="w-14 text-right">AVG</span>
+          <span className="w-14 text-right">LAST</span>
+          <span className="w-18 text-right">P&L</span>
         </div>
 
         {positions.map((p) => (
@@ -698,11 +698,11 @@ function OrdersTab() {
     <div className="p-2">
       <div className="space-y-1">
         <div className="flex items-center text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1">
-          <span className="flex-1">Order</span>
-          <span className="w-10 text-right">Side</span>
-          <span className="w-10 text-right">Qty</span>
-          <span className="w-16 text-right">Price</span>
-          <span className="w-16 text-right">Status</span>
+          <span className="flex-1 min-w-[60px]">SYM</span>
+          <span className="w-10 text-right">SIDE</span>
+          <span className="w-10 text-right">QTY</span>
+          <span className="w-14 text-right">PRC</span>
+          <span className="w-14 text-right">STATUS</span>
           <span className="w-6" />
         </div>
 
@@ -717,7 +717,7 @@ function OrdersTab() {
             }}
             className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
           >
-            <span className="flex-1 font-medium text-foreground truncate">
+            <span className="flex-1 min-w-[60px] font-medium text-foreground truncate" title={o.symbol}>
               {o.symbol}
             </span>
             <span
@@ -731,10 +731,10 @@ function OrdersTab() {
             <span className="w-10 text-right tabular-nums text-foreground">
               {o.quantity}
             </span>
-            <span className="w-16 text-right tabular-nums text-foreground">
+            <span className="w-14 text-right tabular-nums text-foreground truncate" title={o.price ? formatCurrency(o.price) : "MKT"}>
               {o.price ? formatCurrency(o.price) : "MKT"}
             </span>
-            <span className="w-16 flex justify-end">
+            <span className="w-14 flex justify-end">
               <Badge
                 variant="outline"
                 className={cn("text-[9px] px-1.5 py-0", statusColors[o.status] ?? "")}
@@ -1191,21 +1191,21 @@ export function TradePanel() {
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 border border-[#2a2a3e]">
-            <TabsTrigger value="trade" className="text-[11px] h-6 px-2.5">
+          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 border border-[#2a2a3e]">
+            <TabsTrigger value="trade" className="text-[10px] h-6 px-1.5" title="Trade Builder">
               Trade
             </TabsTrigger>
-            <TabsTrigger value="positions" className="text-[11px] h-6 px-2.5">
-              Positions
+            <TabsTrigger value="positions" className="text-[10px] h-6 px-1.5" title="Positions">
+              Pos
             </TabsTrigger>
-            <TabsTrigger value="orders" className="text-[11px] h-6 px-2.5">
-              Orders
+            <TabsTrigger value="orders" className="text-[10px] h-6 px-1.5" title="Orders">
+              Ords
             </TabsTrigger>
-            <TabsTrigger value="journal" className="text-[11px] h-6 px-2.5">
-              Journal
+            <TabsTrigger value="journal" className="text-[10px] h-6 px-1.5" title="Journal">
+              Jrnl
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="text-[11px] h-6 px-2.5">
-              Calendar
+            <TabsTrigger value="calendar" className="text-[10px] h-6 px-1.5" title="P&L Calendar">
+              Cal
             </TabsTrigger>
           </TabsList>
           <HelpCircle text="Build and submit option trades. View current positions, pending orders, and trade journal." />

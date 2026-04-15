@@ -22,7 +22,7 @@ const OptionsPanel = dynamic(
 const TOPBAR_H = 72;
 const WATCHLIST_W = 240;
 const ANALYSIS_W = 300;
-const TRADE_PANEL_W = 380;
+const TRADE_PANEL_W = 420;
 
 const CHART_LAYOUT_KEY = "alphadesk-chart-layout";
 

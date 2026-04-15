@@ -34,7 +34,7 @@ function getPnlText(pnl: number): string {
   return "#f0fdf4";
 }
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES = ["M", "T", "W", "T", "F", "S", "S"];
 
 // ─── Component ──────────────────────────────────────────────
 
@@ -149,16 +149,16 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={prevMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-7 w-7 min-w-[28px] flex-shrink-0 items-center justify-center rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <h3 className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-base")}>
+          <h3 className={cn("font-semibold text-foreground truncate", compact ? "text-sm" : "text-base")}>
             {monthName} {year}
           </h3>
           <button
             onClick={nextMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-7 w-7 min-w-[28px] flex-shrink-0 items-center justify-center rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -180,9 +180,9 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
           <>
             {/* Day names header */}
             <div className="grid grid-cols-7 gap-1 mb-1">
-              {DAY_NAMES.map((d) => (
+              {DAY_NAMES.map((d, i) => (
                 <div
-                  key={d}
+                  key={i}
                   className="text-center text-[10px] font-medium text-muted-foreground py-1"
                 >
                   {d}

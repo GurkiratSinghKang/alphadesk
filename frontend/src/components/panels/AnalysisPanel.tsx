@@ -13,6 +13,7 @@ import {
   Activity,
   ShoppingCart,
   Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -350,6 +351,10 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
   );
 }
 
+// ─── ETF symbol set ─────────────────────────────────────────
+
+const ETF_SYMBOLS = new Set(['SPY', 'QQQ', 'IWM', 'DIA', 'XLK', 'XLV', 'XLF', 'XLE', 'XLU', 'XLRE', 'XLB', 'XLC', 'XLI', 'XLP', 'XLY', 'GLD', 'TLT', 'VTI', 'VOO', 'ARKK']);
+
 // ─── Fundamental Tab ─────────────────────────────────────────
 
 function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
@@ -389,8 +394,16 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
     { label: "Revenue Growth", value: `${Number(revGrowth) >= 0 ? "+" : ""}${revGrowth}%` },
   ];
 
+  const isETF = ETF_SYMBOLS.has(symbol.toUpperCase());
+
   return (
     <div className="space-y-4 p-3">
+      {isETF && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-300">ETF &mdash; individual fundamental metrics are aggregated estimates</p>
+        </div>
+      )}
       <div>
         <h3 className="text-xs font-medium text-muted-foreground mb-2 flex items-center">
           Piotroski F-Score
@@ -921,24 +934,24 @@ export function AnalysisPanel() {
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0 relative z-20">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-hidden border border-[#2a2a3e] relative z-20">
-            <TabsTrigger value="technical" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <Activity className="h-3 w-3" /> Tech
+          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-x-auto overflow-y-hidden border border-[#2a2a3e] relative z-20">
+            <TabsTrigger value="technical" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Technical Analysis">
+              <BarChart2 className="h-3 w-3 shrink-0" /> Tech
             </TabsTrigger>
-            <TabsTrigger value="fundamental" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <DollarSign className="h-3 w-3" /> Fund
+            <TabsTrigger value="fundamental" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Fundamental Analysis">
+              <DollarSign className="h-3 w-3 shrink-0" /> Fund
             </TabsTrigger>
-            <TabsTrigger value="sentiment" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <BarChart2 className="h-3 w-3" /> Sent
+            <TabsTrigger value="sentiment" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Sentiment Analysis">
+              <Activity className="h-3 w-3 shrink-0" /> Sentim.
             </TabsTrigger>
-            <TabsTrigger value="chat" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <MessageSquare className="h-3 w-3" /> Chat
+            <TabsTrigger value="chat" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="AI Chat">
+              <MessageSquare className="h-3 w-3 shrink-0" /> Chat
             </TabsTrigger>
-            <TabsTrigger value="order" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <ShoppingCart className="h-3 w-3" /> Order
+            <TabsTrigger value="order" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Place Order">
+              <ShoppingCart className="h-3 w-3 shrink-0" /> Order
             </TabsTrigger>
-            <TabsTrigger value="mtf" className="text-[10px] h-6 px-1.5 gap-0.5">
-              <Layers className="h-3 w-3" /> MTF
+            <TabsTrigger value="mtf" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Multi-Timeframe">
+              <Layers className="h-3 w-3 shrink-0" /> MTF
             </TabsTrigger>
           </TabsList>
           <HelpCircle text="AI-powered analysis of the selected symbol. Technical, fundamental, and sentiment scores updated by Claude agents." />

@@ -43,6 +43,26 @@ export interface NewsItem {
 
 const MAX_FEED_ITEMS = 10;
 
+// Map internal strategy IDs to user-facing names
+const STRATEGY_NAMES: Record<string, string> = {
+  pead: "Post-Earnings Drift",
+  momentum_quality: "Momentum + Quality",
+  vrp_harvest: "VRP Harvesting",
+  mean_reversion: "Mean Reversion",
+  trend_following: "Trend Following",
+  pairs_trading: "Pairs Trading",
+  breakout: "Breakout",
+  gap_fill: "Gap Fill",
+  earnings_momentum: "Earnings Momentum",
+  sector_rotation: "Sector Rotation",
+};
+
+function humanizeStrategyId(id: string): string {
+  if (STRATEGY_NAMES[id]) return STRATEGY_NAMES[id];
+  // Fallback: capitalize and replace underscores
+  return id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ─── Constants ───────────────────────────────────────────────
 
 const FEED_ICONS: Record<FeedItem["type"], typeof Activity> = {
@@ -144,7 +164,7 @@ export function buildFeedItems(
           time: ts,
           type: "pipeline",
           severity: "warning",
-          title: `Rejected: ${r.symbol} (${r.strategy})`,
+          title: `Rejected: ${r.symbol} (${humanizeStrategyId(r.strategy)})`,
           detail: `${r.reason}${r.remediation ? ` → ${r.remediation}` : ""}`,
         });
       }
@@ -169,7 +189,7 @@ export function buildFeedItems(
         type: "trade",
         severity: "info",
         title: `${order.side === "buy" ? "Bought" : "Sold"} ${order.qty} ${order.symbol} @ $${(Number(order.price) ?? 0).toFixed(2)}`,
-        detail: order.strategy ? `via ${order.strategy}` : undefined,
+        detail: order.strategy ? `via ${humanizeStrategyId(order.strategy)}` : undefined,
       });
     }
 

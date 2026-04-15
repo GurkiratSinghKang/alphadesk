@@ -20,14 +20,8 @@ export function Sparkline({
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
-  // Flat data — render a subtle dashed horizontal line
-  if (min === max) {
-    return (
-      <svg viewBox={`0 0 ${width} ${height}`} className={className ?? "shrink-0"} style={{ height }}>
-        <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="var(--border)" strokeWidth="1" strokeDasharray="3,3" />
-      </svg>
-    );
-  }
+  // Flat data — return nothing; the strategy card already shows the return text
+  if (min === max) return null;
   const range = max - min;
   const points = data
     .map((v, i) => {

@@ -52,10 +52,10 @@ describe('TradePanel', () => {
     const { TradePanel } = await import('@/components/panels/TradePanel');
     render(<TradePanel />);
     expect(screen.getByText('Trade')).toBeDefined();
-    expect(screen.getByText('Positions')).toBeDefined();
-    expect(screen.getByText('Orders')).toBeDefined();
-    expect(screen.getByText('Journal')).toBeDefined();
-    expect(screen.getByText('Calendar')).toBeDefined();
+    expect(screen.getByText('Pos')).toBeDefined();
+    expect(screen.getByText('Ords')).toBeDefined();
+    expect(screen.getByText('Jrnl')).toBeDefined();
+    expect(screen.getByText('Cal')).toBeDefined();
   });
 
   it('shows Trade Builder content on trade tab', async () => {

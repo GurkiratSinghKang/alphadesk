@@ -145,14 +145,17 @@ export function StrategyBuilder() {
 
       {/* Example Rules */}
       {rules.length === 0 && (
-        <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Examples — click to add</p>
+        <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
+            <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">Quick Start &mdash; click a rule to begin</p>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLE_RULES.map((ex, i) => (
               <button
                 key={i}
                 onClick={() => { setInput(ex); }}
-                className="rounded-full border border-border bg-[var(--panel)] px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
+                className="rounded-full border border-primary/20 bg-[var(--panel)] px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/10 transition-colors"
               >
                 {ex}
               </button>
