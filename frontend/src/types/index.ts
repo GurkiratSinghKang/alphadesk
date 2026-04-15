@@ -41,6 +41,7 @@ export interface Position {
   unrealizedPnl: number;
   marketValue: number;
   side?: "long" | "short";
+  sector?: string;
   greeks?: PositionGreeks;
 }
 

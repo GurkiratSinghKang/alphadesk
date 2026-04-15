@@ -114,6 +114,11 @@ export function PnlCalendarMini() {
                 onMouseLeave={() => setHovered(null)}
               >
                 <span className={cn("font-medium", hasPnl ? "text-white" : "text-muted-foreground")}>{cell.day}</span>
+                {hasPnl && (
+                  <span className="text-[8px] tabular-nums text-white/80 leading-none">
+                    {cell.pnl! >= 0 ? '+' : ''}{formatCurrency(cell.pnl!)}
+                  </span>
+                )}
               </div>
             );
           })}

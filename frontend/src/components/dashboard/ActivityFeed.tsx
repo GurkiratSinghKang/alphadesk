@@ -177,12 +177,19 @@ export function buildFeedItems(
     for (const order of ordersClosed) {
       const orderTs = order.timestamp ? new Date(order.timestamp) : ts;
       const pnl = order.pnl ?? null;
+      const qty = Number(order.qty) || 0;
+      const price = Number(order.price) || 0;
+      const qtyStr = qty > 0 ? ` ${qty} shares` : '';
+      const priceStr = price > 0 ? ` @ $${price.toFixed(2)}` : '';
+      const closeTitle = qty > 0 || price > 0
+        ? `Closed ${order.symbol}:${qtyStr}${priceStr}`
+        : `Closed ${order.symbol}`;
       items.push({
         id: `trade-close-${order.symbol}-${order.order_id ?? order.orderId ?? ""}`,
         time: orderTs,
         type: "trade",
         severity: pnl !== null ? (pnl >= 0 ? "success" : "danger") : "info",
-        title: `Closed ${order.symbol}: ${order.side === "sell" ? "Sold" : "Covered"} ${order.qty} @ $${(Number(order.price) ?? 0).toFixed(2)}`,
+        title: closeTitle,
         detail: pnl !== null ? `P&L: ${pnl >= 0 ? "+" : ""}$${(Number(pnl) ?? 0).toFixed(2)}` : undefined,
       });
     }

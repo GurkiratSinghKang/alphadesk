@@ -54,7 +54,13 @@ export const useMarketStore = create<MarketState>()(
           const next = { ...state.quotes };
           for (const q of quotes) {
             const existing = next[q.symbol];
-            next[q.symbol] = existing ? { ...existing, ...q } : q;
+            const merged = existing ? { ...existing, ...q } : { ...q };
+            // Recompute change/changePct from prev close when missing
+            if (merged.last && merged.close && merged.close > 0 && !merged.changePct) {
+              merged.change = +(merged.last - merged.close).toFixed(4);
+              merged.changePct = +((merged.change / merged.close) * 100).toFixed(4);
+            }
+            next[q.symbol] = merged;
           }
           return { quotes: next };
         }),

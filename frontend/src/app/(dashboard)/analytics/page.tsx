@@ -98,7 +98,21 @@ function computeMonthlyReturns(curve: EquityPoint[]): Map<string, number> {
 }
 
 function computeTradeStats(trades: TradeHistoryEntry[]) {
-  const closed = trades.filter((t) => t.exit_price !== null && t.pnl !== null);
+  // Normalize field names: accept both snake_case and camelCase from API
+  const normalized = trades.map((t: any) => ({
+    ...t,
+    exit_price: t.exit_price ?? t.exitPrice ?? null,
+    entry_price: t.entry_price ?? t.entryPrice ?? 0,
+    pnl: t.pnl ?? t.realizedPnl ?? null,
+    entry_time: t.entry_time ?? t.entryTime ?? "",
+    exit_time: t.exit_time ?? t.exitTime ?? null,
+    status: t.status ?? "open",
+  }));
+
+  // Filter for closed trades: has exit_price or status indicates closed
+  const closed = normalized.filter(
+    (t) => (t.exit_price !== null && t.pnl !== null) || t.status === "closed"
+  );
   if (closed.length === 0) {
     return {
       totalTrades: 0, wins: 0, losses: 0, winRate: 0, profitFactor: 0,
@@ -418,8 +432,10 @@ export default function AnalyticsPage() {
         if (perfRes.status === "fulfilled" && Array.isArray(perfRes.value.equity_curve)) {
           setEquityCurve(perfRes.value.equity_curve);
         }
-        if (tradesRes.status === "fulfilled" && Array.isArray(tradesRes.value)) {
-          setTrades(tradesRes.value);
+        if (tradesRes.status === "fulfilled") {
+          const raw = tradesRes.value;
+          const tradeList = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.trades) ? (raw as any).trades : [];
+          setTrades(tradeList);
         }
       } catch {
         // silently handle

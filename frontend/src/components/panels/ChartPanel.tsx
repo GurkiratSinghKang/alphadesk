@@ -252,7 +252,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
 
   // Only use real quote data for header price — never fall back to demo chart data
   const lastRealBar = apiBars && apiBars.length > 0 ? apiBars[apiBars.length - 1] : null;
-  const displayPrice = crosshairPrice ?? quote?.last ?? lastRealBar?.close ?? 0;
+  const displayPrice = crosshairPrice ?? (quote?.last && quote.last > 0 ? quote.last : null) ?? lastRealBar?.close ?? 0;
   const change = quote?.change ?? 0;
   const changePct = quote?.changePct ?? 0;
 

@@ -95,17 +95,17 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
       }
     }
 
-    // Sector concentration
+    // Sector concentration — group by sector, find most concentrated
     const sectorValues: Record<string, number> = {};
     for (const pos of positions) {
-      // We don't have sector data per position; approximate by symbol
-      const key = pos.symbol;
-      sectorValues[key] = (sectorValues[key] ?? 0) + Math.abs(pos.marketValue);
+      const sector = pos.sector || "Unknown";
+      sectorValues[sector] = (sectorValues[sector] ?? 0) + Math.abs(pos.marketValue);
     }
+    const totalSectorValue = Object.values(sectorValues).reduce((s, v) => s + v, 0);
     let maxSectorPct = 0;
     let maxSectorName = "N/A";
     for (const [name, val] of Object.entries(sectorValues)) {
-      const pct = equity > 0 ? (val / equity) * 100 : 0;
+      const pct = totalSectorValue > 0 ? (val / totalSectorValue) * 100 : 0;
       if (pct > maxSectorPct) {
         maxSectorPct = pct;
         maxSectorName = name;
@@ -240,7 +240,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <Shield className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Top Holding</span>
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Top Sector</span>
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",

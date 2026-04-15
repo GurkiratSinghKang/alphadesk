@@ -164,7 +164,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                 {row.map((val, j) => (
                   <div
                     key={j}
-                    className="border border-[var(--surface)] transition-transform hover:scale-110 hover:z-10 cursor-default"
+                    className="border border-[var(--surface)] transition-transform hover:scale-110 hover:z-10 cursor-default flex items-center justify-center"
                     style={{
                       width: cellSize,
                       height: cellSize,
@@ -174,7 +174,11 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                     onMouseEnter={() => setHoveredCell({ row: i, col: j, value: val })}
                     onMouseLeave={() => setHoveredCell(null)}
                     title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${(val ?? 0).toFixed(3)}`}
-                  />
+                  >
+                    {Math.abs(val) > 0.01 && cellSize > 30 && (
+                      <span className="text-[8px] text-white/70 tabular-nums">{val.toFixed(2)}</span>
+                    )}
+                  </div>
                 ))}
               </div>
             ))}
