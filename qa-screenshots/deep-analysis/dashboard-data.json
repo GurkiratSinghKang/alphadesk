@@ -1,0 +1,1005 @@
+{
+  "allText": "Skip to content\nAlphaDesk\nDashboard\nTrade\nAnalytics\nAlerts\nPipeline\nReports\nSearch symbols, commands...\n⌘K\n6\nA\nAAPL\n$258.71\n▼-0.16%\n|\nMSFT\n$392.30\n▲+2.07%\n|\nGOOGL\n$332.87\n▲+3.58%\n|\nAMZN\n$248.80\n▲+3.69%\n|\nNVDA\n$196.49\n▲+3.83%\n|\nTSLA\n$364.17\n▲+3.32%\n|\nSPY\n$694.17\n▲+1.19%\n|\nQQQ\n$628.31\n▲+1.78%\n|\nMETA\n$662.38\n▲+4.35%\n|\nAMD\n$255.09\n▲+3.36%\n|\nAAPL\n$258.71\n▼-0.16%\n|\nMSFT\n$392.30\n▲+2.07%\n|\nGOOGL\n$332.87\n▲+3.58%\n|\nAMZN\n$248.80\n▲+3.69%\n|\nNVDA\n$196.49\n▲+3.83%\n|\nTSLA\n$364.17\n▲+3.32%\n|\nSPY\n$694.17\n▲+1.19%\n|\nQQQ\n$628.31\n▲+1.78%\n|\nMETA\n$662.38\n▲+4.35%\n|\nAMD\n$255.09\n▲+3.36%\nP&L\ngain\n+$74.17(+0.07%)\nRegime\nBull - High Volatility\nVIX\n28.2\nLIVE\nAlpaca (Paper)\nPAPER\n\nWelcome to AlphaDesk! Use ⌘K to search symbols, ? for keyboard shortcuts, or click any strategy card to explore.\n\nDismiss\nAlphaDesk Dashboard\n\nPORTFOLIO\n\n$100,235.10\n\nDAY P&L\n\n+$74.17 (+0.07%)\n\n1W\n1M\n3M\nYTD\nExport P&L\nActivity Feed\nToday\n10 events\n\nPipeline completed: 93 screened, 39 analyzed, 0 trades approved\n\n20 candidate(s) rejected by risk manager\n\n9:53 PM\n\nRejected: MRK (pead)\n\nMRK already held by strategy 'pead' → Close the existing MRK position in 'pead' first, or choose a different symbol.\n\n9:53 PM\n\nRejected: WMT (pead)\n\nWMT already held by strategy 'manual' → Close the existing WMT position in 'manual' first, or choose a different symbol.\n\n9:53 PM\n\nRejected: COIN (pead)\n\nStrategy 'pead' would exceed allocation (15648 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.\n\n9:53 PM\n\nRejected: KO (pead)\n\nStrategy 'pead' would exceed allocation (15751 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.\n\n9:53 PM\n\nRejected: INTC (vrp_harvest)\n\nMomentum gate: INTC has strongly negative momentum (-14.5%, below -10% threshold). → Wait for INTC 6-month momentum to recover above -10%, or select a symbol with stronger relative strength.\n\n9:53 PM\n\n+15 more rejected trade(s)\n\nCheck pipeline logs for full details.\n\n9:53 PM\n\nClosed DIS: Sold 0 @ $0.00\n\n9:53 PM\n\nClosed CRM: Sold 0 @ $0.00\n\n9:53 PM\n\nPipeline error: Outside trading window (21:53 ET)\n\n9:53 PM\nOpen Positions\n8 positions\nAVGO\n15 shares\n\n$392.30\n\navg $381.05\n\n+$168.75\n\n+2.95%\n\nBA\n109 shares\n\n$221.89\n\navg $222.11\n\n-$23.86\n\n-0.10%\n\nCRM\n38 shares\n\n$172.16\n\navg $176.12\n\n-$150.56\n\n-2.25%\n\nDIS\n51 shares\n\n$102.34\n\navg $102.02\n\n+$16.32\n\n+0.31%\n\nMRK\n86 shares\n\n$120.56\n\navg $121.44\n\n-$75.70\n\n-0.72%\n\nNKE\n62 shares\n\n$45.26\n\navg $42.80\n\n+$152.52\n\n+5.75%\n\nPG\n35 shares\n\n$143.95\n\navg $143.01\n\n+$32.90\n\n+0.66%\n\nWMT\n61 shares\n\n$124.83\n\navg $124.19\n\n+$39.24\n\n+0.52%\n\nApril P&L\n+$196.17\nS\nM\nT\nW\nT\nF\nS\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\nRisk Overview\n🔴\nRisk Off\nPORTFOLIO EXPOSURE\n68% invested\nLong 68%\nCash 32%\nBETA\n\n1.25\n\nDAILY VAR\n\n$2,938.01\n\nMAX POS\n\n24.1%\n\nBA\n\nTOP HOLDING\n\n24.1%\n\nBA\n\nVIX Level\n28.2\nStress Test\nEconomic Calendar\n\nFOMC Meeting Minutes\n\nTue, Apr 14 · 2:00 PM\n\nHIGH\n\nNon-Farm Payrolls\n\nTue, Apr 14 · 8:30 AM\n\nHIGH\n\nCPI (YoY)\n\nWed, Apr 15 · 8:30 AM\n\nFcst: 3.2%\n\nPrev: 3.4%\n\nHIGH\n\nInitial Jobless Claims\n\nThu, Apr 16 · 8:30 AM\n\nFcst: 215K\n\nPrev: 210K\n\nMEDIUM\n\nRetail Sales (MoM)\n\nThu, Apr 16 · 8:30 AM\n\nFcst: 0.3%\n\nPrev: 0.2%\n\nMEDIUM\n\nConsumer Confidence\n\nFri, Apr 17 · 10:00 AM\n\nFcst: 104.5\n\nPrev: 103.8\n\nMEDIUM\n\nPMI Manufacturing\n\nMon, Apr 20 · 9:45 AM\n\nFcst: 52.1\n\nPrev: 51.8\n\nMEDIUM\n\nGDP (QoQ)\n\nMon, Apr 20 · 8:30 AM\n\nFcst: 2.8%\n\nPrev: 3.1%\n\nHIGH\nStrategies\n13 active\n\nCross-Sectional Momentum + Quality\n\nActive\n—\nNo positions\n\nThrives in bull trends\n\nPost-Earnings Announcement Drift\n\nActive\n-0.80%\n1 active\n\nEvent-driven, all regimes\n\nSystematic VRP Harvesting\n\nActive\n—\nNo positions\n\nBest in low-vol contango\n\nEarnings Volatility Premium\n\nActive\n-15.50%\n0 active\n\nPaused in high-vol regimes\n\nHMM Regime-Adaptive Allocation\n\nActive\n+8.60%\n1 active\n\nAdjusts to any regime\n\nClaude Alpha\n\nActive\n—\nNo positions\n\nAI-driven, regime-aware\n\nMean Reversion\n\nActive\n-2.20%\n1 active\n\nFavored in sideways markets\n\nVCP Breakout\n\nActive\n+3.00%\n1 active\n\nNeeds bull momentum\n\nStatistical Arbitrage Pairs\n\nActive\n—\nNo positions\n\nMarket-neutral, all regimes\n\nDividend Capture\n\nActive\n—\nNo positions\n\nIncome-focused, stable markets\n\nSector Rotation Model\n\nActive\n—\nNo positions\n\nTrend-following across sectors\n\nOvernight Gap Fill\n\nActive\n—\nNo positions\n\nIntraday, paused after hours\n\nManual / Discretionary\n\nActive\n+0.50%\n4 active\n\nTrader-initiated, all regimes\n\nP&L Attribution\nTotal:\n+$357.31\nRegime Adaptive\n+$960.00\n+41.8%\nManual\n+$197.22\n+8.6%\nVCP Breakout\n+$169.62\n+7.4%\nPEAD\n-$78.32\n-3.4%\nMean Reversion\n-$147.90\n-6.4%\nEarnings Vol\n-$743.31\n-32.4%\nStrategy Correlation Matrix\nPEAD\nEarnings Vol\nRegime Adaptive\nMean Reversion\nVCP Breakout\nManual\nPEAD\nEarnings Vol\nRegime Adaptive\nMean Reversion\nVCP Breakout\nManual\n-1 (inverse)\n+1 (correlated)\nMarket Context\nMARKET INDICES\n\nSPY\n\nS&P 500\n\n$694.17\n\n+1.19%\n\nQQQ\n\nNASDAQ 100\n\n$628.31\n\n+1.78%\n\nIWM\n\nRussell 2000\n\n$268.64\n\n+1.37%\n\nSECTOR PERFORMANCE\nDaily\nYTD\nCons Disc\n+2.2%\nYTD -1.6%\nAMZN\nEnergy\n-2.1%\nYTD +22.5%\nXOM\nTechnology\n+1.6%\nYTD +2.5%\nNVDA\nComm Svcs\n+1.5%\nYTD -0.3%\nMETA\nReal Est\n+0.9%\nYTD +7.5%\nAMT\nHlth\n+0.5%\nYTD -4.3%\nMat\n-0.3%\nInd\n+0.3%\nFin\nUtil\n+0.2%\nALLOCATION\nTotal\n$100.2K\nCash\n$32,576.01\nInvested\n$67,659.09\nBuying Power\n$327,453.01\nUnrealized\n+$159.61\nRealized Today\n+$74.17\nMarket Movers\nGainers\nLosers\nMost Active\nSYMBOL\nPRICE\nCHANGE\nVOLUME\nMETAMeta Platforms\n$662.38\n+4.35%\n496.9K\nNVDANVIDIA Corp.\n$196.49\n+3.83%\n4.5M\nAMZNAmazon.com Inc.\n$248.80\n+3.69%\n3.1M\nGOOGLAlphabet Inc.\n$332.87\n+3.58%\n857.3K\nAMDAdvanced Micro\n$255.09\n+3.36%\n431.8K\nTSLATesla Inc.\n$364.17\n+3.32%\n773.6K\nMSFTMicrosoft Corp.\n$392.30\n+2.07%\n1M\nQQQInvesco QQQ\n$628.31\n+1.78%\n1.1M\nSPYS&P 500 ETF\n$694.17\n+1.19%\n1.6M\nAAPLApple Inc.\n$258.71\n-0.16%\n1M\nMarket Breadth\nSTRONG\nBearish\nNeutral\nBullish\n8\nADVANCING\n2.67\nA/D RATIO\n3\nDECLINING\nConsumer Discretionary +2.2%\nTechnology +1.6%\nCommunication Services +1.5%\nReal Estate +0.9%\nHealthcare +0.5%\nIndustrials +0.3%\nFinancials +0.3%\nUtilities +0.2%\nConsumer Staples -0.1%\nMaterials -0.3%\nEnergy -2.1%\nAlphaDesk v1.0 — Powered by Claude AI — © 2026\nWelcome to AlphaDesk!\n\nThis is your portfolio dashboard. Track equity, daily P&L, and your overall performance at a glance.\n\n1 of 5\nSkip\nNext",
+  "values": [
+    {
+      "text": "self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[91961,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"Providers\\\"]\\n3:I[39756,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\"]\\n4:I[37457,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\"]\\n5:I[22016,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0ka051yepewro.js\\\"],\\\"\\\"]\\n6:I[39756,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"LoadingBoundaryProvider\\\"]\\n7:I[92825,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"ClientSegmentRoot\\\"]\\n8:I[16370,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0a5yj0419zzqz.js\\\",\\\"/_next/static/chunks/0vlz~_c.1-.9j.js\\\",\\\"/_next/static/chunks/085bx1figv33-.js\\\"],\\\"default\\\"]\\n9:I[57892,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0a5yj0419zzqz.js\\\",\\\"/_next/static/chunks/0vlz~_c.1-.9j.js\\\",\\\"/_next/static/chunks/085bx1figv33-.js\\\",\\\"/_next/static/chunks/0zf0e506sl76z.js\\\"],\\\"default\\\"]\\na:I[94149,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0a5yj0419zzqz.js\\\",\\\"/_next/static/chunks/0vlz~_c.1-.9j.js\\\",\\\"/_next/static/chunks/085bx1figv33-.js\\\",\\\"/_next/static/chunks/07-jec0x5sjjf.js\\\"],\\\"default\\\"]\\ne:I[68027,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\",1]\\n:HL[\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"style\\\"]\\n:HL[\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"style\\\"]\\n:HL[\\\"/_next/static/media/70bc3e132a0a741e-s.p.1409xf.ylxg8g.woff2\\\",\\\"font\\\",{\\\"crossOrigin\\\":\\\"\\\",\\\"type\\\":\\\"font/woff2\\\"}]\\n:HL[\\\"/_next/static/media/83afe278b6a6bb3c-s.p.0q-301v4kxxnr.woff2\\\",\\\"font\\\",{\\\"crossOrigin\\\":\\\"\\\",\\\"type\\\":\\\"font/woff2\\\"}]\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"0:{\\\"P\\\":null,\\\"c\\\":[\\\"\\\",\\\"\\\"],\\\"q\\\":\\\"\\\",\\\"i\\\":false,\\\"f\\\":[[[\\\"\\\",{\\\"children\\\":[\\\"(dashboard)\\\",{\\\"children\\\":[\\\"__PAGE__\\\",{}]},\\\"$undefined\\\",\\\"$undefined\\\",4]},\\\"$undefined\\\",\\\"$undefined\\\",24],[[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[[[\\\"$\\\",\\\"link\\\",\\\"0\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"link\\\",\\\"1\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-1\\\",{\\\"src\\\":\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-2\\\",{\\\"src\\\":\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-3\\\",{\\\"src\\\":\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-4\\\",{\\\"src\\\":\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}]],[\\\"$\\\",\\\"html\\\",null,{\\\"lang\\\":\\\"en\\\",\\\"className\\\":\\\"dark inter_8db6fa51-module__MMaAbG__variable jetbrains_mono_6f744923-module__ezYzYG__variable h-full antialiased\\\",\\\"style\\\":{\\\"backgroundColor\\\":\\\"#0a0a0f\\\"},\\\"suppressHydrationWarning\\\":true,\\\"children\\\":[\\\"$\\\",\\\"body\\\",null,{\\\"className\\\":\\\"h-full bg-background text-foreground\\\",\\\"suppressHydrationWarning\\\":true,\\\"children\\\":[\\\"$\\\",\\\"$L2\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$L3\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\\\",\\\"$L4\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"flex min-h-screen items-center justify-center bg-[var(--background)]\\\",\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"text-center space-y-4\\\",\\\"children\\\":[[\\\"$\\\",\\\"h1\\\",null,{\\\"className\\\":\\\"text-6xl font-bold text-primary\\\",\\\"children\\\":\\\"404\\\"}],[\\\"$\\\",\\\"h2\\\",null,{\\\"className\\\":\\\"text-lg font-semibold text-foreground\\\",\\\"children\\\":\\\"Page not found\\\"}],[\\\"$\\\",\\\"p\\\",null,{\\\"className\\\":\\\"text-sm text-muted-foreground max-w-sm\\\",\\\"children\\\":\\\"The page you're looking for doesn't exist or has been moved.\\\"}],[\\\"$\\\",\\\"$L5\\\",null,{\\\"href\\\":\\\"/\\\",\\\"className\\\":\\\"inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors\\\",\\\"children\\\":\\\"Back to AlphaDesk\\\"}]]}]}],[]],\\\"forbidden\\\":\\\"$undefined\\\",\\\"unauthorized\\\":\\\"$undefined\\\"}]}]}]}]]}],{\\\"children\\\":[[\\\"$\\\",\\\"$L6\\\",null,{\\\"loading\\\":[[\\\"$\\\",\\\"div\\\",\\\"l\\\",{\\\"className\\\":\\\"p-6 space-y-6 max-w-[1800px] mx-auto\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"h-[200px] rounded-xl bg-surface animate-pulse\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"grid grid-cols-1 lg:grid-cols-5 gap-4\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"lg:col-span-3 h-[320px] rounded-xl bg-surface animate-pulse\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"lg:col-span-2 h-[320px] rounded-xl bg-surface animate-pulse\\\"}]]}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"grid grid-cols-1 xl:grid-cols-2 gap-4\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"h-[280px] rounded-xl bg-surface animate-pulse\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"h-[280px] rounded-xl bg-surface animate-pulse\\\"}]]}]]}],[],[]],\\\"children\\\":[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[[[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0a5yj0419zzqz.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-1\\\",{\\\"src\\\":\\\"/_next/static/chunks/0vlz~_c.1-.9j.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-2\\\",{\\\"src\\\":\\\"/_next/static/chunks/085bx1figv33-.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}]],[\\\"$\\\",\\\"$L7\\\",null,{\\\"Component\\\":\\\"$8\\\",\\\"slots\\\":{\\\"children\\\":[\\\"$\\\",\\\"$L3\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"error\\\":\\\"$9\\\",\\\"errorStyles\\\":[],\\\"errorScripts\\\":[[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0zf0e506sl76z.js\\\",\\\"async\\\":true}]],\\\"template\\\":[\\\"$\\\",\\\"$La\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$L4\\\",null,{}]}],\\\"templateStyles\\\":[],\\\"templateScripts\\\":[[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/07-jec0x5sjjf.js\\\",\\\"async\\\":true}]],\\\"notFound\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"flex min-h-screen items-center justify-center bg-[var(--background)]\\\",\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"text-center space-y-4\\\",\\\"children\\\":[[\\\"$\\\",\\\"h1\\\",null,{\\\"className\\\":\\\"text-6xl font-bold text-primary\\\",\\\"children\\\":\\\"404\\\"}],[\\\"$\\\",\\\"h2\\\",null,{\\\"className\\\":\\\"text-lg font-semibold text-foreground\\\",\\\"children\\\":\\\"Page not found\\\"}],[\\\"$\\\",\\\"p\\\",null,{\\\"className\\\":\\\"text-sm text-muted-foreground max-w-sm\\\",\\\"children\\\":\\\"The page you're looking for doesn't exist or has been moved.\\\"}],[\\\"$\\\",\\\"$L5\\\",null,{\\\"href\\\":\\\"/\\\",\\\"className\\\":\\\"inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors\\\",\\\"children\\\":\\\"Back to AlphaDesk\\\"}]]}]}],[]],\\\"forbidden\\\":\\\"$undefined\\\",\\\"unauthorized\\\":\\\"$undefined\\\"}]},\\\"serverProvidedParams\\\":{\\\"params\\\":{},\\\"promises\\\":[\\\"$@b\\\"]}}]]}]}],{\\\"children\\\":[\\\"$Lc\\\",{},null,false,null]},null,false,null]},null,false,null],\\\"$Ld\\\",false]],\\\"m\\\":\\\"$undefined\\\",\\\"G\\\":[\\\"$e\\\",[\\\"$Lf\\\",\\\"$L10\\\"]],\\\"S\\\":true,\\\"h\\\":null,\\\"s\\\":\\\"$undefined\\\",\\\"l\\\":\\\"$undefined\\\",\\\"p\\\":\\\"$undefined\\\",\\\"d\\\":\\\"$undefined\\\",\\\"b\\\":\\\"k-ZOIYJSk7s8_5EtLzIdB\\\"}\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"11:I[47257,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"ClientPageRoot\\\"]\\n12:I[71135,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0a5yj0419zzqz.js\\\",\\\"/_next/static/chunks/0vlz~_c.1-.9j.js\\\",\\\"/_next/static/chunks/085bx1figv33-.js\\\",\\\"/_next/static/chunks/0m77lfdg2juwi.js\\\",\\\"/_next/static/chunks/0.dbbzrkror-~.js\\\"],\\\"default\\\"]\\n15:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"OutletBoundary\\\"]\\n16:\\\"$Sreact.suspense\\\"\\n18:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"ViewportBoundary\\\"]\\n1a:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"MetadataBoundary\\\"]\\nc:[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[[\\\"$\\\",\\\"$L11\\\",null,{\\\"Component\\\":\\\"$12\\\",\\\"serverProvidedParams\\\":{\\\"searchParams\\\":{},\\\"params\\\":\\\"$0:f:0:1:1:children:0:props:children:props:children:1:props:serverProvidedParams:params\\\",\\\"promises\\\":[\\\"$@13\\\",\\\"$@14\\\"]}}],[[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0m77lfdg2juwi.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-1\\\",{\\\"src\\\":\\\"/_next/static/chunks/0.dbbzrkror-~.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}]],[\\\"$\\\",\\\"$L15\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$16\\\",null,{\\\"name\\\":\\\"Next.MetadataOutlet\\\",\\\"children\\\":\\\"$@17\\\"}]}]]}]\\nd:[\\\"$\\\",\\\"$1\\\",\\\"h\\\",{\\\"children\\\":[null,[\\\"$\\\",\\\"$L18\\\",null,{\\\"children\\\":\\\"$L19\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"hidden\\\":true,\\\"children\\\":[\\\"$\\\",\\\"$L1a\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$16\\\",null,{\\\"name\\\":\\\"Next.Metadata\\\",\\\"children\\\":\\\"$L1b\\\"}]}]}],[\\\"$\\\",\\\"meta\\\",null,{\\\"name\\\":\\\"next-size-adjust\\\",\\\"content\\\":\\\"\\\"}]]}]\\nf:[\\\"$\\\",\\\"link\\\",\\\"0\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}]\\n10:[\\\"$\\\",\\\"link\\\",\\\"1\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}]\\nb:\\\"$0:f:0:1:1:children:0:props:children:props:children:1:props:serverProvidedParams:params\\\"\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"13:{}\\n14:\\\"$0:f:0:1:1:children:0:props:children:props:children:1:props:serverProvidedParams:params\\\"\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"19:[[\\\"$\\\",\\\"meta\\\",\\\"0\\\",{\\\"charSet\\\":\\\"utf-8\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"1\\\",{\\\"name\\\":\\\"viewport\\\",\\\"content\\\":\\\"width=device-width, initial-scale=1\\\"}]]\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"1c:I[27201,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"IconMark\\\"]\\n17:null\\n1b:[[\\\"$\\\",\\\"title\\\",\\\"0\\\",{\\\"children\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"1\\\",{\\\"name\\\":\\\"description\\\",\\\"content\\\":\\\"Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"2\\\",{\\\"property\\\":\\\"og:title\\\",\\\"content\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"3\\\",{\\\"property\\\":\\\"og:description\\\",\\\"content\\\":\\\"Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"4\\\",{\\\"property\\\":\\\"og:url\\\",\\\"content\\\":\\\"https://tradingalpha.net\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"5\\\",{\\\"property\\\":\\\"og:site_name\\\",\\\"content\\\":\\\"AlphaDesk\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"6\\\",{\\\"property\\\":\\\"og:type\\\",\\\"content\\\":\\\"website\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"7\\\",{\\\"name\\\":\\\"twitter:card\\\",\\\"content\\\":\\\"summary_large_image\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"8\\\",{\\\"name\\\":\\\"twitter:title\\\",\\\"content\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"9\\\",{\\\"name\\\":\\\"twitter:description\\\",\\\"content\\\":\\\"Claude-powered trading platform.\\\"}],[\\\"$\\\",\\\"link\\\",\\\"10\\\",{\\\"rel\\\":\\\"icon\\\",\\\"href\\\":\\\"/favicon.ico?favicon.0x3dzn~oxb6tn.ico\\\",\\\"sizes\\\":\\\"256x256\\\",\\\"type\\\":\\\"image/x-icon\\\"}],[\\\"$\\\",\\\"$L1c\\\",\\\"11\\\",{}]]\\n\"])",
+      "class": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "6",
+      "class": "absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$258.71",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▼-0.16%",
+      "class": "text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$392.30",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+2.07%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$332.87",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.58%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$248.80",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.69%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$196.49",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.83%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$364.17",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.32%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$694.17",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+1.19%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$628.31",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+1.78%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$662.38",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+4.35%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$255.09",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.36%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$258.71",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▼-0.16%",
+      "class": "text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$392.30",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+2.07%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$332.87",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.58%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$248.80",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.69%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$196.49",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.83%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$364.17",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.32%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$694.17",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+1.19%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$628.31",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+1.78%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$662.38",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+4.35%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$255.09",
+      "class": "text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "▲+3.36%",
+      "class": "text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$74.17",
+      "class": "num-transition tabular-nums  ",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.07",
+      "class": "num-transition tabular-nums  ",
+      "tag": "SPAN"
+    },
+    {
+      "text": "28.2",
+      "class": "tabular-nums font-medium text-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$100,235.10",
+      "class": "text-display tabular-nums text-gradient",
+      "tag": "P"
+    },
+    {
+      "text": "(+0.07%)",
+      "class": "text-sm font-normal text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1W",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors text-muted-foreground hover:text-foreground",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "1M",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors bg-primary/20 text-primary",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "3M",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors text-muted-foreground hover:text-foreground",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "10 events",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "20 candidate(s) rejected by risk manager",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Strategy 'pead' would exceed allocation (15648 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Strategy 'pead' would exceed allocation (15751 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Momentum gate: INTC has strongly negative momentum (-14.5%, below -10% threshold). → Wait for INTC 6-month momentum to recover above -10%, or select a symbol with stronger relative strength.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Closed DIS: Sold 0 @ $0.00",
+      "class": "text-[13px] leading-snug text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Closed CRM: Sold 0 @ $0.00",
+      "class": "text-[13px] leading-snug text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8 positions",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "15 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$392.30",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $381.05",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+$168.75",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+2.95%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "109 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$221.89",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $222.11",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "-$23.86",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "-0.10%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "38 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$172.16",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $176.12",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "-$150.56",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "-2.25%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "51 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$102.34",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $102.02",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+$16.32",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+0.31%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "86 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$120.56",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $121.44",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "-$75.70",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "-0.72%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "tag": "P"
+    },
+    {
+      "text": "62 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$45.26",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $42.80",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+$152.52",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+5.75%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "35 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$143.95",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $143.01",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+$32.90",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+0.66%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "61 shares",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$124.83",
+      "class": "text-sm tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "avg $124.19",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+$39.24",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+0.52%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+$196.17",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "5",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "6",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "7",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8",
+      "class": "font-medium text-white",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "10",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "11",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "12",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "13",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "14",
+      "class": "font-medium text-white",
+      "tag": "SPAN"
+    },
+    {
+      "text": "15",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "16",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "17",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "18",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "19",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "20",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "21",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "22",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "23",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "24",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "25",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "26",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "27",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "28",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "29",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "30",
+      "class": "font-medium text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "68% invested",
+      "class": "text-[10px] tabular-nums text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Long 68%",
+      "class": "text-[9px] text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Cash 32%",
+      "class": "text-[9px] text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.25",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "$2,938.01",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "24.1%",
+      "class": "text-lg font-bold tabular-nums text-amber-400",
+      "tag": "P"
+    },
+    {
+      "text": "24.1%",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "28.2",
+      "class": "text-[11px] font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Fcst: 3.2%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "Prev: 3.4%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "Fcst: 0.3%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "Prev: 0.2%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "Fcst: 2.8%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "Prev: 3.1%",
+      "class": "text-[10px] text-muted-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "13 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-0.80%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-15.50%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+8.60%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-2.20%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+3.00%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+0.50%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4 active",
+      "class": "text-xs text-muted-foreground",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+$357.31",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+$960.00",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+41.8%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+$197.22",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+8.6%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+$169.62",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+7.4%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$78.32",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-3.4%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$147.90",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-6.4%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$743.31",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-32.4%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-1 (inverse)",
+      "class": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$694.17",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+1.19%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "$628.31",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+1.78%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "$268.64",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "tag": "P"
+    },
+    {
+      "text": "+1.37%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "tag": "P"
+    },
+    {
+      "text": "+2.2%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "tag": "SPAN"
+    },
+    {
+      "text": "YTD -1.6%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-2.1%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-red-200",
+      "tag": "SPAN"
+    },
+    {
+      "text": "YTD +22.5%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+1.6%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "tag": "SPAN"
+    },
+    {
+      "text": "YTD +2.5%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+1.5%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "tag": "SPAN"
+    },
+    {
+      "text": "YTD -0.3%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "tag": "SPAN"
+    },
+    {
+      "text": "+0.9%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "tag": "SPAN"
+    }
+  ]
+}

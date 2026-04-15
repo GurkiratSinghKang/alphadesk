@@ -1,0 +1,2205 @@
+{
+  "sections": [
+    {
+      "tag": "H1",
+      "text": "AlphaDesk Dashboard",
+      "class": "sr-only"
+    },
+    {
+      "tag": "H2",
+      "text": "Activity Feed",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Open Positions",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "April P&L",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Risk Overview",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Economic Calendar",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Strategies",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "P&L Attribution",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Strategy Correlation Matrix",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Market Context",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H3",
+      "text": "MARKET INDICES",
+      "class": "mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+    },
+    {
+      "tag": "H3",
+      "text": "SECTOR PERFORMANCE",
+      "class": "text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+    },
+    {
+      "tag": "H3",
+      "text": "ALLOCATION",
+      "class": "text-label"
+    },
+    {
+      "tag": "H2",
+      "text": "Market Movers",
+      "class": "text-sm font-semibold text-foreground"
+    },
+    {
+      "tag": "H2",
+      "text": "Market Breadth",
+      "class": "text-sm font-semibold text-foreground"
+    }
+  ],
+  "allNumbers": [
+    {
+      "text": "6",
+      "class": "absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "258.71",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "392.30",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2.07",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "332.87",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.58",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "248.80",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.69",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "196.49",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.83",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "364.17",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.32",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "694.17",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.19",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "628.31",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.78",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "662.38",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4.35",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "255.09",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.36",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "258.71",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "392.30",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2.07",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "332.87",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.58",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "248.80",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.69",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "196.49",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.83",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "364.17",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.32",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "694.17",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.19",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "628.31",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.78",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "662.38",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4.35",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "255.09",
+      "class": "text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.36",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$74.17",
+      "class": "num-transition tabular-nums  ",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.07",
+      "class": "num-transition tabular-nums  ",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%)",
+      "class": "text-muted-foreground ml-1",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "28.2",
+      "class": "tabular-nums font-medium text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$100,236.96",
+      "class": "text-display tabular-nums text-gradient",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$74.17",
+      "class": "text-xl font-semibold tabular-nums leading-none text-[var(--profit)] glow-profit",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.07",
+      "class": "text-sm font-normal text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%)",
+      "class": "text-sm font-normal text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1W",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors text-muted-foreground hover:text-foreground",
+      "id": "",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "1M",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors bg-primary/20 text-primary",
+      "id": "",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "3M",
+      "class": "rounded px-2 py-0.5 text-[10px] font-medium transition-colors text-muted-foreground hover:text-foreground",
+      "id": "",
+      "tag": "BUTTON"
+    },
+    {
+      "text": "10 events",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "20 candidate(s) rejected by risk manager",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Strategy 'pead' would exceed allocation (15648 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Strategy 'pead' would exceed allocation (15751 > 9021) → Reduce position size to $0 or close existing pead positions to free allocation.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Momentum gate: INTC has strongly negative momentum (-14.5%, below -10% threshold). → Wait for INTC 6-month momentum to recover above -10%, or select a symbol with stronger relative strength.",
+      "class": "mt-0.5 text-xs text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Closed DIS: Sold 0 @ $0.00",
+      "class": "text-[13px] leading-snug text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "Closed CRM: Sold 0 @ $0.00",
+      "class": "text-[13px] leading-snug text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9:53 PM",
+      "class": "shrink-0 text-xs tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "15",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$392.30",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$381.05",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$168.75",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "2.95",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "109",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$221.89",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$222.11",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "-$23.86",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "38",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$172.16",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$176.12",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "-$150.56",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "51",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$102.34",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$102.02",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$16.32",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.31",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "86",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$120.56",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$121.44",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "-$75.70",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "62",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$45.29",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$42.80",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$154.38",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "5.82",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "35",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$143.95",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$143.01",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$32.90",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.66",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "61",
+      "class": "text-xs text-muted-foreground tabular-nums",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$124.83",
+      "class": "text-sm tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$124.19",
+      "class": "text-[11px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$39.24",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.52",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$196.17",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "5",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "6",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "7",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8",
+      "class": "font-medium text-white",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "9",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "10",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "11",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "12",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "13",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "14",
+      "class": "font-medium text-white",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "15",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "16",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "17",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "18",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "19",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "20",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "21",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "22",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "23",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "24",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "25",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "26",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "27",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "28",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "29",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "30",
+      "class": "font-medium text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "68",
+      "class": "text-[10px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "% invested",
+      "class": "text-[10px] tabular-nums text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "68",
+      "class": "text-[9px] text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "32",
+      "class": "text-[9px] text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.25",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$2,938.06",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "24.1%",
+      "class": "text-lg font-bold tabular-nums text-amber-400",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "24.1%",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "28.2",
+      "class": "text-[11px] font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2:00 PM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "8:30 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "8:30 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "3.2%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "3.4%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "8:30 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "215K",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "210K",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "8:30 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.3%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "0.2%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "10:00 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "104.5",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "103.8",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "9:45 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "52.1",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "51.8",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "8:30 AM",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "2.8%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "3.1%",
+      "class": "text-[10px] text-muted-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "13",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8.60",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.00",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.50",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4",
+      "class": "text-xs text-muted-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$357.31",
+      "class": "text-sm font-semibold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$960.00",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "41.8",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$197.22",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8.6",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$169.62",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "7.4",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$78.32",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$147.90",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "-$743.31",
+      "class": "text-xs tabular-nums font-medium text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[10px] tabular-nums text-muted-foreground w-12 text-right",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$694.17",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "1.19",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$628.31",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "1.78",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "$268.64",
+      "class": "text-sm font-medium tabular-nums text-foreground",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "1.37",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "%",
+      "class": "text-xs tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "P"
+    },
+    {
+      "text": "2.2",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-red-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "22.5",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.6",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2.5",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.5",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.9",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "7.5",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.5",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] text-white/50 tabular-nums leading-tight mt-px",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-red-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.3",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.2",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[11px] font-bold tabular-nums leading-tight text-emerald-200",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$100.2K",
+      "class": {},
+      "id": "",
+      "tag": "text"
+    },
+    {
+      "text": "$32,576.01",
+      "class": "text-xs tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$67,660.95",
+      "class": "text-xs tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$327,453.01",
+      "class": "text-xs tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$161.47",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$74.17",
+      "class": "text-xs tabular-nums font-medium text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$662.38",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4.35",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "496.9K",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$196.49",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.83",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "4.5M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$248.80",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.69",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.1M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$332.87",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.58",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "857.3K",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$255.09",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.36",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "431.8K",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$364.17",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "3.32",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "773.6K",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$392.30",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2.07",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$628.31",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.78",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.1M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$694.17",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.19",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--profit)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.6M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "$258.71",
+      "class": "w-20 text-right tabular-nums text-foreground",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "w-16 text-right tabular-nums font-medium text-[11px] text-[var(--loss)]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1M",
+      "class": "w-16 text-right tabular-nums text-muted-foreground text-[10px]",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "8",
+      "class": "text-lg font-bold tabular-nums text-[var(--profit)]",
+      "id": "",
+      "tag": "DIV"
+    },
+    {
+      "text": "2.67",
+      "class": "text-lg font-bold tabular-nums text-foreground",
+      "id": "",
+      "tag": "DIV"
+    },
+    {
+      "text": "3",
+      "class": "text-lg font-bold tabular-nums text-[var(--loss)]",
+      "id": "",
+      "tag": "DIV"
+    },
+    {
+      "text": "2.2",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.6",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "1.5",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.9",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.5",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.3",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.3",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "0.2",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--loss)]/10 text-[var(--loss)] border-[var(--loss)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--loss)]/10 text-[var(--loss)] border-[var(--loss)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "%",
+      "class": "text-[9px] px-1.5 py-0.5 rounded border bg-[var(--loss)]/10 text-[var(--loss)] border-[var(--loss)]/20",
+      "id": "",
+      "tag": "SPAN"
+    },
+    {
+      "text": "2026",
+      "class": "border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center",
+      "id": "",
+      "tag": "FOOTER"
+    },
+    {
+      "text": "self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[91961,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"Providers\\\"]\\n3:I[39756,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\"]\\n4:I[37457,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\"]\\n5:I[22016,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0ka051yepewro.js\\\"],\\\"\\\"]\\n6:I[47257,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"ClientPageRoot\\\"]\\n7:I[94542,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"/_next/static/chunks/0cx7lxs9shssf.js\\\"],\\\"default\\\"]\\na:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"OutletBoundary\\\"]\\nb:\\\"$Sreact.suspense\\\"\\nd:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"ViewportBoundary\\\"]\\nf:I[97367,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"MetadataBoundary\\\"]\\n11:I[68027,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"default\\\",1]\\n:HL[\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"style\\\"]\\n:HL[\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"style\\\"]\\n:HL[\\\"/_next/static/media/70bc3e132a0a741e-s.p.1409xf.ylxg8g.woff2\\\",\\\"font\\\",{\\\"crossOrigin\\\":\\\"\\\",\\\"type\\\":\\\"font/woff2\\\"}]\\n:HL[\\\"/_next/static/media/83afe278b6a6bb3c-s.p.0q-301v4kxxnr.woff2\\\",\\\"font\\\",{\\\"crossOrigin\\\":\\\"\\\",\\\"type\\\":\\\"font/woff2\\\"}]\\n\"])",
+      "class": "",
+      "id": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"0:{\\\"P\\\":null,\\\"c\\\":[\\\"\\\",\\\"login\\\"],\\\"q\\\":\\\"\\\",\\\"i\\\":false,\\\"f\\\":[[[\\\"\\\",{\\\"children\\\":[\\\"login\\\",{\\\"children\\\":[\\\"__PAGE__\\\",{}]}]},\\\"$undefined\\\",\\\"$undefined\\\",16],[[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[[[\\\"$\\\",\\\"link\\\",\\\"0\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"link\\\",\\\"1\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-1\\\",{\\\"src\\\":\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-2\\\",{\\\"src\\\":\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-3\\\",{\\\"src\\\":\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"script\\\",\\\"script-4\\\",{\\\"src\\\":\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}]],[\\\"$\\\",\\\"html\\\",null,{\\\"lang\\\":\\\"en\\\",\\\"className\\\":\\\"dark inter_8db6fa51-module__MMaAbG__variable jetbrains_mono_6f744923-module__ezYzYG__variable h-full antialiased\\\",\\\"style\\\":{\\\"backgroundColor\\\":\\\"#0a0a0f\\\"},\\\"suppressHydrationWarning\\\":true,\\\"children\\\":[\\\"$\\\",\\\"body\\\",null,{\\\"className\\\":\\\"h-full bg-background text-foreground\\\",\\\"suppressHydrationWarning\\\":true,\\\"children\\\":[\\\"$\\\",\\\"$L2\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$L3\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\\\",\\\"$L4\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"flex min-h-screen items-center justify-center bg-[var(--background)]\\\",\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"text-center space-y-4\\\",\\\"children\\\":[[\\\"$\\\",\\\"h1\\\",null,{\\\"className\\\":\\\"text-6xl font-bold text-primary\\\",\\\"children\\\":\\\"404\\\"}],[\\\"$\\\",\\\"h2\\\",null,{\\\"className\\\":\\\"text-lg font-semibold text-foreground\\\",\\\"children\\\":\\\"Page not found\\\"}],[\\\"$\\\",\\\"p\\\",null,{\\\"className\\\":\\\"text-sm text-muted-foreground max-w-sm\\\",\\\"children\\\":\\\"The page you're looking for doesn't exist or has been moved.\\\"}],[\\\"$\\\",\\\"$L5\\\",null,{\\\"href\\\":\\\"/\\\",\\\"className\\\":\\\"inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors\\\",\\\"children\\\":\\\"Back to AlphaDesk\\\"}]]}]}],[]],\\\"forbidden\\\":\\\"$undefined\\\",\\\"unauthorized\\\":\\\"$undefined\\\"}]}]}]}]]}],{\\\"children\\\":[[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[null,[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"relative min-h-screen overflow-hidden bg-background\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"pointer-events-none absolute inset-0\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[128px]\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-[var(--profit)]/5 blur-[128px]\\\"}]]}],[\\\"$\\\",\\\"main\\\",null,{\\\"className\\\":\\\"relative z-10\\\",\\\"children\\\":[\\\"$\\\",\\\"$L3\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\\\",\\\"$L4\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":\\\"$undefined\\\",\\\"forbidden\\\":\\\"$undefined\\\",\\\"unauthorized\\\":\\\"$undefined\\\"}]}]]}]]}],{\\\"children\\\":[[\\\"$\\\",\\\"$1\\\",\\\"c\\\",{\\\"children\\\":[[\\\"$\\\",\\\"$L6\\\",null,{\\\"Component\\\":\\\"$7\\\",\\\"serverProvidedParams\\\":{\\\"searchParams\\\":{},\\\"params\\\":{},\\\"promises\\\":[\\\"$@8\\\",\\\"$@9\\\"]}}],[[\\\"$\\\",\\\"script\\\",\\\"script-0\\\",{\\\"src\\\":\\\"/_next/static/chunks/0cx7lxs9shssf.js\\\",\\\"async\\\":true,\\\"nonce\\\":\\\"$undefined\\\"}]],[\\\"$\\\",\\\"$La\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$b\\\",null,{\\\"name\\\":\\\"Next.MetadataOutlet\\\",\\\"children\\\":\\\"$@c\\\"}]}]]}],{},null,false,null]},null,false,null]},null,false,null],[\\\"$\\\",\\\"$1\\\",\\\"h\\\",{\\\"children\\\":[null,[\\\"$\\\",\\\"$Ld\\\",null,{\\\"children\\\":\\\"$Le\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"hidden\\\":true,\\\"children\\\":[\\\"$\\\",\\\"$Lf\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$b\\\",null,{\\\"name\\\":\\\"Next.Metadata\\\",\\\"children\\\":\\\"$L10\\\"}]}]}],[\\\"$\\\",\\\"meta\\\",null,{\\\"name\\\":\\\"next-size-adjust\\\",\\\"content\\\":\\\"\\\"}]]}],false]],\\\"m\\\":\\\"$undefined\\\",\\\"G\\\":[\\\"$11\\\",[[\\\"$\\\",\\\"link\\\",\\\"0\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/03-ki962gfj7q.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}],[\\\"$\\\",\\\"link\\\",\\\"1\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/chunks/0~t74h07gmuzu.css\\\",\\\"precedence\\\":\\\"next\\\",\\\"crossOrigin\\\":\\\"$undefined\\\",\\\"nonce\\\":\\\"$undefined\\\"}]]],\\\"S\\\":true,\\\"h\\\":null,\\\"s\\\":\\\"$undefined\\\",\\\"l\\\":\\\"$undefined\\\",\\\"p\\\":\\\"$undefined\\\",\\\"d\\\":\\\"$undefined\\\",\\\"b\\\":\\\"k-ZOIYJSk7s8_5EtLzIdB\\\"}\\n\"])",
+      "class": "",
+      "id": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"8:{}\\n9:\\\"$0:f:0:1:1:children:1:children:0:props:children:0:props:serverProvidedParams:params\\\"\\n\"])",
+      "class": "",
+      "id": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"e:[[\\\"$\\\",\\\"meta\\\",\\\"0\\\",{\\\"charSet\\\":\\\"utf-8\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"1\\\",{\\\"name\\\":\\\"viewport\\\",\\\"content\\\":\\\"width=device-width, initial-scale=1\\\"}]]\\n\"])",
+      "class": "",
+      "id": "",
+      "tag": "SCRIPT"
+    },
+    {
+      "text": "self.__next_f.push([1,\"12:I[27201,[\\\"/_next/static/chunks/0lw-pcjj78_bw.js\\\",\\\"/_next/static/chunks/0~s5jrn07tpgp.js\\\",\\\"/_next/static/chunks/085wldtoo62n8.js\\\",\\\"/_next/static/chunks/00-csyj9a6t-x.js\\\",\\\"/_next/static/chunks/0t3yrlxj0t1yn.js\\\"],\\\"IconMark\\\"]\\nc:null\\n10:[[\\\"$\\\",\\\"title\\\",\\\"0\\\",{\\\"children\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"1\\\",{\\\"name\\\":\\\"description\\\",\\\"content\\\":\\\"Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"2\\\",{\\\"property\\\":\\\"og:title\\\",\\\"content\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"3\\\",{\\\"property\\\":\\\"og:description\\\",\\\"content\\\":\\\"Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"4\\\",{\\\"property\\\":\\\"og:url\\\",\\\"content\\\":\\\"https://tradingalpha.net\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"5\\\",{\\\"property\\\":\\\"og:site_name\\\",\\\"content\\\":\\\"AlphaDesk\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"6\\\",{\\\"property\\\":\\\"og:type\\\",\\\"content\\\":\\\"website\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"7\\\",{\\\"name\\\":\\\"twitter:card\\\",\\\"content\\\":\\\"summary_large_image\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"8\\\",{\\\"name\\\":\\\"twitter:title\\\",\\\"content\\\":\\\"AlphaDesk — AI-Powered Trading Terminal\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"9\\\",{\\\"name\\\":\\\"twitter:description\\\",\\\"content\\\":\\\"Claude-powered trading platform.\\\"}],[\\\"$\\\",\\\"link\\\",\\\"10\\\",{\\\"rel\\\":\\\"icon\\\",\\\"href\\\":\\\"/favicon.ico?favicon.0x3dzn~oxb6tn.ico\\\",\\\"sizes\\\":\\\"256x256\\\",\\\"type\\\":\\\"image/x-icon\\\"}],[\\\"$\\\",\\\"$L12\\\",\\\"11\\\",{}]]\\n\"])",
+      "class": "",
+      "id": "",
+      "tag": "SCRIPT"
+    }
+  ]
+}

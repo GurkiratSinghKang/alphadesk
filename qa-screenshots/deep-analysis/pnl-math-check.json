@@ -1,0 +1,86 @@
+{
+  "positions": [
+    {
+      "symbol": "AVGO",
+      "shares": 15,
+      "price": 392.3,
+      "avg": 381.05,
+      "expectedPnl": 168.75,
+      "displayedPnl": 168.75,
+      "expectedPct": "2.95",
+      "displayedPct": "2.95%"
+    },
+    {
+      "symbol": "BA",
+      "shares": 109,
+      "price": 221.89,
+      "avg": 222.11,
+      "expectedPnl": -23.980000000002974,
+      "displayedPnl": -23.86,
+      "expectedPct": "-0.10",
+      "displayedPct": "-0.10%"
+    },
+    {
+      "symbol": "CRM",
+      "shares": 38,
+      "price": 172.16,
+      "avg": 176.12,
+      "expectedPnl": -150.4800000000003,
+      "displayedPnl": -150.56,
+      "expectedPct": "-2.25",
+      "displayedPct": "-2.25%"
+    },
+    {
+      "symbol": "DIS",
+      "shares": 51,
+      "price": 102.34,
+      "avg": 102.02,
+      "expectedPnl": 16.320000000000377,
+      "displayedPnl": 16.32,
+      "expectedPct": "0.31",
+      "displayedPct": "+0.31%"
+    },
+    {
+      "symbol": "MRK",
+      "shares": 86,
+      "price": 120.56,
+      "avg": 121.44,
+      "expectedPnl": -75.67999999999961,
+      "displayedPnl": -75.7,
+      "expectedPct": "-0.72",
+      "displayedPct": "-0.72%"
+    },
+    {
+      "symbol": "NKE",
+      "shares": 62,
+      "price": 45.29,
+      "avg": 42.8,
+      "expectedPnl": 154.3800000000001,
+      "displayedPnl": 154.38,
+      "expectedPct": "5.82",
+      "displayedPct": "+5.82%"
+    },
+    {
+      "symbol": "PG",
+      "shares": 35,
+      "price": 143.95,
+      "avg": 143.01,
+      "expectedPnl": 32.89999999999992,
+      "displayedPnl": 32.9,
+      "expectedPct": "0.66",
+      "displayedPct": "+0.66%"
+    },
+    {
+      "symbol": "WMT",
+      "shares": 61,
+      "price": 124.83,
+      "avg": 124.19,
+      "expectedPnl": 39.040000000000035,
+      "displayedPnl": 39.24,
+      "expectedPct": "0.52",
+      "displayedPct": "+0.52%"
+    }
+  ],
+  "totalExpected": 161.24999999999756,
+  "totalDisplayed": 161.47
+}
