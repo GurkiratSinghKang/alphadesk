@@ -41,7 +41,9 @@
 		D3BC923B0AAE4B69BBA97AE8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48949C40E0AEAD70A49B2D9A /* SettingsView.swift */; };
 		D9C5685C505E10D844940053 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76622B7DEF00CEF4E6F3A60E /* LoadingView.swift */; };
 		DB45C61C5B8F95167BBD6F4C /* RiskDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF2EFBF08852D0A51DFFCEE /* RiskDashboardView.swift */; };
+		DB68F6764DF31D353079675F /* MorningBriefCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C835AE482EBDB5ED9C2F7BF /* MorningBriefCard.swift */; };
 		E737476BE1081D42CD7B7FDC /* StrategyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180D1305FDBF668ADF4CBC1A /* StrategyDetailView.swift */; };
+		ECD2A6DAC0906A1899949713 /* CopilotSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484E265A1F2174B31ACCE38D /* CopilotSheet.swift */; };
 		F121AE74B45A4FE0BFD931F9 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */; };
 		F237A2172C02795C4B000181 /* OrderHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB6BF533BB6C101F42D81C9D /* OrderHistoryView.swift */; };
 		FD2D49F4157790C78121BC6F /* BiometricManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FDCFF841BB9CB28DDD3E239 /* BiometricManager.swift */; };
@@ -57,6 +59,7 @@
 		30D35536D1A8A13B2159DE44 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		4266B38345B5E5F7B715DD6A /* PnLText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PnLText.swift; sourceTree = "<group>"; };
 		45765C02F359CA7BFE1ABAA2 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		484E265A1F2174B31ACCE38D /* CopilotSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotSheet.swift; sourceTree = "<group>"; };
 		48949C40E0AEAD70A49B2D9A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		4A3A783D29B05CCE9DC91EB2 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		565EE49375DB35A1C0B2A13A /* AlphaDesk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AlphaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -70,6 +73,7 @@
 		832CBE1BF076F6418F574E76 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		8A00AFF700480159A127F965 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
+		9C835AE482EBDB5ED9C2F7BF /* MorningBriefCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningBriefCard.swift; sourceTree = "<group>"; };
 		A45DC2110DA761EBCDDACE47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A82503AA558FFE633E6681D7 /* Number+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Number+Format.swift"; sourceTree = "<group>"; };
 		AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
@@ -120,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				BD44914BD7F6844CF5B55906 /* AnalyticsSummaryView.swift */,
+				9C835AE482EBDB5ED9C2F7BF /* MorningBriefCard.swift */,
 				91BA90A50DDA5C8F7A0AAA62 /* PerformanceView.swift */,
 				AA89DA3055CAC7E15E318FE7 /* PortfolioView.swift */,
 			);
@@ -255,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				DE3E212A4C1F63F0FF56D429 /* ChatView.swift */,
+				484E265A1F2174B31ACCE38D /* CopilotSheet.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -407,12 +413,14 @@
 				FD2D49F4157790C78121BC6F /* BiometricManager.swift in Sources */,
 				1AB4454B81131D3233721B5B /* ChatView.swift in Sources */,
 				943F2B92D01ECA0048968D52 /* Color+Hex.swift in Sources */,
+				ECD2A6DAC0906A1899949713 /* CopilotSheet.swift in Sources */,
 				814A29D6BC4FB84C8E456939 /* KeychainHelper.swift in Sources */,
 				D9C5685C505E10D844940053 /* LoadingView.swift in Sources */,
 				818748814721A244BF19B953 /* LoginView.swift in Sources */,
 				283E3BAA79FA60C68EC85A99 /* MainTabView.swift in Sources */,
 				4F4255593679945BA99A8056 /* MetricCard.swift in Sources */,
 				A3ACF9A5D2AB9B6FB4376B94 /* Models.swift in Sources */,
+				DB68F6764DF31D353079675F /* MorningBriefCard.swift in Sources */,
 				592AE5A2EA8787FDF64E34D8 /* NetworkMonitor.swift in Sources */,
 				1066A3F721386CAFDD2E0AA9 /* NewsView.swift in Sources */,
 				472E0E8ADE797194FEBFA42F /* Number+Format.swift in Sources */,

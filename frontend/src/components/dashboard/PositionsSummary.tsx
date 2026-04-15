@@ -1,14 +1,42 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useMarketStore } from "@/stores/market";
+import { Sparkline } from "@/components/dashboard/Sparkline";
+import { getBars } from "@/lib/api";
 
 export function PositionsSummary() {
   const router = useRouter();
   const positions = usePortfolioStore((s) => s.positions);
+  const [sparkData, setSparkData] = useState<Record<string, number[]>>({});
+
+  // Fetch 20-day bars for each position symbol on mount
+  useEffect(() => {
+    if (positions.length === 0) return;
+    let cancelled = false;
+    const symbols = positions.map((p) => p.symbol);
+    Promise.allSettled(
+      symbols.map((sym) =>
+        getBars(sym, "D", 20)
+          .then((bars) => ({ symbol: sym, closes: bars.map((b) => b.close) }))
+          .catch(() => ({ symbol: sym, closes: [] as number[] }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const data: Record<string, number[]> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.closes.length > 0) {
+          data[r.value.symbol] = r.value.closes;
+        }
+      }
+      setSparkData(data);
+    });
+    return () => { cancelled = true; };
+  }, [positions]);
 
   if (positions.length === 0) {
     return (
@@ -54,6 +82,15 @@ export function PositionsSummary() {
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-sm font-semibold text-foreground">{pos.symbol}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{pos.quantity} shares</span>
+                {sparkData[pos.symbol] && sparkData[pos.symbol].length >= 2 && (
+                  <Sparkline
+                    data={sparkData[pos.symbol]}
+                    color={positive ? "var(--profit)" : "var(--loss)"}
+                    width={60}
+                    height={20}
+                    className="shrink-0 hidden sm:block"
+                  />
+                )}
               </div>
               <div className="flex items-center gap-4 shrink-0">
                 <div className="text-right">

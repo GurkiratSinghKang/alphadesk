@@ -39,7 +39,7 @@ interface TradingChartProps {
   data?: OHLCVBar[];
   chartType?: ChartType;
   indicators?: Indicator[];
-  onCrosshairMove?: (price: number | null, time: Time | null) => void;
+  onCrosshairMove?: (price: number | null, time: Time | null, ohlcv?: { open: number; high: number; low: number; close: number; volume?: number } | null) => void;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
   positionLines?: {
     entry: number | null;
@@ -359,20 +359,26 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
       if (onCrosshairMove) {
         chart.subscribeCrosshairMove((param) => {
           if (!param.time) {
-            onCrosshairMove(null, null);
+            onCrosshairMove(null, null, null);
             return;
           }
           const seriesData = param.seriesData.get(mainSeries);
+          const volData = param.seriesData.get(volumeSeries);
           if (seriesData) {
+            const vol = volData && "value" in volData ? (volData as HistogramData<Time>).value : undefined;
             if ("close" in seriesData) {
+              const candle = seriesData as CandlestickData<Time>;
               onCrosshairMove(
-                (seriesData as CandlestickData<Time>).close,
-                param.time
+                candle.close,
+                param.time,
+                { open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: vol }
               );
             } else if ("value" in seriesData) {
+              const val = (seriesData as SingleValueData<Time>).value;
               onCrosshairMove(
-                (seriesData as SingleValueData<Time>).value,
-                param.time
+                val,
+                param.time,
+                { open: val, high: val, low: val, close: val, volume: vol }
               );
             }
           }

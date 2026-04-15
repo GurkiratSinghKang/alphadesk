@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,107 @@ async def pipeline_history() -> list[dict[str, Any]]:
                 entries.append({"date": str(date), "error": "corrupt_log"})
 
     return entries
+
+
+# ---- GET /summary — aggregate pipeline statistics ----
+
+@router.get("/summary")
+async def pipeline_summary() -> dict[str, Any]:
+    """Compute aggregate statistics across all pipeline run logs.
+
+    Scans every JSON log in the pipeline_logs directory and returns
+    totals for trades placed/rejected, approval rate, most active
+    strategy, most common rejection reason, and a portfolio
+    since-start snapshot.
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    total_runs = 0
+    total_placed = 0
+    total_rejected = 0
+    strategy_placed: Counter[str] = Counter()
+    rejection_reasons: Counter[str] = Counter()
+    last_run: str | None = None
+    first_equity: float | None = None
+    last_equity: float | None = None
+
+    log_files = sorted(LOG_DIR.glob("????-??-??.json"))
+    for path in log_files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("Skipping corrupt log %s", path.name, exc_info=True)
+            continue
+
+        total_runs += 1
+
+        # Track timestamps for last_run
+        ts = data.get("timestamp") or data.get("date", "")
+        if ts and (last_run is None or ts > last_run):
+            last_run = ts
+
+        # Portfolio equity tracking
+        ps = data.get("portfolio_snapshot", {})
+        eq = ps.get("equity")
+        if eq is not None:
+            if first_equity is None:
+                first_equity = eq
+            last_equity = eq
+
+        # Count orders placed (actual broker orders)
+        orders = data.get("orders_placed", [])
+        total_placed += len(orders)
+
+        # Walk strategies for trade-level data
+        master = data.get("master_agent", {})
+        total_rejected += master.get("rejected", 0)
+
+        # Count approved trades per strategy
+        for strat_name, strat_data in data.get("strategies", {}).items():
+            if not isinstance(strat_data, dict):
+                continue
+            approved = strat_data.get("trades_approved", 0)
+            if approved > 0:
+                strategy_placed[strat_name] += approved
+            # Also count placed orders by strategy
+            for trade in strat_data.get("trades", []):
+                if trade.get("approved"):
+                    strategy_placed[strat_name] += 1
+
+        # Rejection reasons from master agent
+        for rej in master.get("rejections", []):
+            reason = rej.get("reason", "Unknown")
+            rejection_reasons[reason] += 1
+
+    # Also count orders_placed entries toward total if strategies
+    # didn't record them (orders are the ground-truth placements)
+    # total_placed already accounts for orders_placed above
+
+    total_decisions = total_placed + total_rejected
+    approval_rate = round(total_placed / total_decisions * 100, 1) if total_decisions > 0 else 0.0
+
+    most_active = strategy_placed.most_common(1)[0][0] if strategy_placed else None
+    most_rejected = rejection_reasons.most_common(1)[0][0] if rejection_reasons else None
+
+    # Portfolio since start
+    starting = first_equity or 100_000
+    current = last_equity or starting
+    total_return_pct = round((current - starting) / starting * 100, 2) if starting else 0
+
+    return {
+        "total_runs": total_runs,
+        "total_trades_placed": total_placed,
+        "total_trades_rejected": total_rejected,
+        "approval_rate": approval_rate,
+        "most_active_strategy": most_active,
+        "most_rejected_reason": most_rejected,
+        "last_run": last_run,
+        "portfolio_since_start": {
+            "starting_equity": round(starting, 2),
+            "current_equity": round(current, 2),
+            "total_return_pct": total_return_pct,
+        },
+    }
 
 
 # ---- GET /history/{date} — specific day log ----

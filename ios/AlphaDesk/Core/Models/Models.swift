@@ -426,6 +426,36 @@ struct PriceAlert: Codable, Sendable, Identifiable {
     let triggeredAt: String?
 }
 
+// MARK: - Morning Brief
+
+struct MorningBriefResponse: Codable, Sendable {
+    let date: String
+    let portfolio: BriefPortfolio
+    let topMovers: [BriefMover]
+    let market: BriefMarket
+    let catalysts: [String]
+    let aiSummary: String
+}
+
+struct BriefPortfolio: Codable, Sendable {
+    let equity: Double
+    let overnightChange: Double
+    let overnightChangePct: Double
+}
+
+struct BriefMover: Codable, Sendable {
+    let symbol: String
+    let changePct: Double
+    let impact: Double
+}
+
+struct BriefMarket: Codable, Sendable {
+    let regime: String
+    let vix: Double
+    let vixChange: Double
+    let spyChangePct: Double
+}
+
 // MARK: - WebSocket Messages
 
 struct WSOutgoingMessage: Encodable, Sendable {

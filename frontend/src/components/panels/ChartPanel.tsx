@@ -100,6 +100,14 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [activeIndicators, setActiveIndicators] = useState<Indicator[]>(["Volume"]);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
+  const [crosshairData, setCrosshairData] = useState<{
+    time: number | null;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+  } | null>(null);
   const [positionLines, setPositionLines] = useState<{
     entry: number | null;
     stopLoss: number | null;
@@ -256,8 +264,23 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   const change = quote?.change ?? 0;
   const changePct = quote?.changePct ?? 0;
 
+  // Compute average volume for comparison
+  const avgVolume = useMemo(() => {
+    if (!displayData.length) return 0;
+    const total = displayData.reduce((sum, b) => sum + b.volume, 0);
+    return total / displayData.length;
+  }, [displayData]);
+
   const handleCrosshairMove = useCallback(
-    (price: number | null) => setCrosshairPrice(price),
+    (price: number | null, time: unknown, ohlcv?: { open: number; high: number; low: number; close: number; volume?: number } | null) => {
+      setCrosshairPrice(price);
+      if (price === null || !ohlcv) {
+        setCrosshairData(null);
+      } else {
+        const timeNum = typeof time === "number" ? time : null;
+        setCrosshairData({ time: timeNum, ...ohlcv });
+      }
+    },
     []
   );
 
@@ -605,6 +628,53 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
           drawingPriceLines={drawingPriceLines}
         />
         </div>
+
+        {/* Crosshair info card — OHLCV tooltip on hover */}
+        {crosshairData && (
+          <div className="absolute top-2 right-2 z-[8] rounded-lg border border-border bg-[var(--surface)]/95 backdrop-blur-sm px-3 py-2 text-[11px] tabular-nums shadow-lg shadow-black/20 pointer-events-none min-w-[160px]">
+            {crosshairData.time && (
+              <p className="text-muted-foreground mb-1.5 text-[10px]">
+                {new Date(crosshairData.time * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {" "}
+                {new Date(crosshairData.time * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+              <span className="text-muted-foreground">O</span>
+              <span className="text-right text-foreground">{crosshairData.open.toFixed(2)}</span>
+              <span className="text-muted-foreground">H</span>
+              <span className="text-right text-foreground">{crosshairData.high.toFixed(2)}</span>
+              <span className="text-muted-foreground">L</span>
+              <span className="text-right text-foreground">{crosshairData.low.toFixed(2)}</span>
+              <span className="text-muted-foreground">C</span>
+              <span className="text-right text-foreground font-medium">{crosshairData.close.toFixed(2)}</span>
+            </div>
+            {(() => {
+              const barChange = crosshairData.close - crosshairData.open;
+              const barChangePct = crosshairData.open > 0 ? (barChange / crosshairData.open) * 100 : 0;
+              const positive = barChange >= 0;
+              return (
+                <div className={cn("mt-1.5 pt-1.5 border-t border-border/50 flex items-center justify-between", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                  <span>Chg</span>
+                  <span>{positive ? "+" : ""}{barChange.toFixed(2)} ({positive ? "+" : ""}{barChangePct.toFixed(2)}%)</span>
+                </div>
+              );
+            })()}
+            {crosshairData.volume != null && crosshairData.volume > 0 && (
+              <div className="mt-1 flex items-center justify-between text-muted-foreground">
+                <span>Vol</span>
+                <span className="flex items-center gap-1">
+                  {formatNumber(crosshairData.volume, true)}
+                  {avgVolume > 0 && (
+                    <span className={cn("text-[10px]", crosshairData.volume > avgVolume ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                      ({(crosshairData.volume / avgVolume).toFixed(1)}x avg)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Demo data overlay — shown when API bars fail to load */}
         {usingDemoData && !barsLoading && (

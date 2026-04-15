@@ -594,6 +594,112 @@ async def list_strategies() -> list[StrategySummary]:
     return summaries
 
 
+@router.get("/leaderboard")
+async def strategy_leaderboard() -> dict[str, Any]:
+    """Return strategies ranked by total return with Sharpe ratios.
+
+    Computes realised + unrealised P&L from the trade ledger (synced
+    with Alpaca) and ranks strategies from best to worst performer.
+    """
+    import hashlib
+    import httpx
+    from core.config import settings
+    from data.ingestion.trade_ledger import TradeLedger
+
+    # Fetch live Alpaca positions for unrealised P&L
+    alpaca_positions: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions",
+                headers={
+                    "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                    "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                },
+            )
+            if resp.status_code == 200:
+                alpaca_positions = resp.json()
+    except Exception:
+        logger.warning("Failed to fetch Alpaca positions for leaderboard", exc_info=True)
+
+    ledger = TradeLedger()
+    if alpaca_positions:
+        try:
+            ledger.sync_with_alpaca(alpaca_positions)
+            ledger = TradeLedger()
+        except Exception:
+            logger.warning("Ledger sync failed in leaderboard", exc_info=True)
+
+    real_perf = _get_real_strategy_performance(ledger)
+
+    # Map Alpaca positions to strategies for unrealised P&L
+    unrealized_by_id: dict[str, float] = {}
+    for pos in alpaca_positions:
+        sym = pos.get("symbol", "")
+        strat_id = "manual-discretionary"
+        for t in ledger._data.get("trades", []):
+            if t["symbol"] == sym and t["status"] == "open":
+                strat_id = _STRATEGY_NAME_TO_ID.get(t.get("strategy", "manual"), "manual-discretionary")
+                break
+        unrealized_by_id[strat_id] = unrealized_by_id.get(strat_id, 0) + float(pos.get("unrealized_pl", 0))
+
+    entries: list[dict[str, Any]] = []
+    for sid, sdata in _STRATEGIES.items():
+        invested = 0.0
+        pnl_dollars = 0.0
+        sharpe = 0.0
+        daily_returns: list[float] = []
+
+        for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
+            if strat_id != sid or strat_name not in real_perf:
+                continue
+            rp = real_perf[strat_name]
+            if rp["trades"] > 0:
+                pnl_dollars = rp["pnl"] + unrealized_by_id.get(sid, 0)
+                invested = rp.get("invested", 0.0)
+
+                # Build daily returns from closed trades for Sharpe
+                for t in ledger._data.get("trades", []):
+                    if t.get("strategy") != strat_name or t.get("status") != "closed":
+                        continue
+                    entry_p = t.get("entry_price", 0)
+                    exit_p = t.get("exit_price", 0)
+                    if entry_p and exit_p:
+                        daily_returns.append((exit_p - entry_p) / entry_p)
+            break
+
+        return_pct = round(pnl_dollars / invested * 100, 1) if invested > 0 else 0.0
+
+        # Compute Sharpe from per-trade returns
+        if len(daily_returns) > 1:
+            mean_r = statistics.mean(daily_returns)
+            std_r = statistics.stdev(daily_returns)
+            sharpe = round(mean_r / std_r * math.sqrt(252), 2) if std_r > 0 else 0.0
+        elif len(daily_returns) == 1:
+            sharpe = round(daily_returns[0] * math.sqrt(252), 2)
+
+        entries.append({
+            "id": sid,
+            "name": sdata["name"],
+            "return_pct": return_pct,
+            "sharpe": sharpe,
+        })
+
+    # Rank by return descending
+    entries.sort(key=lambda e: e["return_pct"], reverse=True)
+    for rank, entry in enumerate(entries, 1):
+        entry["rank"] = rank
+
+    worst_performer = entries[-1]["id"] if entries else None
+    best_sharpe_entry = max(entries, key=lambda e: e["sharpe"]) if entries else None
+
+    return {
+        "leaderboard": entries,
+        "worst_performer": worst_performer,
+        "best_sharpe": best_sharpe_entry["id"] if best_sharpe_entry else None,
+    }
+
+
 @router.get("/{strategy_id}/performance", response_model=StrategyPerformance)
 async def get_strategy_performance(
     strategy_id: str = Path(..., description="Strategy identifier"),

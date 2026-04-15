@@ -30,6 +30,7 @@ import { RiskDashboard } from "@/components/dashboard/RiskDashboard";
 import { StressTest } from "@/components/dashboard/StressTest";
 import { MorningBrief } from "@/components/dashboard/MorningBrief";
 import { LiveSignalFeed } from "@/components/dashboard/LiveSignalFeed";
+import { useWorkspace } from "@/components/layout/WorkspaceSelector";
 
 // Lazy-load heavy below-the-fold components to reduce initial bundle
 const StrategyCorrelation = dynamic(
@@ -91,6 +92,19 @@ function CommandCenter() {
   const router = useRouter();
   const summary = usePortfolioStore((s) => s.summary);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const { isExpanded, config } = useWorkspace();
+
+  // Auto-open copilot when workspace requests it
+  useEffect(() => {
+    if (config.copilotOpen) {
+      window.dispatchEvent(new CustomEvent("alphadesk:shortcut", { detail: "toggle-copilot" }));
+    }
+  }, [config.copilotOpen]);
+
+  // Toggle ticker tape based on workspace
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("alphadesk:ticker-tape", { detail: { visible: !!config.tickerTape } }));
+  }, [config.tickerTape]);
 
   const handleSelectSymbol = (symbol: string) => {
     setSelectedSymbol(symbol);
@@ -357,7 +371,7 @@ function CommandCenter() {
         )}
 
         {/* Morning Brief — personalized daily briefing */}
-        <MorningBrief />
+        {isExpanded("brief") && <MorningBrief />}
 
         {/* Section 1: Command Bar */}
         <PortfolioHero
@@ -372,7 +386,7 @@ function CommandCenter() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Activity Feed (left ~60%) */}
           <div className="lg:col-span-3 space-y-4">
-            {remainingLoaded ? (
+            {isExpanded("activity") && (remainingLoaded ? (
               <ActivityFeed
                 feedItems={feedItems}
                 onNavigate={(path) => router.push(path)}
@@ -382,38 +396,40 @@ function CommandCenter() {
                 <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-xs text-muted-foreground">Loading activity...</span>
               </div>
-            )}
+            ))}
 
             {/* Live Signal Feed — AI trading signals with reasoning */}
-            <LiveSignalFeed pipelineLog={pipelineLog} />
+            {isExpanded("signals") && <LiveSignalFeed pipelineLog={pipelineLog} />}
 
             {/* Positions + Calendar (below feed) */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <PositionsSummary />
-              <PnlCalendarMini />
+              {isExpanded("positions") && <PositionsSummary />}
+              {isExpanded("calendar") && <PnlCalendarMini />}
             </div>
             {/* Risk Overview */}
-            <RiskDashboard regime={regime} />
-            <StressTest />
-            <EconomicCalendar />
+            {isExpanded("risk") && <RiskDashboard regime={regime} />}
+            {isExpanded("stress") && <StressTest />}
+            {isExpanded("economic") && <EconomicCalendar />}
           </div>
 
           {/* Strategy Grid + P&L Attribution (right ~40%) */}
           <div className="lg:col-span-2 space-y-4">
-            <StrategyGrid
-              strategies={strategies}
-              regimeLabel={regime?.label ?? "unknown"}
-              onStrategyClick={(id) => router.push(`/strategies/${id}`)}
-            />
-            <PnlAttribution strategies={strategies} />
+            {isExpanded("strategies") && (
+              <StrategyGrid
+                strategies={strategies}
+                regimeLabel={regime?.label ?? "unknown"}
+                onStrategyClick={(id) => router.push(`/strategies/${id}`)}
+              />
+            )}
+            {isExpanded("attribution") && <PnlAttribution strategies={strategies} />}
           </div>
         </div>
 
         {/* Strategy Correlation Matrix */}
-        <StrategyCorrelation strategies={strategies} />
+        {isExpanded("correlation") && <StrategyCorrelation strategies={strategies} />}
 
         {/* Section 4: Market Context */}
-        {remainingLoaded ? (
+        {isExpanded("market") && (remainingLoaded ? (
           <MarketContext
             indices={indices}
             sectors={sectors}
@@ -424,13 +440,17 @@ function CommandCenter() {
           />
         ) : (
           <div className="h-32 animate-pulse rounded-xl bg-muted/30" />
-        )}
+        ))}
 
         {/* Section 5: Market Movers + Breadth */}
+        {(isExpanded("movers") || isExpanded("breadth")) && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {isExpanded("movers") && (
           <div className="lg:col-span-2">
             <MarketMovers onSelectSymbol={handleSelectSymbol} />
           </div>
+          )}
+          {isExpanded("breadth") && (
           <div>
             {remainingLoaded ? (
               <MarketBreadth sectors={sectors} />
@@ -438,7 +458,9 @@ function CommandCenter() {
               <div className="h-48 animate-pulse rounded-xl bg-muted/30" />
             )}
           </div>
+          )}
         </div>
+        )}
       </div>
     </ScrollArea>
   );

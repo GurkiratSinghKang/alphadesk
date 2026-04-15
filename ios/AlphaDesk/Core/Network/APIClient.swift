@@ -80,6 +80,9 @@ enum Endpoint: Sendable {
     // Agent / AI Chat
     case agentChat
 
+    // Morning Brief
+    case morningBrief
+
     // Order history
     case orders
 
@@ -143,6 +146,9 @@ enum Endpoint: Sendable {
 
         // Agent / AI Chat
         case .agentChat:                        "/api/v1/agents/chat"
+
+        // Morning Brief
+        case .morningBrief:                     "/api/v1/portfolio/morning-brief"
 
         // Order history
         case .orders:                           "/api/v1/trades/orders"

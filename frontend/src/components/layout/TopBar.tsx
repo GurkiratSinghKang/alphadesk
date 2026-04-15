@@ -9,6 +9,7 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import { NotificationCenter } from "./NotificationCenter";
+import { WorkspaceSelector } from "./WorkspaceSelector";
 
 export function TopBar() {
   const router = useRouter();
@@ -86,6 +87,10 @@ export function TopBar() {
             </button>
           ))}
         </nav>
+        {/* Workspace layout selector — hidden on mobile */}
+        <div className="hidden md:flex ml-1 pl-1 border-l border-border">
+          <WorkspaceSelector />
+        </div>
       </div>
 
       <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">

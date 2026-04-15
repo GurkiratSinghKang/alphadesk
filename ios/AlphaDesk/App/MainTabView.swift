@@ -53,6 +53,7 @@ struct MainTabView: View {
     @State private var selectedTab: Tab = .portfolio
     @State private var networkMonitor = NetworkMonitor.shared
     @State private var badgeProvider = TabBadgeProvider.shared
+    @State private var showCopilot = false
 
     // State preservation keys
     private static let selectedTabKey = "AlphaDesk_selectedTab"
@@ -286,6 +287,22 @@ struct MainTabView: View {
 
             // Custom Tab Bar
             customTabBar
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Button { showCopilot = true } label: {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white)
+                    .frame(width: 50, height: 50)
+                    .background(AD.accent)
+                    .clipShape(Circle())
+                    .shadow(color: AD.accent.opacity(0.3), radius: 8)
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 100) // above tab bar
+        }
+        .sheet(isPresented: $showCopilot) {
+            CopilotSheet()
         }
         .ignoresSafeArea(.keyboard)
     }

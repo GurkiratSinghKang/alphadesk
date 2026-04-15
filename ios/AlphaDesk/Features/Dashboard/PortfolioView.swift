@@ -250,6 +250,7 @@ struct PortfolioView: View {
                         ScrollViewReader { proxy in
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: AD.spacingLG) {
+                                MorningBriefCard()
                                 heroSection
                                 if !vm.equityCurve.isEmpty {
                                     equityChartSection

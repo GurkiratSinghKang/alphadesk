@@ -3,6 +3,7 @@
 import { useState, useMemo, useId } from "react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { ExportButton } from "@/components/dashboard/ExportButton";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 type Period = "1W" | "1M" | "3M" | "YTD";
 
@@ -141,9 +142,16 @@ export function PortfolioHero({
           {/* Portfolio Equity */}
           <div className="min-w-0">
             <p className="text-label leading-none mb-1">Portfolio</p>
-            <p className="text-display tabular-nums text-gradient">
-              {portfolioValue ? formatCurrency(portfolioValue) : "\u2014"}
-            </p>
+            {portfolioValue ? (
+              <AnimatedNumber
+                value={portfolioValue}
+                format={formatCurrency}
+                className="text-display text-gradient"
+                duration={500}
+              />
+            ) : (
+              <p className="text-display tabular-nums text-gradient">{"\u2014"}</p>
+            )}
           </div>
 
           {/* Day P&L */}
@@ -152,19 +160,22 @@ export function PortfolioHero({
             {!portfolioValue && !isDemo ? (
               <p className="text-xl font-semibold tabular-nums leading-none text-muted-foreground">{"\u2014"}</p>
             ) : (
-              <p
+              <div
                 className={cn(
-                  "text-xl font-semibold tabular-nums leading-none",
+                  "text-xl font-semibold leading-none flex items-baseline gap-1",
                   dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground"
                 )}
               >
-                {dayPnl > 0 ? "+" : ""}
-                {formatCurrency(dayPnl)}{" "}
+                <AnimatedNumber
+                  value={dayPnl}
+                  format={(v) => `${v > 0 ? "+" : ""}${formatCurrency(v)}`}
+                  duration={500}
+                />
                 <span className="text-sm font-normal text-muted-foreground">
                   ({dayPnlPct > 0 ? "+" : ""}
                   {(dayPnlPct ?? 0).toFixed(2)}%)
                 </span>
-              </p>
+              </div>
             )}
           </div>
         </div>

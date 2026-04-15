@@ -31,6 +31,13 @@ class PortfolioSummary(BaseModel):
     source: str = "alpaca"
 
 
+class DrawdownInfo(BaseModel):
+    max_drawdown: float = 0
+    max_drawdown_pct: float = 0
+    peak_date: str | None = None
+    trough_date: str | None = None
+
+
 class PerformanceMetrics(BaseModel):
     period: str
     total_return: float
@@ -38,6 +45,10 @@ class PerformanceMetrics(BaseModel):
     sharpe_ratio: float | None = None
     sortino_ratio: float | None = None
     max_drawdown: float | None = None
+    calmar_ratio: float | None = None
+    drawdown_detail: DrawdownInfo = Field(default_factory=DrawdownInfo)
+    rolling_sharpe_30d: list[dict[str, Any]] = Field(default_factory=list)
+    daily_returns: list[dict[str, Any]] = Field(default_factory=list)
     win_rate: float | None = None
     profit_factor: float | None = None
     avg_win: float | None = None
@@ -123,9 +134,92 @@ def _demo_portfolio_summary() -> PortfolioSummary:
     )
 
 
+def _compute_enhanced_metrics(
+    daily_pnls: list[float],
+    dates: list[str],
+    base_equity: float = 100_000,
+) -> dict[str, Any]:
+    """Compute daily returns, rolling Sharpe, drawdown detail, Calmar & Sortino.
+
+    Shared between the demo and live code paths so both return the
+    same enhanced fields.
+    """
+    import math
+
+    n = len(daily_pnls)
+    if n == 0:
+        return {
+            "daily_returns": [],
+            "rolling_sharpe_30d": [],
+            "drawdown_detail": DrawdownInfo(),
+            "calmar_ratio": None,
+            "sortino_ratio": None,
+        }
+
+    # Daily return percentages (relative to base equity)
+    daily_return_records: list[dict[str, Any]] = []
+    for i, pnl in enumerate(daily_pnls):
+        ret_pct = round(pnl / base_equity * 100, 4)
+        daily_return_records.append({"date": dates[i], "return_pct": ret_pct, "pnl": round(pnl, 2)})
+
+    # Rolling 30-day Sharpe
+    rolling_sharpe: list[dict[str, Any]] = []
+    window = 30
+    for i in range(window - 1, n):
+        chunk = daily_pnls[i - window + 1 : i + 1]
+        m = sum(chunk) / window
+        var = sum((x - m) ** 2 for x in chunk) / max(window - 1, 1)
+        s = math.sqrt(var)
+        sh = round(m / s * math.sqrt(252), 2) if s > 0 else 0.0
+        rolling_sharpe.append({"date": dates[i], "sharpe": sh})
+
+    # Drawdown with peak/trough dates
+    running = 0.0
+    peak_val = 0.0
+    max_dd = 0.0
+    peak_idx = 0
+    trough_idx = 0
+    for i, pnl in enumerate(daily_pnls):
+        running += pnl
+        if running > peak_val:
+            peak_val = running
+            peak_idx = i
+        dd = running - peak_val
+        if dd < max_dd:
+            max_dd = dd
+            trough_idx = i
+
+    dd_pct = round(max_dd / base_equity * 100, 2) if base_equity else 0
+    dd_detail = DrawdownInfo(
+        max_drawdown=round(max_dd, 2),
+        max_drawdown_pct=dd_pct,
+        peak_date=dates[peak_idx] if dates else None,
+        trough_date=dates[trough_idx] if dates else None,
+    )
+
+    # Sortino ratio (using downside deviation)
+    mean_ret = sum(daily_pnls) / n
+    downside = [p for p in daily_pnls if p < 0]
+    downside_std = math.sqrt(sum(d ** 2 for d in downside) / max(len(downside), 1)) if downside else 0
+    sortino = round(mean_ret / downside_std * math.sqrt(252), 2) if downside_std > 0 else None
+
+    # Calmar ratio = annualised return / |max drawdown|
+    annualised_return = mean_ret * 252
+    calmar = round(annualised_return / abs(max_dd), 2) if max_dd != 0 else None
+
+    return {
+        "daily_returns": daily_return_records,
+        "rolling_sharpe_30d": rolling_sharpe,
+        "drawdown_detail": dd_detail,
+        "calmar_ratio": calmar,
+        "sortino_ratio": sortino,
+    }
+
+
 def _demo_performance(period: str) -> PerformanceMetrics:
     """Generate a demo equity curve and performance metrics."""
     import random
+    import math
     rng = random.Random(42)
 
     period_days_map = {"7d": 7, "30d": 30, "90d": 90, "1y": 252, "ytd": 60, "all": 500}
@@ -134,13 +228,15 @@ def _demo_performance(period: str) -> PerformanceMetrics:
     # Simulate daily PnL with slight positive drift
     equity_curve = []
     cumulative = 0.0
-    daily_pnls = []
+    daily_pnls: list[float] = []
+    dates: list[str] = []
     today = date.today()
     for i in range(n_points):
         daily = rng.gauss(35, 200)  # mean $35/day, stdev $200
         daily_pnls.append(daily)
         cumulative += daily
         d = today - timedelta(days=(n_points - 1 - i))
+        dates.append(d.isoformat())
         equity_curve.append({
             "date": d.isoformat(),
             "value": round(cumulative, 2),
@@ -151,7 +247,7 @@ def _demo_performance(period: str) -> PerformanceMetrics:
     losses = [p for p in daily_pnls if p < 0]
     total_return = round(cumulative, 2)
 
-    # Simple max drawdown
+    # Max drawdown (simple)
     peak = 0.0
     max_dd = 0.0
     running = 0.0
@@ -164,17 +260,22 @@ def _demo_performance(period: str) -> PerformanceMetrics:
             max_dd = dd
 
     mean_ret = sum(daily_pnls) / len(daily_pnls) if daily_pnls else 0
-    import math
     std_ret = math.sqrt(sum((p - mean_ret) ** 2 for p in daily_pnls) / max(len(daily_pnls) - 1, 1))
     sharpe = round(mean_ret / std_ret * math.sqrt(252), 2) if std_ret > 0 else None
+
+    enhanced = _compute_enhanced_metrics(daily_pnls, dates)
 
     return PerformanceMetrics(
         period=period,
         total_return=total_return,
         total_return_pct=round(total_return / 100_000 * 100, 2),
         sharpe_ratio=sharpe,
-        sortino_ratio=round((sharpe or 0) * 1.3, 2) if sharpe else None,
+        sortino_ratio=enhanced["sortino_ratio"],
         max_drawdown=round(max_dd, 2),
+        calmar_ratio=enhanced["calmar_ratio"],
+        drawdown_detail=enhanced["drawdown_detail"],
+        rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
+        daily_returns=enhanced["daily_returns"],
         win_rate=round(len(wins) / len(daily_pnls) * 100, 1) if daily_pnls else None,
         profit_factor=round(sum(wins) / abs(sum(losses)), 2) if losses and sum(losses) != 0 else None,
         avg_win=round(sum(wins) / len(wins), 2) if wins else None,
