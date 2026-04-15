@@ -63,20 +63,23 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Total:</span>
-          <span
-            className={cn(
-              "text-sm font-semibold tabular-nums",
-              totalPnl > 0
-                ? "text-[var(--profit)]"
-                : totalPnl < 0
-                ? "text-[var(--loss)]"
-                : "text-muted-foreground"
-            )}
-          >
-            {totalPnl >= 0 ? "+" : ""}
-            {formatCurrency(totalPnl)}
-          </span>
+          <div className="text-right">
+            <span className="text-xs text-muted-foreground">Total: </span>
+            <span
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                totalPnl > 0
+                  ? "text-[var(--profit)]"
+                  : totalPnl < 0
+                  ? "text-[var(--loss)]"
+                  : "text-muted-foreground"
+              )}
+            >
+              {totalPnl >= 0 ? "+" : ""}
+              {formatCurrency(totalPnl)}
+            </span>
+            <p className="text-[9px] text-muted-foreground">All-time P&L</p>
+          </div>
         </div>
       </div>
 

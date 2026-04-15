@@ -260,9 +260,9 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
             <span className="text-[10px] text-muted-foreground">VIX Level</span>
             <span className={cn(
               "text-[11px] font-semibold tabular-nums",
-              regime.vix_level > 25 ? "text-[var(--loss)]" :
-              regime.vix_level > 18 ? "text-amber-400" :
-              "text-[var(--profit)]"
+              regime.vix_level < 18 ? "text-[var(--profit)]" :
+              regime.vix_level < 25 ? "text-amber-400" :
+              "text-[var(--loss)]"
             )}>
               {(regime.vix_level ?? 0).toFixed(1)}
             </span>

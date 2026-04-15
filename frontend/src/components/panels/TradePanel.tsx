@@ -345,57 +345,63 @@ function TradeBuilderTab() {
 
       <Separator className="bg-border mb-3" />
 
-      {/* Greeks */}
-      <div className="grid grid-cols-4 gap-2 mb-3">
-        {Object.entries(aggregateGreeks).map(([key, val]) => (
-          <div key={key} className="text-center">
-            <div className="text-[10px] text-muted-foreground capitalize">
-              {key}
-            </div>
-            <div className="text-xs font-medium tabular-nums text-foreground">
-              {formatGreek(val, key === "delta" ? 2 : 3)}
-            </div>
+      {legs.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-3">Add a leg to begin building your trade</p>
+      ) : (
+        <>
+          {/* Greeks */}
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {Object.entries(aggregateGreeks).map(([key, val]) => (
+              <div key={key} className="text-center">
+                <div className="text-[10px] text-muted-foreground capitalize">
+                  {key}
+                </div>
+                <div className="text-xs font-medium tabular-nums text-foreground">
+                  {formatGreek(val, key === "delta" ? 2 : 3)}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Risk summary */}
-      <div className="space-y-1 mb-3 text-xs">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">{netDebit >= 0 ? "Net Credit" : "Net Debit"}</span>
-          <span className={cn("tabular-nums", getChangeTextClass(netDebit))}>
-            {formatCurrency(Math.abs(netDebit))}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Max Profit</span>
-          <span className="text-[var(--profit)] tabular-nums">
-            {formatCurrency(maxProfit)}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Max Loss</span>
-          <span className="text-[var(--loss)] tabular-nums">
-            {formatCurrency(maxLoss)}
-          </span>
-        </div>
-        {breakeven > 0 && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Breakeven</span>
-            <span className="text-foreground tabular-nums">
-              ${(breakeven ?? 0).toFixed(2)}
-            </span>
+          {/* Risk summary */}
+          <div className="space-y-1 mb-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{netDebit >= 0 ? "Net Credit" : "Net Debit"}</span>
+              <span className={cn("tabular-nums", getChangeTextClass(netDebit))}>
+                {formatCurrency(Math.abs(netDebit))}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Max Profit</span>
+              <span className="text-[var(--profit)] tabular-nums">
+                {formatCurrency(maxProfit)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Max Loss</span>
+              <span className="text-[var(--loss)] tabular-nums">
+                {formatCurrency(maxLoss)}
+              </span>
+            </div>
+            {breakeven > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Breakeven</span>
+                <span className="text-foreground tabular-nums">
+                  ${(breakeven ?? 0).toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Payoff Diagram — shown when 2+ option legs (spread detected) */}
-      {payoffLegs.length >= 2 && (
-        <PayoffDiagram
-          legs={payoffLegs}
-          currentPrice={currentQuote?.last}
-          className="mb-3"
-        />
+          {/* Payoff Diagram — shown when 2+ option legs (spread detected) */}
+          {payoffLegs.length >= 2 && (
+            <PayoffDiagram
+              legs={payoffLegs}
+              currentPrice={currentQuote?.last}
+              className="mb-3"
+            />
+          )}
+        </>
       )}
 
       <div className="mt-auto">

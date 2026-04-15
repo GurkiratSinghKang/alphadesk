@@ -231,6 +231,17 @@ export function buildFeedItems(
     });
   }
 
+  // Downgrade "trading window" messages from warning to info
+  for (const item of items) {
+    if (
+      item.severity === "warning" &&
+      (item.title.toLowerCase().includes("trading window") ||
+       (item.detail && item.detail.toLowerCase().includes("trading window")))
+    ) {
+      item.severity = "info";
+    }
+  }
+
   // Sort by time descending and limit to most recent items
   items.sort((a, b) => b.time.getTime() - a.time.getTime());
   return items.slice(0, MAX_FEED_ITEMS);
@@ -241,6 +252,8 @@ export function buildFeedItems(
 const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }) {
   const Icon = FEED_ICONS[item.type];
   const isHighlight = item.severity === "danger" || item.severity === "warning";
+  const isTradingWindow = item.title.toLowerCase().includes("trading window") ||
+    (item.detail && item.detail.toLowerCase().includes("trading window"));
 
   return (
     <div
@@ -254,9 +267,11 @@ const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] leading-snug text-foreground">{item.title}</p>
+        <p className={cn("text-[13px] leading-snug", isTradingWindow ? "text-muted-foreground" : "text-foreground")}>{item.title}</p>
         {item.detail && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
+          <span className="mt-0.5 block text-xs text-muted-foreground" title={item.detail}>
+            {item.detail.length > 120 ? item.detail.slice(0, 120) + '...' : item.detail}
+          </span>
         )}
       </div>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
