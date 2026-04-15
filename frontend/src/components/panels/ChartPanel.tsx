@@ -10,6 +10,7 @@ import {
   Minus,
   TrendingDown,
   Share2,
+  StickyNote,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -146,7 +147,47 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   const [quickOrderQty, setQuickOrderQty] = useState(1);
   const quickOrderInputRef = useRef<HTMLInputElement>(null);
 
-  const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib">("none");
+  const [drawingMode, setDrawingMode] = useState<"none" | "hline" | "trendline" | "fib" | "annotate">("none");
+  const [annotations, setAnnotations] = useState<{ price: number; text: string; color: string }[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(`alphadesk-annotations-${selectedSymbol}`);
+      if (stored) return JSON.parse(stored);
+    } catch { /* ignore */ }
+    return [];
+  });
+  const [annotationInput, setAnnotationInput] = useState<{ price: number; x: number; y: number } | null>(null);
+  const [annotationText, setAnnotationText] = useState("");
+  const annotationInputRef = useRef<HTMLInputElement>(null);
+
+  // Persist annotations per symbol
+  useEffect(() => {
+    if (annotations.length > 0) {
+      localStorage.setItem(`alphadesk-annotations-${selectedSymbol}`, JSON.stringify(annotations));
+    } else {
+      localStorage.removeItem(`alphadesk-annotations-${selectedSymbol}`);
+    }
+  }, [annotations, selectedSymbol]);
+
+  // Reload annotations when symbol changes
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`alphadesk-annotations-${selectedSymbol}`);
+      setAnnotations(stored ? JSON.parse(stored) : []);
+    } catch {
+      setAnnotations([]);
+    }
+  }, [selectedSymbol]);
+
+  const addAnnotation = useCallback((price: number, text: string) => {
+    if (!text.trim()) return;
+    setAnnotations((prev) => [...prev, { price, text: text.trim(), color: "#a78bfa" }]);
+  }, []);
+
+  const removeAnnotation = useCallback((index: number) => {
+    setAnnotations((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const [drawings, setDrawings] = useState<Array<{
     type: "hline" | "trendline" | "fib";
     price?: number;
@@ -307,14 +348,19 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   };
 
   // Toggle drawing mode, resetting partial trendline/fib state when switching modes
-  const toggleDrawingMode = (mode: "hline" | "trendline" | "fib") => {
+  const toggleDrawingMode = (mode: "hline" | "trendline" | "fib" | "annotate") => {
     setTrendlineStart(null);
+    setAnnotationInput(null);
+    setAnnotationText("");
     setDrawingMode((prev) => (prev === mode ? "none" : mode));
   };
 
-  const drawingPriceLines = drawings
-    .filter((d) => d.type === "hline" && d.price != null)
-    .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6", label: d.label }));
+  const drawingPriceLines = [
+    ...drawings
+      .filter((d) => d.type === "hline" && d.price != null)
+      .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6", label: d.label })),
+    ...annotations.map((a) => ({ price: a.price, color: a.color, label: `${a.text} ($${a.price.toFixed(2)})` })),
+  ];
 
   // Real-time chart update: when quote updates via WebSocket, push new bar to chart.
   // chartHandleRef.current may be null on the first quote if the chart hasn't mounted yet;
@@ -360,6 +406,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (annotationInput) { setAnnotationInput(null); setAnnotationText(""); return; }
         if (quickOrder) { setQuickOrder(null); return; }
         if (drawingMode !== "none") {
           setDrawingMode("none");
@@ -369,7 +416,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [quickOrder, drawingMode]);
+  }, [quickOrder, drawingMode, annotationInput]);
 
   const ChartTypeIcon =
     chartType === "candle"
@@ -602,10 +649,18 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
           >
             Fib
           </button>
-          {(drawings.length > 0 || trendlines.length > 0) && (
+          <button
+            aria-label="Add annotation"
+            onClick={() => toggleDrawingMode("annotate")}
+            className={cn("h-6 px-1.5 rounded text-[10px] transition-colors", drawingMode === "annotate" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+            title="Annotate"
+          >
+            <StickyNote className="h-3 w-3" />
+          </button>
+          {(drawings.length > 0 || trendlines.length > 0 || annotations.length > 0) && (
             <button
               aria-label="Clear all drawings"
-              onClick={() => { setDrawings([]); setTrendlines([]); setTrendlineStart(null); }}
+              onClick={() => { setDrawings([]); setTrendlines([]); setTrendlineStart(null); setAnnotations([]); }}
               className="h-6 px-1.5 rounded text-[10px] text-muted-foreground hover:text-[var(--loss)]"
               title="Clear all drawings"
             >
@@ -786,6 +841,103 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
               }
             }}
           />
+        )}
+
+        {/* Annotation overlay — click to place a note at a price level */}
+        {drawingMode === "annotate" && !annotationInput && (
+          <div
+            className="absolute inset-0 cursor-crosshair z-[5]"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pctY = (e.clientY - rect.top) / rect.height;
+              let price = 0;
+              if (quote) {
+                const high = quote.high || quote.last * 1.05;
+                const low = quote.low || quote.last * 0.95;
+                price = high - pctY * (high - low);
+              } else if (displayData.length) {
+                const highs = displayData.map((b) => b.high);
+                const lows = displayData.map((b) => b.low);
+                const high = Math.max(...highs);
+                const low = Math.min(...lows);
+                price = high - pctY * (high - low);
+              }
+              price = Math.round(price * 100) / 100;
+              setAnnotationInput({ price, x: e.clientX - rect.left, y: e.clientY - rect.top });
+              setAnnotationText("");
+              setTimeout(() => annotationInputRef.current?.focus(), 50);
+            }}
+          />
+        )}
+
+        {/* Annotation text input floating panel */}
+        {annotationInput && (
+          <div
+            className="absolute z-[20] rounded-md border border-border bg-[var(--surface)] shadow-lg shadow-black/30 p-2"
+            style={{
+              left: Math.min(annotationInput.x, 200),
+              top: annotationInput.y,
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setAnnotationInput(null);
+                setAnnotationText("");
+              }
+            }}
+          >
+            <div className="text-[10px] text-muted-foreground mb-1">
+              Note at ${annotationInput.price.toFixed(2)}
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                addAnnotation(annotationInput.price, annotationText);
+                setAnnotationInput(null);
+                setAnnotationText("");
+                setDrawingMode("none");
+              }}
+              className="flex gap-1"
+            >
+              <input
+                ref={annotationInputRef}
+                value={annotationText}
+                onChange={(e) => setAnnotationText(e.target.value)}
+                placeholder="Enter note..."
+                className="h-6 w-36 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/60"
+              />
+              <button
+                type="submit"
+                disabled={!annotationText.trim()}
+                className="h-6 px-2 rounded bg-primary text-[10px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+              >
+                Add
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Annotation labels on chart */}
+        {annotations.length > 0 && (
+          <div className="absolute right-2 top-12 z-[7] flex flex-col gap-1 pointer-events-auto max-h-40 overflow-y-auto">
+            {annotations.map((a, i) => (
+              <div
+                key={`${a.price}-${i}`}
+                className="flex items-center gap-1 rounded bg-[#a78bfa]/15 border border-[#a78bfa]/30 px-2 py-0.5 text-[10px] group"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-[#a78bfa] shrink-0" />
+                <span className="text-foreground truncate max-w-[120px]">{a.text}</span>
+                <span className="text-muted-foreground tabular-nums">${a.price.toFixed(2)}</span>
+                <button
+                  onClick={() => removeAnnotation(i)}
+                  className="text-muted-foreground hover:text-[var(--loss)] opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-[10px]"
+                  aria-label={`Remove annotation: ${a.text}`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* SVG overlay for trendlines */}

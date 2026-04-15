@@ -28,10 +28,13 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "k": "watchlist:prev",
   "b": "chart:quick-buy",
   "s": "chart:quick-sell",
+  "Shift+C": "positions:close-all",
+  "Shift+F": "positions:flatten",
+  "Shift+S": "positions:stop-loss",
 };
 
 /** Shortcuts added after 2026-04-01 are flagged as new */
-export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r", "Ctrl+j"]);
+export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r", "Ctrl+j", "Shift+C", "Shift+F", "Shift+S"]);
 
 export type ShortcutGroup = {
   name: string;
@@ -91,6 +94,15 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { key: "b", action: "chart:quick-buy", description: "Quick buy at market" },
       { key: "s", action: "chart:quick-sell", description: "Quick sell at market" },
+    ],
+  },
+  {
+    name: "Positions",
+    icon: "briefcase",
+    items: [
+      { key: "Shift+C", action: "positions:close-all", description: "Close all positions", isNew: true },
+      { key: "Shift+F", action: "positions:flatten", description: "Flatten portfolio", isNew: true },
+      { key: "Shift+S", action: "positions:stop-loss", description: "Set stop loss on selected", isNew: true },
     ],
   },
   {
@@ -180,7 +192,11 @@ export function useKeyboardShortcuts() {
 
       const bindings = bindingsRef.current;
       const now = Date.now();
-      const keyStr = e.ctrlKey || e.metaKey ? `Ctrl+${e.key.toLowerCase()}` : e.key;
+      const keyStr = e.ctrlKey || e.metaKey
+        ? `Ctrl+${e.key.toLowerCase()}`
+        : e.shiftKey && e.key.length === 1
+          ? `Shift+${e.key.toUpperCase()}`
+          : e.key;
 
       if (lastKeyRef.current && now - lastKeyRef.current.time < CHORD_TIMEOUT) {
         const chord = `${lastKeyRef.current.key} ${keyStr}`;

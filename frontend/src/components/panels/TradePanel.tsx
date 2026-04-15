@@ -551,9 +551,77 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
 function PositionsTab() {
   const positions = usePortfolioStore((s) => s.positions);
   const setPositions = usePortfolioStore((s) => s.setPositions);
-  const { setSelectedSymbol } = useMarketStore();
+  const { selectedSymbol, setSelectedSymbol } = useMarketStore();
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const { toast } = useToast();
+  const [stopLossOpen, setStopLossOpen] = useState(false);
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [stopLossSymbol, setStopLossSymbol] = useState("");
+
+  // Position management keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const action = (e as CustomEvent<string>).detail;
+      if (action === "positions:close-all") {
+        if (positions.length === 0) {
+          toast({ type: "info", message: "No open positions to close." });
+          return;
+        }
+        const confirmed = window.confirm(
+          `Close ALL ${positions.length} position(s)? This will sell all holdings.`
+        );
+        if (confirmed) {
+          // Place market sell orders for each position
+          Promise.all(
+            positions.map((p) =>
+              placeOrder({
+                symbol: p.symbol,
+                side: p.side === "short" ? "buy" : "sell",
+                type: "market",
+                quantity: p.quantity,
+              }).catch(() => null)
+            )
+          ).then(() => {
+            toast({ type: "success", message: `Closing ${positions.length} position(s)...` });
+          });
+        }
+      } else if (action === "positions:flatten") {
+        if (positions.length === 0) {
+          toast({ type: "info", message: "No open positions to flatten." });
+          return;
+        }
+        const confirmed = window.confirm(
+          `Flatten portfolio? This will close all ${positions.length} position(s) at market price.`
+        );
+        if (confirmed) {
+          Promise.all(
+            positions.map((p) =>
+              placeOrder({
+                symbol: p.symbol,
+                side: p.side === "short" ? "buy" : "sell",
+                type: "market",
+                quantity: p.quantity,
+              }).catch(() => null)
+            )
+          ).then(() => {
+            toast({ type: "success", message: "Portfolio flatten orders submitted." });
+          });
+        }
+      } else if (action === "positions:stop-loss") {
+        const pos = positions.find((p) => p.symbol.split(" ")[0] === selectedSymbol);
+        if (!pos) {
+          toast({ type: "info", message: `No position for ${selectedSymbol}.` });
+          return;
+        }
+        setStopLossSymbol(pos.symbol);
+        setStopLossPrice("");
+        setStopLossOpen(true);
+      }
+    };
+    window.addEventListener("alphadesk:shortcut", handler);
+    return () => window.removeEventListener("alphadesk:shortcut", handler);
+  }, [positions, selectedSymbol, toast]);
 
   // Fetch positions from API on mount
   useEffect(() => {
@@ -631,6 +699,66 @@ function PositionsTab() {
           <PositionRow key={p.symbol} p={p} onSelect={setSelectedSymbol} />
         ))}
       </div>
+
+      {/* Stop Loss Dialog */}
+      <Dialog open={stopLossOpen} onOpenChange={setStopLossOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Stop Loss</DialogTitle>
+            <DialogDescription>
+              Set a stop loss price for {stopLossSymbol}. A stop order will be placed to sell at market when price drops to this level.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Stop Price</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="h-9 w-full rounded-md border border-border bg-background pl-6 pr-3 text-sm tabular-nums text-foreground"
+                  autoFocus
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStopLossOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const price = parseFloat(stopLossPrice);
+                if (!price || price <= 0) return;
+                const pos = positions.find((p) => p.symbol === stopLossSymbol);
+                if (!pos) return;
+                placeOrder({
+                  symbol: pos.symbol,
+                  side: pos.side === "short" ? "buy" : "sell",
+                  type: "stop",
+                  quantity: pos.quantity,
+                  price,
+                })
+                  .then(() => {
+                    toast({ type: "success", message: `Stop loss set at $${price.toFixed(2)} for ${stopLossSymbol}` });
+                    setStopLossOpen(false);
+                  })
+                  .catch((err: any) => {
+                    toast({ type: "error", message: "Failed: " + (err?.message || "Unknown error") });
+                  });
+              }}
+              disabled={!stopLossPrice || parseFloat(stopLossPrice) <= 0}
+              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+            >
+              Set Stop Loss
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -18,6 +18,109 @@ import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/uti
 import { screenStocks } from "@/lib/api";
 import type { Quote, QuickOrderEvent } from "@/types";
 
+// ─── Column Configuration ────────────────────────────────────
+
+interface WatchlistColumn {
+  id: string;
+  label: string;
+  default: boolean;
+}
+
+const AVAILABLE_COLUMNS: WatchlistColumn[] = [
+  { id: "last", label: "Last", default: true },
+  { id: "changePct", label: "Chg%", default: true },
+  { id: "volume", label: "Vol", default: false },
+  { id: "bid", label: "Bid", default: false },
+  { id: "ask", label: "Ask", default: false },
+  { id: "high", label: "High", default: false },
+  { id: "low", label: "Low", default: false },
+];
+
+const COLUMNS_STORAGE_KEY = "alphadesk-watchlist-columns";
+
+function loadSelectedColumns(): string[] {
+  try {
+    const stored = localStorage.getItem(COLUMNS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return AVAILABLE_COLUMNS.filter((c) => c.default).map((c) => c.id);
+}
+
+function saveSelectedColumns(cols: string[]) {
+  try {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(cols));
+  } catch { /* ignore */ }
+}
+
+function formatVolume(vol: number): string {
+  if (vol >= 1_000_000_000) return (vol / 1_000_000_000).toFixed(1) + "B";
+  if (vol >= 1_000_000) return (vol / 1_000_000).toFixed(1) + "M";
+  if (vol >= 1_000) return (vol / 1_000).toFixed(1) + "K";
+  return String(vol);
+}
+
+// ─── Column Selector Dropdown ────────────────────────────────
+
+function ColumnSelector({
+  selectedColumns,
+  onToggle,
+}: {
+  selectedColumns: string[];
+  onToggle: (colId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Configure watchlist columns"
+        className={cn(
+          "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
+          open && "text-primary bg-primary/10"
+        )}
+        title="Configure columns"
+      >
+        <Settings className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20">
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground px-2 py-1 mb-0.5">
+            Columns
+          </div>
+          {AVAILABLE_COLUMNS.map((col) => (
+            <label
+              key={col.id}
+              className="flex items-center gap-2 px-2 py-1 text-[11px] rounded hover:bg-accent/50 cursor-pointer transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={selectedColumns.includes(col.id)}
+                onChange={() => onToggle(col.id)}
+                className="h-3 w-3 rounded border-border accent-primary"
+              />
+              <span className="text-foreground">{col.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Mock sparkline (tiny SVG) ───────────────────────────────
 
 function MiniSparkline({ trend, symbol }: { trend: number; symbol: string }) {
@@ -78,6 +181,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
   onRemove,
   onAnalyze,
   onTrade,
+  selectedColumns,
 }: {
   symbol: string;
   quote: Quote | undefined;
@@ -86,6 +190,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
   onRemove: () => void;
   onAnalyze: () => void;
   onTrade: () => void;
+  selectedColumns: string[];
 }) {
   const [flashClass, setFlashClass] = useState("");
   const [showQuickTrade, setShowQuickTrade] = useState(false);
@@ -158,47 +263,81 @@ const WatchlistRow = React.memo(function WatchlistRow({
       <MiniSparkline trend={hasRealChange ? change : 0} symbol={symbol} />
 
       {/* Price area — click to open quick-trade popover */}
-      <div className="relative">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowQuickTrade((v) => !v);
-          }}
-          aria-label={`Quick trade ${symbol}`}
-          className="w-16 text-right tabular-nums hover:text-primary transition-colors"
-        >
-          {quote ? formatCurrency(quote.last) : "---"}
-        </button>
-        {showQuickTrade && quote && (
-          <div
-            ref={popoverRef}
-            className="absolute right-0 top-full mt-1 z-50 flex gap-1 rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg"
+      {selectedColumns.includes("last") && (
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowQuickTrade((v) => !v);
+            }}
+            aria-label={`Quick trade ${symbol}`}
+            className="w-16 text-right tabular-nums hover:text-primary transition-colors"
           >
-            <button
-              onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
-              className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors"
+            {quote ? formatCurrency(quote.last) : "---"}
+          </button>
+          {showQuickTrade && quote && (
+            <div
+              ref={popoverRef}
+              className="absolute right-0 top-full mt-1 z-50 flex gap-1 rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg"
             >
-              BUY
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
-              className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors"
-            >
-              SELL
-            </button>
-          </div>
-        )}
-      </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
+                className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors"
+              >
+                BUY
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
+                className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors"
+              >
+                SELL
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className={cn(
-        "w-14 text-right tabular-nums rounded px-1 py-0.5",
-        hasRealChange ? changeColor : "text-muted-foreground",
-        hasRealChange && change > 0 && "bg-[var(--profit)]/10",
-        hasRealChange && change < 0 && "bg-[var(--loss)]/10",
-      )}>
-        {hasRealChange && <span className="sr-only">{change >= 0 ? "gain" : "loss"}</span>}
-        {hasRealChange ? formatPercent(change) : "\u2014"}
-      </div>
+      {selectedColumns.includes("changePct") && (
+        <div className={cn(
+          "w-14 text-right tabular-nums rounded px-1 py-0.5",
+          hasRealChange ? changeColor : "text-muted-foreground",
+          hasRealChange && change > 0 && "bg-[var(--profit)]/10",
+          hasRealChange && change < 0 && "bg-[var(--loss)]/10",
+        )}>
+          {hasRealChange && <span className="sr-only">{change >= 0 ? "gain" : "loss"}</span>}
+          {hasRealChange ? formatPercent(change) : "\u2014"}
+        </div>
+      )}
+
+      {selectedColumns.includes("volume") && (
+        <div className="w-14 text-right tabular-nums text-muted-foreground">
+          {quote ? formatVolume(quote.volume) : "\u2014"}
+        </div>
+      )}
+
+      {selectedColumns.includes("bid") && (
+        <div className="w-14 text-right tabular-nums text-muted-foreground">
+          {quote?.bid ? (quote.bid).toFixed(2) : "\u2014"}
+        </div>
+      )}
+
+      {selectedColumns.includes("ask") && (
+        <div className="w-14 text-right tabular-nums text-muted-foreground">
+          {quote?.ask ? (quote.ask).toFixed(2) : "\u2014"}
+        </div>
+      )}
+
+      {selectedColumns.includes("high") && (
+        <div className="w-14 text-right tabular-nums text-muted-foreground">
+          {quote?.high ? (quote.high).toFixed(2) : "\u2014"}
+        </div>
+      )}
+
+      {selectedColumns.includes("low") && (
+        <div className="w-14 text-right tabular-nums text-muted-foreground">
+          {quote?.low ? (quote.low).toFixed(2) : "\u2014"}
+        </div>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -672,6 +811,19 @@ export function WatchlistPanel() {
   const [addInput, setAddInput] = useState("");
   const [sortKey, setSortKey] = useState<"default" | "symbol" | "last" | "changePct">("default");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() => loadSelectedColumns());
+
+  const toggleColumn = useCallback((colId: string) => {
+    setSelectedColumns((prev) => {
+      const next = prev.includes(colId)
+        ? prev.filter((c) => c !== colId)
+        : [...prev, colId];
+      // Ensure at least one column is always selected
+      if (next.length === 0) return prev;
+      saveSelectedColumns(next);
+      return next;
+    });
+  }, []);
 
   const handleSort = (key: typeof sortKey) => {
     if (key === sortKey) {
@@ -781,13 +933,32 @@ export function WatchlistPanel() {
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>
             <div className="w-9" />
-            <button aria-label="Sort by last price" onClick={() => handleSort("last")} className="w-16 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
-              Last {sortKey === "last" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
-            </button>
-            <button aria-label="Sort by percent change" onClick={() => handleSort("changePct")} className="w-14 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
-              Chg% {sortKey === "changePct" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
-            </button>
-            <div className="w-5" />
+            {selectedColumns.includes("last") && (
+              <button aria-label="Sort by last price" onClick={() => handleSort("last")} className="w-16 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+                Last {sortKey === "last" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+              </button>
+            )}
+            {selectedColumns.includes("changePct") && (
+              <button aria-label="Sort by percent change" onClick={() => handleSort("changePct")} className="w-14 text-right hover:text-foreground transition-colors flex items-center justify-end gap-0.5">
+                Chg% {sortKey === "changePct" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+              </button>
+            )}
+            {selectedColumns.includes("volume") && (
+              <div className="w-14 text-right">Vol</div>
+            )}
+            {selectedColumns.includes("bid") && (
+              <div className="w-14 text-right">Bid</div>
+            )}
+            {selectedColumns.includes("ask") && (
+              <div className="w-14 text-right">Ask</div>
+            )}
+            {selectedColumns.includes("high") && (
+              <div className="w-14 text-right">High</div>
+            )}
+            {selectedColumns.includes("low") && (
+              <div className="w-14 text-right">Low</div>
+            )}
+            <ColumnSelector selectedColumns={selectedColumns} onToggle={toggleColumn} />
           </div>
 
           <ScrollArea className="flex-1">
@@ -809,6 +980,7 @@ export function WatchlistPanel() {
                     onRemove={() => removeFromWatchlist(symbol)}
                     onAnalyze={() => handleAnalyze(symbol)}
                     onTrade={() => handleTrade(symbol)}
+                    selectedColumns={selectedColumns}
                   />
                 ))
               )}
