@@ -38,7 +38,7 @@ function getDismissKey(): string {
 // ─── Component ─────────────────────────────────────────────────
 
 export function MorningBrief() {
-  const { data, isLoading } = useMorningBrief();
+  const { data, isLoading, error } = useMorningBrief();
 
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -64,8 +64,11 @@ export function MorningBrief() {
 
   if (dismissed) return null;
 
+  // If query failed or no data after loading, don't show skeleton forever
+  if (error || (!isLoading && !data)) return null;
+
   // Loading skeleton
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-border bg-[var(--panel)] p-5 animate-pulse">
         <div className="h-5 w-48 rounded bg-muted/40 mb-3" />
@@ -79,7 +82,7 @@ export function MorningBrief() {
     );
   }
 
-  return <MorningBriefContent data={data} onDismiss={handleDismiss} />;
+  return <MorningBriefContent data={data!} onDismiss={handleDismiss} />;
 }
 
 // ─── Content (separated to avoid hook ordering issues) ─────────
