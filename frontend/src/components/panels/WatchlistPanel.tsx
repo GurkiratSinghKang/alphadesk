@@ -623,11 +623,11 @@ function SignalsTab() {
   const { setSelectedSymbol } = useMarketStore();
 
   const signals = [
-    { symbol: "NVDA", signal: "Golden Cross", type: "bullish" as const },
-    { symbol: "AAPL", signal: "RSI Oversold", type: "bullish" as const },
-    { symbol: "TSLA", signal: "Death Cross", type: "bearish" as const },
-    { symbol: "META", signal: "MACD Crossover", type: "bullish" as const },
-    { symbol: "AMD", signal: "Volume Spike", type: "neutral" as const },
+    { symbol: "NVDA", signal: "Golden Cross", type: "bullish" as const, ago: "1h ago" },
+    { symbol: "AAPL", signal: "RSI Oversold", type: "bullish" as const, ago: "2h ago" },
+    { symbol: "TSLA", signal: "Death Cross", type: "bearish" as const, ago: "4h ago" },
+    { symbol: "META", signal: "MACD Crossover", type: "bullish" as const, ago: "6h ago" },
+    { symbol: "AMD", signal: "Volume Spike", type: "neutral" as const, ago: "1d ago" },
   ];
 
   return (
@@ -652,6 +652,7 @@ function SignalsTab() {
           )}
           <span className="font-medium text-foreground">{s.symbol}</span>
           <span className="text-muted-foreground flex-1">{s.signal}</span>
+          <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">{s.ago}</span>
         </div>
       ))}
     </div>

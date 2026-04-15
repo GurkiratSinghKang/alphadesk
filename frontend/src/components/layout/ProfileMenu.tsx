@@ -65,10 +65,35 @@ export function ProfileMenu() {
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="right" className="bg-[var(--surface)] border-border">
           <SheetHeader><SheetTitle>Settings</SheetTitle><SheetDescription>Configure your trading environment.</SheetDescription></SheetHeader>
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <Settings className="h-8 w-8 text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-medium text-foreground">Settings coming soon</p>
-            <p className="text-xs text-muted-foreground mt-1">Broker API keys, preferences, and configuration will be available here.</p>
+          <div className="space-y-6 px-4 py-6">
+            {/* Theme section */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Appearance</h3>
+              <div className="rounded-lg border border-border bg-[var(--panel)] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Dark theme</p>
+                    <p className="text-[10px] text-muted-foreground">OLED optimized, reduced eye strain</p>
+                  </div>
+                  <span className="rounded bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">Active</span>
+                </div>
+                <div className="flex items-center justify-between opacity-50">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Light theme</p>
+                    <p className="text-[10px] text-muted-foreground">Coming soon</p>
+                  </div>
+                  <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Soon</span>
+                </div>
+              </div>
+            </div>
+            {/* Other settings placeholder */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Configuration</h3>
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Settings className="h-6 w-6 text-muted-foreground/40 mb-2" />
+                <p className="text-xs text-muted-foreground">Broker API keys, preferences, and additional configuration coming soon.</p>
+              </div>
+            </div>
           </div>
         </SheetContent>
       </Sheet>

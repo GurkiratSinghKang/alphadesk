@@ -434,7 +434,7 @@ export default function PipelinePage() {
                           <TableCell className="text-xs tabular-nums text-muted-foreground">
                             {pos.stopLoss
                               ? formatCurrency(pos.stopLoss)
-                              : "—"}
+                              : <span className="inline-flex items-center gap-1 text-amber-400" title="No stop loss set — position is unprotected"><span aria-hidden="true">&#9888;&#65039;</span> None</span>}
                           </TableCell>
                           <TableCell className="text-xs tabular-nums text-muted-foreground">
                             {pos.takeProfit
