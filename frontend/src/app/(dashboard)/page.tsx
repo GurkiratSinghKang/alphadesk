@@ -28,6 +28,8 @@ import { MarketBreadth } from "@/components/dashboard/MarketBreadth";
 import { EconomicCalendar } from "@/components/dashboard/EconomicCalendar";
 import { RiskDashboard } from "@/components/dashboard/RiskDashboard";
 import { StressTest } from "@/components/dashboard/StressTest";
+import { MorningBrief } from "@/components/dashboard/MorningBrief";
+import { LiveSignalFeed } from "@/components/dashboard/LiveSignalFeed";
 
 // Lazy-load heavy below-the-fold components to reduce initial bundle
 const StrategyCorrelation = dynamic(
@@ -126,6 +128,7 @@ function CommandCenter() {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
   const [remainingLoaded, setRemainingLoaded] = useState(false);
+  const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
 
   // ─── Derive strategies from hook data ─────────────────────
   const strategies: StrategyData[] = useMemo(() => {
@@ -262,6 +265,9 @@ function CommandCenter() {
         }
       }
 
+      // Store pipeline log for LiveSignalFeed to reuse
+      if (pLog) setPipelineLog(pLog);
+
       // Build feed (news excluded — shown in MarketContext instead)
       const feed = buildFeedItems(pStatus, pLog, regime);
       setFeedItems(feed);
@@ -350,6 +356,9 @@ function CommandCenter() {
           </div>
         )}
 
+        {/* Morning Brief — personalized daily briefing */}
+        <MorningBrief />
+
         {/* Section 1: Command Bar */}
         <PortfolioHero
           portfolioValue={portfolioValue}
@@ -374,6 +383,9 @@ function CommandCenter() {
                 <span className="ml-2 text-xs text-muted-foreground">Loading activity...</span>
               </div>
             )}
+
+            {/* Live Signal Feed — AI trading signals with reasoning */}
+            <LiveSignalFeed pipelineLog={pipelineLog} />
 
             {/* Positions + Calendar (below feed) */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
