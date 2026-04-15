@@ -98,6 +98,9 @@ const StrategyCard = React.memo(function StrategyCard({
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {strategy.positions} active
+                  {strategy.returnPct !== 0 && strategy.positions === 0 && (
+                    <span className="text-[9px] text-muted-foreground ml-1">(historical)</span>
+                  )}
                 </span>
               </>
             )}

@@ -20,45 +20,43 @@ function generateUpcomingEvents(): CalendarEvent[] {
   const now = new Date();
 
   const templates = [
-    { event: "FOMC Meeting Minutes", impact: "high" as const, time: "2:00 PM" },
-    { event: "Non-Farm Payrolls", impact: "high" as const, time: "8:30 AM" },
-    { event: "CPI (YoY)", impact: "high" as const, time: "8:30 AM", forecast: "3.2%", previous: "3.4%" },
-    { event: "Initial Jobless Claims", impact: "medium" as const, time: "8:30 AM", forecast: "215K", previous: "210K" },
-    { event: "Retail Sales (MoM)", impact: "medium" as const, time: "8:30 AM", forecast: "0.3%", previous: "0.2%" },
-    { event: "Consumer Confidence", impact: "medium" as const, time: "10:00 AM", forecast: "104.5", previous: "103.8" },
-    { event: "PMI Manufacturing", impact: "medium" as const, time: "9:45 AM", forecast: "52.1", previous: "51.8" },
-    { event: "GDP (QoQ)", impact: "high" as const, time: "8:30 AM", forecast: "2.8%", previous: "3.1%" },
-    { event: "Core PCE Price Index", impact: "high" as const, time: "8:30 AM", forecast: "2.6%", previous: "2.7%" },
-    { event: "Housing Starts", impact: "low" as const, time: "8:30 AM" },
+    { event: "FOMC Meeting Minutes", impact: "high" as const, time: "2:00 PM", dayOfWeek: 3, forecast: "5.50%", previous: "5.50%" },
+    { event: "Non-Farm Payrolls", impact: "high" as const, time: "8:30 AM", dayOfWeek: 5, forecast: "180K", previous: "175K" },
+    { event: "CPI (YoY)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "3.2%", previous: "3.4%" },
+    { event: "Initial Jobless Claims", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "215K", previous: "210K" },
+    { event: "Retail Sales (MoM)", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "0.3%", previous: "0.2%" },
+    { event: "Consumer Confidence", impact: "medium" as const, time: "10:00 AM", dayOfWeek: 2, forecast: "104.5", previous: "103.8" },
+    { event: "PMI Manufacturing", impact: "medium" as const, time: "9:45 AM", dayOfWeek: 1, forecast: "52.1", previous: "51.8" },
+    { event: "GDP (QoQ)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "2.8%", previous: "3.1%" },
+    { event: "Core PCE Price Index", impact: "high" as const, time: "8:30 AM", dayOfWeek: 5, forecast: "2.6%", previous: "2.7%" },
+    { event: "Housing Starts", impact: "low" as const, time: "8:30 AM", dayOfWeek: 3, forecast: "1.42M", previous: "1.40M" },
   ];
 
-  const usedNames = new Set<string>();
-  let templateIdx = 0;
-
-  for (let i = 0; i < 14 && events.length < 8; i++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() + i);
-    if (d.getDay() === 0 || d.getDay() === 6) continue;
-
-    // 1-2 events per trading day, skipping duplicates
-    const count = i % 2 === 0 ? 2 : 1;
-    let added = 0;
-    while (added < count && templateIdx < templates.length) {
-      const tmpl = templates[templateIdx];
-      templateIdx++;
-      if (usedNames.has(tmpl.event)) continue;
-      usedNames.add(tmpl.event);
-      events.push({
-        date: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-        time: tmpl.time,
-        event: tmpl.event,
-        impact: tmpl.impact,
-        forecast: tmpl.forecast,
-        previous: tmpl.previous,
-      });
-      added++;
-    }
+  // Find the next occurrence of a given day-of-week (1=Mon..5=Fri) from a start date
+  function nextDayOfWeek(from: Date, dow: number): Date {
+    const d = new Date(from);
+    const current = d.getDay(); // 0=Sun..6=Sat
+    let diff = dow - current;
+    if (diff <= 0) diff += 7;
+    d.setDate(d.getDate() + diff);
+    return d;
   }
+
+  // Schedule each event on its preferred day-of-week
+  for (const tmpl of templates) {
+    const d = nextDayOfWeek(now, tmpl.dayOfWeek);
+    events.push({
+      date: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time: tmpl.time,
+      event: tmpl.event,
+      impact: tmpl.impact,
+      forecast: tmpl.forecast,
+      previous: tmpl.previous,
+    });
+  }
+
+  // Sort by date, then take up to 8
+  events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return events.slice(0, 8);
 }
 
