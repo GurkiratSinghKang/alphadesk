@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   TrendingUp,
   Activity,
@@ -302,6 +302,27 @@ interface ActivityFeedProps {
 }
 
 export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedProps) {
+  const [justMounted, setJustMounted] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setJustMounted(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const showLoading = isLoading || (justMounted && feedItems.length === 0);
+
+  // Compute badge label: "Today" if the latest feed item is from today, otherwise show the date
+  const badgeLabel = (() => {
+    if (feedItems.length === 0) return "Today";
+    const latest = feedItems[0].time;
+    const now = new Date();
+    const isToday =
+      latest.getFullYear() === now.getFullYear() &&
+      latest.getMonth() === now.getMonth() &&
+      latest.getDate() === now.getDate();
+    if (isToday) return "Today";
+    return latest.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  })();
+
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -311,16 +332,16 @@ export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedP
             Activity Feed
           </h2>
           <Badge variant="outline" className="text-xs text-muted-foreground">
-            Today
+            {badgeLabel}
           </Badge>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {isLoading ? "\u2014" : `${feedItems.length} event${feedItems.length !== 1 ? "s" : ""}`}
+          {showLoading ? "\u2014" : `${feedItems.length} event${feedItems.length !== 1 ? "s" : ""}`}
         </span>
       </div>
       <ScrollArea className={feedItems.length <= 3 ? "max-h-[200px]" : "h-[320px]"}>
         <div className="space-y-1 p-3">
-          {isLoading ? (
+          {showLoading ? (
             <div className="space-y-2 py-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex items-start gap-3 rounded-lg px-3 py-2.5 animate-pulse">

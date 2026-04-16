@@ -24,33 +24,27 @@ _stream_task: asyncio.Task | None = None
 _should_stop = False
 _last_quotes: dict[str, dict] = {}  # track last bid/ask per symbol
 
-# --- Quote throttling / last-value coalescing ---
-_last_published: dict[str, tuple[float, float]] = {}  # symbol -> (monotonic_ts, price)
-MIN_PUBLISH_INTERVAL = 0.25  # 250ms — SIP data is real-time NBBO, no flickering
+# --- No throttle: SIP feed is real-time, publish every tick ---
+_last_published: dict[str, float] = {}  # symbol -> last_price (for dedup only)
 
 # --- Dynamic watchlist state ---
-_current_symbols: set[str] = set()  # symbols currently subscribed
-MAX_SYMBOLS = 200  # well within SIP unlimited tier but reasonable
+_current_symbols: set[str] = set()
+MAX_SYMBOLS = 200
 
 
 async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) -> None:
-    """Publish only if price moved >0.01 % or >=250 ms elapsed since last publish."""
-    now = time.monotonic()
+    """Publish immediately. Only skip exact same price (dedup)."""
     last = _last_published.get(symbol)
-    if last:
-        elapsed = now - last[0]
-        price_change = abs(price - last[1]) / last[1] if last[1] else 1
-        if elapsed < MIN_PUBLISH_INTERVAL and price_change < 0.0001:
-            return  # Skip -- too soon and price hasn't moved
-    _last_published[symbol] = (now, price)
+    if last is not None and last == price:
+        return  # Exact same price — no update needed
+    _last_published[symbol] = price
     await publish(channel, data)
 
-    # Check price alerts for this symbol (best-effort, non-blocking)
     try:
         from api.routes.trades import check_alerts_for_symbol
         await check_alerts_for_symbol(symbol, price)
     except Exception:
-        pass  # Never let alert checking break the quote stream
+        pass
 
 
 # Default symbols when Redis cache and trade ledger are empty

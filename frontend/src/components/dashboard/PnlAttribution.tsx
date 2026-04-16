@@ -49,7 +49,19 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
     return { items: withPnl, totalPnl: total };
   }, [strategies]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-[var(--panel)]">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">P&L Attribution</h2>
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <p className="text-xs text-muted-foreground">No strategy P&L data yet</p>
+        </div>
+      </div>
+    );
+  }
 
   const maxAbsPnl = Math.max(...items.map((s) => Math.abs(s.dollarPnl)), 1);
 
@@ -114,7 +126,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
                 <div
                   className={cn(
                     "h-full rounded-sm transition-all duration-300",
-                    isPositive ? "bg-emerald-500/60" : "bg-red-500/60"
+                    isPositive ? "bg-[var(--profit)]/60" : "bg-[var(--loss)]/60"
                   )}
                   style={{ width: `${barWidth}%` }}
                 />

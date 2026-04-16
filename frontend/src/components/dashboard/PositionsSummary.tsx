@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -13,27 +13,42 @@ export function PositionsSummary() {
   const router = useRouter();
   const positions = usePortfolioStore((s) => s.positions);
   const [sparkData, setSparkData] = useState<Record<string, number[]>>({});
+  // Track which symbols have already been fetched to avoid refetch spam
+  const fetchedSymbolsRef = useRef<Set<string>>(new Set());
 
-  // Fetch 20-day bars for each position symbol on mount
+  // Fetch 20-day bars only for NEW position symbols
   useEffect(() => {
     if (positions.length === 0) return;
     let cancelled = false;
-    const symbols = positions.map((p) => p.symbol);
+
+    const newSymbols = positions
+      .map((p) => p.symbol)
+      .filter((sym) => !fetchedSymbolsRef.current.has(sym));
+
+    if (newSymbols.length === 0) return;
+
+    // Mark as fetched immediately to prevent duplicate requests
+    for (const sym of newSymbols) {
+      fetchedSymbolsRef.current.add(sym);
+    }
+
     Promise.allSettled(
-      symbols.map((sym) =>
+      newSymbols.map((sym) =>
         getBars(sym, "D", 20)
           .then((bars) => ({ symbol: sym, closes: bars.map((b) => b.close) }))
           .catch(() => ({ symbol: sym, closes: [] as number[] }))
       )
     ).then((results) => {
       if (cancelled) return;
-      const data: Record<string, number[]> = {};
+      const newData: Record<string, number[]> = {};
       for (const r of results) {
         if (r.status === "fulfilled" && r.value.closes.length > 0) {
-          data[r.value.symbol] = r.value.closes;
+          newData[r.value.symbol] = r.value.closes;
         }
       }
-      setSparkData(data);
+      if (Object.keys(newData).length > 0) {
+        setSparkData((prev) => ({ ...prev, ...newData }));
+      }
     });
     return () => { cancelled = true; };
   }, [positions]);

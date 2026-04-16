@@ -35,10 +35,10 @@ export function StatusStrip() {
       <div className="flex items-center gap-1.5 pr-4 border-r border-border/50">
         <span className="text-[#8a8a95] font-medium">P&L</span>
         {hasPnl ? (
-          <span aria-live="polite" aria-atomic="true" className={cn("font-semibold tabular-nums", dayPnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
-            <span className="sr-only">{dayPnl >= 0 ? "gain" : "loss"}</span>
-            {dayPnl >= 0 ? "+" : ""}<AnimatedNumber value={dayPnl} format={(n) => formatCurrency(Math.abs(n))} />
-            <span className="text-muted-foreground ml-1">({dayPnlPct >= 0 ? "+" : ""}<AnimatedNumber value={dayPnlPct} format={(n) => (n ?? 0).toFixed(2)} />%)</span>
+          <span aria-live="polite" aria-atomic="true" className={cn("font-semibold tabular-nums", dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground")}>
+            <span className="sr-only">{dayPnl > 0 ? "gain" : dayPnl < 0 ? "loss" : "flat"}</span>
+            {dayPnl > 0 ? "+" : dayPnl < 0 ? "" : ""}<AnimatedNumber value={dayPnl} format={(n) => formatCurrency(Math.abs(n))} />
+            <span className="text-muted-foreground ml-1">({dayPnlPct > 0 ? "+" : dayPnlPct < 0 ? "" : ""}<AnimatedNumber value={dayPnlPct} format={(n) => (n ?? 0).toFixed(2)} />%)</span>
           </span>
         ) : (
           <span aria-live="polite" aria-atomic="true" className="text-[#8a8a95] tabular-nums">$--.--</span>

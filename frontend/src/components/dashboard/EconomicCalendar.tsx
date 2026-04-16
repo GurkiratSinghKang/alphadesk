@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, ChevronDown } from "lucide-react";
+import { Calendar, ChevronDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CalendarEvent {
@@ -14,22 +14,88 @@ interface CalendarEvent {
   previous?: string;
 }
 
+// ─── FOMC scheduled meeting dates (2025-2026) ───────────────
+// Source: Federal Reserve published schedule
+const FOMC_DATES = [
+  // 2025
+  "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18",
+  "2025-07-30", "2025-09-17", "2025-11-05", "2025-12-17",
+  // 2026
+  "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+  "2026-07-29", "2026-09-16", "2026-11-04", "2026-12-16",
+];
+
+/** Return the first Friday of the month on or after `from` (NFP release day). */
+function getNextNFPDate(from: Date): Date {
+  const d = new Date(from);
+  // Start from the 1st of the current month
+  d.setDate(1);
+  // If already past the first Friday this month, jump to next month
+  const firstFridayThisMonth = getFirstFriday(d);
+  if (firstFridayThisMonth > from) return firstFridayThisMonth;
+  // Otherwise get next month's first Friday
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(1);
+  return getFirstFriday(d);
+}
+
+function getFirstFriday(monthStart: Date): Date {
+  const d = new Date(monthStart);
+  while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+/** Return the next FOMC date on or after `from`. */
+function getNextFOMCDate(from: Date): Date | null {
+  const iso = from.toISOString().slice(0, 10);
+  for (const dateStr of FOMC_DATES) {
+    if (dateStr >= iso) return new Date(dateStr + "T14:00:00");
+  }
+  return null;
+}
+
 // Generate events relative to today for demo purposes
 function generateUpcomingEvents(): CalendarEvent[] {
   const events: CalendarEvent[] = [];
   const now = new Date();
 
+  // --- Smart-scheduled events (real cadence) ---
+
+  // FOMC — use actual scheduled dates
+  const nextFomc = getNextFOMCDate(now);
+  if (nextFomc) {
+    events.push({
+      date: nextFomc.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time: "2:00 PM",
+      event: "FOMC Rate Decision",
+      impact: "high",
+      forecast: "4.25-4.50%",
+      previous: "4.25-4.50%",
+    });
+  }
+
+  // NFP — first Friday of the month
+  const nextNfp = getNextNFPDate(now);
+  events.push({
+    date: nextNfp.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+    time: "8:30 AM",
+    event: "Non-Farm Payrolls",
+    impact: "high",
+    forecast: "155K",
+    previous: "151K",
+  });
+
+  // --- Other recurring events (scheduled on next appropriate weekday) ---
+
   const templates = [
-    { event: "FOMC Meeting Minutes", impact: "high" as const, time: "2:00 PM", dayOfWeek: 3, forecast: "5.50%", previous: "5.50%" },
-    { event: "Non-Farm Payrolls", impact: "high" as const, time: "8:30 AM", dayOfWeek: 5, forecast: "180K", previous: "175K" },
-    { event: "CPI (YoY)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "3.2%", previous: "3.4%" },
-    { event: "Initial Jobless Claims", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "215K", previous: "210K" },
-    { event: "Retail Sales (MoM)", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "0.3%", previous: "0.2%" },
-    { event: "Consumer Confidence", impact: "medium" as const, time: "10:00 AM", dayOfWeek: 2, forecast: "104.5", previous: "103.8" },
-    { event: "PMI Manufacturing", impact: "medium" as const, time: "9:45 AM", dayOfWeek: 1, forecast: "52.1", previous: "51.8" },
-    { event: "GDP (QoQ)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "2.8%", previous: "3.1%" },
-    { event: "Core PCE Price Index", impact: "high" as const, time: "8:30 AM", dayOfWeek: 5, forecast: "2.6%", previous: "2.7%" },
-    { event: "Housing Starts", impact: "low" as const, time: "8:30 AM", dayOfWeek: 3, forecast: "1.42M", previous: "1.40M" },
+    { event: "CPI (YoY)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "2.4%", previous: "2.8%" },
+    { event: "Initial Jobless Claims", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "223K", previous: "219K" },
+    { event: "Retail Sales (MoM)", impact: "medium" as const, time: "8:30 AM", dayOfWeek: 2, forecast: "0.2%", previous: "0.1%" },
+    { event: "Consumer Confidence", impact: "medium" as const, time: "10:00 AM", dayOfWeek: 2, forecast: "98.3", previous: "97.0" },
+    { event: "PMI Manufacturing", impact: "medium" as const, time: "9:45 AM", dayOfWeek: 1, forecast: "50.2", previous: "49.8" },
+    { event: "GDP (QoQ)", impact: "high" as const, time: "8:30 AM", dayOfWeek: 4, forecast: "2.3%", previous: "2.4%" },
+    { event: "Core PCE Price Index", impact: "high" as const, time: "8:30 AM", dayOfWeek: 5, forecast: "2.6%", previous: "2.8%" },
+    { event: "Housing Starts", impact: "low" as const, time: "8:30 AM", dayOfWeek: 3, forecast: "1.38M", previous: "1.35M" },
   ];
 
   // Find the next occurrence of a given day-of-week (1=Mon..5=Fri) from a start date
@@ -73,7 +139,7 @@ const impactDot = {
 };
 
 const EVENT_DESCRIPTIONS: Record<string, string> = {
-  "FOMC Meeting Minutes": "Federal Reserve policy decisions on interest rates. High impact on bonds, USD, and equities.",
+  "FOMC Rate Decision": "Federal Reserve policy decisions on interest rates. High impact on bonds, USD, and equities.",
   "Non-Farm Payrolls": "Monthly jobs report measuring employment changes excluding farm workers. Strong numbers signal economic strength and hawkish Fed expectations. High impact on all markets.",
   "CPI (YoY)": "Consumer Price Index measures year-over-year inflation. Above forecast readings increase rate hike expectations, pressuring equities and strengthening USD.",
   "Initial Jobless Claims": "Weekly count of new unemployment insurance claims. Rising claims signal labor market weakness. Watched as a leading recession indicator.",
@@ -99,6 +165,9 @@ export function EconomicCalendar() {
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Economic Calendar</h2>
+          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-400 tracking-wider">
+            Demo Data
+          </span>
         </div>
       </div>
       <div className="divide-y divide-border">
@@ -135,6 +204,13 @@ export function EconomicCalendar() {
             </div>
           );
         })}
+      </div>
+      {/* API connection notice */}
+      <div className="flex items-center gap-1.5 border-t border-border px-4 py-2">
+        <Info className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <p className="text-[9px] text-muted-foreground">
+          Dates are approximate. Connect an economic calendar API for live data.
+        </p>
       </div>
     </div>
   );

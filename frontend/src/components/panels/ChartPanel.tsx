@@ -362,20 +362,16 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     ...annotations.map((a) => ({ price: a.price, color: a.color, label: `${a.text} ($${(a.price ?? 0).toFixed(2)})` })),
   ];
 
-  // Real-time chart update: when quote updates via WebSocket, push new bar to chart.
-  // chartHandleRef.current may be null on the first quote if the chart hasn't mounted yet;
-  // this is expected and we simply skip the update — the chart will render the data on mount.
+  // Real-time chart update: instant — SIP feed is clean, no debounce needed.
   const prevQuoteRef = useRef<{ last: number; volume: number } | null>(null);
   useEffect(() => {
-    if (!quote) return;
+    if (!quote || !chartHandleRef.current) return;
     const prev = prevQuoteRef.current;
-    if (prev && quote.last !== prev.last && chartHandleRef.current) {
-      // Update the LAST bar's close price instead of creating a new bar at current timestamp.
-      // Creating bars at Date.now() would place them far right of historical data, causing chart jumps.
+    if (prev && quote.last !== prev.last) {
       chartHandleRef.current.updateLastClose(quote.last);
     }
     prevQuoteRef.current = { last: quote.last, volume: quote.volume };
-  }, [quote]);
+  }, [quote?.last]);
 
   // Listen for real-time OHLCV bar updates from the WebSocket (SIP feed)
   useEffect(() => {
@@ -461,6 +457,31 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
               <span className={`text-xs tabular-nums ${getChangeTextClass(change)}`}>
                 {formatChangeWithSign(change)} ({formatPercent(changePct)})
               </span>
+              {/* Compact BUY/SELL in header — always visible, professional placement */}
+              {quote && (
+                <div className="flex items-center gap-1 ml-2">
+                  <button
+                    aria-label="Quick buy"
+                    onClick={() => {
+                      const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "buy", price: quote.last };
+                      window.dispatchEvent(new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail }));
+                    }}
+                    className="rounded px-2 py-0.5 text-[10px] font-bold bg-[var(--profit)]/15 text-[var(--profit)] border border-[var(--profit)]/30 hover:bg-[var(--profit)]/30 transition-colors"
+                  >
+                    BUY
+                  </button>
+                  <button
+                    aria-label="Quick sell"
+                    onClick={() => {
+                      const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "sell", price: quote.last };
+                      window.dispatchEvent(new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail }));
+                    }}
+                    className="rounded px-2 py-0.5 text-[10px] font-bold bg-[var(--loss)]/15 text-[var(--loss)] border border-[var(--loss)]/30 hover:bg-[var(--loss)]/30 transition-colors"
+                  >
+                    SELL
+                  </button>
+                </div>
+              )}
               <button
                 aria-label="Set price alert"
                 onClick={() => { setAlertPrice(quote?.last ?? 0); setAlertOpen(!alertOpen); }}
@@ -1077,34 +1098,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
         )}
 
         {/* Quick trade buttons — fixed top-right, translucent until hovered */}
-        {quote && (
-          <div className="absolute right-16 top-2 z-10 flex flex-col gap-1.5 opacity-30 hover:opacity-100 transition-opacity">
-            <button
-              aria-label="Quick buy"
-              onClick={() => {
-                const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "buy", price: quote.last };
-                window.dispatchEvent(
-                  new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail })
-                );
-              }}
-              className="rounded-md bg-[var(--profit)] px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--profit)]/90 backdrop-blur-sm"
-            >
-              BUY
-            </button>
-            <button
-              aria-label="Quick sell"
-              onClick={() => {
-                const detail: QuickOrderEvent = { symbol: selectedSymbol, side: "sell", price: quote.last };
-                window.dispatchEvent(
-                  new CustomEvent<QuickOrderEvent>("alphadesk:quick-order", { detail })
-                );
-              }}
-              className="rounded-md bg-[var(--loss)] px-2.5 py-1.5 text-[10px] font-bold text-black shadow-lg hover:bg-[var(--loss)]/90 backdrop-blur-sm"
-            >
-              SELL
-            </button>
-          </div>
-        )}
+        {/* BUY/SELL buttons removed from chart overlay — now in header toolbar */}
       </div>
     </div>
   );

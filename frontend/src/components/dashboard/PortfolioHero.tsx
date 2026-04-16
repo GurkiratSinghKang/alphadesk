@@ -204,7 +204,13 @@ export function PortfolioHero({
 
       {/* Chart strip — dedicated space below text */}
       <div className="relative h-[160px] border-t border-border/30">
-        <EquityCurveSVG data={filteredHistory} />
+        {filteredHistory.length > 0 ? (
+          <EquityCurveSVG data={filteredHistory} />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-xs text-muted-foreground">Equity curve loading...</p>
+          </div>
+        )}
       </div>
       {isDemo && hasLoaded && (
         <div className="text-xs text-blue-400/70 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>

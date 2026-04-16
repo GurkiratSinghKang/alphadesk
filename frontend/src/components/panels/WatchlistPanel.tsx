@@ -198,22 +198,27 @@ const WatchlistRow = React.memo(function WatchlistRow({
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Flash green/red on price change — force re-trigger even for consecutive same-direction moves
+  // Flash green/red on price change — color based on DAILY direction (vs prev close),
+  // not tick direction. A stock that's up +1.5% for the day should always flash green,
+  // even when an individual tick is slightly lower than the previous tick.
   useEffect(() => {
     const currentPrice = quote?.last;
     if (currentPrice != null && prevPrice.current != null && currentPrice !== prevPrice.current) {
       // Clear any pending flash so we can re-trigger the animation
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-      // Briefly clear the class to force CSS animation restart on same-direction moves
+
+      // Use daily change direction: compare to previous day's close, not last tick
+      const dailyUp = (quote?.changePct ?? 0) >= 0;
+
       setFlashClass("");
       requestAnimationFrame(() => {
-        setFlashClass(currentPrice > prevPrice.current! ? "flash-profit" : "flash-loss");
+        setFlashClass(dailyUp ? "flash-profit" : "flash-loss");
       });
       flashTimerRef.current = setTimeout(() => setFlashClass(""), 600);
     }
     prevPrice.current = currentPrice;
     return () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); };
-  }, [quote?.last]);
+  }, [quote?.last, quote?.changePct]);
 
   // Close popover on outside click
   useEffect(() => {

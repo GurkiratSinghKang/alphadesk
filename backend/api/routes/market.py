@@ -396,14 +396,15 @@ async def get_bars(
     # --- Redis cache check ---
     from core.redis import cache_get, cache_set
 
-    cache_key = f"bars:{symbol.upper()}:{timeframe.value}:{limit}"
-    cached = await cache_get(cache_key)
-    if cached:
-        return [Bar(**b) for b in cached]
-
-    # Intraday timeframes get 30s TTL; daily+ get 5min TTL
+    # Intraday: no cache (live SIP data). Daily+: 30s cache.
     _INTRADAY_TFS = {"1min", "5min", "15min", "30min", "1h"}
-    cache_ttl = 30 if timeframe.value in _INTRADAY_TFS else 300
+    cache_ttl = 0 if timeframe.value in _INTRADAY_TFS else 30
+
+    cache_key = f"bars:{symbol.upper()}:{timeframe.value}:{limit}"
+    if cache_ttl > 0:
+        cached = await cache_get(cache_key)
+        if cached:
+            return [Bar(**b) for b in cached]
 
     # --- 1. Polygon ---
     if not _polygon_key_empty():

@@ -1,32 +1,33 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { BarChart3 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { getPnlCalendar, type CalendarDay } from "@/lib/api";
+import { usePnlCalendar } from "@/hooks/useQueries";
+import type { CalendarDay } from "@/lib/api";
 
 export function PnlCalendarMini() {
-  const [days, setDays] = useState<CalendarDay[]>([]);
-  const [monthTotal, setMonthTotal] = useState(0);
-  const [fetched, setFetched] = useState(false);
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-based for the hook
+  const year = now.getFullYear();
+
+  const { data: calendarData, isLoading } = usePnlCalendar(month, year);
+  const days: CalendarDay[] = calendarData?.days ?? [];
+  const monthTotal = calendarData?.monthTotal ?? 0;
+
   const [hovered, setHovered] = useState<{ date: string; pnl: number; trades: number; winRate: number; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    getPnlCalendar().then((data) => {
-      setDays(data.days);
-      setMonthTotal(data.monthTotal);
-      setFetched(true);
-    }).catch((err) => {
-      console.error("[PnlCalendarMini] Calendar fetch failed:", err);
-      setFetched(true);
-    });
-  }, []);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  if (!mounted || !fetched) return (
+  // Pre-compute scaleMax outside the cell render loop
+  const scaleMax = useMemo(
+    () => Math.max(...days.map((d) => Math.abs(d.pnl)), 1),
+    [days],
+  );
+
+  if (!mounted || isLoading) return (
     <div className="animate-pulse bg-[var(--panel)] rounded-xl h-48 border border-border" />
   );
 
@@ -42,11 +43,8 @@ export function PnlCalendarMini() {
     </div>
   );
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun (month is 1-based, Date needs 0-based)
+  const daysInMonth = new Date(year, month, 0).getDate(); // month is 1-based, so this gives last day
   const monthName = now.toLocaleString("en-US", { month: "long" });
 
   // Build a map of date -> pnl
@@ -56,7 +54,7 @@ export function PnlCalendarMini() {
   // Empty leading cells
   for (let i = 0; i < firstDay; i++) cells.push({ day: 0, pnl: null });
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     cells.push({ day: d, pnl: pnlMap.get(dateStr) ?? null });
   }
 
@@ -83,9 +81,8 @@ export function PnlCalendarMini() {
             const isToday = cell.day === now.getDate();
             const hasPnl = cell.pnl !== null;
             const positive = (cell.pnl ?? 0) >= 0;
-            const scaleMax = Math.max(...days.map(d => Math.abs(d.pnl)), 1);
             const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / scaleMax, 1) : 0;
-            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
+            const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
             return (
               <div
                 key={cell.day}

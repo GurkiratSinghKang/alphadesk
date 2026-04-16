@@ -18,7 +18,9 @@ export function TopBar() {
   const [isMac, setIsMac] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => {
-    setIsMac(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? ""));
+    setIsMac(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(
+      (navigator as any).userAgentData?.platform ?? navigator.platform ?? ""
+    ));
   }, []);
 
   const isHome = pathname === "/";

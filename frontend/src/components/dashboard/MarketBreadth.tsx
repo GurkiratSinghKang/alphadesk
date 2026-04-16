@@ -57,7 +57,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
 
     const total = sectors.length;
     const h = getMarketHealth(adv, total);
-    const ratio = dec > 0 ? (adv / dec) : adv > 0 ? adv : 0;
+    const ratio = dec > 0 ? (adv / dec) : adv > 0 ? Infinity : 0;
 
     return {
       advancing: adv,
@@ -143,7 +143,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
         {/* A/D Ratio */}
         <div className="text-center">
           <div className="text-lg font-bold tabular-nums text-foreground">
-            {(advDecRatio ?? 0).toFixed(2)}
+            {advDecRatio === Infinity ? "\u221E" : (advDecRatio ?? 0).toFixed(2)}
           </div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
             A/D Ratio
@@ -185,6 +185,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
                 );
               })}
           </div>
+          <p className="text-[9px] text-muted-foreground/50 mt-2">Breadth measured across GICS sectors, not individual stocks.</p>
         </div>
       )}
     </div>

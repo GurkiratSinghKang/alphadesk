@@ -8,9 +8,11 @@ import { usePortfolioStore } from "@/stores/portfolio";
 // ─── Types ──────────────────────────────────────────────────
 
 interface RegimeInfo {
-  label: string;
+  regime?: string;       // Human-readable name from backend (e.g. "Bull Market")
+  label: string;         // Normalized label from backend (e.g. "bull", "bear", "neutral")
   confidence: number;
   vix_level: number;
+  description?: string;
 }
 
 interface RiskDashboardProps {
@@ -19,26 +21,53 @@ interface RiskDashboardProps {
 
 // ─── Regime mapping ─────────────────────────────────────────
 
-function getRegimeDisplay(_label: string, vixLevel?: number): {
+// Rough beta estimates for well-known tickers (used when backend doesn't provide betas)
+const KNOWN_BETAS: Record<string, number> = {
+  SPY: 1.0, QQQ: 1.2, IWM: 1.15, DIA: 0.95,
+  AAPL: 1.2, MSFT: 0.9, GOOGL: 1.1, GOOG: 1.1, AMZN: 1.15, META: 1.3,
+  NVDA: 1.7, TSLA: 2.0, AMD: 1.7, INTC: 1.0, NFLX: 1.3, AVGO: 1.2,
+  CRM: 1.15, ADBE: 1.1, QCOM: 1.2, MU: 1.5,
+  JPM: 1.1, BAC: 1.3, GS: 1.3, WFC: 1.1, MS: 1.4,
+  JNJ: 0.55, PG: 0.45, KO: 0.55, PEP: 0.6, MRK: 0.5, UNH: 0.7,
+  XOM: 0.9, CVX: 0.85, COP: 1.1,
+  V: 0.95, MA: 1.05, PYPL: 1.4,
+  XLK: 1.2, XLF: 1.1, XLE: 0.9, XLV: 0.7, XLP: 0.5, XLU: 0.4,
+  BRK: 0.6, "BRK.B": 0.6,
+  VZ: 0.4, T: 0.6, WMT: 0.5, LLY: 0.65, ABBV: 0.6,
+};
+
+/** Estimate portfolio-weighted beta from known betas; returns null if no positions have known betas. */
+function estimatePortfolioBeta(
+  positions: { symbol: string; marketValue: number }[]
+): number | null {
+  let weightedBeta = 0;
+  let totalKnownValue = 0;
+
+  for (const pos of positions) {
+    const ticker = pos.symbol.toUpperCase();
+    const beta = KNOWN_BETAS[ticker];
+    if (beta !== undefined) {
+      const absVal = Math.abs(pos.marketValue);
+      weightedBeta += beta * absVal;
+      totalKnownValue += absVal;
+    }
+  }
+
+  if (totalKnownValue === 0) return null;
+  return weightedBeta / totalKnownValue;
+}
+
+function getRegimeDisplay(label: string, _vixLevel?: number): {
   text: string;
   indicator: string;
   color: string;
   bgColor: string;
   borderColor: string;
 } {
-  // HIGH-10: Use VIX thresholds for regime label instead of text matching
-  const vix = vixLevel ?? 15;
+  // Use the backend's textual regime label for display
+  const normalized = label.toLowerCase();
 
-  if (vix > 35) {
-    return {
-      text: "Defensive",
-      indicator: "\u26ab",
-      color: "text-muted-foreground",
-      bgColor: "bg-[var(--neutral)]/10",
-      borderColor: "border-[var(--neutral)]/30",
-    };
-  }
-  if (vix >= 25) {
+  if (normalized === "bear" || normalized === "crisis") {
     return {
       text: "Risk Off",
       indicator: "\ud83d\udd34",
@@ -47,7 +76,16 @@ function getRegimeDisplay(_label: string, vixLevel?: number): {
       borderColor: "border-[var(--loss)]/30",
     };
   }
-  if (vix >= 18) {
+  if (normalized === "bull") {
+    return {
+      text: "Risk On",
+      indicator: "\ud83d\udfe2",
+      color: "text-[var(--profit)]",
+      bgColor: "bg-[var(--profit)]/10",
+      borderColor: "border-[var(--profit)]/30",
+    };
+  }
+  if (normalized === "neutral" || normalized === "correction") {
     return {
       text: "Caution",
       indicator: "\ud83d\udfe1",
@@ -56,13 +94,13 @@ function getRegimeDisplay(_label: string, vixLevel?: number): {
       borderColor: "border-amber-500/30",
     };
   }
-  // VIX < 18: Risk On
+  // Fallback: unknown label
   return {
-    text: "Risk On",
-    indicator: "\ud83d\udfe2",
-    color: "text-[var(--profit)]",
-    bgColor: "bg-[var(--profit)]/10",
-    borderColor: "border-[var(--profit)]/30",
+    text: label || "Unknown",
+    indicator: "\u26aa",
+    color: "text-muted-foreground",
+    bgColor: "bg-[var(--neutral)]/10",
+    borderColor: "border-[var(--neutral)]/30",
   };
 }
 
@@ -112,18 +150,29 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
       }
     }
 
-    // Simple beta estimate (placeholder — real beta would come from backend)
-    const beta = positions.length > 0 ? 1.0 + (positions.length - 3) * 0.05 : 0;
-    const clampedBeta = Math.max(0, Math.min(beta, 2.5));
+    // Portfolio-weighted beta from known stock betas (null if no known tickers)
+    const betaEstimate = positions.length > 0 ? estimatePortfolioBeta(positions) : null;
 
-    // VaR from regime VIX level
+    // Position-level VaR: sum of per-position VaR using individual volatility estimates
+    // For each position, estimate annualized vol from its beta relative to market vol (VIX)
     const vix = regime?.vix_level ?? 15;
-    const dailyVaR = (vix / 100) * Math.sqrt(1 / 252) * equity * 1.65;
+    const marketDailyVol = (vix / 100) / Math.sqrt(252); // daily market vol
+    let portfolioVariance = 0;
+    for (const pos of positions) {
+      const ticker = pos.symbol.toUpperCase();
+      const posBeta = KNOWN_BETAS[ticker] ?? 1.0; // assume beta=1 for unknowns
+      const posDailyVol = posBeta * marketDailyVol;
+      const posValue = Math.abs(pos.marketValue);
+      // Variance contribution (simplified — assumes no correlation adjustment beyond beta)
+      portfolioVariance += (posDailyVol * posValue) ** 2;
+    }
+    // 95% VaR = 1.65 * portfolio daily std dev
+    const dailyVaR = positions.length > 0 ? 1.65 * Math.sqrt(portfolioVariance) : 0;
 
     return {
       longExposure,
       cashPct: Math.max(0, cashPct),
-      beta: clampedBeta,
+      betaEstimate,
       dailyVaR,
       maxPosPct,
       maxPosSymbol,
@@ -192,16 +241,31 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
         {/* Metrics grid */}
         <div className="grid grid-cols-2 gap-3">
           {/* Beta */}
-          <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+          <div
+            className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2"
+            title={
+              metrics.betaEstimate == null
+                ? "Beta calculation requires historical returns data. Showing N/A because no positions match known tickers."
+                : "Estimated from known stock betas, portfolio-weighted. Not a substitute for regression-based beta."
+            }
+          >
             <div className="flex items-center gap-1 mb-0.5">
               <Activity className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Beta</span>
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                Beta{metrics.betaEstimate != null ? " (est)" : ""}
+              </span>
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
-              metrics.beta > 1.3 ? "text-amber-400" : metrics.beta > 0.5 ? "text-foreground" : "text-muted-foreground"
+              metrics.betaEstimate == null
+                ? "text-muted-foreground"
+                : metrics.betaEstimate > 1.3 ? "text-amber-400" : metrics.betaEstimate > 0.5 ? "text-foreground" : "text-muted-foreground"
             )}>
-              {positions.length > 0 ? (metrics.beta ?? 0).toFixed(2) : "--"}
+              {positions.length === 0
+                ? "--"
+                : metrics.betaEstimate != null
+                  ? metrics.betaEstimate.toFixed(2)
+                  : "N/A"}
             </p>
           </div>
 

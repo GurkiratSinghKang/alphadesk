@@ -1,39 +1,61 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMarketStore } from "@/stores/market";
+import { cn } from "@/lib/utils";
 
 export function TickerTape() {
   const watchlist = useMarketStore((s) => s.watchlist);
   const quotes = useMarketStore((s) => s.quotes);
 
-  // Build ticker items from watchlist quotes
-  const items = watchlist
-    .map((sym) => {
-      const q = quotes[sym];
-      if (!q) return null;
-      return { symbol: sym, price: q.last, change: q.change, changePct: q.changePct };
-    })
-    .filter(Boolean) as { symbol: string; price: number; change: number; changePct: number }[];
+  const items = useMemo(() => {
+    return watchlist
+      .map((sym) => {
+        const q = quotes[sym];
+        if (!q || !q.last) return null;
+        const change = q.change ?? 0;
+        const changePct = q.changePct ?? 0;
+        return { symbol: sym, price: q.last, change, changePct };
+      })
+      .filter(Boolean) as { symbol: string; price: number; change: number; changePct: number }[];
+  }, [watchlist, quotes]);
 
-  // Don't render if no quotes available yet
   if (items.length === 0) return null;
 
-  // Duplicate items so the marquee loops seamlessly
-  const doubled = [...items, ...items];
+  // Triple for seamless loop
+  const tripled = useMemo(() => [...items, ...items, ...items], [items]);
 
   return (
-    <div role="marquee" aria-label="Live market ticker tape" className="overflow-hidden overflow-x-hidden whitespace-nowrap border-b border-border/30 bg-[var(--surface)] max-w-full">
-      <div className="animate-marquee inline-flex gap-6 py-1 px-4 text-[11px] tabular-nums">
-        {doubled.map((item, i) => (
-          <span key={`${item.symbol}-${i}`} className="flex items-center gap-1">
-            <span className="font-medium text-foreground">{item.symbol}</span>
-            <span className="text-foreground">${(item.price ?? 0).toFixed(2)}</span>
-            <span className={(item.change ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}>
-              {(item.change ?? 0) >= 0 ? "\u25B2" : "\u25BC"}{(item.changePct ?? 0) >= 0 ? "+" : ""}{(item.changePct ?? 0).toFixed(2)}%
+    <div
+      role="marquee"
+      aria-label="Live market ticker"
+      className="overflow-hidden whitespace-nowrap border-b border-border/20 bg-[var(--background)]"
+    >
+      <div className="animate-marquee inline-flex gap-0 py-[3px]">
+        {tripled.map((item, i) => {
+          const up = item.change >= 0;
+          return (
+            <span
+              key={`${item.symbol}-${i}`}
+              className="inline-flex items-center gap-1.5 px-4 border-r border-border/10"
+            >
+              <span className="text-[11px] font-semibold text-foreground">
+                {item.symbol}
+              </span>
+              <span className="text-[11px] tabular-nums text-foreground/80">
+                ${item.price.toFixed(2)}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] font-medium tabular-nums",
+                  up ? "text-[var(--profit)]" : "text-[var(--loss)]"
+                )}
+              >
+                {up ? "+" : ""}{item.change.toFixed(2)} ({up ? "+" : ""}{item.changePct.toFixed(2)}%)
+              </span>
             </span>
-            {i < doubled.length - 1 && <span className="text-border ml-2">|</span>}
-          </span>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

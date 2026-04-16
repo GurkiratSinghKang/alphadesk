@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Activity, Target, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -110,13 +110,19 @@ const StrategyCard = React.memo(function StrategyCard({
           </p>
         </div>
         <div className="mt-2 -mx-1">
-          <Sparkline
-            data={(strategy.sparkline && strategy.sparkline.length > 0) ? strategy.sparkline : [0, 0, 0, 0, 0]}
-            color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
-            width={140}
-            height={28}
-            className="w-full"
-          />
+          {strategy.sparkline && strategy.sparkline.length > 0 ? (
+            <Sparkline
+              data={strategy.sparkline}
+              color={strategy.returnPct >= 0 ? "var(--profit)" : "var(--loss)"}
+              width={140}
+              height={28}
+              className="w-full"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-[28px] w-full">
+              <span className="text-[9px] text-muted-foreground/50">No data</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -183,13 +189,11 @@ interface StrategyGridProps {
 }
 
 export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: StrategyGridProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("expanded");
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem(VIEW_MODE_KEY) : null;
-    if (stored === "compact" || stored === "expanded") setViewMode(stored);
-  }, []);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "expanded";
+    const stored = localStorage.getItem(VIEW_MODE_KEY);
+    return stored === "compact" || stored === "expanded" ? stored : "expanded";
+  });
 
   const toggleView = (mode: ViewMode) => {
     setViewMode(mode);

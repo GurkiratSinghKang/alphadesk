@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Activity, RefreshCw } from "lucide-react";
@@ -141,7 +141,9 @@ function CommandCenter() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [equityHistory, setEquityHistory] = useState<{ date: string; value: number }[]>([]);
-  const [remainingLoaded, setRemainingLoaded] = useState(false);
+  const [sectorsLoaded, setSectorsLoaded] = useState(false);
+  const [newsLoaded, setNewsLoaded] = useState(false);
+  const [feedLoaded, setFeedLoaded] = useState(false);
   const [pipelineLog, setPipelineLog] = useState<Record<string, any> | null>(null);
 
   // ─── Derive strategies from hook data ─────────────────────
@@ -202,129 +204,140 @@ function CommandCenter() {
   // ─── Derive regime from hook data ─────────────────────────
   const regime: RegimeData | null = regimeData?.regime ?? null;
 
-  // ─── Fetch remaining data (sectors, news, pipeline, equity curve) ──
-  const hasFetched = useRef(false);
+  // ─── Independent data fetchers (no waterfall) ─────────────
+  // Each data source loads and refreshes on its own interval.
+
+  // Sectors — fetch on mount, refresh every 5 minutes
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
     let cancelled = false;
-
-    async function fetchRemaining() {
-      const [
-        sectorsRes,
-        newsRes,
-        pipelineStatusRes,
-        pipelineHistoryRes,
-      ] = await Promise.allSettled([
-        getMarketSectors(),
-        getMarketNews(),
-        getPipelineStatus(),
-        getPipelineHistory(),
-      ]);
-
-      if (cancelled) return;
-
+    async function fetchSectors() {
       try {
-      // Sectors
-      if (sectorsRes.status === "fulfilled") {
-        setSectors(sectorsRes.value.sectors ?? []);
-      }
-
-      // News
-      let newsItems: NewsItem[] = [];
-      if (newsRes.status === "fulfilled" && Array.isArray(newsRes.value)) {
-        newsItems = newsRes.value.slice(0, 4);
-        setNews(newsItems);
-      }
-
-      // Pipeline status
-      let pStatus: PipelineStatus | null = null;
-      if (pipelineStatusRes.status === "fulfilled") {
-        pStatus = pipelineStatusRes.value;
-      }
-
-      // Pipeline history: find latest log and fetch its full details
-      let pLog: Record<string, any> | null = null;
-      if (pipelineHistoryRes.status === "fulfilled" && Array.isArray(pipelineHistoryRes.value) && pipelineHistoryRes.value.length > 0) {
-        // Use the most recent entry (already sorted newest-first from API)
-        const latestEntry = pipelineHistoryRes.value[0];
-        const latestDate = latestEntry?.date;
-        if (latestDate) {
-          try {
-            // Fetch full log for the latest date (summary endpoint only has counts)
-            const { getPipelineRun: fetchRun } = await import("@/lib/api");
-            const fullRun = await fetchRun(latestDate);
-            // Re-map into the shape buildFeedItems expects (snake_case keys + raw arrays)
-            pLog = {
-              date: fullRun.date,
-              timestamp: fullRun.timestamp,
-              orders_placed: fullRun.ordersPlaced?.map((o: any) => ({
-                symbol: o.symbol, side: o.side, qty: o.qty,
-                price: o.price, order_id: o.orderId,
-                timestamp: o.timestamp, strategy: o.strategy,
-              })) ?? [],
-              orders_closed: fullRun.ordersClosed?.map((o: any) => ({
-                symbol: o.symbol, side: o.side, qty: o.qty,
-                price: o.price, order_id: o.orderId,
-                timestamp: o.timestamp, pnl: o.pnl,
-              })) ?? [],
-              errors: fullRun.errors ?? [],
-              master_agent: fullRun.master_agent ?? {},
-              strategies_run: fullRun.strategies ?? {},
-            };
-          } catch {
-            // Fall back to the summary entry
-            pLog = latestEntry;
-          }
+        const res = await getMarketSectors();
+        if (!cancelled) {
+          setSectors(res.sectors ?? []);
+          setSectorsLoaded(true);
         }
-      }
-
-      // Store pipeline log for LiveSignalFeed to reuse
-      if (pLog) setPipelineLog(pLog);
-
-      // Build feed (news excluded — shown in MarketContext instead)
-      const feed = buildFeedItems(pStatus, pLog, regime);
-      setFeedItems(feed);
       } catch (err) {
-        console.error("[Dashboard] Data processing error:", err);
+        console.error("[Dashboard] Sectors fetch failed:", err);
+        if (!cancelled) setSectorsLoaded(true);
       }
-
-      // Fetch real equity curve from performance endpoint
-      if (!cancelled) {
-        try {
-          const perfData = await getPortfolioPerformance();
-          if (cancelled) return;
-          if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
-            const freshEquity = usePortfolioStore.getState().summary.equity;
-            const baseEquity = freshEquity > 0 ? freshEquity : 100000;
-            const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
-            const startEquity = baseEquity - totalPnl;
-            const history = perfData.equity_curve.map((pt, i: number) => {
-              const d = new Date();
-              d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
-              return {
-                date: d.toISOString().slice(0, 10),
-                value: startEquity + (pt.cumulative_pnl ?? 0),
-              };
-            });
-            if (!cancelled) setEquityHistory(history);
-          }
-        } catch (err) {
-          console.error("[Dashboard] Equity curve fetch failed:", err);
-        }
-      }
-
-      if (!cancelled) setRemainingLoaded(true);
     }
+    fetchSectors();
+    const interval = setInterval(fetchSectors, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
-    fetchRemaining().catch((err) => {
-      console.error("[Dashboard] fetchRemaining error:", err);
-      if (!cancelled) setRemainingLoaded(true);
-    });
+  // News — fetch on mount, refresh every 2 minutes
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchNews() {
+      try {
+        const res = await getMarketNews();
+        if (!cancelled && Array.isArray(res)) {
+          setNews(res.slice(0, 4));
+          setNewsLoaded(true);
+        }
+      } catch (err) {
+        console.error("[Dashboard] News fetch failed:", err);
+        if (!cancelled) setNewsLoaded(true);
+      }
+    }
+    fetchNews();
+    const interval = setInterval(fetchNews, 2 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
+  // Pipeline status + history + activity feed — fetch on mount, refresh every 60s
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchPipeline() {
+      try {
+        const [pipelineStatusRes, pipelineHistoryRes] = await Promise.allSettled([
+          getPipelineStatus(),
+          getPipelineHistory(),
+        ]);
+        if (cancelled) return;
+
+        let pStatus: PipelineStatus | null = null;
+        if (pipelineStatusRes.status === "fulfilled") {
+          pStatus = pipelineStatusRes.value;
+        }
+
+        let pLog: Record<string, any> | null = null;
+        if (pipelineHistoryRes.status === "fulfilled" && Array.isArray(pipelineHistoryRes.value) && pipelineHistoryRes.value.length > 0) {
+          const latestEntry = pipelineHistoryRes.value[0];
+          const latestDate = latestEntry?.date;
+          if (latestDate) {
+            try {
+              const { getPipelineRun: fetchRun } = await import("@/lib/api");
+              const fullRun = await fetchRun(latestDate);
+              pLog = {
+                date: fullRun.date,
+                timestamp: fullRun.timestamp,
+                orders_placed: fullRun.ordersPlaced?.map((o: any) => ({
+                  symbol: o.symbol, side: o.side, qty: o.qty,
+                  price: o.price, order_id: o.orderId,
+                  timestamp: o.timestamp, strategy: o.strategy,
+                })) ?? [],
+                orders_closed: fullRun.ordersClosed?.map((o: any) => ({
+                  symbol: o.symbol, side: o.side, qty: o.qty,
+                  price: o.price, order_id: o.orderId,
+                  timestamp: o.timestamp, pnl: o.pnl,
+                })) ?? [],
+                errors: fullRun.errors ?? [],
+                master_agent: fullRun.master_agent ?? {},
+                strategies_run: fullRun.strategies ?? {},
+              };
+            } catch {
+              pLog = latestEntry;
+            }
+          }
+        }
+
+        if (pLog) setPipelineLog(pLog);
+        const feed = buildFeedItems(pStatus, pLog, regime);
+        if (!cancelled) {
+          setFeedItems(feed);
+          setFeedLoaded(true);
+        }
+      } catch (err) {
+        console.error("[Dashboard] Pipeline fetch failed:", err);
+        if (!cancelled) setFeedLoaded(true);
+      }
+    }
+    fetchPipeline();
+    const interval = setInterval(fetchPipeline, 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [regime]);
+
+  // Equity curve — one-time fetch (no periodic refresh needed)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchEquity() {
+      try {
+        const perfData = await getPortfolioPerformance();
+        if (cancelled) return;
+        if (Array.isArray(perfData.equity_curve) && perfData.equity_curve.length > 0) {
+          const freshEquity = usePortfolioStore.getState().summary.equity;
+          const baseEquity = freshEquity > 0 ? freshEquity : 100000;
+          const totalPnl = perfData.equity_curve[perfData.equity_curve.length - 1]?.cumulative_pnl ?? 0;
+          const startEquity = baseEquity - totalPnl;
+          const history = perfData.equity_curve.map((pt, i: number) => {
+            const d = new Date();
+            d.setDate(d.getDate() - (perfData.equity_curve.length - 1 - i));
+            return {
+              date: d.toISOString().slice(0, 10),
+              value: startEquity + (pt.cumulative_pnl ?? 0),
+            };
+          });
+          if (!cancelled) setEquityHistory(history);
+        }
+      } catch (err) {
+        console.error("[Dashboard] Equity curve fetch failed:", err);
+      }
+    }
+    fetchEquity();
+    return () => { cancelled = true; };
   }, []);
 
   // ─── Derived values ────────────────────────────────────────
@@ -386,7 +399,7 @@ function CommandCenter() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Activity Feed (left ~60%) */}
           <div className="lg:col-span-3 space-y-4">
-            {isExpanded("activity") && (remainingLoaded ? (
+            {isExpanded("activity") && (feedLoaded ? (
               <ActivityFeed
                 feedItems={feedItems}
                 onNavigate={(path) => router.push(path)}
@@ -429,7 +442,7 @@ function CommandCenter() {
         {isExpanded("correlation") && <StrategyCorrelation strategies={strategies} />}
 
         {/* Section 4: Market Context */}
-        {isExpanded("market") && (remainingLoaded ? (
+        {isExpanded("market") && (sectorsLoaded && newsLoaded ? (
           <MarketContext
             indices={indices}
             sectors={sectors}
@@ -452,7 +465,7 @@ function CommandCenter() {
           )}
           {isExpanded("breadth") && (
           <div>
-            {remainingLoaded ? (
+            {sectorsLoaded ? (
               <MarketBreadth sectors={sectors} />
             ) : (
               <div className="h-48 animate-pulse rounded-xl bg-muted/30" />

@@ -118,7 +118,19 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
     return { pairs, mostInverse, mostCorrelated, avgAbsCorr, divScore };
   }, [activeStrategies, matrix]);
 
-  if (activeStrategies.length < 2) return null;
+  if (activeStrategies.length < 2) {
+    return (
+      <div className="rounded-xl border border-border bg-[var(--panel)]">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <GitMerge className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Strategy Correlation Matrix</h2>
+        </div>
+        <div className="p-8 text-center">
+          <p className="text-xs text-muted-foreground">Need at least 2 strategies with trade history to compute correlations.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Scale cells to fill available space — target at least 44px for readability
   const n = activeStrategies.length;

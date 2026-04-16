@@ -299,10 +299,12 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const quotes = useMarketStore((s) => s.quotes);
   const hasFetched = useRef(false);
 
   // Build signals from pipeline data + watchlist quotes
+  // Note: reads quotes from store directly (not via dependency) to avoid
+  // recreating this callback on every WebSocket tick, which would reset
+  // the 60-second refresh interval.
   const buildSignals = useCallback(async () => {
     const allSignals: Signal[] = [];
 
@@ -346,8 +348,9 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
       // Pipeline data unavailable — continue with watchlist signals
     }
 
-    // 2. Watchlist-derived intraday signals
-    const watchlistSignals = generateWatchlistSignals(quotes);
+    // 2. Watchlist-derived intraday signals — read quotes directly from store
+    const currentQuotes = useMarketStore.getState().quotes;
+    const watchlistSignals = generateWatchlistSignals(currentQuotes);
     allSignals.push(...watchlistSignals);
 
     // Deduplicate by id and sort by timestamp descending
@@ -362,7 +365,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
     setSignals(deduped);
     setLastRefresh(new Date());
     setIsLoading(false);
-  }, [pipelineLog, quotes]);
+  }, [pipelineLog]);
 
   // Initial fetch
   useEffect(() => {
@@ -380,6 +383,8 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
   }, [buildSignals]);
 
   // Also rebuild when quotes change (for watchlist signals)
+  // Subscribe to quotes via the store selector and debounce rebuilds
+  const quotes = useMarketStore((s) => s.quotes);
   const quotesRef = useRef(quotes);
   useEffect(() => {
     if (quotesRef.current !== quotes && hasFetched.current) {

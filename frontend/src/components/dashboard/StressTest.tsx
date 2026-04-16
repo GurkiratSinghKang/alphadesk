@@ -21,7 +21,7 @@ interface StressScenario {
   name: string;
   description: string;
   icon: React.ReactNode;
-  modifier: (symbol: string) => number; // returns multiplier per symbol
+  modifier: (pos: { symbol: string; sector?: string }) => number; // returns multiplier per position
   color: string;
 }
 
@@ -42,29 +42,43 @@ interface StressResult {
   hedgeSuggestions: string[];
 }
 
-// ─── Tech-heavy symbols (heuristic) ────────────────────────
+// ─── Sector-based classification from position data ────────
+// Classify positions by their sector field instead of hardcoded symbol lists.
+// Falls back to a minimal ticker lookup for positions lacking sector data.
 
-const TECH_SYMBOLS = new Set([
-  "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
-  "AMD", "INTC", "CRM", "ADBE", "NFLX", "AVGO", "QCOM", "MU",
-  "SNOW", "SHOP", "SQ", "PYPL", "UBER", "ABNB", "COIN", "PLTR",
-  "QQQ", "XLK", "VGT", "ARKK",
-]);
+const TECH_SECTORS = new Set(["Technology", "Information Technology", "Communication Services"]);
+const DEFENSIVE_SECTORS = new Set(["Utilities", "Consumer Staples", "Health Care", "Healthcare"]);
+const GROWTH_SECTORS = new Set(["Technology", "Information Technology", "Communication Services", "Consumer Discretionary"]);
+const VALUE_SECTORS = new Set(["Financials", "Energy", "Industrials", "Materials"]);
 
-const DEFENSIVE_SYMBOLS = new Set([
-  "XLU", "XLP", "XLV", "VZ", "T", "JNJ", "PG", "KO", "PEP",
-  "MRK", "ABBV", "BMY", "LLY", "UNH", "WMT", "CL", "GIS",
-]);
+/** Minimal fallback: map well-known ETFs / tickers to a sector when position.sector is missing. */
+const TICKER_SECTOR_FALLBACK: Record<string, string> = {
+  QQQ: "Technology", XLK: "Technology", VGT: "Technology", ARKK: "Technology",
+  XLU: "Utilities", XLP: "Consumer Staples", XLV: "Healthcare",
+  XLE: "Energy", XLF: "Financials", VTV: "Financials", IWD: "Financials",
+  SPY: "Broad Market", IWM: "Broad Market", DIA: "Broad Market",
+};
 
-const GROWTH_SYMBOLS = new Set([
-  ...TECH_SYMBOLS,
-  "ARKK", "ARKG", "ARKF", "DKNG", "ROKU", "Z", "PINS", "SNAP",
-]);
+function getPositionSector(pos: { symbol: string; sector?: string }): string {
+  if (pos.sector) return pos.sector;
+  return TICKER_SECTOR_FALLBACK[pos.symbol.toUpperCase()] ?? "Unknown";
+}
 
-const VALUE_SYMBOLS = new Set([
-  "BRK.B", "JPM", "BAC", "WFC", "GS", "XOM", "CVX", "XLE",
-  "XLF", "VTV", "IWD",
-]);
+function isTechPosition(pos: { symbol: string; sector?: string }): boolean {
+  return TECH_SECTORS.has(getPositionSector(pos));
+}
+
+function isDefensivePosition(pos: { symbol: string; sector?: string }): boolean {
+  return DEFENSIVE_SECTORS.has(getPositionSector(pos));
+}
+
+function isGrowthPosition(pos: { symbol: string; sector?: string }): boolean {
+  return GROWTH_SECTORS.has(getPositionSector(pos));
+}
+
+function isValuePosition(pos: { symbol: string; sector?: string }): boolean {
+  return VALUE_SECTORS.has(getPositionSector(pos));
+}
 
 // ─── Scenarios ──────────────────────────────────────────────
 
@@ -80,11 +94,11 @@ const SCENARIOS: StressScenario[] = [
   {
     id: "sector-rotation",
     name: "Sector Rotation",
-    description: "Tech -15%, Defensives +5%",
+    description: "Tech/Growth sectors -15%, Defensive sectors +5%",
     icon: <ArrowDownRight className="h-3.5 w-3.5" />,
-    modifier: (symbol: string) => {
-      if (TECH_SYMBOLS.has(symbol)) return -0.15;
-      if (DEFENSIVE_SYMBOLS.has(symbol)) return 0.05;
+    modifier: (pos) => {
+      if (isTechPosition(pos)) return -0.15;
+      if (isDefensivePosition(pos)) return 0.05;
       return -0.03;
     },
     color: "text-amber-400",
@@ -92,11 +106,11 @@ const SCENARIOS: StressScenario[] = [
   {
     id: "rate-hike",
     name: "Rate Hike",
-    description: "Growth -8%, Value +3%",
+    description: "Growth sectors -8%, Value sectors +3%",
     icon: <Zap className="h-3.5 w-3.5" />,
-    modifier: (symbol: string) => {
-      if (GROWTH_SYMBOLS.has(symbol)) return -0.08;
-      if (VALUE_SYMBOLS.has(symbol)) return 0.03;
+    modifier: (pos) => {
+      if (isGrowthPosition(pos)) return -0.08;
+      if (isValuePosition(pos)) return 0.03;
       return -0.02;
     },
     color: "text-amber-400",
@@ -114,12 +128,12 @@ const SCENARIOS: StressScenario[] = [
 // ─── Compute stress result ──────────────────────────────────
 
 function computeStressResult(
-  positions: { symbol: string; currentPrice: number; quantity: number; marketValue: number }[],
-  modifier: (symbol: string) => number
+  positions: { symbol: string; sector?: string; currentPrice: number; quantity: number; marketValue: number }[],
+  modifier: (pos: { symbol: string; sector?: string }) => number
 ): StressResult {
   const results = positions.map((p) => {
     const currentValue = Math.abs(p.marketValue);
-    const scenarioChange = modifier(p.symbol);
+    const scenarioChange = modifier(p);
     const stressedValue = currentValue * (1 + scenarioChange);
     const impact = stressedValue - currentValue;
     return {
@@ -140,21 +154,33 @@ function computeStressResult(
   // Sort by impact (worst first)
   results.sort((a, b) => a.impact - b.impact);
 
-  // Generate hedge suggestions
+  // Identify the top 3 largest positions by value for hedge suggestions
+  const bySize = [...results].sort((a, b) => b.currentValue - a.currentValue);
+  const top3Names = bySize.slice(0, 3).map((r) => r.symbol);
+
+  // Generate hedge suggestions referencing actual positions
   const hedgeSuggestions: string[] = [];
   const worstSymbol = results[0]?.symbol;
-  if (totalImpact < -1000) {
-    hedgeSuggestions.push("Consider protective puts on largest positions");
+  if (totalImpact < -1000 && top3Names.length > 0) {
+    hedgeSuggestions.push(
+      `Consider protective puts on ${top3Names.slice(0, 2).join(", ")} (largest positions)`
+    );
   }
   if (totalImpact < -5000) {
-    hedgeSuggestions.push("Add SPY/QQQ put spreads as portfolio hedge");
+    hedgeSuggestions.push("Add SPY/QQQ put spreads as a broad portfolio hedge");
   }
   if (worstSymbol && results[0]?.impact < -500) {
-    hedgeSuggestions.push(`Reduce concentration in ${worstSymbol}`);
+    hedgeSuggestions.push(`Reduce concentration in ${worstSymbol} (most impacted)`);
   }
-  const techExposure = results.filter((r) => TECH_SYMBOLS.has(r.symbol));
-  if (techExposure.length > results.length * 0.5) {
-    hedgeSuggestions.push("Diversify away from tech-heavy allocation");
+  // Use sector-based classification from position data
+  const techPositions = positions.filter(isTechPosition);
+  if (techPositions.length > positions.length * 0.5) {
+    const techNames = techPositions
+      .sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue))
+      .slice(0, 3)
+      .map((p) => p.symbol)
+      .join(", ");
+    hedgeSuggestions.push(`Diversify away from tech-heavy allocation (${techNames})`);
   }
   if (hedgeSuggestions.length === 0) {
     hedgeSuggestions.push("Portfolio appears well-hedged for this scenario");
@@ -418,6 +444,11 @@ export function StressTest() {
                 ))}
               </ul>
             </div>
+
+            {/* Disclaimer */}
+            <p className="text-[9px] text-muted-foreground/60 pt-2 border-t border-border">
+              Scenarios are simplified models using uniform sector-level shocks. Actual drawdowns depend on correlations, liquidity, and timing.
+            </p>
           </div>
         )}
       </div>
