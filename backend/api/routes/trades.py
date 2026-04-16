@@ -424,7 +424,7 @@ async def list_positions() -> list[PositionResponse]:
 async def get_trade_history(
     symbol: str | None = Query(None),
     strategy: str | None = Query(None),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10000),
 ) -> list[TradeHistoryEntry]:
     """Retrieve historical trades from the trade ledger (primary) and local database (fallback)."""
 

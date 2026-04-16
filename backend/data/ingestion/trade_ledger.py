@@ -174,11 +174,11 @@ class TradeLedger:
             }
 
         wins = [t for t in closed if (t.get("pnl") or 0) > 0]
-        total_pnl = sum(t.get("pnl", 0) for t in closed)
-        pnl_pcts = [t.get("pnl_pct", 0) for t in closed]
+        total_pnl = sum(t.get("pnl") or 0 for t in closed)
+        pnl_pcts = [t.get("pnl_pct") or 0 for t in closed]
 
-        best = max(closed, key=lambda t: t.get("pnl", 0))
-        worst = min(closed, key=lambda t: t.get("pnl", 0))
+        best = max(closed, key=lambda t: t.get("pnl") or 0)
+        worst = min(closed, key=lambda t: t.get("pnl") or 0)
 
         return {
             "total_trades": len(closed),
