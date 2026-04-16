@@ -312,9 +312,8 @@ class TradeLedger:
     def _match_strategy_for_symbol(self, symbol: str) -> str:
         """Try to match an untracked Alpaca position to its originating strategy.
 
-        Searches recent closed and open trades for the same symbol to inherit
-        the strategy name. Falls back to checking Alpaca client_order_id
-        format (strategy_symbol_timestamp). Last resort: "manual".
+        Searches the last 50 trades for the same symbol to inherit the
+        strategy name from a recent pipeline trade. Last resort: "manual".
         """
         # 1. Check recent trades (last 50) for same symbol
         recent = self._data["trades"][-50:]

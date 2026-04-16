@@ -36,7 +36,8 @@ const numberCompactFmt = new Intl.NumberFormat("en-US", {
 });
 
 export function formatCurrency(value: number, compact = false): string {
-  return compact ? currencyCompactFmt.format(value) : currencyFmt.format(value);
+  const v = Number.isFinite(value) ? value : 0;
+  return compact ? currencyCompactFmt.format(v) : currencyFmt.format(v);
 }
 
 export function formatPercent(value: number): string {

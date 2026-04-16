@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GitMerge } from "lucide-react";
+import { GitMerge, TrendingDown, TrendingUp, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StrategyData } from "@/components/dashboard/StrategyGrid";
 
@@ -24,7 +24,6 @@ function pearson(a: number[], b: number[]): number {
   return Math.max(-1, Math.min(1, num / den));
 }
 
-/** Convert sparkline values to period-over-period returns */
 function toReturns(sparkline: number[]): number[] {
   const returns: number[] = [];
   for (let i = 1; i < sparkline.length; i++) {
@@ -34,26 +33,17 @@ function toReturns(sparkline: number[]): number[] {
   return returns;
 }
 
-/** Interpolate correlation value to muted professional color
- *  -1 = muted blue hsl(220, 60%, 45%)
- *   0 = dark gray   hsl(0, 0%, 25%)
- *  +1 = muted red   hsl(0, 60%, 45%)
- */
 function correlationColor(r: number): string {
   const clamped = Math.max(-1, Math.min(1, r));
   if (clamped >= 0) {
-    // Dark gray to muted red
-    const hue = 0;
-    const sat = 60 * clamped;            // 0% at 0 -> 60% at +1
-    const light = 25 + 20 * clamped;     // 25% at 0 -> 45% at +1
-    return `hsl(${hue}, ${sat}%, ${light}%)`;
+    const sat = 60 * clamped;
+    const light = 25 + 20 * clamped;
+    return `hsl(0, ${sat}%, ${light}%)`;
   } else {
-    // Dark gray to muted blue
     const abs = Math.abs(clamped);
-    const hue = 220;
-    const sat = 60 * abs;                // 0% at 0 -> 60% at -1
-    const light = 25 + 20 * abs;         // 25% at 0 -> 45% at -1
-    return `hsl(${hue}, ${sat}%, ${light}%)`;
+    const sat = 60 * abs;
+    const light = 25 + 20 * abs;
+    return `hsl(220, ${sat}%, ${light}%)`;
   }
 }
 
@@ -63,15 +53,20 @@ interface StrategyCorrelationProps {
   strategies: StrategyData[];
 }
 
+interface PairInfo {
+  nameA: string;
+  nameB: string;
+  value: number;
+}
+
 export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number; value: number } | null>(null);
 
-  // Filter to strategies with actual trade data (non-trivial sparklines)
   const activeStrategies = useMemo(
     () => strategies.filter((s) => {
       if (!s.sparkline || s.sparkline.length < 3) return false;
       const unique = new Set(s.sparkline);
-      return unique.size > 1; // skip flat lines
+      return unique.size > 1;
     }),
     [strategies]
   );
@@ -95,9 +90,39 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
     return m;
   }, [activeStrategies, returns]);
 
+  // Extract insights from the matrix
+  const insights = useMemo(() => {
+    const pairs: PairInfo[] = [];
+    const n = activeStrategies.length;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        pairs.push({
+          nameA: activeStrategies[i].shortName,
+          nameB: activeStrategies[j].shortName,
+          value: matrix[i][j],
+        });
+      }
+    }
+    pairs.sort((a, b) => a.value - b.value);
+
+    const mostInverse = pairs[0] ?? null;
+    const mostCorrelated = pairs[pairs.length - 1] ?? null;
+
+    // Average absolute correlation (lower = better diversified)
+    const avgAbsCorr = pairs.length > 0
+      ? pairs.reduce((s, p) => s + Math.abs(p.value), 0) / pairs.length
+      : 0;
+    // Diversification score: 0-100 (lower avg corr = higher score)
+    const divScore = Math.round(Math.max(0, Math.min(100, (1 - avgAbsCorr) * 100)));
+
+    return { pairs, mostInverse, mostCorrelated, avgAbsCorr, divScore };
+  }, [activeStrategies, matrix]);
+
   if (activeStrategies.length < 2) return null;
 
-  const cellSize = activeStrategies.length > 8 ? 28 : 36;
+  // Scale cells to fill available space — target at least 44px for readability
+  const n = activeStrategies.length;
+  const cellSize = Math.max(36, Math.min(52, Math.floor(280 / n)));
 
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)]">
@@ -114,11 +139,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             <span
               className={cn(
                 "font-medium",
-                hoveredCell.value > 0.3
-                  ? "text-red-400"
-                  : hoveredCell.value < -0.3
-                  ? "text-blue-400"
-                  : "text-foreground"
+                hoveredCell.value > 0.3 ? "text-red-400" : hoveredCell.value < -0.3 ? "text-blue-400" : "text-foreground"
               )}
             >
               {(hoveredCell.value ?? 0).toFixed(3)}
@@ -127,80 +148,169 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
         )}
       </div>
 
-      <div className="p-4 overflow-x-auto">
-        <div className="inline-flex gap-0">
-          {/* Y-axis labels */}
-          <div className="flex flex-col justify-end" style={{ paddingTop: cellSize + 4 }}>
-            {activeStrategies.map((s, i) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-end pr-2 text-[10px] text-muted-foreground truncate"
-                style={{ height: cellSize, maxWidth: 90 }}
-                title={s.name}
-              >
-                {s.shortName}
-              </div>
-            ))}
-          </div>
-
-          <div>
-            {/* X-axis labels */}
-            <div className="flex" style={{ height: cellSize + 4 }}>
-              {activeStrategies.map((s) => (
-                <div
-                  key={s.id}
-                  className="text-[10px] text-muted-foreground overflow-hidden"
-                  style={{ width: cellSize, transform: "rotate(-45deg) translateX(4px)", transformOrigin: "bottom left", whiteSpace: "nowrap" }}
-                  title={s.name}
-                >
-                  {s.shortName}
-                </div>
-              ))}
-            </div>
-
-            {/* Heatmap grid */}
-            {matrix.map((row, i) => (
-              <div key={i} className="flex">
-                {row.map((val, j) => (
+      <div className="p-4">
+        <div className="flex gap-6">
+          {/* Left: Heatmap */}
+          <div className="overflow-x-auto flex-1 min-w-0">
+            <div className="inline-flex gap-0">
+              {/* Y-axis labels */}
+              <div className="flex flex-col justify-end" style={{ paddingTop: cellSize + 4 }}>
+                {activeStrategies.map((s) => (
                   <div
-                    key={j}
-                    className="border border-[var(--surface)] transition-transform hover:scale-110 hover:z-10 cursor-default flex items-center justify-center"
-                    style={{
-                      width: cellSize,
-                      height: cellSize,
-                      backgroundColor: correlationColor(val),
-                      opacity: i === j ? 0.5 : 0.85,
-                    }}
-                    onMouseEnter={() => setHoveredCell({ row: i, col: j, value: val })}
-                    onMouseLeave={() => setHoveredCell(null)}
-                    title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${(val ?? 0).toFixed(3)}`}
+                    key={s.id}
+                    className="flex items-center justify-end pr-2 text-[10px] text-muted-foreground truncate"
+                    style={{ height: cellSize, maxWidth: 100 }}
+                    title={s.name}
                   >
-                    {Math.abs(val) > 0.01 && cellSize > 30 && (
-                      <span className="text-[8px] text-white/70 tabular-nums">{val.toFixed(2)}</span>
-                    )}
+                    {s.shortName}
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Legend */}
-        <div className="flex items-center justify-center gap-2 mt-4 text-[10px] text-muted-foreground">
-          <span>-1 (inverse)</span>
-          <div className="flex h-3 w-32 rounded-sm overflow-hidden">
-            {Array.from({ length: 20 }, (_, i) => {
-              const r = -1 + (i / 19) * 2;
-              return (
-                <div
-                  key={i}
-                  className="flex-1"
-                  style={{ backgroundColor: correlationColor(r) }}
-                />
-              );
-            })}
+              <div>
+                {/* X-axis labels */}
+                <div className="flex" style={{ height: cellSize + 4 }}>
+                  {activeStrategies.map((s) => (
+                    <div
+                      key={s.id}
+                      className="text-[10px] text-muted-foreground overflow-hidden"
+                      style={{ width: cellSize, transform: "rotate(-45deg) translateX(4px)", transformOrigin: "bottom left", whiteSpace: "nowrap" }}
+                      title={s.name}
+                    >
+                      {s.shortName}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Heatmap grid */}
+                {matrix.map((row, i) => (
+                  <div key={i} className="flex">
+                    {row.map((val, j) => (
+                      <div
+                        key={j}
+                        className="border border-[var(--surface)] transition-all hover:scale-110 hover:z-10 cursor-default flex items-center justify-center"
+                        style={{
+                          width: cellSize,
+                          height: cellSize,
+                          backgroundColor: correlationColor(val),
+                          opacity: i === j ? 0.4 : 0.85,
+                        }}
+                        onMouseEnter={() => setHoveredCell({ row: i, col: j, value: val })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                        title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${(val ?? 0).toFixed(3)}`}
+                      >
+                        <span className="text-[9px] text-white/80 tabular-nums font-medium">
+                          {(val ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-2 mt-3 text-[10px] text-muted-foreground">
+              <span>-1 (inverse)</span>
+              <div className="flex h-2.5 w-28 rounded-sm overflow-hidden">
+                {Array.from({ length: 20 }, (_, i) => (
+                  <div key={i} className="flex-1" style={{ backgroundColor: correlationColor(-1 + (i / 19) * 2) }} />
+                ))}
+              </div>
+              <span>+1 (correlated)</span>
+            </div>
           </div>
-          <span>+1 (correlated)</span>
+
+          {/* Right: Insights Panel */}
+          <div className="w-52 shrink-0 space-y-3">
+            {/* Diversification Score */}
+            <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Shield className="h-3.5 w-3.5 text-primary" />
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Diversification
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className={cn(
+                  "text-2xl font-bold tabular-nums",
+                  insights.divScore >= 70 ? "text-emerald-400" : insights.divScore >= 40 ? "text-amber-400" : "text-red-400"
+                )}>
+                  {insights.divScore}
+                </span>
+                <span className="text-xs text-muted-foreground">/ 100</span>
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all", insights.divScore >= 70 ? "bg-emerald-500" : insights.divScore >= 40 ? "bg-amber-500" : "bg-red-500")}
+                  style={{ width: `${insights.divScore}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1.5">
+                Avg |corr|: {insights.avgAbsCorr.toFixed(2)}
+              </p>
+            </div>
+
+            {/* Most Correlated Pair */}
+            {insights.mostCorrelated && (
+              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <TrendingUp className="h-3 w-3 text-red-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Most Correlated
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-foreground">
+                  {insights.mostCorrelated.nameA} / {insights.mostCorrelated.nameB}
+                </p>
+                <span className="text-sm font-bold tabular-nums text-red-400">
+                  {insights.mostCorrelated.value >= 0 ? "+" : ""}{insights.mostCorrelated.value.toFixed(3)}
+                </span>
+              </div>
+            )}
+
+            {/* Most Diversified Pair */}
+            {insights.mostInverse && (
+              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <TrendingDown className="h-3 w-3 text-blue-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Most Diversified
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-foreground">
+                  {insights.mostInverse.nameA} / {insights.mostInverse.nameB}
+                </p>
+                <span className="text-sm font-bold tabular-nums text-blue-400">
+                  {insights.mostInverse.value >= 0 ? "+" : ""}{insights.mostInverse.value.toFixed(3)}
+                </span>
+              </div>
+            )}
+
+            {/* Top pairs list */}
+            {insights.pairs.length > 2 && (
+              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  All Pairs
+                </span>
+                <div className="mt-1.5 space-y-1">
+                  {insights.pairs.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground truncate mr-2">
+                        {p.nameA}/{p.nameB}
+                      </span>
+                      <span className={cn(
+                        "text-[10px] font-medium tabular-nums shrink-0",
+                        p.value > 0.3 ? "text-red-400" : p.value < -0.3 ? "text-blue-400" : "text-muted-foreground"
+                      )}>
+                        {p.value >= 0 ? "+" : ""}{p.value.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

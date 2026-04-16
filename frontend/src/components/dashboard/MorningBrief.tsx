@@ -176,7 +176,7 @@ function MorningBriefContent({
                 )}
               >
                 ({isUp ? "+" : ""}
-                {data.portfolio.overnight_change_pct.toFixed(2)}%)
+                {(data.portfolio.overnight_change_pct ?? 0).toFixed(2)}%)
               </span>
             </div>
             <div className="text-[11px] text-muted-foreground mt-1">
@@ -211,7 +211,7 @@ function MorningBriefContent({
                         )}
                       >
                         {mUp ? "+" : ""}
-                        {m.change_pct.toFixed(1)}%
+                        {(m.change_pct ?? 0).toFixed(1)}%
                       </span>
                       <span
                         className={cn(
@@ -252,17 +252,17 @@ function MorningBriefContent({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">VIX</span>
                 <span className="text-xs font-medium tabular-nums text-foreground">
-                  {data.market.vix.toFixed(1)}
+                  {(data.market.vix ?? 0).toFixed(1)}
                   <span
                     className={cn(
                       "ml-1 text-[11px]",
-                      data.market.vix_change >= 0
+                      (data.market.vix_change ?? 0) >= 0
                         ? "text-red-500/70"
                         : "text-emerald-500/70"
                     )}
                   >
-                    ({data.market.vix_change >= 0 ? "+" : ""}
-                    {data.market.vix_change.toFixed(1)})
+                    ({(data.market.vix_change ?? 0) >= 0 ? "+" : ""}
+                    {(data.market.vix_change ?? 0).toFixed(1)})
                   </span>
                 </span>
               </div>
@@ -277,8 +277,8 @@ function MorningBriefContent({
                       : "text-red-500"
                   )}
                 >
-                  {data.market.spy_change_pct >= 0 ? "+" : ""}
-                  {data.market.spy_change_pct.toFixed(2)}%
+                  {(data.market.spy_change_pct ?? 0) >= 0 ? "+" : ""}
+                  {(data.market.spy_change_pct ?? 0).toFixed(2)}%
                 </span>
               </div>
             </div>

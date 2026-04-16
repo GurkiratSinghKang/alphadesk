@@ -49,7 +49,7 @@ async def _get_technical_context(symbol: str) -> str:
             resp = await client.get(
                 f"https://data.alpaca.markets/v2/stocks/{symbol}/bars",
                 headers=headers,
-                params={"timeframe": "1Day", "limit": 60, "feed": "iex"},
+                params={"timeframe": "1Day", "limit": 60, "feed": "sip"},
             )
             if resp.status_code != 200:
                 return f"Price data unavailable for {symbol}."
@@ -1485,7 +1485,7 @@ async def _get_bars(symbol: str, limit: int = 250) -> dict[str, list]:
             resp = await client.get(
                 f"https://data.alpaca.markets/v2/stocks/{symbol}/bars",
                 headers=headers,
-                params={"timeframe": "1Day", "limit": limit, "feed": "iex"},
+                params={"timeframe": "1Day", "limit": limit, "feed": "sip"},
             )
             if resp.status_code != 200:
                 return {"closes": [], "highs": [], "lows": [], "volumes": []}
@@ -1628,7 +1628,7 @@ class TSMomentumRunner(BaseStrategyRunner):
                 resp = await client.get(
                     "https://data.alpaca.markets/v2/stocks/VIXY/bars",
                     headers=headers,
-                    params={"timeframe": "1Day", "limit": 5, "feed": "iex"},
+                    params={"timeframe": "1Day", "limit": 5, "feed": "sip"},
                 )
                 if resp.status_code == 200:
                     bars = resp.json().get("bars", [])
@@ -2895,7 +2895,7 @@ class ORBRunner(BaseStrategyRunner):
                         "timeframe": "5Min",
                         "start": f"{today}T13:30:00Z",  # 9:30 ET in UTC
                         "limit": 78,  # full day of 5-min bars
-                        "feed": "iex",
+                        "feed": "sip",
                     },
                 )
                 if resp.status_code != 200:
@@ -3114,7 +3114,7 @@ class VWAPRunner(BaseStrategyRunner):
                         "timeframe": "5Min",
                         "start": f"{today}T13:30:00Z",
                         "limit": 78,
-                        "feed": "iex",
+                        "feed": "sip",
                     },
                 )
                 if resp.status_code != 200:

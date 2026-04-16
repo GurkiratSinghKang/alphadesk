@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "@/env";
 
-type WsChannel = "quotes" | "portfolio" | "alerts" | "agents";
+type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars";
 
 interface WsMessage {
   channel: WsChannel;

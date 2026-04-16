@@ -48,8 +48,9 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['vcp-breakout']).toBeDefined();
   });
 
-  it('has 13 strategies total', () => {
-    expect(Object.keys(STRATEGY_CONTENT).length).toBe(13);
+  it('has all strategies documented', () => {
+    // 13 original + 7 new TA strategies = 20
+    expect(Object.keys(STRATEGY_CONTENT).length).toBeGreaterThanOrEqual(20);
   });
 
   it('each strategy has a valid risk profile', () => {

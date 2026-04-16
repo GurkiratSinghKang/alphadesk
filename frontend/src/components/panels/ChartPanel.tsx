@@ -359,7 +359,7 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     ...drawings
       .filter((d) => d.type === "hline" && d.price != null)
       .map((d) => ({ price: d.price as number, color: d.color ?? "#3b82f6", label: d.label })),
-    ...annotations.map((a) => ({ price: a.price, color: a.color, label: `${a.text} ($${a.price.toFixed(2)})` })),
+    ...annotations.map((a) => ({ price: a.price, color: a.color, label: `${a.text} ($${(a.price ?? 0).toFixed(2)})` })),
   ];
 
   // Real-time chart update: when quote updates via WebSocket, push new bar to chart.
@@ -376,6 +376,25 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
     }
     prevQuoteRef.current = { last: quote.last, volume: quote.volume };
   }, [quote]);
+
+  // Listen for real-time OHLCV bar updates from the WebSocket (SIP feed)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const bar = (e as CustomEvent).detail;
+      if (bar?.symbol === selectedSymbol && chartHandleRef.current) {
+        chartHandleRef.current.updateBar({
+          time: Math.floor(new Date(bar.timestamp).getTime() / 1000),
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume,
+        });
+      }
+    };
+    window.addEventListener("alphadesk:bar-update", handler);
+    return () => window.removeEventListener("alphadesk:bar-update", handler);
+  }, [selectedSymbol]);
 
   // Fetch alerts for current symbol when popover opens
   const refreshAlerts = useCallback(() => {
@@ -696,17 +715,17 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
             )}
             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
               <span className="text-muted-foreground">O</span>
-              <span className="text-right text-foreground">{crosshairData.open.toFixed(2)}</span>
+              <span className="text-right text-foreground">{(crosshairData.open ?? 0).toFixed(2)}</span>
               <span className="text-muted-foreground">H</span>
-              <span className="text-right text-foreground">{crosshairData.high.toFixed(2)}</span>
+              <span className="text-right text-foreground">{(crosshairData.high ?? 0).toFixed(2)}</span>
               <span className="text-muted-foreground">L</span>
-              <span className="text-right text-foreground">{crosshairData.low.toFixed(2)}</span>
+              <span className="text-right text-foreground">{(crosshairData.low ?? 0).toFixed(2)}</span>
               <span className="text-muted-foreground">C</span>
-              <span className="text-right text-foreground font-medium">{crosshairData.close.toFixed(2)}</span>
+              <span className="text-right text-foreground font-medium">{(crosshairData.close ?? 0).toFixed(2)}</span>
             </div>
             {(() => {
-              const barChange = crosshairData.close - crosshairData.open;
-              const barChangePct = crosshairData.open > 0 ? (barChange / crosshairData.open) * 100 : 0;
+              const barChange = (crosshairData.close ?? 0) - (crosshairData.open ?? 0);
+              const barChangePct = (crosshairData.open ?? 0) > 0 ? (barChange / crosshairData.open) * 100 : 0;
               const positive = barChange >= 0;
               return (
                 <div className={cn("mt-1.5 pt-1.5 border-t border-border/50 flex items-center justify-between", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>

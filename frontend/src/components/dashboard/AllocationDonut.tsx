@@ -35,29 +35,37 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
         {/* Donut SVG */}
         <div className="shrink-0">
           <svg width={120} height={120} viewBox="0 0 120 120">
-            {/* Cash segment (blue) */}
+            {/* Background track */}
+            <circle
+              cx={cx} cy={cy} r={r}
+              fill="none"
+              stroke="var(--muted)"
+              strokeWidth={12}
+              opacity={0.15}
+            />
+            {/* Cash segment (blue) — starts at 12 o'clock */}
             <circle
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke="var(--primary)"
               strokeWidth={12}
-              strokeDasharray={`${cashDash} ${circumference}`}
+              strokeDasharray={`${cashDash} ${circumference - cashDash}`}
               strokeDashoffset={0}
               strokeLinecap="butt"
               transform={`rotate(-90 ${cx} ${cy})`}
-              opacity={0.8}
+              opacity={0.85}
             />
-            {/* Invested segment (green) — only render if invested > 0 */}
+            {/* Invested segment (green) — starts right after cash */}
             {investedPct > 0.005 && <circle
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke="var(--profit)"
               strokeWidth={12}
-              strokeDasharray={`${investedDash} ${circumference}`}
-              strokeDashoffset={circumference - cashDash}
+              strokeDasharray={`${investedDash} ${circumference - investedDash}`}
+              strokeDashoffset={-cashDash}
               strokeLinecap="butt"
               transform={`rotate(-90 ${cx} ${cy})`}
-              opacity={0.8}
+              opacity={0.85}
             />}
             {/* Center text */}
             <text x={cx} y={cy - 6} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>Total</text>
@@ -71,15 +79,15 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
         <div className="flex-1 space-y-3 pt-2">
           {/* Legend */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
                 <span className="text-xs text-muted-foreground">Cash</span>
               </div>
               <span className="text-xs tabular-nums text-foreground">{formatCurrency(cash)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--profit)]" />
                 <span className="text-xs text-muted-foreground">Invested</span>
               </div>
@@ -89,18 +97,18 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
 
           {/* Compact account details */}
           <div className="border-t border-border pt-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-hint">Buying Power</span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-hint shrink-0">Buying Power</span>
               <span className="text-xs tabular-nums text-foreground">{formatCurrency(buyingPower)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-hint">Unrealized</span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-hint shrink-0">Unrealized</span>
               <span className={cn("text-xs tabular-nums font-medium", unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                 {unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(unrealizedPnl)}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-hint">Realized Today</span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-hint shrink-0">Realized Today</span>
               <span className={cn("text-xs tabular-nums font-medium", realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                 {realizedPnlToday >= 0 ? "+" : ""}{formatCurrency(realizedPnlToday)}
               </span>

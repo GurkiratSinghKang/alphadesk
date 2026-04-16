@@ -275,3 +275,66 @@ async def pipeline_positions() -> dict[str, Any]:
         "open_positions": open_positions,
         "performance": performance,
     }
+
+
+# ---- GET /realtime-setups — view active real-time signal setups ----
+
+@router.get("/realtime-setups")
+async def get_realtime_setups() -> dict[str, Any]:
+    """Return currently active real-time signal scanner setups."""
+    from data.ingestion.realtime_scanner import get_active_setups, _pending_setups, _pairs_setups
+
+    active = get_active_setups()
+    details = []
+    for sym, setups in _pending_setups.items():
+        for s in setups:
+            details.append({
+                "symbol": sym,
+                "strategy": s.get("strategy", ""),
+                "type": s.get("type", ""),
+                "trigger_price": s.get("trigger_price", 0),
+                "direction": s.get("direction", ""),
+                "expires": s.get("expires", ""),
+            })
+    for s in _pairs_setups:
+        details.append({
+            "symbol": f"{s.get('sym_a', '')}/{s.get('sym_b', '')}",
+            "strategy": "pairs_trading",
+            "type": "pairs_zscore",
+            "trigger_price": s.get("trigger_zscore", 0),
+            "direction": s.get("direction", ""),
+            "expires": s.get("expires", ""),
+        })
+
+    return {
+        "summary": active,
+        "setups": details,
+    }
+
+
+# ---- GET /schedule — show the multi-window pipeline schedule ----
+
+@router.get("/schedule")
+async def get_pipeline_schedule() -> dict[str, Any]:
+    """Return the current pipeline execution schedule with strategy assignments."""
+    from data.ingestion.pipeline_runner import (
+        PREMARKET_STRATEGIES, OPEN_STRATEGIES, POST_OR_STRATEGIES,
+        MIDDAY_STRATEGIES, CLOSE_STRATEGIES, MONTHLY_STRATEGIES,
+        WEEKLY_STRATEGIES,
+    )
+
+    return {
+        "windows": [
+            {"time": "06:00 ET", "name": "Pre-market scan", "strategies": PREMARKET_STRATEGIES, "frequency": "daily"},
+            {"time": "09:35 ET", "name": "Market open execution", "strategies": OPEN_STRATEGIES, "frequency": "daily"},
+            {"time": "10:05 ET", "name": "Post-opening range", "strategies": POST_OR_STRATEGIES, "frequency": "daily"},
+            {"time": "12:00 ET", "name": "Midday check", "strategies": MIDDAY_STRATEGIES, "frequency": "daily"},
+            {"time": "15:30 ET", "name": "Close window (MOC)", "strategies": CLOSE_STRATEGIES, "frequency": "daily"},
+            {"time": "15:55 ET", "name": "Monthly rebalance", "strategies": MONTHLY_STRATEGIES, "frequency": "monthly (last trading day)"},
+            {"time": "15:30 Fri", "name": "Weekly refresh", "strategies": WEEKLY_STRATEGIES, "frequency": "weekly (Friday)"},
+        ],
+        "realtime": {
+            "strategies": ["orb", "vwap_strategy", "vcp_breakout", "kama_breakout", "pairs_trading"],
+            "description": "These strategies also have real-time signal scanning via the Redis quote stream, triggered on every price tick.",
+        },
+    }

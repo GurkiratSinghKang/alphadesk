@@ -393,7 +393,7 @@ function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats
     ["Avg Win", `$${(stats.avgWin ?? 0).toFixed(2)}`],
     ["Avg Loss", `-$${(stats.avgLoss ?? 0).toFixed(2)}`],
     ["Largest Win", `$${(stats.largestWin ?? 0).toFixed(2)}`],
-    ["Largest Loss", `$${(Math.abs(stats.largestLoss) ?? 0).toFixed(2)}`],
+    ["Largest Loss", `$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`],
     ["Avg Hold Time", formatDuration(stats.avgHoldMs)],
     ["Max Hold Time", formatDuration(stats.maxHoldMs)],
     ["Max Consec. Wins", String(stats.maxConsecWins)],

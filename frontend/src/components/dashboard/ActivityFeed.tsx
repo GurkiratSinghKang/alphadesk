@@ -43,24 +43,16 @@ export interface NewsItem {
 
 const MAX_FEED_ITEMS = 10;
 
-// Map internal strategy IDs to user-facing names
-const STRATEGY_NAMES: Record<string, string> = {
-  pead: "Post-Earnings Drift",
-  momentum_quality: "Momentum + Quality",
-  vrp_harvest: "VRP Harvesting",
-  mean_reversion: "Mean Reversion",
-  trend_following: "Trend Following",
-  pairs_trading: "Pairs Trading",
-  breakout: "Breakout",
-  gap_fill: "Gap Fill",
-  earnings_momentum: "Earnings Momentum",
-  sector_rotation: "Sector Rotation",
-};
+// Use canonical strategy metadata for name lookups
+import { STRATEGY_META } from "@/lib/strategies";
 
 function humanizeStrategyId(id: string): string {
-  if (STRATEGY_NAMES[id]) return STRATEGY_NAMES[id];
-  // Fallback: capitalize and replace underscores
-  return id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  // Try canonical metadata first (handles both hyphenated and underscored IDs)
+  if (STRATEGY_META[id]) return STRATEGY_META[id].shortName;
+  const hyphenated = id.replace(/_/g, "-");
+  if (STRATEGY_META[hyphenated]) return STRATEGY_META[hyphenated].shortName;
+  // Fallback: capitalize and replace separators
+  return id.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ─── Constants ───────────────────────────────────────────────

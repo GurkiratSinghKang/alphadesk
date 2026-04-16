@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/components/dashboard/Sparkline";
-import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
+import { STRATEGY_META, STRATEGY_ORDER, type StrategyGroup } from "@/lib/strategies";
 
 export { STRATEGY_META, STRATEGY_ORDER };
 
@@ -236,27 +236,68 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
         </div>
       </div>
       {viewMode === "expanded" ? (
-        <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          {strategies.map((strategy, i) => (
-            <StrategyCard
-              key={strategy.id}
-              strategy={strategy}
-              regimeLabel={regimeLabel}
-              onClick={() => onStrategyClick(strategy.id)}
-              index={i}
-            />
-          ))}
+        <div className="p-3 space-y-4">
+          {(["fundamental", "technical", "other"] as StrategyGroup[]).map((group) => {
+            const grouped = strategies.filter(
+              (s) => (STRATEGY_META[s.id]?.group ?? "other") === group
+            );
+            if (grouped.length === 0) return null;
+            const label = group === "fundamental" ? "Fundamental" : group === "technical" ? "Technical Analysis" : "Other";
+            return (
+              <div key={group}>
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {grouped.length}
+                  </span>
+                  <div className="flex-1 border-t border-border/30" />
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                  {grouped.map((strategy, i) => (
+                    <StrategyCard
+                      key={strategy.id}
+                      strategy={strategy}
+                      regimeLabel={regimeLabel}
+                      onClick={() => onStrategyClick(strategy.id)}
+                      index={i}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="divide-y divide-border/30 p-1.5">
-          {strategies.map((strategy, i) => (
-            <CompactStrategyRow
-              key={strategy.id}
-              strategy={strategy}
-              onClick={() => onStrategyClick(strategy.id)}
-              index={i}
-            />
-          ))}
+        <div className="p-1.5">
+          {(["fundamental", "technical", "other"] as StrategyGroup[]).map((group) => {
+            const grouped = strategies.filter(
+              (s) => (STRATEGY_META[s.id]?.group ?? "other") === group
+            );
+            if (grouped.length === 0) return null;
+            const label = group === "fundamental" ? "Fundamental" : group === "technical" ? "Technical Analysis" : "Other";
+            return (
+              <div key={group}>
+                <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">
+                    {label}
+                  </span>
+                  <div className="flex-1 border-t border-border/20" />
+                </div>
+                <div className="divide-y divide-border/30">
+                  {grouped.map((strategy, i) => (
+                    <CompactStrategyRow
+                      key={strategy.id}
+                      strategy={strategy}
+                      onClick={() => onStrategyClick(strategy.id)}
+                      index={i}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -24,11 +24,13 @@ export function useDataPipeline() {
     subscribe("portfolio");
     subscribe("alerts");
     subscribe("agents");
+    subscribe("bars");
     return () => {
       unsubscribe("quotes");
       unsubscribe("portfolio");
       unsubscribe("alerts");
       unsubscribe("agents");
+      unsubscribe("bars");
     };
   }, [subscribe, unsubscribe]);
 
@@ -191,6 +193,29 @@ export function useDataPipeline() {
                 })
               );
             }
+          }
+        }
+      })
+    );
+
+    // "bars" channel — real-time minute bar updates for charts
+    unsubs.push(
+      onMessage("bars", (msg) => {
+        const bar = msg.data as { symbol: string; open: number; high: number; low: number; close: number; volume: number; timestamp: string };
+        if (bar?.symbol && bar?.close) {
+          // Update the quote's last price from the bar close
+          useMarketStore.getState().updateQuote({
+            symbol: bar.symbol,
+            last: bar.close,
+            high: bar.high,
+            low: bar.low,
+            volume: bar.volume,
+          } as Quote);
+          // Dispatch bar event for TradingChart to consume
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("alphadesk:bar-update", { detail: bar })
+            );
           }
         }
       })

@@ -467,7 +467,7 @@ async def get_bars(
                 "end": datetime.combine(effective_end, datetime.min.time(), tzinfo=timezone.utc).isoformat(),
                 "limit": limit,
                 "adjustment": "raw",
-                "feed": "iex",
+                "feed": "sip",
                 "sort": "asc",
             }
             async with httpx.AsyncClient(timeout=10.0) as client:

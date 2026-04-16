@@ -590,8 +590,14 @@ def _save_log(log: dict[str, Any]) -> Path:
 async def run_daily_pipeline(
     screen_limit: int = SCREEN_TOP_N,
     analyze_limit: int = ANALYZE_TOP_N,
+    only_strategies: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Execute the full multi-strategy daily trading pipeline."""
+    """Execute the full multi-strategy daily trading pipeline.
+
+    Args:
+        only_strategies: If provided, only run these strategy names.
+            Used by the multi-window scheduler to run subsets at optimal times.
+    """
     global _pipeline_status
 
     if _pipeline_lock.locked():
@@ -725,7 +731,7 @@ async def _run_pipeline_inner(
                                 "timeframe": "1Day",
                                 "limit": 1,
                                 "start": (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y-%m-%d"),
-                                "feed": "iex",
+                                "feed": "sip",
                             },
                         )
                         if resp.status_code == 200:
@@ -753,7 +759,7 @@ async def _run_pipeline_inner(
                                 "timeframe": "1Day",
                                 "limit": 1,
                                 "start": (_now_et() - timedelta(days=365)).strftime("%Y-%m-%d"),
-                                "feed": "iex",
+                                "feed": "sip",
                             },
                         )
                         if resp.status_code == 200:
@@ -788,7 +794,11 @@ async def _run_pipeline_inner(
                     )
 
             # ---- Run each strategy (screening in parallel) ----
-            strategy_instances = [cls() for cls in ALL_STRATEGIES]
+            if only_strategies:
+                strategy_instances = [cls() for cls in ALL_STRATEGIES if cls.name in only_strategies]
+                logger.info("Running subset: %s", [s.name for s in strategy_instances])
+            else:
+                strategy_instances = [cls() for cls in ALL_STRATEGIES]
             num_strategies = len(strategy_instances)
             per_strategy_limit = max(2, analyze_limit // num_strategies)
 

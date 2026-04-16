@@ -21,6 +21,7 @@ from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
 from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeline_scheduler
 from data.ingestion.continuous_monitor import start_continuous_monitor, stop_continuous_monitor
+from data.ingestion.realtime_scanner import start_realtime_scanner, stop_realtime_scanner
 
 logger = logging.getLogger("alphadesk")
 
@@ -70,6 +71,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("Pipeline scheduler failed to start: %s", e)
 
+    # Start real-time signal scanner (pattern-based strategies)
+    try:
+        await start_realtime_scanner()
+        logger.info("Real-time signal scanner started")
+    except Exception as e:
+        logger.warning("Real-time scanner failed to start: %s", e)
+
     # Start continuous market monitor (news + price alerts)
     try:
         await start_continuous_monitor()
@@ -78,6 +86,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Continuous monitor failed to start: %s", e)
 
     yield
+
+    # Stop real-time scanner
+    try:
+        await stop_realtime_scanner()
+    except Exception:
+        pass
 
     # Stop continuous monitor
     try:

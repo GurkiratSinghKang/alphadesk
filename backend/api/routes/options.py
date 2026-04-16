@@ -4,13 +4,17 @@ import hashlib
 import logging
 import math
 import random
+import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.routes.market import _is_valid_demo_symbol
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +90,15 @@ class Greeks(BaseModel):
 # ---------------------------------------------------------------------------
 
 _DEMO_BASE_PRICES: dict[str, float] = {
-    "AAPL": 230.0, "NVDA": 140.0, "TSLA": 275.0, "MSFT": 430.0,
-    "AMZN": 195.0, "META": 530.0, "GOOGL": 175.0, "SPY": 590.0,
-    "AMD": 165.0, "NFLX": 680.0, "CRM": 310.0, "INTC": 32.0,
+    "AAPL": 265.0, "NVDA": 197.0, "TSLA": 390.0, "MSFT": 418.0,
+    "AMZN": 249.0, "META": 672.0, "GOOGL": 339.0, "SPY": 700.0,
+    "AMD": 155.0, "NFLX": 1050.0, "CRM": 310.0, "INTC": 25.0,
+    "QQQ": 639.0,
 }
+
+# Cache for real spot prices fetched from Alpaca
+_real_spot_cache: dict[str, tuple[float, float]] = {}  # symbol -> (price, timestamp)
+_SPOT_CACHE_TTL = 60  # seconds
 
 _DEMO_BASE_IV: dict[str, float] = {
     "TSLA": 0.55, "NVDA": 0.48, "AMD": 0.45, "META": 0.38,
@@ -103,7 +112,32 @@ def _symbol_seed(symbol: str) -> int:
 
 
 def _demo_spot(symbol: str) -> float:
+    """Get spot price -- tries real Alpaca price first, falls back to demo."""
     s = symbol.upper()
+
+    # Check cache first
+    now = time.time()
+    cached = _real_spot_cache.get(s)
+    if cached and (now - cached[1]) < _SPOT_CACHE_TTL:
+        return cached[0]
+
+    # Try to fetch real price from Alpaca
+    try:
+        headers = _alpaca_headers()
+        resp = httpx.get(
+            f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
+            headers=headers,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            price = resp.json().get("trade", {}).get("p", 0)
+            if price > 0:
+                _real_spot_cache[s] = (price, now)
+                return price
+    except Exception:
+        pass
+
+    # Fallback to demo prices
     if s in _DEMO_BASE_PRICES:
         return _DEMO_BASE_PRICES[s]
     rng = random.Random(_symbol_seed(s))
@@ -285,8 +319,323 @@ def _demo_iv(symbol: str) -> IVData:
 
 
 def _polygon_key_empty() -> bool:
-    from core.config import settings
     return not settings.POLYGON_API_KEY.get_secret_value()
+
+
+# ---------------------------------------------------------------------------
+# Alpaca OPRA options helpers
+# ---------------------------------------------------------------------------
+
+_ALPACA_OPTIONS_BASE = "https://data.alpaca.markets/v1beta1/options"
+
+# Cache: symbol -> (OptionChain, timestamp)
+_chain_cache: dict[str, tuple[OptionChain, float]] = {}
+_CHAIN_CACHE_TTL = 30  # seconds
+
+# Cache: symbol -> (IVData, timestamp)
+_iv_cache: dict[str, tuple[IVData, float]] = {}
+_IV_CACHE_TTL = 30
+
+
+def _alpaca_keys_empty() -> bool:
+    return (
+        not settings.ALPACA_API_KEY.get_secret_value()
+        or not settings.ALPACA_SECRET_KEY.get_secret_value()
+    )
+
+
+def _alpaca_headers() -> dict[str, str]:
+    return {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+
+
+# Regex for Alpaca-style OCC option symbols, e.g. AAPL250418C00250000
+_OCC_RE = re.compile(
+    r"^(?P<underlying>[A-Z]{1,6})"
+    r"(?P<yy>\d{2})(?P<mm>\d{2})(?P<dd>\d{2})"
+    r"(?P<cp>[CP])"
+    r"(?P<strike>\d{8})$"
+)
+
+
+def _parse_alpaca_option_symbol(sym: str) -> dict | None:
+    """Parse an OCC option symbol into components.
+
+    Example: AAPL250418C00250000
+      -> underlying=AAPL, expiry=2025-04-18, type=call, strike=250.0
+    """
+    m = _OCC_RE.match(sym)
+    if not m:
+        return None
+    return {
+        "underlying": m.group("underlying"),
+        "expiry": date(2000 + int(m.group("yy")), int(m.group("mm")), int(m.group("dd"))),
+        "option_type": OptionType.CALL if m.group("cp") == "C" else OptionType.PUT,
+        "strike": int(m.group("strike")) / 1000.0,
+    }
+
+
+def _chain_cache_key(
+    symbol: str,
+    expiry: date | None,
+    strike_min: float | None,
+    strike_max: float | None,
+    option_type: OptionType | None,
+) -> str:
+    parts = [symbol.upper()]
+    if expiry:
+        parts.append(expiry.isoformat())
+    if strike_min is not None:
+        parts.append(f"smin{strike_min}")
+    if strike_max is not None:
+        parts.append(f"smax{strike_max}")
+    if option_type is not None:
+        parts.append(option_type.value)
+    return "|".join(parts)
+
+
+async def _fetch_real_chain(
+    symbol: str,
+    expiry_filter: date | None,
+    strike_min: float | None,
+    strike_max: float | None,
+    option_type_filter: OptionType | None,
+) -> OptionChain | None:
+    """Fetch a real options chain from the Alpaca OPRA API.
+
+    Returns None on any failure so the caller can fall back to demo data.
+    """
+    if _alpaca_keys_empty():
+        return None
+
+    s = symbol.upper()
+
+    # Check cache
+    ckey = _chain_cache_key(s, expiry_filter, strike_min, strike_max, option_type_filter)
+    cached = _chain_cache.get(ckey)
+    if cached:
+        chain, ts = cached
+        if time.time() - ts < _CHAIN_CACHE_TTL:
+            return chain
+
+    try:
+        headers = _alpaca_headers()
+        params: dict[str, str] = {"feed": "opra"}
+        if expiry_filter:
+            params["expiration_date"] = expiry_filter.isoformat()
+        if strike_min is not None:
+            params["strike_price_gte"] = str(strike_min)
+        if strike_max is not None:
+            params["strike_price_lte"] = str(strike_max)
+        if option_type_filter:
+            params["type"] = option_type_filter.value
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{_ALPACA_OPTIONS_BASE}/snapshots/{s}",
+                headers=headers,
+                params=params,
+            )
+
+        if resp.status_code in (401, 403):
+            logger.warning("Alpaca options auth failed (%s) for %s — falling back", resp.status_code, s)
+            return None
+        if resp.status_code == 429:
+            logger.warning("Alpaca options rate-limited for %s", s)
+            return None
+        if resp.status_code != 200:
+            logger.warning("Alpaca options HTTP %s for %s: %s", resp.status_code, s, resp.text[:200])
+            return None
+
+        data = resp.json()
+        if not data or not isinstance(data, dict):
+            logger.warning("Alpaca options returned empty/unexpected payload for %s", s)
+            return None
+
+        # Also fetch current spot price
+        spot_price = _demo_spot(s)  # quick sync fallback
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                spot_resp = await client.get(
+                    f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
+                    headers=headers,
+                )
+            if spot_resp.status_code == 200:
+                trade_price = spot_resp.json().get("trade", {}).get("p", 0)
+                if trade_price > 0:
+                    spot_price = trade_price
+        except Exception:
+            pass  # keep the demo spot as fallback
+
+        contracts: list[OptionContract] = []
+        expirations: set[date] = set()
+
+        # The snapshots endpoint returns: { "AAPL250418C00250000": { ... }, ... }
+        for occ_sym, snap in data.get("snapshots", data).items():
+            parsed = _parse_alpaca_option_symbol(occ_sym)
+            if not parsed:
+                continue
+
+            expiry_date = parsed["expiry"]
+            strike = parsed["strike"]
+            otype = parsed["option_type"]
+
+            # Apply filters that the API might not have fully enforced
+            if expiry_filter and expiry_date != expiry_filter:
+                continue
+            if strike_min is not None and strike < strike_min:
+                continue
+            if strike_max is not None and strike > strike_max:
+                continue
+            if option_type_filter and otype != option_type_filter:
+                continue
+
+            expirations.add(expiry_date)
+
+            # Extract quote / trade / greeks from snapshot
+            quote = snap.get("latestQuote", {})
+            trade = snap.get("latestTrade", {})
+            greeks_data = snap.get("greeks", {})
+
+            bid_price = quote.get("bp", 0) or 0
+            ask_price = quote.get("ap", 0) or 0
+            last_price = trade.get("p", 0) or 0
+            if not last_price and bid_price and ask_price:
+                last_price = round((bid_price + ask_price) / 2, 2)
+
+            volume = trade.get("s", 0) or snap.get("dailyBar", {}).get("v", 0) or 0
+            oi = snap.get("openInterest", 0) or 0
+            iv = snap.get("impliedVolatility", 0) or greeks_data.get("iv", 0) or 0
+
+            contracts.append(OptionContract(
+                symbol=occ_sym,
+                underlying=parsed["underlying"],
+                expiry=expiry_date,
+                strike=strike,
+                option_type=otype,
+                bid=round(bid_price, 2),
+                ask=round(ask_price, 2),
+                last=round(last_price, 2),
+                volume=int(volume),
+                open_interest=int(oi),
+                iv=round(iv, 4),
+                delta=round(greeks_data.get("delta", 0) or 0, 4),
+                gamma=round(greeks_data.get("gamma", 0) or 0, 6),
+                theta=round(greeks_data.get("theta", 0) or 0, 4),
+                vega=round(greeks_data.get("vega", 0) or 0, 4),
+                rho=round(greeks_data.get("rho", 0) or 0, 4),
+            ))
+
+        if not contracts:
+            # Symbol may not be optionable or no data returned
+            logger.info("Alpaca returned 0 contracts for %s — falling back to demo", s)
+            return None
+
+        chain = OptionChain(
+            underlying=s,
+            spot_price=spot_price,
+            expirations=sorted(expirations),
+            contracts=contracts,
+            fetched_at=datetime.now(timezone.utc),
+        )
+        _chain_cache[ckey] = (chain, time.time())
+        return chain
+
+    except httpx.TimeoutException:
+        logger.warning("Alpaca options request timed out for %s", s)
+        return None
+    except Exception:
+        logger.warning("Alpaca options fetch failed for %s", s, exc_info=True)
+        return None
+
+
+async def _fetch_real_iv(symbol: str) -> IVData | None:
+    """Derive IV analytics from the real Alpaca options chain.
+
+    Fetches the chain (or uses the cached version), then computes IV rank
+    proxies, skew, and term structure from the live greeks.
+    Returns None on failure so the caller can fall back to demo data.
+    """
+    s = symbol.upper()
+
+    # Check IV cache
+    cached = _iv_cache.get(s)
+    if cached:
+        iv_data, ts = cached
+        if time.time() - ts < _IV_CACHE_TTL:
+            return iv_data
+
+    # Fetch chain across all expirations — no filters
+    chain = await _fetch_real_chain(s, None, None, None, None)
+    if chain is None or not chain.contracts:
+        return None
+
+    try:
+        spot = chain.spot_price
+
+        # Collect IVs from all contracts
+        all_ivs = [c.iv for c in chain.contracts if c.iv > 0]
+        if not all_ivs:
+            return None
+
+        # ATM IV: contracts closest to spot
+        atm_contracts = sorted(chain.contracts, key=lambda c: abs(c.strike - spot))
+        atm_ivs = [c.iv for c in atm_contracts[:10] if c.iv > 0]
+        current_iv = round(sum(atm_ivs) / len(atm_ivs), 4) if atm_ivs else round(sum(all_ivs) / len(all_ivs), 4)
+
+        # IV rank / percentile approximation from current snapshot spread
+        # (True rank needs history; we use the distribution of IVs in the chain)
+        sorted_ivs = sorted(all_ivs)
+        iv_min = sorted_ivs[0]
+        iv_max = sorted_ivs[-1]
+        iv_rank = round((current_iv - iv_min) / (iv_max - iv_min) * 100, 1) if iv_max != iv_min else 50.0
+        iv_percentile = round(sum(1 for v in sorted_ivs if v < current_iv) / len(sorted_ivs) * 100, 1)
+
+        # HV approximations (without real price history, use IV as proxy)
+        hv_20 = round(current_iv * 0.85, 4)
+        hv_50 = round(current_iv * 0.90, 4)
+        hv_100 = round(current_iv * 0.92, 4)
+
+        # IV skew: calls closest to nearest expiry, grouped by strike
+        nearest_exp = chain.expirations[0] if chain.expirations else None
+        skew: dict[str, float] = {}
+        if nearest_exp:
+            near_contracts = sorted(
+                [c for c in chain.contracts if c.expiry == nearest_exp and c.option_type == OptionType.CALL and c.iv > 0],
+                key=lambda c: abs(c.strike - spot),
+            )
+            for c in near_contracts[:7]:
+                skew[str(c.strike)] = round(c.iv, 4)
+
+        # Term structure: ATM IV by expiration
+        term_structure: dict[str, float] = {}
+        for exp in chain.expirations:
+            exp_atm = [
+                c for c in chain.contracts
+                if c.expiry == exp and c.iv > 0 and abs(c.strike - spot) / spot < 0.05
+            ]
+            if exp_atm:
+                avg_iv = sum(c.iv for c in exp_atm) / len(exp_atm)
+                term_structure[exp.isoformat()] = round(avg_iv, 4)
+
+        result = IVData(
+            symbol=s,
+            current_iv=current_iv,
+            iv_rank=iv_rank,
+            iv_percentile=iv_percentile,
+            hv_20=hv_20,
+            hv_50=hv_50,
+            hv_100=hv_100,
+            iv_skew=skew,
+            term_structure=term_structure,
+        )
+        _iv_cache[s] = (result, time.time())
+        return result
+    except Exception:
+        logger.warning("Failed to compute real IV data for %s", s, exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -303,144 +652,49 @@ async def get_options_chain(
 ) -> OptionChain:
     """Fetch the full options chain for an underlying symbol.
 
-    Data sourced from Theta Data API with real-time greeks computed via
-    Black-Scholes-Merton.
+    Tries Alpaca OPRA real-time data first (requires Algo Trader Plus plan),
+    then falls back to BSM-approximated demo data.
     """
-    if _polygon_key_empty():
-        if not _is_valid_demo_symbol(symbol):
-            raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
-        return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
+    symbol = symbol.upper()
 
-    try:
-        import httpx
-        from core.config import settings
+    # ── 1. Try Alpaca OPRA (real data) ────────────────────────────────
+    real_chain = await _fetch_real_chain(symbol, expiry, strike_min, strike_max, option_type)
+    if real_chain is not None:
+        return real_chain
 
-        symbol = symbol.upper()
-
-        async with httpx.AsyncClient() as client:
-            params = {
-                "root": symbol,
-                "apiKey": settings.POLYGON_API_KEY.get_secret_value(),
-            }
-            if expiry:
-                params["expiration_date"] = expiry.isoformat()
-
-            resp = await client.get(
-                f"https://api.polygon.io/v3/snapshot/options/{symbol}",
-                params=params,
-                timeout=15.0,
-            )
-            if resp.status_code == 429:
-                raise HTTPException(
-                    status_code=429,
-                    detail="Polygon rate limit reached (free tier: 5 calls/min). Please wait and retry.",
-                )
-            if resp.status_code in (401, 403):
-                # API key lacks options permissions — fall back to demo
-                if not _is_valid_demo_symbol(symbol):
-                    raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
-                return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
-            if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=f"Polygon options error: {resp.text[:200]}")
-            try:
-                data = resp.json()
-            except Exception:
-                raise HTTPException(status_code=502, detail="Invalid response from Polygon API")
-
-        contracts: list[OptionContract] = []
-        expirations: set[date] = set()
-        spot_price = 0.0
-
-        for item in data.get("results", []):
-            details = item.get("details", {})
-            greeks = item.get("greeks", {})
-            day = item.get("day", {})
-            quote = item.get("last_quote", {})
-
-            exp_str = details.get("expiration_date")
-            if not exp_str:
-                continue
-            exp = date.fromisoformat(exp_str)
-            strike = details.get("strike_price", 0)
-            otype = OptionType.CALL if details.get("contract_type") == "call" else OptionType.PUT
-
-            if strike_min and strike < strike_min:
-                continue
-            if strike_max and strike > strike_max:
-                continue
-            if option_type and otype != option_type:
-                continue
-
-            expirations.add(exp)
-            spot_price = item.get("underlying_asset", {}).get("price", spot_price)
-
-            # Derive last price: prefer day close, fall back to quote midpoint
-            bid_price = quote.get("bid", 0) or 0
-            ask_price = quote.get("ask", 0) or 0
-            last_price = day.get("close", 0) or 0
-            if not last_price and bid_price and ask_price:
-                last_price = round((bid_price + ask_price) / 2, 2)
-
-            # open_interest can be at item level or under day
-            oi = item.get("open_interest", 0) or day.get("open_interest", 0) or 0
-
-            contracts.append(OptionContract(
-                symbol=details.get("ticker", ""),
-                underlying=symbol,
-                expiry=exp,
-                strike=strike,
-                option_type=otype,
-                bid=bid_price,
-                ask=ask_price,
-                last=last_price,
-                volume=day.get("volume", 0) or 0,
-                open_interest=oi,
-                iv=item.get("implied_volatility", 0) or 0,
-                delta=greeks.get("delta", 0) or 0,
-                gamma=greeks.get("gamma", 0) or 0,
-                theta=greeks.get("theta", 0) or 0,
-                vega=greeks.get("vega", 0) or 0,
-            ))
-
-        return OptionChain(
-            underlying=symbol,
-            spot_price=spot_price,
-            expirations=sorted(expirations),
-            contracts=contracts,
-            fetched_at=datetime.now(timezone.utc),
-        )
-    except HTTPException:
-        raise
-    except Exception:
-        logger.warning("Failed to fetch options chain from Polygon for %s, falling back to demo", symbol, exc_info=True)
-        if not _is_valid_demo_symbol(symbol):
-            raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
-        return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
+    # ── 2. Fallback to demo data ──────────────────────────────────────
+    if not _is_valid_demo_symbol(symbol):
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
+    logger.info("Using demo options chain for %s (Alpaca OPRA unavailable)", symbol)
+    return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
 
 
 @router.get("/iv/{symbol}", response_model=IVData)
 async def get_iv_analysis(symbol: str) -> IVData:
     """Compute IV rank, percentile, and skew analysis for a symbol.
 
-    Uses historical IV data to compute rank/percentile over the past year.
+    Tries real Alpaca OPRA options data first, then falls back to demo.
     """
     symbol = symbol.upper()
 
+    # ── 1. Try real IV from Alpaca OPRA chain ─────────────────────────
+    real_iv = await _fetch_real_iv(symbol)
+    if real_iv is not None:
+        return real_iv
+
+    # ── 2. Try Redis-cached IV history (legacy path) ──────────────────
     try:
         import numpy as np
         from core.redis import cache_get
 
-        # Try cache first
         cached = await cache_get(f"iv:{symbol}")
         if cached:
             return IVData(**cached)
 
-        # In production, fetch 1yr of IV data from Theta Data and compute stats.
         iv_history = await cache_get(f"iv_history:{symbol}") or {}
         iv_values = iv_history.get("values", [])
 
         if not iv_values:
-            # No cached data available — return demo (only for valid symbols)
             if not _is_valid_demo_symbol(symbol):
                 raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
             return _demo_iv(symbol)
@@ -451,7 +705,6 @@ async def get_iv_analysis(symbol: str) -> IVData:
         iv_rank = float((current_iv - arr.min()) / (arr.max() - arr.min()) * 100) if arr.max() != arr.min() else 50
         iv_percentile = float(np.sum(arr < current_iv) / len(arr) * 100)
 
-        # Compute historical vol at multiple windows
         prices = (await cache_get(f"prices:{symbol}") or {}).get("close", [])
         if len(prices) > 100:
             returns = np.diff(np.log(np.array(prices, dtype=float)))

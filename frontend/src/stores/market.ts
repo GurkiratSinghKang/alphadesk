@@ -40,7 +40,17 @@ export const useMarketStore = create<MarketState>()(
       updateQuote: (quote) =>
         set((state) => {
           const existing = state.quotes[quote.symbol];
-          const merged = existing ? { ...existing, ...quote } : { ...quote };
+          if (!existing) {
+            // First time seeing this symbol — store as-is
+            return { quotes: { ...state.quotes, [quote.symbol]: { ...quote } } };
+          }
+          // Merge but PRESERVE the close (prev day close) from the initial snapshot.
+          // WebSocket quotes don't carry close, so don't let it get overwritten.
+          const merged = {
+            ...existing,
+            ...quote,
+            close: existing.close || quote.close, // keep original close
+          };
           // Recompute change/changePct from prev close when a real-time price arrives
           if (merged.last && merged.close && merged.close > 0) {
             merged.change = +(merged.last - merged.close).toFixed(4);

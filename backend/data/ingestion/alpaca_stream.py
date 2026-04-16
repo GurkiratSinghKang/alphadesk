@@ -1,10 +1,10 @@
-"""Alpaca WebSocket streaming for real-time quotes.
+"""Alpaca WebSocket streaming for real-time quotes and minute bars.
 
-Connects to Alpaca's IEX WebSocket feed and publishes quotes/trades
-to Redis pub/sub for distribution to frontend WebSocket clients.
+Connects to Alpaca's SIP WebSocket feed (full NBBO, 100% of market)
+and publishes quotes/trades/bars to Redis pub/sub for distribution
+to frontend WebSocket clients.
 
-Note: IEX data is 15-min delayed on free accounts; real-time with
-paper trading subscriptions.
+SIP provides real-time consolidated data from all US exchanges.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import time
 import websockets
 
 from core.config import settings
-from core.redis import publish
+from core.redis import cache_get, publish
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +26,15 @@ _last_quotes: dict[str, dict] = {}  # track last bid/ask per symbol
 
 # --- Quote throttling / last-value coalescing ---
 _last_published: dict[str, tuple[float, float]] = {}  # symbol -> (monotonic_ts, price)
-MIN_PUBLISH_INTERVAL = 0.1  # 100 ms
+MIN_PUBLISH_INTERVAL = 0.25  # 250ms — SIP data is real-time NBBO, no flickering
+
+# --- Dynamic watchlist state ---
+_current_symbols: set[str] = set()  # symbols currently subscribed
+MAX_SYMBOLS = 200  # well within SIP unlimited tier but reasonable
 
 
 async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) -> None:
-    """Publish only if price moved >0.01 % or >=100 ms elapsed since last publish."""
+    """Publish only if price moved >0.01 % or >=250 ms elapsed since last publish."""
     now = time.monotonic()
     last = _last_published.get(symbol)
     if last:
@@ -49,12 +53,61 @@ async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) ->
         pass  # Never let alert checking break the quote stream
 
 
-WATCHLIST = [
+# Default symbols when Redis cache and trade ledger are empty
+DEFAULT_WATCHLIST = [
     "AAPL", "NVDA", "TSLA", "SPY", "QQQ",
     "MSFT", "AMZN", "META", "AMD", "GOOGL",
 ]
 
-ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v2/iex"
+# Always include core index ETFs for market context
+CORE_INDICES = {"SPY", "QQQ", "DIA", "IWM", "VIXY"}
+
+ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v2/sip"
+
+
+async def get_dynamic_watchlist() -> list[str]:
+    """Build a watchlist from Redis cache, open positions, and core indices.
+
+    Sources (in order):
+      1. Redis cache key "watchlist:symbols" (set by the frontend/API)
+      2. Fallback to DEFAULT_WATCHLIST if Redis is empty
+      3. Symbols with open positions in the trade ledger
+      4. Core index ETFs (SPY, QQQ, DIA, IWM, VIXY)
+
+    Caps at MAX_SYMBOLS (200).
+    """
+    symbols: set[str] = set()
+
+    # 1) Try Redis cached watchlist
+    try:
+        cached = await cache_get("watchlist:symbols")
+        if cached and isinstance(cached, list):
+            symbols.update(
+                s.upper().strip() for s in cached
+                if isinstance(s, str) and s.strip()
+            )
+    except Exception:
+        logger.debug("Could not read watchlist from Redis cache")
+
+    # 2) Fallback to defaults if nothing from Redis
+    if not symbols:
+        symbols.update(DEFAULT_WATCHLIST)
+
+    # 3) Add symbols from open positions in the trade ledger
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+        ledger = TradeLedger()
+        held = ledger.get_held_symbols()
+        symbols.update(held)
+    except Exception:
+        logger.debug("Could not read open positions from trade ledger")
+
+    # 4) Always include core indices
+    symbols.update(CORE_INDICES)
+
+    # 5) Cap at MAX_SYMBOLS
+    result = sorted(symbols)[:MAX_SYMBOLS]
+    return result
 
 
 def _is_market_hours() -> bool:
@@ -68,8 +121,65 @@ def _is_market_hours() -> bool:
     return 4 <= now.hour < 20
 
 
+async def _update_subscriptions(ws, new_symbols: set[str]) -> None:
+    """Subscribe/unsubscribe to match the new symbol set."""
+    global _current_symbols
+
+    to_add = new_symbols - _current_symbols
+    to_remove = _current_symbols - new_symbols
+
+    if to_remove:
+        await ws.send(json.dumps({
+            "action": "unsubscribe",
+            "quotes": list(to_remove),
+            "trades": list(to_remove),
+            "bars": list(to_remove),
+        }))
+        unsub_resp = await ws.recv()
+        logger.info(
+            "Alpaca stream unsubscribed %d symbols: %s",
+            len(to_remove), str(unsub_resp)[:100],
+        )
+
+    if to_add:
+        await ws.send(json.dumps({
+            "action": "subscribe",
+            "quotes": list(to_add),
+            "trades": list(to_add),
+            "bars": list(to_add),
+        }))
+        sub_resp = await ws.recv()
+        logger.info(
+            "Alpaca stream subscribed %d new symbols: %s",
+            len(to_add), str(sub_resp)[:100],
+        )
+
+    _current_symbols = new_symbols.copy()
+
+
+async def _watchlist_refresh_loop(ws) -> None:
+    """Re-evaluate the watchlist every 5 minutes and update subscriptions."""
+    while not _should_stop:
+        await asyncio.sleep(300)  # 5 minutes
+        if _should_stop:
+            break
+        try:
+            new_symbols = set(await get_dynamic_watchlist())
+            if new_symbols != _current_symbols:
+                logger.info(
+                    "Watchlist changed: %d -> %d symbols (added %d, removed %d)",
+                    len(_current_symbols),
+                    len(new_symbols),
+                    len(new_symbols - _current_symbols),
+                    len(_current_symbols - new_symbols),
+                )
+                await _update_subscriptions(ws, new_symbols)
+        except Exception as e:
+            logger.warning("Watchlist refresh failed: %s", e)
+
+
 async def _run_stream() -> None:
-    global _should_stop
+    global _should_stop, _current_symbols
     backoff = 5  # initial backoff seconds
 
     while not _should_stop:
@@ -79,6 +189,7 @@ async def _run_stream() -> None:
             await asyncio.sleep(300)
             continue
 
+        refresh_task = None
         try:
             async with websockets.connect(ALPACA_WS_URL) as ws:
                 # Authenticate
@@ -88,14 +199,17 @@ async def _run_stream() -> None:
                     "secret": settings.ALPACA_SECRET_KEY.get_secret_value(),
                 }))
                 auth_resp = await ws.recv()
-                logger.info("Alpaca stream auth: %s", str(auth_resp)[:100])
+                logger.info("Alpaca SIP stream auth: %s", str(auth_resp)[:100])
 
                 # Check for auth errors
                 try:
                     auth_msgs = json.loads(auth_resp)
                     for m in (auth_msgs if isinstance(auth_msgs, list) else [auth_msgs]):
                         if m.get("T") == "error":
-                            logger.error("Alpaca auth failed: %s — retrying in 60s", m.get("msg", "unknown"))
+                            logger.error(
+                                "Alpaca auth failed: %s — retrying in 60s",
+                                m.get("msg", "unknown"),
+                            )
                             await asyncio.sleep(60)
                             raise ConnectionError("Alpaca auth failed")
                 except ConnectionError as e:
@@ -104,15 +218,18 @@ async def _run_stream() -> None:
                 except Exception:
                     pass
 
-                # Subscribe to quotes and trades
-                await ws.send(json.dumps({
-                    "action": "subscribe",
-                    "quotes": WATCHLIST,
-                    "trades": WATCHLIST,
-                }))
-                sub_resp = await ws.recv()
-                logger.info("Alpaca stream subscribed: %s", str(sub_resp)[:100])
+                # Build dynamic watchlist and do initial subscription
+                watchlist = await get_dynamic_watchlist()
+                _current_symbols = set()  # reset so _update_subscriptions subscribes all
+                await _update_subscriptions(ws, set(watchlist))
+                logger.info(
+                    "Alpaca SIP stream: subscribed to %d symbols (quotes+trades+bars)",
+                    len(watchlist),
+                )
                 backoff = 5  # reset backoff on successful connection
+
+                # Start background watchlist refresh loop
+                refresh_task = asyncio.create_task(_watchlist_refresh_loop(ws))
 
                 # Process incoming messages
                 async for raw in ws:
@@ -131,26 +248,32 @@ async def _run_stream() -> None:
                         msg_type = msg.get("T")
 
                         if msg_type == "q":
-                            # Quote message
+                            # Quote message — update bid/ask.
+                            # SIP provides real-time NBBO so quotes are accurate.
                             sym = msg["S"]
                             bid = msg.get("bp", 0)
                             ask = msg.get("ap", 0)
-                            mid = (bid + ask) / 2 if bid and ask else bid or ask
                             _last_quotes[sym] = {"bid": bid, "ask": ask}
-                            await _maybe_publish("quotes", sym, round(mid, 4), {
-                                "symbol": sym,
-                                "bid": bid,
-                                "ask": ask,
-                                "last": round(mid, 4),
-                                "volume": (msg.get("bs", 0) + msg.get("as", 0)),
-                                "timestamp": msg.get("t", ""),
-                            })
+                            # Only publish bid/ask updates if we have a last trade price
+                            # The "last" price is only updated by trade messages below
+                            last_trade = _last_quotes.get(sym, {}).get("last_trade", 0)
+                            if last_trade > 0:
+                                await _maybe_publish("quotes", sym, last_trade, {
+                                    "symbol": sym,
+                                    "bid": bid,
+                                    "ask": ask,
+                                    "last": last_trade,
+                                    "volume": (msg.get("bs", 0) + msg.get("as", 0)),
+                                    "timestamp": msg.get("t", ""),
+                                })
 
                         elif msg_type == "t":
-                            # Trade message — include last known bid/ask
+                            # Trade message — this is the real price (actual executed trade)
                             sym = msg["S"]
-                            prev = _last_quotes.get(sym, {})
                             trade_price = msg.get("p", 0)
+                            prev = _last_quotes.get(sym, {})
+                            prev["last_trade"] = trade_price  # store for quote messages
+                            _last_quotes[sym] = prev
                             await _maybe_publish("quotes", sym, trade_price, {
                                 "symbol": sym,
                                 "bid": prev.get("bid", 0),
@@ -160,16 +283,40 @@ async def _run_stream() -> None:
                                 "timestamp": msg.get("t", ""),
                             })
 
+                        elif msg_type == "b":
+                            # Minute bar — publish to separate "bars" channel
+                            # for real-time chart updates without REST polling
+                            sym = msg["S"]
+                            bar_data = {
+                                "symbol": sym,
+                                "open": msg.get("o", 0),
+                                "high": msg.get("h", 0),
+                                "low": msg.get("l", 0),
+                                "close": msg.get("c", 0),
+                                "volume": msg.get("v", 0),
+                                "vwap": msg.get("vw", 0),
+                                "timestamp": msg.get("t", ""),
+                                "trade_count": msg.get("n", 0),
+                            }
+                            await publish("bars", bar_data)
+
         except asyncio.CancelledError:
             break
         except Exception as e:
             if _should_stop:
                 break
-            logger.error("Alpaca stream error: %s (reconnecting in %ds)", e, backoff)
+            logger.error("Alpaca SIP stream error: %s (reconnecting in %ds)", e, backoff)
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 300)  # exponential backoff, max 5 minutes
+        finally:
+            if refresh_task and not refresh_task.done():
+                refresh_task.cancel()
+                try:
+                    await refresh_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
-    logger.info("Alpaca stream loop exited")
+    logger.info("Alpaca SIP stream loop exited")
 
 
 async def start_alpaca_stream() -> None:
@@ -183,7 +330,8 @@ async def start_alpaca_stream() -> None:
 
     _should_stop = False
     _stream_task = asyncio.create_task(_run_stream())
-    logger.info("Alpaca stream started for %d symbols", len(WATCHLIST))
+    watchlist = await get_dynamic_watchlist()
+    logger.info("Alpaca SIP stream started for %d symbols", len(watchlist))
 
 
 async def stop_alpaca_stream() -> None:
@@ -198,4 +346,4 @@ async def stop_alpaca_stream() -> None:
         except (asyncio.CancelledError, Exception):
             pass
         _stream_task = None
-    logger.info("Alpaca stream stopped")
+    logger.info("Alpaca SIP stream stopped")
