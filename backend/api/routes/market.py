@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,6 +31,7 @@ class Quote(BaseModel):
     low: float = 0.0
     open: float = 0.0
     close: float = 0.0
+    is_demo: bool = False
 
 
 class Bar(BaseModel):
@@ -38,6 +42,7 @@ class Bar(BaseModel):
     close: float
     volume: int
     vwap: float | None = None
+    is_demo: bool = False
 
 
 class Snapshot(BaseModel):
@@ -47,6 +52,7 @@ class Snapshot(BaseModel):
     prev_day_bar: Bar
     min_bar: Bar
     change_pct: float
+    is_demo: bool = False
 
 
 class MarketStatus(BaseModel):
@@ -56,6 +62,7 @@ class MarketStatus(BaseModel):
         default_factory=dict,
         description="Exchange name -> status (open/closed/early_hours/late_hours)",
     )
+    is_demo: bool = False
 
 
 class Timeframe(str, Enum):
@@ -162,6 +169,7 @@ def _demo_quote(symbol: str) -> Quote:
         volume=volume, timestamp=datetime.now(timezone.utc),
         change=change, changePct=change_pct,
         high=day_high, low=day_low, open=day_open, close=prev_close,
+        is_demo=True,
     )
 
 
@@ -188,8 +196,11 @@ def _demo_bars(symbol: str, timeframe: str, limit: int,
     bars: list[Bar] = []
     price = base * (1 + rng.uniform(-0.15, 0.05))  # start lower for uptrend feel
     ts = datetime.combine(effective_start, datetime.min.time(), tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
 
     for i in range(limit):
+        if ts > now:
+            break  # Don't generate bars in the future
         change = rng.gauss(0.0002, vol)  # slight upward drift
         o = round(price, 2)
         c = round(price * (1 + change), 2)
@@ -202,7 +213,7 @@ def _demo_bars(symbol: str, timeframe: str, limit: int,
 
         bars.append(Bar(
             timestamp=ts, open=o, high=h, low=l, close=c,
-            volume=bar_vol, vwap=vwap,
+            volume=bar_vol, vwap=vwap, is_demo=True,
         ))
         price = c
         ts += delta
@@ -236,6 +247,7 @@ def _demo_snapshot(symbol: str) -> Snapshot:
         prev_day_bar=_make_bar(round(prev_close * (1 + rng.uniform(-0.01, 0.01)), 2), prev_close),
         min_bar=_make_bar(round(base * (1 + rng.uniform(-0.002, 0.002)), 2), base),
         change_pct=change_pct,
+        is_demo=True,
     )
 
 
@@ -248,6 +260,7 @@ def _demo_market_status() -> MarketStatus:
             "nasdaq": "closed",
             "otc": "closed",
         },
+        is_demo=True,
     )
 
 
@@ -329,7 +342,7 @@ async def get_quote(symbol: str) -> Quote:
                     await cache_set(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
                     return quote
         except Exception:
-            pass  # fall through to Alpaca
+            logger.warning("Polygon quote fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 2. Alpaca Market Data ---
     if _alpaca_keys_available():
@@ -372,11 +385,12 @@ async def get_quote(symbol: str) -> Quote:
                     await cache_set(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
                     return quote
         except Exception:
-            pass  # fall through to demo
+            logger.warning("Alpaca quote fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 3. Demo fallback (only for known symbols) ---
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
+    logger.warning("DEMO FALLBACK: Serving fake quote for %s — Polygon and Alpaca both failed", symbol.upper())
     return _demo_quote(symbol)
 
 
@@ -453,7 +467,7 @@ async def get_bars(
                     )
                     return bars
         except Exception:
-            pass  # fall through to Alpaca
+            logger.warning("Polygon bars fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 2. Alpaca bars ---
     if _alpaca_keys_available():
@@ -462,10 +476,13 @@ async def get_bars(
 
             alpaca_tf = ALPACA_TF_MAP.get(timeframe.value, "1Day")
             headers = _alpaca_data_headers()
+            # Use current time as end (not midnight) so intraday charts
+            # only show bars up to NOW, not the full day to 4PM
+            end_dt = datetime.now(timezone.utc) if effective_end == date.today() else datetime.combine(effective_end, datetime.max.time(), tzinfo=timezone.utc)
             params_alpaca: dict = {
                 "timeframe": alpaca_tf,
                 "start": datetime.combine(effective_start, datetime.min.time(), tzinfo=timezone.utc).isoformat(),
-                "end": datetime.combine(effective_end, datetime.min.time(), tzinfo=timezone.utc).isoformat(),
+                "end": end_dt.isoformat(),
                 "limit": limit,
                 "adjustment": "raw",
                 "feed": "sip",
@@ -498,11 +515,12 @@ async def get_bars(
                     )
                     return bars
         except Exception:
-            pass  # fall through to demo
+            logger.warning("Alpaca bars fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 3. Demo fallback (only for known symbols) ---
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
+    logger.warning("DEMO FALLBACK: Serving fake bars for %s — Polygon and Alpaca both failed", symbol.upper())
     return _demo_bars(symbol, timeframe.value, limit, start, end)
 
 
@@ -555,7 +573,7 @@ async def get_snapshot(symbol: str) -> Snapshot:
                         change_pct=data.get("todaysChangePerc", 0),
                     )
         except Exception:
-            pass  # fall through to Alpaca
+            logger.warning("Polygon snapshot fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 2. Alpaca snapshot ---
     if _alpaca_keys_available():
@@ -606,11 +624,12 @@ async def get_snapshot(symbol: str) -> Snapshot:
                         change_pct=change_pct,
                     )
         except Exception:
-            pass  # fall through to demo
+            logger.warning("Alpaca snapshot fetch failed for %s", symbol.upper(), exc_info=True)
 
     # --- 3. Demo fallback (only for known symbols) ---
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
+    logger.warning("DEMO FALLBACK: Serving fake snapshot for %s — Polygon and Alpaca both failed", symbol.upper())
     return _demo_snapshot(symbol)
 
 
@@ -637,7 +656,7 @@ async def get_market_status() -> MarketStatus:
                         exchanges=data.get("exchanges", {}),
                     )
         except Exception:
-            pass  # fall through to Alpaca
+            logger.warning("Polygon market-status fetch failed", exc_info=True)
 
     # --- 2. Alpaca clock ---
     if _alpaca_keys_available():
@@ -662,7 +681,8 @@ async def get_market_status() -> MarketStatus:
                         },
                     )
         except Exception:
-            pass  # fall through to demo
+            logger.warning("Alpaca clock fetch failed", exc_info=True)
 
     # --- 3. Demo fallback ---
+    logger.warning("DEMO FALLBACK: Serving fake market status — Polygon and Alpaca both failed")
     return _demo_market_status()

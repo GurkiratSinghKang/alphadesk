@@ -288,6 +288,85 @@ def _demo_performance(period: str) -> PerformanceMetrics:
     )
 
 
+def _build_performance_from_pnls(
+    period: str,
+    daily_pnls: list[float],
+    dates: list[str],
+    trade_pnls: list[float],
+    total_trades: int,
+    is_demo: bool = False,
+    base_equity: float = 100_000,
+) -> PerformanceMetrics:
+    """Build PerformanceMetrics from real P&L data (shared by ledger and DB paths)."""
+    import math
+
+    if not daily_pnls:
+        return PerformanceMetrics(
+            period=period, total_return=0, total_return_pct=0,
+            equity_curve=[], is_demo=is_demo,
+        )
+
+    # Equity curve
+    cumulative = 0.0
+    equity_curve = []
+    for i, pnl in enumerate(daily_pnls):
+        cumulative += pnl
+        equity_curve.append({
+            "date": dates[i],
+            "value": round(cumulative, 2),
+            "cumulative_pnl": round(cumulative, 2),
+        })
+
+    total_return = round(cumulative, 2)
+
+    # Win/loss from individual trade P&Ls
+    wins = [p for p in trade_pnls if p > 0]
+    losses = [p for p in trade_pnls if p < 0]
+
+    # Drawdown
+    running = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for pnl in daily_pnls:
+        running += pnl
+        if running > peak:
+            peak = running
+        dd = running - peak
+        if dd < max_dd:
+            max_dd = dd
+
+    # Sharpe
+    n = len(daily_pnls)
+    mean_ret = sum(daily_pnls) / n if n > 0 else 0
+    std_ret = math.sqrt(sum((p - mean_ret) ** 2 for p in daily_pnls) / max(n - 1, 1)) if n > 1 else 0
+    sharpe = round(mean_ret / std_ret * math.sqrt(252), 2) if std_ret > 0 else None
+
+    # Enhanced metrics
+    enhanced = _compute_enhanced_metrics(daily_pnls, dates, base_equity)
+
+    return PerformanceMetrics(
+        period=period,
+        total_return=total_return,
+        total_return_pct=round(total_return / base_equity * 100, 2),
+        sharpe_ratio=sharpe,
+        sortino_ratio=enhanced["sortino_ratio"],
+        max_drawdown=round(max_dd, 2),
+        calmar_ratio=enhanced["calmar_ratio"],
+        drawdown_detail=enhanced["drawdown_detail"],
+        rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
+        daily_returns=enhanced["daily_returns"],
+        win_rate=round(len(wins) / len(trade_pnls) * 100, 1) if trade_pnls else None,
+        profit_factor=round(sum(wins) / abs(sum(losses)), 2) if losses and sum(losses) != 0 else None,
+        avg_win=round(sum(wins) / len(wins), 2) if wins else None,
+        avg_loss=round(sum(losses) / len(losses), 2) if losses else None,
+        best_trade=round(max(trade_pnls), 2) if trade_pnls else None,
+        worst_trade=round(min(trade_pnls), 2) if trade_pnls else None,
+        total_trades=total_trades,
+        equity_curve=equity_curve,
+        is_demo=is_demo,
+    )
+
+
 def _demo_greeks() -> PortfolioGreeks:
     """Return zero greeks when no option positions exist."""
     return PortfolioGreeks(
@@ -308,6 +387,7 @@ def _demo_greeks() -> PortfolioGreeks:
 async def get_portfolio_summary() -> PortfolioSummary:
     """Fetch portfolio summary from the broker account."""
     if _alpaca_keys_empty():
+        logger.warning("Alpaca API keys not configured, serving demo portfolio summary")
         return _demo_portfolio_summary()
 
     try:
@@ -382,102 +462,144 @@ async def get_portfolio_summary() -> PortfolioSummary:
 async def get_performance(
     period: str = Query("30d", description="Period: 7d, 30d, 90d, 1y, ytd, all"),
 ) -> PerformanceMetrics:
-    """Compute portfolio performance metrics over a given period."""
+    """Compute portfolio performance metrics over a given period.
+
+    Priority:
+    1. Trade ledger (JSON file) for closed trade P&L history
+    2. Database trades
+    3. Demo data as absolute last resort
+    """
     from core.config import settings
-    if settings.SKIP_DB_INIT:
-        return _demo_performance(period)
 
+    # --- Try trade ledger first (works even with SKIP_DB_INIT) ---
     try:
-        import numpy as np
-        from sqlalchemy import select
-        from data.storage.models import Trade
-        from core.database import _get_session_factory
+        from data.ingestion.trade_ledger import TradeLedger
+        from collections import defaultdict
 
-        # Determine date cutoff
-        period_days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365, "ytd": (date.today() - date(date.today().year, 1, 1)).days, "all": 3650}
-        days = period_days.get(period, 30)
-        cutoff = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
-        from datetime import timedelta
-        cutoff -= timedelta(days=days)
+        ledger = TradeLedger()
+        period_days_map = {"7d": 7, "30d": 30, "90d": 90, "1y": 365, "ytd": (date.today() - date(date.today().year, 1, 1)).days, "all": 3650}
+        n_days = period_days_map.get(period, 30)
+        cutoff_date = (date.today() - timedelta(days=n_days)).isoformat()
 
-        factory = _get_session_factory()
-        async with factory() as db:
-            result = await db.execute(
-                select(Trade)
-                .where(Trade.entry_time >= cutoff, Trade.status == "closed")
-                .order_by(Trade.entry_time)
+        closed = ledger.get_closed_trades(start_date=cutoff_date)
+        if closed:
+            logger.info("Building real performance from %d closed trades in ledger", len(closed))
+
+            # Group P&L by exit date
+            daily_pnl_map: dict[str, float] = defaultdict(float)
+            all_pnls: list[float] = []
+            for t in closed:
+                pnl = t.get("pnl") or 0
+                exit_time = t.get("exit_time", "")
+                day_key = exit_time[:10] if exit_time else date.today().isoformat()
+                daily_pnl_map[day_key] += pnl
+                all_pnls.append(pnl)
+
+            sorted_dates = sorted(daily_pnl_map.keys())
+            daily_pnls = [daily_pnl_map[d] for d in sorted_dates]
+
+            return _build_performance_from_pnls(
+                period=period,
+                daily_pnls=daily_pnls,
+                dates=sorted_dates,
+                trade_pnls=all_pnls,
+                total_trades=len(closed),
+                is_demo=False,
             )
-            trades = result.scalars().all()
-
-        if not trades:
-            # No trade history — return demo performance
-            return _demo_performance(period)
-
-        pnls = [t.pnl for t in trades if t.pnl is not None]
-        returns = np.array(pnls) if pnls else np.array([0.0])
-
-        total_return = float(np.sum(returns))
-        wins = returns[returns > 0]
-        losses = returns[returns < 0]
-
-        cumulative = np.cumsum(returns)
-        running_max = np.maximum.accumulate(cumulative)
-        drawdowns = cumulative - running_max
-        max_dd = float(np.min(drawdowns)) if len(drawdowns) > 0 else 0
-
-        mean_ret = float(np.mean(returns)) if len(returns) > 1 else 0
-        std_ret = float(np.std(returns)) if len(returns) > 1 else 1
-        downside = returns[returns < 0]
-        downside_std = float(np.std(downside)) if len(downside) > 1 else 1
-
-        sharpe = (mean_ret / std_ret * np.sqrt(252)) if std_ret > 0 else None
-        sortino = (mean_ret / downside_std * np.sqrt(252)) if downside_std > 0 else None
-
-        gross_wins = float(np.sum(wins)) if len(wins) else 0
-        gross_losses = abs(float(np.sum(losses))) if len(losses) else 1
-        profit_factor = gross_wins / gross_losses if gross_losses > 0 else None
-
-        # Build equity curve with date and cumulative_pnl
-        today = date.today()
-        n_points = len(cumulative)
-        equity_curve_data = []
-        trade_dates: list[str] = []
-        for i, c in enumerate(cumulative):
-            d = today - timedelta(days=(n_points - 1 - i))
-            d_str = d.isoformat()
-            trade_dates.append(d_str)
-            equity_curve_data.append({
-                "date": d_str,
-                "value": round(float(c), 2),
-                "cumulative_pnl": round(float(c), 2),
-            })
-
-        # Enhanced metrics (daily returns, rolling Sharpe, drawdown detail, Calmar)
-        enhanced = _compute_enhanced_metrics(pnls, trade_dates)
-
-        return PerformanceMetrics(
-            period=period,
-            total_return=round(total_return, 2),
-            total_return_pct=round(total_return / 100_000 * 100, 2),
-            sharpe_ratio=round(float(sharpe), 2) if sharpe else None,
-            sortino_ratio=enhanced["sortino_ratio"],
-            max_drawdown=round(max_dd, 2),
-            calmar_ratio=enhanced["calmar_ratio"],
-            drawdown_detail=enhanced["drawdown_detail"],
-            rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
-            daily_returns=enhanced["daily_returns"],
-            win_rate=round(len(wins) / len(returns) * 100, 1) if len(returns) else None,
-            profit_factor=round(profit_factor, 2) if profit_factor else None,
-            avg_win=round(float(np.mean(wins)), 2) if len(wins) else None,
-            avg_loss=round(float(np.mean(losses)), 2) if len(losses) else None,
-            best_trade=round(float(np.max(returns)), 2) if len(returns) else None,
-            worst_trade=round(float(np.min(returns)), 2) if len(returns) else None,
-            total_trades=len(trades),
-            equity_curve=equity_curve_data,
-        )
     except Exception:
-        logger.warning("Failed to compute performance from DB, falling back to demo", exc_info=True)
-        return _demo_performance(period)
+        logger.warning("Trade ledger performance computation failed", exc_info=True)
+
+    # --- Try database trades ---
+    if not settings.SKIP_DB_INIT:
+        try:
+            import numpy as np
+            from sqlalchemy import select
+            from data.storage.models import Trade
+            from core.database import _get_session_factory
+
+            period_days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365, "ytd": (date.today() - date(date.today().year, 1, 1)).days, "all": 3650}
+            days = period_days.get(period, 30)
+            cutoff = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
+            cutoff -= timedelta(days=days)
+
+            factory = _get_session_factory()
+            async with factory() as db:
+                result = await db.execute(
+                    select(Trade)
+                    .where(Trade.entry_time >= cutoff, Trade.status == "closed")
+                    .order_by(Trade.entry_time)
+                )
+                trades = result.scalars().all()
+
+            if trades:
+                logger.info("Building real performance from %d closed DB trades", len(trades))
+                pnls = [t.pnl for t in trades if t.pnl is not None]
+                returns = np.array(pnls) if pnls else np.array([0.0])
+
+                total_return = float(np.sum(returns))
+                wins = returns[returns > 0]
+                losses = returns[returns < 0]
+
+                cumulative = np.cumsum(returns)
+                running_max = np.maximum.accumulate(cumulative)
+                drawdowns = cumulative - running_max
+                max_dd = float(np.min(drawdowns)) if len(drawdowns) > 0 else 0
+
+                mean_ret = float(np.mean(returns)) if len(returns) > 1 else 0
+                std_ret = float(np.std(returns)) if len(returns) > 1 else 1
+                downside = returns[returns < 0]
+                downside_std = float(np.std(downside)) if len(downside) > 1 else 1
+
+                sharpe = (mean_ret / std_ret * np.sqrt(252)) if std_ret > 0 else None
+                sortino = (mean_ret / downside_std * np.sqrt(252)) if downside_std > 0 else None
+
+                gross_wins = float(np.sum(wins)) if len(wins) else 0
+                gross_losses = abs(float(np.sum(losses))) if len(losses) else 1
+                profit_factor = gross_wins / gross_losses if gross_losses > 0 else None
+
+                # Build equity curve with date and cumulative_pnl
+                today_d = date.today()
+                n_points = len(cumulative)
+                equity_curve_data = []
+                trade_dates: list[str] = []
+                for i, c in enumerate(cumulative):
+                    d = today_d - timedelta(days=(n_points - 1 - i))
+                    d_str = d.isoformat()
+                    trade_dates.append(d_str)
+                    equity_curve_data.append({
+                        "date": d_str,
+                        "value": round(float(c), 2),
+                        "cumulative_pnl": round(float(c), 2),
+                    })
+
+                enhanced = _compute_enhanced_metrics(pnls, trade_dates)
+
+                return PerformanceMetrics(
+                    period=period,
+                    total_return=round(total_return, 2),
+                    total_return_pct=round(total_return / 100_000 * 100, 2),
+                    sharpe_ratio=round(float(sharpe), 2) if sharpe else None,
+                    sortino_ratio=enhanced["sortino_ratio"],
+                    max_drawdown=round(max_dd, 2),
+                    calmar_ratio=enhanced["calmar_ratio"],
+                    drawdown_detail=enhanced["drawdown_detail"],
+                    rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
+                    daily_returns=enhanced["daily_returns"],
+                    win_rate=round(len(wins) / len(returns) * 100, 1) if len(returns) else None,
+                    profit_factor=round(profit_factor, 2) if profit_factor else None,
+                    avg_win=round(float(np.mean(wins)), 2) if len(wins) else None,
+                    avg_loss=round(float(np.mean(losses)), 2) if len(losses) else None,
+                    best_trade=round(float(np.max(returns)), 2) if len(returns) else None,
+                    worst_trade=round(float(np.min(returns)), 2) if len(returns) else None,
+                    total_trades=len(trades),
+                    equity_curve=equity_curve_data,
+                )
+        except Exception:
+            logger.warning("Failed to compute performance from DB", exc_info=True)
+
+    # --- Absolute last resort: demo ---
+    logger.warning("No real trade data available for performance, returning demo")
+    return _demo_performance(period)
 
 
 @router.get("/greeks", response_model=PortfolioGreeks)
@@ -941,8 +1063,13 @@ def _demo_morning_brief() -> MorningBriefResponse:
 
 @router.get("/morning-brief", response_model=MorningBriefResponse)
 async def get_morning_brief() -> MorningBriefResponse:
-    """Generate a personalized morning brief for the trader."""
+    """Generate a personalized morning brief for the trader.
+
+    Uses real Alpaca account data + real SPY/VIXY snapshots.
+    Falls back to demo only if Alpaca is unreachable.
+    """
     if _alpaca_keys_empty():
+        logger.warning("Alpaca API keys not configured, serving demo morning brief")
         return _demo_morning_brief()
 
     try:
@@ -976,6 +1103,8 @@ async def get_morning_brief() -> MorningBriefResponse:
 
             # --- Parse account ---
             if isinstance(acct_resp, Exception) or acct_resp.status_code != 200:
+                logger.warning("Alpaca account API unreachable (status=%s), serving demo brief",
+                               acct_resp.status_code if not isinstance(acct_resp, Exception) else str(acct_resp))
                 return _demo_morning_brief()
             acct = acct_resp.json()
             equity = float(acct.get("equity", 0))

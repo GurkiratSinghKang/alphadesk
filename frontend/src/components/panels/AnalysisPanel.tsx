@@ -372,29 +372,52 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
       </div>
     );
   }
-  let seed = 0;
-  for (let c = 0; c < symbol.length; c++) seed += symbol.charCodeAt(c);
-  const rng = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-  const fScore = analysis?.fundamentalScore != null
+  const hasRealData = analysis != null;
+
+  // Only compute metrics from real analysis data — never generate random values
+  const fScore = hasRealData && analysis.fundamentalScore != null
     ? Math.round((analysis.fundamentalScore / 100) * 9)
-    : Math.round(4 + rng() * 5);
-  const peRatio = (15 + rng() * 25).toFixed(1);
-  const roe = (8 + rng() * 30).toFixed(1);
-  const debtEquity = (0.2 + rng() * 1.5).toFixed(2);
-  const revGrowth = (-5 + rng() * 30).toFixed(1);
-  const opMargin = (10 + rng() * 25).toFixed(1);
-  const metrics = [
-    { label: "P/E Ratio", value: `${peRatio}x` },
-    { label: "P/S Ratio", value: `${(3 + rng() * 8).toFixed(1)}x` },
-    { label: "EV/EBITDA", value: `${(12 + rng() * 18).toFixed(1)}x` },
-    { label: "Profit Margin", value: `${opMargin}%` },
-    { label: "ROE", value: `${roe}%` },
-    { label: "Debt/Equity", value: `${debtEquity}x` },
-    { label: "FCF Yield", value: `${(1 + rng() * 5).toFixed(1)}%` },
-    { label: "Revenue Growth", value: `${Number(revGrowth) >= 0 ? "+" : ""}${revGrowth}%` },
-  ];
+    : null;
 
   const isETF = ETF_SYMBOLS.has(symbol.toUpperCase());
+
+  if (!hasRealData) {
+    return (
+      <div className="space-y-4 p-3">
+        <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground">
+            Analysis unavailable &mdash; connect data source for fundamental metrics
+          </p>
+        </div>
+        <div>
+          <h3 className="text-xs font-medium text-muted-foreground mb-2">Piotroski F-Score</h3>
+          <div className="opacity-30">
+            <FScoreDots score={0} />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2 opacity-50">
+            No fundamental data available for {symbol}.
+          </p>
+        </div>
+        <Separator className="bg-border" />
+        <div>
+          <h4 className="text-[11px] font-medium text-muted-foreground mb-2">Valuation Metrics</h4>
+          <div className="space-y-1">
+            {["P/E Ratio", "P/S Ratio", "EV/EBITDA", "Profit Margin", "ROE", "Debt/Equity", "FCF Yield", "Revenue Growth"].map((label) => (
+              <div key={label} className="flex items-center justify-between text-xs px-2 py-1">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="text-muted-foreground/50 tabular-nums">&mdash;</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Individual valuation metrics are not available from the analysis API.
+  // Show dashes instead of generating random values.
+  const metricLabels = ["P/E Ratio", "P/S Ratio", "EV/EBITDA", "Profit Margin", "ROE", "Debt/Equity", "FCF Yield", "Revenue Growth"];
 
   return (
     <div className="space-y-4 p-3">
@@ -408,11 +431,9 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
         <h3 className="text-xs font-medium text-muted-foreground mb-2 flex items-center">
           Piotroski F-Score
         </h3>
-        <div className={!analysis ? "opacity-40" : undefined}>
-          <FScoreDots score={fScore} />
-        </div>
-        <p className={cn("text-[11px] text-muted-foreground mt-2", !analysis && "opacity-40")}>
-          {symbol} has {fScore <= 3 ? "weak" : fScore <= 6 ? "moderate" : "strong"} fundamentals with {fScore <= 3 ? "concerning profitability and declining financial health" : fScore <= 6 ? "mixed profitability and stable financial health" : "high profitability and improving financial health"}.
+        <FScoreDots score={fScore ?? 0} />
+        <p className={cn("text-[11px] text-muted-foreground mt-2")}>
+          {symbol} has {(fScore ?? 0) <= 3 ? "weak" : (fScore ?? 0) <= 6 ? "moderate" : "strong"} fundamentals with {(fScore ?? 0) <= 3 ? "concerning profitability and declining financial health" : (fScore ?? 0) <= 6 ? "mixed profitability and stable financial health" : "high profitability and improving financial health"}.
         </p>
       </div>
 
@@ -423,17 +444,18 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
           Valuation Metrics
         </h4>
         <div className="space-y-1">
-          {metrics.map((m) => (
+          {metricLabels.map((label) => (
             <div
-              key={m.label}
+              key={label}
               className="flex items-center justify-between text-xs px-2 py-1"
             >
-              <span className="text-muted-foreground">{m.label}</span>
-              <div className="flex items-center gap-3">
-                <span className={cn("text-foreground tabular-nums", !analysis && "opacity-40")}>{m.value}</span>
-              </div>
+              <span className="text-muted-foreground">{label}</span>
+              <span className="text-muted-foreground/50 tabular-nums">&mdash;</span>
             </div>
           ))}
+          <p className="text-[10px] text-muted-foreground/60 px-2 pt-1">
+            Individual valuation metrics require a fundamental data source
+          </p>
         </div>
       </div>
     </div>

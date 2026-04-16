@@ -11,6 +11,7 @@ import {
   TrendingDown,
   Share2,
   StickyNote,
+  AlertTriangle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -771,13 +772,21 @@ export function ChartPanel({ symbol: symbolProp, onSymbolChange }: ChartPanelPro
           </div>
         )}
 
-        {/* Demo data overlay — shown when API bars fail to load */}
+        {/* Demo data watermark + badge — shown when API bars fail to load */}
         {usingDemoData && !barsLoading && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[4]">
-            <span className="text-sm text-muted-foreground bg-[var(--surface)]/80 px-3 py-1.5 rounded-md border border-border">
-              Historical data unavailable
-            </span>
-          </div>
+          <>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[4] select-none">
+              <span className="text-4xl font-bold text-muted-foreground/10 tracking-widest uppercase rotate-[-18deg]">
+                DEMO
+              </span>
+            </div>
+            <div className="absolute top-2 left-2 z-[6] pointer-events-none">
+              <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                Demo data &mdash; API unavailable
+              </span>
+            </div>
+          </>
         )}
 
         {/* Drawing overlay — captures clicks when a drawing mode is active */}

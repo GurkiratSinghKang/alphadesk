@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, TYPE_CHECKING
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -16,6 +17,59 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Alpaca data helpers (screener-local)
+# ---------------------------------------------------------------------------
+
+ALPACA_DATA_URL = "https://data.alpaca.markets"
+
+
+def _alpaca_keys_available() -> bool:
+    from core.config import settings
+    return bool(
+        settings.ALPACA_API_KEY.get_secret_value()
+        and settings.ALPACA_SECRET_KEY.get_secret_value()
+    )
+
+
+def _alpaca_data_headers() -> dict:
+    from core.config import settings
+    return {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+
+
+# Company name lookup — used when Alpaca screener returns only symbols
+_COMPANY_NAMES: dict[str, str] = {
+    "AAPL": "Apple Inc.", "NVDA": "NVIDIA Corp.", "TSLA": "Tesla Inc.",
+    "MSFT": "Microsoft Corp.", "AMZN": "Amazon.com Inc.", "META": "Meta Platforms Inc.",
+    "GOOGL": "Alphabet Inc.", "AMD": "Advanced Micro Devices", "NFLX": "Netflix Inc.",
+    "CRM": "Salesforce Inc.", "AVGO": "Broadcom Inc.", "LLY": "Eli Lilly & Co.",
+    "JPM": "JPMorgan Chase", "V": "Visa Inc.", "UNH": "UnitedHealth Group",
+    "MA": "Mastercard Inc.", "HD": "Home Depot Inc.", "PG": "Procter & Gamble",
+    "XOM": "Exxon Mobil Corp.", "COST": "Costco Wholesale", "ABBV": "AbbVie Inc.",
+    "KO": "Coca-Cola Co.", "MRK": "Merck & Co.", "PEP": "PepsiCo Inc.",
+    "WMT": "Walmart Inc.", "BAC": "Bank of America", "INTC": "Intel Corp.",
+    "DIS": "Walt Disney Co.", "BA": "Boeing Co.", "ADBE": "Adobe Inc.",
+    "ORCL": "Oracle Corp.", "CSCO": "Cisco Systems", "NKE": "Nike Inc.",
+    "PYPL": "PayPal Holdings", "COIN": "Coinbase Global", "SQ": "Block Inc.",
+    "PLTR": "Palantir Technologies", "SNAP": "Snap Inc.", "UBER": "Uber Technologies",
+    "ABNB": "Airbnb Inc.", "SPY": "SPDR S&P 500 ETF", "QQQ": "Invesco QQQ Trust",
+    "GOOG": "Alphabet Inc.", "BRK.B": "Berkshire Hathaway", "JNJ": "Johnson & Johnson",
+    "UNP": "Union Pacific", "RTX": "RTX Corp.", "CAT": "Caterpillar Inc.",
+    "GS": "Goldman Sachs", "SBUX": "Starbucks Corp.", "T": "AT&T Inc.",
+    "VZ": "Verizon Communications", "PFE": "Pfizer Inc.", "CVX": "Chevron Corp.",
+    "MCD": "McDonald's Corp.", "LOW": "Lowe's Cos.", "TMO": "Thermo Fisher Scientific",
+    "INTU": "Intuit Inc.", "QCOM": "Qualcomm Inc.", "TXN": "Texas Instruments",
+    "ISRG": "Intuitive Surgical", "NOW": "ServiceNow Inc.", "PANW": "Palo Alto Networks",
+    "CRWD": "CrowdStrike Holdings", "MRVL": "Marvell Technology", "MU": "Micron Technology",
+    "F": "Ford Motor Co.", "GM": "General Motors", "RIVN": "Rivian Automotive",
+    "LCID": "Lucid Group", "NIO": "NIO Inc.", "SOFI": "SoFi Technologies",
+    "HOOD": "Robinhood Markets", "RBLX": "Roblox Corp.", "SHOP": "Shopify Inc.",
+    "SLB": "Schlumberger Ltd.", "COP": "ConocoPhillips", "EOG": "EOG Resources",
+}
 
 router = APIRouter()
 
@@ -227,6 +281,319 @@ def _generate_demo_screener_results(request: ScreenRequest) -> ScreenResponse:
 
 
 # ---------------------------------------------------------------------------
+# Real Alpaca screener
+# ---------------------------------------------------------------------------
+
+async def _fetch_most_actives(top: int = 100) -> list[dict]:
+    """Fetch most-active stocks from Alpaca screener endpoint.
+
+    Returns a list of dicts with keys: symbol, trade_count, volume, etc.
+    """
+    headers = _alpaca_data_headers()
+    url = f"{ALPACA_DATA_URL}/v1beta1/screener/stocks/most-actives"
+    params = {"by": "volume", "top": top}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers=headers, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("most_actives", [])
+
+
+async def _fetch_multi_snapshots(symbols: list[str]) -> dict[str, dict]:
+    """Fetch Alpaca snapshots for multiple symbols in one call.
+
+    Returns {SYMBOL: snapshot_dict, ...}
+    """
+    headers = _alpaca_data_headers()
+    url = f"{ALPACA_DATA_URL}/v2/stocks/snapshots"
+    # Alpaca accepts comma-separated symbols
+    params = {"symbols": ",".join(symbols), "feed": "sip"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers=headers, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _fetch_momentum_bars(symbols: list[str]) -> dict[str, float]:
+    """Fetch 3-month daily bars for each symbol and compute price momentum (RS score).
+
+    Returns {SYMBOL: rs_score (0-100), ...}
+    Uses Alpaca multi-bars endpoint for efficiency.
+    """
+    headers = _alpaca_data_headers()
+    url = f"{ALPACA_DATA_URL}/v2/stocks/bars"
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(days=90)
+
+    # Fetch bars for all symbols at once (Alpaca supports multi-symbol bars)
+    params = {
+        "symbols": ",".join(symbols),
+        "timeframe": "1Day",
+        "start": start_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end": end_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "limit": 10000,
+        "adjustment": "raw",
+        "feed": "sip",
+        "sort": "asc",
+    }
+
+    rs_scores: dict[str, float] = {}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            bars_by_symbol = data.get("bars", {})
+
+            # Compute 3-month return for each symbol -> rank to RS score
+            returns: dict[str, float] = {}
+            for sym, bar_list in bars_by_symbol.items():
+                if bar_list and len(bar_list) >= 2:
+                    first_close = bar_list[0].get("c", 0)
+                    last_close = bar_list[-1].get("c", 0)
+                    if first_close > 0:
+                        returns[sym] = (last_close - first_close) / first_close * 100
+
+            # Rank returns to get percentile-based RS score (0-100)
+            if returns:
+                sorted_syms = sorted(returns.keys(), key=lambda s: returns[s])
+                total = len(sorted_syms)
+                for rank, sym in enumerate(sorted_syms):
+                    rs_scores[sym] = round((rank / max(total - 1, 1)) * 100, 1)
+    except Exception:
+        logger.warning("Failed to fetch momentum bars for RS scores", exc_info=True)
+
+    return rs_scores
+
+
+def _compute_composite_score(
+    change_pct: float,
+    volume: int,
+    rs_score: float,
+    avg_volume: int = 10_000_000,
+) -> float:
+    """Compute a composite score from real market data.
+
+    Components (each normalized to ~0-100):
+    - RS momentum score (weight 0.35)
+    - Absolute change% magnitude (weight 0.25) — bigger movers score higher
+    - Volume relative to average (weight 0.25) — above-average volume = higher score
+    - Positive price direction bonus (weight 0.15)
+    """
+    # RS already 0-100
+    rs_component = rs_score
+
+    # Change magnitude: |change_pct| capped at 10% -> scale to 0-100
+    change_magnitude = min(abs(change_pct), 10.0) / 10.0 * 100
+
+    # Volume ratio: vol / avg_vol, capped at 3x -> scale to 0-100
+    vol_ratio = min(volume / max(avg_volume, 1), 3.0) / 3.0 * 100
+
+    # Direction bonus: positive change -> 100, flat -> 50, negative -> 0
+    direction = 50 + min(max(change_pct, -5), 5) * 10
+
+    composite = (
+        0.35 * rs_component
+        + 0.25 * change_magnitude
+        + 0.25 * vol_ratio
+        + 0.15 * direction
+    )
+    return round(composite, 1)
+
+
+async def _generate_real_screener_results(request: ScreenRequest) -> ScreenResponse | None:
+    """Fetch real screener results from Alpaca.
+
+    Returns None if real data is unavailable (caller should fallback).
+    """
+    if not _alpaca_keys_available():
+        logger.warning("Alpaca keys not configured — cannot run real screener")
+        return None
+
+    from core.redis import cache_get, cache_set
+
+    # Check cache first (60s TTL for screener results)
+    cache_key = "screener:real_results"
+    cached = await cache_get(cache_key)
+    if cached:
+        logger.info("Returning cached real screener results (%d items)", len(cached))
+        results = [ScreenerResult(**r) for r in cached]
+        # Apply filters on cached results
+        results = _apply_filters_to_results(results, request.filters)
+        # Sort
+        sort_field = request.sort.field
+        results.sort(
+            key=lambda r: getattr(r, sort_field, None) or r.metrics.get(sort_field, 0) or 0,
+            reverse=request.sort.descending,
+        )
+        results = results[: request.limit]
+        return ScreenResponse(
+            count=len(results), results=results, screened_at=datetime.now(timezone.utc),
+        )
+
+    try:
+        # Step 1: Get most-active symbols from Alpaca screener
+        logger.info("Fetching most-active stocks from Alpaca screener...")
+        actives = await _fetch_most_actives(top=100)
+        if not actives:
+            logger.warning("Alpaca screener returned no actives")
+            return None
+
+        symbols = [a.get("symbol", "") for a in actives if a.get("symbol")]
+        if not symbols:
+            return None
+
+        logger.info("Got %d most-active symbols from Alpaca", len(symbols))
+
+        # Step 2: Fetch multi-snapshots for real prices
+        logger.info("Fetching multi-snapshots for %d symbols...", len(symbols))
+        snapshots = await _fetch_multi_snapshots(symbols)
+
+        # Step 3: Fetch 3-month momentum for RS scores
+        logger.info("Computing RS momentum scores for %d symbols...", len(symbols))
+        rs_scores = await _fetch_momentum_bars(symbols)
+
+        # Step 4: Build results with real data
+        results: list[ScreenerResult] = []
+        # Build a lookup from actives for trade_count/volume
+        actives_lookup = {a["symbol"]: a for a in actives if "symbol" in a}
+
+        for sym in symbols:
+            snap = snapshots.get(sym)
+            if not snap:
+                continue
+
+            daily = snap.get("dailyBar", {})
+            prev = snap.get("prevDailyBar", {})
+            latest_trade = snap.get("latestTrade", {})
+
+            price = latest_trade.get("p", 0) or daily.get("c", 0)
+            if price <= 0:
+                continue
+
+            prev_close = prev.get("c", 0)
+            day_volume = int(daily.get("v", 0))
+            change_pct = round(((price - prev_close) / prev_close) * 100, 2) if prev_close > 0 else 0.0
+
+            # Trade count from screener endpoint
+            active_info = actives_lookup.get(sym, {})
+            trade_count = active_info.get("trade_count", 0)
+
+            # RS score from momentum calc
+            rs = rs_scores.get(sym, 50.0)
+
+            # Composite score
+            composite = _compute_composite_score(
+                change_pct=change_pct,
+                volume=day_volume,
+                rs_score=rs,
+            )
+
+            name = _COMPANY_NAMES.get(sym, sym)
+
+            metrics = {
+                "rs_score": rs,
+                "trade_count": trade_count,
+                "day_high": daily.get("h", 0),
+                "day_low": daily.get("l", 0),
+                "day_open": daily.get("o", 0),
+                "day_vwap": daily.get("vw", 0),
+                "prev_close": prev_close,
+                "composite_score": composite,
+            }
+
+            results.append(ScreenerResult(
+                symbol=sym,
+                name=name,
+                sector=None,  # Alpaca screener doesn't return sector
+                market_cap=None,
+                price=price,
+                change_pct=change_pct,
+                volume=day_volume,
+                composite_score=composite,
+                metrics=metrics,
+            ))
+
+        if not results:
+            logger.warning("No valid results after processing Alpaca data")
+            return None
+
+        # Cache the full unfiltered results (60s)
+        await cache_set(
+            cache_key,
+            [r.model_dump(mode="json") for r in results],
+            ttl_seconds=60,
+        )
+
+        logger.info("Real screener produced %d results", len(results))
+
+        # Apply request filters
+        results = _apply_filters_to_results(results, request.filters)
+
+        # Sort
+        sort_field = request.sort.field
+        results.sort(
+            key=lambda r: getattr(r, sort_field, None) or r.metrics.get(sort_field, 0) or 0,
+            reverse=request.sort.descending,
+        )
+        results = results[: request.limit]
+
+        return ScreenResponse(
+            count=len(results), results=results, screened_at=datetime.now(timezone.utc),
+        )
+
+    except httpx.HTTPStatusError as e:
+        logger.error("Alpaca screener HTTP error %s: %s", e.response.status_code, e.response.text)
+        return None
+    except Exception:
+        logger.error("Real screener failed", exc_info=True)
+        return None
+
+
+def _apply_filters_to_results(
+    results: list[ScreenerResult], filters: list[ScreenerFilter]
+) -> list[ScreenerResult]:
+    """Apply ScreenerFilter list to ScreenerResult objects."""
+    filtered = []
+    for r in results:
+        # Build flat dict for filter matching
+        d = {
+            "symbol": r.symbol, "name": r.name, "sector": r.sector,
+            "market_cap": r.market_cap, "price": r.price, "change_pct": r.change_pct,
+            "volume": r.volume, "composite_score": r.composite_score,
+            **r.metrics,
+        }
+        passed = True
+        for f in filters:
+            val = d.get(f.field)
+            if val is None:
+                passed = False
+                break
+            if f.op == FilterOp.GT and not (val > f.value):
+                passed = False
+            elif f.op == FilterOp.GTE and not (val >= f.value):
+                passed = False
+            elif f.op == FilterOp.LT and not (val < f.value):
+                passed = False
+            elif f.op == FilterOp.LTE and not (val <= f.value):
+                passed = False
+            elif f.op == FilterOp.EQ and not (val == f.value):
+                passed = False
+            elif f.op == FilterOp.BETWEEN and isinstance(f.value, list) and len(f.value) == 2:
+                if not (f.value[0] <= val <= f.value[1]):
+                    passed = False
+            elif f.op == FilterOp.IN and isinstance(f.value, list) and val not in f.value:
+                passed = False
+            if not passed:
+                break
+        if passed:
+            filtered.append(r)
+    return filtered
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -239,6 +606,11 @@ async def run_screen(
     Filters are applied server-side against cached fundamental + technical
     data. Results are ranked by a composite ML score when a strategy is
     specified.
+
+    Data source priority:
+    1. Alpaca real-time screener (most-actives + snapshots + momentum)
+    2. Cached universe from Redis
+    3. Demo data (last resort fallback)
     """
     from core.redis import cache_get
 
@@ -250,48 +622,56 @@ async def run_screen(
                 [ScreenerFilter(**f) for f in cached_screen.get("filters", [])]
             )
 
-    # Build universe from cached ticker data (BUG-015: return 503 on empty cache)
+    # --- 1. Try real Alpaca screener FIRST ---
+    real_result = await _generate_real_screener_results(request)
+    if real_result and real_result.count > 0:
+        return real_result
+
+    # --- 2. Fall back to cached universe in Redis ---
     universe_raw: dict | None = await cache_get("universe:us_equities")
-    if not universe_raw or not universe_raw.get("tickers"):
-        # Fall back to demo data instead of erroring
-        return _generate_demo_screener_results(request)
-    tickers: list[dict] = universe_raw.get("tickers", [])
+    if universe_raw and universe_raw.get("tickers"):
+        logger.warning("Real screener unavailable — using cached universe data")
+        tickers: list[dict] = universe_raw.get("tickers", [])
 
-    # Apply filters
-    filtered = tickers
-    for f in request.filters:
-        filtered = _apply_filter(filtered, f)
+        # Apply filters
+        filtered = tickers
+        for f in request.filters:
+            filtered = _apply_filter(filtered, f)
 
-    # Sort
-    filtered.sort(
-        key=lambda t: t.get(request.sort.field, 0) or 0,
-        reverse=request.sort.descending,
-    )
-    filtered = filtered[: request.limit]
-
-    results = [
-        ScreenerResult(
-            symbol=t.get("ticker", ""),
-            name=t.get("name", ""),
-            sector=t.get("sector"),
-            market_cap=t.get("market_cap"),
-            price=t.get("price"),
-            change_pct=t.get("change_pct"),
-            volume=t.get("volume"),
-            composite_score=t.get("composite_score", 0),
-            metrics={
-                k: v for k, v in t.items()
-                if k not in {"ticker", "name", "sector", "market_cap", "price", "change_pct", "volume"}
-            },
+        # Sort
+        filtered.sort(
+            key=lambda t: t.get(request.sort.field, 0) or 0,
+            reverse=request.sort.descending,
         )
-        for t in filtered
-    ]
+        filtered = filtered[: request.limit]
 
-    return ScreenResponse(
-        count=len(results),
-        results=results,
-        screened_at=datetime.now(timezone.utc),
-    )
+        results = [
+            ScreenerResult(
+                symbol=t.get("ticker", ""),
+                name=t.get("name", ""),
+                sector=t.get("sector"),
+                market_cap=t.get("market_cap"),
+                price=t.get("price"),
+                change_pct=t.get("change_pct"),
+                volume=t.get("volume"),
+                composite_score=t.get("composite_score", 0),
+                metrics={
+                    k: v for k, v in t.items()
+                    if k not in {"ticker", "name", "sector", "market_cap", "price", "change_pct", "volume"}
+                },
+            )
+            for t in filtered
+        ]
+
+        return ScreenResponse(
+            count=len(results),
+            results=results,
+            screened_at=datetime.now(timezone.utc),
+        )
+
+    # --- 3. Last resort: demo data ---
+    logger.warning("DEMO FALLBACK: Serving fake screener data — both Alpaca and cache unavailable")
+    return _generate_demo_screener_results(request)
 
 
 @router.get("/presets", response_model=list[PresetResponse])

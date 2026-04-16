@@ -24,7 +24,7 @@ logger = logging.getLogger("alphadesk.news")
 
 router = APIRouter()
 
-NEWSDATA_BASE = "https://newsdata.io/api/1/latest"
+NEWSDATA_BASE = "https://newsdata.io/api/1/news"
 NEWS_CACHE_TTL = 900  # 15 minutes (avoid newsdata.io rate limits)
 
 
@@ -99,6 +99,7 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
 
     api_key = settings.NEWSDATA_API_KEY.get_secret_value()
     if not api_key:
+        logger.warning("NEWSDATA_API_KEY is not configured — cannot fetch real news")
         return []
 
     global _rate_limited_until
@@ -252,13 +253,16 @@ async def get_latest_news(
     if cached:
         return NewsResponse(**cached)
 
+    # Always try real API first; fall back to demo only on failure
     is_demo = False
-    if settings.NEWSDATA_API_KEY.get_secret_value():
-        raw = await _fetch_newsdata(q, limit)
-        articles = _parse_articles(raw)
-    else:
+    raw = await _fetch_newsdata(q, limit)
+    articles = _parse_articles(raw)
+    if not articles:
+        logger.info("No real news returned for query=%r, serving demo headlines", q)
         articles = _generate_demo_articles(symbol=q if q != "stock market" else None, limit=limit)
         is_demo = True
+    else:
+        logger.debug("Serving %d real news articles for query=%r", len(articles), q)
 
     response = NewsResponse(articles=articles, query=q, count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
@@ -273,13 +277,16 @@ async def get_market_news() -> NewsResponse:
     if cached:
         return NewsResponse(**cached)
 
+    # Always try real API first; fall back to demo only on failure
     is_demo = False
-    if settings.NEWSDATA_API_KEY.get_secret_value():
-        raw = await _fetch_newsdata("stock market finance", 10)
-        articles = _parse_articles(raw)
-    else:
+    raw = await _fetch_newsdata("stock market finance", 10)
+    articles = _parse_articles(raw)
+    if not articles:
+        logger.info("No real market news returned, serving demo headlines")
         articles = _generate_demo_articles(symbol=None, limit=10)
         is_demo = True
+    else:
+        logger.debug("Serving %d real market news articles", len(articles))
 
     response = NewsResponse(articles=articles, query="market", count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
@@ -298,14 +305,17 @@ async def get_symbol_news(
     if cached:
         return NewsResponse(**cached)
 
+    # Always try real API first; fall back to demo only on failure
     is_demo = False
-    if settings.NEWSDATA_API_KEY.get_secret_value():
-        query = _company_query(symbol)
-        raw = await _fetch_newsdata(query, limit)
-        articles = _parse_articles(raw, symbols=[symbol])
-    else:
+    query = _company_query(symbol)
+    raw = await _fetch_newsdata(query, limit)
+    articles = _parse_articles(raw, symbols=[symbol])
+    if not articles:
+        logger.info("No real news for symbol=%s, serving demo headlines", symbol)
         articles = _generate_demo_articles(symbol=symbol, limit=limit)
         is_demo = True
+    else:
+        logger.debug("Serving %d real news articles for symbol=%s", len(articles), symbol)
 
     response = NewsResponse(articles=articles, query=symbol, count=len(articles), is_demo=is_demo)
     await cache_set(cache_k, response.model_dump(), ttl_seconds=NEWS_CACHE_TTL)
@@ -326,11 +336,12 @@ async def fetch_news_for_symbol(symbol: str, limit: int = 5) -> list[str]:
     if cached:
         return cached  # type: ignore[return-value]
 
-    if settings.NEWSDATA_API_KEY.get_secret_value():
-        query = _company_query(symbol)
-        raw = await _fetch_newsdata(query, limit)
-        headlines = [r["title"] for r in raw if r.get("title")][:limit]
-    else:
+    # Always try real API first; fall back to demo only on failure
+    query = _company_query(symbol)
+    raw = await _fetch_newsdata(query, limit)
+    headlines = [r["title"] for r in raw if r.get("title")][:limit]
+    if not headlines:
+        logger.info("No real headlines for pipeline symbol=%s, using demo", symbol)
         articles = _generate_demo_articles(symbol=symbol, limit=limit)
         headlines = [a.title for a in articles]
 

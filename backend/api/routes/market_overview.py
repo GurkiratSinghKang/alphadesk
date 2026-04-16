@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import logging
-import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -67,11 +65,11 @@ class RegimeResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 _DEMO_INDICES: list[dict[str, Any]] = [
-    {"symbol": "SPY", "name": "S&P 500 ETF", "price": 590.00, "change": 1.77, "change_pct": 0.3, "prev_close": 588.23},
-    {"symbol": "QQQ", "name": "NASDAQ 100 ETF", "price": 510.00, "change": 2.55, "change_pct": 0.5, "prev_close": 507.45},
-    {"symbol": "IWM", "name": "Russell 2000 ETF", "price": 220.00, "change": -0.44, "change_pct": -0.2, "prev_close": 220.44},
-    {"symbol": "DIA", "name": "Dow Jones ETF", "price": 420.00, "change": 0.42, "change_pct": 0.1, "prev_close": 419.58},
-    {"symbol": "VIX", "name": "CBOE Volatility Index", "price": 16.50, "change": -0.55, "change_pct": -3.2, "prev_close": 17.05},
+    {"symbol": "SPY", "name": "S&P 500 ETF", "price": 535.00, "change": 1.60, "change_pct": 0.3, "prev_close": 533.40},
+    {"symbol": "QQQ", "name": "NASDAQ 100 ETF", "price": 450.00, "change": 2.25, "change_pct": 0.5, "prev_close": 447.75},
+    {"symbol": "IWM", "name": "Russell 2000 ETF", "price": 192.00, "change": -0.38, "change_pct": -0.2, "prev_close": 192.38},
+    {"symbol": "DIA", "name": "Dow Jones ETF", "price": 395.00, "change": 0.40, "change_pct": 0.1, "prev_close": 394.60},
+    {"symbol": "VIX", "name": "CBOE Volatility Index", "price": 30.00, "change": -1.00, "change_pct": -3.2, "prev_close": 31.00},
 ]
 
 _DEMO_SECTORS: list[dict[str, Any]] = [
@@ -151,6 +149,7 @@ async def get_indices() -> IndicesResponse:
                             ))
                             continue
                     # Fallback to demo VIX if VIXY unavailable
+                    logger.warning("Serving DEMO data for VIX — VIXY snapshot unavailable")
                     indices.append(IndexData(**demo, is_demo=True))
                     continue
                 snap = snapshots.get(sym)
@@ -167,11 +166,13 @@ async def get_indices() -> IndicesResponse:
                             is_demo=False,
                         ))
                     else:
+                        logger.warning("Serving DEMO data for %s — snapshot had incomplete price data", sym)
                         indices.append(IndexData(**demo, is_demo=True))
                 else:
+                    logger.warning("Serving DEMO data for %s — no snapshot returned from Alpaca", sym)
                     indices.append(IndexData(**demo, is_demo=True))
     except Exception:
-        logger.warning("Failed to fetch index data from Alpaca, falling back to demo", exc_info=True)
+        logger.warning("Serving DEMO data for ALL indices — Alpaca API call failed", exc_info=True)
         indices = [IndexData(**d, is_demo=True) for d in _DEMO_INDICES]
 
     return IndicesResponse(
@@ -258,9 +259,10 @@ async def get_sectors() -> SectorsResponse:
         if sectors:
             return SectorsResponse(sectors=sectors, as_of=datetime.now(timezone.utc), is_demo=False)
     except Exception:
-        logger.warning("Failed to fetch sector data from Alpaca, falling back to demo", exc_info=True)
+        logger.warning("Serving DEMO sector data — Alpaca API call failed", exc_info=True)
 
     # Full demo fallback
+    logger.warning("Serving DEMO data for ALL sectors")
     return SectorsResponse(
         sectors=[SectorPerformance(**d) for d in _DEMO_SECTORS],
         as_of=datetime.now(timezone.utc),

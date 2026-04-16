@@ -103,7 +103,6 @@ export function NotificationCenter() {
   const markAsRead = useNotificationsStore((s) => s.markAsRead);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const clearAll = useNotificationsStore((s) => s.clearAll);
-  const addNotification = useNotificationsStore((s) => s.addNotification);
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
@@ -116,23 +115,8 @@ export function NotificationCenter() {
     [notifications, activeTab]
   );
 
-  // ─── Seed demo notifications on first mount if empty ──────
-  useEffect(() => {
-    if (notifications.length > 0) return;
-    const seed: Omit<AppNotification, "id" | "timestamp" | "read">[] = [
-      { category: "trades", title: "Order Filled", detail: "Buy 100 AAPL @ $185.32 filled", icon: "check" },
-      { category: "alerts", title: "Price Alert Triggered", detail: "SPY crossed above $520.00", icon: "alert-triangle" },
-      { category: "pipeline", title: "Pipeline Completed", detail: "Momentum + Quality scan finished - 12 signals", icon: "bot" },
-      { category: "system", title: "Session Active", detail: "Logged in from macOS Chrome", icon: "login" },
-      { category: "trades", title: "Order Rejected", detail: "Sell 50 TSLA - insufficient buying power", icon: "rejected" },
-      { category: "system", title: "Circuit Breaker", detail: "VRP Harvesting strategy paused - drawdown limit hit", icon: "shield" },
-    ];
-    // Stagger timestamps so they appear in order
-    seed.forEach((s, i) => {
-      setTimeout(() => addNotification(s), i * 50);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Notifications start empty — real notifications come from trade events,
+  // alerts, pipeline completions, and system events.
 
   return (
     <Popover>
