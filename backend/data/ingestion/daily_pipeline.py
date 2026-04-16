@@ -147,14 +147,23 @@ async def _place_order(
     symbol: str,
     qty: int,
     side: str,
+    strategy: str = "unknown",
 ) -> dict[str, Any]:
-    """Place a market order on Alpaca paper."""
+    """Place a market order on Alpaca paper.
+
+    Includes a client_order_id encoding the strategy name for traceability.
+    """
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    client_order_id = f"{strategy}_{symbol}_{ts}"
+
     body = {
         "symbol": symbol,
         "qty": str(qty),
         "side": side,
         "type": "market",
         "time_in_force": "day",
+        "client_order_id": client_order_id,
     }
     resp = await client.post(
         f"{_base_url()}/v2/orders",
@@ -164,8 +173,8 @@ async def _place_order(
     resp.raise_for_status()
     order = resp.json()
     logger.info(
-        "Order placed: %s %s %d shares  order_id=%s",
-        side.upper(), symbol, qty, order.get("id"),
+        "Order placed: %s %s %d shares  strategy=%s  order_id=%s  client_id=%s",
+        side.upper(), symbol, qty, strategy, order.get("id"), client_order_id,
     )
     return order
 
@@ -301,7 +310,7 @@ async def _execute_approved_orders(
         if shares < 1:
             continue
         try:
-            result = await _place_order(client, sym, shares, "buy")
+            result = await _place_order(client, sym, shares, "buy", strategy=order.get("strategy", "unknown"))
             order_id = result.get("id")
 
             # Record the entry with the pre-trade estimate first

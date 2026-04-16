@@ -297,6 +297,97 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
         "annualized_return_pct": 0,
         "last_trade_date": "",
     },
+    "ts-momentum": {
+        "name": "Time-Series Momentum",
+        "description": "Trend following based on Moskowitz et al. (2012). Goes long when price is above the 200-day SMA and exits on trend reversal. Uses inverse-volatility position sizing for risk parity. Provides crisis alpha — positive convexity during market crashes.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "rsi2-reversal": {
+        "name": "RSI-2 Mean Reversion",
+        "description": "Short-term countertrend strategy from Connors & Alvarez (2009). Buys when RSI(2) drops below 10 while price remains above the 200-day SMA (trading with the trend). Exits on RSI(2) > 90 or 5-day SMA cross. 75% historical win rate, 3-7 day holds.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "dual-momentum": {
+        "name": "Dual Momentum",
+        "description": "Cross-sectional relative strength combined with absolute momentum filter, based on Jegadeesh & Titman (1993) and Antonacci (2014). Ranks stocks by 12-1 month returns, selects top quintile, and only holds those with positive 12-month absolute return. Monthly rebalance.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "pairs-stat-arb": {
+        "name": "Pairs Trading (Stat Arb)",
+        "description": "Statistical arbitrage from Gatev et al. (2006). Identifies cointegrated stock pairs (e.g., KO/PEP, V/MA), computes spread z-score, enters when deviation exceeds 2 std devs, and exits on mean reversion. Market-neutral by construction with dollar-neutral legs.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "kama-breakout": {
+        "name": "KAMA + ATR Breakout",
+        "description": "Volatility-adaptive trend strategy based on Kaufman (1998). Uses Kaufman Adaptive Moving Average for trend detection combined with Keltner Channel breakout confirmation. ATR-based Turtle-style position sizing normalizes risk across holdings. Adapts sensitivity: responsive in trends, quiet in chop.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "orb": {
+        "name": "Opening Range Breakout",
+        "description": "Intraday breakout strategy based on Crabel (1990) and Fisher's ACD Method. Defines the first 30 minutes' high/low as the opening range, enters on breakout with 1.5x OR width target. Sizes positions using OR width as risk unit. VWAP confirmation filters false breakouts.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
+    "vwap-strategy": {
+        "name": "VWAP Bounce / Breakout",
+        "description": "Institutional VWAP-based strategy (Berkowitz et al. 1988, Madhavan 2002). Three signal modes: VWAP bounce (buy pullback to VWAP in uptrend), upper band breakout (price breaks above 2-std VWAP band with volume), and VWAP reclaim (price crosses back above VWAP). Volume confirmation required.",
+        "status": StrategyStatus.ACTIVE,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": 0,
+        "win_rate": 0,
+        "max_drawdown": 0,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
 }
 
 
@@ -431,6 +522,15 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
     "dividend_capture": "dividend-capture",
     "sector_rotation": "sector-rotation",
     "gap_fill": "gap-fill",
+    # Technical analysis strategies
+    "ts_momentum": "ts-momentum",
+    "rsi2_reversal": "rsi2-reversal",
+    "dual_momentum": "dual-momentum",
+    "kama_breakout": "kama-breakout",
+    "orb": "orb",
+    "vwap_strategy": "vwap-strategy",
+    # Stat arb (pairs_trading already above)
+    "pairs_stat_arb": "pairs-stat-arb",
 }
 
 # Reverse mapping: strategy route ID -> ledger strategy name
@@ -836,6 +936,82 @@ async def toggle_strategy(
         previous_status=current_status,
         new_status=new_status,
     )
+
+
+# ---------------------------------------------------------------------------
+# Risk Monitor Toggle
+# ---------------------------------------------------------------------------
+
+class RiskMonitorState(BaseModel):
+    enabled: bool
+    message: str
+
+
+@router.post("/admin/risk-monitor", response_model=RiskMonitorState)
+async def toggle_risk_monitor(enabled: bool = True) -> RiskMonitorState:
+    """Toggle the Master Agent risk monitor on or off.
+
+    When disabled, all risk checks (P1-P4) are bypassed and trades
+    are auto-approved (only duplicate symbol check remains).
+    """
+    from data.ingestion.master_agent import MasterAgent
+
+    previous = MasterAgent.RISK_MONITOR_ENABLED
+    MasterAgent.RISK_MONITOR_ENABLED = enabled
+    logger.warning(
+        "Risk monitor toggled: %s -> %s",
+        "ON" if previous else "OFF",
+        "ON" if enabled else "OFF",
+    )
+    return RiskMonitorState(
+        enabled=enabled,
+        message=f"Risk monitor {'enabled' if enabled else 'disabled'}. "
+                f"{'All risk checks active.' if enabled else 'P1-P4 checks bypassed — trades auto-approved.'}",
+    )
+
+
+@router.get("/admin/risk-monitor", response_model=RiskMonitorState)
+async def get_risk_monitor_state() -> RiskMonitorState:
+    """Get current risk monitor state."""
+    from data.ingestion.master_agent import MasterAgent
+
+    return RiskMonitorState(
+        enabled=MasterAgent.RISK_MONITOR_ENABLED,
+        message=f"Risk monitor is {'enabled' if MasterAgent.RISK_MONITOR_ENABLED else 'disabled'}.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Strategy Competition Leaderboard
+# ---------------------------------------------------------------------------
+
+class StrategyLeaderboardEntry(BaseModel):
+    strategy: str
+    total_trades: int
+    open_trades: int
+    closed_trades: int
+    wins: int
+    losses: int
+    win_rate: float
+    total_pnl: float
+    return_pct: float
+    best_trade_pnl: float
+    worst_trade_pnl: float
+
+
+@router.get("/admin/leaderboard", response_model=list[StrategyLeaderboardEntry])
+async def get_strategy_leaderboard() -> list[StrategyLeaderboardEntry]:
+    """Get per-strategy P&L leaderboard for the competition."""
+    from data.ingestion.trade_ledger import TradeLedger
+
+    ledger = TradeLedger()
+    perf = ledger.get_strategy_performance()
+
+    entries = [
+        StrategyLeaderboardEntry(**p)
+        for p in sorted(perf.values(), key=lambda x: x["total_pnl"], reverse=True)
+    ]
+    return entries
 
 
 def _get_symbol_sector_map() -> dict[str, str]:

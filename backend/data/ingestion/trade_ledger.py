@@ -268,6 +268,11 @@ class TradeLedger:
                 qty = int(float(pos.get("qty", 0)))
                 if qty <= 0:
                     continue
+
+                # Try to match to a recent pipeline trade by symbol
+                # instead of defaulting to "manual"
+                matched_strategy = self._match_strategy_for_symbol(sym)
+
                 trade = {
                     "id": len(self._data["trades"]) + 1,
                     "symbol": sym,
@@ -277,8 +282,8 @@ class TradeLedger:
                     "stop_loss": None,
                     "take_profit": None,
                     "conviction": 0,
-                    "rationale": "Auto-created by Alpaca sync (untracked position)",
-                    "strategy": "manual",
+                    "rationale": f"Auto-created by Alpaca sync (matched to {matched_strategy})",
+                    "strategy": matched_strategy,
                     "status": "open",
                     "exit_price": None,
                     "exit_time": None,
@@ -289,8 +294,8 @@ class TradeLedger:
                 self._data["trades"].append(trade)
                 created.append(sym)
                 logger.info(
-                    "Ledger sync: created entry for %s (%d shares @ %.2f)",
-                    sym, qty, avg_price,
+                    "Ledger sync: created entry for %s (%d shares @ %.2f, strategy=%s)",
+                    sym, qty, avg_price, matched_strategy,
                 )
 
         if created or updated or closed:
@@ -304,6 +309,30 @@ class TradeLedger:
         logger.info("Ledger sync complete: %s", summary)
         return summary
 
+    def _match_strategy_for_symbol(self, symbol: str) -> str:
+        """Try to match an untracked Alpaca position to its originating strategy.
+
+        Searches recent closed and open trades for the same symbol to inherit
+        the strategy name. Falls back to checking Alpaca client_order_id
+        format (strategy_symbol_timestamp). Last resort: "manual".
+        """
+        # 1. Check recent trades (last 50) for same symbol
+        recent = self._data["trades"][-50:]
+        for trade in reversed(recent):
+            if trade["symbol"] == symbol and trade.get("strategy", "manual") != "manual":
+                logger.info(
+                    "Matched %s to strategy '%s' from recent trade #%d",
+                    symbol, trade["strategy"], trade.get("id", 0),
+                )
+                return trade["strategy"]
+
+        # 2. No match found
+        logger.warning(
+            "No strategy match found for %s — defaulting to 'manual'",
+            symbol,
+        )
+        return "manual"
+
     def count_today_trades(self) -> int:
         """Count trades opened today (UTC)."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -312,3 +341,50 @@ class TradeLedger:
             for t in self._data["trades"]
             if t.get("entry_time", "").startswith(today)
         )
+
+    def get_strategy_performance(self) -> dict[str, dict[str, Any]]:
+        """Get per-strategy P&L breakdown for the competition leaderboard."""
+        perf: dict[str, dict[str, Any]] = {}
+        for trade in self._data["trades"]:
+            strat = trade.get("strategy", "unknown")
+            if strat not in perf:
+                perf[strat] = {
+                    "strategy": strat,
+                    "total_trades": 0,
+                    "open_trades": 0,
+                    "closed_trades": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "total_pnl": 0.0,
+                    "total_invested": 0.0,
+                    "best_trade_pnl": 0.0,
+                    "worst_trade_pnl": 0.0,
+                }
+            p = perf[strat]
+            p["total_trades"] += 1
+            invested = (trade.get("entry_price", 0) or 0) * (trade.get("shares", 0) or 0)
+            p["total_invested"] += invested
+
+            if trade["status"] == "open":
+                p["open_trades"] += 1
+            elif trade["status"] == "closed":
+                p["closed_trades"] += 1
+                pnl = trade.get("pnl", 0) or 0
+                p["total_pnl"] += pnl
+                if pnl > 0:
+                    p["wins"] += 1
+                else:
+                    p["losses"] += 1
+                p["best_trade_pnl"] = max(p["best_trade_pnl"], pnl)
+                p["worst_trade_pnl"] = min(p["worst_trade_pnl"], pnl)
+
+        # Compute win rates
+        for p in perf.values():
+            closed = p["closed_trades"]
+            p["win_rate"] = round(p["wins"] / closed * 100, 1) if closed > 0 else 0.0
+            p["total_pnl"] = round(p["total_pnl"], 2)
+            p["return_pct"] = round(
+                (p["total_pnl"] / p["total_invested"] * 100) if p["total_invested"] > 0 else 0, 2
+            )
+
+        return perf

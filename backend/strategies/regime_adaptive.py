@@ -19,25 +19,38 @@ class RegimeAdaptiveStrategy(BaseStrategy):
     description = "Regime-aware strategy that adapts to market conditions via HMM"
     default_timeframe = "swing"
 
-    # Regime-specific allocation weights
+    # Regime-specific allocation weights (includes TA strategies)
     REGIME_ALLOCATIONS = {
         "bull": {
-            "momentum_quality": 0.40,
-            "pead": 0.25,
-            "vrp_harvest": 0.25,
-            "earnings_vol": 0.10,
+            "momentum_quality": 0.15,
+            "ts_momentum": 0.15,        # trend following thrives in bull
+            "dual_momentum": 0.15,       # relative strength works well
+            "kama_breakout": 0.10,       # breakouts frequent in bull
+            "orb": 0.10,                 # intraday momentum strong
+            "vwap_strategy": 0.10,       # VWAP bounces reliable
+            "pead": 0.10,
+            "vrp_harvest": 0.10,
+            "rsi2_reversal": 0.05,       # less mean reversion in bull
         },
         "neutral": {
-            "momentum_quality": 0.20,
-            "pead": 0.15,
-            "vrp_harvest": 0.45,
-            "earnings_vol": 0.20,
+            "rsi2_reversal": 0.15,       # mean reversion thrives in range
+            "pairs_trading": 0.15,       # stat arb is market-neutral
+            "vwap_strategy": 0.15,       # VWAP bounces in range
+            "vrp_harvest": 0.15,         # premium selling in range
+            "momentum_quality": 0.10,
+            "kama_breakout": 0.10,
+            "ts_momentum": 0.10,
+            "pead": 0.10,
         },
         "bear": {
+            "pairs_trading": 0.25,       # market-neutral is key in bear
+            "rsi2_reversal": 0.20,       # deep oversold bounces
+            "vrp_harvest": 0.15,         # elevated VIX = premium selling
+            "vwap_strategy": 0.15,
+            "ts_momentum": 0.10,         # trend following exits to cash
             "momentum_quality": 0.05,
-            "pead": 0.10,
-            "vrp_harvest": 0.15,
-            "earnings_vol": 0.10,
+            "pead": 0.05,
+            "kama_breakout": 0.05,
         },
     }
 

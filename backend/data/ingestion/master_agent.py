@@ -50,23 +50,35 @@ class MasterAgent:
         """Set 12-month absolute momentum data (Antonacci Dual Momentum)."""
         cls.ABSOLUTE_MOMENTUM_DATA = data
 
-    # Allocation limits per strategy (% of equity) — must sum to <= 1.0
+    # Equal allocation: $100k / 15 strategies = $6,667 each (competition mode)
     STRATEGY_LIMITS: dict[str, float] = {
-        "momentum_quality": 0.16,   # 16%  (-2%)
-        "pead": 0.09,               #  9%  (-1%)
-        "vrp_harvest": 0.18,        # 18%  (-2%)
-        "earnings_vol": 0.07,       #  7%  (-1%)
-        "regime_adaptive": 0.13,    # 13%  (-2%)
-        "claude_alpha": 0.15,       # 15%  (-2%)
-        "mean_reversion": 0.12,     # 12%  (same)
-        "vcp_breakout": 0.10,       # 10%  (new)
+        # Fundamental / options strategies
+        "momentum_quality": 0.0667, # $6,667
+        "pead": 0.0667,             # $6,667
+        "vrp_harvest": 0.0667,      # $6,667
+        "earnings_vol": 0.0667,     # $6,667
+        "regime_adaptive": 0.0667,  # $6,667
+        "claude_alpha": 0.0667,     # $6,667
+        "mean_reversion": 0.0667,   # $6,667
+        "vcp_breakout": 0.0667,     # $6,667
+        # Technical analysis strategies
+        "ts_momentum": 0.0667,      # $6,667
+        "rsi2_reversal": 0.0667,    # $6,667
+        "dual_momentum": 0.0667,    # $6,667
+        "pairs_trading": 0.0667,    # $6,667
+        "kama_breakout": 0.0667,    # $6,667
+        "orb": 0.0667,              # $6,667
+        "vwap_strategy": 0.0667,    # $6,667
     }
     # Total: 1.00
-    MAX_POSITIONS = 15
-    MAX_DEPLOYED_PCT = 0.60  # max 60% of equity deployed (fallback)
-    MAX_PER_POSITION = 0.06  # max 6% per position (avoids rounding rejections near 5%)
+    MAX_POSITIONS = 20  # raised for 15 strategies
+    MAX_DEPLOYED_PCT = 0.90  # 90% of equity deployable (competition mode)
+    MAX_PER_POSITION = 0.08  # max 8% per position
     MIN_CONVICTION = 50
     MIN_REWARD_RISK_RATIO = 1.2  # Minimum 1.2:1 reward-to-risk (accommodates mean reversion)
+
+    # Risk monitor toggle — when False, all P1-P4 checks are bypassed
+    RISK_MONITOR_ENABLED: bool = True
 
     # P1: Per-strategy drawdown limits
     STRATEGY_DRAWDOWN_LIMIT = -0.05  # -5% from peak
@@ -334,6 +346,28 @@ class MasterAgent:
 
         Returns ``{"approved": bool, "reason": str}``.
         """
+        # -- Risk Monitor bypass: when disabled, approve all buys --
+        if not self.RISK_MONITOR_ENABLED:
+            # Only enforce duplicate symbol check (safety)
+            if side == "buy" and symbol in self.existing_positions:
+                holding = self.existing_positions[symbol].get("strategy", "unknown")
+                return {"approved": False, "reason": f"{symbol} already held by '{holding}'"}
+
+            order = {
+                "strategy": strategy, "symbol": symbol, "side": side,
+                "notional": notional, "shares": shares, "conviction": conviction,
+                "rationale": rationale, "entry_price": entry_price,
+                "stop_loss": stop_loss, "take_profit": take_profit,
+            }
+            self.pending_orders.append(order)
+            if side == "buy":
+                self.existing_positions[symbol] = {
+                    "strategy": strategy, "notional": notional, "sector": sector,
+                }
+                self.cash -= notional
+            logger.warning("RISK MONITOR OFF — auto-approved: %s %s %s $%.0f", strategy, side, symbol, notional)
+            return {"approved": True, "reason": "Approved (risk monitor disabled)"}
+
         # -- P1: Check if strategy is halted due to drawdown --
         if strategy in self.halted_strategies:
             reason = f"Strategy '{strategy}' is halted (drawdown > {abs(self.STRATEGY_DRAWDOWN_LIMIT)*100}%)"

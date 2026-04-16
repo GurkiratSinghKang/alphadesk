@@ -115,6 +115,51 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
 
 // ─── Main Page ──────────────────────────────────────────────
 
+// ─── Risk Monitor Toggle ───────────────────────────────────
+
+function RiskMonitorToggle() {
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/v1/strategies/admin/risk-monitor")
+      .then((r) => r.json())
+      .then((d) => { setEnabled(d.enabled ?? true); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      await fetch(`/api/v1/strategies/admin/risk-monitor?enabled=${next}`, {
+        method: "POST",
+      });
+    } catch {
+      setEnabled(!next); // revert on error
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <button
+      onClick={toggle}
+      className={cn(
+        "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
+        enabled
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+          : "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+      )}
+      title={enabled ? "Risk monitor is ON — click to disable" : "Risk monitor is OFF — click to enable"}
+    >
+      <span className={cn("h-2 w-2 rounded-full", enabled ? "bg-emerald-500" : "bg-red-500")} />
+      Risk Monitor: {enabled ? "ON" : "OFF"}
+    </button>
+  );
+}
+
+
 export default function PipelinePage() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -325,6 +370,7 @@ export default function PipelinePage() {
             <Sparkles className="h-3 w-3" />
             Templates
           </Button>
+          <RiskMonitorToggle />
           <Button
             size="sm"
             onClick={handleRunNow}
