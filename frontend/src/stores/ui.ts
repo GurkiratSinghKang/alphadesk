@@ -59,6 +59,7 @@ export const useUIStore = create<UIState>()(
     {
       name: "alphadesk-ui",
       partialize: (state) => ({ tradingMode: state.tradingMode }),
+      skipHydration: true,
     }
   )
 );

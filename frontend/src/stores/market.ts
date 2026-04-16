@@ -78,6 +78,7 @@ export const useMarketStore = create<MarketState>()(
     {
       name: "alphadesk-watchlist",
       partialize: (state) => ({ watchlist: state.watchlist }),
+      skipHydration: true,
     }
   )
 );

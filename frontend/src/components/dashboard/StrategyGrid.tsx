@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Activity, Target, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -189,11 +189,13 @@ interface StrategyGridProps {
 }
 
 export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: StrategyGridProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "expanded";
+  // Always start with "expanded" during SSR/hydration to avoid mismatch,
+  // then sync from localStorage after mount
+  const [viewMode, setViewMode] = useState<ViewMode>("expanded");
+  useEffect(() => {
     const stored = localStorage.getItem(VIEW_MODE_KEY);
-    return stored === "compact" || stored === "expanded" ? stored : "expanded";
-  });
+    if (stored === "compact") setViewMode("compact");
+  }, []);
 
   const toggleView = (mode: ViewMode) => {
     setViewMode(mode);

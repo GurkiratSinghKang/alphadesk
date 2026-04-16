@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
@@ -16,6 +16,10 @@ import type { ReactNode } from "react";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
+  // Defer persisted store read to avoid hydration mismatch
+  // (server renders with default true, client may have false from localStorage)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const tickerTapeOn = usePreferencesStore((s) => s.display.tickerTapeOn);
 
   useEffect(() => {
@@ -29,9 +33,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("alphadesk:api-error", handleApiError as EventListener);
   }, [toast]);
 
+  // Don't render any client-interactive content until after hydration.
+  // Zustand persist stores rehydrate from localStorage on mount, which
+  // produces different values than server render → React hydration crash.
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col overflow-x-hidden bg-[var(--background)]">
+        <div className="h-12 border-b border-border bg-[var(--surface)]" />
+        <div className="h-7 border-b border-border bg-[var(--background)]" />
+        <main className="flex-1" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
-      {/* Accessibility: skip-to-content link */}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"

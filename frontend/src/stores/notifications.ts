@@ -68,6 +68,7 @@ export const useNotificationsStore = create<NotificationsState>()(
     }),
     {
       name: "alphadesk-notifications",
+      skipHydration: true,
     }
   )
 );

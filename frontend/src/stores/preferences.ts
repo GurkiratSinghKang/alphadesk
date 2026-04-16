@@ -83,6 +83,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: "alphadesk-preferences",
+      skipHydration: true,
     }
   )
 );

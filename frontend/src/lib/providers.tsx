@@ -62,10 +62,25 @@ function PriceAlertToastBridge() {
 // ─── Data Pipeline (routes WS + REST to stores) ─────────────
 
 function DataPipelineBridge({ children }: { children: ReactNode }) {
-  useDataPipeline();
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    // Rehydrate all Zustand persist stores after mount
+    Promise.all([
+      import("@/stores/market").then(m => m.useMarketStore.persist.rehydrate()),
+      import("@/stores/preferences").then(m => m.usePreferencesStore.persist.rehydrate()),
+      import("@/stores/ui").then(m => m.useUIStore.persist.rehydrate()),
+      import("@/stores/notifications").then(m => m.useNotificationsStore.persist.rehydrate()),
+    ]).then(() => setHydrated(true));
+  }, []);
+
+  // Always call the hook (React rules of hooks — no conditional calls)
+  // but only activate data fetching after stores are hydrated
+  useDataPipeline(hydrated);
+
   return (
     <>
-      <PriceAlertToastBridge />
+      {hydrated && <PriceAlertToastBridge />}
       {children}
     </>
   );

@@ -40,10 +40,14 @@ function getDismissKey(): string {
 export function MorningBrief() {
   const { data, isLoading, error } = useMorningBrief();
 
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(getDismissKey()) === "1";
-  });
+  // Always start as false during SSR to avoid hydration mismatch,
+  // then check localStorage after mount
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    if (localStorage.getItem(getDismissKey()) === "1") {
+      setDismissed(true);
+    }
+  }, []);
 
   // Clean up old dismiss keys on mount
   useEffect(() => {

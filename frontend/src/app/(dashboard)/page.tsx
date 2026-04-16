@@ -112,10 +112,10 @@ function CommandCenter() {
   };
 
   // ─── First-login welcome banner ──────────────────────────
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return !localStorage.getItem('alphadesk-welcomed');
-  });
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('alphadesk-welcomed')) setShowWelcome(true);
+  }, []);
 
   const dismissWelcome = () => {
     localStorage.setItem('alphadesk-welcomed', '1');
