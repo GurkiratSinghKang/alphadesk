@@ -28,6 +28,7 @@ pandas>=2.2.0
 numpy>=2.0.0
 polars>=1.16.0
 scipy>=1.14.0
+statsmodels>=0.14.0   # Engle-Granger ADF used by backend/indicators/stats.py
 
 # ML
 lightgbm>=4.5.0
@@ -42,6 +43,12 @@ alpaca-py>=0.33.0
 
 # Claude AI
 anthropic>=0.40.0
+
+# Parquet cache for data providers
+pyarrow>=17.0.0
+
+# Market calendars (NYSE/NASDAQ sessions, holidays, half-days)
+pandas-market-calendars>=4.4.0
 
 # Technical analysis
 pandas-ta>=0.3.14b1

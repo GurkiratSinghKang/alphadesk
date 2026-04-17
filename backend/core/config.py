@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # --- Market Data Providers ---
     POLYGON_API_KEY: SecretStr = SecretStr("")
+    FMP_API_KEY: SecretStr = SecretStr("")
     THETA_DATA_API_KEY: SecretStr = SecretStr("")
     UNUSUAL_WHALES_API_KEY: SecretStr = SecretStr("")
 

@@ -12,6 +12,7 @@ build/
 .eggs/
 *.whl
 .venv/
+.venv-*/
 venv/
 env/
 .python-version
