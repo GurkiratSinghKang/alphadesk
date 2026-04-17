@@ -1,0 +1,77 @@
+{
+  "window": [
+    "2024-04-01",
+    "2024-09-30"
+  ],
+  "starting_cash": 100000.0,
+  "params": {},
+  "summary": {
+    "sharpe": 0.8755353607488662,
+    "max_drawdown": -0.072862888605293,
+    "cagr": 0.22107164342258523,
+    "years": 0.5198412698412699,
+    "final_equity": 110940.88535675478,
+    "total_return_pct": 0.1094088535675477
+  },
+  "n_sessions": 131,
+  "n_strangles": 10,
+  "n_hedges": 10,
+  "exit_reasons": {
+    "dte-roll": 18
+  },
+  "monthly_pnl": [
+    {
+      "month": "2024-05",
+      "return_pct": 0.05473553859278146
+    },
+    {
+      "month": "2024-06",
+      "return_pct": 0.028651606231452575
+    },
+    {
+      "month": "2024-07",
+      "return_pct": -0.01989425495254271
+    },
+    {
+      "month": "2024-08",
+      "return_pct": 0.0
+    },
+    {
+      "month": "2024-09",
+      "return_pct": 0.0508883226201613
+    }
+  ],
+  "drawdown_events": [
+    {
+      "peak": "2024-04-12",
+      "trough": "2024-04-19",
+      "recovered": "2024-06-28",
+      "drawdown_pct": -0.072862888605293
+    },
+    {
+      "peak": "2024-07-05",
+      "trough": "2024-07-05",
+      "recovered": "2024-07-15",
+      "drawdown_pct": -0.05839697622497442
+    },
+    {
+      "peak": "2024-07-19",
+      "trough": "2024-07-26",
+      "recovered": "2024-09-09",
+      "drawdown_pct": -0.045053713861650024
+    },
+    {
+      "peak": "2024-09-11",
+      "trough": "2024-09-13",
+      "recovered": "2024-09-18",
+      "drawdown_pct": -0.028752745811124192
+    },
+    {
+      "peak": "2024-09-19",
+      "trough": "2024-09-20",
+      "recovered": null,
+      "drawdown_pct": -0.0327223754414675
+    }
+  ],
+  "n_synth_trades": 38
+}

@@ -1,0 +1,22 @@
+{
+  "study_name": "vrp_harvest_phase1_defaults",
+  "note": "Default parameter set from backend/strategies/vrp_harvest/config.py (spec.md §6). A full 15-25 trial Optuna walk-forward tune was not executed in this phase due to Polygon-Developer-tier bandwidth constraints on 2022-10 ... 2024-12 (~750 sessions × ~40 contracts/session of cold cache fetching). The smoke-test window (2024-04 ... 2024-06) and the OOS eval window (2024-04 ... 2024-09) both ran on these defaults and are reported in phase1-vrp_harvest-oos.json. The tune framework (scripts/tune_vrp_harvest.py) is wired for Optuna TPE + the search space from config.py::search_space and will run as-is once the chain-+contract-bars cache is pre-warmed end-to-end. See audit-reports/phase1-vrp_harvest.md §6 for the caveat list.",
+  "train": ["2024-04-01", "2024-06-28"],
+  "test": ["2024-07-01", "2024-09-30"],
+  "trials_run": 0,
+  "best_score": null,
+  "best_params": {
+    "vrp_entry_threshold": 0.02,
+    "strangle_delta": 0.16,
+    "target_dte": 30,
+    "theta_target_pct": 0.003,
+    "tp_pct": 0.50,
+    "sl_pct": 2.0,
+    "exit_dte": 21,
+    "vix_kill_switch": 0.35,
+    "tail_hedge_ratio": 5,
+    "tail_hedge_delta": 0.05,
+    "term_structure_gate": true
+  },
+  "leaderboard": []
+}

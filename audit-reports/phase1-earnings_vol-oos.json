@@ -1,0 +1,197 @@
+{
+  "tuner": {
+    "study_name": "earnings_vol_v1",
+    "best_params": {
+      "implied_vs_historical_min_ratio": 1.194338644844741,
+      "wing_width_multiple": 1.407023547660844,
+      "dte_target": 7,
+      "max_loss_pct_per_trade": 0.01856740207895621,
+      "exit_timing": "next_close",
+      "earnings_timing_filter": "after_close_only",
+      "min_underlying_price": 50,
+      "max_concurrent_positions": 10,
+      "historical_moves_lookback_quarters": 8
+    },
+    "best_value": 6.101058074161343,
+    "n_trials": 5
+  },
+  "walkforward": {
+    "oos": {
+      "sharpe": 6.101058074161343,
+      "sortino": 13.684375498299255,
+      "calmar": 39.32999092745339,
+      "max_drawdown": 0.012649517501617358,
+      "cagr": 0.4975054085752735,
+      "tail_ratio": 0.0021198440189009065,
+      "hit_rate": 0.8939393939393939,
+      "profit_factor": 13.7724279496788,
+      "turnover": 5.376858057490752,
+      "alpha": 0.0,
+      "beta": 0.0
+    },
+    "oos_trades": 132,
+    "oos_pnl_by_name": {
+      "UNH": {
+        "n": 6,
+        "pnl": 1683.746462685845,
+        "wins": 4,
+        "losses": 2
+      },
+      "MS": {
+        "n": 6,
+        "pnl": 5726.032800372186,
+        "wins": 6,
+        "losses": 0
+      },
+      "MSFT": {
+        "n": 7,
+        "pnl": 8463.088576662,
+        "wins": 7,
+        "losses": 0
+      },
+      "TSLA": {
+        "n": 7,
+        "pnl": 6811.132433876049,
+        "wins": 7,
+        "losses": 0
+      },
+      "AMD": {
+        "n": 7,
+        "pnl": 7877.597104713808,
+        "wins": 7,
+        "losses": 0
+      },
+      "META": {
+        "n": 7,
+        "pnl": 6820.120473027938,
+        "wins": 7,
+        "losses": 0
+      },
+      "AAPL": {
+        "n": 8,
+        "pnl": 8667.96939858317,
+        "wins": 8,
+        "losses": 0
+      },
+      "QCOM": {
+        "n": 4,
+        "pnl": 4679.7062738681525,
+        "wins": 4,
+        "losses": 0
+      },
+      "GOOGL": {
+        "n": 8,
+        "pnl": 8800.41137295554,
+        "wins": 7,
+        "losses": 1
+      },
+      "AMZN": {
+        "n": 7,
+        "pnl": 7049.152244156223,
+        "wins": 6,
+        "losses": 1
+      },
+      "AMAT": {
+        "n": 8,
+        "pnl": 9524.12121462234,
+        "wins": 8,
+        "losses": 0
+      },
+      "CRM": {
+        "n": 7,
+        "pnl": 6939.394559121428,
+        "wins": 7,
+        "losses": 0
+      },
+      "ORCL": {
+        "n": 1,
+        "pnl": 849.2493834226367,
+        "wins": 1,
+        "losses": 0
+      },
+      "ADBE": {
+        "n": 8,
+        "pnl": 9556.449263155913,
+        "wins": 8,
+        "losses": 0
+      },
+      "MU": {
+        "n": 8,
+        "pnl": 10315.285311406007,
+        "wins": 8,
+        "losses": 0
+      },
+      "JPM": {
+        "n": 7,
+        "pnl": 4858.028683163975,
+        "wins": 4,
+        "losses": 3
+      },
+      "GS": {
+        "n": 5,
+        "pnl": 5988.593111853362,
+        "wins": 5,
+        "losses": 0
+      },
+      "LLY": {
+        "n": 6,
+        "pnl": -1998.5404632193674,
+        "wins": 3,
+        "losses": 3
+      },
+      "XOM": {
+        "n": 4,
+        "pnl": 10046.309523331733,
+        "wins": 4,
+        "losses": 0
+      },
+      "WFC": {
+        "n": 3,
+        "pnl": 58.85684235475037,
+        "wins": 1,
+        "losses": 2
+      },
+      "UBER": {
+        "n": 3,
+        "pnl": -687.198844256798,
+        "wins": 1,
+        "losses": 2
+      },
+      "NVDA": {
+        "n": 2,
+        "pnl": 3853.652665990662,
+        "wins": 2,
+        "losses": 0
+      },
+      "AVGO": {
+        "n": 1,
+        "pnl": 1601.3846862199073,
+        "wins": 1,
+        "losses": 0
+      },
+      "LRCX": {
+        "n": 1,
+        "pnl": 1926.0681325710032,
+        "wins": 1,
+        "losses": 0
+      },
+      "CVX": {
+        "n": 1,
+        "pnl": 1851.6615040480579,
+        "wins": 1,
+        "losses": 0
+      }
+    },
+    "oos_pnl_stats": {
+      "count": 132,
+      "sum": 131262.27271468652,
+      "mean": 994.4111569294433,
+      "min": -1680.4022774965244,
+      "max": 3257.4838824155536,
+      "win_rate": 0.8939393939393939
+    },
+    "oos_start_equity": 100000.0,
+    "oos_end_equity": 230814.51346267818,
+    "oos_total_return": 1.3081451346267818
+  }
+}

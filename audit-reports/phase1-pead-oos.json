@@ -1,0 +1,59 @@
+{
+  "strategy": "pead",
+  "start": "2023-01-02",
+  "end": "2024-12-30",
+  "best_params": {
+    "sue_threshold": 1.3919657248382904,
+    "holding_days": 40,
+    "sue_lookback_quarters": 4,
+    "max_concurrent_positions": 15,
+    "allocation_per_position": 0.09908208556203621,
+    "allow_shorts": true,
+    "universe_min_mcap_bn": 5,
+    "sue_universe_rank_top_pct": 0.1593510752061481
+  },
+  "oos_metrics": {
+    "sharpe": 1.319920368703154,
+    "sortino": 1.396269865833031,
+    "calmar": 1.696255288114606,
+    "max_drawdown": 0.08652906662611226,
+    "cagr": 0.146775386840164,
+    "tail_ratio": 0.7785546874017416,
+    "hit_rate": 0.6119402985074627,
+    "profit_factor": 1.834302325427642,
+    "turnover": 26.98593643843485,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "oos_fills": 273,
+  "oos_long_fills": 137,
+  "oos_short_fills": 136,
+  "oos_round_trips": 134,
+  "oos_final_equity": 132730.01868900686,
+  "sue_histogram": {
+    "[-inf, -3)": 15,
+    "[-3, -2)": 4,
+    "[-2, -1.5)": 3,
+    "[-1.5, -1)": 0,
+    "[-1, -0.5)": 0,
+    "[-0.5, 0)": 0,
+    "[0, 0.5)": 0,
+    "[0.5, 1)": 0,
+    "[1, 1.5)": 1,
+    "[1.5, 2)": 4,
+    "[2, 3)": 24,
+    "[3, inf)": 88
+  },
+  "hit_rate_by_sue_bucket": {
+    "[1.5, 2.0)": 0.7142857142857143,
+    "[2.0, 3.0)": 0.5714285714285714,
+    "[3.0, inf)": 0.6122448979591837
+  },
+  "n_round_trips_by_sue_bucket": {
+    "[1.5, 2.0)": 7,
+    "[2.0, 3.0)": 28,
+    "[3.0, inf)": 98
+  },
+  "target_sharpe": 0.5,
+  "achieved_sharpe": 1.319920368703154
+}
