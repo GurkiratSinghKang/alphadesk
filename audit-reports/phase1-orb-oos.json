@@ -1,0 +1,54 @@
+{
+  "params": {
+    "or_minutes": 15,
+    "entry_cutoff_hour_et": 14,
+    "stop_method": "or_bound",
+    "volume_confirm_min": 0.8621861504605776,
+    "universe_profile": "all_leveraged",
+    "allow_shorts": false,
+    "tp1_fib": 1.3315247065476081,
+    "tp2_fib": 2.2064001915361944,
+    "risk_per_trade": 0.013581007063173878
+  },
+  "start": "2023-01-01",
+  "end": "2024-12-31",
+  "metrics": {
+    "sharpe": 8.336941623197418,
+    "sortino": 44.47633290263651,
+    "max_drawdown": -0.004479412609676103,
+    "cagr": 0.5979017434782519,
+    "hit_rate": 0.5482233502538071,
+    "profit_factor": 22.25141175491373,
+    "n_days": 522,
+    "n_active_days": 394,
+    "total_return": 1.640215838170905
+  },
+  "entries": 1337,
+  "equity_start": 100000.0,
+  "equity_end": 264021.5838170905,
+  "direction_counts": {
+    "long": 1337
+  },
+  "exit_reason_counts": {
+    "stop": 676,
+    "eod_flat": 661
+  },
+  "by_year": [
+    {
+      "year": 2023,
+      "equity_end": 176849.43600389204,
+      "equity_start": 100000.0,
+      "trading_days": 260,
+      "active_days": 202,
+      "year_return": 0.7684943600389234
+    },
+    {
+      "year": 2024,
+      "equity_end": 264021.5838170905,
+      "equity_start": 176849.43600389204,
+      "trading_days": 262,
+      "active_days": 192,
+      "year_return": 0.4929173074166866
+    }
+  ]
+}

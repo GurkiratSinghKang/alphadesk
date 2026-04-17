@@ -1,0 +1,96 @@
+{
+  "n_trials": 25,
+  "train_start": "2022-01-01",
+  "train_end": "2022-12-31",
+  "test_start": "2023-01-01",
+  "test_end": "2024-12-31",
+  "best_params": {
+    "or_minutes": 15,
+    "entry_cutoff_hour_et": 14,
+    "stop_method": "or_bound",
+    "volume_confirm_min": 0.8621861504605776,
+    "universe_profile": "all_leveraged",
+    "allow_shorts": false,
+    "tp1_fib": 1.3315247065476081,
+    "tp2_fib": 2.2064001915361944,
+    "risk_per_trade": 0.013581007063173878
+  },
+  "best_value_sharpe": 8.336941623197418,
+  "top_trials": [
+    {
+      "number": 19,
+      "value": 8.336941623197418,
+      "params": {
+        "or_minutes": 15,
+        "entry_cutoff_hour_et": 14,
+        "stop_method": "or_bound",
+        "volume_confirm_min": 0.8621861504605776,
+        "universe_profile": "all_leveraged",
+        "allow_shorts": false,
+        "tp1_fib": 1.3315247065476081,
+        "tp2_fib": 2.2064001915361944,
+        "risk_per_trade": 0.013581007063173878
+      }
+    },
+    {
+      "number": 22,
+      "value": 8.252427801623817,
+      "params": {
+        "or_minutes": 15,
+        "entry_cutoff_hour_et": 14,
+        "stop_method": "or_bound",
+        "volume_confirm_min": 0.8838373158440171,
+        "universe_profile": "all_leveraged",
+        "allow_shorts": false,
+        "tp1_fib": 1.3606156071424482,
+        "tp2_fib": 2.240193142811407,
+        "risk_per_trade": 0.017201261863384856
+      }
+    },
+    {
+      "number": 21,
+      "value": 8.227549343103881,
+      "params": {
+        "or_minutes": 15,
+        "entry_cutoff_hour_et": 15,
+        "stop_method": "or_bound",
+        "volume_confirm_min": 0.8645056063100991,
+        "universe_profile": "all_leveraged",
+        "allow_shorts": false,
+        "tp1_fib": 1.364806710206163,
+        "tp2_fib": 2.2057067800741885,
+        "risk_per_trade": 0.017327042671241796
+      }
+    },
+    {
+      "number": 23,
+      "value": 8.133139027951074,
+      "params": {
+        "or_minutes": 15,
+        "entry_cutoff_hour_et": 15,
+        "stop_method": "or_bound",
+        "volume_confirm_min": 0.8878796186680834,
+        "universe_profile": "all_leveraged",
+        "allow_shorts": false,
+        "tp1_fib": 1.3698120545565464,
+        "tp2_fib": 2.2557235539620835,
+        "risk_per_trade": 0.017077388519646863
+      }
+    },
+    {
+      "number": 16,
+      "value": 8.035753242993756,
+      "params": {
+        "or_minutes": 15,
+        "entry_cutoff_hour_et": 14,
+        "stop_method": "or_bound",
+        "volume_confirm_min": 0.8017913005267486,
+        "universe_profile": "qqq_tqqq",
+        "allow_shorts": false,
+        "tp1_fib": 1.3285726521637806,
+        "tp2_fib": 1.935163878715949,
+        "risk_per_trade": 0.014477177970360673
+      }
+    }
+  ]
+}

@@ -1,0 +1,361 @@
+{
+  "tuner": {
+    "study_name": "pairs_trading_v1",
+    "best_params": {
+      "z_window": 60,
+      "z_entry": 2.4808261108522114,
+      "z_exit": 0.7022307111076418,
+      "z_stop": 4.730630785271586,
+      "pair_weight": 0.06568411770746943,
+      "max_pairs": 8,
+      "hedge_method": "kalman",
+      "rescreen_days": 42,
+      "ou_halflife_max_days": 27.203347196145536,
+      "adf_pvalue_max": 0.03248028963184327
+    },
+    "best_value": 1.2999442441950677,
+    "n_trials": 30
+  },
+  "walkforward": {
+    "oos": {
+      "sharpe": 1.2999442441950677,
+      "sortino": 1.4585154844343065,
+      "calmar": 1.1964765435786693,
+      "max_drawdown": 0.03973910499360245,
+      "cagr": 0.04754690698765529,
+      "tail_ratio": 0.877103450653433,
+      "hit_rate": 0.5281124497991968,
+      "profit_factor": 1.1582881454869616,
+      "turnover": 64.67744986227981,
+      "alpha": 0.0,
+      "beta": 0.0
+    },
+    "oos_trades": 498,
+    "oos_start_equity": 100000.0,
+    "oos_end_equity": 110100.15250780822,
+    "oos_total_return": 0.10100152507808224,
+    "pair_contrib": [
+      {
+        "pair_id": "DHR-LLY",
+        "trades": 20,
+        "pnl": 1679.11412
+      },
+      {
+        "pair_id": "META-NVDA",
+        "trades": 14,
+        "pnl": 1604.8257525
+      },
+      {
+        "pair_id": "COST-TGT",
+        "trades": 2,
+        "pnl": 1386.0447075
+      },
+      {
+        "pair_id": "DHR-UNH",
+        "trades": 12,
+        "pnl": 1354.30148
+      },
+      {
+        "pair_id": "PFE-UNH",
+        "trades": 16,
+        "pnl": 1195.5326775
+      },
+      {
+        "pair_id": "CRM-META",
+        "trades": 20,
+        "pnl": 1089.1549149999998
+      },
+      {
+        "pair_id": "LOW-TGT",
+        "trades": 12,
+        "pnl": 884.3794825000001
+      },
+      {
+        "pair_id": "AAPL-CRM",
+        "trades": 11,
+        "pnl": 868.9053825
+      },
+      {
+        "pair_id": "ADBE-MSFT",
+        "trades": 12,
+        "pnl": 797.9717949999999
+      },
+      {
+        "pair_id": "NOC-UPS",
+        "trades": 4,
+        "pnl": 791.7882225
+      },
+      {
+        "pair_id": "AAPL-GOOGL",
+        "trades": 4,
+        "pnl": 730.55037
+      },
+      {
+        "pair_id": "ABT-LLY",
+        "trades": 4,
+        "pnl": 705.37356
+      },
+      {
+        "pair_id": "COP-EOG",
+        "trades": 8,
+        "pnl": 699.5954775
+      },
+      {
+        "pair_id": "C-WFC",
+        "trades": 2,
+        "pnl": 684.2021075
+      },
+      {
+        "pair_id": "FDX-UPS",
+        "trades": 2,
+        "pnl": 550.1787225
+      },
+      {
+        "pair_id": "DHR-JNJ",
+        "trades": 8,
+        "pnl": 506.3153150000001
+      },
+      {
+        "pair_id": "CAT-RTX",
+        "trades": 2,
+        "pnl": 471.2182125
+      },
+      {
+        "pair_id": "GOOGL-ORCL",
+        "trades": 10,
+        "pnl": 448.52064249999995
+      },
+      {
+        "pair_id": "COST-LOW",
+        "trades": 2,
+        "pnl": 346.3307425
+      },
+      {
+        "pair_id": "AAPL-AMZN",
+        "trades": 6,
+        "pnl": 342.8970599999999
+      },
+      {
+        "pair_id": "AMZN-NVDA",
+        "trades": 16,
+        "pnl": 279.1964424999999
+      },
+      {
+        "pair_id": "COST-WMT",
+        "trades": 6,
+        "pnl": 270.6019525
+      },
+      {
+        "pair_id": "GOOGL-NVDA",
+        "trades": 8,
+        "pnl": 261.1149725
+      },
+      {
+        "pair_id": "ADBE-AMZN",
+        "trades": 6,
+        "pnl": 259.58004750000003
+      },
+      {
+        "pair_id": "OXY-SLB",
+        "trades": 8,
+        "pnl": 256.6741424999999
+      },
+      {
+        "pair_id": "GOOGL-META",
+        "trades": 4,
+        "pnl": 231.85216250000008
+      },
+      {
+        "pair_id": "DHR-PFE",
+        "trades": 2,
+        "pnl": 213.56697
+      },
+      {
+        "pair_id": "AAPL-MSFT",
+        "trades": 6,
+        "pnl": 172.11779
+      },
+      {
+        "pair_id": "LOW-MCD",
+        "trades": 4,
+        "pnl": 167.177125
+      },
+      {
+        "pair_id": "FDX-HON",
+        "trades": 8,
+        "pnl": 157.32817750000004
+      },
+      {
+        "pair_id": "AXP-C",
+        "trades": 4,
+        "pnl": 76.19784750000002
+      },
+      {
+        "pair_id": "DE-UPS",
+        "trades": 6,
+        "pnl": 72.37996749999998
+      },
+      {
+        "pair_id": "CVX-XOM",
+        "trades": 8,
+        "pnl": 59.10106999999999
+      },
+      {
+        "pair_id": "JPM-WFC",
+        "trades": 6,
+        "pnl": 55.0529700000001
+      },
+      {
+        "pair_id": "MCD-SBUX",
+        "trades": 6,
+        "pnl": 19.04725750000005
+      },
+      {
+        "pair_id": "HON-UPS",
+        "trades": 6,
+        "pnl": -50.514192499999936
+      },
+      {
+        "pair_id": "BAC-MS",
+        "trades": 6,
+        "pnl": -74.85455500000002
+      },
+      {
+        "pair_id": "C-GS",
+        "trades": 6,
+        "pnl": -88.59548749999988
+      },
+      {
+        "pair_id": "HD-MCD",
+        "trades": 8,
+        "pnl": -90.08395249999998
+      },
+      {
+        "pair_id": "C-MS",
+        "trades": 2,
+        "pnl": -119.06208499999997
+      },
+      {
+        "pair_id": "SBUX-WMT",
+        "trades": 9,
+        "pnl": -131.77038
+      },
+      {
+        "pair_id": "AMZN-MSFT",
+        "trades": 10,
+        "pnl": -133.0821175
+      },
+      {
+        "pair_id": "CRM-MSFT",
+        "trades": 6,
+        "pnl": -155.97501000000005
+      },
+      {
+        "pair_id": "BAC-USB",
+        "trades": 4,
+        "pnl": -177.62266500000004
+      },
+      {
+        "pair_id": "HD-SBUX",
+        "trades": 4,
+        "pnl": -188.97953500000003
+      },
+      {
+        "pair_id": "AXP-JPM",
+        "trades": 6,
+        "pnl": -195.19251999999994
+      },
+      {
+        "pair_id": "LOW-WMT",
+        "trades": 19,
+        "pnl": -248.48845999999992
+      },
+      {
+        "pair_id": "ABT-MRK",
+        "trades": 6,
+        "pnl": -266.6986525
+      },
+      {
+        "pair_id": "EOG-SLB",
+        "trades": 2,
+        "pnl": -275.71817
+      },
+      {
+        "pair_id": "TMO-UNH",
+        "trades": 4,
+        "pnl": -278.69263499999994
+      },
+      {
+        "pair_id": "OXY-XOM",
+        "trades": 22,
+        "pnl": -285.29782249999994
+      },
+      {
+        "pair_id": "BAC-GS",
+        "trades": 26,
+        "pnl": -292.61461999999995
+      },
+      {
+        "pair_id": "MCD-WMT",
+        "trades": 2,
+        "pnl": -323.46353999999997
+      },
+      {
+        "pair_id": "CVX-EOG",
+        "trades": 4,
+        "pnl": -400.25414
+      },
+      {
+        "pair_id": "GS-WFC",
+        "trades": 8,
+        "pnl": -519.1203425
+      },
+      {
+        "pair_id": "ADBE-ORCL",
+        "trades": 4,
+        "pnl": -549.5444975
+      },
+      {
+        "pair_id": "DHR-MRK",
+        "trades": 20,
+        "pnl": -619.1513724999998
+      },
+      {
+        "pair_id": "COP-OXY",
+        "trades": 4,
+        "pnl": -702.7254350000001
+      },
+      {
+        "pair_id": "TGT-WMT",
+        "trades": 9,
+        "pnl": -777.1139199999999
+      },
+      {
+        "pair_id": "LOW-SBUX",
+        "trades": 6,
+        "pnl": -832.5660275
+      },
+      {
+        "pair_id": "CRM-GOOGL",
+        "trades": 2,
+        "pnl": -967.1783774999999
+      },
+      {
+        "pair_id": "MRK-UNH",
+        "trades": 12,
+        "pnl": -1470.95538
+      },
+      {
+        "pair_id": "AXP-MS",
+        "trades": 12,
+        "pnl": -1795.5720724999996
+      }
+    ],
+    "is": {
+      "sharpe": 0.0,
+      "max_drawdown": 0.0,
+      "cagr": 0.0
+    },
+    "is_trades": 0
+  }
+}
