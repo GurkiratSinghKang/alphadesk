@@ -44,12 +44,16 @@ export const useMarketStore = create<MarketState>()(
             // First time seeing this symbol — store as-is
             return { quotes: { ...state.quotes, [quote.symbol]: { ...quote } } };
           }
-          // Merge but PRESERVE the close (prev day close) from the initial snapshot.
-          // WebSocket quotes don't carry close, so don't let it get overwritten.
+          // Merge but PRESERVE snapshot fields that WebSocket doesn't carry.
+          // WebSocket only sends: symbol, bid, ask, last, volume, timestamp.
+          // Snapshot provides: close, open, high, low, change, changePct.
           const merged = {
             ...existing,
             ...quote,
-            close: existing.close || quote.close, // keep original close
+            close: existing.close || quote.close,
+            open: existing.open || quote.open,
+            high: Math.max(existing.high || 0, quote.high || 0) || existing.high,
+            low: (existing.low && quote.low) ? Math.min(existing.low, quote.low) : existing.low || quote.low,
           };
           // Recompute change/changePct from prev close when a real-time price arrives
           if (merged.last && merged.close && merged.close > 0) {
