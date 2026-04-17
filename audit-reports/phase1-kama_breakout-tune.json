@@ -1,0 +1,43 @@
+{
+  "tuner": {
+    "study_name": "kama_breakout_v1",
+    "best_params": {
+      "kama_er_period": 10,
+      "kama_fast": 3,
+      "kama_slow": 20,
+      "donchian_period": 30,
+      "atr_period": 22,
+      "chandelier_atr_mult": 3.626161490620843,
+      "trend_sma_period": 100,
+      "er_min_trend": 0.3897913223118841,
+      "risk_per_trade": 0.01023235394018765,
+      "max_positions": 5,
+      "max_allocation": 0.1137221133763112,
+      "volume_surge_min": 1.1393190329204426,
+      "pyramid_enabled": true
+    },
+    "best_value": 1.685316025710158,
+    "n_trials": 30,
+    "wall_clock_sec": 442.695001
+  },
+  "walkforward": {
+    "oos": {
+      "sharpe": 1.685316025710158,
+      "sortino": 1.4004222984117933,
+      "calmar": 2.7337083108966245,
+      "max_drawdown": 0.034314829033321836,
+      "cagr": 0.09380673331538869,
+      "tail_ratio": 0.8909733772502582,
+      "hit_rate": 0.8571428571428571,
+      "profit_factor": 8.211129102147643,
+      "turnover": 2.201779399629702,
+      "alpha": 0.0,
+      "beta": 0.0
+    },
+    "oos_trades": 7,
+    "oos_fills": 19,
+    "oos_start_equity": 100000.0,
+    "oos_end_equity": 120367.19216,
+    "oos_total_return": 0.20367192160000003
+  }
+}
