@@ -1,0 +1,33 @@
+{
+  "strategy": "momentum_quality",
+  "start": "2019-01-01",
+  "end": "2024-12-31",
+  "train_end": "2022-12-31",
+  "n_trials": 25,
+  "best_oos_sharpe": 2.1853537831177547,
+  "best_params": {
+    "momentum_lookback_m": 12,
+    "momentum_skip_m": 0,
+    "quality_weight": 0.31590058116550723,
+    "top_n": 15,
+    "rebalance_freq": "monthly",
+    "min_f_score": 7,
+    "momentum_filter_min": 0.05393422419156507
+  },
+  "oos_metrics": {
+    "sharpe": 2.2086765861887083,
+    "sortino": 2.0342806518400702,
+    "calmar": 4.517592668619457,
+    "max_drawdown": 0.08012732439016734,
+    "cagr": 0.361982613221113,
+    "tail_ratio": 0.8912726990708681,
+    "hit_rate": 0.7753623188405797,
+    "profit_factor": 3.729706168763342,
+    "turnover": 14.879200745023878,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "elapsed_seconds": 499,
+  "oos_final_equity": 189406.283835,
+  "oos_round_trips": 138
+}
