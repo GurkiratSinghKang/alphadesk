@@ -17,6 +17,11 @@ passlib[bcrypt]>=1.7.4
 # Database
 sqlalchemy[asyncio]>=2.0.36
 asyncpg>=0.30.0
+# psycopg2-binary is the sync driver used by data/ingestion/trade_ledger.py's
+# SQLAlchemy sync engine (postgresql://... resolves to psycopg2 by default).
+# Without this the TradeLedger falls back to an in-memory cache at worker
+# boot with "No module named 'psycopg2'" and writes go nowhere durable.
+psycopg2-binary>=2.9
 alembic>=1.14.0
 redis>=5.2.0
 

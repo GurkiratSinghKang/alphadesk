@@ -552,7 +552,26 @@ def _canonical_id(strategy_id: str) -> str:
 #     the repo-root directory so dev workflows keep working.
 _BUNDLED_OOS_DIR = FilePath(__file__).resolve().parents[2] / "data" / "oos"
 _REPO_OOS_DIR = FilePath(__file__).resolve().parents[3] / "audit-reports"
-_OOS_DIR = _BUNDLED_OOS_DIR if _BUNDLED_OOS_DIR.is_dir() else _REPO_OOS_DIR
+
+
+def _pick_oos_dir() -> FilePath:
+    """Return the first directory that actually contains OOS JSONs.
+
+    Just checking ``is_dir()`` is not enough — an empty ``backend/data/oos/``
+    would happily win the selection and silently starve every strategy of
+    Sharpe/drawdown. We require at least one ``phase1-*-oos.json`` file to
+    be present before we consider a directory the active source.
+    """
+    for candidate in (_BUNDLED_OOS_DIR, _REPO_OOS_DIR):
+        if candidate.is_dir() and any(candidate.glob("phase1-*-oos.json")):
+            return candidate
+    # Fall back to the bundled path so call sites still get a deterministic
+    # ``Path`` even when no OOS data ships — ``_load_oos_for`` handles the
+    # missing-file case gracefully.
+    return _BUNDLED_OOS_DIR
+
+
+_OOS_DIR = _pick_oos_dir()
 
 
 def _extract_oos_metrics(payload: Any) -> dict[str, float] | None:

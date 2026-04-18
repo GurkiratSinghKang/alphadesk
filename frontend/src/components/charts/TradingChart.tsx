@@ -531,10 +531,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
 
         if (indicators.includes("Bollinger")) {
           const bb = computeBollinger(bars);
+          // BB upper band = overbought/resistance → coral (down-500);
+          // BB lower band = oversold/support → chartreuse (up-500).
+          // Middle band stays neutral (fg-hint).
           const bbColors = {
-            upper: "#ef4444",
-            middle: "#64748b",
-            lower: "#22c55e",
+            upper: getTokenVar("--down-500", "#e07856"),
+            middle: getTokenVar("--fg-hint", "#64748b"),
+            lower: getTokenVar("--up-500", "#a8d04d"),
           } as const;
           for (const key of ["upper", "middle", "lower"] as const) {
             if (bb[key].length) {
