@@ -38,17 +38,17 @@ const TOAST_ICON: Record<ToastType, typeof Info> = {
 };
 
 const TOAST_ACCENT: Record<ToastType, string> = {
-  success: "border-l-[var(--profit)]",
-  error: "border-l-[var(--loss)]",
-  info: "border-l-[var(--primary)]",
-  warning: "border-l-amber-500",
+  success: "border-l-profit",
+  error: "border-l-loss",
+  info: "border-l-brand",
+  warning: "border-l-amber",
 };
 
 const TOAST_ICON_COLOR: Record<ToastType, string> = {
-  success: "text-[var(--profit)]",
-  error: "text-[var(--loss)]",
-  info: "text-[var(--primary)]",
-  warning: "text-amber-500",
+  success: "text-profit",
+  error: "text-loss",
+  info: "text-brand",
+  warning: "text-amber",
 };
 
 function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: string) => void }) {
@@ -56,7 +56,9 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border border-border border-l-[3px] bg-[var(--surface)] px-4 py-3 shadow-lg shadow-black/30",
+        "flex items-start gap-3 px-4 py-3",
+        "rounded-md border border-border border-l-[3px] bg-bg-elev-2 text-fg",
+        "shadow-lg shadow-black/30",
         "animate-in slide-in-from-right-full fade-in duration-200",
         TOAST_ACCENT[toast.type]
       )}
@@ -64,17 +66,17 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", TOAST_ICON_COLOR[toast.type])} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-foreground">{toast.message}</p>
+        <p className="text-sm text-fg">{toast.message}</p>
         {toast.action && (
           <button
             onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
-            className="mt-1 text-xs font-medium text-[var(--primary)] hover:underline"
+            className="mt-1 text-xs font-medium text-brand hover:underline"
           >
             {toast.action.label}
           </button>
         )}
       </div>
-      <button onClick={() => onDismiss(toast.id)} className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground">
+      <button onClick={() => onDismiss(toast.id)} className="shrink-0 rounded-sm p-0.5 text-fg-muted hover:text-fg">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>

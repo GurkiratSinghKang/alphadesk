@@ -2,17 +2,53 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * AlphaDesk Card
+ * ──────────────
+ * Warm-ink surface. Optional 2px left-edge accent (`leftAccent`) and a
+ * `hoverable` flag that lifts 1px and darkens border on hover — matches the
+ * strategy-card pattern in the design kit (`components-cards.html`).
+ *
+ * Backwards compatible: existing `<Card>` usages keep working — no accent, no
+ * hover lift by default.
+ */
+type CardProps = React.ComponentProps<"div"> & {
+  size?: "default" | "sm"
+  leftAccent?: "brand" | "loss" | "none"
+  hoverable?: boolean
+}
+
+const accentClass: Record<"brand" | "loss" | "none", string> = {
+  brand:
+    "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-brand before:transition-all",
+  loss:
+    "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-down-500 before:transition-all",
+  none: "",
+}
+
 function Card({
   className,
   size = "default",
+  leftAccent = "none",
+  hoverable = false,
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+}: CardProps) {
   return (
     <div
       data-slot="card"
       data-size={size}
+      data-accent={leftAccent}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card relative flex flex-col gap-3 overflow-hidden",
+        "rounded-md border border-border bg-bg-card text-card-foreground text-sm",
+        "py-4",
+        "has-data-[slot=card-footer]:pb-0",
+        accentClass[leftAccent],
+        hoverable &&
+          "cursor-pointer transition-all duration-150 hover:bg-bg-elev-1 hover:border-border-strong hover:-translate-y-px hover:before:w-[3px]",
+        size === "sm" && "gap-2 py-3",
+        "data-[size=sm]:gap-2 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0",
+        "*:[img:first-child]:rounded-t-md *:[img:last-child]:rounded-b-md",
         className
       )}
       {...props}
@@ -25,7 +61,11 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3",
+        "@container/card-header grid auto-rows-min items-start gap-1 px-4",
+        "group-data-[size=sm]/card:px-3",
+        "has-data-[slot=card-action]:grid-cols-[1fr_auto]",
+        "has-data-[slot=card-description]:grid-rows-[auto_auto]",
+        "[.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3",
         className
       )}
       {...props}
@@ -38,7 +78,8 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-display italic text-[17px] leading-snug text-ink-1000",
+        "group-data-[size=sm]/card:text-[15px]",
         className
       )}
       {...props}
@@ -50,7 +91,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-[13px] text-fg-muted", className)}
       {...props}
     />
   )
@@ -84,7 +125,8 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-4 group-data-[size=sm]/card:p-3",
+        "flex items-center border-t border-border-hair bg-bg-elev-1/50 p-4",
+        "group-data-[size=sm]/card:p-3",
         className
       )}
       {...props}

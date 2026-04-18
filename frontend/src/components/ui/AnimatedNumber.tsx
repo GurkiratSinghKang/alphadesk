@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 interface AnimatedNumberProps {
   value: number;
   format: (n: number) => string;
@@ -12,6 +14,9 @@ interface AnimatedNumberProps {
 /**
  * Smoothly animates between number values using requestAnimationFrame.
  * Falls back to instant display when reduced motion is preferred.
+ *
+ * Wraps the number in JetBrains Mono + tabular-nums — numbers NEVER render in
+ * a proportional sans in AlphaDesk.
  */
 export function AnimatedNumber({ value, format, className = "", duration = 300 }: AnimatedNumberProps) {
   const [display, setDisplay] = useState(value);
@@ -58,7 +63,12 @@ export function AnimatedNumber({ value, format, className = "", duration = 300 }
 
   return (
     <span
-      className={`num-transition tabular-nums ${className} ${flash === "up" ? "flash-profit" : flash === "down" ? "flash-loss" : ""}`}
+      className={cn(
+        "font-mono tabular-nums num-transition",
+        flash === "up" && "flash-profit",
+        flash === "down" && "flash-loss",
+        className
+      )}
     >
       {format(display)}
     </span>
