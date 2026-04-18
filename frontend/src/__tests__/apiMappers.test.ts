@@ -76,6 +76,7 @@ function ok(body: unknown) {
     ok: true,
     status: 200,
     statusText: 'OK',
+    headers: new Headers({ 'content-type': 'application/json' }),
     json: async () => body,
     text: async () => JSON.stringify(body),
   });
@@ -1457,11 +1458,11 @@ describe('apiFetch error handling', () => {
     await expect(getStrategies()).rejects.toThrow('Session expired');
   });
 
-  it('includes Authorization header when cookie is set', async () => {
+  it('does not attach an Authorization header (HttpOnly cookie rides via credentials: include)', async () => {
     mockFetch.mockReturnValueOnce(ok([]));
     await getStrategies();
     const [, init] = mockFetch.mock.calls[0];
-    expect(init.headers['Authorization']).toBe('Bearer test-token');
+    expect(init.headers['Authorization']).toBeUndefined();
   });
 
   it('includes Content-Type: application/json header', async () => {
