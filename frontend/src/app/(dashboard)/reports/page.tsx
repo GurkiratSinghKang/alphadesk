@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, Download, FileText, BarChart3, Calculator, Loader2, ChevronDown, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Download, FileText, BarChart3, Calculator, ChevronDown, ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { DashboardPageLayout } from "@/components/layouts";
 import {
   getPortfolioSummary,
   getPositions,
@@ -568,7 +568,6 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function ReportsPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -603,41 +602,19 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg animate-pulse bg-[var(--panel)]" />
-          <div className="space-y-1">
-            <div className="h-5 w-40 rounded animate-pulse bg-[var(--panel)]" />
-            <div className="h-3 w-64 rounded animate-pulse bg-[var(--panel)]" />
-          </div>
-        </div>
-        <div className="h-[300px] rounded-xl animate-pulse bg-[var(--panel)]" />
-        <div className="h-[300px] rounded-xl animate-pulse bg-[var(--panel)]" />
-        <div className="h-[200px] rounded-xl animate-pulse bg-[var(--panel)]" />
-      </div>
+      <ScrollArea className="h-full">
+        <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
+          <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
+          <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
+          <div className="h-[200px] animate-pulse rounded-lg bg-bg-elev-1" />
+        </DashboardPageLayout>
+      </ScrollArea>
     );
   }
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Back to Dashboard"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Reports & Export</h1>
-            <p className="text-xs text-muted-foreground">
-              Portfolio statements, strategy performance, and tax reporting with CSV export
-            </p>
-          </div>
-        </div>
-
+      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
         {/* Portfolio Statement */}
         <SectionCard title="Portfolio Statement" icon={FileText}>
           {summary ? (
@@ -669,7 +646,7 @@ export default function ReportsPage() {
           </div>
           <TaxReport trades={trades} taxYear={taxYear} />
         </SectionCard>
-      </div>
+      </DashboardPageLayout>
     </ScrollArea>
   );
 }

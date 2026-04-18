@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  Settings,
   Bell,
   Shield,
   Key,
@@ -14,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DashboardPageLayout } from "@/components/layouts";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMarketStore } from "@/stores/market";
@@ -295,15 +295,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-      <div className="flex items-center gap-3">
-        <Settings className="h-6 w-6 text-primary" />
-        <h1 className="text-xl font-bold text-foreground">Settings</h1>
-      </div>
-
+    <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
         {/* Trading Mode */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Monitor className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Trading Mode</h2>
@@ -313,7 +308,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Switch between paper and live trading environments.
               </p>
-              <p className="text-[10px] text-amber-400 mt-1">
+              <p className="text-[10px] text-amber mt-1">
                 {tradingMode === "live"
                   ? "Live mode uses real capital. Be cautious."
                   : "Paper mode uses simulated funds. Safe for testing."}
@@ -340,13 +335,13 @@ export default function SettingsPage() {
                 className={cn(
                   "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors",
                   tradingMode === "live"
-                    ? "bg-red-500/80 border-red-500/60"
-                    : "bg-emerald-500/60 border-emerald-500/40"
+                    ? "bg-loss/80 border-loss/60"
+                    : "bg-profit/60 border-profit/40"
                 )}
               >
                 <span
                   className={cn(
-                    "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                    "inline-block h-4 w-4 rounded-full bg-fg shadow transition-transform",
                     tradingMode === "live"
                       ? "translate-x-5"
                       : "translate-x-0.5"
@@ -357,7 +352,7 @@ export default function SettingsPage() {
                 className={cn(
                   "text-[11px] font-medium",
                   tradingMode === "live"
-                    ? "text-red-400"
+                    ? "text-loss"
                     : "text-muted-foreground"
                 )}
               >
@@ -368,7 +363,7 @@ export default function SettingsPage() {
         </div>
 
         {/* API Keys */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Key className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">API Keys</h2>
@@ -380,7 +375,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Notifications */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Bell className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Notifications</h2>
@@ -414,7 +409,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Display */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Palette className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Display</h2>
@@ -446,7 +441,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Data Refresh */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <RefreshCw className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Data Refresh</h2>
@@ -458,7 +453,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Export */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Download className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Export Data</h2>
@@ -474,7 +469,7 @@ export default function SettingsPage() {
               onClick={handleExportWatchlist}
             >
               {exportDone === "watchlist" ? (
-                <Check className="h-3 w-3 text-emerald-400" />
+                <Check className="h-3 w-3 text-profit" />
               ) : (
                 <Download className="h-3 w-3" />
               )}
@@ -490,7 +485,7 @@ export default function SettingsPage() {
               {exportingTrades ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : exportDone === "trades" ? (
-                <Check className="h-3 w-3 text-emerald-400" />
+                <Check className="h-3 w-3 text-profit" />
               ) : (
                 <Download className="h-3 w-3" />
               )}
@@ -503,7 +498,7 @@ export default function SettingsPage() {
               onClick={handleExportSettings}
             >
               {exportDone === "settings" ? (
-                <Check className="h-3 w-3 text-emerald-400" />
+                <Check className="h-3 w-3 text-profit" />
               ) : (
                 <Download className="h-3 w-3" />
               )}
@@ -513,7 +508,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Security */}
-        <div className="rounded-xl border border-border bg-[var(--panel)] p-4">
+        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Shield className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Security</h2>
@@ -527,6 +522,6 @@ export default function SettingsPage() {
         {/* Performance Monitoring */}
         <PerformanceMetrics />
       </div>
-    </div>
+    </DashboardPageLayout>
   );
 }

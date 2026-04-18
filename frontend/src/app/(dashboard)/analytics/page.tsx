@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, TrendingDown, BarChart3, Activity, Calendar, Table2, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { TrendingDown, BarChart3, Activity, Calendar, Table2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DashboardPageLayout } from "@/components/layouts";
 import { getPortfolioPerformance, getTradeHistory, type TradeHistoryEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -415,7 +415,6 @@ function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function AnalyticsPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
@@ -456,72 +455,51 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg animate-pulse bg-[var(--panel)]" />
-          <div className="space-y-1">
-            <div className="h-5 w-48 rounded animate-pulse bg-[var(--panel)]" />
-            <div className="h-3 w-72 rounded animate-pulse bg-[var(--panel)]" />
+      <ScrollArea className="h-full">
+        <DashboardPageLayout eyebrow="§ ANALYTICS" title="Portfolio analytics">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
+            <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
+            <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
+            <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
           </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
-          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
-          <div className="h-[260px] rounded-xl animate-pulse bg-[var(--panel)]" />
-        </div>
-        <div className="h-[200px] rounded-xl animate-pulse bg-[var(--panel)]" />
-      </div>
+          <div className="h-[200px] animate-pulse rounded-lg bg-bg-elev-1" />
+        </DashboardPageLayout>
+      </ScrollArea>
     );
   }
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Back to Dashboard"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Performance Analytics</h1>
-            <p className="text-xs text-muted-foreground">
-              Deep portfolio analysis -- drawdown, risk metrics, return distribution, and trade statistics
-            </p>
-          </div>
-        </div>
-
+      <DashboardPageLayout
+        eyebrow="§ ANALYTICS"
+        title="Portfolio analytics"
+      >
         {/* Row 1: Drawdown + Rolling Sharpe */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SectionCard title="Underwater Equity (Drawdown)" icon={TrendingDown}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SectionCard title="Underwater equity (drawdown)" icon={TrendingDown}>
             <DrawdownChart data={drawdownData} />
           </SectionCard>
-          <SectionCard title="30-Day Rolling Sharpe Ratio" icon={Activity}>
+          <SectionCard title="30-day rolling Sharpe ratio" icon={Activity}>
             <RollingSharpeChart data={rollingSharpe} />
           </SectionCard>
         </div>
 
         {/* Row 2: Distribution + Trade Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SectionCard title="Daily Return Distribution" icon={BarChart3}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SectionCard title="Daily return distribution" icon={BarChart3}>
             <ReturnDistribution bins={histogram} dailyReturns={dailyReturns} />
           </SectionCard>
-          <SectionCard title="Trade Statistics" icon={Table2}>
+          <SectionCard title="Trade statistics" icon={Table2}>
             <TradeStatsTable stats={tradeStats} />
           </SectionCard>
         </div>
 
         {/* Row 3: Monthly Heatmap */}
-        <SectionCard title="Monthly Returns Heatmap" icon={Calendar}>
+        <SectionCard title="Monthly returns heatmap" icon={Calendar}>
           <MonthlyHeatmap monthlyReturns={monthlyReturns} />
         </SectionCard>
-      </div>
+      </DashboardPageLayout>
     </ScrollArea>
   );
 }

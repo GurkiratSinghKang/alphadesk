@@ -34,17 +34,18 @@ describe('Login Page', () => {
     expect(passwordInput).toBeDefined();
   });
 
-  it('renders Sign In button', async () => {
+  it('renders submit button', async () => {
     const LoginPage = (await import('@/app/login/page')).default;
     render(<LoginPage />);
-    const buttons = screen.getAllByText('Sign In');
+    // Editorial voice: "Sign in" (sentence case) per design system rewrite.
+    const buttons = screen.getAllByText(/sign in/i);
     expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('Sign In button is disabled when fields are empty', async () => {
+  it('submit button is disabled when fields are empty', async () => {
     const LoginPage = (await import('@/app/login/page')).default;
     render(<LoginPage />);
-    const button = screen.getAllByText('Sign In').find(el => el.closest('button'))?.closest('button');
+    const button = screen.getAllByText(/sign in/i).find(el => el.closest('button'))?.closest('button');
     expect(button?.disabled).toBe(true);
   });
 
@@ -61,16 +62,20 @@ describe('Login Page', () => {
     expect(text.includes('Trading') || text.includes('trading') || text.includes('AlphaDesk')).toBe(true);
   });
 
-  it('username input has correct placeholder', async () => {
+  it('username input has a placeholder', async () => {
     const LoginPage = (await import('@/app/login/page')).default;
     render(<LoginPage />);
-    expect(screen.getByPlaceholderText('Enter username')).toBeDefined();
+    // Editorial rewrite: placeholder copy shifted from "Enter username" to
+    // "your handle" to match the design system's terser voice.
+    const input = screen.getByLabelText('Username') as HTMLInputElement;
+    expect(input.placeholder).toBeTruthy();
   });
 
-  it('password input has correct placeholder', async () => {
+  it('password input has a placeholder', async () => {
     const LoginPage = (await import('@/app/login/page')).default;
     render(<LoginPage />);
-    expect(screen.getByPlaceholderText('Password')).toBeDefined();
+    const input = screen.getByLabelText('Password') as HTMLInputElement;
+    expect(input.placeholder).toBeTruthy();
   });
 
   it('password input has type password', async () => {

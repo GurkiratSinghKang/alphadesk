@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Bot,
   BarChart3,
   Brain,
   Play,
@@ -27,6 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DashboardPageLayout } from "@/components/layouts";
+import Mono from "@/components/typography/Mono";
 import { cn, formatCurrency } from "@/lib/utils";
 import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
 import { BacktestPanel } from "@/components/panels/BacktestPanel";
@@ -52,7 +53,7 @@ function SignalBadge({ signal }: { signal: string }) {
       ? "bg-[var(--profit)]/15 text-[var(--profit)] border-[var(--profit)]/30"
       : s === "sell"
       ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
-      : "bg-yellow-500/15 text-yellow-500 border-yellow-500/30";
+      : "bg-amber/15 text-amber border-amber/30";
   return (
     <Badge className={cn("text-[10px] font-bold uppercase border", color)}>
       {signal}
@@ -146,14 +147,14 @@ function RiskMonitorToggle() {
     <button
       onClick={toggle}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
+        "flex items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
         enabled
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-          : "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+          ? "border-profit/30 bg-profit-tint text-profit hover:bg-profit/15"
+          : "border-loss/30 bg-loss-tint text-loss hover:bg-loss/15"
       )}
       title={enabled ? "Risk monitor is ON — click to disable" : "Risk monitor is OFF — click to enable"}
     >
-      <span className={cn("h-2 w-2 rounded-full", enabled ? "bg-emerald-500" : "bg-red-500")} />
+      <span className={cn("h-2 w-2 rounded-full", enabled ? "bg-profit" : "bg-loss")} />
       Risk Monitor: {enabled ? "ON" : "OFF"}
     </button>
   );
@@ -300,9 +301,11 @@ export default function PipelinePage() {
 
   if (!mounted) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      </div>
+      <DashboardPageLayout eyebrow="§ PIPELINE" title="Daily pipeline">
+        <div className="flex h-64 items-center justify-center">
+          <p className="font-display italic text-[14px] text-fg-muted">Loading pipeline.</p>
+        </div>
+      </DashboardPageLayout>
     );
   }
 
@@ -333,63 +336,60 @@ export default function PipelinePage() {
     ? "Error"
     : "Idle";
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-border bg-[var(--surface)] px-6 py-3">
-        <div className="flex items-center gap-3">
-          <Bot className="h-5 w-5 text-primary" />
-          <h1 className="text-sm font-bold text-foreground">
-            Trading Pipeline
-          </h1>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn(
-                "inline-block h-2 w-2 rounded-full",
-                statusColor
-              )}
-            />
-            <span className="text-[11px] font-medium text-muted-foreground">
-              {statusLabel}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {status?.lastRun && (
-            <span className="text-[11px] text-muted-foreground">
-              <Clock className="inline h-3 w-3 mr-1" />
-              Last run: {new Date(status.lastRun).toLocaleString()}
-            </span>
+  const pipelineActions = (
+    <>
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "inline-block h-2 w-2 rounded-full",
+            statusColor
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setTemplatesOpen(true)}
-            className="h-7 text-[11px] gap-1.5"
-          >
-            <Sparkles className="h-3 w-3" />
-            Templates
-          </Button>
-          <RiskMonitorToggle />
-          <Button
-            size="sm"
-            onClick={handleRunNow}
-            disabled={running}
-            className="h-7 text-[11px] gap-1.5"
-          >
-            {running ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-            {running ? "Running..." : "Run Now"}
-          </Button>
-        </div>
+        />
+        <span className="font-sans text-[11px] font-medium text-fg-muted">
+          {statusLabel}
+        </span>
       </div>
+      {status?.lastRun && (
+        <span className="flex items-center gap-1 text-fg-muted">
+          <Clock className="h-3 w-3" aria-hidden />
+          <Mono className="text-[11px] text-fg-muted">
+            {new Date(status.lastRun).toLocaleString()}
+          </Mono>
+        </span>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setTemplatesOpen(true)}
+        className="h-7 text-[11px] gap-1.5"
+      >
+        <Sparkles className="h-3 w-3" />
+        Templates
+      </Button>
+      <RiskMonitorToggle />
+      <Button
+        size="sm"
+        onClick={handleRunNow}
+        disabled={running}
+        className="h-7 text-[11px] gap-1.5"
+      >
+        {running ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Play className="h-3 w-3" />
+        )}
+        {running ? "Running..." : "Run Now"}
+      </Button>
+    </>
+  );
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {loading ? (
+  return (
+    <DashboardPageLayout
+      eyebrow="§ PIPELINE"
+      title="Daily pipeline"
+      actions={pipelineActions}
+    >
+      {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
@@ -480,7 +480,7 @@ export default function PipelinePage() {
                           <TableCell className="text-xs tabular-nums text-muted-foreground">
                             {pos.stopLoss
                               ? formatCurrency(pos.stopLoss)
-                              : <span className="inline-flex items-center gap-1 text-amber-400" title="No stop loss set — position is unprotected"><span aria-hidden="true">&#9888;&#65039;</span> None</span>}
+                              : <span className="inline-flex items-center gap-1 text-amber" title="No stop loss set — position is unprotected">None</span>}
                           </TableCell>
                           <TableCell className="text-xs tabular-nums text-muted-foreground">
                             {pos.takeProfit
@@ -796,8 +796,7 @@ export default function PipelinePage() {
             </section>
           </>
         )}
-      </div>
       <StrategyTemplates open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
-    </div>
+    </DashboardPageLayout>
   );
 }

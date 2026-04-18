@@ -11,4 +11,6 @@ export type { DeskLayoutProps } from "./DeskLayout";
 
 export { default as MarketingShell } from "./MarketingShell";
 export { default as StaticArticle } from "./StaticArticle";
+export { default as DashboardPageLayout } from "./DashboardPageLayout";
+export type { DashboardPageLayoutProps } from "./DashboardPageLayout";
 export { EditorialBullet, EditorialP, MailA, ExternalA } from "./editorial";
