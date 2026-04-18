@@ -5,6 +5,15 @@ import { env } from "@/env";
 
 type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars";
 
+/**
+ * WebSocket connection status for the dashboard UI.
+ *   - "connecting": initial TCP/WS handshake in flight, no prior success
+ *   - "open": authenticated and streaming
+ *   - "reconnecting": previous connection dropped, exponential backoff retry in flight
+ *   - "failed": MAX_RETRIES exhausted, stream is dead until user action
+ */
+export type WsStatus = "connecting" | "open" | "reconnecting" | "failed";
+
 interface WsMessage {
   channel: WsChannel;
   event: string;
@@ -16,8 +25,12 @@ interface UseWebSocketReturn {
   unsubscribe: (channel: WsChannel) => void;
   send: (channel: WsChannel, event: string, data?: unknown) => void;
   isConnected: boolean;
-  /** @deprecated Use onMessage instead — lastMessage triggers re-renders on every WS message */
-  lastMessage: WsMessage | null;
+  /**
+   * Lifecycle status for the shared WebSocket — consumers (e.g. a status
+   * banner) should render "reconnecting" / "failed" affordances instead of
+   * relying on the binary `isConnected` flag. See edge-cases-audit-r3 D/P0.
+   */
+  wsStatus: WsStatus;
   /** Subscribe to messages on a specific channel. Returns an unsubscribe function. */
   onMessage: (channel: WsChannel, callback: (data: WsMessage) => void) => () => void;
 }
@@ -33,8 +46,7 @@ export function useWebSocket(): UseWebSocketReturn {
   const subscribedChannels = useRef<Set<WsChannel>>(new Set());
 
   const [isConnected, setIsConnected] = useState(false);
-  /** @deprecated kept for backward compat — prefer onMessage */
-  const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+  const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
 
   // Channel-based callback system: dispatches to subscribers without triggering React re-renders
   const channelCallbacksRef = useRef<Map<WsChannel, Set<(data: WsMessage) => void>>>(new Map());
@@ -77,6 +89,7 @@ export function useWebSocket(): UseWebSocketReturn {
         // `ws.cookies.get("access_token")` on connect and responds with
         // `{"type": "authenticated"}`. No client-side auth frame needed.
         setIsConnected(true);
+        setWsStatus("open");
         retriesRef.current = 0;
 
         // Re-subscribe to all channels after a short delay so the backend
@@ -92,7 +105,11 @@ export function useWebSocket(): UseWebSocketReturn {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as WsMessage;
-          // Dispatch to channel-specific callbacks (no React re-render)
+          // Dispatch to channel-specific callbacks (no React re-render).
+          // The previous `setLastMessage(msg)` call was removed in Wave 14
+          // because it re-rendered every component consuming `useWs()` on
+          // every WS frame (perf-audit-r3 P0). `onMessage(channel, cb)` is
+          // the only supported consumption path.
           const channel = msg.channel ?? (msg as unknown as Record<string, unknown>).type as WsChannel | undefined;
           if (channel) {
             const callbacks = channelCallbacksRef.current.get(channel);
@@ -100,8 +117,6 @@ export function useWebSocket(): UseWebSocketReturn {
               callbacks.forEach(cb => cb(msg));
             }
           }
-          // Also update lastMessage for backward compat (deprecated path)
-          setLastMessage(msg);
         } catch {
           // ignore malformed messages
         }
@@ -125,7 +140,10 @@ export function useWebSocket(): UseWebSocketReturn {
             MAX_DELAY
           );
           retriesRef.current++;
+          setWsStatus("reconnecting");
           reconnectTimerRef.current = setTimeout(connect, delay);
+        } else {
+          setWsStatus("failed");
         }
       };
     } catch {
@@ -136,7 +154,10 @@ export function useWebSocket(): UseWebSocketReturn {
           MAX_DELAY
         );
         retriesRef.current++;
+        setWsStatus("reconnecting");
         reconnectTimerRef.current = setTimeout(connect, delay);
+      } else {
+        setWsStatus("failed");
       }
     }
   }, []);
@@ -160,6 +181,7 @@ export function useWebSocket(): UseWebSocketReturn {
         const ws = wsRef.current;
         if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
           retriesRef.current = 0;
+          setWsStatus("connecting");
           connect();
         }
       }
@@ -201,5 +223,5 @@ export function useWebSocket(): UseWebSocketReturn {
     };
   }, []);
 
-  return { subscribe, unsubscribe, send, isConnected, lastMessage, onMessage };
+  return { subscribe, unsubscribe, send, isConnected, wsStatus, onMessage };
 }

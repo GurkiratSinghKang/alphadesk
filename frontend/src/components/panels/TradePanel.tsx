@@ -19,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuote, useQuotes } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useOptionsStore, type SelectedStrike } from "@/stores/options";
@@ -213,8 +213,9 @@ function TradeBuilderTab() {
       }));
   }, [legs]);
 
-  const quotes = useMarketStore((s) => s.quotes);
-  const currentQuote = quotes[selectedSymbol];
+  // Wave 14 perf-audit-r3 P0 #3: scoped to the selected symbol so this form
+  // panel doesn't rerender on every unrelated WS tick.
+  const currentQuote = useQuote(selectedSymbol);
 
   const updateLegQty = (id: string, delta: number) => {
     setLegs((prev) =>
@@ -524,7 +525,9 @@ function TradeBuilderTab() {
 
 /** Single position row with real-time P&L from WebSocket quotes */
 function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => void }) {
-  const liveQuote = useMarketStore((s) => s.quotes[p.symbol.split(" ")[0]]);
+  // Wave 14 perf-audit-r3 P0 #3: scoped selector — each row only subscribes
+  // to its own symbol, so a tick in AAPL never rerenders the MSFT row.
+  const liveQuote = useQuote(p.symbol.split(" ")[0]);
 
   // Compute live P&L: if we have a real-time quote, recalculate using the latest price
   const livePrice = liveQuote?.last ?? p.currentPrice;
@@ -664,8 +667,15 @@ function PositionsTab() {
     );
   }, [fetched, setPositions]);
 
-  // Compute total live P&L across all positions
-  const quotes = useMarketStore((s) => s.quotes);
+  // Compute total live P&L across all positions.
+  // Wave 14 perf-audit-r3 P0 #3: `useQuotes` shallow-compares only the
+  // symbols currently in `positions`, so unrelated ticks no longer
+  // rerender this list.
+  const positionSymbols = useMemo(
+    () => positions.map((p) => p.symbol.split(" ")[0]),
+    [positions],
+  );
+  const quotes = useQuotes(positionSymbols);
   const totalLivePnl = useMemo(() => {
     return positions.reduce((sum, p) => {
       const liveQuote = quotes[p.symbol.split(" ")[0]];

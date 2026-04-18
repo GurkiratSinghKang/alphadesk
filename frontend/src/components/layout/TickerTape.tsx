@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuotes } from "@/stores/market";
 import { cn } from "@/lib/utils";
 
 export function TickerTape() {
   const watchlist = useMarketStore((s) => s.watchlist);
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: `useQuotes(watchlist)` shallow-compares the
+  // returned map so this component rerenders only when one of the watchlist
+  // symbols actually changes, not on every unrelated quote tick.
+  const quotes = useQuotes(watchlist);
 
   const items = useMemo(() => {
     return watchlist
@@ -27,8 +30,13 @@ export function TickerTape() {
 
   return (
     <div
-      role="marquee"
-      aria-label="Live market ticker"
+      // a11y audit r3 — `role="marquee"` is deprecated and not an ARIA 1.2
+      // role; AT engines either ignore it or flag a warning. Use region +
+      // aria-live="off" so the ticker is a named landmark without being
+      // read on every tick.
+      role="region"
+      aria-label="Market ticker"
+      aria-live="off"
       className="overflow-hidden whitespace-nowrap border-b border-border/20 bg-[var(--background)]"
     >
       <div className="animate-marquee inline-flex gap-0 py-[3px]">

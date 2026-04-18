@@ -83,10 +83,14 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({ className, scope, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
+      // a11y audit r3 — WCAG 1.3.1: default scope to "col" so VoiceOver's
+      // table rotor associates cells with their column header. Consumers can
+      // override by passing a custom scope (e.g. "row" for row-header usage).
+      scope={scope ?? "col"}
       className={cn(
         "px-2 pb-2 align-middle whitespace-nowrap",
         "font-sans text-[9px] font-semibold tracking-[0.16em] uppercase text-fg-muted",

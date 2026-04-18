@@ -14,6 +14,34 @@ import type { CalendarData, CalendarDay } from "@/lib/api";
 import { formatCurrency, cn } from "@/lib/utils";
 import { usePnlCalendar } from "@/hooks/useQueries";
 
+// ─── ET date helpers ────────────────────────────────────────
+//
+// "Today" for a trader is the ET calendar day, not the browser's local
+// day. After 20:00 PT on a weekday, local date is still Monday but ET
+// is already Tuesday — the highlighted cell must follow ET.
+// Using `Intl.DateTimeFormat` avoids the broken
+// `new Date(toLocaleString(...))` round-trip.
+function getETDateParts(now: Date = new Date()): { year: number; month: number; day: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  let year = 0, month = 0, day = 0;
+  for (const p of formatter.formatToParts(now)) {
+    if (p.type === "year") year = parseInt(p.value, 10);
+    else if (p.type === "month") month = parseInt(p.value, 10);
+    else if (p.type === "day") day = parseInt(p.value, 10);
+  }
+  return { year, month, day };
+}
+
+function getETTodayStr(now: Date = new Date()): string {
+  const { year, month, day } = getETDateParts(now);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 // ─── Color scale for P&L ────────────────────────────────────
 //
 // Reads the design-token palette so the calendar speaks the same
@@ -49,9 +77,13 @@ interface PnlCalendarProps {
 }
 
 export function PnlCalendar({ compact = false }: PnlCalendarProps) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  // Initialise the visible month/year from the ET calendar day so late-PT
+  // / international users don't see tomorrow's or yesterday's month by
+  // default. Local browser time would land the wrong month for roughly
+  // 1 hour / day for a US-Pacific user near midnight ET.
+  const et = getETDateParts();
+  const [year, setYear] = useState(et.year);
+  const [month, setMonth] = useState(et.month);
 
   const { data: apiData, isLoading: loading } = usePnlCalendar(month, year);
 
@@ -96,8 +128,9 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
     const startDow = (firstDay.getDay() + 6) % 7; // Mon=0 .. Sun=6
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    // Today = today in New York. Backend buckets day-PnL by ET too, so
+    // the highlighted cell aligns with the server's data boundary.
+    const todayStr = getETTodayStr();
 
     interface CellData {
       day: number | null;

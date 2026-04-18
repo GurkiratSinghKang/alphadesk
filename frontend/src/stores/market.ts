@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
+import { useMemo } from "react";
 import type { Quote } from "@/types";
 
 const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
@@ -86,3 +88,54 @@ export const useMarketStore = create<MarketState>()(
     }
   )
 );
+
+// ─── Scoped selectors (perf-audit-r3 P0 #3) ──────────────────
+//
+// `useMarketStore((s) => s.quotes)` returns the whole `Record<string, Quote>`
+// and rerenders every consumer on every tick. Use these per-symbol helpers
+// instead: they only rerender when the specific symbol's quote changes by
+// reference (which happens when `updateQuote` merges that symbol).
+
+/** Subscribe to a single symbol's quote. Rerenders only when that symbol updates. */
+export function useQuote(symbol: string): Quote | null {
+  return useMarketStore((s) => s.quotes[symbol] ?? null);
+}
+
+/**
+ * Subscribe to a small set of symbols' quotes at once. Shallow-compares the
+ * returned object so the component rerenders only when one of the requested
+ * symbols changes. Intended for broadcast surfaces like TickerTape / Movers
+ * where the component truly needs multiple symbols at once but should not
+ * rerender on unrelated ticks.
+ *
+ * `symbols` should be stable-identity across renders (e.g. a memoised list).
+ */
+export function useQuotes(symbols: readonly string[]): Record<string, Quote> {
+  const stableSymbols = useMemo(() => [...symbols], [symbols.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMarketStore(
+    useShallow((s) => {
+      const out: Record<string, Quote> = {};
+      for (const sym of stableSymbols) {
+        const q = s.quotes[sym];
+        if (q) out[sym] = q;
+      }
+      return out;
+    })
+  );
+}
+
+/**
+ * Compute the freshest quote timestamp across the store, as epoch-seconds.
+ * Not a hook — intended to be called imperatively on a heartbeat so consumers
+ * don't subscribe to the whole quotes map. Returns undefined when no quotes
+ * have arrived.
+ */
+export function getFreshestQuoteTimestamp(): number | undefined {
+  const quotes = useMarketStore.getState().quotes;
+  let max = 0;
+  for (const sym in quotes) {
+    const t = Number(quotes[sym]?.timestamp) || 0;
+    if (t > max) max = t;
+  }
+  return max || undefined;
+}

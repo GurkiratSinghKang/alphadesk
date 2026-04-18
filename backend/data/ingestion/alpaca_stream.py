@@ -12,13 +12,21 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import websockets
 
 from core.config import settings
 from core.redis import cache_get, publish
+from data.calendar import USMarketCalendar
 
 logger = logging.getLogger(__name__)
+
+_ET = ZoneInfo("America/New_York")
+# Shared calendar instance — memoises the schedule cache so repeated
+# ``is_trading_day`` calls across the stream loop are cheap.
+_CAL = USMarketCalendar()
 
 _stream_task: asyncio.Task | None = None
 _should_stop = False
@@ -111,12 +119,21 @@ async def get_dynamic_watchlist() -> list[str]:
 
 
 def _is_market_hours() -> bool:
-    """Check if we're within extended market hours (4 AM - 8 PM ET)."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    et = ZoneInfo("America/New_York")
-    now = datetime.now(et)
-    if now.weekday() >= 5:
+    """Check if we're within extended market hours on a real trading day.
+
+    Holiday-aware via :class:`USMarketCalendar` — on Christmas Day, MLK
+    Day, Good Friday, etc. the stream will skip the (expensive) websocket
+    connect/subscribe dance rather than wake up every 4 AM ET to a
+    guaranteed-empty tape. Extended session is 04:00–20:00 ET on trading
+    days; half-day closes only affect the regular session, so extended
+    hours around them still count. See edge-cases-audit-r3.md P0 #4.
+
+    NOTE: Wave 9's ``_supervised_run`` wrapper relies on ``_run_stream``
+    checking this before each connect. We preserve that contract — the
+    function is still a cheap, side-effect-free bool.
+    """
+    now = datetime.now(_ET)
+    if not _CAL.is_trading_day(now.date()):
         return False
     return 4 <= now.hour < 20
 

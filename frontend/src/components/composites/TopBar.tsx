@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Menu, LogOut } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -124,13 +125,18 @@ export default function TopBar({
         </SheetContent>
       </Sheet>
 
-      <div
-        className="flex items-baseline gap-1.5 font-display italic text-[20px] text-ink-1000"
+      {/* a11y audit r3 — WCAG 2.1.1/4.1.2: logo converted from presentational
+          <div> to <Link> so it is keyboard-focusable and carries proper role.
+          Visual identical to prior markup. */}
+      <Link
+        href="/"
+        aria-label="AlphaDesk home"
+        className="flex items-baseline gap-1.5 font-display italic text-[20px] text-ink-1000 no-underline"
         style={{ letterSpacing: "-0.02em" }}
       >
         <span className="text-brand">α</span>
         <span>AlphaDesk</span>
-      </div>
+      </Link>
 
       {/* Desktop nav — hidden below md */}
       <nav

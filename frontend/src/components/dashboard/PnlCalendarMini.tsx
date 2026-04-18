@@ -6,10 +6,32 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { usePnlCalendar } from "@/hooks/useQueries";
 import type { CalendarDay } from "@/lib/api";
 
+// Resolve today in ET. A trader's "today" is the NYSE calendar day, not
+// the browser's local day — late-evening Pacific users and anyone
+// overseas would otherwise see the wrong month highlighted around the
+// ET midnight rollover. `Intl.DateTimeFormat` avoids the broken
+// `new Date(toLocaleString(...))` round-trip.
+function getETDateParts(now: Date = new Date()): { year: number; month: number; day: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  let year = 0, month = 0, day = 0;
+  for (const p of formatter.formatToParts(now)) {
+    if (p.type === "year") year = parseInt(p.value, 10);
+    else if (p.type === "month") month = parseInt(p.value, 10);
+    else if (p.type === "day") day = parseInt(p.value, 10);
+  }
+  return { year, month, day };
+}
+
 export function PnlCalendarMini() {
   const now = new Date();
-  const month = now.getMonth() + 1; // 1-based for the hook
-  const year = now.getFullYear();
+  const et = getETDateParts(now);
+  const month = et.month; // 1-based for the hook
+  const year = et.year;
 
   const { data: calendarData, isLoading } = usePnlCalendar(month, year);
   const days: CalendarDay[] = calendarData?.days ?? [];
@@ -45,7 +67,11 @@ export function PnlCalendarMini() {
 
   const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun (month is 1-based, Date needs 0-based)
   const daysInMonth = new Date(year, month, 0).getDate(); // month is 1-based, so this gives last day
-  const monthName = now.toLocaleString("en-US", { month: "long" });
+  // Render the month name in ET so it matches the ET-resolved month number.
+  const monthName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "long",
+  }).format(now);
 
   // Build a map of date -> pnl
   const pnlMap = new Map(days.map((d) => [d.date, d.pnl]));
@@ -78,7 +104,8 @@ export function PnlCalendarMini() {
           ))}
           {cells.map((cell, i) => {
             if (cell.day === 0) return <div key={`e-${i}`} />;
-            const isToday = cell.day === now.getDate();
+            // "Today" = ET day, not browser-local day.
+            const isToday = cell.day === et.day;
             const hasPnl = cell.pnl !== null;
             const positive = (cell.pnl ?? 0) >= 0;
             const intensity = hasPnl ? Math.min(Math.abs(cell.pnl!) / scaleMax, 1) : 0;

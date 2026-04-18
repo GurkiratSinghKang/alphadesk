@@ -53,6 +53,9 @@ const TOAST_ICON_COLOR: Record<ToastType, string> = {
 
 function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: string) => void }) {
   const Icon = TOAST_ICON[toast.type];
+  // a11y audit r3 — WCAG 4.1.3: error toasts need role="alert" + aria-live="assertive"
+  // so AT interrupts; info/success/warning use role="status" + aria-live="polite".
+  const isError = toast.type === "error";
   return (
     <div
       className={cn(
@@ -62,7 +65,8 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
         "animate-in slide-in-from-right-full fade-in duration-200",
         TOAST_ACCENT[toast.type]
       )}
-      role="alert"
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", TOAST_ICON_COLOR[toast.type])} />
       <div className="flex-1 min-w-0">
@@ -117,7 +121,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ addToast, dismissToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[55] flex flex-col-reverse gap-2 w-[380px] pointer-events-none">
+      {/* a11y audit r3 — WCAG 4.1.3: Toast container is a labeled live region
+          so AT engines register announcements when toasts append. Individual
+          toasts still carry their own role/aria-live (assertive for errors,
+          polite for info/success/warning). */}
+      <div
+        role="region"
+        aria-label="Notifications"
+        aria-live="polite"
+        aria-atomic="false"
+        className="fixed bottom-4 right-4 z-[55] flex flex-col-reverse gap-2 w-[380px] pointer-events-none"
+      >
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">
             <ToastItem toast={t} onDismiss={dismissToast} />

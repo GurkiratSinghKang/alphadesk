@@ -6,7 +6,7 @@ import { Radio, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuotes } from "@/stores/market";
 import { getPipelineHistory, getPipelineRun, type PipelineRun, type PipelineAnalysis } from "@/lib/api";
 import { STRATEGY_META } from "@/lib/strategies";
 import type { Quote } from "@/types";
@@ -382,9 +382,12 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
     return () => clearInterval(timer);
   }, [buildSignals]);
 
-  // Also rebuild when quotes change (for watchlist signals)
-  // Subscribe to quotes via the store selector and debounce rebuilds
-  const quotes = useMarketStore((s) => s.quotes);
+  // Also rebuild when quotes change (for watchlist signals).
+  // Wave 14 perf-audit-r3 P0 #3: scoped to the watchlist via `useQuotes`, so
+  // unrelated ticks (e.g. a stream of symbols not on the watchlist) no
+  // longer kick this effect. The debounce remains in place.
+  const watchlist = useMarketStore((s) => s.watchlist);
+  const quotes = useQuotes(watchlist);
   const quotesRef = useRef(quotes);
   useEffect(() => {
     if (quotesRef.current !== quotes && hasFetched.current) {

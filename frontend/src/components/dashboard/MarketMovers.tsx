@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
-import { useMarketStore } from "@/stores/market";
+import { useQuotes } from "@/stores/market";
 import { formatCurrency, formatNumber, cn } from "@/lib/utils";
 import type { Quote } from "@/types";
 
@@ -63,7 +63,9 @@ interface MarketMoversProps {
 
 export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
   const [activeTab, setActiveTab] = useState<Tab>("gainers");
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: was `useMarketStore((s) => s.quotes)`; scope
+  // to just the curated TOP_SYMBOLS list so unrelated ticks don't rerender.
+  const quotes = useQuotes(TOP_SYMBOLS);
 
   // Build mover rows from available quotes
   const movers: MoverRow[] = useMemo(() => {

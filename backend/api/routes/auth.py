@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -14,11 +14,61 @@ from core.auth import (
     create_refresh_token,
     decode_token,
     is_token_revoked,
+    require_auth,
     verify_password,
 )
 from core.config import settings
 
 router = APIRouter()
+
+# Minimum password length when accepting new credentials (signup, password
+# change, password reset). Existing bcrypt hashes with shorter passwords are
+# NOT re-validated — this is a forward bar only. See security-audit-r3.md
+# P1 "No password policy / no lockout on login".
+MIN_PASSWORD_LENGTH = 12
+
+
+def _enforce_password_policy(new_password: str) -> None:
+    """Raise 400 if new_password fails the minimum-complexity bar.
+
+    Kept deliberately simple: length-only. Character-class rules encourage
+    users to pick `Password1!` and call it a day; 12+ chars of anything is
+    a better lower bound than 8 chars of mixed classes.
+    """
+    if not isinstance(new_password, str) or len(new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Admin role dependency
+# ---------------------------------------------------------------------------
+# Exported for use by routers that expose admin-only endpoints (e.g.
+# strategies.py — `/admin/risk-monitor`, `/admin/leaderboard`).
+#
+# Applied to admin routes in future wave — see audit-reports/security-audit-r3.md
+# P0 #1. This wave only defines + exports the dependency; strategies.py is
+# owned by Wave 12 and will import this in a follow-up round.
+#
+# require_auth() returns the `sub` claim from the JWT (a username string).
+# We compare that against the configured ADMIN_USERNAME. Any future role
+# column / multi-user setup can swap this out without touching the call sites.
+async def require_admin(username: str = Depends(require_auth)) -> str:
+    """FastAPI dependency: require an authenticated admin.
+
+    Raises 403 if the principal's username does not match
+    ``settings.ADMIN_USERNAME``. In a multi-user future this should resolve
+    against a proper role/permission record on the user row, but until then
+    admin identity == "the singleton admin account".
+    """
+    if username != settings.ADMIN_USERNAME:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    return username
 
 # ---------------------------------------------------------------------------
 # Login rate limiting: max 5 attempts per IP per 5-minute window (Redis-backed)
@@ -131,8 +181,14 @@ async def login(request: LoginRequest, req: Request):
     client_ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req.client else "unknown")
     await _check_rate_limit(client_ip)
 
+    # Strip whitespace from the submitted username BEFORE comparing against
+    # the configured admin or counting toward the lockout. A trailing space
+    # from a password-manager paste would otherwise be treated as a genuine
+    # auth failure. See edge-cases-audit-r3.md I/P1.
+    submitted_username = (request.username or "").strip()
+
     if (
-        request.username != settings.ADMIN_USERNAME
+        submitted_username != settings.ADMIN_USERNAME
         or not settings.ADMIN_PASSWORD_HASH
         or not verify_password(request.password, settings.ADMIN_PASSWORD_HASH)
     ):
@@ -141,8 +197,8 @@ async def login(request: LoginRequest, req: Request):
             detail="Invalid username or password",
         )
 
-    access_token = create_access_token(request.username)
-    refresh_token = create_refresh_token(request.username)
+    access_token = create_access_token(submitted_username)
+    refresh_token = create_refresh_token(submitted_username)
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
     # Return tokens in body (for backward compat) AND set HttpOnly cookies

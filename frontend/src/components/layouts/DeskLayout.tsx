@@ -69,12 +69,19 @@ export default function DeskLayout({
           {rail}
         </aside>
 
-        <section
+        {/* a11y audit r3 — WCAG 2.4.1 / 1.3.1 / 4.1.2: the flagship desk
+            route had no <main> landmark; wrapped the center column here so
+            the skip-link target (#main-content) lands on a proper landmark
+            and SR users can jump straight to the chart/order ticket. */}
+        <main
+          id="main-content"
           data-slot="desk-center"
+          aria-label="Trading chart and order ticket"
+          tabIndex={-1}
           className="flex min-h-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg"
         >
           {center}
-        </section>
+        </main>
 
         <aside
           data-slot="desk-right"

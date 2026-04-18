@@ -24,7 +24,7 @@ import {
 } from "@/components/composites";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
 import type { Order } from "@/types";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useStrategies } from "@/hooks/useQueries";
 import { useToast } from "@/hooks/useToast";
@@ -54,7 +54,8 @@ export default function TradePage() {
   const router = useRouter();
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: scoped to selected symbol only.
+  const selectedQuote = useQuote(selectedSymbol);
   const { data: strategiesResp } = useStrategies();
 
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
@@ -75,8 +76,8 @@ export default function TradePage() {
     return () => { cancelled = true; };
   }, [selectedSymbol, range]);
 
-  const quote = toQuote(quotes[selectedSymbol]);
-  const meta = toMetaCells(quotes[selectedSymbol]);
+  const quote = toQuote(selectedQuote ?? undefined);
+  const meta = toMetaCells(selectedQuote ?? undefined);
   const symbol = toMarketSymbol(selectedSymbol);
 
   /* ─── Recent orders strip ──────────────────────────────── */

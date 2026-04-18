@@ -14,8 +14,14 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from data.calendar import USMarketCalendar
+
 logger = logging.getLogger("alphadesk.monitor")
 ET = ZoneInfo("America/New_York")
+
+# Shared holiday-aware calendar. See edge-cases-audit-r3.md P0 #4 — using
+# `datetime.weekday() < 5` misses US holidays that fall on weekdays.
+_CAL = USMarketCalendar()
 
 _monitor_task: asyncio.Task | None = None
 _should_stop = False
@@ -155,6 +161,15 @@ async def _run_monitor() -> None:
             hour = now.hour
             minute = now.minute
 
+            # Skip non-trading days entirely — US holidays that fall on a
+            # weekday (Christmas, MLK Day, Good Friday, etc.) would otherwise
+            # trigger strategy evaluation against a closed market. Weekend days
+            # are also covered by ``is_trading_day``. See edge-cases-audit-r3
+            # P0 #4.
+            if not _CAL.is_trading_day(now.date()):
+                await asyncio.sleep(300)  # 5 min — cheap, no market to watch
+                continue
+
             # Only run during extended market hours (7 AM - 8 PM ET)
             if hour < 7 or hour >= 20:
                 await asyncio.sleep(60)
@@ -172,8 +187,21 @@ async def _run_monitor() -> None:
                 await _check_price_alerts()
                 last_price_check = current_time
 
-            # Strategy evaluation every 30 minutes during market hours (9:30-16:00 ET)
-            is_market_hours = (hour == 9 and minute >= 30) or (10 <= hour <= 15)
+            # Strategy evaluation every 30 minutes during regular trading
+            # hours. Holiday-aware via USMarketCalendar — on early-close days
+            # (day after Thanksgiving, Christmas Eve, July 3rd) the window
+            # ends at 13:00 ET rather than 16:00 ET.
+            is_market_hours = False
+            try:
+                if _CAL.is_trading_day(now.date()):
+                    open_utc, close_utc = _CAL.session_hours(now.date())
+                    open_et = open_utc.astimezone(ET)
+                    close_et = close_utc.astimezone(ET)
+                    is_market_hours = open_et <= now < close_et
+            except Exception:
+                # Calendar lookup failure — fall back to the coarse weekday+hour
+                # check rather than evaluating strategies against bad data.
+                is_market_hours = (hour == 9 and minute >= 30) or (10 <= hour <= 15)
             is_evaluation_time = minute in (0, 30)
 
             if is_market_hours and is_evaluation_time:

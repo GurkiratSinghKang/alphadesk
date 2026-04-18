@@ -102,6 +102,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (isDeskRoute) {
     return (
       <>
+        {/* a11y audit r3 — WCAG 2.4.1: skip link must be emitted on the desk
+            route too (previously only the non-desk branch had it). DeskLayout
+            now exposes <main id="main-content"> so this anchor resolves. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-[60] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+        >
+          Skip to content
+        </a>
         {children}
         <CommandPalette />
         <AICopilot />
@@ -114,9 +123,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // ─── Non-desk dashboard pages keep the pre-F3 chrome. ──────────
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
+      {/* a11y audit r3 — WCAG 1.4.3: previous focus:text-white on gold bg
+          was 2.4:1 (fails AA). Use focus:text-primary-foreground (near-black
+          on gold ≈ 8:1). */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
       >
         Skip to content
       </a>

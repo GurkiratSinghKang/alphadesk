@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useDataPipeline } from "@/hooks/useDataPipeline";
 import { useToast } from "@/hooks/useToast";
+import { ensureTokenRefreshScheduled } from "@/lib/api";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -37,6 +38,13 @@ export function useWs(): WsContextValue {
 
 function WebSocketProvider({ children }: { children: ReactNode }) {
   const ws = useWebSocket();
+  // Wave 14 edge-cases-audit-r3 P0 #1: start the silent token-refresh
+  // scheduler exactly once when a logged-in session mounts the dashboard.
+  // Mounted here (and not on /login) because WebSocketProvider only wraps
+  // authenticated surfaces — see <Providers> below.
+  useEffect(() => {
+    ensureTokenRefreshScheduled();
+  }, []);
   return (
     <WebSocketContext.Provider value={ws}>{children}</WebSocketContext.Provider>
   );

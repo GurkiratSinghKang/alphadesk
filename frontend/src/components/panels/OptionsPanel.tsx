@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuote } from "@/stores/market";
 import { useOptionsStore } from "@/stores/options";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { cn, formatNumber, formatGreek } from "@/lib/utils";
@@ -126,7 +126,8 @@ function Cell({
 
 export function OptionsPanel() {
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: scoped to selectedSymbol only.
+  const quoteData = useQuote(selectedSymbol);
   const { selectedStrikes, toggleStrike } = useOptionsStore();
   const today = new Date().toDateString();
   const expirations = useMemo(generateExpirations, [today]);
@@ -149,7 +150,7 @@ export function OptionsPanel() {
   // Spot price from the market store — when the quote hasn't arrived yet we
   // render an honest empty state rather than substituting a ticker-specific
   // placeholder (was: `SPY === 590, AAPL === 230, fallback 175`).
-  const quoteData = quotes[selectedSymbol];
+  // `quoteData` comes from the scoped `useQuote(selectedSymbol)` selector above.
   const spotPrice = quoteData?.last ?? null;
 
   // Fetch real options chain via React Query — no RNG fallback.

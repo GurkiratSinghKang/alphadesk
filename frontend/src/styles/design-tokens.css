@@ -60,8 +60,15 @@
 
   --fg:         var(--ink-900);
   --fg-dim:     var(--ink-700);
-  --fg-muted:   var(--ink-600);
-  --fg-hint:    var(--ink-500);
+  /* a11y audit r3: fg-muted lifted from ink-600 (~4.18:1 on bg-elev-1) to
+     ink-700 (~6.7:1 on bg-card) so every card/dialog muted-text site passes
+     AA automatically. */
+  --fg-muted:   var(--ink-700);
+  /* a11y audit r3: fg-hint lifted from ink-500 (2.67:1 on bg — AA FAIL on
+     every surface) to a value that passes AA on bg (#0b0a09), bg-elev-1
+     (#111110), bg-elev-2 (#15140f), and bg-card (#1c1a14). #9a9380 ≈ 5.9:1
+     on bg and ~5.3:1 on bg-elev-1. */
+  --fg-hint:    #9a9380;
 
   --border:     var(--ink-300);
   --border-strong: var(--ink-400);
@@ -83,7 +90,11 @@
        (#1a1206) in globals.css @theme inline. */
   --primary-foreground: #1a1206;
   --profit-foreground: var(--ink-000);
-  --loss-foreground:   var(--ink-1000);
+  /* a11y audit r3: prior value (--ink-1000 ≈ #f7f1dc) on --loss (#e07856)
+     was ~2.7:1 — AA FAIL on the destructive CTA. Coral is warm-light, so
+     the foreground must be NEAR-BLACK for 4.5:1 contrast. --ink-000 (#050503)
+     on coral ≈ 6.7:1, passes AA. */
+  --loss-foreground:   var(--ink-000);
 
   /* ─── TYPE ───────────────────────────────────────────────────── */
 

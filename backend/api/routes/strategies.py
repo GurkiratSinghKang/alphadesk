@@ -755,6 +755,11 @@ def _annualized_return(return_pct: float, first_trade_date: str | None = None) -
     Uses the actual first trade date from the ledger.  If no trades exist
     or the holding period is less than 30 days the raw (non-annualized)
     return is returned to avoid misleading extrapolation.
+
+    Annualisation uses **252 trading days** (not 365 calendar days) and
+    compounds regardless of period length. The previous implementation
+    linearly extrapolated for <365 days and used calendar days, producing
+    understated CAGR on short / medium-length track records.
     """
     if return_pct == 0 or not first_trade_date:
         return 0
@@ -764,16 +769,19 @@ def _annualized_return(return_pct: float, first_trade_date: str | None = None) -
     except (ValueError, TypeError):
         return 0
 
-    days_held = max((date.today() - start).days, 1)
+    # Approximate trading days between two dates: calendar days * (252/365).
+    # For very short windows this is a rough estimate — a proper count would
+    # iterate the USMarketCalendar sessions, but CAGR stability doesn't need
+    # exact business-day counts once the window is >30 days.
+    calendar_days = max((date.today() - start).days, 1)
+    trading_days = max(int(calendar_days * 252 / 365), 1)
 
     # Don't annualize short track records -- just show the raw return
-    if days_held < 30:
+    if trading_days < 21:  # <~ 1 trading month
         return round(return_pct, 2)
 
-    if days_held >= 365:
-        annualized = ((1 + return_pct / 100) ** (365 / days_held) - 1) * 100
-    else:
-        annualized = return_pct * (365 / days_held)
+    # Always compound — linear extrapolation was wrong for windows <1yr.
+    annualized = ((1 + return_pct / 100) ** (252 / trading_days) - 1) * 100
     return round(annualized, 2)
 
 
@@ -825,7 +833,7 @@ def _get_real_strategy_performance(ledger_instance: Any | None = None) -> dict[s
             strat = trade.get("strategy", "unknown")
             if strat not in perf:
                 perf[strat] = {
-                    "trades": 0, "pnl": 0.0, "wins": 0, "open": 0,
+                    "trades": 0, "pnl": 0.0, "wins": 0, "losses": 0, "scratches": 0, "open": 0,
                     "invested": 0.0, "last_trade_date": "", "first_trade_date": "",
                     "best_trade": None, "worst_trade": None,
                 }
@@ -841,18 +849,33 @@ def _get_real_strategy_performance(ledger_instance: Any | None = None) -> dict[s
             if trade.get("status") == "open":
                 perf[strat]["open"] += 1
             if trade.get("status") == "closed" and entry_price:
-                # Prefer stored pnl/pnl_pct; fall back to calculation
+                # Prefer stored pnl/pnl_pct; fall back to calculation.
+                # Fallback must respect side: short P&L = (entry - exit) * shares.
                 pnl = trade.get("pnl")
+                raw_side = str(trade.get("side") or "long").lower()
+                is_short = raw_side in {"short", "sell", "s"}
                 if pnl is None and trade.get("exit_price"):
-                    pnl = (trade["exit_price"] - entry_price) * shares
+                    if is_short:
+                        pnl = (entry_price - trade["exit_price"]) * shares
+                    else:
+                        pnl = (trade["exit_price"] - entry_price) * shares
                 if pnl is not None:
                     perf[strat]["pnl"] += pnl
+                    # Classify: win / loss / scratch (break-even). Break-even
+                    # trades are excluded from win_rate denominators downstream.
                     if pnl > 0:
                         perf[strat]["wins"] += 1
+                    elif pnl < 0:
+                        perf[strat]["losses"] += 1
+                    else:
+                        perf[strat]["scratches"] += 1
                     # Track best/worst trades
                     pnl_pct = trade.get("pnl_pct")
                     if pnl_pct is None and trade.get("exit_price"):
-                        pnl_pct = round(((trade["exit_price"] - entry_price) / entry_price) * 100, 2)
+                        if is_short:
+                            pnl_pct = round(((entry_price - trade["exit_price"]) / entry_price) * 100, 2)
+                        else:
+                            pnl_pct = round(((trade["exit_price"] - entry_price) / entry_price) * 100, 2)
                     trade_summary = {"symbol": trade.get("symbol", ""), "pnl": pnl, "pnl_pct": pnl_pct or 0}
                     if perf[strat]["best_trade"] is None or pnl > perf[strat]["best_trade"]["pnl"]:
                         perf[strat]["best_trade"] = trade_summary
@@ -1022,9 +1045,11 @@ async def list_strategies() -> list[StrategySummary]:
                 if rp["trades"] > 0:
                     pnl_dollars = rp["pnl"] + unrealized_by_strat_id.get(sid, 0)
                     invested = rp.get("invested", 0.0)
-                    closed = rp["trades"] - rp["open"]
-                    if closed > 0:
-                        win_rate = round(rp["wins"] / closed * 100, 1)
+                    # Decided = wins + losses (scratch trades excluded per
+                    # audit: pnl == 0 is neither a win nor a loss).
+                    decided = rp.get("wins", 0) + rp.get("losses", 0)
+                    if decided > 0:
+                        win_rate = round(rp["wins"] / decided * 100, 1)
                     if invested > 0:
                         total_return = round(pnl_dollars / invested * 100, 1)
                 break
@@ -1099,7 +1124,14 @@ async def strategy_leaderboard() -> dict[str, Any]:
         invested = 0.0
         pnl_dollars = 0.0
         sharpe = 0.0
-        daily_returns: list[float] = []
+        # Per-trade returns AND their holding periods (in days). We can't
+        # honestly annualise per-trade returns by sqrt(252) without knowing
+        # the average hold period — that inflates Sharpe by sqrt(avg_hold_days).
+        # For a PEAD strategy that holds 30-60 days the inflation factor is
+        # 5-8×; for a monthly rebalance ~4.6×. We correct by scaling sqrt by
+        # (252 / avg_hold_days).
+        per_trade_returns: list[float] = []
+        hold_days_list: list[float] = []
 
         for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
             if strat_id != sid or strat_name not in real_perf:
@@ -1109,25 +1141,51 @@ async def strategy_leaderboard() -> dict[str, Any]:
                 pnl_dollars = rp["pnl"] + unrealized_by_id.get(sid, 0)
                 invested = rp.get("invested", 0.0)
 
-                # Build daily returns from closed trades for Sharpe
+                # Build per-trade returns from closed trades for Sharpe,
+                # respecting side ("short" flips the sign of (exit-entry)/entry).
                 for t in ledger._data.get("trades", []):
                     if t.get("strategy") != strat_name or t.get("status") != "closed":
                         continue
                     entry_p = t.get("entry_price", 0)
                     exit_p = t.get("exit_price", 0)
-                    if entry_p and exit_p:
-                        daily_returns.append((exit_p - entry_p) / entry_p)
+                    if not (entry_p and exit_p):
+                        continue
+                    raw_side = str(t.get("side") or "long").lower()
+                    if raw_side in {"short", "sell", "s"}:
+                        ret = (entry_p - exit_p) / entry_p
+                    else:
+                        ret = (exit_p - entry_p) / entry_p
+                    per_trade_returns.append(ret)
+                    # Hold period in days (inclusive of partial days => min 1)
+                    entry_time = t.get("entry_time")
+                    exit_time = t.get("exit_time")
+                    try:
+                        if entry_time and exit_time:
+                            e_dt = datetime.fromisoformat(entry_time[:19])
+                            x_dt = datetime.fromisoformat(exit_time[:19])
+                            hold = max((x_dt - e_dt).total_seconds() / 86400.0, 1.0)
+                            hold_days_list.append(hold)
+                    except (ValueError, TypeError):
+                        pass
             break
 
         return_pct = round(pnl_dollars / invested * 100, 1) if invested > 0 else 0.0
 
-        # Compute Sharpe from per-trade returns
-        if len(daily_returns) > 1:
-            mean_r = statistics.mean(daily_returns)
-            std_r = statistics.stdev(daily_returns)
-            sharpe = round(mean_r / std_r * math.sqrt(252), 2) if std_r > 0 else 0.0
-        elif len(daily_returns) == 1:
-            sharpe = round(daily_returns[0] * math.sqrt(252), 2)
+        # Compute Sharpe using per-trade returns, annualised by
+        # sqrt(252 / avg_hold_days) so multi-day holds don't get inflated.
+        avg_hold_days = (
+            sum(hold_days_list) / len(hold_days_list) if hold_days_list else 1.0
+        )
+        # Guard: avg_hold_days must be positive finite.
+        if not math.isfinite(avg_hold_days) or avg_hold_days <= 0:
+            avg_hold_days = 1.0
+        ann_factor = math.sqrt(252 / avg_hold_days)
+        if len(per_trade_returns) > 1:
+            mean_r = statistics.mean(per_trade_returns)
+            std_r = statistics.stdev(per_trade_returns)
+            sharpe = round(mean_r / std_r * ann_factor, 2) if std_r > 0 else 0.0
+        elif len(per_trade_returns) == 1:
+            sharpe = round(per_trade_returns[0] * ann_factor, 2)
 
         entries.append({
             "id": sid,
@@ -1229,9 +1287,10 @@ async def get_strategy_performance(
                 invested = rp.get("invested", 0.0)
                 last_trade = rp.get("last_trade_date", "")
                 first_trade = rp.get("first_trade_date", "")
-                closed = rp["trades"] - rp["open"]
-                if closed > 0:
-                    win_rate = round(rp["wins"] / closed * 100, 1)
+                # Scratch trades (pnl == 0) excluded from win_rate denominator.
+                decided = rp.get("wins", 0) + rp.get("losses", 0)
+                if decided > 0:
+                    win_rate = round(rp["wins"] / decided * 100, 1)
                 if invested > 0:
                     return_pct = round(pnl_dollars / invested * 100, 1)
             break

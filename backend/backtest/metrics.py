@@ -62,10 +62,12 @@ def sortino(returns: pd.Series, rf: float = 0.0, periods_per_year: int = TRADING
     if len(r) < 2:
         return 0.0
     excess = r - rf / periods_per_year
-    downside = excess[excess < 0]
-    if len(downside) == 0:
-        return 0.0
-    dd_std = math.sqrt((downside ** 2).mean())
+    # Lower Partial Moment (LPM₂) downside deviation: sum of squared
+    # negative returns divided by the TOTAL number of observations (not the
+    # count of downside observations). Dividing by len(downside) systematically
+    # understates Sortino when losses are infrequent.
+    downside_sq = (excess.clip(upper=0.0) ** 2).sum()
+    dd_std = math.sqrt(float(downside_sq) / len(excess))
     if not math.isfinite(dd_std) or dd_std < _FLOAT_EPS:
         return 0.0
     return float(excess.mean() / dd_std * _annualization_factor(periods_per_year))
@@ -111,12 +113,20 @@ def turnover(daily_notional: pd.Series, equity: pd.Series) -> float:
 
 
 def hit_rate(trade_pnls: pd.Series) -> float:
-    """Fraction of winning trades."""
+    """Fraction of winning trades.
+
+    Break-even trades (pnl == 0) are scratch trades: they are neither a win
+    nor a loss, so they are excluded from both numerator and denominator.
+    ``wins / (wins + losses)`` — denominator skips pnl == 0.
+    """
 
     t = pd.Series(trade_pnls).dropna().astype(float)
-    if len(t) == 0:
+    wins = int((t > 0).sum())
+    losses = int((t < 0).sum())
+    decided = wins + losses
+    if decided == 0:
         return 0.0
-    return float((t > 0).sum() / len(t))
+    return float(wins / decided)
 
 
 def profit_factor(trade_pnls: pd.Series) -> float:

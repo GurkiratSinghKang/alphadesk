@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuotes } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
@@ -789,7 +789,11 @@ function SignalsTab() {
 
 export function WatchlistPanel() {
   const watchlist = useMarketStore((s) => s.watchlist);
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: was `useMarketStore((s) => s.quotes)` which
+  // returned the whole map ref and rerendered this ~1000-LOC panel on every
+  // tick. `useQuotes(watchlist)` shallow-compares only the symbols we care
+  // about, and each `<WatchlistRow>` below is memo'd against its quote prop.
+  const quotes = useQuotes(watchlist);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);

@@ -143,6 +143,16 @@ def _compute_enhanced_metrics(
 
     Shared between the demo and live code paths so both return the
     same enhanced fields.
+
+    IMPORTANT: Sharpe / Sortino / Calmar are computed on **returns** (daily
+    P&L divided by ``base_equity``), not on raw dollar P&Ls. Treating dollars
+    as returns makes the Sharpe scale with the account size rather than with
+    risk-adjusted performance and produces a number that can't be compared
+    against any external benchmark.  Max drawdown is computed against a
+    running peak of the **equity curve** (``base_equity + cumulative_pnl``),
+    so the denominator is the true peak rather than the peak P&L, which can
+    be near zero early in an equity curve and produce nonsensical
+    percentages.
     """
     import math
 
@@ -156,40 +166,58 @@ def _compute_enhanced_metrics(
             "sortino_ratio": None,
         }
 
-    # Daily return percentages (relative to base equity)
+    if not base_equity or base_equity <= 0:
+        base_equity = 100_000
+
+    # Convert dollar P&Ls to period returns (pnl / equity). We use a constant
+    # ``base_equity`` denominator as a stable proxy for the account equity at
+    # the start of each period. A proper implementation would divide each
+    # period's P&L by that period's starting equity — TODO once we have a
+    # daily account-equity series.
+    daily_returns_pct_frac: list[float] = [p / base_equity for p in daily_pnls]
+
+    # Daily return percentages (relative to base equity) — response payload
     daily_return_records: list[dict[str, Any]] = []
     for i, pnl in enumerate(daily_pnls):
         ret_pct = round(pnl / base_equity * 100, 4)
         daily_return_records.append({"date": dates[i], "return_pct": ret_pct, "pnl": round(pnl, 2)})
 
-    # Rolling 30-day Sharpe
+    # Rolling 30-day Sharpe (on returns, not dollars)
     rolling_sharpe: list[dict[str, Any]] = []
     window = 30
     for i in range(window - 1, n):
-        chunk = daily_pnls[i - window + 1 : i + 1]
+        chunk = daily_returns_pct_frac[i - window + 1 : i + 1]
         m = sum(chunk) / window
         var = sum((x - m) ** 2 for x in chunk) / max(window - 1, 1)
         s = math.sqrt(var)
         sh = round(m / s * math.sqrt(252), 2) if s > 0 else 0.0
         rolling_sharpe.append({"date": dates[i], "sharpe": sh})
 
-    # Drawdown with peak/trough dates
-    running = 0.0
-    peak_val = 0.0
-    max_dd = 0.0
+    # Drawdown on the equity curve (peak-to-trough of equity, not P&L).
+    # equity_t = base_equity + cumulative_pnl_t. Divide by the running equity
+    # peak, not by base_equity, so the percentage tracks the actual peak-to-
+    # trough decline.
+    running_pnl = 0.0
+    peak_equity = base_equity
+    max_dd = 0.0            # dollar drawdown at trough
+    max_dd_pct = 0.0        # fractional drawdown at trough (negative)
     peak_idx = 0
     trough_idx = 0
     for i, pnl in enumerate(daily_pnls):
-        running += pnl
-        if running > peak_val:
-            peak_val = running
+        running_pnl += pnl
+        equity_i = base_equity + running_pnl
+        if equity_i > peak_equity:
+            peak_equity = equity_i
             peak_idx = i
-        dd = running - peak_val
-        if dd < max_dd:
-            max_dd = dd
+        # drawdown relative to running peak equity
+        dd_frac = (equity_i - peak_equity) / peak_equity if peak_equity > 0 else 0.0
+        dd_abs = equity_i - peak_equity
+        if dd_frac < max_dd_pct:
+            max_dd_pct = dd_frac
+            max_dd = dd_abs
             trough_idx = i
 
-    dd_pct = round(max_dd / base_equity * 100, 2) if base_equity else 0
+    dd_pct = round(max_dd_pct * 100, 2)
     dd_detail = DrawdownInfo(
         max_drawdown=round(max_dd, 2),
         max_drawdown_pct=dd_pct,
@@ -197,15 +225,21 @@ def _compute_enhanced_metrics(
         trough_date=dates[trough_idx] if dates else None,
     )
 
-    # Sortino ratio (using downside deviation)
-    mean_ret = sum(daily_pnls) / n
-    downside = [p for p in daily_pnls if p < 0]
-    downside_std = math.sqrt(sum(d ** 2 for d in downside) / max(len(downside), 1)) if downside else 0
+    # Sortino ratio — denominator is TOTAL N (LPM₂ formulation), not the
+    # number of downside periods. Dividing by len(downside) would systematically
+    # understate Sortino when losses are infrequent.
+    mean_ret = sum(daily_returns_pct_frac) / n
+    downside_sq_sum = sum(min(r, 0.0) ** 2 for r in daily_returns_pct_frac)
+    downside_std = math.sqrt(downside_sq_sum / n) if n > 0 else 0.0
     sortino = round(mean_ret / downside_std * math.sqrt(252), 2) if downside_std > 0 else None
 
-    # Calmar ratio = annualised return / |max drawdown|
+    # Calmar ratio = annualised return / |max drawdown pct|. Annualisation
+    # multiplies the mean daily return (fraction) by 252 trading days.
     annualised_return = mean_ret * 252
-    calmar = round(annualised_return / abs(max_dd), 2) if max_dd != 0 else None
+    calmar = (
+        round(annualised_return / abs(max_dd_pct), 2)
+        if max_dd_pct != 0 else None
+    )
 
     return {
         "daily_returns": daily_return_records,
@@ -243,32 +277,43 @@ def _demo_performance(period: str) -> PerformanceMetrics:
             "cumulative_pnl": round(cumulative, 2),
         })
 
+    # Scratch trades (pnl == 0) are excluded from both buckets per audit:
+    # neither a win nor a loss, so win_rate = wins / (wins + losses).
     wins = [p for p in daily_pnls if p > 0]
     losses = [p for p in daily_pnls if p < 0]
     total_return = round(cumulative, 2)
 
-    # Max drawdown (simple)
-    peak = 0.0
+    # Max drawdown against running PEAK EQUITY (base_equity + cumulative_pnl),
+    # not peak P&L.
+    base_equity = 100_000
+    peak_equity = base_equity
     max_dd = 0.0
     running = 0.0
     for pnl in daily_pnls:
         running += pnl
-        if running > peak:
-            peak = running
-        dd = running - peak
+        equity_i = base_equity + running
+        if equity_i > peak_equity:
+            peak_equity = equity_i
+        dd = equity_i - peak_equity
         if dd < max_dd:
             max_dd = dd
 
-    mean_ret = sum(daily_pnls) / len(daily_pnls) if daily_pnls else 0
-    std_ret = math.sqrt(sum((p - mean_ret) ** 2 for p in daily_pnls) / max(len(daily_pnls) - 1, 1))
+    # Sharpe on daily **returns** (pnl / base_equity), not dollar P&Ls.
+    daily_ret_frac = [p / base_equity for p in daily_pnls] if base_equity else []
+    mean_ret = sum(daily_ret_frac) / len(daily_ret_frac) if daily_ret_frac else 0
+    std_ret = math.sqrt(
+        sum((p - mean_ret) ** 2 for p in daily_ret_frac)
+        / max(len(daily_ret_frac) - 1, 1)
+    ) if len(daily_ret_frac) > 1 else 0
     sharpe = round(mean_ret / std_ret * math.sqrt(252), 2) if std_ret > 0 else None
 
-    enhanced = _compute_enhanced_metrics(daily_pnls, dates)
+    enhanced = _compute_enhanced_metrics(daily_pnls, dates, base_equity=base_equity)
 
+    decided_trades = len(wins) + len(losses)
     return PerformanceMetrics(
         period=period,
         total_return=total_return,
-        total_return_pct=round(total_return / 100_000 * 100, 2),
+        total_return_pct=round(total_return / base_equity * 100, 2),
         sharpe_ratio=sharpe,
         sortino_ratio=enhanced["sortino_ratio"],
         max_drawdown=round(max_dd, 2),
@@ -276,7 +321,7 @@ def _demo_performance(period: str) -> PerformanceMetrics:
         drawdown_detail=enhanced["drawdown_detail"],
         rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
         daily_returns=enhanced["daily_returns"],
-        win_rate=round(len(wins) / len(daily_pnls) * 100, 1) if daily_pnls else None,
+        win_rate=round(len(wins) / decided_trades * 100, 1) if decided_trades else None,
         profit_factor=round(sum(wins) / abs(sum(losses)), 2) if losses and sum(losses) != 0 else None,
         avg_win=round(sum(wins) / len(wins), 2) if wins else None,
         avg_loss=round(sum(losses) / len(losses), 2) if losses else None,
@@ -319,35 +364,41 @@ def _build_performance_from_pnls(
 
     total_return = round(cumulative, 2)
 
-    # Win/loss from individual trade P&Ls
+    # Win/loss from individual trade P&Ls — pnl==0 is a scratch, excluded from both.
     wins = [p for p in trade_pnls if p > 0]
     losses = [p for p in trade_pnls if p < 0]
 
-    # Drawdown
+    # Drawdown against running PEAK EQUITY, not peak P&L.
+    _base = base_equity if base_equity and base_equity > 0 else 100_000
     running = 0.0
-    peak = 0.0
+    peak_equity = _base
     max_dd = 0.0
     for pnl in daily_pnls:
         running += pnl
-        if running > peak:
-            peak = running
-        dd = running - peak
+        equity_i = _base + running
+        if equity_i > peak_equity:
+            peak_equity = equity_i
+        dd = equity_i - peak_equity
         if dd < max_dd:
             max_dd = dd
 
-    # Sharpe
+    # Sharpe on daily **returns** (pnl / base_equity), not dollar P&Ls.
     n = len(daily_pnls)
-    mean_ret = sum(daily_pnls) / n if n > 0 else 0
-    std_ret = math.sqrt(sum((p - mean_ret) ** 2 for p in daily_pnls) / max(n - 1, 1)) if n > 1 else 0
+    daily_ret_frac = [p / _base for p in daily_pnls]
+    mean_ret = sum(daily_ret_frac) / n if n > 0 else 0
+    std_ret = math.sqrt(
+        sum((p - mean_ret) ** 2 for p in daily_ret_frac) / max(n - 1, 1)
+    ) if n > 1 else 0
     sharpe = round(mean_ret / std_ret * math.sqrt(252), 2) if std_ret > 0 else None
 
-    # Enhanced metrics
-    enhanced = _compute_enhanced_metrics(daily_pnls, dates, base_equity)
+    # Enhanced metrics (drawdown / sortino / calmar / rolling Sharpe)
+    enhanced = _compute_enhanced_metrics(daily_pnls, dates, _base)
 
+    decided_trades = len(wins) + len(losses)
     return PerformanceMetrics(
         period=period,
         total_return=total_return,
-        total_return_pct=round(total_return / base_equity * 100, 2),
+        total_return_pct=round(total_return / _base * 100, 2),
         sharpe_ratio=sharpe,
         sortino_ratio=enhanced["sortino_ratio"],
         max_drawdown=round(max_dd, 2),
@@ -355,7 +406,7 @@ def _build_performance_from_pnls(
         drawdown_detail=enhanced["drawdown_detail"],
         rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
         daily_returns=enhanced["daily_returns"],
-        win_rate=round(len(wins) / len(trade_pnls) * 100, 1) if trade_pnls else None,
+        win_rate=round(len(wins) / decided_trades * 100, 1) if decided_trades else None,
         profit_factor=round(sum(wins) / abs(sum(losses)), 2) if losses and sum(losses) != 0 else None,
         avg_win=round(sum(wins) / len(wins), 2) if wins else None,
         avg_loss=round(sum(losses) / len(losses), 2) if losses else None,
@@ -438,7 +489,29 @@ async def get_portfolio_summary() -> PortfolioSummary:
         unrealized_pnl = positions_unrealized
         total_mv = long_mv + abs(short_mv)
         unrealized_pnl_pct = (unrealized_pnl / total_mv * 100) if total_mv > 0 else 0
-        realized_pnl_today = day_pnl - unrealized_pnl
+
+        # Compute realized_pnl_today DIRECTLY from the trade ledger: sum of
+        # pnl on trades whose exit_time falls on today's date. The old
+        # formulation ``day_pnl - unrealized_pnl`` subtracted all-time
+        # unrealized P&L from today's equity delta, which produced arbitrary
+        # numbers that flipped sign when long-held positions swung even when
+        # nothing closed today.
+        realized_pnl_today = 0.0
+        try:
+            from data.ingestion.trade_ledger import TradeLedger
+            ledger_for_today = TradeLedger()
+            today_str = date.today().isoformat()
+            for t in ledger_for_today.get_closed_trades(start_date=today_str):
+                exit_time = t.get("exit_time") or ""
+                if exit_time[:10] == today_str and t.get("pnl") is not None:
+                    realized_pnl_today += float(t["pnl"])
+            realized_pnl_today = round(realized_pnl_today, 2)
+        except Exception:
+            logger.warning(
+                "Failed to compute realized_pnl_today from ledger; defaulting to 0",
+                exc_info=True,
+            )
+            realized_pnl_today = 0.0
 
         return PortfolioSummary(
             equity=equity,
@@ -534,21 +607,35 @@ async def get_performance(
             if trades:
                 logger.info("Building real performance from %d closed DB trades", len(trades))
                 pnls = [t.pnl for t in trades if t.pnl is not None]
-                returns = np.array(pnls) if pnls else np.array([0.0])
+                returns_dollars = np.array(pnls) if pnls else np.array([0.0])
 
-                total_return = float(np.sum(returns))
-                wins = returns[returns > 0]
-                losses = returns[returns < 0]
+                total_return = float(np.sum(returns_dollars))
+                wins = returns_dollars[returns_dollars > 0]
+                losses = returns_dollars[returns_dollars < 0]
 
-                cumulative = np.cumsum(returns)
-                running_max = np.maximum.accumulate(cumulative)
-                drawdowns = cumulative - running_max
+                # Equity curve (cumulative P&L added to starting equity)
+                base_equity = 100_000  # TODO: thread actual account equity
+                cumulative = np.cumsum(returns_dollars)
+                equity_series = base_equity + cumulative
+                running_peak = np.maximum.accumulate(equity_series)
+                drawdowns = (equity_series - running_peak)
                 max_dd = float(np.min(drawdowns)) if len(drawdowns) > 0 else 0
 
-                mean_ret = float(np.mean(returns)) if len(returns) > 1 else 0
-                std_ret = float(np.std(returns)) if len(returns) > 1 else 1
-                downside = returns[returns < 0]
-                downside_std = float(np.std(downside)) if len(downside) > 1 else 1
+                # Convert per-trade dollar P&Ls to returns vs account equity.
+                # Per-trade returns annualised via sqrt(252) over-states Sharpe
+                # for multi-day holds — this path is the "trade-count as day-count"
+                # approximation. TODO: derive a true daily-equity series for an
+                # accurate annualisation factor.
+                daily_ret_frac = returns_dollars / base_equity if base_equity else returns_dollars
+                mean_ret = float(np.mean(daily_ret_frac)) if len(daily_ret_frac) > 1 else 0
+                std_ret = float(np.std(daily_ret_frac, ddof=1)) if len(daily_ret_frac) > 1 else 0
+                # Sortino downside: divide SUM(min(r,0)^2) by TOTAL N (LPM₂),
+                # not just the count of negative observations.
+                downside_sq = np.sum(np.minimum(daily_ret_frac, 0.0) ** 2)
+                downside_std = (
+                    float(np.sqrt(downside_sq / len(daily_ret_frac)))
+                    if len(daily_ret_frac) > 0 else 0
+                )
 
                 sharpe = (mean_ret / std_ret * np.sqrt(252)) if std_ret > 0 else None
                 sortino = (mean_ret / downside_std * np.sqrt(252)) if downside_std > 0 else None
@@ -572,25 +659,27 @@ async def get_performance(
                         "cumulative_pnl": round(float(c), 2),
                     })
 
-                enhanced = _compute_enhanced_metrics(pnls, trade_dates)
+                enhanced = _compute_enhanced_metrics(pnls, trade_dates, base_equity)
 
+                # Scratch trades are excluded from win_rate denominator.
+                decided_trades = int(len(wins) + len(losses))
                 return PerformanceMetrics(
                     period=period,
                     total_return=round(total_return, 2),
-                    total_return_pct=round(total_return / 100_000 * 100, 2),
+                    total_return_pct=round(total_return / base_equity * 100, 2),
                     sharpe_ratio=round(float(sharpe), 2) if sharpe else None,
-                    sortino_ratio=enhanced["sortino_ratio"],
+                    sortino_ratio=round(float(sortino), 2) if sortino else enhanced["sortino_ratio"],
                     max_drawdown=round(max_dd, 2),
                     calmar_ratio=enhanced["calmar_ratio"],
                     drawdown_detail=enhanced["drawdown_detail"],
                     rolling_sharpe_30d=enhanced["rolling_sharpe_30d"],
                     daily_returns=enhanced["daily_returns"],
-                    win_rate=round(len(wins) / len(returns) * 100, 1) if len(returns) else None,
+                    win_rate=round(len(wins) / decided_trades * 100, 1) if decided_trades else None,
                     profit_factor=round(profit_factor, 2) if profit_factor else None,
                     avg_win=round(float(np.mean(wins)), 2) if len(wins) else None,
                     avg_loss=round(float(np.mean(losses)), 2) if len(losses) else None,
-                    best_trade=round(float(np.max(returns)), 2) if len(returns) else None,
-                    worst_trade=round(float(np.min(returns)), 2) if len(returns) else None,
+                    best_trade=round(float(np.max(returns_dollars)), 2) if len(returns_dollars) else None,
+                    worst_trade=round(float(np.min(returns_dollars)), 2) if len(returns_dollars) else None,
                     total_trades=len(trades),
                     equity_curve=equity_curve_data,
                 )

@@ -42,8 +42,13 @@ export default function TickerStrip({
   return (
     <div
       data-slot="ticker-strip"
-      role="marquee"
-      aria-label="Market tickers"
+      // a11y audit r3 — `role="marquee"` is a deprecated HTML role that is
+      // NOT part of ARIA 1.2. Replaced with `role="region"` + aria-label so
+      // the strip is a named landmark. `aria-live="off"` because the ticker
+      // updates too frequently to be announced politely.
+      role="region"
+      aria-label="Market ticker"
+      aria-live="off"
       data-paused={paused || undefined}
       className={cn(
         "overflow-hidden whitespace-nowrap py-6 border-b border-border",

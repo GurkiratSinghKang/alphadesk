@@ -88,9 +88,11 @@ function computeEnhancedMetrics(
   totalBars: number,
   initialCapital: number,
 ): { profitFactor: number; calmarRatio: number; avgTradeDuration: number; exposureTimePct: number; drawdownCurve: number[] } {
-  // Profit Factor
+  // Profit Factor — break-even trades (pnl === 0) are scratches and
+  // don't contribute to gross profits OR gross losses. Matches backend
+  // `hit_rate` semantics and analytics/page.tsx.
   const grossProfits = tradeRecords.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
-  const grossLosses = Math.abs(tradeRecords.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
+  const grossLosses = Math.abs(tradeRecords.filter(t => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
   const profitFactor = grossLosses > 0 ? grossProfits / grossLosses : (grossProfits > 0 ? Infinity : 0);
 
   // Drawdown curve
@@ -161,7 +163,7 @@ function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number
       const pnl = totalProceeds - (position * entryPrice);
       capital += totalProceeds;
       trades++;
-      if (pnl > 0) wins++; else losses++;
+      if (pnl > 0) wins++; else if (pnl < 0) losses++;
       tradeRecords.push({ entryBar, exitBar: i, pnl });
       position = 0;
     }
@@ -181,7 +183,7 @@ function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number
     const pnl = totalProceeds - position * entryPrice;
     capital += totalProceeds;
     tradeRecords.push({ entryBar, exitBar: closes.length - 1, pnl });
-    trades++; if (pnl > 0) wins++; else losses++;
+    trades++; if (pnl > 0) wins++; else if (pnl < 0) losses++;
     position = 0;
   }
 
@@ -247,7 +249,7 @@ function runMacdBacktest(bars: OHLCVBar[], initialCapital: number, commission: n
       const pnl = totalProceeds - position * entryPrice;
       capital += totalProceeds;
       trades++;
-      if (pnl > 0) wins++; else losses++;
+      if (pnl > 0) wins++; else if (pnl < 0) losses++;
       tradeRecords.push({ entryBar, exitBar: i, pnl });
       position = 0;
     }
@@ -267,7 +269,7 @@ function runMacdBacktest(bars: OHLCVBar[], initialCapital: number, commission: n
     const pnl = totalProceeds - position * entryPrice;
     capital += totalProceeds;
     tradeRecords.push({ entryBar, exitBar: closes.length - 1, pnl });
-    trades++; if (pnl > 0) wins++; else losses++;
+    trades++; if (pnl > 0) wins++; else if (pnl < 0) losses++;
     position = 0;
   }
 
@@ -320,7 +322,7 @@ function runRsiBacktest(bars: OHLCVBar[], period: number, oversold: number, over
       const { totalProceeds } = applySellProceeds(closes[i], position, commission, slippagePct);
       const pnl = totalProceeds - position * entryPrice;
       cash += totalProceeds;
-      trades++; if (pnl > 0) wins++; else losses++;
+      trades++; if (pnl > 0) wins++; else if (pnl < 0) losses++;
       tradeRecords.push({ entryBar, exitBar: i, pnl });
       position = 0;
     }
@@ -338,7 +340,7 @@ function runRsiBacktest(bars: OHLCVBar[], period: number, oversold: number, over
     const pnl = totalProceeds - position * entryPrice;
     cash += totalProceeds;
     tradeRecords.push({ entryBar, exitBar: closes.length - 1, pnl });
-    trades++; if (pnl > 0) wins++; else losses++;
+    trades++; if (pnl > 0) wins++; else if (pnl < 0) losses++;
     position = 0;
   }
 
@@ -515,11 +517,14 @@ function MetricCard({ label, value, sub, color }: { label: string; value: string
 // ─── Comparison Table ───────────────────────────────────────
 
 function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
+  // Win-rate denominator is (wins + losses) — scratches excluded from both.
+  const winRateA = (a.wins + a.losses) > 0 ? ((a.wins / (a.wins + a.losses)) * 100).toFixed(0) : "0";
+  const winRateB = (b.wins + b.losses) > 0 ? ((b.wins / (b.wins + b.losses)) * 100).toFixed(0) : "0";
   const rows: { label: string; valA: string; valB: string; highlight: "higher" | "lower" | "none" }[] = [
     { label: "Total Return", valA: `${(a.totalReturnPct ?? 0) >= 0 ? "+" : ""}${(a.totalReturnPct ?? 0).toFixed(1)}%`, valB: `${(b.totalReturnPct ?? 0) >= 0 ? "+" : ""}${(b.totalReturnPct ?? 0).toFixed(1)}%`, highlight: "higher" },
     { label: "Sharpe Ratio", valA: (a.sharpe ?? 0).toFixed(2), valB: (b.sharpe ?? 0).toFixed(2), highlight: "higher" },
     { label: "Max Drawdown", valA: `-${(a.maxDrawdown ?? 0).toFixed(1)}%`, valB: `-${(b.maxDrawdown ?? 0).toFixed(1)}%`, highlight: "lower" },
-    { label: "Win Rate", valA: `${a.trades > 0 ? ((a.wins / a.trades) * 100).toFixed(0) : 0}%`, valB: `${b.trades > 0 ? ((b.wins / b.trades) * 100).toFixed(0) : 0}%`, highlight: "higher" },
+    { label: "Win Rate", valA: `${winRateA}%`, valB: `${winRateB}%`, highlight: "higher" },
     { label: "Profit Factor", valA: a.profitFactor === Infinity ? "Inf" : (a.profitFactor ?? 0).toFixed(2), valB: b.profitFactor === Infinity ? "Inf" : (b.profitFactor ?? 0).toFixed(2), highlight: "higher" },
     { label: "Calmar Ratio", valA: (a.calmarRatio ?? 0).toFixed(2), valB: (b.calmarRatio ?? 0).toFixed(2), highlight: "higher" },
     { label: "Trades", valA: String(a.trades), valB: String(b.trades), highlight: "none" },
@@ -751,8 +756,21 @@ export function BacktestPanel() {
             />
             <MetricCard
               label="Win Rate"
-              value={`${activeResult.trades > 0 ? ((activeResult.wins / activeResult.trades) * 100).toFixed(0) : 0}%`}
-              sub={`${activeResult.wins}W / ${activeResult.losses}L (${activeResult.trades} trades)`}
+              value={(() => {
+                // Scratches (pnl === 0) are excluded from both wins and
+                // losses — denominator is decided trades only so a scratch
+                // doesn't pull the rate down.
+                const decided = activeResult.wins + activeResult.losses;
+                return `${decided > 0 ? ((activeResult.wins / decided) * 100).toFixed(0) : 0}%`;
+              })()}
+              sub={(() => {
+                const scratches = Math.max(
+                  activeResult.trades - activeResult.wins - activeResult.losses,
+                  0,
+                );
+                const base = `${activeResult.wins}W / ${activeResult.losses}L (${activeResult.trades} trades)`;
+                return scratches > 0 ? `${base} — ${scratches} scratch` : base;
+              })()}
             />
             <MetricCard
               label="Max Drawdown"

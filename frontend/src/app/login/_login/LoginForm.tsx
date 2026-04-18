@@ -214,10 +214,13 @@ export default function LoginForm() {
             variant="ghost"
             size="sm"
             onClick={() => setShowPassword((v) => !v)}
+            // a11y audit r3 — WCAG 2.1.1/2.4.3: previously had tabIndex={-1}
+            // which excluded keyboard-only users from revealing their password.
+            // type="button" already prevents form submission on Enter, so
+            // there's no need to remove it from tab order.
             aria-label={showPassword ? "Hide password" : "Show password"}
             aria-pressed={showPassword}
             className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-            tabIndex={-1}
           >
             {showPassword ? (
               <EyeOff className="h-3.5 w-3.5" aria-hidden />

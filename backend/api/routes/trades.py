@@ -95,7 +95,11 @@ class OrderStatus(str, Enum):
 
 
 class OrderLeg(BaseModel):
-    symbol: str = Field(..., pattern=r"^[A-Z]{1,10}$")
+    # Matches the frontend symbol regex (dots/hyphens allowed for tickers
+    # like BRK.B, BF.B, RDS-A, BTC-USD). Previously this was the stricter
+    # ``^[A-Z]{1,10}$`` which rejected valid class-B / preferred-share tickers
+    # even though the frontend accepted them and the data APIs supported them.
+    symbol: str = Field(..., pattern=r"^[A-Z][A-Z0-9.\-]{0,9}$")
     side: OrderSide
     qty: float = Field(..., gt=0, le=100000)
     order_type: OrderType = OrderType.LIMIT
@@ -240,19 +244,53 @@ async def create_order(
             detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
         )
 
-    # Reject market orders outside regular trading hours (9:30 AM – 4:00 PM ET)
+    # Reject market orders outside regular trading hours (session-aware:
+    # uses USMarketCalendar so US holidays and early-close afternoons are
+    # rejected correctly — previously a market order on MLK day, Good Friday,
+    # Christmas Eve after 13:00 ET, etc. would pass the gate and be rejected
+    # by Alpaca with a confusing error).
     if any(leg.order_type == OrderType.MARKET for leg in request.legs):
         et_now = datetime.now(ZoneInfo("America/New_York"))
-        if (
-            et_now.weekday() >= 5
-            or et_now.hour < 9
-            or (et_now.hour == 9 and et_now.minute < 30)
-            or et_now.hour >= 16
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Market orders can only be placed during regular trading hours (9:30 AM - 4:00 PM ET)",
+        try:
+            from data.calendar import USMarketCalendar
+            _cal = USMarketCalendar()
+            if not _cal.is_trading_day(et_now.date()):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Market is closed (US holiday or weekend). Market orders can only be placed on trading days.",
+                )
+            open_utc, close_utc = _cal.session_hours(et_now.date())
+            open_et = open_utc.astimezone(ZoneInfo("America/New_York"))
+            close_et = close_utc.astimezone(ZoneInfo("America/New_York"))
+            if et_now < open_et or et_now >= close_et:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Market orders can only be placed during regular trading "
+                        f"hours ({open_et.strftime('%H:%M')} – "
+                        f"{close_et.strftime('%H:%M')} ET)."
+                    ),
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # Calendar unavailable: fall back to the conservative weekday+RTH
+            # check so an unexpected calendar failure doesn't silently allow
+            # orders at all hours.
+            logger.warning(
+                "USMarketCalendar unavailable — falling back to weekday/RTH check",
+                exc_info=True,
             )
+            if (
+                et_now.weekday() >= 5
+                or et_now.hour < 9
+                or (et_now.hour == 9 and et_now.minute < 30)
+                or et_now.hour >= 16
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Market orders can only be placed during regular trading hours (9:30 AM - 4:00 PM ET)",
+                )
 
     from core.config import settings
     from core.redis import publish
@@ -285,6 +323,11 @@ async def create_order(
             from core.database import _get_session_factory
             from data.storage.models import Trade
 
+            # Map the OrderSide on the first leg to the ledger side convention:
+            # ``buy`` (opening long) -> "long"; ``sell`` (opening short) -> "short".
+            first_leg_side = request.legs[0].side
+            persisted_side = "short" if first_leg_side == OrderSide.SELL else "long"
+
             factory = _get_session_factory()
             async with factory() as db:
                 trade = Trade(
@@ -294,6 +337,7 @@ async def create_order(
                     entry_time=datetime.now(timezone.utc),
                     status="submitted",
                     notes=request.notes,
+                    side=persisted_side,
                 )
                 db.add(trade)
                 await db.flush()
@@ -576,9 +620,13 @@ async def get_trade_history(
         for t in trades:
             leg = t.legs[0] if t.legs else {}
             qty = leg.get("qty", 1) or 1
-            # Derive side from the first leg; required field on TradeHistoryEntry
+            # Derive side from the first leg; required field on TradeHistoryEntry.
+            # Top-level ``Trade.side`` (new column) is authoritative when set.
             leg_side = leg.get("side") if isinstance(leg, dict) else None
-            if leg_side not in {"buy", "sell", "short", "cover"}:
+            top_side = getattr(t, "side", None)
+            if top_side in {"long", "short"}:
+                leg_side = "sell" if top_side == "short" else "buy"
+            elif leg_side not in {"buy", "sell", "short", "cover"}:
                 # Synthesize a record for _derive_side using strategy + qty
                 leg_side = _derive_side({
                     "side": leg_side,
@@ -737,7 +785,8 @@ ALERTS_REDIS_KEY = "price_alerts"
 
 
 class CreateAlertRequest(BaseModel):
-    symbol: str = Field(..., pattern=r"^[A-Z]{1,10}$")
+    # Relaxed from ``^[A-Z]{1,10}$`` to match the frontend (BRK.B, BF.B, RDS-A).
+    symbol: str = Field(..., pattern=r"^[A-Z][A-Z0-9.\-]{0,9}$")
     price: float = Field(..., gt=0)
     condition: str = Field("above", pattern=r"^(above|below)$")
 

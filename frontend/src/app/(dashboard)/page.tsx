@@ -35,7 +35,7 @@ import {
   useRegime,
   useStrategies,
 } from "@/hooks/useQueries";
-import { useMarketStore } from "@/stores/market";
+import { useMarketStore, useQuote, getFreshestQuoteTimestamp } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useToast } from "@/hooks/useToast";
 import type { Position, Order } from "@/types";
@@ -70,7 +70,10 @@ export default function DeskPage() {
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
-  const quotes = useMarketStore((s) => s.quotes);
+  // Wave 14 perf-audit-r3 P0 #3: `useQuote(selectedSymbol)` only rerenders
+  // this page when the selected symbol's quote changes — not on every WS
+  // tick for every other watchlist symbol.
+  const selectedQuote = useQuote(selectedSymbol);
 
   const portfolioSummary = usePortfolioStore((s) => s.summary);
   const positions = usePortfolioStore((s) => s.positions);
@@ -158,8 +161,8 @@ export default function DeskPage() {
 
   /* ─── Shaped props for the composites ──────────────────── */
   const regime = toRegime(regimeResp?.regime);
-  const quote = toQuote(quotes[selectedSymbol]);
-  const meta = toMetaCells(quotes[selectedSymbol]);
+  const quote = toQuote(selectedQuote ?? undefined);
+  const meta = toMetaCells(selectedQuote ?? undefined);
   const symbol = toMarketSymbol(selectedSymbol);
   const contextCells = toContextCells(portfolioSummary, positions as Position[], orderCount);
   const positionRows = toPositionRows(positions as Position[]);
@@ -176,17 +179,17 @@ export default function DeskPage() {
   const lastTickSec = useMemo(() => {
     // Referenced in deps so the memo re-evaluates on each heartbeat.
     void tickHeartbeat;
-    // Pick the freshest timestamp across quotes the desk might care about.
-    const ts = Object.values(quotes).reduce<number>((max, q) => {
-      const t = Number(q?.timestamp) || 0;
-      return t > max ? t : max;
-    }, 0);
+    // Wave 14 perf-audit-r3 P1 #2: was `Object.values(quotes).reduce(...)`
+    // with `quotes` in the dep array — that recomputed on every WS tick.
+    // `getFreshestQuoteTimestamp()` reads imperatively from the store so
+    // this memo only re-runs on the 2s heartbeat.
+    const ts = getFreshestQuoteTimestamp();
     if (!ts) return undefined;
     // Server timestamps are usually seconds — normalise if they look like ms.
     const epochMs = ts > 1e12 ? ts : ts * 1000;
     const delta = (Date.now() - epochMs) / 1000;
     return delta >= 0 && delta < 86_400 ? delta : undefined;
-  }, [quotes, tickHeartbeat]);
+  }, [tickHeartbeat]);
 
   const statusPills = toStatusPills({
     brokerConnected: !portfolioSummary.is_demo,

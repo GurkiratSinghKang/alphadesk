@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DashboardPageLayout } from "@/components/layouts";
 import { getPortfolioPerformance, getTradeHistory, type TradeHistoryEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAccountEquity, equityAtPoint, startingEquity } from "@/lib/accountEquity";
 
 // ─── Token helpers ──────────────────────────────────────────
 // SVG `fill` / `stroke` attributes need a concrete color string at runtime —
@@ -36,27 +37,32 @@ function rgbaFromHex(hex: string, alpha: number): string {
 interface EquityPoint {
   date: string;
   cumulative_pnl: number;
+  // `value` is the authoritative equity level emitted by the backend.
+  // Optional for backwards-compat with older API responses — helpers use
+  // `equityAtPoint` to fall back to `baseEquity + cumulative_pnl`.
+  value?: number;
 }
 
 // ─── Helpers ────────────────────────────────────────────────
 
-function computeDailyReturns(curve: EquityPoint[]): { date: string; ret: number }[] {
+function computeDailyReturns(curve: EquityPoint[], baseEquity: number): { date: string; ret: number }[] {
   if (curve.length < 2) return [];
   const results: { date: string; ret: number }[] = [];
   for (let i = 1; i < curve.length; i++) {
-    const base = 100000 + curve[i - 1].cumulative_pnl;
-    const ret = base > 0 ? (curve[i].cumulative_pnl - curve[i - 1].cumulative_pnl) / base : 0;
+    const prevEq = equityAtPoint(curve[i - 1], baseEquity);
+    const currEq = equityAtPoint(curve[i], baseEquity);
+    const ret = prevEq > 0 ? (currEq - prevEq) / prevEq : 0;
     results.push({ date: curve[i].date, ret });
   }
   return results;
 }
 
-function computeDrawdown(curve: EquityPoint[]): { date: string; dd: number }[] {
+function computeDrawdown(curve: EquityPoint[], baseEquity: number): { date: string; dd: number }[] {
   if (curve.length === 0) return [];
   const results: { date: string; dd: number }[] = [];
   let peak = -Infinity;
   for (const pt of curve) {
-    const equity = 100000 + pt.cumulative_pnl;
+    const equity = equityAtPoint(pt, baseEquity);
     if (equity > peak) peak = equity;
     const dd = peak > 0 ? (equity - peak) / peak : 0;
     results.push({ date: pt.date, dd });
@@ -101,13 +107,13 @@ function normalPDF(x: number, mean: number, std: number): number {
   return (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - mean) / std) ** 2);
 }
 
-function computeMonthlyReturns(curve: EquityPoint[]): Map<string, number> {
+function computeMonthlyReturns(curve: EquityPoint[], baseEquity: number): Map<string, number> {
   // Group by month, compute return for each month
   const monthly = new Map<string, { first: number; last: number }>();
   for (const pt of curve) {
     const key = pt.date.slice(0, 7); // YYYY-MM
     const entry = monthly.get(key);
-    const equity = 100000 + pt.cumulative_pnl;
+    const equity = equityAtPoint(pt, baseEquity);
     if (!entry) {
       monthly.set(key, { first: equity, last: equity });
     } else {
@@ -139,35 +145,43 @@ function computeTradeStats(trades: TradeHistoryEntry[]) {
   );
   if (closed.length === 0) {
     return {
-      totalTrades: 0, wins: 0, losses: 0, winRate: 0, profitFactor: 0,
+      totalTrades: 0, wins: 0, losses: 0, scratches: 0, winRate: 0, profitFactor: 0,
       avgWin: 0, avgLoss: 0, largestWin: 0, largestLoss: 0,
       avgHoldMs: 0, maxHoldMs: 0, maxConsecWins: 0, maxConsecLosses: 0,
     };
   }
 
+  // Break-even trades (pnl === 0) are "scratches" — excluded from both
+  // win and loss buckets so they don't deflate win-rate or distort
+  // profit factor. Win-rate denominator becomes (wins + losses), NOT
+  // the total trade count, matching backend `hit_rate` semantics.
   const wins = closed.filter((t) => (t.pnl ?? 0) > 0);
-  const losses = closed.filter((t) => (t.pnl ?? 0) <= 0);
+  const losses = closed.filter((t) => (t.pnl ?? 0) < 0);
+  const scratches = closed.filter((t) => (t.pnl ?? 0) === 0);
   const totalWin = wins.reduce((s, t) => s + (t.pnl ?? 0), 0);
   const totalLoss = Math.abs(losses.reduce((s, t) => s + (t.pnl ?? 0), 0));
   const pnls = closed.map((t) => t.pnl ?? 0);
+  const decidedCount = wins.length + losses.length;
 
   // Hold times
   const holdTimes = closed
     .filter((t) => t.entry_time && t.exit_time)
     .map((t) => new Date(t.exit_time!).getTime() - new Date(t.entry_time).getTime());
 
-  // Consecutive streaks
+  // Consecutive streaks — scratches don't reset or extend either streak
   let maxConsecWins = 0, maxConsecLosses = 0, curWins = 0, curLosses = 0;
   for (const pnl of pnls) {
     if (pnl > 0) { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
-    else { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
+    else if (pnl < 0) { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
+    // pnl === 0: scratch — leaves both counters untouched
   }
 
   return {
     totalTrades: closed.length,
     wins: wins.length,
     losses: losses.length,
-    winRate: (wins.length / closed.length) * 100,
+    scratches: scratches.length,
+    winRate: decidedCount > 0 ? (wins.length / decidedCount) * 100 : 0,
     profitFactor: totalLoss > 0 ? totalWin / totalLoss : totalWin > 0 ? Infinity : 0,
     avgWin: wins.length > 0 ? totalWin / wins.length : 0,
     avgLoss: losses.length > 0 ? totalLoss / losses.length : 0,
@@ -369,10 +383,16 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
         </thead>
         <tbody>
           {years.map((year) => {
-            const ytd = months.reduce((s, _, mi) => {
-              const key = `${year}-${String(mi + 1).padStart(2, "0")}`;
-              return s + (monthlyReturns.get(key) ?? 0);
-            }, 0);
+            // YTD must COMPOUND monthly returns — arithmetic summation is
+            // wrong (e.g. Jan +10%, Feb -10% sums to 0 but compounded is
+            // -1%). Product of (1 + r/100), minus 1, scaled to a %.
+            const ytd =
+              (months.reduce((p, _, mi) => {
+                const key = `${year}-${String(mi + 1).padStart(2, "0")}`;
+                const m = monthlyReturns.get(key);
+                if (m === undefined) return p; // skip months with no data
+                return p * (1 + m / 100);
+              }, 1) - 1) * 100;
             return (
               <tr key={year}>
                 <td className="px-2 py-1 text-foreground font-medium tabular-nums">{year}</td>
@@ -438,9 +458,16 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: Rea
 // ─── Trade Stats Table ──────────────────────────────────────
 
 function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats> }) {
+  // Surface scratches alongside win-rate so traders can see when the
+  // denominator is smaller than totalTrades — e.g. "54% (3 scratches)".
+  const winRateLabel =
+    stats.scratches > 0
+      ? `${(stats.winRate ?? 0).toFixed(1)}% (${stats.scratches} scratch${stats.scratches === 1 ? "" : "es"})`
+      : `${(stats.winRate ?? 0).toFixed(1)}%`;
+
   const rows: [string, string][] = [
     ["Total Trades", String(stats.totalTrades)],
-    ["Win Rate", `${(stats.winRate ?? 0).toFixed(1)}%`],
+    ["Win Rate", winRateLabel],
     ["Profit Factor", stats.profitFactor === Infinity ? "Inf" : (stats.profitFactor ?? 0).toFixed(2)],
     ["Avg Win", `$${(stats.avgWin ?? 0).toFixed(2)}`],
     ["Avg Loss", `-$${(stats.avgLoss ?? 0).toFixed(2)}`],
@@ -471,6 +498,10 @@ export default function AnalyticsPage() {
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
 
+  // Live account equity from the dashboard polling pipeline. `null` until
+  // the first poll resolves; callers treat `null` as "not ready yet."
+  const liveEquity = useAccountEquity();
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -498,17 +529,47 @@ export default function AnalyticsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const dailyReturns = useMemo(() => computeDailyReturns(equityCurve), [equityCurve]);
-  const drawdownData = useMemo(() => computeDrawdown(equityCurve), [equityCurve]);
+  // `baseEquity` is the STARTING equity of the curve (equity level at
+  // the curve's first point). We derive it from the live account equity
+  // (current) minus the total cumulative P&L, so every point can then be
+  // scaled as `baseEquity + cumulative_pnl_at_point`. This replaces the
+  // hardcoded $100k constant that used to anchor every chart.
+  const baseEquity = useMemo(() => {
+    if (equityCurve.length === 0) {
+      return liveEquity ?? 0;
+    }
+    const current = liveEquity ?? 0;
+    if (current > 0) {
+      return startingEquity(equityCurve, current);
+    }
+    // No live equity yet — use helper's internal derivation (first
+    // point's `value` if present, else fallback derived from a 0 base
+    // which will flow through until the store hydrates).
+    return startingEquity(equityCurve, 0);
+  }, [liveEquity, equityCurve]);
+
+  // Ready when either (a) we have a positive baseEquity, or (b) the
+  // curve is empty anyway (nothing to scale). Prevents infinite skeleton
+  // on brand-new accounts where neither store nor curve is populated.
+  const equityReady =
+    baseEquity > 0 ||
+    equityCurve.length === 0 ||
+    equityCurve.some((p) => typeof p.value === "number" && p.value > 0);
+
+  const dailyReturns = useMemo(() => computeDailyReturns(equityCurve, baseEquity), [equityCurve, baseEquity]);
+  const drawdownData = useMemo(() => computeDrawdown(equityCurve, baseEquity), [equityCurve, baseEquity]);
   const rollingSharpe = useMemo(() => computeRollingSharpe(dailyReturns), [dailyReturns]);
   const histogram = useMemo(() => computeHistogram(dailyReturns), [dailyReturns]);
-  const monthlyReturns = useMemo(() => computeMonthlyReturns(equityCurve), [equityCurve]);
+  const monthlyReturns = useMemo(() => computeMonthlyReturns(equityCurve, baseEquity), [equityCurve, baseEquity]);
   const tradeStats = useMemo(() => computeTradeStats(trades), [trades]);
   // closedTradesCount lives here (not after the early return below) so the
   // Rules of Hooks are preserved regardless of the loading branch.
   const closedTradesCount = tradeStats.totalTrades;
 
-  if (loading) {
+  // Show skeleton while data is loading OR while we still have no usable
+  // equity reference (live store + curve both missing). Keeps the
+  // returns/drawdown from painting with a bogus 0 base.
+  if (loading || !equityReady) {
     return (
       <ScrollArea className="h-full">
         <DashboardPageLayout eyebrow="§ ANALYTICS" title="Portfolio analytics">

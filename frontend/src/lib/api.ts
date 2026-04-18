@@ -293,7 +293,18 @@ export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit 
   }));
 }
 
-/** Fetch snapshots for multiple symbols (fires parallel requests). */
+/**
+ * Fetch snapshots for multiple symbols.
+ *
+ * TODO(perf-audit-r3 P0 #4): the backend currently exposes only
+ * `/api/v1/market/quotes/{symbol}` (per-symbol), not a batched
+ * `/api/v1/market/snapshots?symbols=A,B,C` endpoint. This function therefore
+ * fires N parallel requests — with a 10-symbol watchlist the first mount
+ * triggers 10 Alpaca calls and ~3–5 s of cold-start latency. When the
+ * backend batch endpoint lands (screener.py:_fetch_multi_snapshots is the
+ * closest existing implementation), migrate callers to `getSnapshots` below
+ * and delete this per-symbol fan-out.
+ */
 export async function getSnapshot(symbols: string[]): Promise<Record<string, Quote>> {
   const results: Record<string, Quote> = {};
   const fetches = symbols.map(async (s) => {
@@ -306,6 +317,84 @@ export async function getSnapshot(symbols: string[]): Promise<Record<string, Quo
   });
   await Promise.all(fetches);
   return results;
+}
+
+/**
+ * Batched snapshot fetch. Intended to call a future
+ * `/api/v1/market/snapshots?symbols=A,B,C` single-request endpoint.
+ *
+ * Until the backend ships that endpoint (Wave 14 did not touch backend),
+ * this delegates to `getSnapshot` above so callers can adopt the new
+ * signature today and automatically get the batched behaviour when the
+ * backend ships. Emits a single cache key instead of N once the endpoint
+ * exists — see audit report for the full migration plan.
+ */
+export async function getSnapshots(symbols: string[]): Promise<Record<string, Quote>> {
+  if (!symbols.length) return {};
+  // When the backend adds the batched endpoint, swap the body below with:
+  //   const qs = new URLSearchParams({ symbols: symbols.join(",") });
+  //   return apiFetch<Record<string, Quote>>(`/api/v1/market/snapshots?${qs}`);
+  return getSnapshot(symbols);
+}
+
+// ─── Auth token refresh scheduler (edge-cases-audit-r3 P0 #1) ─
+//
+// The backend mints an access_token with an 8-hour TTL
+// (backend/core/config.py:82). The only client-side logic for 401 is to
+// redirect to /login, which silently kicks out users who leave the tab open
+// overnight. `ensureTokenRefreshScheduled()` starts a single module-level
+// interval (idempotent: calling it twice is a no-op) that POSTs to
+// `/api/v1/auth/refresh` ~15 min before expiry.
+//
+// Caveats — read these before touching the flow:
+//   * The refresh_token cookie is HttpOnly (path=/api/v1/auth). The backend
+//     refresh handler currently requires `{"refresh_token": "…"}` in the
+//     request body, which JS cannot read from the cookie. The call below
+//     sends an empty body; it will return 422 until the backend is updated
+//     to read the refresh_token from cookies (or we store the token from
+//     /login's JSON response in memory). The scheduler infrastructure is in
+//     place regardless so the fix is one-line on the backend.
+//   * We refresh at (expiry - 15 min) so a brief outage has time to retry.
+
+const TOKEN_REFRESH_INTERVAL_MS = 7 * 60 * 60 * 1000; // 7 hours (buffer before 8-hr expiry)
+let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+export async function refreshAccessToken(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    // NOTE: backend currently expects `{ refresh_token }` body; an empty body
+    // returns 422 until the backend reads the HttpOnly cookie. Leaving the
+    // call in place so when the backend fix lands we don't need client work.
+    await apiFetch("/api/v1/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({}),
+      // Don't redirect on 401 — the scheduler manages that UX itself.
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Idempotent scheduler for silent access-token refresh.
+ * Starts a single `setInterval` at the module level; subsequent calls are
+ * no-ops. Intended to be called once on dashboard mount (e.g. from the
+ * WebSocket provider in `providers.tsx`). Safe to call on every render.
+ *
+ * Note: does NOT fire an immediate refresh — the first refresh happens
+ * `TOKEN_REFRESH_INTERVAL_MS` after the first call. Callers on a freshly
+ * logged-in session don't need one because the login flow just minted a
+ * token; callers resuming an 8-hr-idle tab will hit the 401 path in
+ * `apiFetch` on their next request, which is acceptable until the backend
+ * batched-refresh via HttpOnly cookie is implemented.
+ */
+export function ensureTokenRefreshScheduled(): void {
+  if (typeof window === "undefined") return;
+  if (tokenRefreshTimer !== null) return;
+  tokenRefreshTimer = setInterval(() => {
+    refreshAccessToken().catch(() => undefined);
+  }, TOKEN_REFRESH_INTERVAL_MS);
 }
 
 // ─── Screener ────────────────────────────────────────────────

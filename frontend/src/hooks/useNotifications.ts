@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWs } from "@/lib/providers";
 import { useNotificationsStore, type NotificationCategory } from "@/stores/notifications";
 import { shouldNotify } from "@/lib/notificationPrefs";
 
@@ -55,7 +55,10 @@ function safeSymbol(p: FillPayload | AlertPayload | PipelinePayload | null | und
 }
 
 export function useNotifications() {
-  const { subscribe, onMessage } = useWebSocket();
+  // Wave 14: was `useWebSocket()` which opened a second WebSocket connection
+  // per tab (perf-audit-r3 P0). Switched to `useWs()` so we share the single
+  // socket owned by `WebSocketProvider` in `lib/providers.tsx`.
+  const { subscribe, onMessage } = useWs();
   const addNotification = useNotificationsStore((s) => s.addNotification);
 
   // Keep a ref so listeners capture the latest pusher without re-subscribing

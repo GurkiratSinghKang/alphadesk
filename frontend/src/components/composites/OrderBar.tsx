@@ -116,7 +116,10 @@ export default function OrderBar({
           className={cn(
             "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             "font-mono text-[13px] text-ink-1000 outline-none",
-            "focus-visible:border-brand",
+            // a11y audit r3 — WCAG 2.4.7: outline-none + 1px brand border
+            // change was not a visible focus cue. Add a ring so keyboard
+            // users can see which select is focused.
+            "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
             noStrategies && "opacity-60 cursor-not-allowed"
           )}
         >
@@ -191,7 +194,9 @@ export default function OrderBar({
           className={cn(
             "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             "font-mono text-[13px] text-ink-1000 outline-none",
-            "focus-visible:border-brand"
+            // a11y audit r3 — WCAG 2.4.7: matching visible focus ring on the
+            // Type select (same treatment as the Strategy select above).
+            "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
           )}
         >
           {TYPES.map((t) => (

@@ -8,7 +8,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-localhost}
       STATUS_USER: ${STATUS_USER:-admin}
-      STATUS_PASS_HASH: ${STATUS_PASS_HASH}
+      # Must be set — bcrypt hash for the /status endpoint basic-auth.
+      STATUS_PASS_HASH: ${STATUS_PASS_HASH:?STATUS_PASS_HASH is required}
     volumes:
       - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -43,8 +44,11 @@ services:
       # Override base compose dev values — environment: takes precedence over env_file:
       ENVIRONMENT: prod
       DEBUG: "false"
-      DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:-alphadesk_dev}@timescaledb:5432/alphadesk
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Secrets MUST be set in .env.prod (or the shell env). No dev-password
+      # fallback — docker compose will refuse to start if either is missing.
+      # See audit-reports/security-audit-r3.md P0 #2.
+      DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@timescaledb:5432/alphadesk
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
     volumes:
       - /var/lib/alphadesk/pipeline_logs:/app/data/pipeline_logs
     healthcheck:
@@ -85,11 +89,11 @@ services:
     cpus: 1.5
 
   redis:
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - /var/lib/alphadesk/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--no-auth-warning", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10

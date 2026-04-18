@@ -30,6 +30,7 @@ import logging
 from datetime import datetime, date, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
+from data.calendar import USMarketCalendar
 from data.ingestion.daily_pipeline import (
     run_daily_pipeline,
     run_position_check,
@@ -37,6 +38,11 @@ from data.ingestion.daily_pipeline import (
 )
 
 logger = logging.getLogger("alphadesk.pipeline.scheduler")
+
+# Single shared instance — USMarketCalendar keeps an internal schedule cache
+# keyed on the (start, end) range passed to ``_schedule``; building it once
+# and reusing means holidays are memoised across the whole scheduler loop.
+_CAL = USMarketCalendar()
 
 # How often to reconcile the trade ledger with Alpaca (seconds).
 # 5 minutes is short enough to catch broker-side fills quickly, long enough
@@ -94,12 +100,25 @@ _should_stop = False
 
 
 def _is_market_hours() -> bool:
-    """Return True if current ET time is within US equity RTH (roughly)."""
+    """Return True if current ET time is within US equity RTH.
+
+    Holiday-aware via :class:`USMarketCalendar` — previously this was a
+    ``weekday() < 5`` check which mis-reported Christmas-on-a-Monday, MLK
+    Day, Good Friday, etc. as "market hours". Half-day closes (13:00 ET)
+    are also respected: at 15:00 ET on the day after Thanksgiving the
+    scheduler correctly sees the market as closed.
+    """
     now = datetime.now(ET)
-    if now.weekday() >= 5:
+    today = now.date()
+    if not _CAL.is_trading_day(today):
         return False
-    t = now.time()
-    return dt_time(9, 30) <= t <= dt_time(16, 0)
+    try:
+        open_utc, close_utc = _CAL.session_hours(today)
+    except ValueError:
+        return False
+    open_et = open_utc.astimezone(ET)
+    close_et = close_utc.astimezone(ET)
+    return open_et <= now < close_et
 
 
 async def _sync_ledger_with_alpaca() -> None:
@@ -170,23 +189,44 @@ async def _ledger_sync_loop() -> None:
     logger.info("Ledger→Alpaca sync loop stopped")
 
 
-def _is_weekday() -> bool:
-    return datetime.now(ET).weekday() < 5
+def _is_trading_day() -> bool:
+    """Holiday-aware replacement for the old ``_is_weekday`` check.
+
+    Uses :class:`USMarketCalendar` so that New Year's Day, MLK Day,
+    Presidents' Day, Good Friday, Memorial Day, Juneteenth, July 4th,
+    Labor Day, Thanksgiving, and Christmas all return False — even when
+    they fall on a weekday. See edge-cases-audit-r3.md P0 #4.
+    """
+    return _CAL.is_trading_day(datetime.now(ET).date())
+
+
+# Back-compat alias: other call sites may still import `_is_weekday`.
+# Redirect to the holiday-aware version so there is a single source of truth.
+_is_weekday = _is_trading_day
 
 
 def _is_last_trading_day() -> bool:
-    """Check if today is the last weekday of the month."""
+    """Check if today is the last TRADING day of the month.
+
+    Walks backwards from the last calendar day and finds the first date
+    that :class:`USMarketCalendar` agrees is a session — so end-of-month
+    rebalances correctly fire on the last *trading* day even when the
+    month ends on a holiday weekday (e.g. New Year's Eve falls on a Fri
+    where the session is already closed).
+    """
     now = datetime.now(ET)
     last_day = calendar.monthrange(now.year, now.month)[1]
     d = date(now.year, now.month, last_day)
-    # Walk backwards from last calendar day to find last weekday
-    while d.weekday() > 4:
+    # Walk backwards until we hit a real trading session.
+    while not _CAL.is_trading_day(d):
         d -= timedelta(days=1)
     return now.date() == d
 
 
 def _is_friday() -> bool:
-    return datetime.now(ET).weekday() == 4
+    """True if today is a trading Friday (skips Good Friday etc.)."""
+    now = datetime.now(ET)
+    return now.weekday() == 4 and _CAL.is_trading_day(now.date())
 
 
 def _in_window(target: dt_time, window_minutes: int = 5) -> bool:
@@ -197,6 +237,34 @@ def _in_window(target: dt_time, window_minutes: int = 5) -> bool:
     end_hour = target.hour + end_minute // 60
     end_time = dt_time(min(end_hour, 23), end_minute % 60)
     return target <= now <= end_time
+
+
+def _close_window_target(today: date) -> dt_time:
+    """Return the ET time to fire close-window strategies today.
+
+    On regular session days the window fires at 15:30 ET (30 min before
+    16:00 close). On half-days the close is 13:00 ET and the window
+    shifts to 12:30 ET so MOC entries still land before the bell rather
+    than against a market that closed two hours earlier. See
+    edge-cases-audit-r3.md A/P1 "Early-close days".
+    """
+    default = WINDOWS["close"]
+    try:
+        if not _CAL.is_trading_day(today) or not _CAL.is_early_close(today):
+            return default
+        _, close_utc = _CAL.session_hours(today)
+        close_et = close_utc.astimezone(ET)
+        # 30 minutes before the early close, same offset as the default.
+        shifted = (
+            datetime.combine(today, dt_time(close_et.hour, close_et.minute))
+            - timedelta(minutes=30)
+        ).time()
+        return shifted
+    except Exception:
+        # If anything goes sideways in calendar lookup, fall back to the
+        # hard-coded default rather than skipping the window entirely.
+        logger.warning("Could not compute early-close window for %s; using default", today)
+        return default
 
 
 async def _run_window(
@@ -272,8 +340,9 @@ async def _scheduler_loop() -> None:
             if _in_window(WINDOWS["midday"]):
                 await _run_window("midday", MIDDAY_STRATEGIES, state, cache_set)
 
-            # ── Close window (3:30 PM) — MOC strategies + position checks ──
-            if _in_window(WINDOWS["close"]):
+            # ── Close window (3:30 PM regular / 12:30 PM on half-days) ──
+            close_target = _close_window_target(datetime.now(ET).date())
+            if _in_window(close_target):
                 await _run_window("close", CLOSE_STRATEGIES, state, cache_set)
 
                 # Also run position check (stops/targets) for all strategies

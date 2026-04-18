@@ -27,9 +27,31 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from data.calendar import USMarketCalendar
+
 logger = logging.getLogger("alphadesk.realtime_scanner")
 
 ET = ZoneInfo("America/New_York")
+
+# Shared holiday-aware calendar. Ticks from the Alpaca stream are already
+# gated by ``alpaca_stream._is_market_hours``, but the pair z-score loop
+# fires Alpaca REST requests on its own 30s cadence — guard those calls
+# so we don't burn quota on Christmas. See edge-cases-audit-r3.md P0 #4.
+_CAL = USMarketCalendar()
+
+
+def _is_trading_session_now() -> bool:
+    """True if the market is currently in regular trading hours (holiday-aware)."""
+    now = datetime.now(ET)
+    if not _CAL.is_trading_day(now.date()):
+        return False
+    try:
+        open_utc, close_utc = _CAL.session_hours(now.date())
+    except ValueError:
+        return False
+    open_et = open_utc.astimezone(ET)
+    close_et = close_utc.astimezone(ET)
+    return open_et <= now < close_et
 
 _scanner_task: asyncio.Task | None = None
 _should_stop = False
@@ -174,7 +196,12 @@ async def _evaluate_tick(symbol: str, price: float, volume: int, bid: float, ask
 
 
 async def _check_pairs_zscore() -> None:
-    """Periodically check pairs z-scores (every 30s, not per-tick)."""
+    """Periodically check pairs z-scores (every 30s, not per-tick).
+
+    Skipped entirely outside regular trading hours / on US holidays —
+    the pair spread is meaningless when no trades are being printed and
+    the REST calls would just burn Alpaca quota.
+    """
     global _last_pairs_check, _pairs_setups
     now = time.monotonic()
     if now - _last_pairs_check < PAIRS_CHECK_INTERVAL:
@@ -182,6 +209,9 @@ async def _check_pairs_zscore() -> None:
     _last_pairs_check = now
 
     if not _pairs_setups:
+        return
+
+    if not _is_trading_session_now():
         return
 
     # Fetch latest prices for pair components

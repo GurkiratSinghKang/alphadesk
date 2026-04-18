@@ -5,6 +5,7 @@ import { Sun, Moon, Sunrise, X, TrendingUp, TrendingDown, Zap, BarChart3, Sparkl
 import { formatCurrency, cn } from "@/lib/utils";
 import { useMorningBrief } from "@/hooks/useQueries";
 import type { MorningBriefData } from "@/lib/api";
+import { getMarketSession } from "@/lib/marketHours";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -15,18 +16,34 @@ function getGreeting(): { text: string; icon: typeof Sun } {
   return { text: "Good evening", icon: Moon };
 }
 
+/**
+ * Status pill data for the Morning Brief header. Uses the shared
+ * `getMarketSession` helper (DST-correct, `Intl.DateTimeFormat`-based)
+ * so this component no longer owns broken `new Date(toLocaleString(...))`
+ * date arithmetic that could report the wrong day in non-US locales
+ * around midnight ET. After-hours window 16:00–20:00 ET is not
+ * distinguished from generic "post" here because the extended window
+ * runs 16:00–20:00 ET; we render it as "After Hours" for any `post`
+ * session between 16:00 and 20:00, falling back to "Closed" later.
+ */
 function getMarketStatus(): { label: string; color: string } {
-  const now = new Date();
-  const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const h = et.getHours();
-  const m = et.getMinutes();
-  const mins = h * 60 + m;
-  const day = et.getDay();
-
-  if (day === 0 || day === 6) return { label: "Closed", color: "text-muted-foreground" };
-  if (mins < 570) return { label: "Pre-Market", color: "text-ice" };       // before 9:30
-  if (mins < 960) return { label: "Market Open", color: "text-profit" };   // 9:30–16:00
-  if (mins < 1200) return { label: "After Hours", color: "text-amber" };    // 16:00–20:00
+  const session = getMarketSession();
+  if (session === "open") return { label: "Market Open", color: "text-profit" };
+  if (session === "pre") return { label: "Pre-Market", color: "text-ice" };
+  if (session === "post") {
+    // After-hours extended session is 16:00–20:00 ET; past 20:00 we're
+    // effectively closed for retail. Read ET hour via formatToParts —
+    // the same primitive `getMarketSession` uses, no date round-trip.
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date());
+    const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+    const hour = parseInt(hourStr, 10) % 24;
+    if (hour < 20) return { label: "After Hours", color: "text-amber" };
+    return { label: "Closed", color: "text-muted-foreground" };
+  }
   return { label: "Closed", color: "text-muted-foreground" };
 }
 

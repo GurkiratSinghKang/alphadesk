@@ -101,6 +101,16 @@ def _define_models() -> dict[str, Any]:
         pnl = Column(Float, nullable=True)
         status = Column(String(20), nullable=False, default="open", index=True)
         notes = Column(Text, nullable=True)
+        # ``side`` records the direction of the entry ("long" or "short"). It is
+        # nullable so legacy rows that pre-date the column keep loading; new
+        # inserts MUST supply the side from the originating order so short P&L
+        # can be computed correctly.  The first leg's ``side`` in the
+        # ``legs`` JSON is authoritative when present; this column is a denormalised
+        # projection for fast filtering and for queries that don't need to parse
+        # JSON.
+        # TODO: generate an alembic migration to add this column to production:
+        #   alembic revision --autogenerate -m "add side to trades"
+        side = Column(String(10), nullable=True, index=True)
 
         __table_args__ = (
             Index("ix_trades_strategy_status", "strategy", "status"),

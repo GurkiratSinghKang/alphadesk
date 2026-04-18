@@ -120,6 +120,12 @@ def _ensure_schema(engine: Any) -> None:
     Column set mirrors the legacy JSON record so the migration and all
     callers work unmodified.
     """
+    # NOTE: ``side`` was added so short P&L can be computed correctly in
+    # ``record_exit``. Nullable for legacy rows; defaults to 'long' on insert.
+    # Existing deployments will need ``ALTER TABLE trade_ledger ADD COLUMN
+    # side VARCHAR(8)`` — the ``ADD COLUMN IF NOT EXISTS`` statement below is
+    # idempotent and safe to rerun.  TODO: generate a dedicated alembic
+    # revision for this schema change.
     ddl = """
     CREATE TABLE IF NOT EXISTS trade_ledger (
         id            INTEGER PRIMARY KEY,
@@ -137,8 +143,10 @@ def _ensure_schema(engine: Any) -> None:
         exit_time     TIMESTAMPTZ,
         exit_reason   VARCHAR(60),
         pnl           DOUBLE PRECISION,
-        pnl_pct       DOUBLE PRECISION
+        pnl_pct       DOUBLE PRECISION,
+        side          VARCHAR(8)   DEFAULT 'long'
     );
+    ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS side VARCHAR(8) DEFAULT 'long';
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_status ON trade_ledger(status);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_symbol ON trade_ledger(symbol);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_strategy ON trade_ledger(strategy);
@@ -208,6 +216,13 @@ def _run_migration(engine: Any) -> None:
         with engine.begin() as conn:
             for t in trades:
                 try:
+                    legacy_side = str(t.get("side") or "long").lower()
+                    if legacy_side not in {"long", "short"}:
+                        legacy_side = (
+                            "short"
+                            if legacy_side in {"sell", "s"}
+                            else "long"
+                        )
                     conn.execute(
                         _text(
                             """
@@ -215,13 +230,13 @@ def _run_migration(engine: Any) -> None:
                                 id, symbol, shares, entry_price, entry_time,
                                 stop_loss, take_profit, conviction, rationale,
                                 strategy, status, exit_price, exit_time,
-                                exit_reason, pnl, pnl_pct
+                                exit_reason, pnl, pnl_pct, side
                             )
                             VALUES (
                                 :id, :symbol, :shares, :entry_price, :entry_time,
                                 :stop_loss, :take_profit, :conviction, :rationale,
                                 :strategy, :status, :exit_price, :exit_time,
-                                :exit_reason, :pnl, :pnl_pct
+                                :exit_reason, :pnl, :pnl_pct, :side
                             )
                             ON CONFLICT (id) DO NOTHING
                             """
@@ -244,6 +259,7 @@ def _run_migration(engine: Any) -> None:
                             "exit_reason": t.get("exit_reason"),
                             "pnl": t.get("pnl"),
                             "pnl_pct": t.get("pnl_pct"),
+                            "side": legacy_side,
                         },
                     )
                     inserted += 1
@@ -392,13 +408,21 @@ class TradeLedger:
         signal: dict[str, Any],
         rationale: str,
         strategy: str = "claude_alpha",
+        side: str = "long",
     ) -> dict[str, Any]:
         """Insert a new open trade and return the persisted record.
+
+        ``side`` is either ``"long"`` or ``"short"``. It governs how
+        :meth:`record_exit` computes P&L: long P&L = (exit - entry) * shares,
+        short P&L = (entry - exit) * shares. Defaults to ``"long"`` for
+        backward compatibility with callers that haven't yet been updated to
+        pass an explicit side.
 
         Raises :class:`RuntimeError` if the database is unavailable — the
         previous in-memory fallback caused per-worker divergence.
         """
         engine = self._require_engine()
+        side_norm = "short" if str(side).lower() in {"short", "sell", "s"} else "long"
         trade = {
             "id": self._next_id(),
             "symbol": symbol,
@@ -411,6 +435,7 @@ class TradeLedger:
             "rationale": rationale,
             "strategy": strategy,
             "status": "open",
+            "side": side_norm,
             "exit_price": None,
             "exit_time": None,
             "exit_reason": None,
@@ -424,18 +449,21 @@ class TradeLedger:
                     INSERT INTO trade_ledger (
                         id, symbol, shares, entry_price, entry_time,
                         stop_loss, take_profit, conviction, rationale,
-                        strategy, status
+                        strategy, status, side
                     )
                     VALUES (
                         :id, :symbol, :shares, :entry_price, :entry_time,
                         :stop_loss, :take_profit, :conviction, :rationale,
-                        :strategy, 'open'
+                        :strategy, 'open', :side
                     )
                     """
                 ),
                 trade,
             )
-        logger.info("Ledger: recorded ENTRY %s %d @ %.2f", symbol, shares, price)
+        logger.info(
+            "Ledger: recorded ENTRY %s %d @ %.2f (side=%s)",
+            symbol, shares, price, side_norm,
+        )
         return trade
 
     def update_entry_price(self, symbol: str, new_price: float) -> bool:
@@ -476,8 +504,14 @@ class TradeLedger:
         shares: int,
         price: float,
         reason: str,
+        side: str | None = None,
     ) -> dict[str, Any] | None:
         """Close the oldest open trade for ``symbol`` and return the updated row.
+
+        ``side`` overrides the side stored on the entry. When ``None`` the
+        function reads the side column from the open row (defaulting to
+        ``"long"`` for legacy rows that pre-date the column). Short P&L is
+        computed as (entry - exit) * shares; long P&L as (exit - entry) * shares.
 
         Raises :class:`RuntimeError` if DB is unavailable.
         """
@@ -487,7 +521,7 @@ class TradeLedger:
                 row = conn.execute(
                     _text(
                         """
-                        SELECT id, entry_price FROM trade_ledger
+                        SELECT id, entry_price, side FROM trade_ledger
                          WHERE symbol = :symbol AND status = 'open'
                          ORDER BY id ASC LIMIT 1
                         """
@@ -499,11 +533,27 @@ class TradeLedger:
                     return None
                 trade_id = row[0]
                 entry_price = float(row[1] or 0.0)
-                pnl = round((float(price) - entry_price) * int(shares), 2)
-                pnl_pct = (
-                    round(((float(price) - entry_price) / entry_price) * 100, 2)
-                    if entry_price else 0.0
+                stored_side = row[2] if len(row) > 2 else None
+                effective_side_raw = side if side is not None else stored_side
+                effective_side = (
+                    "short"
+                    if str(effective_side_raw or "long").lower() in {"short", "sell", "s"}
+                    else "long"
                 )
+                qty = int(shares)
+                if effective_side == "short":
+                    # Short: profit when exit < entry.
+                    pnl = round((entry_price - float(price)) * qty, 2)
+                    pnl_pct = (
+                        round(((entry_price - float(price)) / entry_price) * 100, 2)
+                        if entry_price else 0.0
+                    )
+                else:
+                    pnl = round((float(price) - entry_price) * qty, 2)
+                    pnl_pct = (
+                        round(((float(price) - entry_price) / entry_price) * 100, 2)
+                        if entry_price else 0.0
+                    )
                 conn.execute(
                     _text(
                         """
@@ -514,16 +564,18 @@ class TradeLedger:
                                exit_reason = :reason,
                                shares = :shares,
                                pnl = :pnl,
-                               pnl_pct = :pnl_pct
+                               pnl_pct = :pnl_pct,
+                               side = :side
                          WHERE id = :id
                         """
                     ),
                     {
                         "exit_price": float(price),
                         "reason": reason,
-                        "shares": int(shares),
+                        "shares": qty,
                         "pnl": pnl,
                         "pnl_pct": pnl_pct,
+                        "side": effective_side,
                         "id": trade_id,
                     },
                 )
@@ -533,8 +585,8 @@ class TradeLedger:
                 ).one()
                 result = _row_to_dict(fresh)
             logger.info(
-                "Ledger: recorded EXIT %s %d @ %.2f  P&L=%.2f (%.1f%%)",
-                symbol, shares, price, pnl, pnl_pct,
+                "Ledger: recorded EXIT %s %d @ %.2f  side=%s P&L=%.2f (%.1f%%)",
+                symbol, shares, price, effective_side, pnl, pnl_pct,
             )
             return result
         except Exception as exc:
@@ -559,6 +611,8 @@ class TradeLedger:
         trade.setdefault(
             "entry_time", datetime.now(timezone.utc).isoformat()
         )
+        raw_side = str(trade.get("side") or "long").lower()
+        trade["side"] = "short" if raw_side in {"short", "sell", "s"} else "long"
         with engine.begin() as conn:
             conn.execute(
                 _text(
@@ -567,13 +621,13 @@ class TradeLedger:
                         id, symbol, shares, entry_price, entry_time,
                         stop_loss, take_profit, conviction, rationale,
                         strategy, status, exit_price, exit_time,
-                        exit_reason, pnl, pnl_pct
+                        exit_reason, pnl, pnl_pct, side
                     )
                     VALUES (
                         :id, :symbol, :shares, :entry_price, :entry_time,
                         :stop_loss, :take_profit, :conviction, :rationale,
                         :strategy, :status, :exit_price, :exit_time,
-                        :exit_reason, :pnl, :pnl_pct
+                        :exit_reason, :pnl, :pnl_pct, :side
                     )
                     """
                 ),
@@ -594,6 +648,7 @@ class TradeLedger:
                     "exit_reason": trade.get("exit_reason"),
                     "pnl": trade.get("pnl"),
                     "pnl_pct": trade.get("pnl_pct"),
+                    "side": trade.get("side"),
                 },
             )
         return trade["id"]
@@ -609,6 +664,7 @@ class TradeLedger:
             "symbol", "shares", "entry_price", "entry_time", "stop_loss",
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
+            "side",
         }
         patch = {k: v for k, v in patch.items() if k in allowed}
         if not patch:
@@ -642,6 +698,7 @@ class TradeLedger:
             "id", "symbol", "shares", "entry_price", "entry_time", "stop_loss",
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
+            "side",
         }
         bad = [k for k in filter if k not in allowed]
         if bad:
@@ -714,7 +771,12 @@ class TradeLedger:
                 "best_trade": None,
                 "worst_trade": None,
             }
+        # Classify: wins > 0, losses < 0, scratches == 0. Scratches are
+        # excluded from the win_rate denominator per the audit: break-even
+        # trades are neither wins nor losses.
         wins = [t for t in closed if (t.get("pnl") or 0) > 0]
+        losses = [t for t in closed if (t.get("pnl") or 0) < 0]
+        decided = len(wins) + len(losses)
         total_pnl = sum(t.get("pnl") or 0 for t in closed)
         pnl_pcts = [t.get("pnl_pct") or 0 for t in closed]
         best = max(closed, key=lambda t: t.get("pnl") or 0)
@@ -723,7 +785,7 @@ class TradeLedger:
             "total_trades": len(closed),
             "open_positions": len(self.get_open_positions()),
             "total_pnl": round(total_pnl, 2),
-            "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0.0,
+            "win_rate": round(len(wins) / decided * 100, 1) if decided else 0.0,
             "avg_pnl_pct": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0.0,
             "best_trade": {
                 "symbol": best["symbol"],
@@ -946,6 +1008,7 @@ class TradeLedger:
                     "closed_trades": 0,
                     "wins": 0,
                     "losses": 0,
+                    "scratches": 0,
                     "total_pnl": 0.0,
                     "total_invested": 0.0,
                     "best_trade_pnl": 0.0,
@@ -961,15 +1024,19 @@ class TradeLedger:
                 p["closed_trades"] += 1
                 pnl = trade.get("pnl", 0) or 0
                 p["total_pnl"] += pnl
+                # Classify pnl strictly: wins > 0, losses < 0, scratches == 0.
+                # Break-even trades must not be counted as losses.
                 if pnl > 0:
                     p["wins"] += 1
-                else:
+                elif pnl < 0:
                     p["losses"] += 1
+                else:
+                    p["scratches"] += 1
                 p["best_trade_pnl"] = max(p["best_trade_pnl"], pnl)
                 p["worst_trade_pnl"] = min(p["worst_trade_pnl"], pnl)
         for p in perf.values():
-            closed = p["closed_trades"]
-            p["win_rate"] = round(p["wins"] / closed * 100, 1) if closed > 0 else 0.0
+            decided = p["wins"] + p["losses"]
+            p["win_rate"] = round(p["wins"] / decided * 100, 1) if decided > 0 else 0.0
             p["total_pnl"] = round(p["total_pnl"], 2)
             p["return_pct"] = round(
                 (p["total_pnl"] / p["total_invested"] * 100) if p["total_invested"] > 0 else 0, 2

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { searchSymbols } from "@/lib/api";
 import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
 import { useToast } from "@/hooks/useToast";
@@ -243,6 +243,13 @@ export function CommandPalette() {
         data-testid="command-palette"
         className="overflow-hidden p-0 max-w-xl bg-[var(--surface)] border-border shadow-2xl [&>button]:hidden"
       >
+        {/* a11y audit r3 — WCAG 4.1.2 / 2.4.6: Dialog needs an accessible name.
+            The command palette is visually headerless, so use sr-only title +
+            description so SR users hear "Command Palette" instead of "dialog". */}
+        <DialogTitle className="sr-only">Command Palette</DialogTitle>
+        <DialogDescription className="sr-only">
+          Quick navigation and actions
+        </DialogDescription>
         <Command
           className="bg-transparent"
           loop
