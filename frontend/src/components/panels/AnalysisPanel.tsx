@@ -189,6 +189,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
   const rawScore = analysis?.technicalScore;
   const isPlaceholderScore = rawScore == null;
   const score = rawScore ?? 50;
+  const tech = analysis?.technicals;
   // Derive key levels from the actual quote price
   const currentPrice = quote?.last ?? quote?.close ?? 0;
   const step = currentPrice * 0.03; // ~3% increments for S/R levels
@@ -199,17 +200,43 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     { label: "Support 1", price: Math.round((currentPrice - step) * 100) / 100 },
     { label: "Support 2", price: Math.round((currentPrice - step * 2) * 100) / 100 },
   ] : [];
-  // Generate deterministic indicators based on score
-  const bullish = score >= 60;
-  const bearish = score < 40;
-  const indicators: { name: string; value: string; signal: "bullish" | "bearish" | "neutral" }[] = [
-    { name: "RSI (14)", value: (40 + score * 0.3).toFixed(1), signal: score > 65 ? "bullish" : score < 35 ? "bearish" : "neutral" },
-    { name: "MACD", value: bullish ? "Bullish Cross" : bearish ? "Bearish Cross" : "Converging", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
-    { name: "EMA 20/50", value: bullish ? "Above" : bearish ? "Below" : "Flat", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
-    { name: "BB Width", value: "Normal", signal: "neutral" },
-    { name: "ADX", value: (20 + score * 0.15).toFixed(1), signal: score > 50 ? "bullish" : "neutral" },
-    { name: "OBV", value: bullish ? "Rising" : bearish ? "Falling" : "Flat", signal: bullish ? "bullish" : bearish ? "bearish" : "neutral" },
+  // Real technicals from the backend — no scalar-score derivation.
+  // Absent fields render as em-dash with a "waiting" subtitle below.
+  const dash = "\u2014";
+  const trendSignal: "bullish" | "bearish" | "neutral" = tech?.trend ?? "neutral";
+  const macdSignal: "bullish" | "bearish" | "neutral" = tech?.macd_signal ?? "neutral";
+  const emaLabel = (() => {
+    if (tech?.ema_20 == null) return null;
+    if (tech?.ema_50 == null) return `$${tech.ema_20.toFixed(2)}`;
+    return tech.ema_20 > tech.ema_50 ? "Above" : tech.ema_20 < tech.ema_50 ? "Below" : "Flat";
+  })();
+  const emaSignal: "bullish" | "bearish" | "neutral" =
+    emaLabel === "Above" ? "bullish" : emaLabel === "Below" ? "bearish" : "neutral";
+  const volumeLabel = (() => {
+    if (tech?.volume_trend == null) return null;
+    if (tech.volume_trend === "above_average") return "Rising";
+    if (tech.volume_trend === "below_average") return "Falling";
+    return "Flat";
+  })();
+  const volumeSignal: "bullish" | "bearish" | "neutral" =
+    volumeLabel === "Rising" ? "bullish" : volumeLabel === "Falling" ? "bearish" : "neutral";
+  const rsiSignal: "bullish" | "bearish" | "neutral" =
+    tech?.rsi_14 == null
+      ? "neutral"
+      : tech.rsi_14 < 30
+      ? "bullish"
+      : tech.rsi_14 > 70
+      ? "bearish"
+      : "neutral";
+  const indicators: { name: string; value: string; signal: "bullish" | "bearish" | "neutral"; missing?: boolean }[] = [
+    { name: "RSI (14)", value: tech?.rsi_14 != null ? tech.rsi_14.toFixed(1) : dash, signal: rsiSignal, missing: tech?.rsi_14 == null },
+    { name: "MACD", value: tech?.macd_signal ? (macdSignal === "bullish" ? "Bullish" : macdSignal === "bearish" ? "Bearish" : "Neutral") : dash, signal: macdSignal, missing: tech?.macd_signal == null },
+    { name: "EMA 20/50", value: emaLabel ?? dash, signal: emaSignal, missing: emaLabel == null },
+    { name: "Trend", value: tech?.trend ? (trendSignal.charAt(0).toUpperCase() + trendSignal.slice(1)) : dash, signal: trendSignal, missing: tech?.trend == null },
+    { name: "Volume", value: volumeLabel ?? dash, signal: volumeSignal, missing: volumeLabel == null },
+    { name: "ATR (14)", value: tech?.atr_14 != null ? `$${tech.atr_14.toFixed(2)}` : dash, signal: "neutral" as const, missing: tech?.atr_14 == null },
   ];
+  const anyMissing = indicators.some((i) => i.missing);
 
   if (loading) {
     return (
@@ -334,8 +361,10 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             >
               <span className="text-muted-foreground">{ind.name}</span>
               <div className="flex items-center gap-1.5">
-                <span className="text-foreground">{ind.value}</span>
-                {ind.signal === "bullish" ? (
+                <span className={cn("text-foreground tabular-nums", ind.missing && "text-muted-foreground/50")}>
+                  {ind.value}
+                </span>
+                {ind.missing ? null : ind.signal === "bullish" ? (
                   <TrendingUp className="h-3 w-3 text-[var(--profit)]" />
                 ) : ind.signal === "bearish" ? (
                   <TrendingDown className="h-3 w-3 text-[var(--loss)]" />
@@ -346,6 +375,11 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             </div>
           ))}
         </div>
+        {anyMissing && (
+          <p className="mt-2 px-2 font-display italic text-[11px] text-muted-foreground">
+            Waiting for live technicals.
+          </p>
+        )}
       </div>
     </div>
   );

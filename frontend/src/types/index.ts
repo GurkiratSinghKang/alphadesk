@@ -105,9 +105,14 @@ export interface OptionsContract {
   oi: number;
   iv: number;
   delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
+  /**
+   * Greeks from the live chain. Nullable — when the data provider does not
+   * emit a greek for a contract we carry `null` through. Callers must render
+   * an em-dash rather than a hardcoded constant (audit P0-5).
+   */
+  gamma: number | null;
+  theta: number | null;
+  vega: number | null;
 }
 
 export interface OptionsChain {
@@ -128,6 +133,25 @@ export interface Signal {
   strength: number;
 }
 
+/**
+ * Live technical indicators returned by the backend analysis pipeline
+ * (`backend/api/routes/analysis.py::_compute_technicals`). Any field may be
+ * missing when the symbol has insufficient bar history — callers must render
+ * an em-dash rather than substituting a derivation.
+ */
+export interface AnalysisTechnicals {
+  rsi_14?: number | null;
+  ema_20?: number | null;
+  ema_50?: number | null;
+  atr_14?: number | null;
+  support?: number | null;
+  resistance?: number | null;
+  trend?: "bullish" | "bearish" | "neutral" | null;
+  macd_signal?: "bullish" | "bearish" | "neutral" | null;
+  volume_ratio?: number | null;
+  volume_trend?: "above_average" | "below_average" | "average" | null;
+}
+
 export interface Analysis {
   symbol: string;
   technicalScore: number;
@@ -136,6 +160,8 @@ export interface Analysis {
   composite: number;
   summary: string;
   signals: Signal[];
+  /** Live technicals from `_compute_technicals`. Optional — may be absent. */
+  technicals?: AnalysisTechnicals;
 }
 
 // ─── Screener ─────────────────────────────────────────────────

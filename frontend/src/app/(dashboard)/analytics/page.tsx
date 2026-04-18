@@ -337,7 +337,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                       {val !== undefined ? (
                         <span
                           className="inline-block w-full rounded px-1 py-0.5 tabular-nums font-medium"
-                          style={{ backgroundColor: cellColor(val), color: Math.abs(val) > maxAbs * 0.3 ? "#fff" : "var(--foreground)" }}
+                          style={{ backgroundColor: cellColor(val), color: Math.abs(val) > maxAbs * 0.3 ? "var(--ink-1000)" : "var(--fg)" }}
                         >
                           {(val ?? 0) >= 0 ? "+" : ""}{(val ?? 0).toFixed(1)}%
                         </span>

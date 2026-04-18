@@ -2,73 +2,50 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { EconomicCalendar } from '@/components/dashboard/EconomicCalendar';
 
+/**
+ * After audit P0-6 landed, EconomicCalendar no longer fabricates forecast or
+ * previous values. It renders an honest editorial empty state listing the
+ * cadence of recurring events. These tests cover the shape of that state.
+ */
+
 describe('EconomicCalendar', () => {
   it('renders the header', () => {
     render(<EconomicCalendar />);
     expect(screen.getByText('Economic Calendar')).toBeDefined();
   });
 
-  it('shows Economic Calendar header', () => {
-    render(<EconomicCalendar />);
-    expect(screen.getByText('Economic Calendar')).toBeDefined();
-  });
-
-  it('renders events with impact badges', () => {
+  it('explains that the calendar is not configured', () => {
     const { container } = render(<EconomicCalendar />);
     const text = container.textContent ?? '';
-    const hasImpact =
-      text.toLowerCase().includes('high') ||
-      text.toLowerCase().includes('medium') ||
-      text.toLowerCase().includes('low');
-    expect(hasImpact).toBe(true);
+    expect(text.toLowerCase()).toContain('not configured');
   });
 
-  it('renders at least one calendar event row', () => {
-    const { container } = render(<EconomicCalendar />);
-    // Each event is in a div with px-4 py-2 flex items-center gap-3
-    const eventDivs = container.querySelectorAll('.divide-y > div');
-    expect(eventDivs.length).toBeGreaterThan(0);
-  });
-
-  it('renders event names from the template list', () => {
+  it('lists the recurring event names it tracks', () => {
     const { container } = render(<EconomicCalendar />);
     const text = container.textContent ?? '';
-    // At least one known event name should appear
     const knownEvents = [
-      'FOMC Meeting Minutes',
+      'FOMC Rate Decision',
       'Non-Farm Payrolls',
       'CPI',
-      'Jobless Claims',
-      'Retail Sales',
-      'Consumer Confidence',
-      'PMI',
       'GDP',
       'PCE',
-      'Housing Starts',
+      'Initial Jobless Claims',
     ];
-    const found = knownEvents.some((name) => text.includes(name));
-    expect(found).toBe(true);
+    const foundCount = knownEvents.filter((name) => text.includes(name)).length;
+    // Expect at least three of the recurring events surfaced.
+    expect(foundCount).toBeGreaterThanOrEqual(3);
   });
 
-  it('renders forecast and previous data for applicable events', () => {
+  it('does not invent forecast or previous numbers', () => {
     const { container } = render(<EconomicCalendar />);
     const text = container.textContent ?? '';
-    // Some events have forecast/previous data
-    const hasForecastOrPrev = text.includes('Fcst:') || text.includes('Prev:');
-    expect(hasForecastOrPrev).toBe(true);
+    expect(text).not.toMatch(/Fcst:/);
+    expect(text).not.toMatch(/Prev:/);
   });
 
-  it('renders impact dot indicators', () => {
-    const { container } = render(<EconomicCalendar />);
-    // Impact dots are spans with rounded-full class
-    const dots = container.querySelectorAll('span.rounded-full');
-    expect(dots.length).toBeGreaterThan(0);
-  });
-
-  it('renders date and time information for events', () => {
+  it('surfaces a notice prompting an API connection', () => {
     const { container } = render(<EconomicCalendar />);
     const text = container.textContent ?? '';
-    // Times follow AM/PM pattern
-    expect(text).toMatch(/\d+:\d{2} [AP]M/);
+    expect(text.toLowerCase()).toContain('connect an economic calendar api');
   });
 });

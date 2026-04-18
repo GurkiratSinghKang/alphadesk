@@ -63,17 +63,32 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          FRONTEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-frontend:${{ github.sha }}
+          BACKEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: deploy
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_TOKEN,GHCR_USER,FRONTEND_IMAGE,BACKEND_IMAGE
           script: |
+            set -e
             cd /opt/alphadesk
-            export FRONTEND_IMAGE=ghcr.io/${{ steps.repo.outputs.name }}-frontend:${{ github.sha }}
-            export BACKEND_IMAGE=ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
+            # Authenticate to GHCR with the ephemeral job token so the
+            # VPS can pull the images built seconds earlier in this run.
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Load non-compose secrets from .env.prod so compose can
+            # interpolate them (REDIS_PASSWORD, STATUS_PASS_HASH, etc.).
+            set -a
+            . ./.env.prod
+            set +a
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml pull frontend backend
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d
-            sleep 10
+            sleep 15
             curl -sf http://localhost:8000/health || (echo "Health check failed!" && exit 1)
+            # Tidy up old images without touching anything younger than 24h.
             docker system prune -f --filter "until=24h"
-            echo "Deploy successful: ${{ github.sha }}"
+            docker logout ghcr.io
+            echo "Deploy successful: ${FRONTEND_IMAGE} + ${BACKEND_IMAGE}"

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { Plus, X, TrendingUp, TrendingDown, Minus, MoreHorizontal, ChevronUp, ChevronDown, Save, ShoppingCart, Settings } from "lucide-react";
+import Link from "next/link";
+import { Plus, X, TrendingUp, TrendingDown, MoreHorizontal, ChevronUp, ChevronDown, Save, ShoppingCart, Settings } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -764,41 +765,21 @@ function ScreenerTab() {
 // ─── Signals tab content ──────────────────────────────────────
 
 function SignalsTab() {
-  const { setSelectedSymbol } = useMarketStore();
-
-  const signals = [
-    { symbol: "NVDA", signal: "Golden Cross", type: "bullish" as const, ago: "1h ago" },
-    { symbol: "AAPL", signal: "RSI Oversold", type: "bullish" as const, ago: "2h ago" },
-    { symbol: "TSLA", signal: "Death Cross", type: "bearish" as const, ago: "4h ago" },
-    { symbol: "META", signal: "MACD Crossover", type: "bullish" as const, ago: "6h ago" },
-    { symbol: "AMD", signal: "Volume Spike", type: "neutral" as const, ago: "1d ago" },
-  ];
-
+  // Honest empty state — there is no live signals endpoint wired to the
+  // watchlist today. Previously this tab shipped a hardcoded demo array
+  // ("NVDA Golden Cross, 1h ago") that could easily be mistaken for real
+  // detected signals. See audit-reports/01-frontend.md [P0-3].
   return (
-    <div className="p-2 space-y-1">
-      {signals.map((s, i) => (
-        <div
-          key={i}
-          role="button"
-          tabIndex={0}
-          onClick={() => setSelectedSymbol(s.symbol)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setSelectedSymbol(s.symbol);
-          }}
-          className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer opacity-40"
-        >
-          {s.type === "bullish" ? (
-            <TrendingUp className="h-3.5 w-3.5 text-[var(--profit)]" />
-          ) : s.type === "bearish" ? (
-            <TrendingDown className="h-3.5 w-3.5 text-[var(--loss)]" />
-          ) : (
-            <Minus className="h-3.5 w-3.5 text-[var(--neutral)]" />
-          )}
-          <span className="font-medium text-foreground">{s.symbol}</span>
-          <span className="text-muted-foreground flex-1">{s.signal}</span>
-          <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">{s.ago}</span>
-        </div>
-      ))}
+    <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+      <p className="font-display italic text-[13.5px] text-muted-foreground">
+        No live signals.
+      </p>
+      <Link
+        href="/alerts"
+        className="font-sans text-[11px] uppercase tracking-[0.18em] text-brand transition-colors hover:text-gold-300"
+      >
+        Configure alerts
+      </Link>
     </div>
   );
 }

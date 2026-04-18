@@ -10,7 +10,7 @@ import { HelpCircle } from "@/components/ui/HelpCircle";
 import { cn, formatNumber, formatGreek } from "@/lib/utils";
 import { useOptionsChain, useIVData } from "@/hooks/useQueries";
 
-// ─── Generate demo options chain ─────────────────────────────
+// ─── Options chain row shape ────────────────────────────────
 
 interface ChainRow {
   strike: number;
@@ -22,6 +22,9 @@ interface ChainRow {
     oi: number;
     iv: number;
     delta: number;
+    gamma?: number | null;
+    theta?: number | null;
+    vega?: number | null;
   };
   put: {
     last: number;
@@ -31,65 +34,10 @@ interface ChainRow {
     oi: number;
     iv: number;
     delta: number;
+    gamma?: number | null;
+    theta?: number | null;
+    vega?: number | null;
   };
-}
-
-function generateChain(spotPrice: number, _expiry: string): ChainRow[] {
-  const strikes: ChainRow[] = [];
-  const baseStrike = Math.round(spotPrice / 5) * 5;
-
-  // Use expiry as seed to generate different data per expiry
-  let seed = 0;
-  for (let c = 0; c < _expiry.length; c++) seed += _expiry.charCodeAt(c);
-  const rng = () => {
-    seed = (seed * 16807 + 0) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-
-  for (let i = -8; i <= 8; i++) {
-    const strike = baseStrike + i * 5;
-    const moneyness = (spotPrice - strike) / spotPrice;
-
-    const callITM = strike < spotPrice;
-    const callIntrinsic = callITM ? spotPrice - strike : 0;
-    const callIV = 0.22 + Math.abs(moneyness) * 0.3 + rng() * 0.05;
-    const callTimeValue = spotPrice * callIV * 0.08 * Math.exp(-Math.abs(moneyness) * 3);
-    const callPrice = callIntrinsic + callTimeValue;
-    const callDelta = callITM ? 0.5 + moneyness * 2.5 : Math.max(0.02, 0.5 + moneyness * 2.5);
-
-    const putITM = strike > spotPrice;
-    const putIntrinsic = putITM ? strike - spotPrice : 0;
-    const putIV = 0.23 + Math.abs(moneyness) * 0.3 + rng() * 0.05;
-    const putTimeValue = spotPrice * putIV * 0.08 * Math.exp(-Math.abs(moneyness) * 3);
-    const putPrice = putIntrinsic + putTimeValue;
-    const putDelta = -(1 - Math.min(0.98, Math.max(0.02, callDelta)));
-
-    const spread = Math.max(0.01, callPrice * 0.03);
-
-    strikes.push({
-      strike,
-      call: {
-        last: Math.max(0.01, callPrice),
-        bid: Math.max(0.01, callPrice - spread),
-        ask: callPrice + spread,
-        vol: Math.floor(100 + rng() * 5000),
-        oi: Math.floor(500 + rng() * 20000),
-        iv: callIV * 100,
-        delta: Math.min(0.99, Math.max(0.01, callDelta)),
-      },
-      put: {
-        last: Math.max(0.01, putPrice),
-        bid: Math.max(0.01, putPrice - spread),
-        ask: putPrice + spread,
-        vol: Math.floor(80 + rng() * 4000),
-        oi: Math.floor(400 + rng() * 15000),
-        iv: putIV * 100,
-        delta: Math.max(-0.99, Math.min(-0.01, putDelta)),
-      },
-    });
-  }
-
-  return strikes;
 }
 
 // ─── Expiration dates ────────────────────────────────────────
@@ -198,13 +146,13 @@ export function OptionsPanel() {
     return keys;
   }, [selectedStrikes]);
 
-  // BUG #28/#33: Derive spotPrice from market store with fallback
+  // Spot price from the market store — when the quote hasn't arrived yet we
+  // render an honest empty state rather than substituting a ticker-specific
+  // placeholder (was: `SPY === 590, AAPL === 230, fallback 175`).
   const quoteData = quotes[selectedSymbol];
-  const spotPrice =
-    quoteData?.last ??
-    (selectedSymbol === "SPY" ? 590 : selectedSymbol === "AAPL" ? 230 : 175);
+  const spotPrice = quoteData?.last ?? null;
 
-  // Fetch real options chain via React Query, fall back to generated
+  // Fetch real options chain via React Query — no RNG fallback.
   const { data: chainData, isLoading: chainLoading } = useOptionsChain(selectedSymbol, selectedExpiry);
 
   const apiChain = useMemo(() => {
@@ -217,6 +165,9 @@ export function OptionsPanel() {
       existing.call = {
         last: c.last, bid: c.bid, ask: c.ask,
         vol: c.volume, oi: c.oi, iv: c.iv * 100, delta: c.delta,
+        gamma: typeof c.gamma === "number" ? c.gamma : null,
+        theta: typeof c.theta === "number" ? c.theta : null,
+        vega: typeof c.vega === "number" ? c.vega : null,
       };
       strikeMap.set(c.strike, existing);
     }
@@ -226,6 +177,9 @@ export function OptionsPanel() {
       existing.put = {
         last: p.last, bid: p.bid, ask: p.ask,
         vol: p.volume, oi: p.oi, iv: p.iv * 100, delta: p.delta,
+        gamma: typeof p.gamma === "number" ? p.gamma : null,
+        theta: typeof p.theta === "number" ? p.theta : null,
+        vega: typeof p.vega === "number" ? p.vega : null,
       };
       strikeMap.set(p.strike, existing);
     }
@@ -235,13 +189,8 @@ export function OptionsPanel() {
     return rows.length ? rows : null;
   }, [chainData]);
 
-  // BUG #23: chain depends on selectedExpiry
-  const generatedChain = useMemo(
-    () => generateChain(spotPrice, selectedExpiry),
-    [spotPrice, selectedExpiry]
-  );
-  const chain = apiChain ?? generatedChain;
-  const usingGeneratedChain = apiChain === null && !chainLoading;
+  const chain = apiChain;
+  const chainEmpty = !chainLoading && (!apiChain || apiChain.length === 0);
 
   // HIGH-2: Auto-scroll to ATM strike when chain data changes
   useEffect(() => {
@@ -257,7 +206,7 @@ export function OptionsPanel() {
 
   // Compute expected move from IV if available; derive DTE from selected expiry
   const expectedMove = useMemo(() => {
-    if (currentIV == null || !selectedExpiry) return null;
+    if (currentIV == null || spotPrice == null || !selectedExpiry) return null;
     const expiryDate = new Date(selectedExpiry + "T00:00:00");
     const dte = Math.max(1, Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
     return currentIV * spotPrice * Math.sqrt(dte / 365);
@@ -271,6 +220,9 @@ export function OptionsPanel() {
       expiry: selectedExpiry,
       price: row.call.last,
       delta: row.call.delta,
+      gamma: row.call.gamma ?? null,
+      theta: row.call.theta ?? null,
+      vega: row.call.vega ?? null,
     });
   };
 
@@ -282,6 +234,9 @@ export function OptionsPanel() {
       expiry: selectedExpiry,
       price: row.put.last,
       delta: Math.abs(row.put.delta),
+      gamma: row.put.gamma ?? null,
+      theta: row.put.theta ?? null,
+      vega: row.put.vega ?? null,
     });
   };
 
@@ -349,169 +304,168 @@ export function OptionsPanel() {
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching options chain...
         </div>
       )}
-      <ScrollArea className={cn("flex-1 overflow-auto", usingGeneratedChain && "opacity-40")}>
-        <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
-          <thead className="sticky top-0 z-10 bg-[#14141e]">
-            <tr className="border-b border-border">
-              {colHeaders.map((h) => (
-                <th
-                  scope="col"
-                  key={`c-${h}`}
-                  className="px-1.5 py-1 text-right font-medium text-[var(--profit)]/70 whitespace-nowrap"
-                >
-                  <span className="sr-only">Call </span>{h}
+      {chainEmpty ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-12 text-center">
+          <p className="font-display italic text-[14px] text-muted-foreground">
+            Options data not available for {selectedSymbol}.
+          </p>
+          <p className="font-sans text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground/70">
+            No invented quotes are shown.
+          </p>
+        </div>
+      ) : chain == null ? null : (
+        <ScrollArea className="flex-1 overflow-auto">
+          <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
+            <thead className="sticky top-0 z-10 bg-[#14141e]">
+              <tr className="border-b border-border">
+                {colHeaders.map((h) => (
+                  <th
+                    scope="col"
+                    key={`c-${h}`}
+                    className="px-1.5 py-1 text-right font-medium text-[var(--profit)]/70 whitespace-nowrap"
+                  >
+                    <span className="sr-only">Call </span>{h}
+                  </th>
+                ))}
+                <th scope="col" className="px-2 py-1 text-center font-bold text-foreground bg-background/30 border-x border-border">
+                  Strike
                 </th>
-              ))}
-              <th scope="col" className="px-2 py-1 text-center font-bold text-foreground bg-background/30 border-x border-border">
-                Strike
-              </th>
-              {colHeaders.map((h) => (
-                <th
-                  scope="col"
-                  key={`p-${h}`}
-                  className="px-1.5 py-1 text-right font-medium text-[var(--loss)]/70 whitespace-nowrap"
-                >
-                  <span className="sr-only">Put </span>{h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {chain.map((row) => {
-              const callITM = row.strike < spotPrice;
-              const putITM = row.strike > spotPrice;
-              const closestStrike = chain.reduce((best, r) =>
-                Math.abs(r.strike - spotPrice) < Math.abs(best.strike - spotPrice) ? r : best
-              );
-              const atm = row.strike === closestStrike.strike;
-              // Deep OTM strikes (>15% from spot) have meaningless generated prices
-              const pctFromSpot = Math.abs(row.strike - spotPrice) / spotPrice;
-              const callDeepOTM = !callITM && pctFromSpot > 0.15 && usingGeneratedChain;
-              const putDeepOTM = !putITM && pctFromSpot > 0.15 && usingGeneratedChain;
-              const callKey = `call-${row.strike}`;
-              const putKey = `put-${row.strike}`;
-              const callSelected = selectedKeys.has(callKey);
-              const putSelected = selectedKeys.has(putKey);
+                {colHeaders.map((h) => (
+                  <th
+                    scope="col"
+                    key={`p-${h}`}
+                    className="px-1.5 py-1 text-right font-medium text-[var(--loss)]/70 whitespace-nowrap"
+                  >
+                    <span className="sr-only">Put </span>{h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {chain.map((row) => {
+                // Spot may be unavailable — fall back to the median strike for layout cues only.
+                const spotRef = spotPrice ?? chain[Math.floor(chain.length / 2)].strike;
+                const callITM = row.strike < spotRef;
+                const putITM = row.strike > spotRef;
+                const closestStrike = chain.reduce((best, r) =>
+                  Math.abs(r.strike - spotRef) < Math.abs(best.strike - spotRef) ? r : best
+                );
+                const atm = row.strike === closestStrike.strike;
+                const callKey = `call-${row.strike}`;
+                const putKey = `put-${row.strike}`;
+                const callSelected = selectedKeys.has(callKey);
+                const putSelected = selectedKeys.has(putKey);
 
-              return (
-                <tr
-                  key={row.strike}
-                  aria-current={atm ? "true" : undefined}
-                  className={cn(
-                    "border-b border-border/50 hover:bg-accent/30 transition-colors",
-                    atm && "bg-primary/15"
-                  )}
-                >
-                  {/* Calls — BUG #21: last cell clickable */}
-                  <Cell
-                    value={row.call.last}
-                    displayDash={callDeepOTM}
+                return (
+                  <tr
+                    key={row.strike}
+                    aria-current={atm ? "true" : undefined}
                     className={cn(
-                      "cursor-pointer",
-                      callITM && "bg-[var(--profit)]/5",
-                      callSelected && "bg-primary/20 text-primary"
-                    )}
-                    onClick={callDeepOTM ? undefined : () => handleCallClick(row)}
-                  />
-                  <Cell
-                    value={row.call.bid}
-                    displayDash={callDeepOTM}
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.call.ask}
-                    displayDash={callDeepOTM}
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.call.vol}
-                    format="number"
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.call.oi}
-                    format="number"
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.call.iv}
-                    format="pct"
-                    displayDash={callDeepOTM}
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.call.delta}
-                    format="greek"
-                    displayDash={callDeepOTM}
-                    className={callITM ? "bg-[var(--profit)]/5" : ""}
-                  />
-
-                  {/* Strike — BUG #22/#24: no dual-toggle, just display */}
-                  <td
-                    className={cn(
-                      "px-2 py-1 text-center font-bold tabular-nums border-x border-border bg-background/30",
-                      atm ? "text-primary" : "text-foreground"
+                      "border-b border-border/50 hover:bg-accent/30 transition-colors",
+                      atm && "bg-primary/15"
                     )}
                   >
-                    {(row.strike ?? 0).toFixed(0)}
-                  </td>
+                    {/* Calls — last cell clickable */}
+                    <Cell
+                      value={row.call.last}
+                      className={cn(
+                        "cursor-pointer",
+                        callITM && "bg-[var(--profit)]/5",
+                        callSelected && "bg-primary/20 text-primary"
+                      )}
+                      onClick={() => handleCallClick(row)}
+                    />
+                    <Cell
+                      value={row.call.bid}
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.call.ask}
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.call.vol}
+                      format="number"
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.call.oi}
+                      format="number"
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.call.iv}
+                      format="pct"
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.call.delta}
+                      format="greek"
+                      className={callITM ? "bg-[var(--profit)]/5" : ""}
+                    />
 
-                  {/* Puts — BUG #21: last cell clickable */}
-                  <Cell
-                    value={row.put.last}
-                    displayDash={putDeepOTM}
-                    className={cn(
-                      "cursor-pointer",
-                      putITM && "bg-[var(--loss)]/5",
-                      putSelected && "bg-primary/20 text-primary",
-                      !putSelected && row.put.last <= 0.01 && "text-muted-foreground/50"
-                    )}
-                    onClick={putDeepOTM ? undefined : () => handlePutClick(row)}
-                  />
-                  <Cell
-                    value={row.put.bid}
-                    displayDash={putDeepOTM}
-                    className={cn(
-                      putITM ? "bg-[var(--loss)]/5" : "",
-                      row.put.bid <= 0.01 && "text-muted-foreground/50"
-                    )}
-                  />
-                  <Cell
-                    value={row.put.ask}
-                    displayDash={putDeepOTM}
-                    className={cn(
-                      putITM ? "bg-[var(--loss)]/5" : "",
-                      row.put.ask <= 0.01 && "text-muted-foreground/50"
-                    )}
-                  />
-                  <Cell
-                    value={row.put.vol}
-                    format="number"
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.put.oi}
-                    format="number"
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.put.iv}
-                    format="pct"
-                    displayDash={putDeepOTM}
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
-                  />
-                  <Cell
-                    value={row.put.delta}
-                    format="greek"
-                    displayDash={putDeepOTM}
-                    className={putITM ? "bg-[var(--loss)]/5" : ""}
-                  />
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </ScrollArea>
+                    {/* Strike */}
+                    <td
+                      className={cn(
+                        "px-2 py-1 text-center font-bold tabular-nums border-x border-border bg-background/30",
+                        atm ? "text-primary" : "text-foreground"
+                      )}
+                    >
+                      {(row.strike ?? 0).toFixed(0)}
+                    </td>
+
+                    {/* Puts — last cell clickable */}
+                    <Cell
+                      value={row.put.last}
+                      className={cn(
+                        "cursor-pointer",
+                        putITM && "bg-[var(--loss)]/5",
+                        putSelected && "bg-primary/20 text-primary",
+                        !putSelected && row.put.last <= 0.01 && "text-muted-foreground/50"
+                      )}
+                      onClick={() => handlePutClick(row)}
+                    />
+                    <Cell
+                      value={row.put.bid}
+                      className={cn(
+                        putITM ? "bg-[var(--loss)]/5" : "",
+                        row.put.bid <= 0.01 && "text-muted-foreground/50"
+                      )}
+                    />
+                    <Cell
+                      value={row.put.ask}
+                      className={cn(
+                        putITM ? "bg-[var(--loss)]/5" : "",
+                        row.put.ask <= 0.01 && "text-muted-foreground/50"
+                      )}
+                    />
+                    <Cell
+                      value={row.put.vol}
+                      format="number"
+                      className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.put.oi}
+                      format="number"
+                      className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.put.iv}
+                      format="pct"
+                      className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    />
+                    <Cell
+                      value={row.put.delta}
+                      format="greek"
+                      className={putITM ? "bg-[var(--loss)]/5" : ""}
+                    />
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </ScrollArea>
+      )}
     </div>
   );
 }

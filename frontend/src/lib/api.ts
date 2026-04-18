@@ -287,6 +287,32 @@ export async function analyzeSymbol(symbol: string): Promise<Analysis> {
     body: JSON.stringify({ agents: ["technical", "fundamental", "sentiment", "options"] }),
   });
   const findAgent = (name: string) => resp.agent_results?.find((a) => a.agent === name);
+  // Surface the real technical indicators computed by the backend
+  // (rsi_14, macd_signal, ema_20, ema_50, trend, volume_*). These are read
+  // from the `details` bag of the `technical` agent result — no derivation.
+  const techDetails = findAgent("technical")?.details ?? null;
+  const pickNumeric = (k: string): number | null => {
+    const v = techDetails?.[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const pickString = <T extends string>(k: string, allowed: readonly T[]): T | null => {
+    const v = techDetails?.[k];
+    return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : null;
+  };
+  const technicals = techDetails
+    ? {
+        rsi_14: pickNumeric("rsi_14"),
+        ema_20: pickNumeric("ema_20"),
+        ema_50: pickNumeric("ema_50"),
+        atr_14: pickNumeric("atr_14"),
+        support: pickNumeric("support"),
+        resistance: pickNumeric("resistance"),
+        trend: pickString("trend", ["bullish", "bearish", "neutral"] as const),
+        macd_signal: pickString("macd_signal", ["bullish", "bearish", "neutral"] as const),
+        volume_ratio: pickNumeric("volume_ratio"),
+        volume_trend: pickString("volume_trend", ["above_average", "below_average", "average"] as const),
+      }
+    : undefined;
   return {
     symbol: resp.symbol,
     technicalScore: findAgent("technical")?.score ?? 0,
@@ -295,6 +321,7 @@ export async function analyzeSymbol(symbol: string): Promise<Analysis> {
     composite: resp.composite_score ?? 0,
     summary: findAgent("technical")?.summary ?? resp.recommendation ?? "",
     signals: [],
+    technicals,
   };
 }
 
@@ -310,6 +337,10 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
   // Backend returns { underlying, contracts: [...], expirations, ... }
   // Frontend expects { symbol, calls: [...], puts: [...], expirations }
   const contracts = (raw.contracts ?? []) as Array<Record<string, unknown>>;
+  // Greeks are nullable — pass `null` through when the provider omits them
+  // rather than collapsing to 0, which would let hardcoded constants hide.
+  const pickGreek = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
   const calls = contracts
     .filter((c) => c.option_type === "call")
     .map((c) => ({
@@ -324,9 +355,9 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
       oi: (c.open_interest as number) ?? 0,
       iv: (c.iv as number) ?? 0,
       delta: (c.delta as number) ?? 0,
-      gamma: (c.gamma as number) ?? 0,
-      theta: (c.theta as number) ?? 0,
-      vega: (c.vega as number) ?? 0,
+      gamma: pickGreek(c.gamma),
+      theta: pickGreek(c.theta),
+      vega: pickGreek(c.vega),
     }));
   const puts = contracts
     .filter((c) => c.option_type === "put")
@@ -342,9 +373,9 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
       oi: (c.open_interest as number) ?? 0,
       iv: (c.iv as number) ?? 0,
       delta: (c.delta as number) ?? 0,
-      gamma: (c.gamma as number) ?? 0,
-      theta: (c.theta as number) ?? 0,
-      vega: (c.vega as number) ?? 0,
+      gamma: pickGreek(c.gamma),
+      theta: pickGreek(c.theta),
+      vega: pickGreek(c.vega),
     }));
   return {
     symbol: (raw.underlying as string) ?? symbol,

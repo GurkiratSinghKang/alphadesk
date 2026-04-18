@@ -6,6 +6,11 @@ export interface SelectedStrike {
   expiry: string;
   price: number;
   delta: number;
+  /** Greeks from the live chain. `null` when the chain did not expose them —
+   * the trade builder must render `—` rather than a hardcoded constant. */
+  gamma?: number | null;
+  theta?: number | null;
+  vega?: number | null;
 }
 
 interface OptionsState {

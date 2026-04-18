@@ -51,7 +51,7 @@ const FOOTER_COLS: { heading: string; items: { label: string; href: string }[] }
   {
     heading: "Company",
     items: [
-      { label: "Request access", href: "mailto:legal@tradingalpha.net" },
+      { label: "Request access", href: "/request-access" },
       { label: "Support", href: "mailto:support@tradingalpha.net" },
     ],
   },
@@ -118,13 +118,13 @@ export default function MarketingShell({
             >
               Sign in
             </Link>
-            <a
-              href="mailto:legal@tradingalpha.net"
+            <Link
+              href="/request-access"
               className="rounded-sm bg-brand px-4 py-2 font-sans text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
               style={{ letterSpacing: "0.01em" }}
             >
               Request access
-            </a>
+            </Link>
           </div>
         </nav>
 

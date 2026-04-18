@@ -56,10 +56,14 @@ interface TradeLeg {
   type: "call" | "put" | "stock";
   strike?: number;
   expiry?: string;
-  delta?: number;
-  gamma?: number;
-  theta?: number;
-  vega?: number;
+  delta?: number | null;
+  /**
+   * Greeks — `null` when the live chain did not expose the greek for this
+   * contract. Renderers must show `—` for null rather than treating it as 0.
+   */
+  gamma?: number | null;
+  theta?: number | null;
+  vega?: number | null;
 }
 
 function detectStrategy(legs: TradeLeg[]): string {
@@ -121,6 +125,10 @@ function TradeBuilderTab() {
 
   useEffect(() => {
     if (selectedStrikes.length === 0) return;
+    // Greeks come from the live chain or not at all. Audit P0-5 removed the
+    // hardcoded `gamma: 0.01, theta: -0.02, vega: 0.08` constants — legs
+    // now carry `null` for any greek the chain did not emit, and the leg
+    // summary renders em-dashes for those rows.
     const newLegs: TradeLeg[] = selectedStrikes.map(
       (s: SelectedStrike, i: number) => ({
         id: `opt-${Date.now()}-${i}`,
@@ -132,9 +140,9 @@ function TradeBuilderTab() {
         strike: s.strike,
         expiry: s.expiry,
         delta: s.type === "call" ? s.delta : -s.delta,
-        gamma: 0.01,
-        theta: -0.02,
-        vega: 0.08,
+        gamma: s.gamma ?? null,
+        theta: s.theta ?? null,
+        vega: s.vega ?? null,
       })
     );
     setLegs(newLegs);
@@ -147,16 +155,29 @@ function TradeBuilderTab() {
     return sum + (l.side === "buy" ? -cost : cost);
   }, 0);
 
+  /**
+   * Aggregate greeks — only roll up greeks that every leg actually has.
+   * When a leg carries `null` for a greek, the aggregate for that greek is
+   * `null` (rendered as em-dash). Net delta is still computed because delta
+   * is required on every leg derived from an option click.
+   */
   const aggregateGreeks = useMemo(() => {
-    const g = { delta: 0, gamma: 0, theta: 0, vega: 0 };
-    for (const leg of legs) {
-      const mult = leg.side === "buy" ? leg.quantity : -leg.quantity;
-      g.delta += (leg.delta ?? 0) * mult;
-      g.gamma += (leg.gamma ?? 0) * mult;
-      g.theta += (leg.theta ?? 0) * mult;
-      g.vega += (leg.vega ?? 0) * mult;
-    }
-    return g;
+    const sum = (key: "delta" | "gamma" | "theta" | "vega"): number | null => {
+      let acc = 0;
+      for (const leg of legs) {
+        const v = leg[key];
+        if (v == null) return null; // missing greek — cannot roll up
+        const mult = leg.side === "buy" ? leg.quantity : -leg.quantity;
+        acc += v * mult;
+      }
+      return acc;
+    };
+    return {
+      delta: sum("delta"),
+      gamma: sum("gamma"),
+      theta: sum("theta"),
+      vega: sum("vega"),
+    };
   }, [legs]);
 
   const strategyName = useMemo(() => detectStrategy(legs), [legs]);
@@ -219,10 +240,10 @@ function TradeBuilderTab() {
         type: "call",
         strike: undefined,
         expiry: undefined,
-        delta: 0,
-        gamma: 0,
-        theta: 0,
-        vega: 0,
+        delta: null,
+        gamma: null,
+        theta: null,
+        vega: null,
       },
     ]);
   };
@@ -349,15 +370,20 @@ function TradeBuilderTab() {
         <p className="text-xs text-muted-foreground text-center py-3">Add a leg to begin building your trade</p>
       ) : (
         <>
-          {/* Greeks */}
+          {/* Greeks — null values render as em-dash (audit P0-5). */}
           <div className="grid grid-cols-4 gap-2 mb-3">
             {Object.entries(aggregateGreeks).map(([key, val]) => (
               <div key={key} className="text-center">
                 <div className="text-[10px] text-muted-foreground capitalize">
                   {key}
                 </div>
-                <div className="text-xs font-medium tabular-nums text-foreground">
-                  {formatGreek(val, key === "delta" ? 2 : 3)}
+                <div
+                  className={cn(
+                    "text-xs font-medium tabular-nums text-foreground",
+                    val == null && "text-muted-foreground/50"
+                  )}
+                >
+                  {val == null ? "\u2014" : formatGreek(val, key === "delta" ? 2 : 3)}
                 </div>
               </div>
             ))}
@@ -464,7 +490,9 @@ function TradeBuilderTab() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Net Delta</span>
-                <span className="tabular-nums text-foreground">{formatGreek(aggregateGreeks.delta, 2)}</span>
+                <span className="tabular-nums text-foreground">
+                  {aggregateGreeks.delta == null ? "\u2014" : formatGreek(aggregateGreeks.delta, 2)}
+                </span>
               </div>
             </div>
           )}
