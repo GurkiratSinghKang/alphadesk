@@ -77,13 +77,16 @@ describe('useDataPipeline', () => {
     expect(mockSubscribe).toHaveBeenCalledWith('portfolio');
     expect(mockSubscribe).toHaveBeenCalledWith('alerts');
     expect(mockSubscribe).toHaveBeenCalledWith('agents');
+    expect(mockSubscribe).toHaveBeenCalledWith('bars');
   });
 
-  it('subscribes to exactly 4 channels', async () => {
+  it('subscribes to exactly 5 channels', async () => {
     const { useDataPipeline } = await import('@/hooks/useDataPipeline');
     renderHook(() => useDataPipeline());
 
-    expect(mockSubscribe).toHaveBeenCalledTimes(4);
+    // quotes, portfolio, alerts, agents, bars — bars was added when the chart
+    // moved to live intraday streams.
+    expect(mockSubscribe).toHaveBeenCalledTimes(5);
   });
 
   it('routes quote WS messages to market store', async () => {

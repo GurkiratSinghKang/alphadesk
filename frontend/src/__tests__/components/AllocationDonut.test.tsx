@@ -86,13 +86,15 @@ describe('AllocationDonut', () => {
     expect(circles.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('renders only one circle when invested is zero (no invested segment)', () => {
+  it('omits the invested segment circle when invested is zero', () => {
     const { container } = render(
       <AllocationDonut {...props} cash={100000} invested={0} equity={100000} />
     );
-    // investedPct = 0, so the invested circle should not render
+    // Component renders a base-ring backdrop + a cash arc always; the invested
+    // segment is conditional on investedPct > 0.005. Two visible circles at
+    // invested=0 (backdrop + cash), three otherwise.
     const circles = container.querySelectorAll('circle');
-    expect(circles.length).toBe(1);
+    expect(circles.length).toBe(2);
   });
 
   it('renders total equity in center text', () => {

@@ -10,8 +10,13 @@ describe('Strategy configuration', () => {
     }
   });
 
-  it('has 13 strategies', () => {
-    expect(STRATEGY_ORDER.length).toBe(13);
+  it('has the full strategy catalogue registered', () => {
+    // Frontend catalogue is broader than the backend's 12 registered strategies —
+    // includes marketing placeholders (claude-alpha, dividend-capture,
+    // sector-rotation, mean-reversion, vcp-breakout, gap-fill,
+    // manual-discretionary, pairs-stat-arb). Update this anchor when
+    // intentionally adding/removing from STRATEGY_ORDER.
+    expect(STRATEGY_ORDER.length).toBe(20);
   });
 
   it('has unique strategy IDs', () => {
