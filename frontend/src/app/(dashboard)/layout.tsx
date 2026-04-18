@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
@@ -13,11 +14,24 @@ import { useToast } from "@/hooks/useToast";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { ReactNode } from "react";
 
+/**
+ * DashboardLayout — chrome wrapper for non-desk dashboard routes.
+ *
+ * The flagship trading desk (`/`) brings its own 4-row `DeskLayout`
+ * shell (TopBar / ContextBar / main / StatusBar) and must own the
+ * viewport. For that route this layout renders the overlays only so
+ * ⌘K, copilot, shortcuts and the onboarding tour still work.
+ *
+ * For every other dashboard route (analytics, alerts, pipeline, reports,
+ * settings, strategies, trade) the layout keeps the pre-F3 chrome.
+ */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isDeskRoute = pathname === "/";
+
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
-  // Defer persisted store read to avoid hydration mismatch
-  // (server renders with default true, client may have false from localStorage)
+  // Defer persisted store read to avoid hydration mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const tickerTapeOn = usePreferencesStore((s) => s.display.tickerTapeOn);
@@ -25,7 +39,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     function handleApiError(e: CustomEvent) {
       const { status, message } = e.detail;
-      if (status !== 401) { // Don't toast on auth redirects
+      if (status !== 401) {
         toast({ type: "error", message: message || "An API error occurred" });
       }
     }
@@ -33,10 +47,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("alphadesk:api-error", handleApiError as EventListener);
   }, [toast]);
 
-  // Don't render any client-interactive content until after hydration.
-  // Zustand persist stores rehydrate from localStorage on mount, which
-  // produces different values than server render → React hydration crash.
+  // Pre-mount skeleton — avoids zustand/persist hydration mismatches.
   if (!mounted) {
+    if (isDeskRoute) {
+      return (
+        <div
+          className="h-screen w-full bg-bg"
+          style={{
+            display: "grid",
+            gridTemplateRows: "48px 38px 1fr 22px",
+          }}
+        >
+          <div className="border-b border-border bg-ink-050" />
+          <div className="border-b border-border bg-ink-100" />
+          <div />
+          <div className="border-t border-border bg-ink-050" />
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen flex-col overflow-x-hidden bg-[var(--background)]">
         <div className="h-12 border-b border-border bg-[var(--surface)]" />
@@ -46,6 +74,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // ─── Flagship desk: overlays only, the page owns the viewport. ──
+  if (isDeskRoute) {
+    return (
+      <>
+        {children}
+        <CommandPalette />
+        <AICopilot />
+        {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
+        <OnboardingTour />
+      </>
+    );
+  }
+
+  // ─── Non-desk dashboard pages keep the pre-F3 chrome. ──────────
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
       <a
