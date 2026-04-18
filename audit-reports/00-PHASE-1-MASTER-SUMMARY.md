@@ -21,11 +21,12 @@
 | 9 | VWAP | 0.40 | **0.949** | 2.37× | clean |
 | 10 | VRP Harvest | 0.70 | **0.876** | 1.25× | abbreviated 2024-H2 |
 | 11 | ORB | 0.70 | **8.34** * | 11.9× | inflated — see §3 |
-| 12 | Earnings Vol | 0.70 | **6.10** * | 8.71× | inflated — see §3 |
+| 12 | Earnings Vol | 0.70 | **1.434** † | 2.05× | honest (v2, real options) |
 
-`*` = inflation from synthetic P&L model or notional compression, honest live estimate in §3.
+`*` = notional-cap compression inflation; honest per-trade Sharpe in §3.
+`†` = v2 post-Phase-2 engine-fix + re-tune. The Wave D number (6.10) was artifact of a synthetic options ledger; commit `a6310fa` rescues the strategy with real Polygon slippage. Same target, honestly cleared.
 
-**Median OOS Sharpe 1.48**, **12/12 strategies above target.**
+**Median OOS Sharpe 1.47**, **12/12 strategies above target** (honestly).
 
 ---
 
@@ -50,9 +51,10 @@ Two strategies show Sharpes that look too good:
 - **Honest per-trade Sharpe:** ~1.5–2.0, in the expected 0.5–1.2 range of the Zarattini-Aziz 2023 paper.
 - **Slippage sensitivity:** Sharpe holds at 5.0 at 20 bps slippage and 7.1 at 10 bps — strategy is not slippage-fragile, but the headline number is still cap-driven.
 
-### Earnings Vol (6.10 OOS Sharpe)
-- **Why inflated:** Polygon Developer tier's historical chain endpoint strips bid/ask, so the synthetic options ledger inverts IV from per-contract daily-close prices and prices the exit via Black-Scholes with a 0.55 IV-crush-retention factor. This deterministic model under-states real round-trip slippage (bid-ask spreads on single-name weekly options are often 5-15% of premium).
-- **Honest live estimate:** ~3-4 Sharpe after 30-50% haircut. Still 4-6× target, still one of the best in the book, but not literally 6.10.
+### Earnings Vol — now 1.43 (was 6.10)
+- **The Wave D 6.10 was a synthetic-ledger artifact.** The old path inverted IV from per-contract daily-close prices and modeled the exit via BS with a 0.55 IV-crush-retention factor. That deterministic model under-stated real round-trip slippage on single-name weekly options (5-15% of premium).
+- **Phase 2 fix:** engine now prices each leg via Polygon `contract_bars` with real per-leg half-spread slippage; strategy limit_price relaxed to 95% of mid so fills don't get rejected by the slippage model; search space re-tuned.
+- **Real v2 OOS Sharpe: 1.43.** Commit `a6310fa`. Full details in `audit-reports/phase1-earnings_vol.md`. Capacity is small (~5 events/year with current filter) but every traded underlying was positive. Front-weeklies would likely work better with a data upgrade (OptionMetrics / CBOE historical); Polygon Developer's thin front-week mids pushed the tuner to 21 DTE.
 
 **Everything else in the table is clean.** Median clean Sharpe is 1.48, arithmetic mean of the 10 clean strategies is 1.46.
 
