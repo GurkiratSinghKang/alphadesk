@@ -1,0 +1,112 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  a{text-decoration:none;color:inherit}
+  .wrap{padding:24px;display:flex;flex-direction:column;gap:12px}
+  .row{display:flex;gap:14px}
+
+  /* ── Card ── */
+  .strat{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;cursor:pointer;transition:background 160ms, border-color 160ms, transform 160ms}
+  .strat::after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--brand);transition:width 160ms}
+  .strat.loss::after{background:var(--down-500)}
+  .strat:hover{background:var(--bg-elev-1);border-color:var(--border-strong);transform:translateY(-1px)}
+  .strat:hover::after{width:3px}
+  .strat:hover .go{opacity:1;transform:translateX(0)}
+
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .name{font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.01em;line-height:1.1}
+  .sub{font-family:var(--font-ui);font-size:10px;color:var(--fg-muted);letter-spacing:0.14em;text-transform:uppercase;font-weight:600;margin-top:3px}
+
+  /* Chip — now a real interactive control */
+  .chip{font-family:var(--font-ui);font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--up-500);padding:4px 9px;background:rgba(168,208,77,0.08);border:1px solid rgba(168,208,77,0.28);border-radius:2px;font-weight:600;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;transition:background 140ms, border-color 140ms, transform 120ms}
+  .chip.loss{color:var(--down-500);background:rgba(224,120,86,0.08);border-color:rgba(224,120,86,0.28)}
+  .chip:hover{background:rgba(224,120,86,0.16);border-color:rgba(224,120,86,0.5)}
+  .chip.up:hover{background:rgba(168,208,77,0.16);border-color:rgba(168,208,77,0.5)}
+  .chip:active{transform:scale(0.96)}
+  .chip .dot{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:0.5}
+  .chip .dot.on{opacity:1}
+  .chip.flash{animation:flash 280ms ease}
+  @keyframes flash{0%{background:rgba(224,120,86,0.35)}100%{}}
+  .chip.up.flash{animation-name:flashUp}
+  @keyframes flashUp{0%{background:rgba(168,208,77,0.35)}100%{}}
+
+  .ret{font-family:var(--font-mono);font-size:30px;font-weight:300;color:var(--up-500);letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1}
+  .ret.dn{color:var(--down-500)}
+  .meta{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10.5px;color:var(--fg-muted)}
+  .meta b{color:var(--fg);font-weight:500}
+  .spark{height:28px;margin:0 -2px}
+
+  /* Click-through arrow, reveals on hover */
+  .go{position:absolute;right:14px;bottom:12px;font-family:var(--font-display);font-style:italic;font-size:13px;color:var(--brand);opacity:0;transform:translateX(-6px);transition:opacity 180ms, transform 180ms;letter-spacing:-0.01em;pointer-events:none}
+
+  /* Footnote explaining the interaction */
+  .note{padding:10px 14px;border-top:1px dashed var(--border);font-family:var(--font-display);font-style:italic;font-size:12px;color:var(--fg-muted);margin-top:4px;line-height:1.5}
+  .note kbd{font-family:var(--font-mono);font-size:10px;color:var(--fg);background:var(--bg-elev-1);border:1px solid var(--border);padding:1px 6px;border-radius:2px;font-style:normal;letter-spacing:0.04em;margin:0 2px}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="row">
+
+    <!-- Card 1 — profit side, chip cycles "win stats" -->
+    <a class="strat" href="#strategy/momentum-quality" data-chip-up>
+      <div class="top">
+        <div><div class="name">Momentum &amp; Quality</div><div class="sub">Strategy 01 · swing</div></div>
+        <button class="chip up" data-chip-up-btn aria-label="Cycle metric">
+          <span data-chip-label>Win 62%</span>
+        </button>
+      </div>
+      <div class="ret">+3.42%</div>
+      <svg class="spark" viewBox="0 0 200 28" preserveAspectRatio="none"><polyline points="0,22 20,18 40,20 60,14 80,16 100,10 120,12 140,7 160,9 180,4 200,2" fill="none" stroke="#a8d04d" stroke-width="1.5"/></svg>
+      <div class="meta"><span>4 positions</span><span>Win <b>62%</b></span><span>Invested <b>$18.2K</b></span></div>
+      <span class="go">open →</span>
+    </a>
+
+    <!-- Card 2 — loss side, chip cycles "drawdown views" -->
+    <a class="strat loss" href="#strategy/claude-alpha" data-chip-dn>
+      <div class="top">
+        <div><div class="name">Claude Alpha</div><div class="sub">Strategy 06 · AI opp.</div></div>
+        <button class="chip loss" data-chip-dn-btn aria-label="Cycle drawdown view">
+          <span data-chip-label>−3.8% DD</span>
+        </button>
+      </div>
+      <div class="ret dn">−1.18%</div>
+      <svg class="spark" viewBox="0 0 200 28" preserveAspectRatio="none"><polyline points="0,4 20,8 40,6 60,12 80,10 100,16 120,14 140,19 160,17 180,22 200,24" fill="none" stroke="#e07856" stroke-width="1.5"/></svg>
+      <div class="meta"><span>2 positions</span><span>Win <b>48%</b></span><span>Invested <b>$6.4K</b></span></div>
+      <span class="go">open →</span>
+    </a>
+
+  </div>
+
+  <div class="note">
+    Card → <kbd>↵</kbd> opens the strategy page. The chip cycles local views — <em>drawdown %</em> → <em>drawdown $</em> → <em>DD this week</em> — without leaving the card.
+  </div>
+</div>
+
+<script>
+  // Two independent chip cyclers — loss DD and profit Win —
+  // both stop propagation so the card's link doesn't fire.
+  const cycles = [
+    { btnSel: '[data-chip-dn-btn]', values: ['−3.8% DD', '−$1,240 DD', '−1.9% · this week'] },
+    { btnSel: '[data-chip-up-btn]', values: ['Win 62%', 'Win $4.2K', 'Win 8 of 13 · wk'] },
+  ];
+  cycles.forEach(({btnSel, values}) => {
+    const btn = document.querySelector(btnSel);
+    if (!btn) return;
+    let i = 0;
+    const label = btn.querySelector('[data-chip-label]');
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      i = (i + 1) % values.length;
+      label.textContent = values[i];
+      btn.classList.remove('flash');
+      void btn.offsetWidth;
+      btn.classList.add('flash');
+    });
+  });
+  // Prevent the href from navigating in the preview (the card is still a real link)
+  document.querySelectorAll('a.strat').forEach(a => {
+    a.addEventListener('click', e => e.preventDefault());
+  });
+</script>
+</body></html>

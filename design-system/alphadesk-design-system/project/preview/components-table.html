@@ -1,0 +1,212 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .wrap{padding:18px 20px 20px}
+  .caption{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .ttl{font-family:var(--font-display);font-style:italic;font-size:17px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .hint{font-family:var(--font-ui);font-size:9px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--fg-muted)}
+  .hint kbd{font-family:var(--font-mono);font-size:9px;background:var(--bg-elev-1);border:1px solid var(--border);padding:1px 5px;border-radius:2px;color:var(--fg);letter-spacing:0.02em;margin:0 2px}
+
+  table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px}
+  th{font-family:var(--font-ui);font-size:9px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted);text-align:right;padding:0 8px 8px;border-bottom:1px solid var(--border)}
+  th:first-child, th.exits{text-align:left}
+  th.caret{width:18px;padding:0}
+
+  tr.row{cursor:pointer;transition:background 120ms}
+  tr.row:hover{background:var(--bg-elev-1)}
+  tr.row.open{background:var(--bg-elev-1)}
+  tr.row td{padding:9px 8px;border-bottom:1px solid var(--border-hair);color:var(--fg);font-variant-numeric:tabular-nums;text-align:right;vertical-align:middle}
+  tr.row td:first-child{text-align:left}
+  tr.row.open td{border-bottom-color:transparent}
+
+  .caret{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--fg-hint);font-family:var(--font-mono);font-size:10px;transition:transform 180ms}
+  tr.row.open .caret{transform:rotate(90deg);color:var(--brand)}
+
+  .sym{font-family:var(--font-ui);font-weight:500;letter-spacing:0.02em;color:var(--ink-1000);font-size:12.5px}
+  .sym .q{color:var(--fg-hint);font-family:var(--font-mono);font-weight:400;font-size:10px;margin-left:4px}
+  .side-buy{color:var(--up-500);text-transform:uppercase;font-family:var(--font-ui);font-size:9.5px;letter-spacing:0.14em;font-weight:600}
+  .side-sell{color:var(--down-500);text-transform:uppercase;font-family:var(--font-ui);font-size:9.5px;letter-spacing:0.14em;font-weight:600}
+  .up{color:var(--up-500)}
+  .dn{color:var(--down-500)}
+  .strat{font-family:var(--font-display);font-style:italic;font-size:12px;color:var(--fg-dim)}
+
+  /* Exit-criteria chips row */
+  .exits{text-align:left}
+  .exits .group{display:inline-flex;gap:4px;align-items:center}
+  .ex{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid var(--border);border-radius:2px;font-family:var(--font-mono);font-size:10px;color:var(--fg-dim);background:var(--bg-elev-1);white-space:nowrap}
+  .ex .ico{font-family:var(--font-ui);font-weight:700;font-size:8.5px;letter-spacing:0.1em;color:var(--fg-muted);padding:1px 3px;border-radius:2px;background:var(--border)}
+  .ex.sl{border-color:rgba(224,120,86,0.3)}
+  .ex.sl .ico{background:rgba(224,120,86,0.2);color:var(--down-500)}
+  .ex.tp{border-color:rgba(168,208,77,0.3)}
+  .ex.tp .ico{background:rgba(168,208,77,0.18);color:var(--up-500)}
+  .ex.tr{border-color:rgba(141,179,196,0.3)}
+  .ex.tr .ico{background:rgba(141,179,196,0.18);color:var(--ice-500)}
+  .ex.hit{color:var(--ink-1000);background:rgba(217,164,65,0.1);border-color:rgba(217,164,65,0.4)}
+  .ex.hit .ico{background:rgba(217,164,65,0.3);color:#d9a441}
+
+  /* Drilldown */
+  tr.drill{display:none}
+  tr.drill.open{display:table-row}
+  tr.drill td{padding:0;background:var(--ink-100);border-bottom:1px solid var(--border)}
+  .drawer{padding:14px 18px 16px;border-left:2px solid var(--brand);display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+  .drawer .sec-k{font-family:var(--font-ui);font-size:8.5px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--brand);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .drawer .sec-k .d{width:6px;height:6px;border-radius:50%;background:var(--brand);box-shadow:0 0 6px var(--brand)}
+  .memo{font-family:var(--font-display);font-style:italic;font-size:14px;color:var(--ink-900);line-height:1.4;letter-spacing:-0.005em}
+  .memo em{color:var(--gold-300)}
+  .memo-foot{margin-top:8px;font-family:var(--font-mono);font-size:9.5px;color:var(--fg-hint);letter-spacing:0.04em}
+  .exit-detail{display:flex;flex-direction:column;gap:6px}
+  .ed-row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:2px;font-family:var(--font-mono);font-size:11px}
+  .ed-row .k{font-family:var(--font-ui);font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--fg-muted)}
+  .ed-row .v{color:var(--ink-1000);font-variant-numeric:tabular-nums}
+  .ed-row.armed{border-color:rgba(217,164,65,0.45)}
+  .ed-row.armed .v{color:#d9a441}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="caption">
+    <div class="ttl">Positions · open book</div>
+    <div class="hint">Row <kbd>click</kbd> for Claude's rationale &amp; exits</div>
+  </div>
+
+  <table id="posTable">
+    <thead><tr>
+      <th class="caret"></th>
+      <th>Symbol</th>
+      <th>Side</th>
+      <th>Qty</th>
+      <th>Entry</th>
+      <th>P&amp;L</th>
+      <th class="exits">Exits</th>
+      <th>Strategy</th>
+    </tr></thead>
+    <tbody>
+      <!-- NVDA -->
+      <tr class="row" data-row="1">
+        <td><span class="caret">›</span></td>
+        <td class="sym">NVDA</td>
+        <td><span class="side-buy">Long</span></td>
+        <td>250</td>
+        <td>128.41</td>
+        <td class="up">+$1,602</td>
+        <td class="exits"><span class="group">
+          <span class="ex sl"><span class="ico">SL</span>123.27</span>
+          <span class="ex tp"><span class="ico">TP</span>142.00</span>
+        </span></td>
+        <td class="strat">Momentum &amp; Quality</td>
+      </tr>
+      <tr class="drill" data-drill="1"><td colspan="8"><div class="drawer">
+        <div>
+          <div class="sec-k"><span class="d"></span>Claude · entry memo · 3d ago</div>
+          <div class="memo">"Entry fits <em>Momentum &amp; Quality</em>: 3-week high, regime <em>bull / low-vol</em>, earnings 14 days out. Sized 250 sh at 128.41 — semis beta 1.7, risk scaled down from baseline."</div>
+          <div class="memo-foot">Haiku 4.5 · confidence 0.72 · 180 ms · approved by you 14:28:02 ET</div>
+        </div>
+        <div class="exit-detail">
+          <div class="sec-k"><span class="d" style="background:var(--fg-muted);box-shadow:none"></span>Exit plan</div>
+          <div class="ed-row"><span class="k">Stop · hard</span><span class="v">123.27 <span style="color:var(--fg-hint)">· −4.0%</span></span></div>
+          <div class="ed-row"><span class="k">Take profit</span><span class="v">142.00 <span style="color:var(--fg-hint)">· +10.6%</span></span></div>
+          <div class="ed-row"><span class="k">Regime trigger</span><span class="v">exit if → bear/hi-vol</span></div>
+          <div class="ed-row"><span class="k">Time stop</span><span class="v">+20 trading days</span></div>
+        </div>
+      </div></td></tr>
+
+      <!-- INTC short -->
+      <tr class="row" data-row="2">
+        <td><span class="caret">›</span></td>
+        <td class="sym">INTC <span class="q">short</span></td>
+        <td><span class="side-sell">Short</span></td>
+        <td>120</td>
+        <td>32.40</td>
+        <td class="up">+$151</td>
+        <td class="exits"><span class="group">
+          <span class="ex sl"><span class="ico">SL</span>34.05</span>
+          <span class="ex tr"><span class="ico">PR</span>pair: AMD</span>
+        </span></td>
+        <td class="strat">Pairs · Sector</td>
+      </tr>
+      <tr class="drill" data-drill="2"><td colspan="8"><div class="drawer">
+        <div>
+          <div class="sec-k"><span class="d"></span>Claude · entry memo · 6d ago</div>
+          <div class="memo">"Pair leg vs. <em>AMD long</em>. Spread z-score −2.1 at entry; semis basket beta-neutral. Mean-reversion horizon 5–15 sessions; exit at z ≈ 0."</div>
+          <div class="memo-foot">Haiku 4.5 · confidence 0.64 · 210 ms · approved by you 11:04:19 ET</div>
+        </div>
+        <div class="exit-detail">
+          <div class="sec-k"><span class="d" style="background:var(--fg-muted);box-shadow:none"></span>Exit plan</div>
+          <div class="ed-row"><span class="k">Stop · hard</span><span class="v">34.05 <span style="color:var(--fg-hint)">· −5.1%</span></span></div>
+          <div class="ed-row"><span class="k">Pair trigger</span><span class="v">close both at z ≈ 0</span></div>
+          <div class="ed-row"><span class="k">Time stop</span><span class="v">+15 trading days</span></div>
+        </div>
+      </div></td></tr>
+
+      <!-- UNH — trigger armed (warning state) -->
+      <tr class="row" data-row="3">
+        <td><span class="caret">›</span></td>
+        <td class="sym">UNH</td>
+        <td><span class="side-buy">Long</span></td>
+        <td>40</td>
+        <td>588.20</td>
+        <td class="dn">−$258</td>
+        <td class="exits"><span class="group">
+          <span class="ex sl"><span class="ico">SL</span>564.67</span>
+          <span class="ex hit" title="Trigger armed"><span class="ico">!</span>regime flip</span>
+        </span></td>
+        <td class="strat">Claude Alpha</td>
+      </tr>
+      <tr class="drill" data-drill="3"><td colspan="8"><div class="drawer">
+        <div>
+          <div class="sec-k"><span class="d"></span>Claude · entry memo · 4d ago</div>
+          <div class="memo">"Opportunistic — policy tailwind, relative strength vs. XLV. One caveat: regime fit 0.58, below the 0.65 bar. <em>Size cut 40%</em> from baseline. Re-evaluate if regime shifts."</div>
+          <div class="memo-foot">Haiku 4.5 · confidence 0.58 · 190 ms · approved by you 10:47:02 ET · <b style="color:#d9a441">exit review suggested</b></div>
+        </div>
+        <div class="exit-detail">
+          <div class="sec-k"><span class="d" style="background:#d9a441;box-shadow:0 0 6px #d9a441"></span>Exit plan · armed</div>
+          <div class="ed-row"><span class="k">Stop · hard</span><span class="v">564.67 <span style="color:var(--fg-hint)">· −4.0%</span></span></div>
+          <div class="ed-row armed"><span class="k">Regime trigger</span><span class="v">ARMED · consider trim 40%</span></div>
+          <div class="ed-row"><span class="k">Time stop</span><span class="v">+10 trading days</span></div>
+        </div>
+      </div></td></tr>
+
+      <!-- SPY -->
+      <tr class="row" data-row="4">
+        <td><span class="caret">›</span></td>
+        <td class="sym">SPY</td>
+        <td><span class="side-buy">Long</span></td>
+        <td>50</td>
+        <td>478.22</td>
+        <td class="up">+$234</td>
+        <td class="exits"><span class="group">
+          <span class="ex tr"><span class="ico">RG</span>regime long</span>
+          <span class="ex sl"><span class="ico">SL</span>459.09</span>
+        </span></td>
+        <td class="strat">Regime Adaptive</td>
+      </tr>
+      <tr class="drill" data-drill="4"><td colspan="8"><div class="drawer">
+        <div>
+          <div class="sec-k"><span class="d"></span>Claude · entry memo · 11d ago</div>
+          <div class="memo">"Baseline long exposure while regime holds <em>bull / low-vol</em>. Not a conviction trade — a policy anchor. Size scales with vol target."</div>
+          <div class="memo-foot">Haiku 4.5 · confidence 0.81 · 140 ms · auto-approved (policy anchor)</div>
+        </div>
+        <div class="exit-detail">
+          <div class="sec-k"><span class="d" style="background:var(--fg-muted);box-shadow:none"></span>Exit plan</div>
+          <div class="ed-row"><span class="k">Regime trigger</span><span class="v">exit on regime flip</span></div>
+          <div class="ed-row"><span class="k">Stop · soft</span><span class="v">459.09 <span style="color:var(--fg-hint)">· −4.0%</span></span></div>
+          <div class="ed-row"><span class="k">Rebalance</span><span class="v">every session close</span></div>
+        </div>
+      </div></td></tr>
+
+    </tbody>
+  </table>
+</div>
+
+<script>
+  document.querySelectorAll('tr.row').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.row;
+      const drill = document.querySelector(`tr.drill[data-drill="${id}"]`);
+      const open = row.classList.toggle('open');
+      if (drill) drill.classList.toggle('open', open);
+    });
+  });
+  // Auto-open the NVDA row to showcase
+  document.querySelector('tr.row[data-row="1"]').click();
+</script>
+</body></html>

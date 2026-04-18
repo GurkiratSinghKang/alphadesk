@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .card{padding:24px 28px;display:flex;flex-direction:column;gap:16px}
+  .eyebrow{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted)}
+  .row{display:flex;gap:12px}
+  .tile{flex:1;aspect-ratio:1.4;background:var(--bg-elev-1);border:1px solid var(--border);display:flex;flex-direction:column;justify-content:flex-end;padding:10px;box-sizing:border-box;font-family:var(--font-mono);font-size:10px;color:var(--fg-muted)}
+  .tile b{color:var(--fg);font-family:var(--font-ui);font-weight:500;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .r0{border-radius:0}
+  .rxs{border-radius:2px}
+  .rsm{border-radius:4px}
+  .rmd{border-radius:6px}
+  .rlg{border-radius:10px}
+  .rxl{border-radius:16px}
+</style></head>
+<body>
+<div class="card">
+  <div class="eyebrow">Corner radii · Restrained</div>
+  <div class="row">
+    <div class="tile r0"><b>0</b>Hairline / chart axes</div>
+    <div class="tile rxs"><b>2 xs</b>Chips · inline pills</div>
+    <div class="tile rsm"><b>4 sm</b>Inputs · buttons</div>
+    <div class="tile rmd"><b>6 md</b>Cards · panels</div>
+    <div class="tile rlg"><b>10 lg</b>Hero tiles</div>
+    <div class="tile rxl"><b>16 xl</b>Modals only</div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .card{padding:24px;display:flex;flex-direction:column;gap:16px}
+  .eyebrow{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .b{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-radius:2px;font-family:var(--font-ui);font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;border:1px solid transparent}
+  .dot{width:6px;height:6px;border-radius:50%}
+  .active{color:var(--up-500);background:rgba(168,208,77,0.08);border-color:rgba(168,208,77,0.25)}
+  .active .dot{background:var(--up-500);box-shadow:0 0 6px var(--up-500)}
+  .paused{color:var(--rust-500);background:rgba(199,106,61,0.08);border-color:rgba(199,106,61,0.25)}
+  .paused .dot{background:var(--rust-500)}
+  .halt{color:var(--down-500);background:rgba(224,120,86,0.08);border-color:rgba(224,120,86,0.25)}
+  .halt .dot{background:var(--down-500);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .ghost{color:var(--fg-muted);background:transparent;border-color:var(--border)}
+  .brand{color:var(--gold-300);background:rgba(201,166,107,0.1);border-color:rgba(201,166,107,0.3)}
+  .regime{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid var(--border);border-radius:999px;font-family:var(--font-display);font-style:italic;font-size:13px;color:var(--fg)}
+  .regime .rd{width:8px;height:8px;border-radius:50%;background:var(--ice-500)}
+  .chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:var(--bg-elev-1);border:1px solid var(--border);border-radius:999px;font-family:var(--font-mono);font-size:11px;color:var(--fg-dim)}
+  .chip b{color:var(--ink-1000);font-weight:500}
+</style></head>
+<body>
+<div class="card">
+  <div class="eyebrow">Badges · Status</div>
+  <div class="row">
+    <span class="b active"><span class="dot"></span>Active</span>
+    <span class="b paused"><span class="dot"></span>Paused</span>
+    <span class="b halt"><span class="dot"></span>Halted</span>
+    <span class="b ghost"><span class="dot" style="background:var(--fg-muted)"></span>Idle</span>
+    <span class="b brand"><span class="dot" style="background:var(--gold-300)"></span>AI</span>
+  </div>
+  <div class="eyebrow">Regime · Market context pill</div>
+  <div class="row">
+    <span class="regime"><span class="rd"></span>bull &mdash; low volatility</span>
+    <span class="regime"><span class="rd" style="background:var(--rust-500)"></span>neutral &mdash; elevated vix</span>
+    <span class="regime"><span class="rd" style="background:var(--wine-500)"></span>bear &mdash; risk-off</span>
+  </div>
+  <div class="eyebrow">Chips · Numeric metadata</div>
+  <div class="row">
+    <span class="chip">Sharpe <b>1.08</b></span>
+    <span class="chip">Beta <b>0.62</b></span>
+    <span class="chip">Exposure <b>48%</b></span>
+    <span class="chip">Positions <b>12</b></span>
+    <span class="chip" style="color:var(--up-500)">P&amp;L <b style="color:var(--up-500)">+$24,381</b></span>
+  </div>
+</div>
+</body></html>

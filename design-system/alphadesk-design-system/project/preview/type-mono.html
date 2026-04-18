@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .card{padding:28px 32px;display:flex;flex-direction:column;gap:20px}
+  .eyebrow{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted);border-bottom:1px solid var(--border);padding-bottom:6px}
+  .hero{font-family:var(--font-mono);font-size:56px;font-weight:300;letter-spacing:-0.02em;color:var(--ink-1000);line-height:1;font-variant-numeric:tabular-nums}
+  .hero .sign{color:var(--up-500)}
+  .hero .small{font-size:20px;color:var(--fg-dim)}
+  .row{display:flex;gap:36px;align-items:baseline}
+  .cell{display:flex;flex-direction:column;gap:4px}
+  .cell .k{font-size:10px;font-family:var(--font-ui);color:var(--fg-muted);text-transform:uppercase;letter-spacing:0.16em;font-weight:600}
+  .cell .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:18px;color:var(--fg)}
+  .cell .v.up{color:var(--up-500)}
+  .cell .v.dn{color:var(--down-500)}
+  .stamp{font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.02em;color:var(--fg-hint);text-transform:uppercase}
+</style></head>
+<body>
+<div class="card">
+  <div class="eyebrow">Mono · JetBrains Mono · tabular-nums</div>
+  <div class="hero"><span class="sign">+</span>$24,381<span class="small">.07</span></div>
+  <div class="row">
+    <div class="cell"><div class="k">Day</div><div class="v up">+0.82%</div></div>
+    <div class="cell"><div class="k">Week</div><div class="v up">+2.14%</div></div>
+    <div class="cell"><div class="k">Month</div><div class="v dn">−0.31%</div></div>
+    <div class="cell"><div class="k">Ytd</div><div class="v up">+11.47%</div></div>
+    <div class="cell"><div class="k">Sharpe</div><div class="v">1.08</div></div>
+  </div>
+  <div class="stamp">14:32:08 et · last tick 0.04s · alpaca paper</div>
+</div>
+</body></html>

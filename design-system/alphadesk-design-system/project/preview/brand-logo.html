@@ -1,0 +1,237 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden;color:var(--fg)}
+  .page{padding:22px 22px 26px;display:flex;flex-direction:column;gap:14px}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  .head .ttl{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);letter-spacing:-0.025em}
+  .head .sub{font-family:var(--font-ui);font-size:9px;color:var(--fg-muted);letter-spacing:0.22em;text-transform:uppercase;font-weight:600}
+
+  /* Hero — locked-in primary */
+  .hero{display:grid;grid-template-columns:1.1fr 0.9fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+  .hero .stage{background:var(--ink-050);padding:32px 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;min-height:200px}
+  .hero .stage::before{content:"";position:absolute;top:14px;left:14px;right:14px;bottom:14px;border:1px solid rgba(201,166,107,0.12);pointer-events:none}
+  .corner{position:absolute;font-family:var(--font-mono);font-size:8.5px;color:var(--fg-hint);letter-spacing:0.18em;text-transform:uppercase}
+  .corner.tl{top:20px;left:20px}.corner.tr{top:20px;right:20px}
+  .corner.bl{bottom:20px;left:20px}.corner.br{bottom:20px;right:20px;color:var(--brand)}
+
+  .primary-lock{display:inline-flex;align-items:baseline;gap:12px}
+  .primary-lock .a{font-family:var(--font-display);font-style:italic;font-size:72px;color:var(--brand);line-height:1;font-variation-settings:"opsz" 72}
+  .primary-lock .w{font-family:var(--font-display);font-style:italic;font-size:56px;color:var(--ink-1000);letter-spacing:-0.03em;line-height:1;font-variation-settings:"opsz" 72}
+  .primary-lock .w b{font-weight:400;color:var(--fg-dim);font-style:italic}
+
+  .ruleblock{background:var(--ink-100);padding:22px 24px;display:flex;flex-direction:column;gap:14px;justify-content:center}
+  .rule-k{font-family:var(--font-ui);font-size:8.5px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--brand);margin-bottom:3px}
+  .rule-v{font-family:var(--font-display);font-style:italic;font-size:14px;color:var(--ink-900);line-height:1.35}
+  .rule-v em{color:var(--gold-300)}
+
+  /* Studies grid */
+  .studies{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+  .s{background:var(--bg);padding:18px 16px 14px;display:flex;flex-direction:column;gap:10px;min-height:148px}
+  .s.inv{background:var(--ink-1000);color:#1a1206}
+  .s .n{font-family:var(--font-mono);font-size:9px;letter-spacing:0.18em;color:var(--fg-hint)}
+  .s.inv .n{color:#8c6d2f}
+  .s .box{flex:1;display:flex;align-items:center;justify-content:center;padding:10px 2px;min-height:70px}
+  .s .cap{font-family:var(--font-display);font-style:italic;font-size:11.5px;color:var(--fg-muted);line-height:1.3}
+  .s.inv .cap{color:#5c4a22}
+
+  /* 01 - Current α + AlphaDesk */
+  .v01 .a{font-family:var(--font-display);font-style:italic;font-size:38px;color:var(--brand);line-height:1}
+  .v01 .w{font-family:var(--font-display);font-style:italic;font-size:28px;color:var(--ink-1000);letter-spacing:-0.025em;margin-left:8px}
+
+  /* 02 - Stacked tight */
+  .v02{flex-direction:column;gap:2px;text-align:center}
+  .v02 .a{font-family:var(--font-display);font-style:italic;font-size:42px;color:var(--brand);line-height:0.9}
+  .v02 .w{font-family:var(--font-mono);font-size:10px;color:var(--ink-1000);letter-spacing:0.36em;font-weight:500;text-transform:uppercase;margin-top:4px}
+
+  /* 03 - α inside brackets */
+  .v03 .br{font-family:var(--font-mono);font-size:46px;color:var(--fg-dim);font-weight:200;line-height:1}
+  .v03 .a{font-family:var(--font-display);font-style:italic;font-size:46px;color:var(--brand);line-height:1;margin:0 2px}
+  .v03 .w{font-family:var(--font-display);font-style:italic;font-size:20px;color:var(--ink-1000);margin-left:10px;letter-spacing:-0.02em}
+
+  /* 04 - Slashed lockup: Alpha/Desk */
+  .v04 .alpha{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .v04 .slash{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--brand);margin:0 3px}
+  .v04 .desk{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--fg-dim);letter-spacing:-0.02em}
+
+  /* 05 - Tile */
+  .tile{width:76px;height:76px;background:var(--brand);display:flex;align-items:center;justify-content:center;border-radius:4px;position:relative;overflow:hidden}
+  .tile::after{content:"";position:absolute;inset:4px;border:1px solid rgba(26,18,6,0.25);border-radius:2px}
+  .tile span{font-family:var(--font-display);font-style:italic;font-size:48px;color:#1a1206;line-height:1;font-variation-settings:"opsz" 72}
+
+  /* 06 - Inverted */
+  .v06 .a{font-family:var(--font-display);font-style:italic;font-size:36px;color:#8c6d2f;line-height:1}
+  .v06 .w{font-family:var(--font-display);font-style:italic;font-size:26px;color:#1a1206;letter-spacing:-0.025em;margin-left:8px}
+
+  /* 07 - Serif wordmark, α as drop-cap */
+  .v07{align-items:flex-start}
+  .v07 .dropcap{font-family:var(--font-display);font-style:italic;font-size:60px;color:var(--brand);line-height:0.85;padding-right:6px;font-variation-settings:"opsz" 72}
+  .v07 .stack{display:flex;flex-direction:column;line-height:1.05}
+  .v07 .stack .a1{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .v07 .stack .a2{font-family:var(--font-ui);font-size:9px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--fg-muted);margin-top:2px}
+
+  /* 08 - ALPHA · DESK split */
+  .v08{flex-direction:column;gap:4px;text-align:center}
+  .v08 .row{display:inline-flex;align-items:baseline;gap:10px}
+  .v08 .l{font-family:var(--font-mono);font-size:13px;color:var(--ink-1000);letter-spacing:0.28em;font-weight:500}
+  .v08 .dot{color:var(--brand);font-size:14px}
+  .v08 .r{font-family:var(--font-mono);font-size:13px;color:var(--fg-dim);letter-spacing:0.28em;font-weight:500}
+  .v08 .sub{font-family:var(--font-display);font-style:italic;font-size:11px;color:var(--fg-muted);margin-top:2px}
+
+  /* 09 - Monogram AD ligature */
+  .v09 svg{display:block}
+  .v09 .w{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);margin-left:10px;letter-spacing:-0.02em}
+
+  /* 10 - Underline rule */
+  .v10{flex-direction:column;gap:3px;align-items:center}
+  .v10 .row{display:inline-flex;align-items:baseline;gap:6px}
+  .v10 .a{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--brand)}
+  .v10 .w{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--ink-1000);letter-spacing:-0.025em}
+  .v10 .rule{width:88px;height:1px;background:var(--brand);opacity:0.6}
+
+  /* Sub-brand row */
+  .subs{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+  .subs > div{background:var(--bg);padding:14px 14px;display:flex;flex-direction:column;gap:4px}
+  .subs .k{font-family:var(--font-ui);font-size:8.5px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--fg-muted)}
+  .subs .lock{display:inline-flex;align-items:baseline;gap:6px}
+  .subs .lock .a{font-family:var(--font-display);font-style:italic;font-size:20px;color:var(--brand)}
+  .subs .lock .w{font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .subs .lock .w .suf{color:var(--fg-dim)}
+
+  /* Spec */
+  .spec{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+  .spec > div{background:var(--bg);padding:12px 14px}
+  .spec .k{font-family:var(--font-ui);font-size:8.5px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--fg-muted)}
+  .spec .v{font-family:var(--font-mono);font-size:11px;color:var(--ink-1000);margin-top:3px}
+  .spec .v em{color:var(--brand);font-family:var(--font-display);font-style:italic}
+</style></head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <div class="ttl"><em style="font-style:italic">AlphaDesk</em> — mark &amp; lockup</div>
+    <div class="sub">Primary · 10 variants · sub-brands</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="stage">
+      <div class="corner tl">Primary · lockup</div>
+      <div class="corner tr">Newsreader italic</div>
+      <div class="corner bl">v01 · nov 2025</div>
+      <div class="corner br">α · gold primary</div>
+      <div class="primary-lock"><span class="a">α</span><span class="w">AlphaDesk</span></div>
+    </div>
+    <div class="ruleblock">
+      <div>
+        <div class="rule-k">Concept</div>
+        <div class="rule-v">The greek <em>α</em> is the <em>alpha</em> we chase. The serif italic signals editorial patience; the sans-neutral "Desk" grounds it as software.</div>
+      </div>
+      <div>
+        <div class="rule-k">Rule</div>
+        <div class="rule-v">α is always gold. "AlphaDesk" is always one word, capital-A capital-D. Never "Alpha Desk" or "alphadesk".</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Studies grid -->
+  <div class="studies">
+    <div class="s">
+      <div class="n">01 · PRIMARY</div>
+      <div class="box v01"><span class="a">α</span><span class="w">AlphaDesk</span></div>
+      <div class="cap">Default lockup. Use everywhere unless a variant fits better.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">02 · STACKED · TIGHT</div>
+      <div class="box v02"><div class="a">α</div><div class="w">AlphaDesk</div></div>
+      <div class="cap">Square spaces — avatars, favicons at display size.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">03 · BRACKETED</div>
+      <div class="box v03"><span class="br">[</span><span class="a">α</span><span class="br">]</span><span class="w">AlphaDesk</span></div>
+      <div class="cap">Terminal / CLI / memo header — mono brackets frame the glyph.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">04 · SPLIT · ALPHA/DESK</div>
+      <div class="box v04"><span class="alpha">Alpha</span><span class="slash">/</span><span class="desk">Desk</span></div>
+      <div class="cap">For wide banner contexts — emphasizes the two halves.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">05 · TILE</div>
+      <div class="box"><div class="tile"><span>α</span></div></div>
+      <div class="cap">iOS / homescreen / app icon.</div>
+    </div>
+
+    <div class="s inv">
+      <div class="n">06 · INVERTED</div>
+      <div class="box v06"><span class="a">α</span><span class="w">AlphaDesk</span></div>
+      <div class="cap">On light / press / paper. α holds deep gold.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">07 · DROP-CAP</div>
+      <div class="box v07"><span class="dropcap">α</span><span class="stack"><span class="a1">AlphaDesk</span><span class="a2">A systematic desk</span></span></div>
+      <div class="cap">Editorial / masthead / deck covers.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">08 · MONO · SPLIT</div>
+      <div class="box v08"><div class="row"><span class="l">ALPHA</span><span class="dot">·</span><span class="r">DESK</span></div><div class="sub">a systematic terminal</div></div>
+      <div class="cap">Footers, receipts, stamps — machined feel.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">09 · AD MONOGRAM</div>
+      <div class="box v09">
+        <svg width="56" height="50" viewBox="0 0 56 50" fill="none" stroke="#c9a66b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <!-- A shape -->
+          <path d="M6 44 L18 6 L30 44"/>
+          <line x1="11" y1="30" x2="25" y2="30"/>
+          <!-- D shape interlocked -->
+          <path d="M30 6 L30 44 L40 44 C48 44 52 38 52 25 C52 12 48 6 40 6 Z" fill="none"/>
+        </svg>
+        <span class="w">AlphaDesk</span>
+      </div>
+      <div class="cap">Interlocked AD — embossing / seal / footer mark.</div>
+    </div>
+
+    <div class="s">
+      <div class="n">10 · UNDERLINED</div>
+      <div class="box v10"><div class="row"><span class="a">α</span><span class="w">AlphaDesk</span></div><div class="rule"></div></div>
+      <div class="cap">Hero / deck title slide — editorial rule below.</div>
+    </div>
+
+    <div class="s" style="grid-column:span 2">
+      <div class="n">11 · NAME ALTERNATIVES <span style="color:var(--fg-hint);margin-left:8px">(same mark · different name)</span></div>
+      <div class="box" style="flex-direction:column;gap:6px;align-items:flex-start">
+        <div style="display:inline-flex;align-items:baseline;gap:8px"><span style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--brand)">α</span><span style="font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em">AlphaDesk</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.1em">· current</span></div>
+        <div style="display:inline-flex;align-items:baseline;gap:8px"><span style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--brand)">α</span><span style="font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em">Alphaline</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.1em">· softer · platform-y</span></div>
+        <div style="display:inline-flex;align-items:baseline;gap:8px"><span style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--brand)">α</span><span style="font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em">Alphaworks</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.1em">· studio · craft</span></div>
+        <div style="display:inline-flex;align-items:baseline;gap:8px"><span style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--brand)">α</span><span style="font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em">Alphahaus</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.1em">· bauhaus · editorial</span></div>
+        <div style="display:inline-flex;align-items:baseline;gap:8px"><span style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--brand)">α</span><span style="font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em">Alpha &amp; Co.</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.1em">· heritage · boutique</span></div>
+      </div>
+      <div class="cap">Same α mark — different word tail. Useful if "Desk" reads too narrow.</div>
+    </div>
+  </div>
+
+  <!-- Sub-brands -->
+  <div class="subs">
+    <div><span class="k">Research</span><span class="lock"><span class="a">α</span><span class="w">AlphaDesk <span class="suf">Research</span></span></span></div>
+    <div><span class="k">Mobile</span><span class="lock"><span class="a">α</span><span class="w">AlphaDesk <span class="suf">Mobile</span></span></span></div>
+    <div><span class="k">Terminal</span><span class="lock"><span class="a">α</span><span class="w">AlphaDesk <span class="suf">Terminal</span></span></span></div>
+    <div><span class="k">Capital (fund)</span><span class="lock"><span class="a">α</span><span class="w">AlphaDesk <span class="suf">Capital</span></span></span></div>
+  </div>
+
+  <!-- Spec -->
+  <div class="spec">
+    <div><div class="k">Typography</div><div class="v"><em>Newsreader</em> italic, opsz 72<br>Inter Tight for tails</div></div>
+    <div><div class="k">Tracking</div><div class="v">word <em>−0.025em</em><br>mono tails 0.28em</div></div>
+    <div><div class="k">Clearspace</div><div class="v">1× α cap-height<br>all sides</div></div>
+    <div><div class="k">Min size</div><div class="v">20px digital<br>14mm print</div></div>
+  </div>
+
+</div>
+</body></html>

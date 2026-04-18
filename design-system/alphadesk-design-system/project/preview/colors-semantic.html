@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .card{padding:24px;display:flex;flex-direction:column;gap:16px}
+  .caption{display:flex;justify-content:space-between;align-items:baseline}
+  .caption .ttl{font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .caption .desc{font-family:var(--font-ui);font-size:11px;color:var(--fg-muted);letter-spacing:0.16em;text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .pair{display:flex;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elev-1)}
+  .pair .sw{width:44px;height:44px;border-radius:var(--radius-xs);flex-shrink:0}
+  .pair .txt{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
+  .pair .nm{font-family:var(--font-ui);font-size:10px;color:var(--fg);font-weight:600;letter-spacing:0.16em;text-transform:uppercase}
+  .pair .hex{font-family:var(--font-mono);font-size:10.5px;color:var(--fg-muted)}
+  .pair .role{font-family:var(--font-display);font-style:italic;font-size:13px;color:var(--fg-dim);margin-top:1px}
+  .num{font-family:var(--font-mono);font-size:17px;font-weight:500}
+
+  /* contrast strip: prove loss & warning now read differently */
+  .strip{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+  .strip > div{padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+  .strip .loss{background:rgba(224,120,86,0.08);border-right:1px solid var(--border)}
+  .strip .warn{background:rgba(217,164,65,0.08)}
+  .strip .k{font-family:var(--font-ui);font-size:9px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--fg-muted)}
+  .strip .v{font-family:var(--font-display);font-style:italic;font-size:16px;letter-spacing:-0.01em}
+  .strip .v.loss-c{color:#e07856}
+  .strip .v.warn-c{color:#d9a441}
+  .strip .hex{font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.04em}
+</style></head>
+<body>
+<div class="card">
+  <div class="caption"><div class="ttl">P&amp;L semantics</div><div class="desc">Chartreuse · coral · amber</div></div>
+
+  <!-- Loss vs Warning contrast -->
+  <div class="strip">
+    <div class="loss">
+      <span class="k">Loss · coral</span>
+      <span class="v loss-c">−1.18%</span>
+      <span class="hex">#e07856 · down-500</span>
+    </div>
+    <div class="warn">
+      <span class="k">Warning · amber</span>
+      <span class="v warn-c">drawdown 3.8%</span>
+      <span class="hex">#d9a441 · amber-500</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="pair"><div class="sw" style="background:#a8d04d"></div><div class="txt"><div class="nm">Profit</div><div class="num" style="color:#a8d04d">+2.34%</div><div class="hex">a8d04d · up-500</div></div></div>
+    <div class="pair"><div class="sw" style="background:#e07856"></div><div class="txt"><div class="nm">Loss</div><div class="num" style="color:#e07856">−1.18%</div><div class="hex">e07856 · down-500</div></div></div>
+    <div class="pair"><div class="sw" style="background:#8db3c4"></div><div class="txt"><div class="nm">Info / Regime</div><div class="role">bull — low vol</div><div class="hex">8db3c4 · ice-500</div></div></div>
+    <div class="pair"><div class="sw" style="background:#d9a441"></div><div class="txt"><div class="nm">Warning</div><div class="role">drawdown 3.8%</div><div class="hex">d9a441 · amber-500</div></div></div>
+    <div class="pair"><div class="sw" style="background:#8a3a4a"></div><div class="txt"><div class="nm">Critical</div><div class="role">circuit break</div><div class="hex">8a3a4a · wine-500</div></div></div>
+    <div class="pair"><div class="sw" style="background:#d3e89a"></div><div class="txt"><div class="nm">Tints · 100</div><div class="role">background washes</div><div class="hex">d3e89a / f3dfa3</div></div></div>
+  </div>
+</div>
+</body></html>

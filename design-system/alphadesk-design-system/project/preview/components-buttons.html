@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg);width:700px;overflow:hidden}
+  .card{padding:26px;display:flex;flex-direction:column;gap:14px}
+  .eyebrow{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{font-family:var(--font-ui);font-size:12.5px;font-weight:500;letter-spacing:0.01em;height:34px;padding:0 16px;border-radius:var(--radius-sm);border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 140ms var(--ease)}
+  .btn.primary{background:var(--brand);color:#1a1206}
+  .btn.primary:hover{background:var(--gold-300)}
+  .btn.secondary{background:transparent;color:var(--fg);border-color:var(--border-strong)}
+  .btn.secondary:hover{background:var(--bg-elev-1);border-color:var(--brand)}
+  .btn.ghost{background:transparent;color:var(--fg-dim)}
+  .btn.ghost:hover{color:var(--fg);background:var(--bg-elev-1)}
+  .btn.buy{background:rgba(168,208,77,0.1);color:var(--up-500);border-color:rgba(168,208,77,0.3);letter-spacing:0.1em;text-transform:uppercase;font-size:11px}
+  .btn.buy:hover{background:rgba(168,208,77,0.18)}
+  .btn.sell{background:rgba(224,120,86,0.1);color:var(--down-500);border-color:rgba(224,120,86,0.3);letter-spacing:0.1em;text-transform:uppercase;font-size:11px}
+  .btn.sell:hover{background:rgba(224,120,86,0.18)}
+  .btn.link{background:transparent;color:var(--brand);padding:0;height:auto;border:0;border-bottom:1px solid var(--brand-dim);border-radius:0}
+  .btn.lg{height:42px;padding:0 24px;font-size:13px}
+  .btn.sm{height:26px;padding:0 10px;font-size:11px}
+  .caption{font-family:var(--font-display);font-style:italic;font-size:14px;color:var(--fg-muted)}
+</style></head>
+<body>
+<div class="card">
+  <div class="eyebrow">Buttons · Primary · Secondary · Semantic</div>
+  <div class="row">
+    <button class="btn primary">Run pipeline</button>
+    <button class="btn secondary">Cancel order</button>
+    <button class="btn ghost">Dismiss</button>
+    <a class="btn link">Read strategy memo →</a>
+  </div>
+  <div class="row">
+    <button class="btn buy">Buy · 100 SPY</button>
+    <button class="btn sell">Sell · 50 NVDA</button>
+    <button class="btn primary lg">Open trading desk</button>
+    <button class="btn secondary sm">Export CSV</button>
+  </div>
+  <div class="caption">Press shrinks 2%, never changes color. Focus uses a 1px gold ring.</div>
+</div>
+</body></html>

@@ -1,0 +1,377 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AlphaDesk — Mobile</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--ink-000);min-height:100vh}
+  .scene{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:60px 32px 80px;gap:40px;flex-wrap:wrap;background:radial-gradient(circle at 50% 0%, rgba(201,166,107,0.07) 0%, transparent 55%), var(--ink-000)}
+  .caption{text-align:center;font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--fg-muted);margin-top:16px;letter-spacing:-0.005em;max-width:300px}
+  .caption .eye{display:block;font-family:var(--font-ui);font-size:10px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--brand);margin-bottom:6px;font-style:normal}
+  .pair{display:flex;flex-direction:column;align-items:center}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+</head>
+<body>
+<div id="root" class="scene"></div>
+<script type="text/babel">
+const INK='#0b0a09', INK_ELEV='#111110', INK_CARD='#1c1a14', INK_CARD_HI='#221f17', INK_BORDER='#2a271d', INK_BORDER_HI='#3a3628';
+const FG='#ece6d2', FG_DIM='#a8a08d', FG_MUTED='#7d7665', FG_HINT='#5b5547';
+const GOLD='#c9a66b', GOLD_BRIGHT='#e0c070', GOLD_DEEP='#8c6d2f';
+const UP='#a8d04d', DN='#e07856', ICE='#8db3c4';
+const SERIF="'Newsreader', Georgia, serif";
+const UI="'Inter Tight', -apple-system, sans-serif";
+const MONO="'JetBrains Mono', 'SF Mono', monospace";
+
+// ═══ Shared micro-components ══════════════════════════════════
+
+// Small ticker badge with letter (like a stamp)
+function Stamp({sym, color=GOLD}) {
+  return (
+    <div style={{
+      width:44, height:54, borderRadius:4, border:`1px solid ${color}`,
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      background:'rgba(201,166,107,0.06)', position:'relative', flexShrink:0,
+    }}>
+      <div style={{fontFamily:UI, fontSize:8, fontWeight:600, letterSpacing:'0.18em', color:color, opacity:0.6}}>TKR</div>
+      <div style={{fontFamily:UI, fontSize:13, fontWeight:600, letterSpacing:'0.03em', color:FG, marginTop:-2}}>{sym}</div>
+    </div>
+  );
+}
+
+// Corner ornament (trading-card vibe) — tiny α in each corner
+function Corners({color=GOLD}) {
+  return <>
+    {[
+      {top:10, left:10},{top:10, right:10, transform:'scaleX(-1)'},
+      {bottom:10, left:10, transform:'scaleY(-1)'},{bottom:10, right:10, transform:'scale(-1,-1)'},
+    ].map((p,i)=>(
+      <div key={i} style={{position:'absolute', fontFamily:SERIF, fontStyle:'italic', fontSize:13, color:color, opacity:0.35, lineHeight:1, ...p}}>α</div>
+    ))}
+  </>;
+}
+
+// ═══ SCREEN 1 — OVERVIEW (deck peek) ══════════════════════════
+function OverviewScreen(){
+  return (
+    <div style={{background:INK, minHeight:'100%', color:FG, fontFamily:UI, paddingTop:60, position:'relative', overflow:'hidden'}}>
+      {/* subtle radial glow */}
+      <div style={{position:'absolute', top:-120, left:-80, right:-80, height:400, background:'radial-gradient(ellipse, rgba(201,166,107,0.12), transparent 70%)', pointerEvents:'none'}}/>
+
+      {/* Header row */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 20px 4px', position:'relative'}}>
+        <div style={{display:'flex', alignItems:'baseline', gap:4, fontFamily:SERIF, fontStyle:'italic', fontSize:22, color:FG, letterSpacing:-0.02}}>
+          <span style={{color:GOLD}}>α</span>AlphaDesk
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:6, padding:'4px 10px', border:`1px solid ${INK_BORDER}`, borderRadius:999, fontFamily:SERIF, fontStyle:'italic', fontSize:12, color:FG_DIM}}>
+          <span style={{width:6, height:6, borderRadius:'50%', background:ICE, boxShadow:`0 0 6px ${ICE}`}}></span>
+          bull · low vol
+        </div>
+      </div>
+
+      {/* Book equity hero */}
+      <div style={{padding:'28px 20px 24px', position:'relative'}}>
+        <div style={{fontFamily:UI, fontSize:9.5, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:FG_MUTED, marginBottom:10}}>Book · total equity</div>
+        <div style={{fontFamily:MONO, fontSize:52, fontWeight:300, color:'#f7f1dc', letterSpacing:-0.03, lineHeight:1, fontVariantNumeric:'tabular-nums'}}>
+          $284,193<span style={{fontSize:28, color:FG_DIM}}>.42</span>
+        </div>
+        <div style={{marginTop:10, display:'flex', gap:14, alignItems:'baseline', fontFamily:MONO, fontSize:14}}>
+          <span style={{color:UP}}>+$2,341.18</span>
+          <span style={{color:UP}}>+0.82%</span>
+          <span style={{color:FG_MUTED, fontFamily:SERIF, fontStyle:'italic'}}>today</span>
+        </div>
+      </div>
+
+      {/* Positions — deck peek title */}
+      <div style={{padding:'4px 20px 14px', display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
+        <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:22, color:'#ece6d2', letterSpacing:-0.015}}>Your hand</div>
+        <div style={{fontFamily:MONO, fontSize:11, color:FG_MUTED, letterSpacing:0.04}}>12 CARDS · 5 STRATS</div>
+      </div>
+
+      {/* Stacked playcards (overlapping) */}
+      <div style={{padding:'0 16px', position:'relative', height:320}}>
+        {[
+          {sym:'NVDA', name:'Nvidia', strat:'Momentum & Quality', idx:1, pnl:'+$1,602', pct:'+5.0%', qty:250, dn:false, offset:0},
+          {sym:'SPY', name:'S&P 500 ETF', strat:'Regime Adaptive', idx:2, pnl:'+$234', pct:'+1.0%', qty:50, dn:false, offset:18},
+          {sym:'UNH', name:'UnitedHealth', strat:'Claude Alpha', idx:3, pnl:'−$258', pct:'−1.1%', qty:40, dn:true, offset:36},
+        ].map((c,i)=>(
+          <PlayCard key={c.sym} {...c} stacked stackIndex={i} total={3}/>
+        ))}
+        {/* hint count */}
+        <div style={{position:'absolute', bottom:-8, left:0, right:0, textAlign:'center', fontFamily:SERIF, fontStyle:'italic', fontSize:12, color:FG_HINT}}>
+          + 9 more — pull up to deal
+        </div>
+      </div>
+
+      {/* Quick Claude memo card */}
+      <div style={{margin:'20px 20px 16px', padding:'16px 18px', background:INK_ELEV, border:`1px solid ${INK_BORDER}`, borderRadius:8, position:'relative'}}>
+        <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8}}>
+          <span style={{width:7, height:7, borderRadius:'50%', background:GOLD, boxShadow:`0 0 8px ${GOLD}`}}/>
+          <span style={{fontFamily:UI, fontSize:9, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:GOLD}}>Claude · 14:32 memo</span>
+        </div>
+        <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:15, color:'#ece6d2', lineHeight:1.38, letterSpacing:-0.005}}>
+          Regime held <span style={{color:GOLD_BRIGHT}}>bull / low-vol</span>. Trim UNH 40%.
+        </div>
+      </div>
+
+      <div style={{height:110}}/>
+      <TabBar active="Desk"/>
+    </div>
+  );
+}
+
+// ═══ SCREEN 2 — STRATEGIES (card deck / fan) ══════════════════
+function StrategiesScreen(){
+  const strats = [
+    {idx:'01', name:'Momentum\n& Quality', suit:'swing', color:GOLD,   ret:'+3.42%', pos:4, dn:false},
+    {idx:'02', name:'Regime\nAdaptive',   suit:'macro', color:ICE,    ret:'+1.84%', pos:3, dn:false},
+    {idx:'03', name:'PEAD',               suit:'event', color:UP,     ret:'+0.62%', pos:2, dn:false},
+    {idx:'04', name:'Mean\nReversion',    suit:'paused',color:FG_HINT,ret:'—',      pos:0, dn:false, paused:true},
+    {idx:'05', name:'Pairs\n· Sector',    suit:'neutral',color:GOLD_BRIGHT, ret:'+0.41%', pos:2, dn:false},
+    {idx:'06', name:'Claude\nAlpha',      suit:'ai',    color:GOLD,    ret:'−1.18%',pos:1, dn:true, ai:true},
+  ];
+  return (
+    <div style={{background:INK, minHeight:'100%', color:FG, fontFamily:UI, paddingTop:60, position:'relative', overflow:'hidden'}}>
+      {/* back + title */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 20px'}}>
+        <div style={{width:34, height:34, borderRadius:'50%', background:INK_ELEV, border:`1px solid ${INK_BORDER}`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:SERIF, fontSize:18, color:FG_DIM, lineHeight:1}}>←</div>
+        <div style={{fontFamily:UI, fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:FG_MUTED}}>The Book</div>
+        <div style={{width:34, height:34}}/>
+      </div>
+
+      {/* Hero */}
+      <div style={{padding:'20px 20px 24px'}}>
+        <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:44, color:'#f7f1dc', letterSpacing:-0.028, lineHeight:0.98}}>Six strategies.<br/><span style={{color:GOLD}}>One desk.</span></div>
+        <div style={{fontFamily:UI, fontSize:13, color:FG_DIM, marginTop:14, lineHeight:1.45, maxWidth:320}}>
+          Each runs on the same execution layer and risk policy. Tap a card to tune.
+        </div>
+      </div>
+
+      {/* 2×3 strategy deck */}
+      <div style={{padding:'0 16px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+        {strats.map(s => <StrategyCard key={s.idx} {...s}/>)}
+      </div>
+
+      <div style={{padding:'24px 20px 0', fontFamily:SERIF, fontStyle:'italic', fontSize:14, color:FG_HINT, textAlign:'center'}}>
+        Composite · <span style={{color:UP, fontFamily:MONO, fontStyle:'normal'}}>+4.91%</span> · this month
+      </div>
+
+      <div style={{height:120}}/>
+      <TabBar active="Book"/>
+    </div>
+  );
+}
+
+// ═══ SCREEN 3 — POSITION DETAIL (hero card) ═══════════════════
+function PositionScreen(){
+  return (
+    <div style={{background:INK, minHeight:'100%', color:FG, fontFamily:UI, paddingTop:60, position:'relative'}}>
+      {/* back + meta */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 20px'}}>
+        <div style={{width:34, height:34, borderRadius:'50%', background:INK_ELEV, border:`1px solid ${INK_BORDER}`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:SERIF, fontSize:18, color:FG_DIM, lineHeight:1}}>←</div>
+        <div style={{fontFamily:UI, fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:FG_MUTED}}>Card 01 / 12</div>
+        <div style={{width:34, height:34, borderRadius:'50%', background:INK_ELEV, border:`1px solid ${INK_BORDER}`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:MONO, fontSize:14, color:FG_DIM}}>⋯</div>
+      </div>
+
+      {/* Hero playcard */}
+      <div style={{padding:'14px 20px 20px'}}>
+        <HeroCard/>
+      </div>
+
+      {/* Stats rail below card */}
+      <div style={{margin:'0 20px', padding:'14px 0 0', borderTop:`1px solid ${INK_BORDER}`}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, padding:'2px 0'}}>
+          {[['Held','9 days'],['Avg cost','128.41'],['Mkt value','33,705'],['Weight','11.9%']].map(([k,v],i)=>(
+            <div key={i} style={{padding:'10px 0'}}>
+              <div style={{fontFamily:MONO, fontSize:9.5, color:FG_HINT, letterSpacing:0.06, textTransform:'uppercase'}}>{k}</div>
+              <div style={{fontFamily:MONO, fontSize:18, color:'#f7f1dc', fontVariantNumeric:'tabular-nums', fontWeight:300, marginTop:3}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* actions */}
+      <div style={{padding:'16px 20px 28px', display:'flex', gap:8}}>
+        <div style={{flex:1, textAlign:'center', padding:'14px', background:'rgba(224,120,86,0.1)', color:DN, border:`1px solid rgba(224,120,86,0.3)`, borderRadius:8, fontFamily:UI, fontSize:11, fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase'}}>Trim</div>
+        <div style={{flex:1, textAlign:'center', padding:'14px', background:'rgba(168,208,77,0.1)', color:UP, border:`1px solid rgba(168,208,77,0.3)`, borderRadius:8, fontFamily:UI, fontSize:11, fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase'}}>Add</div>
+        <div style={{flex:1.3, textAlign:'center', padding:'14px', background:GOLD, color:'#1a1206', borderRadius:8, fontFamily:UI, fontSize:11, fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase'}}>Ask α</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ The PlayCard — trading-card styled position tile ═════════
+function PlayCard({sym, name, strat, idx, pnl, pct, qty, dn, stacked=false, stackIndex=0, total=1}){
+  // Staggered stacking for the overview "hand"
+  const stackStyle = stacked ? {
+    position:'absolute', left:16+stackIndex*14, right:16+stackIndex*14,
+    top:stackIndex*48,
+    transform:`rotate(${(stackIndex-1)*-1.5}deg)`,
+    zIndex: total - stackIndex,
+    boxShadow: stackIndex===0 ? '0 30px 60px rgba(0,0,0,0.6), 0 10px 20px rgba(0,0,0,0.3)' : '0 20px 30px rgba(0,0,0,0.35)',
+  } : {};
+  const accent = dn ? DN : UP;
+  return (
+    <div style={{
+      background:`linear-gradient(165deg, ${INK_CARD_HI} 0%, ${INK_CARD} 60%, ${INK_ELEV} 100%)`,
+      border:`1px solid ${INK_BORDER_HI}`,
+      borderRadius:12, padding:'14px 16px',
+      position:'relative', overflow:'hidden',
+      ...stackStyle,
+    }}>
+      <Corners color={accent}/>
+      {/* Top row: index + sym */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10}}>
+        <div style={{display:'flex', alignItems:'center', gap:10}}>
+          <div style={{fontFamily:MONO, fontSize:10, color:FG_HINT, letterSpacing:0.1}}>N°{String(idx).padStart(2,'0')}</div>
+          <div style={{fontFamily:UI, fontSize:16, fontWeight:700, color:'#f7f1dc', letterSpacing:0.04}}>{sym}</div>
+        </div>
+        <div style={{fontFamily:MONO, fontSize:10, color:FG_HINT, letterSpacing:0.05}}>{qty} SH</div>
+      </div>
+      {/* Name + strategy */}
+      <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:18, color:FG, letterSpacing:-0.01, lineHeight:1.1}}>{name}</div>
+      <div style={{fontFamily:UI, fontSize:9.5, fontWeight:600, color:FG_MUTED, letterSpacing:'0.18em', textTransform:'uppercase', marginTop:3}}>{strat}</div>
+      {/* Divider row with gold rule */}
+      <div style={{display:'flex', alignItems:'center', gap:10, marginTop:10, paddingTop:10, borderTop:`1px dashed rgba(236,230,210,0.08)`}}>
+        <div style={{flex:1, display:'flex', flexDirection:'column'}}>
+          <span style={{fontFamily:MONO, fontSize:9.5, color:FG_HINT, textTransform:'uppercase', letterSpacing:0.08}}>unreal.</span>
+          <span style={{fontFamily:MONO, fontSize:22, fontWeight:500, color:accent, fontVariantNumeric:'tabular-nums', lineHeight:1, marginTop:2}}>{pnl}</span>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <span style={{fontFamily:MONO, fontSize:9.5, color:FG_HINT, textTransform:'uppercase', letterSpacing:0.08}}>return</span>
+          <div style={{fontFamily:MONO, fontSize:22, fontWeight:500, color:accent, fontVariantNumeric:'tabular-nums', lineHeight:1, marginTop:2}}>{pct}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ HeroCard — full-bleed playcard w/ chart ══════════════════
+function HeroCard(){
+  return (
+    <div style={{
+      background:`linear-gradient(155deg, #2a2217 0%, ${INK_CARD} 55%, ${INK_ELEV} 100%)`,
+      border:`1px solid ${GOLD_DEEP}`,
+      borderRadius:14, padding:'18px 20px 20px',
+      position:'relative', overflow:'hidden',
+      boxShadow:'0 30px 60px rgba(0,0,0,0.6), 0 0 40px rgba(201,166,107,0.1)',
+    }}>
+      <Corners color={GOLD}/>
+      {/* Top rank line */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{display:'flex', alignItems:'baseline', gap:10}}>
+          <div style={{fontFamily:MONO, fontSize:11, color:FG_HINT, letterSpacing:0.12}}>N° 01</div>
+          <div style={{fontFamily:UI, fontSize:11, fontWeight:600, letterSpacing:'0.18em', textTransform:'uppercase', color:GOLD_BRIGHT}}>long</div>
+        </div>
+        <div style={{fontFamily:MONO, fontSize:11, color:FG_HINT, letterSpacing:0.1}}>250 SH</div>
+      </div>
+
+      {/* Title row */}
+      <div style={{marginTop:12}}>
+        <div style={{fontFamily:UI, fontSize:24, fontWeight:700, color:'#f7f1dc', letterSpacing:0.06}}>NVDA</div>
+        <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:30, color:FG, letterSpacing:-0.02, lineHeight:1, marginTop:2}}>Nvidia Corp.</div>
+        <div style={{fontFamily:UI, fontSize:9.5, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:GOLD, marginTop:6}}>Strategy · Momentum & Quality</div>
+      </div>
+
+      {/* Chart */}
+      <div style={{marginTop:14, background:'rgba(0,0,0,0.2)', borderRadius:6, padding:'10px 4px 4px'}}>
+        <svg viewBox="0 0 360 90" style={{width:'100%', height:90, display:'block'}} preserveAspectRatio="none">
+          <defs><linearGradient id="hcg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={GOLD} stopOpacity="0.32"/><stop offset="1" stopColor={GOLD} stopOpacity="0"/></linearGradient></defs>
+          <path d="M0 74 L30 68 L60 70 L90 60 L120 58 L150 48 L180 52 L210 40 L240 34 L270 40 L300 24 L330 16 L360 8 L360 90 L0 90 Z" fill="url(#hcg)"/>
+          <path d="M0 74 L30 68 L60 70 L90 60 L120 58 L150 48 L180 52 L210 40 L240 34 L270 40 L300 24 L330 16 L360 8" fill="none" stroke={GOLD_BRIGHT} strokeWidth="1.5"/>
+          <circle cx="210" cy="40" r="4" fill="none" stroke={UP} strokeWidth="1.4"/>
+          <circle cx="360" cy="8" r="3" fill={GOLD_BRIGHT}/>
+        </svg>
+      </div>
+
+      {/* Power/Toughness — the classic trading card bottom */}
+      <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:10, alignItems:'center'}}>
+        <div>
+          <div style={{fontFamily:MONO, fontSize:9.5, color:FG_HINT, letterSpacing:0.1, textTransform:'uppercase'}}>price</div>
+          <div style={{fontFamily:MONO, fontSize:30, fontWeight:300, color:'#f7f1dc', fontVariantNumeric:'tabular-nums', lineHeight:1, letterSpacing:-0.01, marginTop:2}}>134.82</div>
+          <div style={{fontFamily:MONO, fontSize:12, color:UP, marginTop:3}}>+1.74 · +1.31%</div>
+        </div>
+        <div style={{width:1, height:46, background:GOLD_DEEP, opacity:0.5}}/>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontFamily:MONO, fontSize:9.5, color:FG_HINT, letterSpacing:0.1, textTransform:'uppercase'}}>unreal. P&L</div>
+          <div style={{fontFamily:MONO, fontSize:30, fontWeight:500, color:UP, fontVariantNumeric:'tabular-nums', lineHeight:1, letterSpacing:-0.01, marginTop:2}}>+1,602</div>
+          <div style={{fontFamily:MONO, fontSize:12, color:UP, marginTop:3}}>+5.0%</div>
+        </div>
+      </div>
+
+      {/* Flavor text */}
+      <div style={{marginTop:14, padding:'12px 14px', background:'rgba(0,0,0,0.25)', borderLeft:`2px solid ${GOLD}`, fontFamily:SERIF, fontStyle:'italic', fontSize:13, color:FG_DIM, lineHeight:1.45}}>
+        "3-week high, regime bull/low-vol, earnings 14 days out."<div style={{fontFamily:UI, fontStyle:'normal', fontSize:9, fontWeight:600, letterSpacing:'0.2em', color:GOLD, marginTop:6, textTransform:'uppercase'}}>— Claude · 14:28</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ StrategyCard — square deck card ══════════════════════════
+function StrategyCard({idx, name, suit, color, ret, pos, dn, paused, ai}){
+  const accent = paused ? FG_HINT : color;
+  return (
+    <div style={{
+      background: ai
+        ? `linear-gradient(160deg, #2a2217 0%, ${INK_CARD} 70%)`
+        : `linear-gradient(160deg, ${INK_CARD_HI} 0%, ${INK_CARD} 70%, ${INK_ELEV} 100%)`,
+      border:`1px solid ${ai ? GOLD_DEEP : INK_BORDER_HI}`,
+      borderRadius:10, padding:'14px 12px 12px',
+      position:'relative', overflow:'hidden', aspectRatio:'0.72', display:'flex', flexDirection:'column',
+      opacity: paused ? 0.6 : 1,
+    }}>
+      <Corners color={accent}/>
+      {/* Top — index */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
+        <div style={{fontFamily:MONO, fontSize:10, color:FG_HINT, letterSpacing:0.1}}>N°{idx}</div>
+        <div style={{fontFamily:UI, fontSize:8, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase', color:accent}}>{suit}</div>
+      </div>
+      {/* Center — name */}
+      <div style={{flex:1, display:'flex', alignItems:'center'}}>
+        <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:22, color: ai ? GOLD_BRIGHT : FG, letterSpacing:-0.02, lineHeight:1.0, whiteSpace:'pre-line'}}>
+          {name}
+        </div>
+      </div>
+      {/* Glyph — big strategy number */}
+      <div style={{fontFamily:SERIF, fontStyle:'italic', fontSize:64, color:accent, opacity:0.18, position:'absolute', right:-6, bottom:-10, lineHeight:1, letterSpacing:-0.04}}>{idx}</div>
+      {/* Footer — return & positions */}
+      <div style={{marginTop:12, paddingTop:10, borderTop:`1px dashed rgba(236,230,210,0.1)`, display:'flex', justifyContent:'space-between', alignItems:'baseline', position:'relative', zIndex:1}}>
+        <div style={{fontFamily:MONO, fontSize:13, color: paused ? FG_HINT : (dn ? DN : UP), fontVariantNumeric:'tabular-nums', fontWeight:500}}>{ret}</div>
+        <div style={{fontFamily:MONO, fontSize:10, color:FG_MUTED, letterSpacing:0.06}}>{pos} POS</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ TabBar ═══════════════════════════════════════════════════
+function TabBar({active}){
+  return (
+    <div style={{position:'absolute', bottom:34, left:14, right:14, height:58, background:'rgba(17,17,16,0.88)', backdropFilter:'blur(16px) saturate(140%)', WebkitBackdropFilter:'blur(16px) saturate(140%)', border:`1px solid ${INK_BORDER}`, borderRadius:18, display:'flex', alignItems:'center', justifyContent:'space-around', padding:'0 8px'}}>
+      {['Desk','Book','Journal','Profile'].map(l=>(
+        <div key={l} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:3}}>
+          <div style={{width:6, height:6, borderRadius:'50%', background: l===active ? GOLD : 'transparent'}}/>
+          <div style={{fontFamily:UI, fontSize:11, fontWeight:500, color: l===active ? '#f7f1dc' : FG_MUTED, letterSpacing:0.01}}>{l}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <>
+    <div className="pair">
+      <IOSDevice dark={true}><OverviewScreen/></IOSDevice>
+      <div className="caption"><span className="eye">01 · overview</span>Your hand — positions as a stacked deck.</div>
+    </div>
+    <div className="pair">
+      <IOSDevice dark={true}><StrategiesScreen/></IOSDevice>
+      <div className="caption"><span className="eye">02 · the book</span>Six strategies as collectible cards.</div>
+    </div>
+    <div className="pair">
+      <IOSDevice dark={true}><PositionScreen/></IOSDevice>
+      <div className="caption"><span className="eye">03 · position</span>A single card, flipped up — with Claude's flavor text.</div>
+    </div>
+  </>
+);
+</script>
+</body></html>

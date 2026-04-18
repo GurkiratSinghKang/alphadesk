@@ -1,0 +1,224 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AlphaDesk — Quiet money, loud math</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg)}
+  .page{max-width:1440px;margin:0 auto;padding:0 48px}
+
+  /* ── Nav ───────────────────────────────────────────── */
+  nav.site{display:flex;align-items:center;height:72px;gap:32px}
+  nav.site .logo{display:flex;align-items:baseline;gap:4px;font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);letter-spacing:-0.02em}
+  nav.site .logo .a{color:var(--brand)}
+  nav.site .links{display:flex;gap:24px;margin-left:24px}
+  nav.site .links a{font-family:var(--font-ui);font-size:13px;color:var(--fg-dim);text-decoration:none}
+  nav.site .links a:hover{color:var(--fg)}
+  nav.site .right{margin-left:auto;display:flex;gap:12px;align-items:center}
+  nav.site .right a{font-family:var(--font-ui);font-size:13px;color:var(--fg-dim);text-decoration:none}
+  nav.site .cta{background:var(--brand);color:#1a1206;padding:8px 16px;border-radius:var(--radius-sm);font-weight:600;letter-spacing:0.01em}
+
+  /* ── Hero ──────────────────────────────────────────── */
+  .hero{padding:80px 0 120px;display:grid;grid-template-columns:1.05fr 0.95fr;gap:64px;align-items:center;border-bottom:1px solid var(--border)}
+  .hero .eye{font-family:var(--font-ui);font-size:11px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--brand);margin-bottom:24px}
+  .hero h1{font-family:var(--font-display);font-style:italic;font-size:108px;line-height:0.94;letter-spacing:-0.035em;color:var(--ink-1000);font-weight:400;margin:0;text-wrap:balance;font-variation-settings:"opsz" 72}
+  .hero h1 .alt{font-style:normal;color:var(--fg-dim)}
+  .hero p{font-family:var(--font-ui);font-size:18px;line-height:1.45;color:var(--fg-dim);max-width:480px;margin:32px 0 36px}
+  .hero .ctas{display:flex;gap:14px;align-items:center}
+  .hero .btn-primary{background:var(--brand);color:#1a1206;padding:14px 24px;border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:13px;font-weight:600;letter-spacing:0.02em;text-decoration:none}
+  .hero .btn-ghost{font-family:var(--font-display);font-style:italic;font-size:15px;color:var(--fg);text-decoration:none;border-bottom:1px solid var(--border-strong);padding-bottom:2px}
+  .hero .btn-ghost:hover{color:var(--brand);border-bottom-color:var(--brand)}
+
+  /* Hero visual — a live-ish terminal card */
+  .viz{background:var(--bg-elev-1);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;box-shadow:var(--shadow-2)}
+  .viz-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--ink-050);font-family:var(--font-mono);font-size:10.5px;color:var(--fg-muted);letter-spacing:0.08em;text-transform:uppercase}
+  .viz-head .dot{width:7px;height:7px;border-radius:50%;background:var(--up-500);box-shadow:0 0 6px var(--up-500)}
+  .viz-head .spacer{flex:1}
+  .viz-body{padding:24px;font-family:var(--font-mono);font-size:12px;color:var(--fg-dim);line-height:1.7}
+  .viz-body .line{display:flex;justify-content:space-between;border-bottom:1px dashed var(--border-hair);padding:8px 0}
+  .viz-body .line:last-child{border:0}
+  .viz-body b{color:var(--ink-1000);font-weight:500}
+  .viz-body .up{color:var(--up-500)}
+  .viz-body .dn{color:var(--down-500)}
+  .viz-body .gold{color:var(--gold-300)}
+  .viz-ai{padding:20px 24px;background:var(--ink-100);border-top:1px solid var(--border);font-family:var(--font-display);font-style:italic;font-size:16px;color:var(--ink-900);line-height:1.4}
+  .viz-ai::before{content:"α";color:var(--brand);margin-right:10px;font-size:22px}
+
+  /* ── Ticker strip ──────────────────────────────────── */
+  .ticker{padding:24px 0;border-bottom:1px solid var(--border);display:flex;gap:56px;overflow:hidden;white-space:nowrap;font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);letter-spacing:0.03em}
+  .ticker b{color:var(--fg);font-weight:500}
+  .ticker .up{color:var(--up-500)}
+  .ticker .dn{color:var(--down-500)}
+
+  /* ── Manifesto ─────────────────────────────────────── */
+  .manifesto{padding:120px 0;display:grid;grid-template-columns:280px 1fr;gap:80px;border-bottom:1px solid var(--border)}
+  .manifesto .eye{font-family:var(--font-ui);font-size:11px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--fg-muted);padding-top:18px;border-top:1px solid var(--border)}
+  .manifesto .body{font-family:var(--font-display);font-size:42px;line-height:1.22;letter-spacing:-0.02em;color:var(--ink-900);max-width:920px;text-wrap:balance}
+  .manifesto .body em{color:var(--brand);font-style:italic}
+  .manifesto .body .s{color:var(--fg-muted);font-style:italic}
+  .manifesto sig{display:block;font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--fg-muted);margin-top:32px}
+
+  /* ── Strategies grid ──────────────────────────────── */
+  .strats{padding:120px 0;border-bottom:1px solid var(--border)}
+  .strats h2{font-family:var(--font-display);font-style:italic;font-size:72px;letter-spacing:-0.03em;color:var(--ink-1000);margin:0 0 12px;font-weight:400;font-variation-settings:"opsz" 72}
+  .strats .sub{font-family:var(--font-ui);font-size:16px;color:var(--fg-dim);max-width:620px;margin:0 0 56px}
+  .strats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border)}
+  .strat-cell{background:var(--bg);padding:36px 32px;display:flex;flex-direction:column;gap:16px;min-height:300px;position:relative;transition:background 200ms}
+  .strat-cell:hover{background:var(--bg-elev-1)}
+  .strat-cell .idx{font-family:var(--font-mono);font-size:11px;color:var(--fg-hint);letter-spacing:0.16em}
+  .strat-cell .nm{font-family:var(--font-display);font-style:italic;font-size:32px;color:var(--ink-1000);letter-spacing:-0.02em;line-height:1.05;font-weight:400;margin-top:auto}
+  .strat-cell .dc{font-family:var(--font-ui);font-size:13.5px;color:var(--fg-dim);line-height:1.5}
+  .strat-cell .tg{display:flex;gap:8px;margin-top:auto;padding-top:16px;border-top:1px solid var(--border-hair)}
+  .strat-cell .tg span{font-family:var(--font-ui);font-size:9.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--fg-muted)}
+  .strat-cell .tg span.on{color:var(--up-500)}
+
+  /* ── Numbers section ───────────────────────────────── */
+  .numbers{padding:120px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+  .num{padding:32px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .num:last-child{border:0}
+  .num .k{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--fg-muted)}
+  .num .v{font-family:var(--font-mono);font-size:64px;font-weight:300;color:var(--ink-1000);letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums}
+  .num .v .s{font-size:28px;color:var(--fg-dim);font-weight:300}
+  .num .note{font-family:var(--font-display);font-style:italic;font-size:14px;color:var(--fg-muted)}
+
+  /* ── Pricing teaser ────────────────────────────────── */
+  .pricing{padding:120px 0;border-bottom:1px solid var(--border)}
+  .pricing h2{font-family:var(--font-display);font-style:italic;font-size:64px;letter-spacing:-0.03em;color:var(--ink-1000);margin:0 0 48px;font-weight:400}
+  .plans{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .plan{border:1px solid var(--border);border-radius:var(--radius-md);padding:32px;display:flex;flex-direction:column;gap:20px;background:var(--bg-elev-1)}
+  .plan.feat{background:var(--ink-100);border-color:var(--brand-dim);box-shadow:var(--shadow-glow-gold)}
+  .plan .nm{font-family:var(--font-display);font-style:italic;font-size:28px;color:var(--ink-1000);letter-spacing:-0.02em}
+  .plan.feat .nm{color:var(--brand)}
+  .plan .pr{font-family:var(--font-mono);font-size:48px;font-weight:300;color:var(--ink-1000);letter-spacing:-0.03em;line-height:1}
+  .plan .pr .s{font-size:14px;color:var(--fg-muted);font-family:var(--font-ui);text-transform:uppercase;letter-spacing:0.14em;margin-left:4px;font-weight:500}
+  .plan ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;font-family:var(--font-ui);font-size:13px;color:var(--fg-dim)}
+  .plan ul li{padding-left:18px;position:relative}
+  .plan ul li::before{content:"+";position:absolute;left:0;color:var(--brand);font-family:var(--font-display);font-style:italic;font-size:14px}
+  .plan .btn{margin-top:auto;text-align:center;padding:12px;border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:13px;font-weight:600;letter-spacing:0.02em;text-decoration:none}
+  .plan .btn.out{border:1px solid var(--border-strong);color:var(--fg)}
+  .plan .btn.on{background:var(--brand);color:#1a1206}
+
+  /* ── Footer ────────────────────────────────────────── */
+  footer{padding:80px 0 40px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px}
+  footer .brand{font-family:var(--font-display);font-style:italic;font-size:36px;color:var(--ink-1000);letter-spacing:-0.02em;margin-bottom:12px}
+  footer .brand .a{color:var(--brand)}
+  footer .tag{font-family:var(--font-display);font-style:italic;font-size:16px;color:var(--fg-muted);max-width:360px}
+  footer .col .h{font-family:var(--font-ui);font-size:10.5px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:16px}
+  footer .col a{display:block;font-family:var(--font-ui);font-size:13px;color:var(--fg-dim);text-decoration:none;padding:4px 0}
+  .fine{padding:20px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10px;color:var(--fg-hint);letter-spacing:0.05em;text-transform:uppercase}
+</style></head>
+<body>
+<div class="page">
+
+  <nav class="site">
+    <div class="logo"><span class="a">α</span>AlphaDesk</div>
+    <div class="links">
+      <a>Product</a><a>Strategies</a><a>Research</a><a>Pricing</a><a>Manifesto</a>
+    </div>
+    <div class="right">
+      <a>Sign in</a>
+      <a class="cta">Request access</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <div class="eye">A systematic trading terminal</div>
+      <h1>Trade with <span class="alt">the</span> patience <span class="alt">of</span> capital.</h1>
+      <p>AlphaDesk is a single workstation for designing, back-testing, and executing systematic equity strategies — with Claude as a pre-trade second opinion, not a co-pilot on the wheel.</p>
+      <div class="ctas">
+        <a class="btn-primary" href="#">Request access →</a>
+        <a class="btn-ghost" href="#">Read the manifesto</a>
+      </div>
+    </div>
+    <div class="viz">
+      <div class="viz-head"><span class="dot"></span><span>Desk · live</span><span class="spacer"></span><span>14:32:08 ET</span></div>
+      <div class="viz-body">
+        <div class="line"><span>Equity</span><b>$284,193.42</b></div>
+        <div class="line"><span>Day P&amp;L</span><b class="up">+$2,341.18 · +0.82%</b></div>
+        <div class="line"><span>Sharpe · 30d</span><b>1.08</b></div>
+        <div class="line"><span>Regime</span><b class="gold">bull · low volatility</b></div>
+        <div class="line"><span>Open positions</span><b>12 across 5 strategies</b></div>
+      </div>
+      <div class="viz-ai">Claude suggests trimming UNH (−1.1%) and reallocating to NVDA — regime fit 0.82, earnings 14 days out.</div>
+    </div>
+  </section>
+
+  <div class="ticker">
+    <span>NVDA <b>134.82</b> <span class="up">+1.31%</span></span>
+    <span>SPY <b>482.91</b> <span class="up">+0.44%</span></span>
+    <span>AAPL <b>228.14</b> <span class="dn">−0.22%</span></span>
+    <span>XOM <b>118.02</b> <span class="up">+0.81%</span></span>
+    <span>UNH <b>581.76</b> <span class="dn">−1.04%</span></span>
+    <span>JPM <b>209.30</b> <span class="up">+0.58%</span></span>
+    <span>MSFT <b>414.62</b> <span class="up">+0.12%</span></span>
+    <span>GOOGL <b>168.94</b> <span class="dn">−0.38%</span></span>
+  </div>
+
+  <section class="manifesto">
+    <div class="eye">§01 · The brief</div>
+    <div>
+      <div class="body">
+        We believe alpha is <em>systematic discipline</em>, applied consistently, <span class="s">with the smallest possible surface area for human error.</span> A terminal should make the right trade <em>boring</em>, and the wrong trade — the one made in panic, in hope, at 2 AM — <span class="s">visibly, physically, harder to place.</span>
+      </div>
+      <sig>— AlphaDesk, est. 2025</sig>
+    </div>
+  </section>
+
+  <section class="strats">
+    <h2>Six strategies. One desk.</h2>
+    <p class="sub">Each strategy runs on the same execution layer, risk policy, and audit trail. Turn them on, turn them off; they never argue.</p>
+    <div class="strats-grid">
+      <div class="strat-cell"><span class="idx">01</span><div class="nm">Momentum &amp;&nbsp;Quality</div><p class="dc">Swing 5–20 days. Strong trend, strong fundamentals, weak drawdown tolerance.</p><div class="tg"><span class="on">Active</span><span>+3.42%</span></div></div>
+      <div class="strat-cell"><span class="idx">02</span><div class="nm">Regime Adaptive</div><p class="dc">Long/short macro. Rebalances to current volatility regime every session.</p><div class="tg"><span class="on">Active</span><span>+1.84%</span></div></div>
+      <div class="strat-cell"><span class="idx">03</span><div class="nm">PEAD</div><p class="dc">Post-earnings announcement drift. Holds winners, shorts losers, 5-day window.</p><div class="tg"><span class="on">Active</span><span>+0.62%</span></div></div>
+      <div class="strat-cell"><span class="idx">04</span><div class="nm">Mean&nbsp;Reversion</div><p class="dc">1–3 day horizon. Z-score entries on high-liquidity names only.</p><div class="tg"><span>Paused</span><span>—</span></div></div>
+      <div class="strat-cell"><span class="idx">05</span><div class="nm">Pairs · Sector</div><p class="dc">Market-neutral pairs within-sector. Beta ≈ 0. Low correlation to book.</p><div class="tg"><span class="on">Active</span><span>+0.41%</span></div></div>
+      <div class="strat-cell" style="background:var(--ink-100)"><span class="idx">06 · AI</span><div class="nm" style="color:var(--brand)">Claude Alpha</div><p class="dc">Opportunistic. Claude reads filings, news, earnings calls — proposes, you approve.</p><div class="tg"><span class="on">Active</span><span style="color:var(--down-500)">−1.18%</span></div></div>
+    </div>
+  </section>
+
+  <section class="numbers">
+    <div class="num"><span class="k">Strategies live</span><span class="v">06</span><span class="note">across equity &amp; ETF</span></div>
+    <div class="num"><span class="k">Median latency</span><span class="v">42<span class="s">ms</span></span><span class="note">tick to staged order</span></div>
+    <div class="num"><span class="k">Sharpe · 90d</span><span class="v">1.2<span class="s">4</span></span><span class="note">composite, net of fees</span></div>
+    <div class="num"><span class="k">Max drawdown</span><span class="v">4.1<span class="s">%</span></span><span class="note">rolling 12 months</span></div>
+  </section>
+
+  <section class="pricing">
+    <h2>Pricing, without the theatre.</h2>
+    <div class="plans">
+      <div class="plan">
+        <div class="nm">Paper</div>
+        <div class="pr">$0<span class="s">/mo</span></div>
+        <ul><li>All six strategies</li><li>Alpaca paper broker</li><li>Claude pre-trade · 100/day</li><li>Up to 3 books</li></ul>
+        <a class="btn out">Start paper</a>
+      </div>
+      <div class="plan feat">
+        <div class="nm">Desk</div>
+        <div class="pr">$149<span class="s">/mo</span></div>
+        <ul><li>Live broker (Alpaca, IBKR)</li><li>Claude pre-trade · unlimited</li><li>Full journal &amp; replay</li><li>Custom strategies (Python)</li><li>Priority support</li></ul>
+        <a class="btn on">Request access →</a>
+      </div>
+      <div class="plan">
+        <div class="nm">House</div>
+        <div class="pr">Talk to us</div>
+        <ul><li>Multi-user books</li><li>Compliance audit trail</li><li>On-prem Claude routing</li><li>SLA, DPA, custom integration</li></ul>
+        <a class="btn out">Contact desk</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <div class="brand"><span class="a">α</span>AlphaDesk</div>
+      <div class="tag">A systematic trading terminal for humans who'd rather read the research than refresh the chart.</div>
+    </div>
+    <div class="col"><div class="h">Product</div><a>Desk</a><a>Strategies</a><a>Research</a><a>Journal</a></div>
+    <div class="col"><div class="h">Company</div><a>Manifesto</a><a>Security</a><a>Changelog</a><a>Careers</a></div>
+    <div class="col"><div class="h">Legal</div><a>Not investment advice</a><a>Risk disclosure</a><a>Terms</a><a>Privacy</a></div>
+  </footer>
+  <div class="fine">
+    <span>© 2025 AlphaDesk Labs · Not a broker-dealer</span>
+    <span>α · made with discipline in n.y.c.</span>
+  </div>
+
+</div>
+</body></html>

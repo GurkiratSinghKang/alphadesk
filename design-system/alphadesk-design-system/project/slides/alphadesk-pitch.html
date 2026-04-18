@@ -1,0 +1,277 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AlphaDesk — Deck</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<script src="./deck-stage.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100vh}
+  deck-stage section{background:var(--ink-050);color:var(--fg);padding:88px 120px;box-sizing:border-box;position:relative;overflow:hidden;font-family:var(--font-ui)}
+
+  /* Shared slide chrome */
+  .chrome-top{position:absolute;top:48px;left:120px;right:120px;display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:15px;color:var(--fg-muted);letter-spacing:0.05em;text-transform:uppercase}
+  .chrome-top .logo{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);letter-spacing:-0.02em;text-transform:none}
+  .chrome-top .logo .a{color:var(--brand)}
+  .chrome-bot{position:absolute;bottom:48px;left:120px;right:120px;display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:13px;color:var(--fg-hint);letter-spacing:0.08em;text-transform:uppercase}
+  .eyebrow{font-family:var(--font-ui);font-size:14px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--brand)}
+
+  /* ── S1 title ──────────────────────────────────────── */
+  .s1{display:flex;flex-direction:column;justify-content:center;background:radial-gradient(ellipse at 20% 100%, rgba(201,166,107,0.08) 0%, transparent 55%), var(--ink-050)}
+  .s1 .hero{font-family:var(--font-display);font-style:italic;font-size:260px;line-height:0.88;letter-spacing:-0.045em;color:var(--ink-1000);font-weight:400;font-variation-settings:"opsz" 72;max-width:1500px}
+  .s1 .hero .alt{font-style:normal;color:var(--fg-dim)}
+  .s1 .hero .g{color:var(--brand)}
+  .s1 .sub{font-family:var(--font-display);font-style:italic;font-size:30px;color:var(--fg-muted);margin-top:48px}
+
+  /* ── S2 manifesto ──────────────────────────────────── */
+  .s2{display:grid;grid-template-columns:320px 1fr;gap:80px;align-items:center}
+  .s2 .num{font-family:var(--font-display);font-style:italic;font-size:200px;color:var(--brand);line-height:0.9;letter-spacing:-0.04em}
+  .s2 .body{font-family:var(--font-display);font-size:68px;line-height:1.12;letter-spacing:-0.022em;color:var(--ink-900);font-weight:400;max-width:1150px;text-wrap:balance}
+  .s2 .body em{color:var(--brand);font-style:italic}
+  .s2 .body .s{color:var(--fg-muted);font-style:italic}
+
+  /* ── S3 problem — comparison ──────────────────────── */
+  .s3 h2{font-family:var(--font-display);font-style:italic;font-size:92px;color:var(--ink-1000);letter-spacing:-0.03em;margin:0 0 64px;font-weight:400;max-width:1200px;line-height:1}
+  .s3 .grid{display:grid;grid-template-columns:1fr 1fr;gap:48px}
+  .s3 .col{padding:36px;border:1px solid var(--border)}
+  .s3 .col.bad{background:var(--ink-100);color:var(--fg-dim)}
+  .s3 .col.good{background:var(--ink-100);border-color:var(--brand-dim);box-shadow:var(--shadow-glow-gold)}
+  .s3 .col .tag{font-family:var(--font-ui);font-size:15px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;margin-bottom:16px}
+  .s3 .col.bad .tag{color:var(--down-500)}
+  .s3 .col.good .tag{color:var(--brand)}
+  .s3 .col .ttl{font-family:var(--font-display);font-style:italic;font-size:52px;color:var(--ink-1000);letter-spacing:-0.02em;margin-bottom:24px;line-height:1.05;font-weight:400}
+  .s3 .col ul{padding:0;margin:0;list-style:none;display:flex;flex-direction:column;gap:16px}
+  .s3 .col li{font-family:var(--font-ui);font-size:24px;line-height:1.35;padding-left:32px;position:relative}
+  .s3 .col.bad li::before{content:"—";position:absolute;left:0;color:var(--down-500);font-weight:700}
+  .s3 .col.good li::before{content:"+";position:absolute;left:0;color:var(--brand);font-family:var(--font-display);font-style:italic;font-size:28px;line-height:0.9}
+
+  /* ── S4 strategies grid ────────────────────────────── */
+  .s4 h2{font-family:var(--font-display);font-style:italic;font-size:92px;color:var(--ink-1000);letter-spacing:-0.03em;margin:0 0 48px;font-weight:400}
+  .s4 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border)}
+  .s4 .cell{background:var(--ink-100);padding:36px 32px;min-height:260px;display:flex;flex-direction:column;gap:16px}
+  .s4 .cell .n{font-family:var(--font-mono);font-size:14px;color:var(--fg-hint);letter-spacing:0.16em}
+  .s4 .cell .nm{font-family:var(--font-display);font-style:italic;font-size:44px;color:var(--ink-1000);letter-spacing:-0.02em;line-height:1;font-weight:400}
+  .s4 .cell .dc{font-family:var(--font-ui);font-size:18px;color:var(--fg-dim);line-height:1.45;margin-top:auto}
+  .s4 .cell.ai{background:var(--ink-150)}
+  .s4 .cell.ai .nm{color:var(--brand)}
+
+  /* ── S5 product screenshot ────────────────────────── */
+  .s5{display:grid;grid-template-columns:420px 1fr;gap:80px;align-items:center}
+  .s5 .lft .eyebrow{margin-bottom:32px}
+  .s5 .lft h2{font-family:var(--font-display);font-style:italic;font-size:84px;color:var(--ink-1000);letter-spacing:-0.03em;margin:0 0 28px;line-height:1;font-weight:400}
+  .s5 .lft p{font-family:var(--font-ui);font-size:22px;color:var(--fg-dim);line-height:1.45}
+  .s5 .shot{background:var(--ink-100);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6)}
+  .s5 .shot-chrome{background:var(--ink-050);padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:18px;font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);letter-spacing:0.06em}
+  .s5 .shot-chrome .dots{display:flex;gap:7px}
+  .s5 .shot-chrome .dots span{width:10px;height:10px;border-radius:50%;background:var(--ink-400)}
+  .s5 .shot-body{padding:24px;display:grid;grid-template-columns:180px 1fr 240px;gap:1px;background:var(--border)}
+  .s5 .shot-body > div{background:var(--ink-100);padding:16px}
+  .s5 .price{font-family:var(--font-mono);font-size:42px;font-weight:300;color:var(--ink-1000);font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .s5 .delta{font-family:var(--font-mono);font-size:16px;color:var(--up-500);margin-top:4px}
+  .s5 svg.cart{width:100%;height:140px;margin-top:16px}
+  .s5 .side{display:flex;flex-direction:column;gap:12px}
+  .s5 .side .row{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:13px;color:var(--fg-dim);padding:6px 0;border-bottom:1px solid var(--border-hair)}
+  .s5 .side .row b{color:var(--ink-1000);font-weight:500}
+  .s5 .strat{padding:10px 0;border-bottom:1px solid var(--border-hair);font-family:var(--font-display);font-style:italic;font-size:16px;color:var(--fg-dim)}
+  .s5 .strat.on{color:var(--brand)}
+
+  /* ── S6 AI pull quote ──────────────────────────────── */
+  .s6{display:flex;flex-direction:column;justify-content:center;background:radial-gradient(ellipse at 100% 0%, rgba(201,166,107,0.12) 0%, transparent 50%), var(--ink-050)}
+  .s6 .eyebrow{margin-bottom:48px;color:var(--brand)}
+  .s6 .q{font-family:var(--font-display);font-style:italic;font-size:112px;color:var(--ink-1000);letter-spacing:-0.03em;line-height:1.05;font-weight:400;max-width:1620px;text-wrap:balance}
+  .s6 .q em{color:var(--brand);font-style:italic}
+  .s6 .q .o{color:var(--fg-dim);font-style:italic}
+  .s6 .attr{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--fg-muted);margin-top:56px}
+  .s6 .attr .mark{color:var(--brand);margin-right:10px;font-size:32px;vertical-align:-3px}
+
+  /* ── S7 numbers ────────────────────────────────────── */
+  .s7 h2{font-family:var(--font-display);font-style:italic;font-size:92px;color:var(--ink-1000);letter-spacing:-0.03em;margin:0 0 56px;font-weight:400}
+  .s7 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0}
+  .s7 .n{padding:48px 0 32px;border-bottom:1px solid var(--border)}
+  .s7 .n:nth-child(odd){border-right:1px solid var(--border);padding-right:64px}
+  .s7 .n:nth-child(even){padding-left:64px}
+  .s7 .n .k{font-family:var(--font-ui);font-size:16px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--fg-muted)}
+  .s7 .n .v{font-family:var(--font-mono);font-size:144px;font-weight:300;color:var(--ink-1000);letter-spacing:-0.04em;line-height:1;font-variant-numeric:tabular-nums;margin-top:20px}
+  .s7 .n .v .s{font-size:60px;color:var(--fg-dim)}
+  .s7 .n .v .p{color:var(--up-500)}
+  .s7 .n .note{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--fg-muted);margin-top:16px}
+
+  /* ── S8 closing ────────────────────────────────────── */
+  .s8{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;background:radial-gradient(ellipse at 50% 100%, rgba(201,166,107,0.1) 0%, transparent 55%), var(--ink-050)}
+  .s8 .eyebrow{margin-bottom:40px}
+  .s8 .line{font-family:var(--font-display);font-style:italic;font-size:180px;color:var(--ink-1000);letter-spacing:-0.035em;line-height:0.96;font-weight:400;max-width:1650px;text-wrap:balance;font-variation-settings:"opsz" 72}
+  .s8 .line em{color:var(--brand);font-style:italic}
+  .s8 .cta{margin-top:80px;display:flex;align-items:center;gap:40px}
+  .s8 .cta .btn{background:var(--brand);color:#1a1206;padding:22px 40px;border-radius:4px;font-family:var(--font-ui);font-size:20px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase}
+  .s8 .cta .note{font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--fg-muted)}
+  .s8 .sig{position:absolute;bottom:88px;right:120px;font-family:var(--font-display);font-style:italic;font-size:28px;color:var(--fg-dim)}
+  .s8 .sig .a{color:var(--brand);font-size:40px;vertical-align:-4px;margin-right:4px}
+</style></head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+  <!-- 1 — Title -->
+  <section class="s1" data-label="Title">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>SERIES · A · CONFIDENTIAL</div>
+    </div>
+    <div class="hero">Trade <span class="alt">with</span> the<br>patience <span class="alt">of</span> <span class="g">capital.</span></div>
+    <div class="sub">A systematic trading terminal. Claude reads first, you approve second.</div>
+    <div class="chrome-bot"><div>01 / 08</div><div>Nov · 2025</div></div>
+  </section>
+
+  <!-- 2 — Manifesto -->
+  <section class="s2" data-label="Manifesto">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ Manifesto</div>
+    </div>
+    <div class="num">α</div>
+    <div class="body">
+      We believe alpha is <em>systematic discipline</em>, applied consistently, <span class="s">with the smallest possible surface area for human error.</span> A terminal should make the right trade <em>boring</em> — and the wrong trade <span class="s">physically harder to place.</span>
+    </div>
+    <div class="chrome-bot"><div>02 / 08</div><div>§ Manifesto</div></div>
+  </section>
+
+  <!-- 3 — Problem / comparison -->
+  <section class="s3" data-label="Problem">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ The problem</div>
+    </div>
+    <h2>Retail terminals solve the wrong problem.</h2>
+    <div class="grid">
+      <div class="col bad">
+        <div class="tag">Today · retail</div>
+        <div class="ttl">Bright lights, dopamine, no policy.</div>
+        <ul>
+          <li>Charts optimized for <em>emotion</em>, not decision.</li>
+          <li>Every order is a gut call, dressed up.</li>
+          <li>Risk limits live in a different app.</li>
+          <li>No journal. No replay. No memory.</li>
+        </ul>
+      </div>
+      <div class="col good">
+        <div class="tag">AlphaDesk</div>
+        <div class="ttl">Quiet terminal, loud discipline.</div>
+        <ul>
+          <li>Every order is a strategy instance, logged.</li>
+          <li>Risk policy blocks the bad trade <em>at the button</em>.</li>
+          <li>Claude reads first, you approve second.</li>
+          <li>Full replay of every decision you made.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="chrome-bot"><div>03 / 08</div><div>§ Problem</div></div>
+  </section>
+
+  <!-- 4 — Strategies -->
+  <section class="s4" data-label="Strategies">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ The book</div>
+    </div>
+    <h2>Six strategies. One desk.</h2>
+    <div class="grid">
+      <div class="cell"><span class="n">01</span><div class="nm">Momentum &amp;&nbsp;Quality</div><p class="dc">Swing 5–20 days. Strong trend meets strong fundamentals.</p></div>
+      <div class="cell"><span class="n">02</span><div class="nm">Regime Adaptive</div><p class="dc">Long/short macro, rebalanced to the volatility regime every session.</p></div>
+      <div class="cell"><span class="n">03</span><div class="nm">PEAD</div><p class="dc">Post-earnings drift. Holds winners, shorts losers. 5-day window.</p></div>
+      <div class="cell"><span class="n">04</span><div class="nm">Mean&nbsp;Reversion</div><p class="dc">1–3 day horizon. Z-score entries on high-liquidity names only.</p></div>
+      <div class="cell"><span class="n">05</span><div class="nm">Pairs · Sector</div><p class="dc">Within-sector market-neutral. Beta ≈ 0. Low book correlation.</p></div>
+      <div class="cell ai"><span class="n" style="color:var(--brand)">06 · AI</span><div class="nm">Claude Alpha</div><p class="dc">Opportunistic. Claude reads filings &amp; news, proposes, you approve.</p></div>
+    </div>
+    <div class="chrome-bot"><div>04 / 08</div><div>§ Strategies</div></div>
+  </section>
+
+  <!-- 5 — Product shot -->
+  <section class="s5" data-label="Product">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ The desk</div>
+    </div>
+    <div class="lft">
+      <div class="eyebrow">The desk</div>
+      <h2>Everything on one screen — by design.</h2>
+      <p>Strategies on the left. Price and execution in the middle. Positions on the right. Claude reviews every stage before you click.</p>
+    </div>
+    <div class="shot">
+      <div class="shot-chrome"><div class="dots"><span></span><span></span><span></span></div><span>α · AlphaDesk — Desk</span><span style="margin-left:auto">14:32:08 ET · bull · low vol</span></div>
+      <div class="shot-body">
+        <div>
+          <div style="font-family:var(--font-ui);font-size:10px;color:var(--fg-muted);letter-spacing:0.18em;text-transform:uppercase;font-weight:600;margin-bottom:10px">Strategies</div>
+          <div class="strat on">Momentum &amp; Quality</div>
+          <div class="strat">Regime Adaptive</div>
+          <div class="strat">PEAD</div>
+          <div class="strat">Mean Reversion</div>
+          <div class="strat">Pairs · Sector</div>
+          <div class="strat">Claude Alpha</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-display);font-style:italic;font-size:22px;color:var(--ink-1000);letter-spacing:-0.02em">Nvidia <span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-muted);text-transform:uppercase;letter-spacing:0.16em;margin-left:8px">NVDA</span></div>
+          <div class="price">134.82</div>
+          <div class="delta">+1.74 · +1.31%</div>
+          <svg class="cart" viewBox="0 0 500 140" preserveAspectRatio="none">
+            <defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#c9a66b" stop-opacity="0.28"/><stop offset="1" stop-color="#c9a66b" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0 110 L40 100 L80 104 L120 92 L160 88 L200 76 L240 80 L280 66 L320 58 L360 64 L400 44 L440 38 L480 24 L500 18 L500 140 L0 140 Z" fill="url(#cg)"/>
+            <path d="M0 110 L40 100 L80 104 L120 92 L160 88 L200 76 L240 80 L280 66 L320 58 L360 64 L400 44 L440 38 L480 24 L500 18" fill="none" stroke="#e0c070" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <div class="side">
+          <div style="font-family:var(--font-ui);font-size:10px;color:var(--fg-muted);letter-spacing:0.18em;text-transform:uppercase;font-weight:600">Positions · 12</div>
+          <div class="row"><span>NVDA · 250</span><b style="color:var(--up-500)">+$1,602</b></div>
+          <div class="row"><span>SPY · 50</span><b style="color:var(--up-500)">+$234</b></div>
+          <div class="row"><span>XOM · 180</span><b style="color:var(--up-500)">+$291</b></div>
+          <div class="row"><span>UNH · 40</span><b style="color:var(--down-500)">−$258</b></div>
+          <div class="row"><span>JPM · 120</span><b style="color:var(--up-500)">+$412</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="chrome-bot"><div>05 / 08</div><div>§ Product</div></div>
+  </section>
+
+  <!-- 6 — Claude pull quote -->
+  <section class="s6" data-label="AI">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ Second opinion</div>
+    </div>
+    <div class="eyebrow">Claude · pre-trade memo</div>
+    <div class="q">
+      NVDA entry fits <em>Momentum &amp; Quality</em>: 3-week high, regime bull/low-vol, earnings 14 days out. <span class="o">Size 250 sh at limit 134.80, 4% stop. One caveat — semis beta 1.7; sizing uses scaled units.</span>
+    </div>
+    <div class="attr"><span class="mark">α</span>Haiku 4.5 · 180 ms · Confidence 0.72</div>
+    <div class="chrome-bot"><div>06 / 08</div><div>§ AI</div></div>
+  </section>
+
+  <!-- 7 — Numbers -->
+  <section class="s7" data-label="Numbers">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ The book · 90d</div>
+    </div>
+    <h2>The boring numbers.</h2>
+    <div class="grid">
+      <div class="n"><div class="k">Sharpe · 90d</div><div class="v">1.2<span class="s">4</span></div><div class="note">composite, net of fees &amp; slippage</div></div>
+      <div class="n"><div class="k">Max drawdown</div><div class="v">4.1<span class="s">%</span></div><div class="note">rolling twelve months</div></div>
+      <div class="n"><div class="k">Win rate</div><div class="v">62<span class="s">%</span></div><div class="note">trade-weighted, all strategies</div></div>
+      <div class="n"><div class="k">Return · ytd</div><div class="v"><span class="p">+</span>11.4<span class="s">%</span></div><div class="note">vs. SPY <span style="color:var(--up-500)">+7.8%</span></div></div>
+    </div>
+    <div class="chrome-bot"><div>07 / 08</div><div>§ Numbers</div></div>
+  </section>
+
+  <!-- 8 — Closing -->
+  <section class="s8" data-label="Closing">
+    <div class="chrome-top">
+      <div class="logo"><span class="a">α</span>AlphaDesk</div>
+      <div>§ Fin.</div>
+    </div>
+    <div class="eyebrow">Join the desk</div>
+    <div class="line">Quiet&nbsp;terminal.<br><em>Loud&nbsp;discipline.</em></div>
+    <div class="cta">
+      <div class="btn">Request access →</div>
+      <div class="note">alphadesk.co &middot; three-week onboarding</div>
+    </div>
+    <div class="sig"><span class="a">α</span>AlphaDesk · 2025</div>
+  </section>
+
+</deck-stage>
+
+</body></html>

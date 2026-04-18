@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AlphaDesk — Design System</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg)}
+  main{max-width:1080px;margin:0 auto;padding:80px 56px 120px}
+  /* Editorial nameplate */
+  .plate{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:28px;border-bottom:2px solid var(--ink-1000);margin-bottom:64px}
+  .plate .brand{font-family:var(--font-display);font-style:italic;font-size:84px;line-height:0.95;letter-spacing:-0.035em;color:var(--ink-1000);font-weight:400;font-variation-settings:"opsz" 72}
+  .plate .brand .a{color:var(--brand)}
+  .plate .issue{text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);letter-spacing:0.16em;text-transform:uppercase;line-height:1.6}
+  .plate .issue b{color:var(--ink-1000);font-weight:500;display:block;font-size:13px}
+
+  /* Lede */
+  .lede{font-family:var(--font-display);font-size:36px;line-height:1.22;letter-spacing:-0.018em;color:var(--ink-900);margin-bottom:72px;text-wrap:balance;max-width:900px}
+  .lede em{color:var(--brand);font-style:italic}
+  .lede .s{color:var(--fg-muted);font-style:italic}
+
+  /* Section header */
+  h2.sec{font-family:var(--font-ui);font-size:11px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:var(--fg-muted);margin:72px 0 20px;padding-top:16px;border-top:1px solid var(--border)}
+  h3{font-family:var(--font-display);font-style:italic;font-size:38px;letter-spacing:-0.02em;color:var(--ink-1000);font-weight:400;margin:0 0 20px;line-height:1.05}
+  p{font-family:var(--font-ui);font-size:15px;line-height:1.6;color:var(--fg-dim);max-width:680px}
+  p strong{color:var(--fg);font-weight:500}
+  p em{font-family:var(--font-display);color:var(--brand)}
+
+  /* Two-col body */
+  .two{display:grid;grid-template-columns:2fr 1fr;gap:56px;align-items:start}
+
+  /* Links grid */
+  .links{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);margin-top:24px}
+  .link{background:var(--bg);padding:24px 28px;display:flex;flex-direction:column;gap:6px;text-decoration:none;transition:background 160ms}
+  .link:hover{background:var(--bg-elev-1)}
+  .link .num{font-family:var(--font-mono);font-size:10px;letter-spacing:0.16em;color:var(--fg-hint)}
+  .link .ttl{font-family:var(--font-display);font-style:italic;font-size:26px;letter-spacing:-0.02em;color:var(--ink-1000);line-height:1}
+  .link .dc{font-family:var(--font-ui);font-size:13px;color:var(--fg-muted);line-height:1.45}
+  .link .arrow{font-family:var(--font-display);font-style:italic;color:var(--brand);margin-top:4px}
+
+  /* Principles */
+  .principles{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);margin-top:24px}
+  .prin{background:var(--bg);padding:28px 32px}
+  .prin .n{font-family:var(--font-mono);font-size:10px;color:var(--gold-500);letter-spacing:0.2em;font-weight:600}
+  .prin h4{font-family:var(--font-display);font-style:italic;font-size:24px;letter-spacing:-0.015em;color:var(--ink-1000);margin:8px 0 8px;font-weight:400;line-height:1.15}
+  .prin p{font-size:13px;color:var(--fg-dim);line-height:1.5;margin:0}
+
+  /* Token card quicklook */
+  .tokens{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+  .tcard{border:1px solid var(--border);padding:20px;background:var(--bg-elev-1)}
+  .tcard .k{font-family:var(--font-ui);font-size:10px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:10px}
+  .tcard .v{font-family:var(--font-mono);font-size:13px;color:var(--fg);line-height:1.7}
+  .tcard .v b{color:var(--ink-1000);font-weight:500}
+
+  footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10.5px;color:var(--fg-hint);letter-spacing:0.06em;text-transform:uppercase}
+  footer .a{color:var(--brand);margin-right:4px;font-family:var(--font-display);font-style:italic;font-size:14px;vertical-align:-1px}
+</style></head>
+<body>
+<main>
+
+  <!-- Editorial nameplate -->
+  <div class="plate">
+    <div class="brand"><span class="a">α</span>AlphaDesk</div>
+    <div class="issue">
+      Vol. 01 · Issue 01<br>
+      <b>The Design System</b>
+      Nov 2025
+    </div>
+  </div>
+
+  <!-- Lede -->
+  <div class="lede">
+    A design system for a systematic trading terminal — built for humans who'd <em>rather read the research</em> than refresh the chart. <span class="s">Editorial serif. Tabular mono. One accent: liquid gold.</span>
+  </div>
+
+  <!-- ── Principles ── -->
+  <h2 class="sec">§ 01 · Principles</h2>
+  <div class="two">
+    <div>
+      <h3>Four rules the system never breaks.</h3>
+      <p>Every token, component, and layout in this system follows four rules. If a design breaks one of them, it's off-brand — even if it "looks good." Taste is not a tie-breaker.</p>
+    </div>
+  </div>
+  <div class="principles">
+    <div class="prin">
+      <div class="n">01</div>
+      <h4>Quiet by default, loud by accent.</h4>
+      <p>Ink and paper (warm near-blacks) carry the page. Liquid gold (<b>#c9a66b</b>) is used once per view, not three times. Never gradient. Never glow except for live status.</p>
+    </div>
+    <div class="prin">
+      <div class="n">02</div>
+      <h4>Serif for voice, mono for truth.</h4>
+      <p>Editorial italic serif carries strategy names, memos, and hero copy. Tabular mono carries every number. UI sans sits between them. Never swap their jobs.</p>
+    </div>
+    <div class="prin">
+      <div class="n">03</div>
+      <h4>P&amp;L is chartreuse and coral.</h4>
+      <p>Not traffic-light red/green. Profit is <b style="color:var(--up-500)">a8d04d</b>, loss is <b style="color:var(--down-500)">e07856</b>. The goal is to look at losses without flinching — and to notice when profit gets <em>too</em> interesting.</p>
+    </div>
+    <div class="prin">
+      <div class="n">04</div>
+      <h4>Borders do the depth work.</h4>
+      <p>Shadows are hairlines. Radii stay under <b>10px</b> except for modals. Density is a feature; white space is earned, not sprinkled.</p>
+    </div>
+  </div>
+
+  <!-- ── Foundations ── -->
+  <h2 class="sec">§ 02 · Foundations</h2>
+  <div class="two">
+    <div>
+      <h3>One stylesheet, one source of truth.</h3>
+      <p><strong>colors_and_type.css</strong> defines every token: ink scale, gold stops, P&amp;L semantics, the three font families, the type ramp, spacing, radii, and motion. Import it in every artifact. Do not invent colors; extend the scale.</p>
+    </div>
+  </div>
+  <div class="tokens">
+    <div class="tcard"><div class="k">Ink scale</div><div class="v">bg <b>#0b0a09</b><br>card <b>#1c1a14</b><br>border <b>#2a271d</b><br>fg <b>#ece6d2</b></div></div>
+    <div class="tcard"><div class="k">Brand · gold</div><div class="v">tint <b>#f5e6b8</b><br>bright <b>#e0c070</b><br>primary <b>#c9a66b</b><br>deep <b>#8c6d2f</b></div></div>
+    <div class="tcard"><div class="k">P&amp;L</div><div class="v">up <b style="color:var(--up-500)">#a8d04d</b><br>down <b style="color:var(--down-500)">#e07856</b><br>info <b style="color:var(--ice-500)">#8db3c4</b><br>critical <b style="color:var(--wine-500)">#8a3a4a</b></div></div>
+    <div class="tcard"><div class="k">Type · display</div><div class="v">Newsreader italic<br>opsz 60–72<br>−0.03em tracking<br>1.02 leading</div></div>
+    <div class="tcard"><div class="k">Type · UI</div><div class="v">Inter Tight<br>13–28px<br>500 / 600<br>tnum always</div></div>
+    <div class="tcard"><div class="k">Type · mono</div><div class="v">JetBrains Mono<br>tabular-nums<br>300 / 400 / 500<br>for every number</div></div>
+  </div>
+
+  <!-- ── Surfaces ── -->
+  <h2 class="sec">§ 03 · Surfaces</h2>
+  <div class="two">
+    <div>
+      <h3>Four surfaces to design against.</h3>
+      <p>The system ships with reference implementations across the four surfaces AlphaDesk lives on — web app, marketing, mobile, and presentation. Each is a hi-fi artifact you can borrow from directly.</p>
+    </div>
+  </div>
+  <div class="links">
+    <a class="link" href="ui_kits/webapp-trading-desk.html">
+      <span class="num">01 · WEB APP</span>
+      <span class="ttl">Trading desk</span>
+      <span class="dc">Three-column workstation — strategies, price &amp; execution, positions. The flagship.</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="ui_kits/marketing-landing.html">
+      <span class="num">02 · MARKETING</span>
+      <span class="ttl">Landing page</span>
+      <span class="dc">Editorial landing with manifesto, strategy grid, numbers, and pricing.</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="ui_kits/mobile-companion.html">
+      <span class="num">03 · MOBILE</span>
+      <span class="ttl">Companion</span>
+      <span class="dc">iOS overview &amp; single-position detail. Read-only by design; trades happen on the desk.</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="slides/alphadesk-pitch.html">
+      <span class="num">04 · SLIDES</span>
+      <span class="ttl">Pitch deck</span>
+      <span class="dc">Eight slides — title, manifesto, problem, strategies, desk, AI memo, numbers, close.</span>
+      <span class="arrow">→</span>
+    </a>
+  </div>
+
+  <footer>
+    <span><span class="a">α</span>AlphaDesk · design system</span>
+    <span>v0.1 · quiet money, loud math</span>
+  </footer>
+</main>
+</body></html>
