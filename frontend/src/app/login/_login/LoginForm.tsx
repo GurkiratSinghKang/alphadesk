@@ -134,7 +134,17 @@ export default function LoginForm() {
         // Success — clear the failure log
         writeFailures([]);
         setFailures([]);
-        await res.json();
+        const body = await res.json().catch(() => ({}));
+        // Hand the refresh token to the in-memory scheduler so
+        // `ensureTokenRefreshScheduled()` can rotate the access token
+        // before its 8-hour TTL expires. See `frontend/src/lib/api.ts`.
+        if (body?.refresh_token) {
+          window.dispatchEvent(
+            new CustomEvent("alphadesk:auth-login-success", {
+              detail: { refresh_token: body.refresh_token },
+            })
+          );
+        }
         router.push("/");
       } catch {
         setError("Failed to connect to server");

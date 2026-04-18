@@ -8,6 +8,7 @@ import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { WsStatusBanner } from "@/components/layout/WsStatusBanner";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
@@ -111,6 +112,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         >
           Skip to content
         </a>
+        {/* edge-cases-audit-r3 P0 #6: surface WS reconnect / failed state
+            so users don't place trades on stale cached quotes. Only renders
+            when wsStatus !== "open". Thin enough (py-1.5) to avoid shifting
+            the desk grid noticeably. */}
+        <WsStatusBanner />
         {children}
         <CommandPalette />
         <AICopilot />
@@ -133,6 +139,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
+      {/* edge-cases-audit-r3 P0 #6 — see desk branch comment above. */}
+      <WsStatusBanner />
       <TopBar />
       {tickerTapeOn && <TickerTape />}
       <StatusStrip />

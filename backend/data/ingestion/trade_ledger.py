@@ -26,11 +26,47 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from threading import Lock as _ThreadLock
 from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Money math helpers
+# ---------------------------------------------------------------------------
+# code-patterns-audit-r4 P0 #3: live P&L was previously computed in float and
+# rounded with Python 3's banker's ``round()`` (half-to-even), diverging from
+# the backtest engine and from Alpaca's reported P&L on .xx5 boundaries. We
+# now compute in ``Decimal`` and quantize once at the end with
+# ``ROUND_HALF_UP``. The function returns a ``Decimal``; callers convert to
+# float at the JSON/DB boundary.
+_TWO_PLACES = Decimal("0.01")
+
+
+def _money(x: Any) -> Decimal:
+    """Quantize a numeric value to 2 decimal places using ROUND_HALF_UP."""
+    if x is None:
+        return Decimal("0.00")
+    if isinstance(x, Decimal):
+        return x.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    # Convert via str() to avoid binary-float artefacts seeping in.
+    return Decimal(str(x)).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+
+
+def _to_decimal(x: Any) -> Decimal:
+    """Lift a numeric value to ``Decimal`` for intermediate arithmetic.
+
+    Unlike ``_money`` this does NOT quantize — use it for inputs to a
+    multi-step calculation; quantize ONCE at the end with ``_money``.
+    """
+    if x is None:
+        return Decimal("0")
+    if isinstance(x, Decimal):
+        return x
+    return Decimal(str(x))
 
 LEDGER_PATH = Path(__file__).resolve().parent.parent / "pipeline_logs" / "ledger.json"
 MIGRATED_PATH = LEDGER_PATH.with_suffix(".json.migrated")
@@ -541,17 +577,24 @@ class TradeLedger:
                     else "long"
                 )
                 qty = int(shares)
+                # code-patterns-audit-r4 P0 #3: compute P&L in Decimal with
+                # one ROUND_HALF_UP at the end. Keeps the return type float
+                # for JSON/DB serialization but eliminates the .xx5 banker's-
+                # rounding drift vs. the backtest engine and Alpaca's UI.
+                entry_dec = _to_decimal(entry_price)
+                price_dec = _to_decimal(price)
+                qty_dec = _to_decimal(qty)
                 if effective_side == "short":
                     # Short: profit when exit < entry.
-                    pnl = round((entry_price - float(price)) * qty, 2)
+                    pnl = float(_money((entry_dec - price_dec) * qty_dec))
                     pnl_pct = (
-                        round(((entry_price - float(price)) / entry_price) * 100, 2)
+                        float(_money(((entry_dec - price_dec) / entry_dec) * Decimal("100")))
                         if entry_price else 0.0
                     )
                 else:
-                    pnl = round((float(price) - entry_price) * qty, 2)
+                    pnl = float(_money((price_dec - entry_dec) * qty_dec))
                     pnl_pct = (
-                        round(((float(price) - entry_price) / entry_price) * 100, 2)
+                        float(_money(((price_dec - entry_dec) / entry_dec) * Decimal("100")))
                         if entry_price else 0.0
                     )
                 conn.execute(
@@ -777,16 +820,33 @@ class TradeLedger:
         wins = [t for t in closed if (t.get("pnl") or 0) > 0]
         losses = [t for t in closed if (t.get("pnl") or 0) < 0]
         decided = len(wins) + len(losses)
-        total_pnl = sum(t.get("pnl") or 0 for t in closed)
+        # Sum P&L in Decimal then quantize once at the end — banker's rounding
+        # at every per-trade addition leaks cents over thousands of trades
+        # (code-patterns-audit-r4 P0 #3).
+        total_pnl_dec = sum(
+            (_to_decimal(t.get("pnl") or 0) for t in closed),
+            start=Decimal("0"),
+        )
         pnl_pcts = [t.get("pnl_pct") or 0 for t in closed]
         best = max(closed, key=lambda t: t.get("pnl") or 0)
         worst = min(closed, key=lambda t: t.get("pnl") or 0)
+        avg_pnl_pct_dec = (
+            sum((_to_decimal(p) for p in pnl_pcts), start=Decimal("0"))
+            / Decimal(len(pnl_pcts))
+            if pnl_pcts else Decimal("0")
+        )
         return {
             "total_trades": len(closed),
             "open_positions": len(self.get_open_positions()),
-            "total_pnl": round(total_pnl, 2),
-            "win_rate": round(len(wins) / decided * 100, 1) if decided else 0.0,
-            "avg_pnl_pct": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0.0,
+            "total_pnl": float(_money(total_pnl_dec)),
+            # win_rate is a display percentage (1 decimal) — leaving as float
+            # is acceptable per the audit, but we still avoid banker's rounding.
+            "win_rate": float(
+                _to_decimal(len(wins) / decided * 100).quantize(
+                    Decimal("0.1"), rounding=ROUND_HALF_UP,
+                )
+            ) if decided else 0.0,
+            "avg_pnl_pct": float(_money(avg_pnl_pct_dec)),
             "best_trade": {
                 "symbol": best["symbol"],
                 "pnl": best.get("pnl", 0),
@@ -808,9 +868,15 @@ class TradeLedger:
             sym = t["symbol"]
             price = t.get("entry_price", 0) or 0
             shares = t.get("shares", 0) or 0
+            # Notional in Decimal then float for JSON — avoids banker's
+            # rounding on .xx5 boundaries (code-patterns-audit-r4 P0 #3).
+            notional_val = (
+                float(_money(_to_decimal(price) * _to_decimal(shares)))
+                if price and shares else 0
+            )
             result[sym] = {
                 "strategy": t.get("strategy", "claude_alpha"),
-                "notional": round(price * shares, 2) if price and shares else 0,
+                "notional": notional_val,
                 "shares": shares,
                 "entry_price": price,
             }
@@ -997,7 +1063,12 @@ class TradeLedger:
         )
 
     def get_strategy_performance(self) -> dict[str, dict[str, Any]]:
+        # Sum invested / pnl in Decimal for each strategy then quantize once
+        # at the end. Eliminates per-trade banker's-rounding drift
+        # (code-patterns-audit-r4 P0 #3).
         perf: dict[str, dict[str, Any]] = {}
+        # Parallel Decimal accumulators keyed by strategy name.
+        dec_totals: dict[str, dict[str, Decimal]] = {}
         for trade in self._list_all():
             strat = trade.get("strategy", "unknown")
             if strat not in perf:
@@ -1014,16 +1085,24 @@ class TradeLedger:
                     "best_trade_pnl": 0.0,
                     "worst_trade_pnl": 0.0,
                 }
+                dec_totals[strat] = {
+                    "total_pnl": Decimal("0"),
+                    "total_invested": Decimal("0"),
+                }
             p = perf[strat]
+            d = dec_totals[strat]
             p["total_trades"] += 1
-            invested = (trade.get("entry_price", 0) or 0) * (trade.get("shares", 0) or 0)
-            p["total_invested"] += invested
+            invested_dec = (
+                _to_decimal(trade.get("entry_price", 0) or 0)
+                * _to_decimal(trade.get("shares", 0) or 0)
+            )
+            d["total_invested"] += invested_dec
             if trade["status"] == "open":
                 p["open_trades"] += 1
             elif trade["status"] == "closed":
                 p["closed_trades"] += 1
                 pnl = trade.get("pnl", 0) or 0
-                p["total_pnl"] += pnl
+                d["total_pnl"] += _to_decimal(pnl)
                 # Classify pnl strictly: wins > 0, losses < 0, scratches == 0.
                 # Break-even trades must not be counted as losses.
                 if pnl > 0:
@@ -1034,11 +1113,25 @@ class TradeLedger:
                     p["scratches"] += 1
                 p["best_trade_pnl"] = max(p["best_trade_pnl"], pnl)
                 p["worst_trade_pnl"] = min(p["worst_trade_pnl"], pnl)
-        for p in perf.values():
+        for strat, p in perf.items():
+            d = dec_totals[strat]
             decided = p["wins"] + p["losses"]
-            p["win_rate"] = round(p["wins"] / decided * 100, 1) if decided > 0 else 0.0
-            p["total_pnl"] = round(p["total_pnl"], 2)
-            p["return_pct"] = round(
-                (p["total_pnl"] / p["total_invested"] * 100) if p["total_invested"] > 0 else 0, 2
-            )
+            # win_rate stays a 1-decimal display percentage but uses
+            # ROUND_HALF_UP rather than banker's rounding.
+            if decided > 0:
+                p["win_rate"] = float(
+                    _to_decimal(p["wins"] / decided * 100).quantize(
+                        Decimal("0.1"), rounding=ROUND_HALF_UP,
+                    )
+                )
+            else:
+                p["win_rate"] = 0.0
+            p["total_pnl"] = float(_money(d["total_pnl"]))
+            p["total_invested"] = float(_money(d["total_invested"]))
+            if d["total_invested"] > 0:
+                p["return_pct"] = float(_money(
+                    (d["total_pnl"] / d["total_invested"]) * Decimal("100")
+                ))
+            else:
+                p["return_pct"] = 0.0
         return perf

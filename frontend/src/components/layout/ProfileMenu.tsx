@@ -76,6 +76,9 @@ export function ProfileMenu() {
       // Best-effort; proceed to the login page even if the POST fails so
       // the user doesn't get stuck.
     }
+    // Stop the in-memory refresh-token scheduler so it doesn't fire a
+    // 401 storm after the backend revokes the session.
+    window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
     // HttpOnly cookies can't be cleared from JS — rely on the backend's
     // Set-Cookie: Max-Age=0 header in the /logout response.
     window.location.href = "/login";

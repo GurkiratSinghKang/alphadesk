@@ -8,12 +8,14 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.auth import require_auth
 from api.routes import auth as auth_routes
 
 from core.config import settings
 from core.database import init_db, close_db
+from core.logging import REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news
@@ -24,19 +26,13 @@ from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeli
 from data.ingestion.continuous_monitor import start_continuous_monitor, stop_continuous_monitor
 from data.ingestion.realtime_scanner import start_realtime_scanner, stop_realtime_scanner
 
-logger = logging.getLogger("alphadesk")
+# Install the JSON formatter + request-id filter for the whole process. This
+# replaces the ad-hoc logging.basicConfig block that lived here previously and
+# makes every log record carry ``request_id`` automatically. See
+# audit-reports/observability-audit-r4.md P0 #3 and #4.
+configure_logging()
 
-# Force application logs to stdout even under Gunicorn
-# (Gunicorn overrides the root logger, so basicConfig alone is not enough)
-_log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
-logging.basicConfig(level=_log_level, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", force=True)
-# Ensure all alphadesk loggers propagate correctly
-for _name in ("alphadesk", "data.ingestion", "api.websocket", "core"):
-    _lg = logging.getLogger(_name)
-    _lg.setLevel(_log_level)
-    if not _lg.handlers:
-        _lg.addHandler(logging.StreamHandler())
-    _lg.propagate = True
+logger = logging.getLogger("alphadesk")
 
 
 @asynccontextmanager
@@ -207,20 +203,82 @@ async def remove_server_header(request: Request, call_next):
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    request_id = str(uuid.uuid4())
+    # Honour an inbound X-Request-ID if the edge (Caddy) sends one, otherwise
+    # mint a fresh uuid4. Either way we pin it on request.state AND on the
+    # REQUEST_ID ContextVar so every log record emitted during this request —
+    # including those from middleware, handlers, DB helpers, and the Alpaca
+    # client — carries the same id.
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
-    response = await call_next(request)
+    token = REQUEST_ID.set(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        REQUEST_ID.reset(token)
     response.headers["X-Request-ID"] = request_id
     return response
 
 
 # --- Health ---
+@app.get("/livez", tags=["Health"])
+async def livez() -> dict:
+    """Liveness probe — process is up and accepting requests.
+
+    Used by docker/Kubernetes to decide whether to restart the container.
+    No dependency checks: any failure here means the Python process itself
+    is wedged, and a restart is the correct recovery.
+    """
+    return {"status": "ok"}
+
+
 @app.get("/health", tags=["Health"])
 async def health_check() -> dict:
-    if settings.is_production:
-        return {"status": "ok"}
-    return {
-        "status": "healthy",
-        "environment": settings.ENVIRONMENT.value,
-        "version": app.version,
-    }
+    """Backward-compat alias for /livez.
+
+    docker-compose.prod.yml has a healthcheck pointed at /health; keep it
+    working until every deployment switches to /livez.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/readyz", tags=["Health"])
+async def readyz() -> JSONResponse:
+    """Readiness probe — dependencies we can't serve traffic without.
+
+    Pings Postgres (SELECT 1) and Redis (PING). On failure, returns 503 +
+    a JSON body indicating which dependency is down, so oncall can triage
+    without shelling into each container. Kept fast (<1s combined) by
+    short-circuiting on first failure and using ``asyncio.wait_for`` timeouts.
+    """
+    result: dict[str, str] = {"db": "unknown", "redis": "unknown"}
+    overall_ok = True
+
+    # DB check — SELECT 1 is cheap and proves the connection pool is live.
+    try:
+        from sqlalchemy import text
+        from core.database import _get_engine
+
+        engine = _get_engine()
+
+        async def _db_ping() -> None:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_db_ping(), timeout=0.8)
+        result["db"] = "ok"
+    except Exception as e:
+        overall_ok = False
+        result["db"] = f"down: {type(e).__name__}"
+
+    # Redis check — PING over the async client.
+    try:
+        redis = await get_redis()
+        await asyncio.wait_for(redis.ping(), timeout=0.5)
+        result["redis"] = "ok"
+    except Exception as e:
+        overall_ok = False
+        result["redis"] = f"down: {type(e).__name__}"
+
+    status_code = 200 if overall_ok else 503
+    result["status"] = "ok" if overall_ok else "degraded"
+    return JSONResponse(status_code=status_code, content=result)

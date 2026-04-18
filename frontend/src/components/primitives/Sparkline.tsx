@@ -44,8 +44,15 @@ export default function Sparkline({
 }: SparklineProps) {
   if (!data || data.length < 2) return null;
 
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  // Filter non-finite values (NaN / Infinity) before min/max. A single NaN
+  // in `data` would make `Math.min` return NaN, which then propagates to
+  // every polyline point — SVG silently drops the shape. If too few clean
+  // points remain, bail out rather than drawing garbage.
+  const clean = data.filter(Number.isFinite);
+  if (clean.length < 2) return null;
+
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min;
   if (range === 0) return null;
 
@@ -55,7 +62,10 @@ export default function Sparkline({
   const points = data
     .map((v, i) => {
       const x = i * xStep;
-      const y = topPad + (1 - (v - min) / range) * usable;
+      // Clamp non-finite points to the midline rather than emitting NaN
+      // coords — a cleaner failure mode than a vanished polyline.
+      const safeV = Number.isFinite(v) ? v : (min + max) / 2;
+      const y = topPad + (1 - (safeV - min) / range) * usable;
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");

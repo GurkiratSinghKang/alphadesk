@@ -23,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
-import { cn } from "@/lib/utils";
+import { cn, safeNum } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
@@ -825,7 +825,7 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-quantity"
             type="number"
             value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) => setQuantity(Math.max(1, Math.floor(safeNum(e.target.value, 1))))}
             className="h-8 flex-1 rounded border border-border bg-background px-2 text-center text-sm tabular-nums text-foreground"
             min={1}
           />
@@ -858,7 +858,7 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-limit-price"
             type="number"
             value={limitPrice}
-            onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
+            onChange={(e) => setLimitPrice(safeNum(e.target.value, 0))}
             step={0.01}
             className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
           />
@@ -872,7 +872,7 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-stop-price"
             type="number"
             value={stopPrice}
-            onChange={(e) => setStopPrice(parseFloat(e.target.value) || 0)}
+            onChange={(e) => setStopPrice(safeNum(e.target.value, 0))}
             step={0.01}
             className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
           />
@@ -887,7 +887,7 @@ function OrderTab({ symbol }: { symbol: string }) {
               id="order-stop-price-sl"
               type="number"
               value={stopPrice}
-              onChange={(e) => setStopPrice(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setStopPrice(safeNum(e.target.value, 0))}
               step={0.01}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
             />
@@ -898,7 +898,7 @@ function OrderTab({ symbol }: { symbol: string }) {
               id="order-limit-price-sl"
               type="number"
               value={limitPrice}
-              onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setLimitPrice(safeNum(e.target.value, 0))}
               step={0.01}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
             />
@@ -923,7 +923,7 @@ function OrderTab({ symbol }: { symbol: string }) {
               id="trail-amount"
               type="number"
               value={trailAmount}
-              onChange={(e) => setTrailAmount(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setTrailAmount(safeNum(e.target.value, 0))}
               step={trailType === "dollar" ? 0.01 : 0.1}
               min={0}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"

@@ -213,7 +213,10 @@ export function StressTest() {
         modifier: () => (parseFloat(customPct) || 0) / 100,
         color: parseFloat(customPct) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]",
       }
-    : SCENARIOS.find((s) => s.id === selectedScenario)!;
+    // Fallback to SCENARIOS[0] if the persisted id ever drifts from the list
+    // (e.g. a scenario was removed in a release). Never assert non-null — a
+    // missing scenario used to blow up `.modifier` on load.
+    : (SCENARIOS.find((s) => s.id === selectedScenario) ?? SCENARIOS[0]);
 
   const result = useMemo(() => {
     if (!positions.length) return null;

@@ -41,9 +41,20 @@ _last_quotes: dict[str, dict] = {}  # track last bid/ask per symbol
 # --- No throttle: SIP feed is real-time, publish every tick ---
 _last_published: dict[str, float] = {}  # symbol -> last_price (for dedup only)
 
+# Track when each symbol was last updated for the periodic sweep —
+# long-session-audit-r4 P0 #3.
+_last_quote_seen_at: dict[str, float] = {}
+
 # --- Dynamic watchlist state ---
 _current_symbols: set[str] = set()
 MAX_SYMBOLS = 200
+
+# Periodic sweep: drop entries for symbols not seen in this many seconds.
+# Catches the case where Alpaca silently stops sending updates for a symbol
+# without an explicit unsubscribe (long-session-audit-r4 P0 #3).
+_STALE_QUOTE_SECONDS = 60 * 60 * 6  # 6 hours
+_last_sweep_at: float = 0.0
+_SWEEP_INTERVAL = 60 * 30  # run every 30 minutes
 
 
 async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) -> None:
@@ -139,7 +150,13 @@ def _is_market_hours() -> bool:
 
 
 async def _update_subscriptions(ws, new_symbols: set[str]) -> None:
-    """Subscribe/unsubscribe to match the new symbol set."""
+    """Subscribe/unsubscribe to match the new symbol set.
+
+    On unsubscribe we drop the symbol from ``_last_quotes``,
+    ``_last_published``, and ``_last_quote_seen_at`` so those dicts don't
+    grow unbounded as the watchlist churns over a long session
+    (long-session-audit-r4 P0 #3).
+    """
     global _current_symbols
 
     to_add = new_symbols - _current_symbols
@@ -157,6 +174,12 @@ async def _update_subscriptions(ws, new_symbols: set[str]) -> None:
             "Alpaca stream unsubscribed %d symbols: %s",
             len(to_remove), str(unsub_resp)[:100],
         )
+        # Evict per-symbol state so we don't leak memory across watchlist
+        # churn over multi-day sessions.
+        for sym in to_remove:
+            _last_quotes.pop(sym, None)
+            _last_published.pop(sym, None)
+            _last_quote_seen_at.pop(sym, None)
 
     if to_add:
         await ws.send(json.dumps({
@@ -174,8 +197,43 @@ async def _update_subscriptions(ws, new_symbols: set[str]) -> None:
     _current_symbols = new_symbols.copy()
 
 
+def _sweep_stale_quotes() -> int:
+    """Drop in-memory quote state for symbols we haven't seen recently.
+
+    Defence-in-depth against the case where Alpaca quietly stops emitting
+    updates for a symbol without an unsubscribe round-trip (e.g. listing
+    halts). Returns the number of entries removed.
+    Long-session-audit-r4 P0 #3 / P2 #13.
+    """
+    global _last_sweep_at
+    now = time.monotonic()
+    if now - _last_sweep_at < _SWEEP_INTERVAL:
+        return 0
+    _last_sweep_at = now
+
+    cutoff = now - _STALE_QUOTE_SECONDS
+    stale = [
+        sym for sym, ts in list(_last_quote_seen_at.items())
+        if ts < cutoff and sym not in _current_symbols
+    ]
+    for sym in stale:
+        _last_quotes.pop(sym, None)
+        _last_published.pop(sym, None)
+        _last_quote_seen_at.pop(sym, None)
+    if stale:
+        logger.info(
+            "alpaca_stream: swept %d stale quote entries (older than %ds)",
+            len(stale), _STALE_QUOTE_SECONDS,
+        )
+    return len(stale)
+
+
 async def _watchlist_refresh_loop(ws) -> None:
-    """Re-evaluate the watchlist every 5 minutes and update subscriptions."""
+    """Re-evaluate the watchlist every 5 minutes and update subscriptions.
+
+    Also runs the periodic stale-quote sweep so per-worker dicts don't grow
+    forever during multi-day sessions (long-session-audit-r4 P0 #3).
+    """
     while not _should_stop:
         await asyncio.sleep(300)  # 5 minutes
         if _should_stop:
@@ -191,6 +249,8 @@ async def _watchlist_refresh_loop(ws) -> None:
                     len(_current_symbols - new_symbols),
                 )
                 await _update_subscriptions(ws, new_symbols)
+            # Defence-in-depth eviction sweep — internal interval guard.
+            _sweep_stale_quotes()
         except Exception as e:
             logger.warning("Watchlist refresh failed: %s", e)
 
@@ -271,6 +331,7 @@ async def _run_stream() -> None:
                             bid = msg.get("bp", 0)
                             ask = msg.get("ap", 0)
                             _last_quotes[sym] = {"bid": bid, "ask": ask}
+                            _last_quote_seen_at[sym] = time.monotonic()
                             # Only publish bid/ask updates if we have a last trade price
                             # The "last" price is only updated by trade messages below
                             last_trade = _last_quotes.get(sym, {}).get("last_trade", 0)
@@ -291,6 +352,7 @@ async def _run_stream() -> None:
                             prev = _last_quotes.get(sym, {})
                             prev["last_trade"] = trade_price  # store for quote messages
                             _last_quotes[sym] = prev
+                            _last_quote_seen_at[sym] = time.monotonic()
                             await _maybe_publish("quotes", sym, trade_price, {
                                 "symbol": sym,
                                 "bid": prev.get("bid", 0),

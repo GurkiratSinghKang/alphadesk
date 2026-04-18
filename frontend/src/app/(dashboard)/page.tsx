@@ -140,16 +140,58 @@ export default function DeskPage() {
   const [orderCount, setOrderCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    // Track whether we've already warned this session so repeated 30s
+    // polls don't spam toasts. Reset on success.
+    let hasWarned = false;
+
     async function fetchCounts() {
-      try {
-        const [pending, open] = await Promise.all([
-          getOrders("pending").catch(() => []),
-          getOrders("open").catch(() => []),
-        ]);
-        if (!cancelled) setOrderCount(pending.length + open.length);
-      } catch {
-        if (!cancelled) setOrderCount(0);
+      // Helper: fetch a status, return `null` on error so we can
+      // distinguish "no orders" (0) from "request failed" (null).
+      // Previously `.catch(() => [])` rendered a 5xx as "no open orders"
+      // silently — user believes their order book is clean when it
+      // really can't be retrieved.
+      async function safeFetch(status: string): Promise<unknown[] | null> {
+        try {
+          return await getOrders(status);
+        } catch (err) {
+          // Only log the first failure per session to avoid console spam.
+          if (!hasWarned) {
+            console.error(`[desk] getOrders(${status}) failed:`, err);
+          }
+          return null;
+        }
       }
+
+      const [pending, open] = await Promise.all([
+        safeFetch("pending"),
+        safeFetch("open"),
+      ]);
+      if (cancelled) return;
+
+      const anyError = pending === null || open === null;
+      if (anyError) {
+        // Dispatch a one-time system notification so the user sees that
+        // the order count is stale. Keep the last-known count rather
+        // than zeroing it — "No open orders" on a 5xx is misleading.
+        if (!hasWarned && typeof window !== "undefined") {
+          hasWarned = true;
+          window.dispatchEvent(
+            new CustomEvent("alphadesk:system-notify", {
+              detail: {
+                kind: "error",
+                title: "Order list unavailable",
+                message:
+                  "Couldn't fetch pending/open orders — showing last-known count. Retrying in 30s.",
+              },
+            })
+          );
+        }
+        // Don't overwrite orderCount on error — keep the stale-but-real value.
+        return;
+      }
+
+      hasWarned = false;
+      setOrderCount((pending?.length ?? 0) + (open?.length ?? 0));
     }
     fetchCounts();
     const id = setInterval(fetchCounts, 30_000);

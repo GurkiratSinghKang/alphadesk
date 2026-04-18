@@ -320,56 +320,134 @@ export async function getSnapshot(symbols: string[]): Promise<Record<string, Quo
 }
 
 /**
- * Batched snapshot fetch. Intended to call a future
- * `/api/v1/market/snapshots?symbols=A,B,C` single-request endpoint.
+ * Batched snapshot fetch using the backend `/api/v1/market/snapshots` endpoint
+ * (perf-audit-r3 P0 #4 — shipped alongside this change).
  *
- * Until the backend ships that endpoint (Wave 14 did not touch backend),
- * this delegates to `getSnapshot` above so callers can adopt the new
- * signature today and automatically get the batched behaviour when the
- * backend ships. Emits a single cache key instead of N once the endpoint
- * exists — see audit report for the full migration plan.
+ * The backend returns `{ [symbol]: Snapshot }` where each `Snapshot` wraps a
+ * `quote` plus day/prev/minute bars. Callers of this function expect
+ * `Record<string, Quote>`, so we unwrap `.quote` (with a backwards-compat
+ * fallback in case an older backend still returns a flat Quote map).
+ *
+ * On upstream failure we fall back to the N-request fan-out in `getSnapshot`
+ * so the watchlist stays populated during partial outages; the caller sees
+ * the same shape either way.
  */
 export async function getSnapshots(symbols: string[]): Promise<Record<string, Quote>> {
   if (!symbols.length) return {};
-  // When the backend adds the batched endpoint, swap the body below with:
-  //   const qs = new URLSearchParams({ symbols: symbols.join(",") });
-  //   return apiFetch<Record<string, Quote>>(`/api/v1/market/snapshots?${qs}`);
-  return getSnapshot(symbols);
+  const qs = new URLSearchParams({ symbols: symbols.join(",") }).toString();
+  try {
+    type BackendSnapshot = { quote?: Quote } & Partial<Quote>;
+    const raw = await apiFetch<Record<string, BackendSnapshot>>(
+      `/api/v1/market/snapshots?${qs}`,
+    );
+    const out: Record<string, Quote> = {};
+    for (const [sym, snap] of Object.entries(raw)) {
+      // New `{symbol: Snapshot}` shape — unwrap the nested quote.
+      if (snap && typeof snap === "object" && "quote" in snap && snap.quote) {
+        out[sym] = snap.quote;
+      } else if (snap && typeof snap === "object" && "last" in snap) {
+        // Defensive fallback: older backend shape returns flat Quote objects.
+        out[sym] = snap as Quote;
+      }
+    }
+    return out;
+  } catch {
+    // Any network/5xx error: degrade to per-symbol fan-out rather than
+    // handing callers an empty map (the UI would otherwise show a mostly-empty
+    // watchlist during a Caddy hiccup).
+    return getSnapshot(symbols);
+  }
 }
 
-// ─── Auth token refresh scheduler (edge-cases-audit-r3 P0 #1) ─
+// ─── Auth token refresh scheduler (long-session-audit-r4 P0 #1) ─
 //
 // The backend mints an access_token with an 8-hour TTL
 // (backend/core/config.py:82). The only client-side logic for 401 is to
 // redirect to /login, which silently kicks out users who leave the tab open
 // overnight. `ensureTokenRefreshScheduled()` starts a single module-level
 // interval (idempotent: calling it twice is a no-op) that POSTs to
-// `/api/v1/auth/refresh` ~15 min before expiry.
+// `/api/v1/auth/refresh` ~1 hour before expiry.
 //
-// Caveats — read these before touching the flow:
+// APPROACH B (in-memory refresh token):
 //   * The refresh_token cookie is HttpOnly (path=/api/v1/auth). The backend
-//     refresh handler currently requires `{"refresh_token": "…"}` in the
-//     request body, which JS cannot read from the cookie. The call below
-//     sends an empty body; it will return 422 until the backend is updated
-//     to read the refresh_token from cookies (or we store the token from
-//     /login's JSON response in memory). The scheduler infrastructure is in
-//     place regardless so the fix is one-line on the backend.
-//   * We refresh at (expiry - 15 min) so a brief outage has time to retry.
+//     refresh handler requires `{"refresh_token": "…"}` in the request body
+//     which JS cannot read from the cookie. Instead, the login response JSON
+//     includes the refresh_token — we capture it here via
+//     `captureRefreshToken(token)` and keep it in a module-level variable
+//     (NOT localStorage / NOT persistent state). This is safer than
+//     localStorage because an XSS attacker cannot read it from the DOM and
+//     it never survives a page reload.
+//   * SECURITY / UX trade-off: page reload loses the in-memory token →
+//     next refresh cycle becomes a no-op → user falls through to the 401
+//     redirect on their next request after the access_token expires. This
+//     is acceptable because (a) reloads are rare in long sessions and
+//     (b) memory-only is strictly safer than persistence.
+//   * Since LoginForm uses its own `fetch` (not `apiFetch`) we also listen
+//     for a DOM event `alphadesk:auth-login-success` with the token in the
+//     detail payload so the capture happens even if the login caller never
+//     imports `captureRefreshToken`.
+//   * We refresh at (expiry - 1 hour) so a brief outage has time to retry.
 
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 60 * 60 * 1000; // 7 hours (buffer before 8-hr expiry)
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
+// Module-local in-memory refresh token. Deliberately NOT exported as a value
+// (only via the setter/clearer) so consumers can't accidentally serialise it.
+let refreshToken: string | null = null;
+
+/**
+ * Capture the refresh token after a successful login. The login flow is
+ * deliberately not owned by this module (it lives in LoginForm and uses
+ * raw `fetch`), so either the caller imports and calls this directly or it
+ * dispatches the `alphadesk:auth-login-success` CustomEvent detailed below.
+ */
+export function captureRefreshToken(token: string | null): void {
+  refreshToken = typeof token === "string" && token.length > 0 ? token : null;
+}
+
+/** Clear the refresh token (called on logout or refresh failure). */
+export function clearRefreshToken(): void {
+  refreshToken = null;
+  if (tokenRefreshTimer !== null) {
+    clearInterval(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+}
+
+/**
+ * Subscribe once (module init) to the login-success DOM event so the
+ * refresh token is captured even when LoginForm does not import this
+ * module. The event must carry `{ detail: { refresh_token: string } }`.
+ */
+if (typeof window !== "undefined") {
+  window.addEventListener("alphadesk:auth-login-success", (e: Event) => {
+    const detail = (e as CustomEvent<{ refresh_token?: string }>).detail;
+    if (detail?.refresh_token) {
+      captureRefreshToken(detail.refresh_token);
+    }
+  });
+  // On logout, clear the token + interval. Matches ProfileMenu's /auth/logout
+  // POST which clears the server-side session.
+  window.addEventListener("alphadesk:auth-logout", () => {
+    clearRefreshToken();
+  });
+}
 
 export async function refreshAccessToken(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (refreshToken === null) return false;
   try {
-    // NOTE: backend currently expects `{ refresh_token }` body; an empty body
-    // returns 422 until the backend reads the HttpOnly cookie. Leaving the
-    // call in place so when the backend fix lands we don't need client work.
-    await apiFetch("/api/v1/auth/refresh", {
+    // The backend's /auth/refresh handler returns `{access_token, refresh_token, ...}`
+    // on success. Some backends rotate the refresh_token on every call
+    // (recommended); capture the new one if provided.
+    type RefreshResponse = { access_token?: string; refresh_token?: string };
+    const resp = await apiFetch<RefreshResponse>("/api/v1/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({ refresh_token: refreshToken }),
       // Don't redirect on 401 — the scheduler manages that UX itself.
     });
+    if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
+      refreshToken = resp.refresh_token;
+    }
     return true;
   } catch {
     return false;
@@ -382,18 +460,28 @@ export async function refreshAccessToken(): Promise<boolean> {
  * no-ops. Intended to be called once on dashboard mount (e.g. from the
  * WebSocket provider in `providers.tsx`). Safe to call on every render.
  *
- * Note: does NOT fire an immediate refresh — the first refresh happens
- * `TOKEN_REFRESH_INTERVAL_MS` after the first call. Callers on a freshly
- * logged-in session don't need one because the login flow just minted a
- * token; callers resuming an 8-hr-idle tab will hit the 401 path in
- * `apiFetch` on their next request, which is acceptable until the backend
- * batched-refresh via HttpOnly cookie is implemented.
+ * Guards:
+ *   * Skip entirely if no refresh_token has been captured yet (user reloaded
+ *     or is not logged in) — the interval is left unstarted so we don't
+ *     spam 401 calls to the backend.
+ *   * Clear the interval on refresh failure to avoid repeated 401 storms;
+ *     the next login (or page reload) rearms it.
  */
 export function ensureTokenRefreshScheduled(): void {
   if (typeof window === "undefined") return;
   if (tokenRefreshTimer !== null) return;
+  if (refreshToken === null) return;
   tokenRefreshTimer = setInterval(() => {
-    refreshAccessToken().catch(() => undefined);
+    refreshAccessToken().then((ok) => {
+      if (!ok && tokenRefreshTimer !== null) {
+        // Refresh failed — stop the scheduler so we don't keep hitting
+        // /auth/refresh with a stale or rejected token. The user will hit
+        // the 401 redirect on their next normal request, which is the
+        // correct UX.
+        clearInterval(tokenRefreshTimer);
+        tokenRefreshTimer = null;
+      }
+    }).catch(() => undefined);
   }, TOKEN_REFRESH_INTERVAL_MS);
 }
 

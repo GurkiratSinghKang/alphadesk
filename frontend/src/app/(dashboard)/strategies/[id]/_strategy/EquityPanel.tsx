@@ -79,14 +79,22 @@ export default function EquityPanel({
   const benchValues = hasBench ? benchmark!.map((p) => p.value) : [];
 
   const allVals = hasBench ? [...mainValues, ...benchValues] : mainValues;
-  const min = Math.min(...allVals);
-  const max = Math.max(...allVals);
+  // Filter non-finite values before min/max — a single NaN (e.g. from
+  // `data[0].value === 0` causing a divide-by-zero above, or from a bad
+  // upstream parse) would silently NaN out the entire chart.
+  const cleanVals = allVals.filter(Number.isFinite);
+  const min = cleanVals.length ? Math.min(...cleanVals) : 0;
+  const max = cleanVals.length ? Math.max(...cleanVals) : 0;
   const range = max - min || 1;
 
   const toPoint = (vals: number[], idx: number) => {
     const total = vals.length;
+    const raw = vals[idx];
+    // Clamp non-finite to the midline so a single bad point doesn't break
+    // the SVG path (the min/max above already filtered them out).
+    const v = Number.isFinite(raw) ? raw : (min + max) / 2;
     const x = padX + (idx / (total - 1)) * (w - 2 * padX);
-    const y = padY + (1 - (vals[idx] - min) / range) * (h - 2 * padY);
+    const y = padY + (1 - (v - min) / range) * (h - 2 * padY);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   };
 

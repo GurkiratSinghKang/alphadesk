@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePortfolioStore } from "@/stores/portfolio";
-import { cn } from "@/lib/utils";
+import { cn, safeNum } from "@/lib/utils";
 
 interface PositionSizerProps {
   symbol: string;
@@ -101,9 +101,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                 id="position-risk-pct"
                 type="number"
                 value={riskPct}
-                onChange={(e) =>
-                  setRiskPct(parseFloat(e.target.value) || 1)
-                }
+                onChange={(e) => setRiskPct(safeNum(e.target.value, 0))}
                 min={0.5}
                 max={10}
                 step={0.5}
@@ -123,9 +121,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                   id="position-stop-loss"
                   type="number"
                   value={stopLossPct}
-                  onChange={(e) =>
-                    setStopLossPct(parseFloat(e.target.value) || 1)
-                  }
+                  onChange={(e) => setStopLossPct(safeNum(e.target.value, 0))}
                   min={0.5}
                   max={20}
                   step={0.5}
@@ -145,9 +141,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                     id="position-entry-price"
                     type="number"
                     value={entryPrice}
-                    onChange={(e) =>
-                      setEntryPrice(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setEntryPrice(safeNum(e.target.value, 0))}
                     step={0.01}
                     className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
                   />
@@ -163,9 +157,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                     id="position-stop-price"
                     type="number"
                     value={stopLossPrice}
-                    onChange={(e) =>
-                      setStopLossPrice(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setStopLossPrice(safeNum(e.target.value, 0))}
                     step={0.01}
                     className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
                   />

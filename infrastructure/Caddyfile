@@ -27,12 +27,14 @@
     handle /ws {
         reverse_proxy backend:8000
     }
-    handle /status/* {
-        basic_auth {
-            {$STATUS_USER:admin} {$STATUS_PASS_HASH}
-        }
-        reverse_proxy uptime-kuma:3001
-    }
+    # /status/* handler removed 2026-04-18 — it pointed at uptime-kuma:3001,
+    # which was deleted from docker-compose.prod.yml on 2026-04-17. Caddy was
+    # returning 502s (with a basic-auth prompt first, which made it look like
+    # the service was up). Requests to /status now fall through to the
+    # default frontend handler and receive a Next.js 404 — the correct
+    # response for a route that no longer exists. When a real health
+    # dashboard lands (Grafana / Netdata), re-add a /status/* handler.
+    # See observability-audit-r4.md P2 #15.
     handle {
         reverse_proxy frontend:3000
     }

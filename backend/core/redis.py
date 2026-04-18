@@ -49,10 +49,15 @@ ALL_CHANNELS = [CHANNEL_QUOTES, CHANNEL_PORTFOLIO, CHANNEL_ALERTS, CHANNEL_AGENT
 
 
 async def publish(channel: str, data: dict[str, Any]) -> int:
-    """Publish a JSON-serialised message to a Redis channel."""
-    data["_ts"] = time.time()  # Add timestamp for staleness detection
+    """Publish a JSON-serialised message to a Redis channel.
+
+    Copies the caller's dict before injecting ``_ts`` so we never mutate the
+    argument. The previous in-place mutation tripped readers that iterated
+    the same dict concurrently (concurrency-audit-r4 P0 #3).
+    """
+    payload_dict = {**data, "_ts": time.time()}
     r = await get_redis()
-    payload = orjson.dumps(data).decode()
+    payload = orjson.dumps(payload_dict).decode()
     return await r.publish(channel, payload)
 
 

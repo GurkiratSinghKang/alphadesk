@@ -97,3 +97,19 @@ export function formatChangeWithSign(value: number, decimals = 2): string {
   const sign = (value ?? 0) >= 0 ? "+" : "";
   return `${sign}${(value ?? 0).toFixed(decimals)}`;
 }
+
+/**
+ * Parse a string to a finite number, returning `fallback` for empty / NaN /
+ * Infinity inputs. Unlike `parseFloat(s) || fallback`, this preserves
+ * legitimate `0` entries — critical for position-sizing / stop-loss /
+ * take-profit inputs where `0` is a user-meaningful value (disable /
+ * no-TP), not "missing".
+ *
+ * NOTE: If you need a value strictly greater than zero, add a separate
+ * validation step downstream — do not bake the "treat 0 as 1" rule into
+ * the parse.
+ */
+export function safeNum(s: string, fallback = 0): number {
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : fallback;
+}

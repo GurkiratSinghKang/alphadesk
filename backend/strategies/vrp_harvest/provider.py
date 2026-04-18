@@ -20,6 +20,7 @@ data, not just the contract metadata.
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -259,12 +260,13 @@ class _ContractsCacheProxy:
     ) -> pd.DataFrame:
         """Perform the bounded Polygon contracts listing.
 
-        The actual HTTP client is passed via a module-level thread-local
-        handoff so the cached signature stays minimal.
+        The actual HTTP client is passed via a ``contextvars.ContextVar``
+        handoff so the cached signature stays minimal. ContextVar is
+        asyncio-safe — concurrent VRP chain fetches each see their own
+        client (concurrency-audit-r4 P0 #1).
         """
 
-        global _PENDING_HTTP
-        http = _PENDING_HTTP
+        http = _PENDING_HTTP.get()
         if http is None:
             raise RuntimeError(
                 "_fetch_contracts_cached: no _PENDING_HTTP installed; "
@@ -308,7 +310,12 @@ class _ContractsCacheProxy:
 
 
 _PROXY = _ContractsCacheProxy()
-_PENDING_HTTP: Any = None
+# ContextVar so concurrent VRP chain fetches don't clobber each other's HTTP
+# client. Each asyncio task / thread sees its own value (concurrency-audit-r4
+# P0 #1). We deliberately do NOT use a module-level mutable global here.
+_PENDING_HTTP: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar(
+    "_vrp_pending_http", default=None,
+)
 
 
 def _fetch_contracts_cached(
@@ -321,12 +328,11 @@ def _fetch_contracts_cached(
 ) -> pd.DataFrame:
     """Module-level entry point to the cached contracts listing."""
 
-    global _PENDING_HTTP
-    _PENDING_HTTP = http_source
+    token = _PENDING_HTTP.set(http_source)
     try:
         return _PROXY.fetch(sym, asof_iso, int(lower_dte), int(upper_dte))
     finally:
-        _PENDING_HTTP = None
+        _PENDING_HTTP.reset(token)
 
 
 __all__ = ["BoundedPolygonOptionsProvider"]

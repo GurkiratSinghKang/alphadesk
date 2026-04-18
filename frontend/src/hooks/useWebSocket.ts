@@ -5,6 +5,17 @@ import { env } from "@/env";
 
 type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars";
 
+// long-session-audit-r4 P1 #9 (defence-in-depth): hard allow-list of
+// channel names. Any dispatch to a channel outside this set is rejected.
+// Mirrors the server-side check in backend/api/websocket/handler.py:49-51
+// — if a future code path ever `subscribe(symbol)`'s dynamically, the set
+// can't grow unbounded.
+const ALL_CHANNELS: readonly WsChannel[] = ["quotes", "portfolio", "alerts", "agents", "bars"] as const;
+const ALL_CHANNELS_SET: ReadonlySet<string> = new Set<string>(ALL_CHANNELS);
+function isValidChannel(channel: string): channel is WsChannel {
+  return ALL_CHANNELS_SET.has(channel);
+}
+
 /**
  * WebSocket connection status for the dashboard UI.
  *   - "connecting": initial TCP/WS handshake in flight, no prior success
@@ -43,6 +54,11 @@ export function useWebSocket(): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // long-session-audit-r4 P2: track the re-subscribe timeout so we can
+  // cancel it on reconnect / visibility change. Previously the 100ms
+  // setTimeout could fire on an already-closed socket, raising
+  // `InvalidStateError` in ws.send.
+  const subscribeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscribedChannels = useRef<Set<WsChannel>>(new Set());
 
   const [isConnected, setIsConnected] = useState(false);
@@ -56,6 +72,13 @@ export function useWebSocket(): UseWebSocketReturn {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = undefined;
+    }
+    // Cancel any pending re-subscribe timer from a prior socket — without
+    // this, a stale callback fires on the new socket and may race the open
+    // handshake (or worse, fire after the socket is closed).
+    if (subscribeTimeoutRef.current) {
+      clearTimeout(subscribeTimeoutRef.current);
+      subscribeTimeoutRef.current = null;
     }
 
     // Clean up previous connection
@@ -94,8 +117,14 @@ export function useWebSocket(): UseWebSocketReturn {
 
         // Re-subscribe to all channels after a short delay so the backend
         // has time to send the `authenticated` ack before we flood it with
-        // subscribe frames.
-        setTimeout(() => {
+        // subscribe frames. Track the handle + check readyState in the
+        // callback so we don't send on a closed socket.
+        if (subscribeTimeoutRef.current) {
+          clearTimeout(subscribeTimeoutRef.current);
+        }
+        subscribeTimeoutRef.current = setTimeout(() => {
+          subscribeTimeoutRef.current = null;
+          if (ws.readyState !== WebSocket.OPEN) return;
           subscribedChannels.current.forEach((channel) => {
             ws.send(JSON.stringify({ action: "subscribe", channel }));
           });
@@ -167,6 +196,10 @@ export function useWebSocket(): UseWebSocketReturn {
 
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (subscribeTimeoutRef.current) {
+        clearTimeout(subscribeTimeoutRef.current);
+        subscribeTimeoutRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
@@ -191,6 +224,10 @@ export function useWebSocket(): UseWebSocketReturn {
   }, [connect]);
 
   const subscribe = useCallback((channel: WsChannel) => {
+    // long-session-audit-r4 P1 #9: validate against the hardcoded channel
+    // list. Rejecting unknown channels keeps the subscribedChannels Set
+    // bounded even if a future caller dispatches a dynamic value.
+    if (!isValidChannel(channel)) return;
     subscribedChannels.current.add(channel);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "subscribe", channel }));
@@ -198,6 +235,7 @@ export function useWebSocket(): UseWebSocketReturn {
   }, []);
 
   const unsubscribe = useCallback((channel: WsChannel) => {
+    if (!isValidChannel(channel)) return;
     subscribedChannels.current.delete(channel);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "unsubscribe", channel }));
@@ -206,6 +244,7 @@ export function useWebSocket(): UseWebSocketReturn {
 
   const send = useCallback(
     (channel: WsChannel, event: string, data?: unknown) => {
+      if (!isValidChannel(channel)) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ channel, event, data }));
       }
@@ -214,6 +253,10 @@ export function useWebSocket(): UseWebSocketReturn {
   );
 
   const onMessage = useCallback((channel: WsChannel, callback: (data: WsMessage) => void) => {
+    if (!isValidChannel(channel)) {
+      // No-op unsubscribe so callers can still `return unsub` unconditionally.
+      return () => undefined;
+    }
     if (!channelCallbacksRef.current.has(channel)) {
       channelCallbacksRef.current.set(channel, new Set());
     }

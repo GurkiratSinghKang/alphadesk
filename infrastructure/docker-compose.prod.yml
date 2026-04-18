@@ -19,6 +19,14 @@ services:
         condition: service_healthy
     networks:
       - alphadesk
+    logging:
+      driver: json-file
+      options:
+        # Same 50m×5 (250 MB) policy as every other service so Caddy access
+        # logs — the only record of who hit which URL — survive longer than
+        # a few hours. See observability-audit-r4.md P2 #14.
+        max-size: "50m"
+        max-file: "5"
     mem_limit: 256m
     cpus: 0.25
 
@@ -31,8 +39,12 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        # Bumped from 10m×3 (30 MB) to 50m×5 (250 MB/service). Old rotation
+        # held only a few hours of traffic, making "what happened yesterday?"
+        # impossible. Disk budget: ~1 GB across 5 services on a 38 GB VPS.
+        # See observability-audit-r4.md P2 #14.
+        max-size: "50m"
+        max-file: "5"
     mem_limit: 512m
     cpus: 0.5
 
@@ -62,8 +74,12 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        # Bumped from 10m×3 (30 MB) to 50m×5 (250 MB/service). Old rotation
+        # held only a few hours of traffic, making "what happened yesterday?"
+        # impossible. Disk budget: ~1 GB across 5 services on a 38 GB VPS.
+        # See observability-audit-r4.md P2 #14.
+        max-size: "50m"
+        max-file: "5"
     mem_limit: 1536m
     cpus: 1.0
 
@@ -83,8 +99,12 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        # Bumped from 10m×3 (30 MB) to 50m×5 (250 MB/service). Old rotation
+        # held only a few hours of traffic, making "what happened yesterday?"
+        # impossible. Disk budget: ~1 GB across 5 services on a 38 GB VPS.
+        # See observability-audit-r4.md P2 #14.
+        max-size: "50m"
+        max-file: "5"
     mem_limit: 2g
     cpus: 1.5
 
@@ -102,8 +122,12 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        # Bumped from 10m×3 (30 MB) to 50m×5 (250 MB/service). Old rotation
+        # held only a few hours of traffic, making "what happened yesterday?"
+        # impossible. Disk budget: ~1 GB across 5 services on a 38 GB VPS.
+        # See observability-audit-r4.md P2 #14.
+        max-size: "50m"
+        max-file: "5"
     mem_limit: 640m
     cpus: 0.5
 

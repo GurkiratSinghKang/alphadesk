@@ -13,10 +13,17 @@ import { ToastProvider } from "@/components/ui/toast";
 // ─── React Query ─────────────────────────────────────────────
 
 function makeQueryClient() {
+  // long-session-audit-r4 P1 #5: explicit gcTime avoids the v5 default of
+  // 5 min growing unbounded on heavy research sessions where the user
+  // hovers many symbols / expirations (each unique key hangs in cache).
+  // 10 min gc is a reasonable bound; per-query callsites can override with
+  // a shorter gcTime (e.g. 60_000) for high-cardinality keys like
+  // `useOptionsChain(symbol, expiration)` / `useIVData(symbol)`.
   return new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
+        gcTime: 10 * 60_000, // 10 minutes — cap cache retention
         refetchOnWindowFocus: false,
         retry: 2,
       },
@@ -38,12 +45,18 @@ export function useWs(): WsContextValue {
 
 function WebSocketProvider({ children }: { children: ReactNode }) {
   const ws = useWebSocket();
-  // Wave 14 edge-cases-audit-r3 P0 #1: start the silent token-refresh
-  // scheduler exactly once when a logged-in session mounts the dashboard.
+  // long-session-audit-r4 P0 #1: start the silent token-refresh scheduler
+  // once when a logged-in session mounts the dashboard. The scheduler is
+  // a no-op until `captureRefreshToken` is called (see api.ts), so we also
+  // re-arm it on the login-success event in case the dashboard is first
+  // mounted before the event fires (e.g. SSR hydration ordering).
   // Mounted here (and not on /login) because WebSocketProvider only wraps
   // authenticated surfaces — see <Providers> below.
   useEffect(() => {
     ensureTokenRefreshScheduled();
+    const onLogin = () => ensureTokenRefreshScheduled();
+    window.addEventListener("alphadesk:auth-login-success", onLogin);
+    return () => window.removeEventListener("alphadesk:auth-login-success", onLogin);
   }, []);
   return (
     <WebSocketContext.Provider value={ws}>{children}</WebSocketContext.Provider>

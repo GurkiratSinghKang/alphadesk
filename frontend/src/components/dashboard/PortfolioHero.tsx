@@ -60,7 +60,11 @@ function EquityCurveSVG({
 
   if (data.length < 2) return null;
 
-  const values = data.map((d) => d.value);
+  // Filter out non-finite values before computing min/max. If backend ever
+  // returns a NaN equity point (bad parsing, float('nan') serialised to
+  // JSON), a single NaN would make the entire chart render blank.
+  const values = data.map((d) => d.value).filter(Number.isFinite);
+  if (values.length < 2) return null;
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
   const rawRange = maxV - minV;
@@ -72,13 +76,19 @@ function EquityCurveSVG({
 
   const toX = (i: number) =>
     PAD_X + (i / (data.length - 1)) * (W - PAD_X * 2);
-  const toY = (v: number) =>
-    PAD_Y + (1 - (v - paddedMin) / paddedRange) * (H - PAD_Y * 2);
+  const toY = (v: number) => {
+    // Clamp non-finite values to the midline — emitting NaN into the SVG
+    // coords would break the entire path.
+    const safeV = Number.isFinite(v) ? v : (paddedMin + paddedMax) / 2;
+    return PAD_Y + (1 - (safeV - paddedMin) / paddedRange) * (H - PAD_Y * 2);
+  };
 
   const points = data.map((d, i) => `${toX(i)},${toY(d.value)}`).join(" ");
 
-  const firstVal = data[0].value;
-  const lastVal = data[data.length - 1].value;
+  // Pick the first/last finite values for the up/down color, not raw
+  // `data[0]` / `data[n-1]` — a NaN at either end would flip direction.
+  const firstVal = values[0];
+  const lastVal = values[values.length - 1];
   const isUp = lastVal >= firstVal;
   const colorVar = isUp ? "var(--profit)" : "var(--loss)";
 

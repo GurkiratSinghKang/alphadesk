@@ -13,6 +13,67 @@ interface ApiTiming {
   status: number;
 }
 
+// ─── Module-level singleton timings (long-session-audit-r4 P0 #2) ──
+//
+// Previously the effect captured `originalFetch = window.fetch` then replaced
+// `window.fetch` on every mount. Re-mounts (StrictMode double-invoke, fast
+// refresh, future layout changes) chained wrappers — each new wrapper took the
+// already-wrapped `window.fetch` as `originalFetch`, so every API call walked
+// the entire chain and every wrapper's `timingsRef` closure was retained in
+// memory forever.
+//
+// The fix is an idempotency guard: we wrap `window.fetch` exactly once per
+// page and write timings to a module-level array that all PerformanceMetrics
+// instances read from via the ref synchroniser below. Unwrapping is fragile
+// (another consumer may have patched on top) so we leave the wrap installed
+// for the life of the page.
+let __fetchWrapped = false;
+const __moduleTimings: ApiTiming[] = [];
+const MAX_TIMINGS = 100;
+
+function installFetchInterceptor() {
+  if (__fetchWrapped) return;
+  if (typeof window === "undefined") return;
+  __fetchWrapped = true;
+  const originalFetch = window.fetch;
+  window.fetch = async function (...args: Parameters<typeof fetch>) {
+    const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url ?? "";
+    const isApi = url.includes("/api/") || url.includes("localhost:8000");
+    const start = performance.now();
+    try {
+      const res = await originalFetch.apply(this, args);
+      if (isApi) {
+        const duration = performance.now() - start;
+        __moduleTimings.push({
+          url: url.replace(/^https?:\/\/[^/]+/, ""),
+          duration: Math.round(duration),
+          timestamp: Date.now(),
+          status: res.status,
+        });
+        // Bounded FIFO — drop oldest on overflow to keep memory flat.
+        if (__moduleTimings.length > MAX_TIMINGS) {
+          __moduleTimings.splice(0, __moduleTimings.length - MAX_TIMINGS);
+        }
+      }
+      return res;
+    } catch (err) {
+      if (isApi) {
+        const duration = performance.now() - start;
+        __moduleTimings.push({
+          url: url.replace(/^https?:\/\/[^/]+/, ""),
+          duration: Math.round(duration),
+          timestamp: Date.now(),
+          status: 0,
+        });
+        if (__moduleTimings.length > MAX_TIMINGS) {
+          __moduleTimings.splice(0, __moduleTimings.length - MAX_TIMINGS);
+        }
+      }
+      throw err;
+    }
+  };
+}
+
 interface PerformanceData {
   apiTimings: ApiTiming[];
   wsConnected: boolean;
@@ -43,47 +104,15 @@ function usePerformanceMonitor() {
   });
 
   const wsStartRef = useRef<number>(Date.now());
-  const timingsRef = useRef<ApiTiming[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
-  // Intercept fetch to measure API response times
+  // Install the fetch wrapper exactly once per page. Re-mounts are no-ops:
+  // __fetchWrapped guards against chained wrappers (long-session-audit-r4 P0 #2).
+  // Cleanup deliberately leaves the wrapper in place — unwrapping is fragile
+  // when other code may have patched on top, and the singleton is safe to
+  // leak for the life of the page.
   useEffect(() => {
-    const originalFetch = window.fetch;
-
-    window.fetch = async function (...args: Parameters<typeof fetch>) {
-      const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url ?? "";
-      // Only track API calls, skip static assets
-      const isApi = url.includes("/api/") || url.includes("localhost:8000");
-      const start = performance.now();
-
-      try {
-        const res = await originalFetch.apply(this, args);
-        if (isApi) {
-          const duration = performance.now() - start;
-          const timing: ApiTiming = {
-            url: url.replace(/^https?:\/\/[^/]+/, ""),
-            duration: Math.round(duration),
-            timestamp: Date.now(),
-            status: res.status,
-          };
-          timingsRef.current = [...timingsRef.current.slice(-99), timing];
-        }
-        return res;
-      } catch (err) {
-        if (isApi) {
-          const duration = performance.now() - start;
-          timingsRef.current = [
-            ...timingsRef.current.slice(-99),
-            { url: url.replace(/^https?:\/\/[^/]+/, ""), duration: Math.round(duration), timestamp: Date.now(), status: 0 },
-          ];
-        }
-        throw err;
-      }
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
+    installFetchInterceptor();
   }, []);
 
   // Track WebSocket state
@@ -108,7 +137,7 @@ function usePerformanceMonitor() {
 
   // Periodic update
   const updateMetrics = useCallback(() => {
-    const timings = timingsRef.current;
+    const timings = __moduleTimings;
     const durations = timings.map((t) => t.duration).sort((a, b) => a - b);
     const avg = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
     const p95 = durations.length > 0 ? durations[Math.floor(durations.length * 0.95)] : 0;

@@ -8,6 +8,40 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+# Dedicated audit logger — emits auth-relevant events (login, logout, refresh,
+# token revoke) so they can be shipped to a tamper-evident store separately
+# from the app logs. Emits at INFO. See observability-audit-r4.md P1 #10.
+audit_logger = logging.getLogger("alphadesk.audit")
+
+
+def _client_ip(req: Request) -> str:
+    """Best-effort resolve the caller's IP.
+
+    Prefers X-Forwarded-For (we trust Caddy per ProxyHeadersMiddleware
+    trusted_hosts in main.py). Falls back to request.client.host.
+    """
+    xff = req.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip() or "unknown"
+    return req.client.host if req.client else "unknown"
+
+
+def _audit(event: str, *, user: str, ip: str, result: str, **extra: object) -> None:
+    """Emit a structured auth audit record at INFO.
+
+    The JSON formatter in core/logging.py promotes ``extra=`` kwargs to
+    top-level fields, so a log aggregator can filter on ``event`` or
+    ``user`` directly. The message string stays human-readable for plain-
+    text viewers (``docker logs backend``).
+    """
+    audit_logger.info(
+        "audit event=%s user=%s ip=%s result=%s",
+        event,
+        user,
+        ip,
+        result,
+        extra={"event": event, "user": user, "ip": ip, "result": result, **extra},
+    )
 
 from core.auth import (
     create_access_token,
@@ -126,8 +160,14 @@ async def _check_rate_limit(client_ip: str) -> None:
         count = int(results[0])
     except Exception as e:
         # Redis unavailable — degrade to in-memory counter rather than allowing
-        # uncapped login attempts.
-        logger.warning("Rate limit: Redis unavailable, using in-memory fallback: %s", e)
+        # uncapped login attempts. ``exc_info=True`` so the traceback reaches
+        # the aggregator — without it, a recurring Redis fault is invisible
+        # beyond the exception type name.
+        logger.warning(
+            "Rate limit: Redis unavailable, using in-memory fallback: %s",
+            e,
+            exc_info=True,
+        )
         count = _inmem_check(client_ip)
 
     if count > _RATE_LIMIT_MAX:
@@ -178,7 +218,7 @@ class RefreshRequest(BaseModel):
 
 @router.post("/login")
 async def login(request: LoginRequest, req: Request):
-    client_ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req.client else "unknown")
+    client_ip = _client_ip(req)
     await _check_rate_limit(client_ip)
 
     # Strip whitespace from the submitted username BEFORE comparing against
@@ -192,6 +232,9 @@ async def login(request: LoginRequest, req: Request):
         or not settings.ADMIN_PASSWORD_HASH
         or not verify_password(request.password, settings.ADMIN_PASSWORD_HASH)
     ):
+        # Audit the failed attempt. ``user`` records the *submitted* username
+        # so investigations can see attempts against non-existent accounts.
+        _audit("login", user=submitted_username or "-", ip=client_ip, result="failure")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -200,6 +243,9 @@ async def login(request: LoginRequest, req: Request):
     access_token = create_access_token(submitted_username)
     refresh_token = create_refresh_token(submitted_username)
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # Audit the successful login. Do NOT log the tokens or password hash.
+    _audit("login", user=submitted_username, ip=client_ip, result="success")
 
     # Return tokens in body (for backward compat) AND set HttpOnly cookies
     response = JSONResponse(content={
@@ -213,15 +259,27 @@ async def login(request: LoginRequest, req: Request):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: RefreshRequest) -> TokenResponse:
-    payload = decode_token(request.refresh_token, expected_type="refresh")
+async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
+    client_ip = _client_ip(req)
+
+    try:
+        payload = decode_token(request.refresh_token, expected_type="refresh")
+    except Exception:
+        # Bad / expired / tampered token. Audit the attempt (no username yet
+        # since we couldn't decode) and re-raise so decode_token's HTTPException
+        # surfaces to the caller.
+        _audit("refresh", user="-", ip=client_ip, result="failure")
+        raise
+
     username = payload.get("sub", "")
     if not username:
+        _audit("refresh", user="-", ip=client_ip, result="failure")
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
     # Check if the old refresh token was already revoked (replay attack detection)
     jti = payload.get("jti")
     if jti and await is_token_revoked(jti):
+        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoked")
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
     # Revoke OLD refresh token FIRST, before minting a new one. If revocation
@@ -232,12 +290,14 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
         await revoke_token(request.refresh_token)
     except Exception:
         logger.warning("refresh: failed to revoke old token — aborting", exc_info=True)
+        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_failed")
         raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
 
     # Verify the revocation landed. revoke_token() swallows failures internally,
     # so we double-check by querying the blocklist.
     if jti and not await is_token_revoked(jti):
         logger.warning("refresh: revoke_token did not persist jti=%s — aborting", jti)
+        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_not_persisted")
         raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
 
     new_tokens = TokenResponse(
@@ -245,6 +305,8 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
         refresh_token=create_refresh_token(username),
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+    _audit("refresh", user=username, ip=client_ip, result="success")
 
     return new_tokens
 
@@ -254,8 +316,21 @@ async def logout(request: Request):
     """Clear HttpOnly auth cookies and revoke BOTH access and refresh tokens."""
     from core.auth import revoke_token
 
-    # Revoke the current access token (if present)
+    client_ip = _client_ip(request)
+
+    # Best-effort resolve the logging-out user. If we can decode the access
+    # token we get their username; otherwise we audit an anonymous logout.
+    acting_user = "-"
     access_token = request.cookies.get("access_token")
+    if access_token:
+        try:
+            payload = decode_token(access_token, expected_type="access")
+            acting_user = payload.get("sub", "-") or "-"
+        except Exception:
+            # Token might be expired/invalid — still allow logout.
+            logger.debug("logout: unable to decode access token for audit", exc_info=True)
+
+    # Revoke the current access token (if present)
     if access_token:
         try:
             await revoke_token(access_token)
@@ -273,13 +348,19 @@ async def logout(request: Request):
             if isinstance(body, dict):
                 refresh_token = body.get("refresh_token")
         except Exception:
-            pass
+            # Body might not be JSON (curl -X POST with no body, e.g.). Not a
+            # real error, but we no longer swallow silently — the old
+            # ``except Exception: pass`` here hid genuine bugs. See
+            # observability-audit-r4.md P0 #5.
+            logger.debug("logout: no JSON body / body parse failed", exc_info=True)
 
     if refresh_token:
         try:
             await revoke_token(refresh_token)
         except Exception:
             logger.warning("logout: revoke refresh token failed", exc_info=True)
+
+    _audit("logout", user=acting_user, ip=client_ip, result="success")
 
     response = JSONResponse(content={"ok": True})
     is_prod = settings.is_production

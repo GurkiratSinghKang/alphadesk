@@ -41,9 +41,15 @@ _CACHE_ROOT = Path(os.environ.get("ALPHADESK_CACHE_DIR", Path.home() / ".alphade
 _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
 
 # One lock per cache key. Shared across threads; the outer lock protects the
-# dict of per-key locks.
+# dict of per-key locks. Sync callers use the threading locks; async callers
+# (the @cached(async) wrapper) get asyncio.Lock instances from a separate
+# table to avoid holding a threading.Lock across an await — the latter wedges
+# the event loop on a slow network fetch (concurrency-audit-r4 P0 #5).
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
+
+_ASYNC_LOCKS: dict[str, asyncio.Lock] = {}
+_ASYNC_LOCKS_GUARD = threading.Lock()
 
 # Default TTLs (seconds)
 TTL_INTRADAY = 60 * 60 * 24           # 1 day
@@ -82,6 +88,21 @@ def _lock_for(key: str) -> threading.Lock:
         if key not in _LOCKS:
             _LOCKS[key] = threading.Lock()
         return _LOCKS[key]
+
+
+def _async_lock_for(key: str) -> asyncio.Lock:
+    """Per-key ``asyncio.Lock`` for the async ``@cached`` wrapper.
+
+    Using ``threading.Lock`` in an async branch and holding it across an
+    ``await`` blocks the event loop for the duration of the awaited call —
+    a slow Polygon fetch then freezes every other request on the worker
+    (concurrency-audit-r4 P0 #5). The asyncio.Lock yields cooperatively
+    while waiting and only excludes other coroutines on the same key.
+    """
+    with _ASYNC_LOCKS_GUARD:
+        if key not in _ASYNC_LOCKS:
+            _ASYNC_LOCKS[key] = asyncio.Lock()
+        return _ASYNC_LOCKS[key]
 
 
 def _cache_path(key: str) -> Path:
@@ -182,11 +203,11 @@ def cached(
                 hit = store.get(key, ttl_seconds)
                 if hit is not None:
                     return hit
-                # Async call: lock is still thread-level, but async tasks on a
-                # single event loop don't need real mutual exclusion; we only
-                # protect against two sync threads racing.
-                lock = _lock_for(key)
-                with lock:
+                # Async branch: use asyncio.Lock so we don't block the event
+                # loop while the underlying coroutine awaits a slow vendor
+                # call. concurrency-audit-r4 P0 #5.
+                lock = _async_lock_for(key)
+                async with lock:
                     hit = store.get(key, ttl_seconds)
                     if hit is not None:
                         return hit

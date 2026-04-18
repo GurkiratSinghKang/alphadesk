@@ -144,7 +144,10 @@ async def _check_price_alerts() -> list[dict]:
     return alerts
 
 
-_last_eval_slot: str | None = None  # tracks last strategy evaluation slot
+# tracks last strategy evaluation slot, including the trading date so the
+# same clock slot ("9:30") doesn't get suppressed when we cross a date
+# boundary (long-session-audit-r4 P2 #13).
+_last_eval_slot: str | None = None
 
 async def _run_monitor() -> None:
     """Main monitoring loop -- runs during market hours."""
@@ -205,8 +208,11 @@ async def _run_monitor() -> None:
             is_evaluation_time = minute in (0, 30)
 
             if is_market_hours and is_evaluation_time:
-                # Check if we already ran this slot
-                slot_key = f"{hour}:{minute:02d}"
+                # Check if we already ran this slot. Key includes the trading
+                # date so the same clock slot ("9:30") on Tue isn't skipped
+                # because Mon's "9:30" is still cached
+                # (long-session-audit-r4 P2 #13).
+                slot_key = f"{now.date().isoformat()}:{hour}:{minute:02d}"
                 if slot_key != _last_eval_slot:
                     from data.ingestion.daily_pipeline import run_daily_pipeline, _pipeline_lock
                     if _pipeline_lock.locked():

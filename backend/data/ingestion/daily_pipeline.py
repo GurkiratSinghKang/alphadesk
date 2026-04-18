@@ -50,35 +50,87 @@ CLAUDE_CLI = os.environ.get("CLAUDE_CLI_PATH", "claude")
 LOG_DIR = Path(__file__).resolve().parent.parent / "pipeline_logs"
 
 
-async def _get_vix_level(client: httpx.AsyncClient) -> float:
-    """Fetch VIX level from the market-overview regime endpoint or Polygon."""
+_VIX_CACHE_KEY = "pipeline:last_vix_level"
+_VIX_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # one week
+
+
+async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
+    """Fetch VIX level from the market-overview regime endpoint or Polygon.
+
+    Returns ``None`` when both providers fail AND there is no cached prior
+    value. The previous behaviour silently returned 16.5 ("bull_low_vol")
+    on any failure — so if real VIX was 30+ during a crisis, MasterAgent
+    would oversize positions at exactly the wrong moment
+    (code-patterns-audit-r4 P0 #1).
+
+    On success we cache the value in Redis so the next pipeline run can
+    fall back to the prior day's VIX (safer than a hardcoded constant).
+    """
+    from core.redis import cache_get, cache_set
+
+    fetched: float | None = None
+    fetch_errors: list[str] = []
+
     # Try our own regime endpoint first (uses Polygon VIX data)
     try:
         from api.routes.market_overview import _get_regime_data
         regime = await _get_regime_data()
         if regime and "vix_level" in regime:
-            return float(regime["vix_level"])
-    except Exception:
-        pass
+            fetched = float(regime["vix_level"])
+    except Exception as exc:
+        fetch_errors.append(f"regime endpoint: {exc}")
+        logger.exception("VIX fetch via regime endpoint failed")
 
     # Fallback: fetch ^VIX from Polygon if available
-    try:
-        from core.config import settings
-        polygon_key = settings.POLYGON_API_KEY.get_secret_value()
-        if polygon_key:
-            resp = await client.get(
-                f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/VIX",
-                params={"apiKey": polygon_key},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                last = data.get("ticker", {}).get("lastTrade", {}).get("p")
-                if last and last < 100:  # sanity check
-                    return round(float(last), 1)
-    except Exception:
-        pass
+    if fetched is None:
+        try:
+            from core.config import settings
+            polygon_key = settings.POLYGON_API_KEY.get_secret_value()
+            if polygon_key:
+                resp = await client.get(
+                    f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/VIX",
+                    params={"apiKey": polygon_key},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    last = data.get("ticker", {}).get("lastTrade", {}).get("p")
+                    if last and last < 100:  # sanity check
+                        fetched = round(float(last), 1)
+                else:
+                    fetch_errors.append(
+                        f"Polygon VIX HTTP {resp.status_code}"
+                    )
+        except Exception as exc:
+            fetch_errors.append(f"Polygon VIX: {exc}")
+            logger.exception("VIX fetch via Polygon failed")
 
-    return 16.5  # default — assume normal conditions rather than crisis
+    if fetched is not None:
+        # Cache for the next run's fallback
+        try:
+            await cache_set(_VIX_CACHE_KEY, {"vix": fetched}, ttl_seconds=_VIX_CACHE_TTL_SECONDS)
+        except Exception:
+            logger.debug("Could not persist VIX to Redis cache", exc_info=True)
+        return fetched
+
+    # Both providers failed — try yesterday's cached VIX before giving up.
+    try:
+        cached = await cache_get(_VIX_CACHE_KEY)
+        if cached and isinstance(cached, dict) and "vix" in cached:
+            prior = float(cached["vix"])
+            logger.error(
+                "VIX fetch failed (%s); using prior cached VIX=%.1f",
+                "; ".join(fetch_errors) or "unknown", prior,
+            )
+            return prior
+    except Exception:
+        logger.debug("VIX cache lookup failed", exc_info=True)
+
+    # Truly no data — return None. Caller MUST handle.
+    logger.error(
+        "VIX fetch failed and no cached prior value: %s",
+        "; ".join(fetch_errors) or "unknown",
+    )
+    return None
 
 # ----- Pipeline state -----
 _pipeline_lock = asyncio.Lock()
@@ -175,6 +227,60 @@ async def _place_order(
     logger.info(
         "Order placed: %s %s %d shares  strategy=%s  order_id=%s  client_id=%s",
         side.upper(), symbol, qty, strategy, order.get("id"), client_order_id,
+    )
+    return order
+
+
+async def _place_bracket_order(
+    client: httpx.AsyncClient,
+    symbol: str,
+    qty: int,
+    stop_price: float,
+    take_profit_price: float | None,
+    strategy: str = "unknown",
+) -> dict[str, Any]:
+    """Place a Alpaca bracket buy order — entry + stop-loss (and optional
+    take-profit) submitted as a single atomic order_class.
+
+    Eliminates the previous race where the entry market order would fill but
+    the follow-up stop-order POST failed (network blip, Alpaca rate limit),
+    leaving a naked position. With ``order_class=bracket`` Alpaca either
+    accepts the whole structure or rejects it whole — no half-state.
+
+    Time-in-force: GTC for the legs, DAY for the entry. (Matches Alpaca's
+    documented bracket requirements.)
+
+    See concurrency-audit-r4 P0 #4 / code-patterns-audit-r4 P0 #2.
+    """
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    client_order_id = f"{strategy}_{symbol}_{ts}_b"
+
+    body: dict[str, Any] = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": "buy",
+        "type": "market",
+        "time_in_force": "day",
+        "order_class": "bracket",
+        "stop_loss": {"stop_price": str(round(stop_price, 2))},
+        "client_order_id": client_order_id,
+    }
+    if take_profit_price and take_profit_price > 0:
+        body["take_profit"] = {"limit_price": str(round(take_profit_price, 2))}
+
+    resp = await client.post(
+        f"{_base_url()}/v2/orders",
+        headers=_alpaca_headers(),
+        json=body,
+    )
+    resp.raise_for_status()
+    order = resp.json()
+    logger.info(
+        "Bracket order placed: BUY %s %d  stop=$%.2f  tp=%s  strategy=%s  order_id=%s",
+        symbol, qty, stop_price,
+        f"${take_profit_price:.2f}" if take_profit_price else "none",
+        strategy, order.get("id"),
     )
     return order
 
@@ -310,21 +416,84 @@ async def _execute_approved_orders(
         if shares < 1:
             continue
         try:
-            result = await _place_order(client, sym, shares, "buy", strategy=order.get("strategy", "unknown"))
-            order_id = result.get("id")
+            # Compute effective stop_loss up front so we can submit a bracket
+            # order atomically. If we don't have a stop, fall back to 5% below
+            # the pre-trade entry estimate. concurrency-audit-r4 P0 #4 +
+            # code-patterns-audit-r4 P0 #2 — the previous flow placed the
+            # entry first, then the stop in a separate request: if the stop
+            # POST failed, the position was naked.
+            order_entry_estimate = order.get("entry_price", 0)
+            effective_stop = order.get("stop_loss")
+            if not effective_stop or effective_stop <= 0:
+                effective_stop = (
+                    round(order_entry_estimate * 0.95, 2)
+                    if order_entry_estimate > 0
+                    else None
+                )
+            tp_estimate = order.get("take_profit")
+            strategy_name = order.get("strategy", "unknown")
+
+            order_id: str | None = None
+            result: dict[str, Any]
+            used_bracket = False
+            fill_price: float | None = None  # populated by _poll_fill_price below
+
+            if effective_stop and effective_stop > 0:
+                # Atomic bracket: entry + stop (+ optional TP). Alpaca either
+                # accepts the whole envelope or rejects it whole — no half-state
+                # naked position. If bracket placement raises, the entry never
+                # filled, so there is nothing to roll back on the broker side.
+                try:
+                    result = await _place_bracket_order(
+                        client, sym, shares,
+                        effective_stop,
+                        tp_estimate if tp_estimate and tp_estimate > 0 else None,
+                        strategy=strategy_name,
+                    )
+                    order_id = result.get("id")
+                    used_bracket = True
+                except Exception as bracket_err:
+                    # Bracket failed (e.g. account doesn't support it, bad
+                    # params). Fall back to plain market order, but the
+                    # follow-on stop-loss failure must now be treated as a
+                    # CRITICAL — see code-patterns-audit-r4 P0 #2.
+                    logger.warning(
+                        "Bracket order failed for %s (%s); falling back to "
+                        "market+stop with strict failure handling",
+                        sym, bracket_err,
+                    )
+                    result = await _place_order(
+                        client, sym, shares, "buy",
+                        strategy=strategy_name,
+                    )
+                    order_id = result.get("id")
+            else:
+                # No stop available — place plain market order. We still
+                # record the trade but log a CRITICAL because the position is
+                # unprotected.
+                logger.critical(
+                    "Placing %s without a stop-loss (no effective_stop computed). "
+                    "Position will be naked — review strategy signal.",
+                    sym,
+                )
+                result = await _place_order(
+                    client, sym, shares, "buy",
+                    strategy=strategy_name,
+                )
+                order_id = result.get("id")
 
             # Record the entry with the pre-trade estimate first
             ledger.record_entry(
                 symbol=sym,
                 shares=shares,
-                price=order.get("entry_price", 0),
+                price=order_entry_estimate,
                 signal={
-                    "stop_loss": order.get("stop_loss"),
-                    "take_profit": order.get("take_profit"),
+                    "stop_loss": effective_stop,
+                    "take_profit": tp_estimate,
                     "conviction": order.get("conviction", 0),
                 },
                 rationale=order.get("rationale", ""),
-                strategy=order.get("strategy", "unknown"),
+                strategy=strategy_name,
             )
 
             # Poll for actual fill price and recalculate stop/take-profit
@@ -337,7 +506,7 @@ async def _execute_approved_orders(
                         sym, fill_price,
                     )
                     # Recalculate stop/take-profit relative to actual fill
-                    old_entry = order.get("entry_price", 0)
+                    old_entry = order_entry_estimate
                     old_stop = order.get("stop_loss", 0)
                     old_tp = order.get("take_profit", 0)
                     if old_entry and old_entry > 0:
@@ -361,27 +530,76 @@ async def _execute_approved_orders(
                         sym, order_id,
                     )
 
-            # Compute effective stop_loss: use order value, fall back to 5% below entry
-            effective_stop = order.get("stop_loss")
-            if not effective_stop or effective_stop <= 0:
-                effective_entry = order.get("entry_price", 0)
-                effective_stop = round(effective_entry * 0.95, 2) if effective_entry > 0 else None
+            # If the bracket already established stop+TP atomically with the
+            # entry, we're done — skip the follow-up posts. Otherwise (bracket
+            # fallback path or no-stop path) we must post the stop and TP
+            # separately and handle their failure as critical.
+            if not used_bracket:
+                # Place stop-loss order on Alpaca — failure is now CRITICAL
+                # and we attempt to unwind the entry. code-patterns-audit-r4
+                # P0 #2: do not silently log and continue with a naked
+                # position.
+                if effective_stop and effective_stop > 0:
+                    try:
+                        stop_oid = await _place_stop_order(
+                            client, sym, shares, effective_stop,
+                        )
+                        logger.info(
+                            "Stop-loss order placed for %s: %s",
+                            sym,
+                            stop_oid.get("id") if isinstance(stop_oid, dict) else stop_oid,
+                        )
+                    except Exception as stop_err:
+                        logger.critical(
+                            "CRITICAL: stop-loss order FAILED for %s after entry "
+                            "filled — attempting emergency unwind. Error: %s",
+                            sym, stop_err, exc_info=True,
+                        )
+                        # Best-effort emergency close so the position is not
+                        # left naked. This may itself fail (broker outage),
+                        # in which case the operator MUST be alerted.
+                        try:
+                            unwind = await _place_order(
+                                client, sym, shares, "sell",
+                                strategy=f"{strategy_name}_unwind",
+                            )
+                            logger.critical(
+                                "Emergency unwind submitted for %s order_id=%s",
+                                sym, unwind.get("id"),
+                            )
+                            ledger.record_exit(
+                                sym, shares,
+                                fill_price if fill_price is not None else order_entry_estimate,
+                                "stop_loss_failed_unwind",
+                            )
+                        except Exception as unwind_err:
+                            logger.critical(
+                                "CRITICAL: emergency unwind ALSO failed for %s: %s. "
+                                "POSITION IS NAKED — operator intervention required.",
+                                sym, unwind_err, exc_info=True,
+                            )
+                        # Re-raise so the outer except records the failure
+                        # in orders_placed and rolls back master state.
+                        raise RuntimeError(
+                            f"Stop-loss placement failed for {sym}: {stop_err}"
+                        ) from stop_err
 
-            # Place stop-loss order on Alpaca immediately
-            if effective_stop and effective_stop > 0:
-                try:
-                    stop_oid = await _place_stop_order(client, sym, shares, effective_stop)
-                    logger.info("Stop-loss order placed for %s: %s", sym, stop_oid.get("id") if isinstance(stop_oid, dict) else stop_oid)
-                except Exception as e:
-                    logger.error("Stop-loss order failed for %s: %s", sym, e)
-
-            # Place take-profit limit order on Alpaca immediately
-            if order.get("take_profit"):
-                try:
-                    tp_oid = await _place_limit_order(client, sym, shares, order["take_profit"])
-                    logger.info("Take-profit order placed for %s: %s", sym, tp_oid.get("id") if isinstance(tp_oid, dict) else tp_oid)
-                except Exception as e:
-                    logger.error("Take-profit order failed for %s: %s", sym, e)
+                # Place take-profit limit order on Alpaca immediately
+                if order.get("take_profit"):
+                    try:
+                        tp_oid = await _place_limit_order(client, sym, shares, order["take_profit"])
+                        logger.info(
+                            "Take-profit order placed for %s: %s",
+                            sym,
+                            tp_oid.get("id") if isinstance(tp_oid, dict) else tp_oid,
+                        )
+                    except Exception as e:
+                        # TP failure is non-critical (we still have a stop) —
+                        # log loudly but do not unwind.
+                        logger.error(
+                            "Take-profit order failed for %s: %s",
+                            sym, e, exc_info=True,
+                        )
 
             orders_placed.append({
                 "symbol": sym,
@@ -391,9 +609,10 @@ async def _execute_approved_orders(
                 "conviction": order.get("conviction"),
                 "order_id": order_id,
                 "status": result.get("status"),
+                "bracket": used_bracket,
             })
         except Exception as e:
-            logger.error("Order failed for %s: %s", sym, e)
+            logger.error("Order failed for %s: %s", sym, e, exc_info=True)
 
             # --- Ghost position rollback ---
             # The MasterAgent already added this symbol to existing_positions
@@ -474,13 +693,31 @@ async def _check_exits(
             new_stop = entry_price * 1.01  # Move stop to 1% above entry (breakeven + buffer)
             old_stop = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss", 0) or 0
             if new_stop > old_stop:
-                # Update the stop in the trade record for next check
-                trade["stop_loss"] = round(new_stop, 2)
-                if trade.get("signal") and isinstance(trade["signal"], dict):
-                    trade["signal"]["stop_loss"] = round(new_stop, 2)
-                # Persist the updated stop level
-                ledger._persist()
-                logger.info("Trailing stop updated for %s: $%.2f → $%.2f (persisted)", sym, old_stop, new_stop)
+                # Persist the updated stop level via the ledger update API.
+                # Previously this called the long-removed ``ledger._persist()``
+                # method (left over from the JSON-file ledger) which raised
+                # AttributeError silently — the in-memory mutation evaporated
+                # on the next loop and trailing stops never trailed.
+                # concurrency-audit-r4 P0 #4.
+                trade_id = trade.get("id")
+                rounded_new_stop = round(new_stop, 2)
+                if trade_id is not None:
+                    try:
+                        ledger.update(int(trade_id), {"stop_loss": rounded_new_stop})
+                        logger.info(
+                            "Trailing stop updated for %s (id=%s): $%.2f -> $%.2f (persisted to DB)",
+                            sym, trade_id, old_stop, new_stop,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "Failed to persist trailing stop for %s (id=%s): %s",
+                            sym, trade_id, exc, exc_info=True,
+                        )
+                else:
+                    logger.warning(
+                        "Trailing stop for %s skipped: trade row has no id",
+                        sym,
+                    )
                 # Cancel old stop order and place new one at higher level
                 try:
                     # Cancel existing stop orders for this symbol
@@ -495,7 +732,7 @@ async def _check_exits(
                                     f"{_base_url()}/v2/orders/{existing_order['id']}",
                                     headers=_alpaca_headers(),
                                 )
-                    await _place_stop_order(client, sym, trade["shares"], round(new_stop, 2))
+                    await _place_stop_order(client, sym, trade["shares"], rounded_new_stop)
                     logger.info(
                         "Trailing stop updated for %s: raised from $%.2f to $%.2f",
                         sym, old_stop, new_stop,
@@ -685,7 +922,21 @@ async def _run_pipeline_inner(
                 return log
 
             # ---- Fetch VIX level for regime detection (P3) ----
+            # code-patterns-audit-r4 P0 #1: do NOT silently fall through to
+            # 16.5 (bull_low_vol). If both VIX fetches fail and there's no
+            # cached prior value, abort the pipeline rather than trade with
+            # the wrong regime.
             vix_level = await _get_vix_level(client)
+            if vix_level is None:
+                msg = (
+                    "Pipeline aborted: VIX unavailable (regime detection "
+                    "would default to bull_low_vol and oversize positions)."
+                )
+                logger.critical(msg)
+                errors.append(msg)
+                _save_log(log)
+                _pipeline_status["last_result"] = "vix_unavailable"
+                return log
 
             # ---- Ensure all existing positions have stop-loss orders ----
             try:

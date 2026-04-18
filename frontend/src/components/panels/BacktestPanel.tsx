@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Play, BarChart3, TrendingUp, TrendingDown, GitCompareArrows, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, safeNum } from "@/lib/utils";
 import { getBars } from "@/lib/api";
 import type { OHLCVBar } from "@/types";
 
@@ -696,11 +696,11 @@ export function BacktestPanel() {
           <>
             <div>
               <label htmlFor="backtest-fast-sma" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
-              <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(parseInt(e.target.value) || 10)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 10))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
             <div>
               <label htmlFor="backtest-slow-sma" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
-              <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(parseInt(e.target.value) || 50)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 50))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
           </>
         )}
@@ -719,15 +719,15 @@ export function BacktestPanel() {
         )}
         <div>
           <label htmlFor="backtest-capital" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
-          <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(parseInt(e.target.value) || 100000)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(Math.max(1, Math.floor(safeNum(e.target.value, 100000))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
         <div>
           <label htmlFor="backtest-commission" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Commission ($)</label>
-          <input id="backtest-commission" type="number" value={commission} onChange={(e) => setCommission(parseFloat(e.target.value) || 0)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-commission" type="number" value={commission} onChange={(e) => setCommission(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
         <div>
           <label htmlFor="backtest-slippage" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Slippage (%)</label>
-          <input id="backtest-slippage" type="number" step="0.01" value={slippagePct} onChange={(e) => setSlippagePct(parseFloat(e.target.value) || 0)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-slippage" type="number" step="0.01" value={slippagePct} onChange={(e) => setSlippagePct(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
       </div>
 

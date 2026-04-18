@@ -12,8 +12,10 @@ from enum import Enum
 from pathlib import Path as FilePath
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
+
+from api.routes.auth import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -1338,23 +1340,102 @@ async def get_strategy_performance(
 async def toggle_strategy(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> ToggleResponse:
-    """Toggle a strategy between active and paused."""
+    """Toggle a strategy between active and paused.
+
+    Uses a Redis WATCH/MULTI/EXEC transaction so concurrent double-clicks
+    can't both read the same starting state and both invert it (which would
+    net to a single flip instead of zero). On WatchError we retry up to
+    ``max_attempts`` times. concurrency-audit-r4 P0 #6.
+    """
+    import orjson
+    from core.redis import get_redis
+    from redis.exceptions import WatchError
+
     data = await _get_strategy_data(strategy_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
-    current_status = data["status"]
-    if current_status == StrategyStatus.ACTIVE:
-        new_status = StrategyStatus.PAUSED
-    else:
-        new_status = StrategyStatus.ACTIVE
+    canonical = _canonical_id(strategy_id)
+    redis_key = f"strategy_status:{canonical}"
 
-    await _set_strategy_status_override(strategy_id, new_status)
+    redis_client = await get_redis()
+    max_attempts = 5
+    last_err: Exception | None = None
+    previous_status: StrategyStatus = data["status"]
+    new_status: StrategyStatus = StrategyStatus.PAUSED
+
+    for attempt in range(max_attempts):
+        try:
+            async with redis_client.pipeline(transaction=True) as pipe:
+                await pipe.watch(redis_key)
+                raw = await pipe.get(redis_key)
+                # Resolve the current status from Redis (override) or from
+                # the canonical _STRATEGIES table when no override is set.
+                current_status: StrategyStatus = data["status"]
+                if raw is not None:
+                    try:
+                        parsed = orjson.loads(raw)
+                        current_status = StrategyStatus(parsed["status"])
+                    except Exception:
+                        # Corrupt entry — fall through to inversion of the
+                        # canonical default rather than refusing the toggle.
+                        logger.warning(
+                            "toggle_strategy: corrupt Redis value for %s: %r",
+                            redis_key, raw,
+                        )
+                next_status = (
+                    StrategyStatus.PAUSED
+                    if current_status == StrategyStatus.ACTIVE
+                    else StrategyStatus.ACTIVE
+                )
+                pipe.multi()
+                pipe.set(
+                    redis_key,
+                    orjson.dumps({"status": next_status.value}).decode(),
+                )
+                await pipe.execute()
+                previous_status = current_status
+                new_status = next_status
+                break
+        except WatchError as exc:
+            last_err = exc
+            logger.info(
+                "toggle_strategy: WATCH conflict for %s (attempt %d/%d), retrying",
+                strategy_id, attempt + 1, max_attempts,
+            )
+            continue
+        except Exception as exc:
+            # Redis-level failure — fall back to non-atomic write so the user
+            # toggle still lands. The previous code already had this fallback
+            # implicit via the try/except in _set_strategy_status_override.
+            last_err = exc
+            logger.warning(
+                "toggle_strategy: Redis transaction failed (%s), falling back "
+                "to non-atomic write", exc, exc_info=True,
+            )
+            previous_status = data["status"]
+            new_status = (
+                StrategyStatus.PAUSED
+                if previous_status == StrategyStatus.ACTIVE
+                else StrategyStatus.ACTIVE
+            )
+            await _set_strategy_status_override(canonical, new_status)
+            break
+    else:
+        # Exhausted retries without breaking out — surface the conflict.
+        logger.error(
+            "toggle_strategy: %d WATCH conflicts in a row for %s; giving up",
+            max_attempts, strategy_id,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"Strategy toggle conflicted with concurrent updates: {last_err}",
+        )
 
     return ToggleResponse(
         id=strategy_id,
         name=data["name"],
-        previous_status=current_status,
+        previous_status=previous_status,
         new_status=new_status,
     )
 
@@ -1369,11 +1450,16 @@ class RiskMonitorState(BaseModel):
 
 
 @router.post("/admin/risk-monitor", response_model=RiskMonitorState)
-async def toggle_risk_monitor(enabled: bool = True) -> RiskMonitorState:
+async def toggle_risk_monitor(
+    enabled: bool = True,
+    _admin: str = Depends(require_admin),
+) -> RiskMonitorState:
     """Toggle the Master Agent risk monitor on or off.
 
-    When disabled, all risk checks (P1-P4) are bypassed and trades
-    are auto-approved (only duplicate symbol check remains).
+    Admin-only (security-audit-r3 P0 #1). When disabled, all risk checks
+    (P1-P4) are bypassed and trades are auto-approved (only duplicate symbol
+    check remains) — toggling this off is a trust-me-bro override that should
+    never be exposed to a non-admin principal.
     """
     from data.ingestion.master_agent import MasterAgent
 
@@ -1392,8 +1478,10 @@ async def toggle_risk_monitor(enabled: bool = True) -> RiskMonitorState:
 
 
 @router.get("/admin/risk-monitor", response_model=RiskMonitorState)
-async def get_risk_monitor_state() -> RiskMonitorState:
-    """Get current risk monitor state."""
+async def get_risk_monitor_state(
+    _admin: str = Depends(require_admin),
+) -> RiskMonitorState:
+    """Get current risk monitor state. Admin-only (security-audit-r3 P0 #1)."""
     from data.ingestion.master_agent import MasterAgent
 
     return RiskMonitorState(
@@ -1421,8 +1509,12 @@ class StrategyLeaderboardEntry(BaseModel):
 
 
 @router.get("/admin/leaderboard", response_model=list[StrategyLeaderboardEntry])
-async def get_strategy_leaderboard() -> list[StrategyLeaderboardEntry]:
-    """Get per-strategy P&L leaderboard for the competition."""
+async def get_strategy_leaderboard(
+    _admin: str = Depends(require_admin),
+) -> list[StrategyLeaderboardEntry]:
+    """Get per-strategy P&L leaderboard for the competition. Admin-only
+    (security-audit-r3 P0 #1). Leaks competitive strategy performance data
+    that would otherwise be visible to any authenticated user."""
     from data.ingestion.trade_ledger import TradeLedger
 
     ledger = TradeLedger()

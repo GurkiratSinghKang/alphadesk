@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
+import re
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 
@@ -686,3 +687,172 @@ async def get_market_status() -> MarketStatus:
     # --- 3. Demo fallback ---
     logger.warning("DEMO FALLBACK: Serving fake market status — Polygon and Alpaca both failed")
     return _demo_market_status()
+
+
+# ---------------------------------------------------------------------------
+# Batched snapshots (perf-audit-r3 P0 #4)
+# ---------------------------------------------------------------------------
+# Prior implementation forced the frontend to fan out N per-symbol
+# `/market/quotes/{symbol}` requests on every watchlist refresh. A 10-symbol
+# watchlist cold-start therefore cost ~10 Alpaca round-trips and 3-5s of
+# wall-clock latency, dominated by TCP setup + Chrome's 6-per-host socket
+# ceiling. This endpoint fans out exactly ONE upstream call when Alpaca keys
+# are available (Alpaca's /v2/stocks/snapshots accepts a comma-separated
+# symbols param and returns all snapshots in one response), falling back to
+# per-symbol calls only when the batched provider is unavailable.
+
+# Symbol syntax: uppercase letter start, up to 9 additional
+# [A-Z0-9.\-] chars. Matches Alpaca/Polygon ticker conventions (e.g.
+# "AAPL", "BRK.B", "SPY", "BF-B"). Reject anything else before spending
+# an upstream call — cheap defence against injection and typos.
+_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+_MAX_BATCH_SYMBOLS = 100
+
+
+def _parse_and_validate_symbols(raw: str) -> list[str]:
+    """Split the comma-separated `symbols` query param, uppercase, dedupe, validate.
+
+    Raises 400 if any token is malformed or if the batch exceeds
+    ``_MAX_BATCH_SYMBOLS``. Returns symbols in the original request order with
+    duplicates stripped (stable dedup) so callers can zip the response back to
+    their input list.
+    """
+    if not raw:
+        raise HTTPException(status_code=400, detail="symbols query param is required")
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for tok in raw.split(","):
+        s = tok.strip().upper()
+        if not s:
+            continue
+        if not _SYMBOL_RE.match(s):
+            raise HTTPException(status_code=400, detail=f"Invalid symbol: {tok!r}")
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+
+    if not out:
+        raise HTTPException(status_code=400, detail="symbols query param is required")
+    if len(out) > _MAX_BATCH_SYMBOLS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many symbols: {len(out)} > {_MAX_BATCH_SYMBOLS}",
+        )
+    return out
+
+
+def _alpaca_snapshot_to_model(symbol: str, data: dict) -> Snapshot | None:
+    """Convert one Alpaca snapshot payload into our internal ``Snapshot`` model.
+
+    Returns ``None`` if the payload is missing the latestTrade + dailyBar
+    fields we rely on — callers should fall through to per-symbol fetch in
+    that case rather than emitting a degenerate snapshot.
+    """
+    if not isinstance(data, dict):
+        return None
+    lt = data.get("latestTrade") or {}
+    lq = data.get("latestQuote") or {}
+    daily = data.get("dailyBar") or {}
+    prev = data.get("prevDailyBar") or {}
+    mn = data.get("minuteBar") or {}
+
+    # Guard: Alpaca occasionally returns {} for illiquid symbols outside RTH.
+    if not daily and not lt:
+        return None
+
+    now = datetime.now(timezone.utc)
+
+    def _parse_bar(d: dict) -> Bar:
+        try:
+            ts = datetime.fromisoformat(d["t"].replace("Z", "+00:00")) if d.get("t") else now
+        except (ValueError, AttributeError, TypeError):
+            ts = now
+        return Bar(
+            timestamp=ts,
+            open=d.get("o", 0), high=d.get("h", 0),
+            low=d.get("l", 0), close=d.get("c", 0),
+            volume=int(d.get("v", 0) or 0), vwap=d.get("vw"),
+        )
+
+    day_close = daily.get("c", 0) or 0
+    prev_close = prev.get("c", 0) or 0
+    change_pct = round(((day_close - prev_close) / prev_close) * 100, 2) if prev_close else 0
+
+    return Snapshot(
+        symbol=symbol,
+        quote=Quote(
+            symbol=symbol,
+            bid=lq.get("bp", 0) or 0,
+            ask=lq.get("ap", 0) or 0,
+            last=lt.get("p", 0) or 0,
+            volume=int(daily.get("v", 0) or 0),
+            timestamp=now,
+            change=round(day_close - prev_close, 2) if prev_close else 0,
+            changePct=change_pct,
+            high=daily.get("h", 0) or 0,
+            low=daily.get("l", 0) or 0,
+            open=daily.get("o", 0) or 0,
+            close=prev_close,
+        ),
+        day_bar=_parse_bar(daily),
+        prev_day_bar=_parse_bar(prev),
+        min_bar=_parse_bar(mn),
+        change_pct=change_pct,
+    )
+
+
+@router.get("/snapshots", response_model=dict[str, Snapshot])
+async def get_snapshots(
+    symbols: str = Query(..., description="Comma-separated symbols (max 100), e.g. AAPL,NVDA,TSLA"),
+) -> dict[str, Snapshot]:
+    """Fetch snapshots for up to 100 symbols in a single request.
+
+    Primary path: Alpaca multi-snapshots endpoint (one upstream call for the
+    whole batch). Fallback: per-symbol ``get_snapshot()`` when the batched
+    provider fails for a subset — we keep the partial success rather than
+    erroring the whole request. Authentication is already enforced by the
+    router-level ``require_auth`` dependency registered in main.py.
+    """
+    symbol_list = _parse_and_validate_symbols(symbols)
+    results: dict[str, Snapshot] = {}
+
+    # --- 1. Alpaca batched fetch (preferred) ---
+    if _alpaca_keys_available():
+        try:
+            import httpx
+
+            headers = _alpaca_data_headers()
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    f"{ALPACA_DATA_URL}/v2/stocks/snapshots",
+                    headers=headers,
+                    params={"symbols": ",".join(symbol_list), "feed": "sip"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json() or {}
+                    for sym in symbol_list:
+                        snap = _alpaca_snapshot_to_model(sym, data.get(sym) or {})
+                        if snap is not None:
+                            results[sym] = snap
+        except Exception:
+            logger.warning("Alpaca multi-snapshot fetch failed", exc_info=True)
+
+    # --- 2. Fallback: per-symbol for anything the batch call missed ---
+    # Symbols missing from the batched response (e.g. Alpaca returned {} for
+    # one of them, or the call itself failed) drop back to single-symbol
+    # fetch, which has its own Polygon/Alpaca/demo waterfall already wired.
+    missing = [s for s in symbol_list if s not in results]
+    for sym in missing:
+        try:
+            results[sym] = await get_snapshot(sym)
+        except HTTPException:
+            # 404 on an unknown symbol — just omit it from the batch reply
+            # rather than sinking the entire request.
+            continue
+        except Exception:
+            logger.warning("Per-symbol fallback snapshot failed for %s", sym, exc_info=True)
+            continue
+
+    return results

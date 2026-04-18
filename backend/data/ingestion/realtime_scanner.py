@@ -63,6 +63,12 @@ _should_stop = False
 _pending_setups: dict[str, list[dict[str, Any]]] = {}
 _pairs_setups: list[dict[str, Any]] = []  # pairs are keyed by pair, not symbol
 
+# concurrency-audit-r4 P0 #2: serialise mutations of _pending_setups /
+# _pairs_setups so the scanner loop, the cleanup pass, and any HTTP read
+# (api/routes/pipeline.py:get_realtime_setups) can't race. Readers should
+# snapshot under this lock before iterating ("copy-before-iterate").
+_setups_lock: asyncio.Lock = asyncio.Lock()
+
 # Last z-score check time for pairs (throttle to every 30s)
 _last_pairs_check: float = 0
 PAIRS_CHECK_INTERVAL = 30.0  # seconds
@@ -86,17 +92,28 @@ def register_setup(setup: dict[str, Any]) -> None:
         conviction: int
         rationale: str
         expires: str — ISO timestamp when setup expires (e.g., end of day)
+
+    Note: mutations rebind the module-level lists/dicts atomically (rather
+    than mutating in place) so any reader that already holds a reference to
+    the previous list won't see a torn iteration. concurrency-audit-r4 P0 #2.
     """
+    global _pairs_setups
     sym = setup.get("symbol", "")
     strategy = setup.get("type", "")
 
     if strategy == "pairs_zscore":
-        _pairs_setups.append(setup)
+        # Copy-on-write so concurrent readers iterating the previous list
+        # don't see a mid-mutation append.
+        _pairs_setups = [*_pairs_setups, setup]
         logger.info("Registered pairs setup: %s z-target=%.2f", sym, setup.get("trigger_zscore", 0))
     else:
-        if sym not in _pending_setups:
-            _pending_setups[sym] = []
-        _pending_setups[sym].append(setup)
+        existing = _pending_setups.get(sym, [])
+        # Rebuild the per-symbol list and reassign the dict slot — readers
+        # iterating the old list see a stable snapshot.
+        next_map = dict(_pending_setups)
+        next_map[sym] = [*existing, setup]
+        _pending_setups.clear()
+        _pending_setups.update(next_map)
         logger.info(
             "Registered %s setup: %s trigger=$%.2f %s",
             strategy, sym, setup.get("trigger_price", 0), setup.get("direction", ""),
@@ -104,40 +121,72 @@ def register_setup(setup: dict[str, Any]) -> None:
 
 
 def clear_expired_setups() -> None:
-    """Remove setups that have expired (e.g., end of day for intraday strategies)."""
-    now = datetime.now(ET).isoformat()
-    for sym in list(_pending_setups):
-        _pending_setups[sym] = [
-            s for s in _pending_setups[sym]
-            if s.get("expires", "9999") > now
-        ]
-        if not _pending_setups[sym]:
-            del _pending_setups[sym]
+    """Remove setups that have expired (e.g., end of day for intraday strategies).
 
+    Uses copy-on-write semantics: builds the filtered map, then atomically
+    swaps the module dict's contents. Concurrent readers iterating the old
+    snapshot continue safely. concurrency-audit-r4 P0 #2.
+    """
     global _pairs_setups
-    _pairs_setups = [s for s in _pairs_setups if s.get("expires", "9999") > now]
+    now = datetime.now(ET).isoformat()
+
+    # Snapshot before iterating; never mutate the live dict mid-loop.
+    snapshot = dict(_pending_setups)
+    next_map: dict[str, list[dict[str, Any]]] = {}
+    for sym, setups in snapshot.items():
+        kept = [s for s in setups if s.get("expires", "9999") > now]
+        if kept:
+            next_map[sym] = kept
+
+    # Atomic-ish swap: clear+update in a tight non-await section.
+    _pending_setups.clear()
+    _pending_setups.update(next_map)
+
+    _pairs_setups = [s for s in list(_pairs_setups) if s.get("expires", "9999") > now]
 
 
 def get_active_setups() -> dict[str, Any]:
-    """Return current pending setups for API/dashboard display."""
+    """Return current pending setups for API/dashboard display.
+
+    Snapshot the live dict before iterating so a concurrent mutator can't
+    raise ``RuntimeError: dictionary changed size during iteration``.
+    """
+    snapshot = dict(_pending_setups)
+    pairs_snapshot = list(_pairs_setups)
     return {
-        "symbol_setups": {sym: len(setups) for sym, setups in _pending_setups.items()},
-        "pairs_setups": len(_pairs_setups),
-        "total": sum(len(s) for s in _pending_setups.values()) + len(_pairs_setups),
+        "symbol_setups": {sym: len(setups) for sym, setups in snapshot.items()},
+        "pairs_setups": len(pairs_snapshot),
+        "total": sum(len(s) for s in snapshot.values()) + len(pairs_snapshot),
     }
 
 
 # ─── Signal Evaluation ──────────────────────────────────────
 
 async def _evaluate_tick(symbol: str, price: float, volume: int, bid: float, ask: float) -> None:
-    """Called on every price tick. Check if any pending setup triggers."""
+    """Called on every price tick. Check if any pending setup triggers.
+
+    Snapshot the per-symbol setups under the asyncio lock before the
+    eval/await dance so a concurrent ``clear_expired_setups`` /
+    ``register_setup`` / HTTP read can't race the iteration
+    (concurrency-audit-r4 P0 #2).
+    """
+    # Quick non-locked existence check — dict reads are atomic under GIL,
+    # so this is safe for the early-out case.
     if symbol not in _pending_setups:
+        return
+
+    async with _setups_lock:
+        # Re-check under the lock and snapshot the list of setups for this
+        # symbol; mutations elsewhere now don't tear the iteration.
+        setups_for_sym = list(_pending_setups.get(symbol, []))
+
+    if not setups_for_sym:
         return
 
     triggered: list[dict[str, Any]] = []
     remaining: list[dict[str, Any]] = []
 
-    for setup in _pending_setups[symbol]:
+    for setup in setups_for_sym:
         setup_type = setup.get("type", "")
         trigger = setup.get("trigger_price", 0)
         direction = setup.get("direction", "long")
@@ -186,11 +235,22 @@ async def _evaluate_tick(symbol: str, price: float, volume: int, bid: float, ask
         else:
             remaining.append(setup)
 
-    _pending_setups[symbol] = remaining
-    if not _pending_setups[symbol]:
-        del _pending_setups[symbol]
+    # Update the live dict atomically under the lock — no awaits between
+    # the read and the write.
+    async with _setups_lock:
+        if remaining:
+            next_map = dict(_pending_setups)
+            next_map[symbol] = remaining
+            _pending_setups.clear()
+            _pending_setups.update(next_map)
+        else:
+            next_map = dict(_pending_setups)
+            next_map.pop(symbol, None)
+            _pending_setups.clear()
+            _pending_setups.update(next_map)
 
-    # Execute triggered setups
+    # Execute triggered setups (outside the lock — these may await on broker
+    # HTTP calls and we don't want to hold the lock across network IO).
     for setup in triggered:
         await _execute_triggered_setup(setup)
 
@@ -227,7 +287,13 @@ async def _check_pairs_zscore() -> None:
         triggered = []
         remaining = []
 
-        for setup in _pairs_setups:
+        # Snapshot the pairs list under the lock so iteration is safe even
+        # if register_setup / clear_expired_setups runs concurrently
+        # (concurrency-audit-r4 P0 #2).
+        async with _setups_lock:
+            pairs_snapshot = list(_pairs_setups)
+
+        for setup in pairs_snapshot:
             sym_a = setup.get("sym_a", "")
             sym_b = setup.get("sym_b", "")
             hedge_ratio = setup.get("hedge_ratio", 1.0)
@@ -269,7 +335,13 @@ async def _check_pairs_zscore() -> None:
                 logger.debug("Pairs price fetch error for %s/%s: %s", sym_a, sym_b, e)
                 remaining.append(setup)
 
-        _pairs_setups = remaining
+        # Replace the live pairs list under the lock. Any setups that were
+        # registered concurrently (after the snapshot) are merged back in
+        # so we don't drop them.
+        async with _setups_lock:
+            evaluated_ids = {id(s) for s in pairs_snapshot}
+            new_setups = [s for s in _pairs_setups if id(s) not in evaluated_ids]
+            _pairs_setups = remaining + new_setups
 
         for setup in triggered:
             await _execute_triggered_setup(setup)
