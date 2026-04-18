@@ -61,6 +61,20 @@ jobs:
             ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
             ghcr.io/${{ steps.repo.outputs.name }}-backend:latest
 
+      # Sync the compose + infrastructure config to the VPS BEFORE the
+      # image pull. Host's /opt/alphadesk config files were drifting from
+      # the repo in prior deploys — e.g. port bindings in docker-compose.yml
+      # never took effect because the VPS had stale copies.
+      - name: Sync config to VPS
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "docker-compose.yml,infrastructure/*"
+          target: "/opt/alphadesk/"
+          overwrite: true
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         env:
@@ -85,7 +99,10 @@ jobs:
             . ./.env.prod
             set +a
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml pull frontend backend
-            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d
+            # --remove-orphans tears down services deleted from the compose
+            # (e.g. uptime-kuma). --force-recreate picks up config-only
+            # changes (e.g. port rebinds) that don't change the image hash.
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --remove-orphans --force-recreate
             sleep 15
             curl -sf http://localhost:8000/health || (echo "Health check failed!" && exit 1)
             # Tidy up old images without touching anything younger than 24h.
