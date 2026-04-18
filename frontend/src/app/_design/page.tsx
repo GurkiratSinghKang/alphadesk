@@ -39,6 +39,29 @@ import {
   SerifEyebrow,
 } from "@/components/typography";
 
+import {
+  AIMemoPanel,
+  ClaudeStamp,
+  ContextBar,
+  EditorialNameplate,
+  OrderBar,
+  PositionsList,
+  PriceChartPanel,
+  StatusBar,
+  StrategyCard,
+  StrategyRail,
+  TickerStrip,
+  TopBar,
+} from "@/components/composites";
+import type {
+  AIMemo,
+  ContextCell,
+  PositionRow,
+  StatusPill,
+  StrategyRailItem,
+  TickerEntry,
+} from "@/components/composites/types";
+
 const SWATCHES: Array<{ name: string; bg: string; text: string }> = [
   { name: "bg-bg", bg: "bg-bg", text: "text-fg" },
   { name: "bg-bg-elev-1", bg: "bg-bg-elev-1", text: "text-fg" },
@@ -64,6 +87,79 @@ const TABLE_ROWS = [
 const SPARK_UP = [22, 18, 20, 14, 16, 10, 12, 7, 9, 4, 2];
 const SPARK_DOWN = [4, 8, 6, 12, 10, 16, 14, 19, 17, 22, 24];
 const SPARK_BRAND = [12, 14, 10, 15, 12, 16, 11, 18, 13, 20];
+
+// ─── Composite mock fixtures (§10) ────────────────────────────
+const CTX_CELLS: ContextCell[] = [
+  { label: "Book equity", value: "$284,193.42", delta: "+0.82%", deltaTone: "profit", emphasis: true },
+  { label: "Day P&L", value: "+$2,341.18", deltaTone: "profit" },
+  { label: "Cash", value: "$47,812" },
+  { label: "Exposure · Long / Short", value: "48%", delta: "62 / 14" },
+  { label: "Sharpe · 30d", value: "1.08" },
+  { label: "Beta", value: "0.62" },
+  { label: "Positions · Orders", value: "12 · 2" },
+];
+
+const RAIL_ITEMS: StrategyRailItem[] = [
+  { id: "mq", name: "Momentum & Quality", subtitle: "Swing · 5–20 day hold", status: "active", returnPct: 3.42, indexLabel: "01" },
+  { id: "ra", name: "Regime Adaptive", subtitle: "Long/short macro", status: "active", returnPct: 1.84, indexLabel: "02" },
+  { id: "pead", name: "PEAD", subtitle: "Post-earnings drift", status: "active", returnPct: 0.62, indexLabel: "03" },
+  { id: "mr", name: "Mean Reversion", subtitle: "Short-horizon · 1–3 day", status: "paused", returnPct: null, indexLabel: "04" },
+  { id: "pairs", name: "Pairs · Sector", subtitle: "Market-neutral", status: "active", returnPct: 0.41, indexLabel: "05" },
+  { id: "claude", name: "Claude Alpha", subtitle: "AI opportunistic", status: "active", returnPct: -1.18, indexLabel: "06" },
+];
+
+const POSITIONS: PositionRow[] = [
+  { id: "1", symbol: "NVDA", quantity: 250, entryPrice: 128.41, strategyName: "Momentum & Quality", progress: 0.72, pnl: 1602, pnlPct: 5.0 },
+  { id: "2", symbol: "SPY", quantity: 50, entryPrice: 478.22, strategyName: "Regime Adaptive", progress: 0.48, pnl: 234, pnlPct: 1.0 },
+  { id: "3", symbol: "XOM", quantity: 180, entryPrice: 116.4, strategyName: "PEAD", progress: 0.22, pnl: 291, pnlPct: 1.4 },
+  { id: "4", symbol: "UNH", quantity: 40, entryPrice: 588.2, strategyName: "Claude Alpha", progress: 0.38, pnl: -258, pnlPct: -1.1 },
+  { id: "5", symbol: "JPM", quantity: 120, entryPrice: 186.5, strategyName: "Pairs · Sector", progress: 0.56, pnl: 412, pnlPct: 1.8 },
+];
+
+const MEMO: AIMemo = {
+  text: "NVDA entry fits Momentum & Quality — 3-week high, regime bull/low-vol, earnings 14 days out. Suggest 250 sh at limit 134.80 with 4% stop. One caveat — semis beta 1.7, sizing uses scaled units.",
+  chips: [
+    { label: "Regime fit 0.82", tone: "profit" },
+    { label: "Risk ok", tone: "ice" },
+    { label: "Earn 14d", tone: "muted" },
+  ],
+  confidence: 0.72,
+  model: "Haiku 4.5",
+  latencyMs: 180,
+  timestamp: "14:32:08",
+};
+
+const STATUS_PILLS: StatusPill[] = [
+  { label: "Alpaca paper · connected", tone: "profit" },
+  { label: "Market · open · 1h 28m to close", tone: "profit" },
+  { label: "Claude · healthy · p50 180ms", tone: "muted" },
+  { label: "Last tick 0.04s", tone: "muted" },
+];
+
+const TICKERS: TickerEntry[] = [
+  { symbol: "NVDA", price: "134.82", deltaPct: 1.31 },
+  { symbol: "SPY", price: "482.91", deltaPct: 0.44 },
+  { symbol: "AAPL", price: "228.14", deltaPct: -0.22 },
+  { symbol: "XOM", price: "118.02", deltaPct: 0.81 },
+  { symbol: "UNH", price: "581.76", deltaPct: -1.04 },
+  { symbol: "JPM", price: "209.30", deltaPct: 0.58 },
+  { symbol: "MSFT", price: "414.62", deltaPct: 0.12 },
+  { symbol: "GOOGL", price: "168.94", deltaPct: -0.38 },
+];
+
+// A handful of OHLCV bars for the chart preview. The chart canvas
+// mounts asynchronously and gracefully no-ops in SSR.
+const SERIES = Array.from({ length: 40 }, (_, i) => {
+  const base = 130 + Math.sin(i / 3.5) * 3 + i * 0.1;
+  return {
+    time: 1_700_000_000 + i * 3600,
+    open: base,
+    high: base + 0.5,
+    low: base - 0.5,
+    close: base + (Math.random() - 0.45) * 0.8,
+    volume: 1_000_000,
+  };
+});
 
 export default function DesignPreviewPage() {
   return (
@@ -409,8 +505,192 @@ export default function DesignPreviewPage() {
           </div>
         </section>
 
+        {/* ─── §10 COMPOSITES ─── */}
+        <section className="mb-16">
+          <SectionRule tag="§ 10 · Composites" />
+
+          <div className="mt-6 space-y-10">
+            {/* TopBar */}
+            <div>
+              <Eyebrow as="div" className="mb-3">TopBar</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border">
+                <TopBar
+                  currentRoute="/desk"
+                  routes={[
+                    { label: "Overview", href: "/" },
+                    { label: "Desk", href: "/desk", active: true },
+                    { label: "Strategies", href: "/strategies" },
+                    { label: "Research", href: "/research" },
+                    { label: "Journal", href: "/journal" },
+                  ]}
+                  regime={{ regime: "bull", vol: "low" }}
+                  clockEt="14:32:08 ET · Tue Nov 4"
+                  avatarInitial="α"
+                />
+              </div>
+            </div>
+
+            {/* ContextBar */}
+            <div>
+              <Eyebrow as="div" className="mb-3">ContextBar</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border">
+                <ContextBar cells={CTX_CELLS} />
+              </div>
+            </div>
+
+            {/* StrategyRail */}
+            <div>
+              <Eyebrow as="div" className="mb-3">StrategyRail</Eyebrow>
+              <div className="grid grid-cols-[260px_1fr] gap-px bg-border rounded-md overflow-hidden border border-border">
+                <div className="bg-bg">
+                  <StrategyRail items={RAIL_ITEMS} selectedId="mq" />
+                </div>
+                <div className="bg-bg px-6 py-8 text-fg-muted">
+                  <Mono size="micro">center pane placeholder</Mono>
+                </div>
+              </div>
+            </div>
+
+            {/* PriceChartPanel */}
+            <div>
+              <Eyebrow as="div" className="mb-3">PriceChartPanel</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border bg-bg min-h-[520px]">
+                <PriceChartPanel
+                  symbol={{ ticker: "NVDA", name: "Nvidia", venue: "Nasdaq · Semis" }}
+                  quote={{ last: 134.82, change: 1.74, changePct: 1.31 }}
+                  meta={{
+                    volume: "28.4M",
+                    avgVolume: "42.1M",
+                    range: "132.10 — 135.44",
+                    iv: "41.2%",
+                    regimeFit: 0.82,
+                  }}
+                  series={SERIES}
+                  activeRange="1M"
+                  onRangeChange={() => { /* preview */ }}
+                />
+              </div>
+            </div>
+
+            {/* OrderBar */}
+            <div>
+              <Eyebrow as="div" className="mb-3">OrderBar</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border">
+                <OrderBar
+                  symbol="NVDA"
+                  strategies={[
+                    { id: "mq", label: "Momentum & Quality" },
+                    { id: "ra", label: "Regime Adaptive" },
+                  ]}
+                  defaults={{
+                    strategyId: "mq",
+                    side: "buy",
+                    quantity: 250,
+                    type: "limit",
+                    price: 134.8,
+                    stop: "−4.0%",
+                  }}
+                  onSubmit={(o) => console.log("staged", o)}
+                />
+              </div>
+            </div>
+
+            {/* PositionsList */}
+            <div>
+              <Eyebrow as="div" className="mb-3">PositionsList</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border bg-bg max-w-[340px]">
+                <PositionsList positions={POSITIONS} activeTab="positions" />
+              </div>
+            </div>
+
+            {/* AIMemoPanel */}
+            <div>
+              <Eyebrow as="div" className="mb-3">AIMemoPanel</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border max-w-[340px]">
+                <AIMemoPanel memo={MEMO} />
+              </div>
+            </div>
+
+            {/* StatusBar */}
+            <div>
+              <Eyebrow as="div" className="mb-3">StatusBar</Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border">
+                <StatusBar pills={STATUS_PILLS} buildVersion="2.4.1-edge" />
+              </div>
+            </div>
+
+            {/* TickerStrip */}
+            <div>
+              <Eyebrow as="div" className="mb-3">
+                TickerStrip (paused — WCAG default)
+              </Eyebrow>
+              <div className="rounded-md overflow-hidden border border-border">
+                <TickerStrip tickers={TICKERS} />
+              </div>
+            </div>
+
+            {/* StrategyCard */}
+            <div>
+              <Eyebrow as="div" className="mb-3">StrategyCard</Eyebrow>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <StrategyCard
+                  name="Momentum & Quality"
+                  subtitle="Strategy 01 · swing"
+                  returnPct={3.42}
+                  isLoss={false}
+                  positions={4}
+                  winRatePct={62}
+                  invested="$18.2K"
+                  sparkline={SPARK_UP.slice().reverse()}
+                  href="#strategy/momentum-quality"
+                />
+                <StrategyCard
+                  name="Claude Alpha"
+                  subtitle="Strategy 06 · AI opp."
+                  returnPct={-1.18}
+                  isLoss
+                  positions={2}
+                  winRatePct={48}
+                  invested="$6.4K"
+                  sparkline={SPARK_DOWN}
+                  href="#strategy/claude-alpha"
+                />
+              </div>
+            </div>
+
+            {/* EditorialNameplate */}
+            <div>
+              <Eyebrow as="div" className="mb-3">EditorialNameplate</Eyebrow>
+              <div className="rounded-md border border-border p-4 bg-bg-card">
+                <EditorialNameplate
+                  volume="III"
+                  issue="04"
+                  title="Quiet money, loud math"
+                  date="Apr 17, 2026"
+                />
+              </div>
+            </div>
+
+            {/* ClaudeStamp */}
+            <div>
+              <Eyebrow as="div" className="mb-3">ClaudeStamp</Eyebrow>
+              <div className="rounded-md border border-border p-4 bg-bg-card flex flex-col gap-3">
+                <ClaudeStamp
+                  model="Haiku 4.5"
+                  confidence={0.72}
+                  latencyMs={180}
+                  approvedAt="14:28 ET"
+                  approved
+                />
+                <ClaudeStamp model="Haiku 4.5" confidence={0.64} latencyMs={142} />
+                <ClaudeStamp model="Haiku 4.5" />
+              </div>
+            </div>
+          </div>
+        </section>
+
         <footer className="border-t border-border-hair pt-6">
-          <Mono size="micro">alphadesk · design · F1 · tradingalpha.net</Mono>
+          <Mono size="micro">alphadesk · design · F2 · tradingalpha.net</Mono>
         </footer>
       </div>
     </main>
