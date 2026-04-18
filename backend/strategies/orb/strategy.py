@@ -39,13 +39,13 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import (
+from strategies.base import Context, cache_of
+from strategies.registry import (
     StrategyRegistrationError,
     _STRATEGY_CLASSES,
     register_strategy,
 )
-from backend.strategies.signal import Signal
+from strategies.signal import Signal
 
 from .config import DEFAULTS, UNIVERSE_PROFILES, search_space
 

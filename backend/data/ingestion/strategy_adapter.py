@@ -90,14 +90,14 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
     that insist on them will raise in ``generate_signals`` and the adapter
     will catch + log.
     """
-    from backend.backtest.types import Context
+    from backtest.types import Context
 
     bar_provider = options_provider = None
     earnings_provider = fundamentals_provider = calendar_provider = None
 
     # Alpaca — required.
     try:
-        from backend.data.providers.alpaca import AlpacaBarProvider
+        from data.providers.alpaca import AlpacaBarProvider
 
         bar_provider = AlpacaBarProvider()
     except Exception as e:
@@ -105,7 +105,7 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
 
     # Polygon options — optional.
     try:
-        from backend.data.providers.polygon_options import PolygonOptionsProvider
+        from data.providers.polygon_options import PolygonOptionsProvider
 
         options_provider = PolygonOptionsProvider()
     except Exception as e:
@@ -113,7 +113,7 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
 
     # FMP earnings — optional.
     try:
-        from backend.data.providers.fmp_earnings import FMPEarningsProvider
+        from data.providers.fmp_earnings import FMPEarningsProvider
 
         earnings_provider = FMPEarningsProvider()
     except Exception as e:
@@ -121,7 +121,7 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
 
     # FMP fundamentals — optional.
     try:
-        from backend.data.providers.fmp_fundamentals import FMPFundamentalsProvider
+        from data.providers.fmp_fundamentals import FMPFundamentalsProvider
 
         fundamentals_provider = FMPFundamentalsProvider()
     except Exception as e:
@@ -129,7 +129,7 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
 
     # Trading calendar — optional.
     try:
-        from backend.data.calendar import USMarketCalendar
+        from data.calendar import USMarketCalendar
 
         calendar_provider = USMarketCalendar()
     except Exception as e:
@@ -245,7 +245,7 @@ class LiveStrategyAdapter(BaseStrategyRunner):
         """Resolve + instantiate the underlying registry strategy once."""
         if self._strategy is not None:
             return self._strategy
-        from backend.strategies.registry import get_meta, get_strategy, load_all
+        from strategies.registry import get_meta, get_strategy, load_all
 
         # Idempotent; first call does the discovery.
         load_all()
@@ -503,7 +503,7 @@ def build_all_strategies() -> list[type[LiveStrategyAdapter]]:
     ``ALL_STRATEGIES``.  Smoke strategies (category ``"smoke"``) are excluded
     — they exist only for registry / engine round-trip tests.
     """
-    from backend.strategies.registry import list_strategies, load_all
+    from strategies.registry import list_strategies, load_all
 
     load_all()
     classes: list[type[LiveStrategyAdapter]] = []

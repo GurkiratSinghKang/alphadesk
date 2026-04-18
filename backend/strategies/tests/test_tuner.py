@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from backend.tuner.objective import WalkForwardObjective
-from backend.tuner.search import (
+from tuner.objective import WalkForwardObjective
+from tuner.search import (
     Categorical,
     FloatRange,
     IntRange,
@@ -267,7 +267,7 @@ class TestObjectiveScoring:
 # --------------------------------------------------------------------------- #
 class TestRunnerCLI:
     def test_parser_accepts_required_args(self):
-        from backend.tuner.runner import build_parser
+        from tuner.runner import build_parser
 
         parser = build_parser()
         ns = parser.parse_args(

@@ -17,8 +17,8 @@ API reference: https://polygon.io/docs/stocks, https://polygon.io/docs/options.
 
 from __future__ import annotations
 
-from backend.data.providers.polygon_bars import PolygonStockBarProvider
-from backend.data.providers.polygon_options import PolygonOptionsProvider
+from data.providers.polygon_bars import PolygonStockBarProvider
+from data.providers.polygon_options import PolygonOptionsProvider
 
 __all__ = ["PolygonStockBarProvider", "PolygonOptionsProvider"]
 

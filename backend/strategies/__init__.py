@@ -12,7 +12,7 @@ registry: `from backend.strategies.registry import get_strategy, load_all`.
 
 from __future__ import annotations
 
-from backend.strategies.base import BaseStrategy
+from strategies.base import BaseStrategy
 
 STRATEGIES: dict[str, type[BaseStrategy]] = {}
 
@@ -24,7 +24,7 @@ def get_strategy(name: str) -> BaseStrategy | None:
     """
 
     try:
-        from backend.strategies.registry import get_strategy as _new_get
+        from strategies.registry import get_strategy as _new_get
         cls = _new_get(name)
         return cls() if cls else None
     except Exception:

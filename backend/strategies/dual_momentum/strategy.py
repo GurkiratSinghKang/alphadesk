@@ -22,9 +22,9 @@ from typing import Any, Iterable, Mapping, Optional
 
 import pandas as pd
 
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import register_strategy
-from backend.strategies.signal import OrderType, Signal
+from strategies.base import Context, cache_of
+from strategies.registry import register_strategy
+from strategies.signal import OrderType, Signal
 
 from .config import DEFAULT_PARAMS, DualMomentumConfig, build_search_space
 

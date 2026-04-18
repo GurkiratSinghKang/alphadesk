@@ -30,15 +30,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context, Position, Side
-from backend.strategies.pead.config import DEFAULTS, UNIVERSE_SEED, search_space
-from backend.strategies.pead.helpers import (
+from backtest.types import Context, Position, Side
+from strategies.pead.config import DEFAULTS, UNIVERSE_SEED, search_space
+from strategies.pead.helpers import (
     compute_sue,
     has_overlapping_earnings,
     passes_liquidity,
     trading_days_between,
 )
-from backend.strategies.pead.strategy import PEADStrategy
+from strategies.pead.strategy import PEADStrategy
 
 
 # --------------------------------------------------------------------------- #
@@ -205,7 +205,7 @@ def _synthetic_history(
 # --------------------------------------------------------------------------- #
 class TestRegistrationAndConfig:
     def test_strategy_registered(self):
-        from backend.strategies.registry import get_strategy
+        from strategies.registry import get_strategy
 
         cls = get_strategy("pead")
         assert cls is PEADStrategy

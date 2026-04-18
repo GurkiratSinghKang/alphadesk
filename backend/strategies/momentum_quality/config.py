@@ -147,7 +147,7 @@ def search_space() -> dict[str, Any]:
     """Optuna search space. Matches the ranges in the Wave B design brief."""
 
     # Deferred import: keeps this module importable without optuna.
-    from backend.tuner.search import Categorical, FloatRange, IntRange
+    from tuner.search import Categorical, FloatRange, IntRange
 
     return {
         "momentum_lookback_m": Categorical([6, 9, 12]),

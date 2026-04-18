@@ -31,9 +31,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from backend.strategies.registry import get_strategy, list_names, load_all
-from backend.tuner.objective import WalkForwardObjective
-from backend.tuner.search import ParameterSearch
+from strategies.registry import get_strategy, list_names, load_all
+from tuner.objective import WalkForwardObjective
+from tuner.search import ParameterSearch
 
 log = logging.getLogger("alphadesk.tuner.runner")
 
@@ -163,7 +163,7 @@ def _resolve_bar_provider() -> Any:
 
     try:
         # Preferred: the parquet-backed cache reading from the shared data lake.
-        from backend.data.providers.cache import CachedBarProvider  # type: ignore
+        from data.providers.cache import CachedBarProvider  # type: ignore
     except Exception:
         CachedBarProvider = None  # type: ignore[assignment]
 

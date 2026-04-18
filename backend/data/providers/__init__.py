@@ -9,7 +9,7 @@ A ``ParquetCache`` in :mod:`cache` memoises any provider method to
 ``~/.alphadesk/cache`` keyed by (provider, method, args).
 """
 
-from backend.data.providers.base import (
+from data.providers.base import (
     BarProvider,
     CalendarProvider,
     EarningsProvider,

@@ -105,7 +105,7 @@ def search_space() -> dict[str, Any]:
     """Optuna search space. Matches the Wave D brief."""
 
     # Deferred import so this module is importable without optuna.
-    from backend.tuner.search import Categorical, FloatRange
+    from tuner.search import Categorical, FloatRange
 
     return {
         "sue_threshold": FloatRange(1.0, 3.0),

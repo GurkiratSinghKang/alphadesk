@@ -7,8 +7,8 @@ from decimal import Decimal
 
 import pytest
 
-from backend.backtest.portfolio import Portfolio
-from backend.backtest.types import (
+from backtest.portfolio import Portfolio
+from backtest.types import (
     AssetClass,
     Fill,
     OptionLeg,

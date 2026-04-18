@@ -51,11 +51,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context
-from backend.strategies.registry import get_meta, get_strategy
-from backend.strategies.signal import OrderType
+from backtest.types import Context
+from strategies.registry import get_meta, get_strategy
+from strategies.signal import OrderType
 
-import backend.strategies.rsi2_reversal  # noqa: F401 - fires registration
+import strategies.rsi2_reversal  # noqa: F401 - fires registration
 
 
 # --------------------------------------------------------------------------- #
@@ -372,7 +372,7 @@ class TestEntryGates:
 class TestManageExits:
     def _setup_open_position(self, inst, provider, asof, symbol, entry_price, stop_price):
         """Build a Context with a single open long position in ``symbol``."""
-        from backend.backtest.types import AssetClass, Position
+        from backtest.types import AssetClass, Position
 
         ctx = _make_ctx(provider, asof)
         ctx.state["rsi2_reversal.universe"] = [symbol, "SPY"]
@@ -534,7 +534,7 @@ class TestManageExits:
         )
         asof = flat.index[-1].date()
 
-        from backend.backtest.types import AssetClass, Position
+        from backtest.types import AssetClass, Position
 
         ctx = _make_ctx(provider, asof)
         ctx.state["rsi2_reversal.universe"] = ["AAPL", "SPY"]

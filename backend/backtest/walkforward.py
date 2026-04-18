@@ -24,9 +24,9 @@ from typing import Any, Callable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.backtest.engine import BacktestEngine, EngineConfig
-from backend.backtest.metrics import summary_dict
-from backend.backtest.types import BacktestResult
+from backtest.engine import BacktestEngine, EngineConfig
+from backtest.metrics import summary_dict
+from backtest.types import BacktestResult
 
 
 @dataclass

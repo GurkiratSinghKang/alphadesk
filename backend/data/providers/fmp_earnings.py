@@ -8,8 +8,8 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from backend.data.providers._fmp_http import FMPHTTP
-from backend.data.providers.cache import TTL_DAILY, cached
+from data.providers._fmp_http import FMPHTTP
+from data.providers.cache import TTL_DAILY, cached
 
 _CALENDAR_COLS = [
     "symbol", "date", "eps_actual", "eps_estimated",

@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Iterable, Mapping, Optional
 
-from backend.backtest.types import (
+from backtest.types import (
     AssetClass,
     Fill,
     OptionLeg,

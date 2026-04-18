@@ -15,8 +15,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.engine import BacktestEngine, EngineConfig
-from backend.backtest.types import (
+from backtest.engine import BacktestEngine, EngineConfig
+from backtest.types import (
     Context,
     OrderType,
     Signal,
@@ -188,7 +188,7 @@ def test_no_lookahead_first_bar_has_no_trades():
 def test_splits_applied_mid_backtest():
     """A 2:1 split mid-window doubles our share count."""
 
-    from backend.backtest.types import Bar
+    from backtest.types import Bar
 
     class SplittingProvider:
         def bars(self, symbols, start, end, tf: str = "1D"):
@@ -318,7 +318,7 @@ class ShortStrangleStrategy:
         return [self.underlying]
 
     def generate_signals(self, asof, ctx):
-        from backend.backtest.types import OptionLeg, Side
+        from backtest.types import OptionLeg, Side
         if self.opened:
             return []
         # Open on the first session.
@@ -357,7 +357,7 @@ class ShortStrangleStrategy:
         ]
 
     def manage(self, asof, ctx):
-        from backend.backtest.types import OptionLeg, Side
+        from backtest.types import OptionLeg, Side
         if not self.opened or self.closed:
             return []
         if asof < self._close_on:

@@ -630,7 +630,7 @@ def _reload_oos_metrics() -> dict[str, dict[str, Any]]:
     # Falling back to ``_FALLBACK_META`` below keeps the catalogue
     # authoritative even when the registry hasn't been loaded yet.
     try:
-        from backend.strategies.registry import get_meta as _get_meta
+        from strategies.registry import get_meta as _get_meta
     except Exception:
         _get_meta = None  # type: ignore[assignment]
 

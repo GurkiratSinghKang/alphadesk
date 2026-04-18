@@ -57,7 +57,7 @@ def fresh_registry():
     ``@register_strategy`` decorators when called inside the test.
     """
 
-    from backend.strategies.registry import (
+    from strategies.registry import (
         _STRATEGY_CLASSES,
         _STRATEGY_META,
         clear,
@@ -178,7 +178,7 @@ def spy_2020_q1_bars(fake_bar_provider: _FakeBarProvider) -> pd.DataFrame:
 
     if os.environ.get("ALPHADESK_TEST_LIVE_DATA"):  # pragma: no cover
         try:
-            from backend.data.providers.cache import (  # type: ignore
+            from data.providers.cache import (  # type: ignore
                 CachedBarProvider,
             )
 

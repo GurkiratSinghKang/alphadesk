@@ -25,7 +25,7 @@ Example
 .. code-block:: python
 
     from decimal import Decimal
-    from backend.strategies.signal import Signal, OptionLeg, OrderType, Side
+    from strategies.signal import Signal, OptionLeg, OrderType, Side
 
     # Go 100% long SPY on today's close
     sig = Signal(symbol="SPY", target_weight=1.0, order_type=OrderType.MOC)
@@ -43,7 +43,7 @@ The canonical field definitions live in
 
 from __future__ import annotations
 
-from backend.backtest.types import (
+from backtest.types import (
     OptionLeg,
     OrderType,
     Side,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.data.providers.alpaca import AlpacaBarProvider
+from data.providers.alpaca import AlpacaBarProvider
 
 pytestmark = pytest.mark.integration
 

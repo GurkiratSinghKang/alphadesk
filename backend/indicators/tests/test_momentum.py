@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.momentum import rsi, connors_rsi, macd, adx, roc
+from indicators.momentum import rsi, connors_rsi, macd, adx, roc
 
 
 # -----------------------------------------------------------------------------

@@ -24,9 +24,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.volume import vwap_session
-from backend.strategies.registry import get_strategy
-from backend.strategies.signal import OrderType, Signal
+from indicators.volume import vwap_session
+from strategies.registry import get_strategy
+from strategies.signal import OrderType, Signal
 
 
 # --------------------------------------------------------------------------- #
@@ -365,7 +365,7 @@ class TestEntryGates:
         # needs ≥100 bars; build 300 days.
         start = asof - timedelta(days=450)
 
-        from backend.strategies.vwap.config import UNIVERSE
+        from strategies.vwap.config import UNIVERSE
 
         drift = 0.0010 if allow_name_trend else -0.002
         for sym in UNIVERSE:
@@ -471,7 +471,7 @@ class TestStopAndTakeProfit:
     """Rule (d): entry signals carry stop_price and take_profit."""
 
     def test_stop_below_entry_and_tp_above_entry(self):
-        from backend.strategies.vwap.config import UNIVERSE
+        from strategies.vwap.config import UNIVERSE
 
         asof = date(2024, 6, 4)
         provider = _MockBarProvider()
@@ -503,7 +503,7 @@ class TestShortsMirror:
     """Rule (e): shorts mirror long logic when ``allow_shorts=True``."""
 
     def test_shorts_fire_on_mirror_setup_when_enabled(self):
-        from backend.strategies.vwap.config import UNIVERSE
+        from strategies.vwap.config import UNIVERSE
 
         asof = date(2024, 6, 4)
         provider = _MockBarProvider()
@@ -558,7 +558,7 @@ class TestShortsMirror:
         intra_indexed = intra.copy()
         intra_indexed = intra_indexed.set_index("ts").sort_index()
         # Filter to regular hours like the strategy does.
-        from backend.strategies.vwap.strategy import VWAPSessionStrategy
+        from strategies.vwap.strategy import VWAPSessionStrategy
 
         strat = VWAPSessionStrategy()
         strat.configure(

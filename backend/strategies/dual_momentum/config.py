@@ -12,7 +12,7 @@ Usage
 
 .. code-block:: python
 
-    from backend.strategies.dual_momentum.config import (
+    from strategies.dual_momentum.config import (
         DEFAULT_PARAMS,
         DualMomentumConfig,
         build_search_space,
@@ -215,7 +215,7 @@ def build_search_space() -> dict[str, Any]:
 
     # Deferred import: keeps the config module importable when optuna is
     # not available (e.g. in the engine or frontend processes).
-    from backend.tuner.search import Categorical, FloatRange
+    from tuner.search import Categorical, FloatRange
 
     return {
         "lookback_days": Categorical([126, 189, 252]),

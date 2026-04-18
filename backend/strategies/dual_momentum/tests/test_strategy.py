@@ -29,13 +29,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context, Position
-from backend.strategies.dual_momentum.config import (
+from backtest.types import Context, Position
+from strategies.dual_momentum.config import (
     DEFAULT_PARAMS,
     DualMomentumConfig,
     build_search_space,
 )
-from backend.strategies.dual_momentum.strategy import (
+from strategies.dual_momentum.strategy import (
     DualMomentumStrategy,
     _composite_return,
     _is_last_trading_day_of_month,
@@ -368,7 +368,7 @@ class TestHelpers:
 # --------------------------------------------------------------------------- #
 class TestRegistration:
     def test_strategy_is_registered(self):
-        from backend.strategies.registry import get_meta, get_strategy
+        from strategies.registry import get_meta, get_strategy
 
         cls = get_strategy("dual_momentum")
         assert cls is DualMomentumStrategy or cls.__name__ == "DualMomentumStrategy"

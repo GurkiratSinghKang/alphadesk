@@ -26,8 +26,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from backend.data.providers.cache import TTL_DAILY, cached
-from backend.data.providers.polygon import PolygonOptionsProvider
+from data.providers.cache import TTL_DAILY, cached
+from data.providers.polygon import PolygonOptionsProvider
 
 
 log = logging.getLogger(__name__)

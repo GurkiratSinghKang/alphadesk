@@ -14,7 +14,7 @@ Usage from the engine / tuner / CLI
 
 .. code-block:: python
 
-    from backend.strategies.registry import load_all, get_strategy, list_strategies
+    from strategies.registry import load_all, get_strategy, list_strategies
 
     load_all()                                 # triggers decorator-side-effects
     names = [m.name for m in list_strategies()]
@@ -39,7 +39,7 @@ import sys
 from dataclasses import replace
 from typing import Callable, TypeVar
 
-from backend.strategies.base import Strategy, StrategyMeta
+from strategies.base import Strategy, StrategyMeta
 
 log = logging.getLogger("alphadesk.strategies.registry")
 

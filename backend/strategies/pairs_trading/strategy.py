@@ -41,20 +41,20 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.indicators.stats import (
+from indicators.stats import (
     engle_granger_adf,
     hurst,
     kalman_hedge_ratio,
     ols_hedge_ratio,
     ou_half_life,
 )
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import (
+from strategies.base import Context, cache_of
+from strategies.registry import (
     StrategyRegistrationError,
     _STRATEGY_CLASSES,
     register_strategy,
 )
-from backend.strategies.signal import OrderType, Signal, TimeInForce
+from strategies.signal import OrderType, Signal, TimeInForce
 
 from .config import (
     DEFAULTS,

@@ -23,13 +23,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context, Position
-from backend.strategies.ts_momentum.config import (
+from backtest.types import Context, Position
+from strategies.ts_momentum.config import (
     DEFAULT_PARAMS,
     TSMomentumConfig,
     build_search_space,
 )
-from backend.strategies.ts_momentum.strategy import (
+from strategies.ts_momentum.strategy import (
     TSMomentumStrategy,
     _is_last_trading_day_of_month,
 )
@@ -446,7 +446,7 @@ class TestConfig:
 
 class TestRegistration:
     def test_strategy_is_registered(self):
-        from backend.strategies.registry import get_meta, get_strategy
+        from strategies.registry import get_meta, get_strategy
 
         cls = get_strategy("ts_momentum")
         assert cls is TSMomentumStrategy or cls.__name__ == "TSMomentumStrategy"

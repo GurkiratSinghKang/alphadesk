@@ -29,15 +29,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context, Position
-from backend.strategies.momentum_quality.config import (
+from backtest.types import Context, Position
+from strategies.momentum_quality.config import (
     DEFAULTS,
     EXCLUDED_SECTORS,
     SECTOR_MAP,
     eligible_universe,
     search_space,
 )
-from backend.strategies.momentum_quality.strategy import (
+from strategies.momentum_quality.strategy import (
     MomentumQualityStrategy,
     _is_last_trading_day_of_month,
     _rank_01,
@@ -185,7 +185,7 @@ NON_REBAL_DAY = date(2024, 1, 15)
 # --------------------------------------------------------------------------- #
 class TestRegistrationAndConfig:
     def test_strategy_registered(self):
-        from backend.strategies.registry import get_strategy
+        from strategies.registry import get_strategy
 
         cls = get_strategy("momentum_quality")
         assert cls is MomentumQualityStrategy

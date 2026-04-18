@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.volatility import atr, parkinson, garman_klass, realized_vol, hv
+from indicators.volatility import atr, parkinson, garman_klass, realized_vol, hv
 
 
 class TestATR:

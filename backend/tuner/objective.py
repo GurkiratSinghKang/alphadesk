@@ -39,7 +39,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional
 
-from backend.backtest.types import BacktestResult
+from backtest.types import BacktestResult
 
 log = logging.getLogger("alphadesk.tuner.objective")
 
@@ -157,7 +157,7 @@ class WalkForwardObjective:
         # tested) in environments that haven't yet installed the engine's
         # heavy dependencies (pandas, numpy are already required but engine
         # features like cost models may pull additional packages).
-        from backend.backtest.walkforward import (
+        from backtest.walkforward import (
             WalkForwardConfig,
             WalkForwardRunner,
         )

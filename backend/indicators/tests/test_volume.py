@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.volume import vwap_session, vwap_rolling, obv, volume_zscore
+from indicators.volume import vwap_session, vwap_rolling, obv, volume_zscore
 
 
 class TestVWAPSession:

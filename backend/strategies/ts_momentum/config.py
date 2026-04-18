@@ -11,7 +11,7 @@ Usage
 
 .. code-block:: python
 
-    from backend.strategies.ts_momentum.config import (
+    from strategies.ts_momentum.config import (
         DEFAULT_PARAMS,
         TSMomentumConfig,
         build_search_space,
@@ -240,7 +240,7 @@ def build_search_space() -> dict[str, Any]:
     keep the TPE sampler well-behaved on a small-to-medium-sized space.
     """
 
-    from backend.tuner.search import Categorical, FloatRange
+    from tuner.search import Categorical, FloatRange
 
     return {
         "lookback_months": Categorical([6, 9, 12]),

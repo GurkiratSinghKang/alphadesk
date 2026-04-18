@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from backend.data.calendar import USMarketCalendar
+from data.calendar import USMarketCalendar
 
 
 @pytest.fixture(scope="module")

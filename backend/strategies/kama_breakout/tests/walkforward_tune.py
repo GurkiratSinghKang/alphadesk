@@ -92,10 +92,10 @@ def main() -> int:
     )
     log = logging.getLogger("kama_breakout.tune")
 
-    from backend.data.providers.alpaca import AlpacaBarProvider
-    from backend.strategies.kama_breakout.strategy import KamaBreakout
-    from backend.tuner.objective import WalkForwardObjective
-    from backend.tuner.search import ParameterSearch
+    from data.providers.alpaca import AlpacaBarProvider
+    from strategies.kama_breakout.strategy import KamaBreakout
+    from tuner.objective import WalkForwardObjective
+    from tuner.search import ParameterSearch
 
     provider = AlpacaBarProvider()
 

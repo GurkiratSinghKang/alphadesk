@@ -28,11 +28,11 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.backtest.costs import CostModel, DefaultCostModel
-from backend.backtest.execution import ExecutionSimulator
-from backend.backtest.metrics import summary_dict
-from backend.backtest.portfolio import Portfolio
-from backend.backtest.types import (
+from backtest.costs import CostModel, DefaultCostModel
+from backtest.execution import ExecutionSimulator
+from backtest.metrics import summary_dict
+from backtest.portfolio import Portfolio
+from backtest.types import (
     AssetClass,
     BacktestResult,
     Bar,
@@ -49,7 +49,7 @@ from backend.backtest.types import (
 # delivered them; otherwise fall back to the local stubs. Downstream code in
 # this module only needs duck typing so the fallback is purely cosmetic.
 try:  # pragma: no cover - import-time wiring
-    from backend.data.providers.base import (
+    from data.providers.base import (
         BarProvider,
         OptionsProvider,
         EarningsProvider,
@@ -57,7 +57,7 @@ try:  # pragma: no cover - import-time wiring
         CalendarProvider,
     )
 except Exception:  # pragma: no cover
-    from backend.backtest.types import (
+    from backtest.types import (
         BarProvider,
         OptionsProvider,
         EarningsProvider,
@@ -66,9 +66,9 @@ except Exception:  # pragma: no cover
     )
 
 try:  # pragma: no cover - import-time wiring
-    from backend.strategies.base import Strategy
+    from strategies.base import Strategy
 except Exception:  # pragma: no cover
-    from backend.backtest.types import Strategy  # type: ignore
+    from backtest.types import Strategy  # type: ignore
 
 
 def _d(x) -> Decimal:
@@ -97,7 +97,7 @@ def _bs_fallback_from_leg(
     ):
         return None
     try:
-        from backend.indicators.options import bs_price
+        from indicators.options import bs_price
     except Exception:
         return None
     days = (leg.expiry - asof).days if hasattr(leg.expiry, "__sub__") else 0

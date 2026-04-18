@@ -26,11 +26,11 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.indicators.trend import donchian, kama, sma
-from backend.indicators.volatility import atr
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import register_strategy
-from backend.strategies.signal import OrderType, Signal
+from indicators.trend import donchian, kama, sma
+from indicators.volatility import atr
+from strategies.base import Context, cache_of
+from strategies.registry import register_strategy
+from strategies.signal import OrderType, Signal
 
 from .config import DEFAULTS, DEFAULT_UNIVERSE, search_space as _cfg_search_space
 

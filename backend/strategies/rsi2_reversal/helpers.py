@@ -16,9 +16,9 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
-from backend.indicators.momentum import connors_rsi, rsi
-from backend.indicators.trend import sma
-from backend.strategies.base import Context, cache_of
+from indicators.momentum import connors_rsi, rsi
+from indicators.trend import sma
+from strategies.base import Context, cache_of
 
 
 # --------------------------------------------------------------------------- #

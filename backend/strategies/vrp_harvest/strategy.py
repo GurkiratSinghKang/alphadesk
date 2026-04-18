@@ -48,19 +48,19 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.indicators.options import (
+from indicators.options import (
     bs_greeks,
     bs_price,
     iv_from_price,
 )
-from backend.indicators.volatility import hv
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import (
+from indicators.volatility import hv
+from strategies.base import Context, cache_of
+from strategies.registry import (
     StrategyRegistrationError,
     _STRATEGY_CLASSES,
     register_strategy,
 )
-from backend.strategies.signal import OptionLeg, OrderType, Side, Signal, TimeInForce
+from strategies.signal import OptionLeg, OrderType, Side, Signal, TimeInForce
 
 from .config import DEFAULTS, UNDERLYING, search_space
 

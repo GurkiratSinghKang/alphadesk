@@ -33,8 +33,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Iterable, Mapping, Optional
 
-from backend.backtest.costs import CostModel
-from backend.backtest.types import (
+from backtest.costs import CostModel
+from backtest.types import (
     AssetClass,
     Bar,
     Fill,

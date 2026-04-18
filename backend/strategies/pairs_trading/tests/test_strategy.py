@@ -46,11 +46,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import backend.strategies.pairs_trading  # noqa: F401 - decorator side effect
+import strategies.pairs_trading  # noqa: F401 - decorator side effect
 
-from backend.backtest.types import Context
-from backend.strategies.pairs_trading.config import UNIVERSE
-from backend.strategies.pairs_trading.strategy import PairsTradingStrategy
+from backtest.types import Context
+from strategies.pairs_trading.config import UNIVERSE
+from strategies.pairs_trading.strategy import PairsTradingStrategy
 
 
 # --------------------------------------------------------------------------- #
@@ -149,7 +149,7 @@ def _make_noncointegrated_closes(
 # Metadata                                                                    #
 # --------------------------------------------------------------------------- #
 def test_registered_with_expected_meta() -> None:
-    from backend.strategies.registry import get_meta
+    from strategies.registry import get_meta
 
     meta = get_meta("pairs_trading")
     assert meta.name == "pairs_trading"
@@ -175,7 +175,7 @@ def test_configure_applies_defaults_and_overrides() -> None:
 def test_eg_adf_gate_rejects_noncointegrated() -> None:
     """Two independent random walks should fail the ADF p-value gate."""
 
-    from backend.indicators.stats import engle_granger_adf
+    from indicators.stats import engle_granger_adf
 
     closes = _make_noncointegrated_closes(n_bars=400, seed=11)
     # Engle-Granger on two random walks usually fails the 0.05 gate
@@ -265,7 +265,7 @@ def test_entry_emits_two_legs_with_opposite_signs() -> None:
     full["MSFT"] = closes["MSFT"].values
     provider = SyntheticBarProvider(full)
 
-    from backend.strategies.pairs_trading.strategy import ActivePair
+    from strategies.pairs_trading.strategy import ActivePair
 
     s = PairsTradingStrategy()
     s.configure({
@@ -327,7 +327,7 @@ def test_mean_revert_exit_closes_both_legs() -> None:
     })
 
     # Pre-seed an active pair + open position in ctx.state.
-    from backend.strategies.pairs_trading.strategy import (
+    from strategies.pairs_trading.strategy import (
         ActivePair, OpenPosition,
     )
 
@@ -388,7 +388,7 @@ def test_watchdog_force_closes_broken_pair() -> None:
         "z_exit": 0.0,  # disable mean-revert so only watchdog fires
         "z_stop": 100.0,
     })
-    from backend.strategies.pairs_trading.strategy import (
+    from strategies.pairs_trading.strategy import (
         ActivePair, OpenPosition,
     )
     asof = closes.index[-1].date()
@@ -425,7 +425,7 @@ def test_watchdog_force_closes_broken_pair() -> None:
 def test_kalman_hedge_ratio_tracks_drift() -> None:
     """beta drifts from 1.0 -> 1.5 over 400 bars; Kalman should track."""
 
-    from backend.indicators.stats import kalman_hedge_ratio
+    from indicators.stats import kalman_hedge_ratio
 
     rng = np.random.default_rng(101)
     n = 600

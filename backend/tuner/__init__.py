@@ -7,9 +7,9 @@ be resumed.
 
 Public entry points:
 
-    from backend.tuner.search import ParameterSearch, IntRange, FloatRange, Categorical
-    from backend.tuner.objective import WalkForwardObjective
-    from backend.tuner.reports import write_report
+    from tuner.search import ParameterSearch, IntRange, FloatRange, Categorical
+    from tuner.objective import WalkForwardObjective
+    from tuner.reports import write_report
 
 Command-line:
 
@@ -18,7 +18,7 @@ Command-line:
 
 from __future__ import annotations
 
-from backend.tuner.search import (
+from tuner.search import (
     ParameterSearch,
     IntRange,
     FloatRange,

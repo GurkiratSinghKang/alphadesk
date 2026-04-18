@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from backend.api.routes import strategies as strat_mod
+from api.routes import strategies as strat_mod
 
 
 # --------------------------------------------------------------------------- #

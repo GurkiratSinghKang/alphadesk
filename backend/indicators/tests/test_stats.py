@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.stats import (
+from indicators.stats import (
     zscore,
     pct_rank,
     ewma,

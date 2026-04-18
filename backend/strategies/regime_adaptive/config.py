@@ -11,7 +11,7 @@ Usage
 
 .. code-block:: python
 
-    from backend.strategies.regime_adaptive.config import (
+    from strategies.regime_adaptive.config import (
         DEFAULT_PARAMS,
         RegimeAdaptiveConfig,
         build_search_space,
@@ -312,7 +312,7 @@ def build_search_space() -> dict[str, Any]:
     """
 
     # Deferred import so config.py stays importable without optuna.
-    from backend.tuner.search import Categorical, FloatRange, IntRange
+    from tuner.search import Categorical, FloatRange, IntRange
 
     return {
         "sma_fast": Categorical([50, 100]),

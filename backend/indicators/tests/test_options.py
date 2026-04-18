@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.options import (
+from indicators.options import (
     bs_price,
     bs_greeks,
     iv_from_price,

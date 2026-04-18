@@ -8,8 +8,8 @@ from typing import Any
 
 import pandas as pd
 
-from backend.data.providers._fmp_http import FMPHTTP
-from backend.data.providers.cache import TTL_ANNUAL, cached
+from data.providers._fmp_http import FMPHTTP
+from data.providers.cache import TTL_ANNUAL, cached
 
 
 class FMPFundamentalsProvider:

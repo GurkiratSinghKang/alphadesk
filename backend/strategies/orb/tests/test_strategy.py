@@ -15,7 +15,7 @@ from typing import Iterable
 import pandas as pd
 import pytest
 
-from backend.strategies.orb.strategy import ORBStrategy, OrbDayResult
+from strategies.orb.strategy import ORBStrategy, OrbDayResult
 
 
 # --------------------------------------------------------------------------- #

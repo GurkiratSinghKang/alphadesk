@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from backend.data.providers.fmp import FMPEarningsProvider, FMPFundamentalsProvider
+from data.providers.fmp import FMPEarningsProvider, FMPFundamentalsProvider
 
 pytestmark = pytest.mark.integration
 

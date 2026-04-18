@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest import metrics as M
+from backtest import metrics as M
 
 
 RNG = np.random.default_rng(42)

@@ -5,6 +5,6 @@ with the strategy registry via ``@register_strategy`` when the module is
 imported (directly or via :func:`backend.strategies.registry.load_all`).
 """
 
-from backend.strategies._smoke.buy_and_hold_spy.strategy import BuyAndHoldSPY
+from strategies._smoke.buy_and_hold_spy.strategy import BuyAndHoldSPY
 
 __all__ = ["BuyAndHoldSPY"]

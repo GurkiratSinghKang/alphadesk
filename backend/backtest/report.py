@@ -21,7 +21,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from backend.backtest.types import BacktestResult
+from backtest.types import BacktestResult
 
 
 def _json_default(o: Any) -> Any:

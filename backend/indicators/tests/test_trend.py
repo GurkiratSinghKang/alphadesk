@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.trend import sma, ema, kama, donchian, ichimoku
+from indicators.trend import sma, ema, kama, donchian, ichimoku
 
 
 class TestSMA:

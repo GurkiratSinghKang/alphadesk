@@ -8,7 +8,7 @@ import time
 import pandas as pd
 import pytest
 
-from backend.data.providers.cache import ParquetCache, cached
+from data.providers.cache import ParquetCache, cached
 
 
 def test_roundtrip(tmp_path):

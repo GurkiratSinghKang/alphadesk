@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import pytest
 
-from backend.strategies.base import (
+from strategies.base import (
     BaseStrategy,
     Strategy,
     StrategyMeta,
     cache_of,
     calendar_of,
 )
-from backend.strategies.registry import (
+from strategies.registry import (
     StrategyRegistrationError,
     get_meta,
     get_strategy,
@@ -31,7 +31,7 @@ from backend.strategies.registry import (
     load_all,
     register_strategy,
 )
-from backend.strategies.signal import OptionLeg, OrderType, Signal
+from strategies.signal import OptionLeg, OrderType, Signal
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ class TestRegistration:
     def test_idempotent_same_class(self, fresh_registry):
         """Importing the same module twice must not raise."""
 
-        from backend.strategies.registry import _STRATEGY_CLASSES, register_strategy
+        from strategies.registry import _STRATEGY_CLASSES, register_strategy
 
         class _Foo:
             name = "idempotent"
@@ -204,7 +204,7 @@ class TestLoadAll:
         good_dir = pkg_root / "good"
         good_dir.mkdir()
         (good_dir / "__init__.py").write_text(
-            "from backend.strategies.registry import register_strategy\n"
+            "from strategies.registry import register_strategy\n"
             "@register_strategy(name='good_strategy')\n"
             "class _Good:\n"
             "    name = 'good_strategy'\n"
@@ -247,14 +247,14 @@ class TestSurface:
         assert isinstance(instance, Strategy)
 
     def test_signal_importable_from_both_places(self):
-        from backend.backtest.types import Signal as EngineSignal
-        from backend.strategies.signal import Signal as StratSignal
+        from backtest.types import Signal as EngineSignal
+        from strategies.signal import Signal as StratSignal
 
         assert StratSignal is EngineSignal
 
     def test_option_leg_importable(self):
-        from backend.backtest.types import OptionLeg as EngineLeg
-        from backend.strategies.signal import OptionLeg as StratLeg
+        from backtest.types import OptionLeg as EngineLeg
+        from strategies.signal import OptionLeg as StratLeg
 
         assert StratLeg is EngineLeg
 
@@ -276,7 +276,7 @@ class TestSurface:
         assert issubclass(BaseStrategy, ABC)
 
     def test_cache_of_reads_state_field(self):
-        from backend.backtest.types import Context
+        from backtest.types import Context
 
         ctx = Context(asof=None, cash=None, equity=None)  # type: ignore[arg-type]
         cache = cache_of(ctx)
@@ -284,7 +284,7 @@ class TestSurface:
         assert ctx.state["foo"] == 1  # proves it's the same dict
 
     def test_calendar_of_fallback(self):
-        from backend.backtest.types import Context
+        from backtest.types import Context
 
         class _Cal:
             pass
@@ -306,7 +306,7 @@ class TestSmokeStrategy:
         instance = cls()
         instance.configure({})
 
-        from backend.backtest.types import Context
+        from backtest.types import Context
         from decimal import Decimal
         from datetime import date as _date
 

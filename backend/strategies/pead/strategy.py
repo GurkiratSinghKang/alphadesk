@@ -30,13 +30,13 @@ from typing import Any, Iterable, Mapping, Optional
 
 import pandas as pd
 
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import (
+from strategies.base import Context, cache_of
+from strategies.registry import (
     StrategyRegistrationError,
     _STRATEGY_CLASSES,
     register_strategy,
 )
-from backend.strategies.signal import OrderType, Signal, TimeInForce
+from strategies.signal import OrderType, Signal, TimeInForce
 
 from .config import (
     DEFAULTS,

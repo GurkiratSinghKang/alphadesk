@@ -25,17 +25,17 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from backend.indicators.momentum import rsi
-from backend.indicators.trend import sma
-from backend.indicators.volatility import atr as atr_indicator
-from backend.indicators.volume import vwap_session
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import (
+from indicators.momentum import rsi
+from indicators.trend import sma
+from indicators.volatility import atr as atr_indicator
+from indicators.volume import vwap_session
+from strategies.base import Context, cache_of
+from strategies.registry import (
     StrategyRegistrationError,
     _STRATEGY_CLASSES,
     register_strategy,
 )
-from backend.strategies.signal import OrderType, Signal, TimeInForce
+from strategies.signal import OrderType, Signal, TimeInForce
 
 from .config import DEFAULTS, SPY, UNIVERSE, search_space as _search_space
 

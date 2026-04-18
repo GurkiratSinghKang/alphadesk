@@ -23,15 +23,15 @@ from typing import Iterable, Mapping
 import pandas as pd
 import pytest
 
-from backend.backtest.types import (
+from backtest.types import (
     AssetClass,
     Context,
     OrderType,
     Position,
     Side,
 )
-from backend.strategies.earnings_vol.config import UNIVERSE
-from backend.strategies.earnings_vol.strategy import (
+from strategies.earnings_vol.config import UNIVERSE
+from strategies.earnings_vol.strategy import (
     EarningsVolStrategy,
     _classify_earnings_time,
     _pick_leg_strikes,

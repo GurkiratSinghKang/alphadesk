@@ -57,10 +57,10 @@ Rules of the road
 
 Minimal example::
 
-    from backend.strategies.base import Strategy
-    from backend.strategies.registry import register_strategy
-    from backend.strategies.signal import Signal
-    from backend.tuner.search import IntRange
+    from strategies.base import Strategy
+    from strategies.registry import register_strategy
+    from strategies.signal import Signal
+    from tuner.search import IntRange
 
     @register_strategy(
         name="my_strategy",
@@ -105,7 +105,7 @@ from typing import Any, Iterable, Mapping, Protocol, TYPE_CHECKING, runtime_chec
 # The canonical engine types (Signal, OptionLeg, Context, Fill, Bar ...) live
 # in ``backend.backtest.types``. We re-export the ones strategy authors touch
 # every day so they only need to import from ``backend.strategies.*``.
-from backend.backtest.types import (
+from backtest.types import (
     Bar,
     Context,
     Fill,

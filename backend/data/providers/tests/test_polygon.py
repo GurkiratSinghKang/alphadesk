@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from backend.data.providers.polygon import PolygonOptionsProvider
+from data.providers.polygon import PolygonOptionsProvider
 
 pytestmark = pytest.mark.integration
 

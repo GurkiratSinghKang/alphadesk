@@ -14,7 +14,7 @@ from typing import Any, Iterable, Optional
 import numpy as np
 import pandas as pd
 
-from backend.strategies.base import Context, cache_of
+from strategies.base import Context, cache_of
 
 
 log = logging.getLogger("alphadesk.strategies.momentum_quality.helpers")

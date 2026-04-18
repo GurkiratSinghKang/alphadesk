@@ -18,7 +18,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Mapping, Optional, Protocol, runtime_checkable
 
-from backend.backtest.types import AssetClass, OptionLeg, Side
+from backtest.types import AssetClass, OptionLeg, Side
 
 
 def _d(x) -> Decimal:

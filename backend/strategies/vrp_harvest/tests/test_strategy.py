@@ -27,9 +27,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.indicators.options import bs_price, bs_greeks
-from backend.strategies.vrp_harvest.config import DEFAULTS
-from backend.strategies.vrp_harvest.strategy import (
+from indicators.options import bs_price, bs_greeks
+from strategies.vrp_harvest.config import DEFAULTS
+from strategies.vrp_harvest.strategy import (
     VRPHarvestStrategy,
     _NS,
     _open_positions,
@@ -235,7 +235,7 @@ def test_pick_leg_by_delta_targets_16d():
     )
     assert call_row is not None and put_row is not None
     # Compute the *actual* greeks of the chosen strikes.
-    from backend.indicators.options import bs_greeks as _g
+    from indicators.options import bs_greeks as _g
     gc = _g(spot, call_row.strike, 30 / 365.0, 0.045, 0.013, call_row.iv_entry, "call")
     gp = _g(spot, put_row.strike, 30 / 365.0, 0.045, 0.013, put_row.iv_entry, "put")
     assert abs(abs(gc["delta"]) - 0.16) < 0.07
@@ -542,7 +542,7 @@ def test_term_structure_gate_blocks_backwardation():
 # Additional: Registry lookup round-trip                                      #
 # --------------------------------------------------------------------------- #
 def test_registry_lookup():
-    from backend.strategies.registry import get_strategy
+    from strategies.registry import get_strategy
 
     cls = get_strategy("vrp_harvest")
     assert cls is VRPHarvestStrategy

@@ -31,9 +31,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from backend.backtest.engine import BacktestEngine, EngineConfig
-from backend.backtest.report import ReportWriter
-from backend.backtest.walkforward import WalkForwardConfig, WalkForwardRunner
+from backtest.engine import BacktestEngine, EngineConfig
+from backtest.report import ReportWriter
+from backtest.walkforward import WalkForwardConfig, WalkForwardRunner
 
 
 def _parse_date(s: str) -> date:
@@ -44,7 +44,7 @@ def _resolve_strategy_factory(name: str) -> Callable[[], Any]:
     """Return a callable that returns a fresh strategy instance."""
 
     try:  # pragma: no cover - optional dependency on team F4
-        from backend.strategies.registry import get_strategy  # type: ignore
+        from strategies.registry import get_strategy  # type: ignore
 
         def factory() -> Any:
             return get_strategy(name)
@@ -66,7 +66,7 @@ def _resolve_bar_provider():
     """Pick the default bar provider from team F2 if available."""
 
     try:  # pragma: no cover
-        from backend.data.providers.alpaca import AlpacaBarProvider  # type: ignore
+        from data.providers.alpaca import AlpacaBarProvider  # type: ignore
 
         return AlpacaBarProvider()
     except Exception:
@@ -76,13 +76,13 @@ def _resolve_bar_provider():
 def _resolve_extra_providers() -> dict[str, Any]:
     providers: dict[str, Any] = {}
     try:  # pragma: no cover
-        from backend.data.providers.polygon import PolygonOptionsProvider  # type: ignore
+        from data.providers.polygon import PolygonOptionsProvider  # type: ignore
 
         providers["options_provider"] = PolygonOptionsProvider()
     except Exception:
         pass
     try:  # pragma: no cover
-        from backend.data.providers.fmp import (  # type: ignore
+        from data.providers.fmp import (  # type: ignore
             FmpEarningsProvider,
             FmpFundamentalsProvider,
         )
@@ -92,7 +92,7 @@ def _resolve_extra_providers() -> dict[str, Any]:
     except Exception:
         pass
     try:  # pragma: no cover
-        from backend.data.calendar import UsMarketCalendar  # type: ignore
+        from data.calendar import UsMarketCalendar  # type: ignore
 
         providers["calendar_provider"] = UsMarketCalendar()
     except Exception:

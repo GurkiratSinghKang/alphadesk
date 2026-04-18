@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import Context, Position
-from backend.strategies.regime_adaptive.config import (
+from backtest.types import Context, Position
+from strategies.regime_adaptive.config import (
     BASE_ALLOCATIONS,
     DEFAULT_PARAMS,
     REGIMES,
@@ -32,7 +32,7 @@ from backend.strategies.regime_adaptive.config import (
     allocation_for,
     build_search_space,
 )
-from backend.strategies.regime_adaptive.strategy import (
+from strategies.regime_adaptive.strategy import (
     RegimeAdaptiveStrategy,
     _is_last_trading_day_of_month,
 )
@@ -540,7 +540,7 @@ class TestConfig:
 # --------------------------------------------------------------------------- #
 class TestRegistration:
     def test_strategy_is_registered(self):
-        from backend.strategies.registry import get_meta, get_strategy
+        from strategies.registry import get_meta, get_strategy
 
         cls = get_strategy("regime_adaptive")
         assert cls is RegimeAdaptiveStrategy or cls.__name__ == "RegimeAdaptiveStrategy"

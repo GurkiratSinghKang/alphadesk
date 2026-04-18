@@ -19,9 +19,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Iterable, Mapping
 
-from backend.strategies.base import Context, cache_of
-from backend.strategies.registry import register_strategy
-from backend.strategies.signal import OrderType, Signal
+from strategies.base import Context, cache_of
+from strategies.registry import register_strategy
+from strategies.signal import OrderType, Signal
 
 
 @register_strategy(

@@ -11,8 +11,8 @@ API reference: https://site.financialmodelingprep.com/developer/docs
 
 from __future__ import annotations
 
-from backend.data.providers.fmp_earnings import FMPEarningsProvider
-from backend.data.providers.fmp_fundamentals import FMPFundamentalsProvider
+from data.providers.fmp_earnings import FMPEarningsProvider
+from data.providers.fmp_fundamentals import FMPFundamentalsProvider
 
 __all__ = ["FMPEarningsProvider", "FMPFundamentalsProvider"]
 

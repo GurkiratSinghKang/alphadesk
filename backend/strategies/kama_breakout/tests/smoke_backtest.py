@@ -78,9 +78,9 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    from backend.backtest.engine import BacktestEngine, EngineConfig
-    from backend.data.providers.alpaca import AlpacaBarProvider
-    from backend.strategies.kama_breakout.strategy import KamaBreakout
+    from backtest.engine import BacktestEngine, EngineConfig
+    from data.providers.alpaca import AlpacaBarProvider
+    from strategies.kama_breakout.strategy import KamaBreakout
 
     params: dict = {"universe_symbols": args.symbols}
     if args.er_min is not None:

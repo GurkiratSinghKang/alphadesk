@@ -29,8 +29,8 @@ from typing import Any, Iterable
 import httpx
 import pandas as pd
 
-from backend.core.config import settings
-from backend.data.providers.cache import TTL_DAILY, TTL_INTRADAY, cached
+from core.config import settings
+from data.providers.cache import TTL_DAILY, TTL_INTRADAY, cached
 
 logger = logging.getLogger(__name__)
 

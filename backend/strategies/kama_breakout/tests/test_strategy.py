@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.backtest.types import (
+from backtest.types import (
     AssetClass,
     Context,
     Fill,
@@ -171,7 +171,7 @@ def _build_ctx(
 def test_metadata_matches_spec():
     """Import-time registration plus basic metadata sanity."""
 
-    from backend.strategies.registry import get_meta, get_strategy
+    from strategies.registry import get_meta, get_strategy
 
     meta = get_meta("kama_breakout")
     assert meta.name == "kama_breakout"
@@ -343,7 +343,7 @@ def test_sizing_obeys_risk_per_trade():
     sig = signals[0]
 
     # Derive ATR from the same series to cross-check sizing.
-    from backend.indicators.volatility import atr
+    from indicators.volatility import atr
 
     a = float(
         atr(df["high"], df["low"], df["close"], period=22).iloc[-1]

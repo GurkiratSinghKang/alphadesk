@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.tuner.search import Categorical, FloatRange, IntRange
+from tuner.search import Categorical, FloatRange, IntRange
 
 
 # --------------------------------------------------------------------------- #
