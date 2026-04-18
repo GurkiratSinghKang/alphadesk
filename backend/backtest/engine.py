@@ -77,6 +77,49 @@ def _d(x) -> Decimal:
     return Decimal(str(x))
 
 
+def _bs_fallback_from_leg(
+    leg: "OptionLeg",
+    underlying_price: Decimal,
+    asof: date,
+) -> Optional[Decimal]:
+    """Black-Scholes fallback price when the options provider has no bar.
+
+    Uses the leg's ``strike``, ``expiry``, and ``right``; assumes a 25% IV
+    and 4.5% risk-free rate as last-resort defaults. Returns ``None`` when
+    the leg lacks the metadata needed for BSM.
+    """
+
+    if (
+        leg.strike is None
+        or leg.expiry is None
+        or leg.right is None
+        or underlying_price is None
+    ):
+        return None
+    try:
+        from backend.indicators.options import bs_price
+    except Exception:
+        return None
+    days = (leg.expiry - asof).days if hasattr(leg.expiry, "__sub__") else 0
+    tau = max(1.0 / 365.0, float(days) / 365.0)
+    call_put = "call" if str(leg.right).upper().startswith("C") else "put"
+    try:
+        px = bs_price(
+            spot=float(underlying_price),
+            strike=float(leg.strike),
+            tau=tau,
+            r=0.045,
+            q=0.0,
+            sigma=0.25,
+            call_put=call_put,
+        )
+    except Exception:
+        return None
+    if px <= 0:
+        return None
+    return Decimal(str(px))
+
+
 @dataclass
 class EngineConfig:
     start: date
@@ -119,7 +162,14 @@ class BacktestEngine:
         self.portfolio.borrow_rate = self.cost_model.borrow_rate(
             "__default__"
         )
-        self.executor = ExecutionSimulator(self.cost_model)
+        # Wire the options_provider and a Black-Scholes theoretical-price
+        # fallback into the executor so multi-leg Signals price at real
+        # per-contract premiums rather than the underlying's close.
+        self.executor = ExecutionSimulator(
+            self.cost_model,
+            options_provider=self.options_provider,
+            options_bs_fallback=_bs_fallback_from_leg,
+        )
 
         # Deterministic RNG for any strategy that asks for one via Context.
         self._rng = np.random.default_rng(config.seed)

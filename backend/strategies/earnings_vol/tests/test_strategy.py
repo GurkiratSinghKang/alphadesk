@@ -375,10 +375,9 @@ def test_multi_leg_signal_shape_and_sign():
     sigs = list(strat.generate_signals(asof, ctx))
     assert len(sigs) == 1, f"expected 1 Signal, got {len(sigs)}: {sigs}"
     sig = sigs[0]
-    # Strategy emits using a synthetic symbol so the engine's multi-leg
-    # fill path is priced off our injected spread-price bar rather than
-    # the underlying's stock price. See ``polygon_helpers.SyntheticBarProvider``.
-    assert sig.symbol.startswith("EVOL:AAPL:"), sig.symbol
+    # The Signal is keyed by the real underlying; the engine's multi-leg
+    # fill path prices each leg from options_provider.contract_bars.
+    assert sig.symbol == "AAPL", sig.symbol
     assert sig.legs and len(sig.legs) == 4
     # Two SELL body + two BUY wing legs.
     body = [l for l in sig.legs if l.side is Side.SELL]
@@ -473,24 +472,31 @@ def test_next_open_exit_emits_four_leg_close():
 
     # Now advance to the exit session. The strategy stashed the pending
     # trade on ctx.state; manage() should emit a closing signal at MOO.
-    # Simulate the engine having booked the entry fill: add a Position
-    # for the synthetic symbol so manage()'s "flat-position pruning"
-    # does not strip out pending before the exit fires.
+    # Simulate the engine having booked the entry fill: add an OPTION
+    # leg Position per leg so manage()'s retirement logic doesn't strip
+    # out the pending trade before the exit fires.
     entry_sig = entry_sigs[0]
-    ctx.positions = [
+    leg_positions = [
         Position(
-            symbol=entry_sig.symbol,
-            quantity=entry_sig.quantity,
-            avg_price=Decimal("100"),
-            asset_class=AssetClass.MULTILEG,
-            legs=entry_sig.legs,
+            symbol=leg.contract_id,
+            quantity=-abs(entry_sig.quantity) * leg.qty if leg.side is Side.SELL
+            else +abs(entry_sig.quantity) * leg.qty,
+            avg_price=Decimal("1"),
+            asset_class=AssetClass.OPTION,
+            multiplier=leg.multiplier,
+            underlying=leg.underlying,
+            expiry=leg.expiry,
+            strike=leg.strike,
+            right=leg.right,
         )
+        for leg in entry_sig.legs
     ]
+    ctx.positions = leg_positions
     ctx.asof = tomorrow
     exit_sigs = list(strat.manage(tomorrow, ctx))
     assert len(exit_sigs) == 1
     esig = exit_sigs[0]
-    assert esig.symbol.startswith("EVOL:AAPL:"), esig.symbol
+    assert esig.symbol == "AAPL", esig.symbol
     assert len(esig.legs) == 4
     assert esig.order_type is OrderType.MOO
     # Closing legs are flipped vs the entry.

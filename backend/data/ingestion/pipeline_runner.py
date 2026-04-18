@@ -2,9 +2,9 @@
 
 Strategies run at their academically optimal times, not all at once:
 
-    6:00 AM ET  — Pre-market: PEAD (earnings scan), Claude Alpha (overnight news), Regime model
-    9:35 AM ET  — Market open: execute PEAD T+1 entries, Claude Alpha high-conviction
-   10:05 AM ET  — Post-opening range: ORB breakouts, VWAP monitoring begins, VCP triggers
+    6:00 AM ET  — Pre-market: PEAD (earnings scan), Regime model
+    9:35 AM ET  — Market open: execute PEAD T+1 entries
+   10:05 AM ET  — Post-opening range: ORB breakouts, VWAP monitoring begins
    12:00 PM ET  — Midday: Pairs z-score check, KAMA squeeze scan
     3:30 PM ET  — Close window: RSI-2 (MOC entry), Mean Reversion (MOC), VRP scan,
                   Earnings Vol, position exits
@@ -43,13 +43,13 @@ ET = ZoneInfo("America/New_York")
 # ─── Strategy Groups by Optimal Run Time ────────────────────
 
 # Pre-market analysis (6:00 AM) — scan overnight events
-PREMARKET_STRATEGIES = ["pead", "claude_alpha", "regime_adaptive"]
+PREMARKET_STRATEGIES = ["pead", "regime_adaptive"]
 
 # Market open (9:35 AM) — execute pre-market signals
-OPEN_STRATEGIES = ["pead", "claude_alpha"]
+OPEN_STRATEGIES = ["pead"]
 
 # Post-opening range (10:05 AM) — intraday breakout strategies
-POST_OR_STRATEGIES = ["orb", "vwap_strategy", "vcp_breakout"]
+POST_OR_STRATEGIES = ["orb", "vwap"]
 
 # Midday (12:00 PM) — market-neutral and squeeze strategies
 MIDDAY_STRATEGIES = ["pairs_trading", "kama_breakout"]
@@ -154,9 +154,9 @@ async def _scheduler_loop() -> None:
 
     logger.info(
         "Pipeline scheduler started (multi-window mode)\n"
-        "  6:00 AM  — Pre-market: PEAD, Claude Alpha, Regime\n"
-        "  9:35 AM  — Open: PEAD T+1, Claude Alpha executions\n"
-        " 10:05 AM  — Post-OR: ORB, VWAP, VCP\n"
+        "  6:00 AM  — Pre-market: PEAD, Regime\n"
+        "  9:35 AM  — Open: PEAD T+1 executions\n"
+        " 10:05 AM  — Post-OR: ORB, VWAP\n"
         " 12:00 PM  — Midday: Pairs, KAMA\n"
         "  3:30 PM  — Close: RSI-2 (MOC), Mean Rev, VRP, Earnings Vol\n"
         "  3:55 PM  — Monthly: TS Momentum, Dual Momentum, MQ\n"

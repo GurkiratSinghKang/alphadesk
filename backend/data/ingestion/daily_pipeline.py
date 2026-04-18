@@ -714,8 +714,8 @@ async def _run_pipeline_inner(
 
             # ---- Populate momentum data for the momentum filter ----
             try:
-                from data.ingestion.strategy_runner import _get_screener_results
-                screened = _get_screener_results(limit=100)
+                from data.ingestion.strategy_runner import get_screener_results
+                screened = get_screener_results(limit=100)
                 momentum_data: dict[str, float] = {}
                 for stock in screened:
                     momentum_data[stock["symbol"]] = stock.get("change_pct", 0)

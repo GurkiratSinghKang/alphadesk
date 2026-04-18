@@ -6,38 +6,29 @@ crisis kill-switch. Position is a 16-delta strangle ~30 DTE alongside an
 optional 5-delta far-OTM put (1 put per N strangles). Exits: 50 % max
 profit, 21 DTE, 200 % loss stop, VIX kill switch.
 
-Engine plumbing note
---------------------
-The AlphaDesk backtest engine (see ``backend.backtest.execution.py:200-246``)
-uses the *underlying*'s ``bar.close`` as the fill price for multi-leg
-options Signals. That is fine as a schema/audit-trail surface (``Fill``
-carries the ``legs`` tuple) but produces nonsensical cash deltas for an
-options spread (SPY's 500-dollar close is not the spread's premium).
+Engine integration
+------------------
+The strategy emits regular multi-leg :class:`Signal`s that the AlphaDesk
+backtest engine prices via :class:`ExecutionSimulator._fill_multileg_option`.
+Each leg's per-contract premium is fetched from the options provider's
+``contract_bars`` endpoint; there is no synthetic P&L ledger inside the
+strategy. The strategy's :meth:`manage` reads
+:attr:`Context.positions` directly (one :class:`Position` per option leg,
+``AssetClass.OPTION``) to drive TP/SL/DTE decisions.
 
-Rather than modify the engine, VRP Harvest **runs entirely on a
-synthetic options P&L model**:
-
-- Every entry / exit is recorded in ``ctx.state["vrp_harvest.positions"]``
-  and ``ctx.state["vrp_harvest.synth_trades"]`` with (entry_mid,
-  exit_mid, n_spreads, legs).
-- Synthetic P&L is integrated into ``ctx.state["vrp_harvest.synth_cash"]``
-  on every fill event inside the strategy itself. The engine's own
-  equity curve is *flat* (we never emit engine-visible Signals), and
-  the caller (smoke / tuning / OOS scripts) recovers the real equity
-  curve via the helper :func:`synthetic_equity_curve`.
-- The signals emitted by :meth:`generate_signals` / :meth:`manage` are
-  returned only as an audit artefact; they are **not** fed to the
-  engine by the scripts in this package. Integration with the engine's
-  equity curve is done post-hoc by the smoke/tune harness.
+We still keep an in-strategy ledger of ``PositionRecord`` entries — not
+for cash accounting, but to group legs into a logical "strangle" and
+remember entry metadata (strikes, expiry, credit received) that
+per-leg Positions do not carry on their own.
 
 Data contracts:
 - ``ctx.options_provider.chain_snapshot(underlying, asof)`` — returns a
   DataFrame with at least columns
   ``[contract_ticker, expiration, strike, option_type, bid, ask, last,
     iv, delta, gamma, theta, vega]``.
-  On older dates on Polygon Developer tier the last 6 may be None; we
-  solve IV via :func:`backend.indicators.options.iv_from_price` from the
-  mid-price.
+- ``ctx.options_provider.contract_bars(contract, start, end)`` — daily
+  aggregates for a specific option contract. Used by the engine for
+  per-leg fill pricing.
 - ``ctx.bar_provider.bars([underlying], asof, asof, tf='1D')`` — returns
   a DataFrame with OHLCV columns for the underlying.
 
@@ -366,7 +357,10 @@ class VRPHarvestStrategy:
             asof=asof,
         )
 
-        # Record our internal state for `manage()` to consult.
+        # Record our internal state for `manage()` to consult. The engine
+        # owns cashflow via Portfolio; this ledger only tracks metadata
+        # needed for grouping legs into a logical strangle and for
+        # management decisions (credit level, expiry, n_spreads).
         pos_id = f"vrp_{asof.isoformat()}"
         rec = PositionRecord(
             pos_id=pos_id,
@@ -379,18 +373,6 @@ class VRPHarvestStrategy:
         )
         _save_position(cache, rec)
         cache[f"{_NS}.last_entry_date"] = asof
-
-        # Synthetic P&L accrual: credit received on the strangle.
-        # Options are 100-share contracts.
-        _accrue_synth(
-            cache,
-            asof=asof,
-            cashflow=float(credit_per_spread) * float(n_spreads) * 100.0,
-            kind="enter-strangle",
-            pos_id=pos_id,
-            n_spreads=int(n_spreads),
-            per_spread_mid=float(credit_per_spread),
-        )
 
         out: list[Signal] = [strangle_signal]
         if hedge_leg is not None and n_hedge > 0:
@@ -426,16 +408,6 @@ class VRPHarvestStrategy:
                 tag=f"{_NS}-hedge",
             )
             _save_position(cache, hedge_rec)
-            # Synthetic P&L: debit paid for the tail-hedge puts.
-            _accrue_synth(
-                cache,
-                asof=asof,
-                cashflow=-float(hedge_leg.mid_entry) * float(n_hedge) * 100.0,
-                kind="enter-hedge",
-                pos_id=hedge_rec.pos_id,
-                n_spreads=int(n_hedge),
-                per_spread_mid=float(hedge_leg.mid_entry),
-            )
             out.append(hedge_signal)
         return out
 
@@ -563,22 +535,6 @@ class VRPHarvestStrategy:
             rec.closed_on = asof
             rec.exit_reason = reason
             rec.exit_debit_per_spread = float(per_spread_mid)
-
-            # Synthetic P&L: short-premium paid back = debit (negative);
-            # long hedge sold = credit received (positive).
-            if is_short_premium:
-                cashflow = -float(per_spread_mid) * float(rec.n_spreads) * 100.0
-            else:
-                cashflow = +float(per_spread_mid) * float(rec.n_spreads) * 100.0
-            _accrue_synth(
-                cache,
-                asof=asof,
-                cashflow=cashflow,
-                kind=f"exit-{reason}",
-                pos_id=rec.pos_id,
-                n_spreads=int(rec.n_spreads),
-                per_spread_mid=float(per_spread_mid),
-            )
         _flush_positions(cache, positions)
         return out
 
@@ -1132,16 +1088,16 @@ def _flush_positions(cache: dict, recs: list[PositionRecord]) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Synthetic P&L ledger                                                        #
+# Synthetic P&L ledger (DEPRECATED — retained for backward compat with older  #
+# smoke / tune scripts that ran the strategy outside the real engine).        #
+# The strategy no longer writes to the synth ledger; new integrations should  #
+# run through :class:`BacktestEngine` and read ``result.equity_curve``.       #
 # --------------------------------------------------------------------------- #
 def _synth_trades(cache: dict) -> list[dict]:
     return cache.setdefault(f"{_NS}.synth_trades", [])
 
 
 def _synth_cash(cache: dict) -> list[tuple[date, float]]:
-    """Chronological list of (asof, running_cash_delta). We treat the
-    starting position as zero and add each entry/exit cashflow."""
-
     return cache.setdefault(f"{_NS}.synth_cash", [])
 
 
@@ -1155,6 +1111,11 @@ def _accrue_synth(
     n_spreads: int,
     per_spread_mid: float,
 ) -> None:
+    """Legacy synthetic-cashflow accrual, retained for test doubles that
+    still call it directly. The production strategy no longer invokes
+    this helper — engine Portfolio handles cashflow natively.
+    """
+
     _synth_trades(cache).append(
         {
             "asof": asof,
@@ -1176,36 +1137,69 @@ def synthetic_equity_curve(
     sessions: list[date],
     starting_cash: float,
 ) -> pd.DataFrame:
-    """Build the strategy's equity curve from the synthetic P&L ledger.
+    """Build the strategy's equity curve from the in-strategy
+    :class:`PositionRecord` ledger + BS per-leg revaluation.
 
     For each session we compute:
         equity_t = starting_cash
                   + cumulative_realised_cashflow(t)
                   + mark_to_market_of_open_positions(t)
 
-    ``mark_to_market`` evaluates every open position at today's spot +
-    today's chain (via the strategy's :meth:`_revalue_legs`). For
-    positions that have closed in the ledger the MTM contribution is
-    zero (the realised cashflow has already been booked).
+    Realised cashflows are derived from ``PositionRecord`` entries that
+    have an ``exit_debit_per_spread`` (closing debit) and a
+    ``credit_per_spread`` (entry credit). MTM uses the strategy's
+    :meth:`_revalue_legs` against the current chain.
+
+    This helper is retained for backwards compatibility with the
+    pre-engine smoke / tune / OOS scripts that run the strategy via
+    ``generate_signals`` + ``manage`` directly. New integrations should
+    run through :class:`BacktestEngine` and read ``result.equity_curve``
+    instead — that path now produces real P&L via the multi-leg fill
+    plumbing and no longer requires this helper.
     """
 
     cache = cache_of(ctx)
-    trades = _synth_trades(cache)
-    # Index trades by date for fast lookup.
-    realised_by_date: dict[date, float] = {}
-    for t in trades:
-        realised_by_date[t["asof"]] = realised_by_date.get(t["asof"], 0.0) + t["cashflow"]
 
-    # Build per-position open/close ranges for MTM.
+    # Build per-position records and derive realised cashflows from
+    # their open/close pair. Each short-premium strangle books:
+    #     credit_entry = +credit_per_spread * n_spreads * 100   (on opened_on)
+    #     debit_exit   = -exit_debit_per_spread * n_spreads * 100 (on closed_on)
+    # Long-premium (hedge) positions: flip the sign.
     pos_map = _positions_map(cache)
-    open_ranges: list[tuple[PositionRecord]] = list(pos_map.values())
+    records: list[PositionRecord] = list(pos_map.values())
+
+    realised_by_date: dict[date, float] = {}
+    for rec in records:
+        n = rec.n_spreads
+        credit = float(rec.credit_per_spread)
+        if credit > 0:
+            # Short-premium: credit in on open, pay to close.
+            realised_by_date[rec.opened_on] = (
+                realised_by_date.get(rec.opened_on, 0.0) + credit * n * 100.0
+            )
+            if rec.closed_on is not None and rec.exit_debit_per_spread is not None:
+                realised_by_date[rec.closed_on] = (
+                    realised_by_date.get(rec.closed_on, 0.0)
+                    - float(rec.exit_debit_per_spread) * n * 100.0
+                )
+        else:
+            # Long-premium hedge: debit on open, credit on close.
+            debit = -credit
+            realised_by_date[rec.opened_on] = (
+                realised_by_date.get(rec.opened_on, 0.0) - debit * n * 100.0
+            )
+            if rec.closed_on is not None and rec.exit_debit_per_spread is not None:
+                realised_by_date[rec.closed_on] = (
+                    realised_by_date.get(rec.closed_on, 0.0)
+                    + float(rec.exit_debit_per_spread) * n * 100.0
+                )
 
     rows: list[dict] = []
     running_cash = 0.0
     for s in sessions:
         running_cash += realised_by_date.get(s, 0.0)
         mtm = 0.0
-        for rec in open_ranges:
+        for rec in records:
             if rec.opened_on > s:
                 continue
             if rec.closed_on is not None and rec.closed_on <= s:
@@ -1218,7 +1212,6 @@ def synthetic_equity_curve(
             per_mid = strat._revalue_legs(rec.legs, spot, s, chain, strat.params)
             if per_mid is None:
                 continue
-            # For short premium: MTM = credit_received * n - current_cost * n (multiplied by 100).
             n = rec.n_spreads
             if rec.credit_per_spread > 0:
                 # short premium: unrealised P&L = (credit - current_cost) * n * 100

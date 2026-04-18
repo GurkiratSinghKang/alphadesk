@@ -18,195 +18,196 @@ export interface StrategyContent {
 export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "momentum-quality": {
     thesis:
-      "This strategy combines the well-documented cross-sectional momentum anomaly with fundamental quality screening to construct a portfolio of stocks exhibiting both strong price trends and robust financial health. The momentum component follows the canonical 12-minus-1 month formation period established by Jegadeesh & Titman (1993), skipping the most recent month to avoid the short-term reversal effect documented by Lehmann (1990). By ranking the investable universe on prior returns and selecting from the top decile, the strategy captures the tendency of past winners to continue outperforming over intermediate horizons — an effect that has persisted across geographies and decades, as confirmed by Asness, Moskowitz & Pedersen (2013) in their seminal study of value and momentum everywhere.\n\nThe quality overlay uses the Piotroski F-Score (Piotroski, 2000), a composite measure of profitability, leverage, and operating efficiency, requiring a score of 6 or higher for portfolio inclusion. This filter serves a dual purpose: it eliminates financially distressed firms that may exhibit high momentum due to speculative activity or short squeezes, and it selects for companies whose price appreciation is grounded in genuine fundamental improvement. Research by Asness, Frazzini & Pedersen (2019) demonstrates that quality factors earn a significant premium and, critically, exhibit negative correlation with momentum drawdowns.\n\nThe intersection of momentum and quality directly addresses the primary risk of pure momentum strategies — catastrophic crash risk during market reversals. Momentum crashes, as analyzed by Daniel & Moskowitz (2016), tend to concentrate in low-quality, high-beta names. By excluding these through the F-Score screen, the strategy preserves the core momentum premium while substantially reducing tail risk, resulting in a more favorable Sharpe ratio and maximum drawdown profile than either factor in isolation.",
-    edge: "Exploits the behavioral underreaction to gradual information flow in fundamentally sound companies, where institutional herding amplifies trends that quality screening ensures are grounded in real earnings improvement rather than speculative excess.",
+      "A long-only cross-sectional factor strategy that combines the Jegadeesh-Titman (1993) 12-1 month momentum signal with the Piotroski (2000) F-score quality gate. On the last trading session of each month the strategy ranks a ~47-name universe of ex-Financials / ex-Utilities S&P 500 large-caps by percentile-rank of momentum and percentile-rank of F-score, requires a hard F-score floor, and holds the top 15 names equal-weighted until the next rebalance.\n\nThe quality overlay is motivated by Daniel & Moskowitz (2016) on momentum crashes: the worst left-tail momentum episodes (2009, 2022 rotation) concentrate in low-quality names, and a Piotroski gate trims them before they enter the book. Asness, Frazzini & Pedersen (2019) document that a quality-tilted composite earns materially better risk-adjusted returns than either factor alone.\n\nNo intraday logic, no stops, no take-profits. The signal is monthly; per-name stops destroy monthly-horizon signals (see Barroso & Santa-Clara 2015). The 2023-2024 walk-forward OOS Sharpe came in at 2.209 with an 8.0% max drawdown — above the 0.8 design target, but the 2023-24 regime was unusually kind to mega-cap quality momentum (NVDA / META / AAPL rally). Published long-only 12-1 momentum is a 0.6-0.9 Sharpe factor; treat the achieved OOS number as a regime-specific upside, not a long-run expectation. See audit-reports/phase1-momentum_quality.md.",
+    edge:
+      "Stacks two independent factor signals — Jegadeesh-Titman relative momentum and Piotroski F-score quality — where the quality gate filters the low-quality names that historically drive momentum's left tail.",
     riskProfile: {
       level: "Medium",
       description:
-        "Quality screening materially reduces momentum crash risk, but the strategy remains exposed to broad factor rotations and can underperform during sharp reversals from growth to value.",
+        "Long-only equity factor book, 15 concurrent names. No sector neutrality — 2023-24 concentrated in tech; expect 10-15% drawdowns in a sharp growth-to-value rotation. Monthly signal; no intraday protection.",
     },
     parameters: {
-      rebalanceFrequency: "Monthly (first trading day)",
-      universe: "S&P 500 constituents, excluding financials and REITs",
-      positionSizing: "Equal-weight across selected positions",
+      rebalanceFrequency: "Monthly (last trading session of month; MOO fill next open)",
+      universe:
+        "47 liquid US large-caps, Financials and Utilities excluded (QMJ convention). Point-in-time F-scores via FMP filingDate filter.",
+      positionSizing: "Equal-weight 1/top_n across the top names selected by composite rank",
       entryCriteria:
-        "Top-decile 12-minus-1 month momentum AND Piotroski F-Score >= 6",
+        "Top composite rank of 12-1 month momentum + F-score percentile, F-score >= 7 hard gate, absolute momentum >= 5.4%, no earnings within 3 days",
       exitCriteria:
-        "Falls below top-quartile momentum OR F-Score drops below 5",
-      maxPositions: "20",
+        "Falls out of top-N at the next monthly rebalance. No per-name stops, no take-profits.",
+      maxPositions: "15",
     },
     howItWorks: [
-      "Screen the S&P 500 universe monthly, ranking all stocks by 12-minus-1 month total return (skipping the most recent month to avoid reversal effects).",
-      "Filter the top-decile momentum stocks through a Piotroski F-Score quality screen, requiring a score of 6 or higher to confirm fundamental health.",
-      "Construct an equal-weight portfolio of qualifying stocks (up to 20 positions) on the first trading day of each month.",
-      "Monitor positions daily for F-Score deterioration or momentum rank collapse; exit individual names that fall below the top-quartile momentum threshold or whose F-Score drops below 5.",
-      "Full portfolio rebalance occurs monthly, replacing exited positions with the next-qualifying candidates from the ranked universe.",
+      "On the last trading session of each month, compute 12-1 month total return for every name in the 47-ticker universe (adjusted closes).",
+      "Fetch point-in-time Piotroski F-scores from FMP (filtered by filingDate so no look-ahead); apply a hard F-score >= 7 gate and skip names with earnings in the next 3 days.",
+      "Compute cross-sectional percentile ranks for momentum and F-score; blend with quality_weight ~0.32 into a composite score.",
+      "Select the top 15 names; any position not in the new top 15 is closed MOO on the next session open, new entrants are sized to 1/15 equal-weight.",
+      "Hold until the next monthly rebalance. No stops, no take-profits, no intra-month intervention.",
     ],
-    whenToUse: "This strategy excels during sustained bull markets with clear sector leadership and trending conditions. It performs best when market breadth is expanding and institutional capital is flowing into quality growth names. Avoid deploying during sharp factor rotation episodes (e.g., sudden growth-to-value pivots) or during periods of extreme market stress where momentum crashes are historically concentrated.",
+    whenToUse:
+      "Designed as a core equity allocation in trending bull regimes where mega-cap leadership persists. Expect the largest drawdowns during sharp growth-to-value rotations (Jan 2022-style) and momentum unwind episodes; the quality gate softens but does not eliminate them.",
     risks: [
-      "Momentum crash risk during sharp market reversals, though quality screening reduces this significantly compared to pure momentum strategies.",
-      "Factor crowding: when too many systematic strategies chase the same momentum+quality names, exit liquidity can evaporate during drawdowns.",
-      "Underperformance during value-led rallies where low-quality, beaten-down names lead the recovery.",
-      "Monthly rebalancing frequency may lag rapid regime changes, resulting in holding stale winners.",
+      "No sector neutrality at selection — the book will concentrate 2-3 sectors during persistent regimes; documented trade-off.",
+      "Fixed 47-name universe does not re-screen; new S&P entrants (PLTR, etc.) and falling stars are not captured until the universe is refreshed manually.",
+      "Single-split walk-forward on 2023-24 OOS — the 2.21 Sharpe carries wide confidence intervals; the published long-only factor band is 0.6-0.9.",
     ],
   },
 
   pead: {
     thesis:
-      "Post-Earnings Announcement Drift is one of the most robust and persistent anomalies in empirical finance, first rigorously documented by Bernard & Thomas (1989, 1990). The phenomenon describes the tendency of stock prices to continue drifting in the direction of an earnings surprise for 60 to 90 days following the announcement, contradicting the semi-strong form of the Efficient Market Hypothesis. This strategy monetizes PEAD through defined-risk bull call spreads on companies that report earnings above consensus estimates, capturing the directional drift while capping downside exposure through the spread structure.\n\nThe persistence of PEAD is attributed to a combination of investor underreaction to earnings news — rooted in anchoring bias and the slow diffusion of information through analyst revisions — and institutional constraints that prevent rapid price adjustment. Livnat & Mendenhall (2006) show that the drift is strongest for firms with lower analyst coverage, higher earnings surprise magnitude, and more persistent earnings processes. The strategy exploits this by filtering for surprise magnitude relative to historical standard deviation (SUE score) and targeting names where the informational gap between the earnings signal and full price incorporation is widest.\n\nThe use of bull call spreads rather than outright equity positions reflects a deliberate risk management choice. Options allow the strategy to express a directional view with defined maximum loss, while benefiting from the favorable gamma profile in the days immediately following earnings when post-announcement volatility is often underpriced relative to realized moves. The 30-to-60-day holding period aligns with the empirically observed drift window while avoiding the decay of the signal documented by Ke & Ramalingegowda (2005) beyond the quarterly horizon.",
-    edge: "Captures systematic investor underreaction to earnings surprises — a well-documented behavioral anomaly where prices take 60-90 days to fully incorporate the information content of earnings beats, amplified by anchoring bias in analyst estimate revisions.",
+      "A long/short event-driven equity strategy that trades Post-Earnings Announcement Drift using the Bernard & Thomas (1989, 1990) Standardized Unexpected Earnings (SUE) signal. For each quarterly report, SUE is computed as (actual EPS - consensus estimate) / sigma_surprise, where sigma_surprise is the trailing 4-8 quarter standard deviation of the forecast error. Names clearing |SUE| >= threshold are held for a 40-trading-day drift window with no stops, no take-profits, and a time-based MOC exit.\n\nLivnat & Mendenhall (2006) established that analyst-consensus SUE dominates the seasonal-random-walk variant post-1990; we use FMP consensus estimates and historical surprises. The drift window matches the Bernard-Thomas canonical 60-calendar-day window; no per-trade stops because PEAD's payoff is positive-skew and bracket orders clip the right tail.\n\nThe legacy AlphaDesk implementation had a fake SUE (|change_pct| vs a sector-average dict), a hardcoded weekday earnings calendar, an RNG-driven screener, and silently dropped every short signal (audit findings F1-F5). This rewrite uses real FMP earnings calendar and historical-surprise data, trades both long and short, and uses a 40-day time-stop only. 2023-2024 OOS Sharpe: 1.32, max drawdown 8.7%, 134 round-trip trades on a large-cap universe with a $5B market-cap floor. See audit-reports/phase1-pead.md.",
+    edge:
+      "Monetizes the underreaction to earnings surprises documented by Bernard & Thomas — prices continue to drift in the direction of a large SUE for 40 trading days post-announcement because analyst revisions and slower-moving capital take time to fully incorporate the news.",
     riskProfile: {
       level: "Medium",
       description:
-        "Risk is defined per trade by the spread width, but the strategy is exposed to broad market drawdowns that can overwhelm stock-specific earnings drift during periods of elevated systematic risk.",
+        "Long/short equity with 40-day holding period; defined maximum concentration via max_concurrent_positions cap. Positions ride binary event risk — no stops means a second-quarter earnings shock inside the window can move against you.",
     },
     parameters: {
-      rebalanceFrequency: "Event-driven (triggered by earnings releases)",
+      rebalanceFrequency: "Event-driven (day after each earnings release, MOO entry)",
       universe:
-        "S&P 500 and Russell 1000 stocks reporting quarterly earnings with liquid options markets",
+        "~200 curated S&P 500 mid/large-cap names with $20M ADV, $10 price floor, and >=4 quarters of prior surprise history",
       positionSizing:
-        "1-2% of portfolio NAV per spread, scaled by SUE score magnitude",
+        "Equal-weight ~10% of equity per name; signed long/short based on SUE sign; book capped at max_concurrent_positions",
       entryCriteria:
-        "EPS beat >= 1 standard deviation above consensus (SUE > 1.0), confirmed by revenue beat, with options IV percentile below 70",
+        "|SUE| >= threshold (tuned to ~1.4) AND no overlapping earnings in the next 40 trading days AND universe liquidity filters pass",
       exitCriteria:
-        "Spread expiration at 30-60 DTE, or early close at 80% of max profit",
+        "MOC close exactly 40 trading days after entry. No stops, no take-profits.",
       maxPositions: "15",
     },
     howItWorks: [
-      "Monitor the earnings calendar daily for upcoming quarterly earnings announcements across the S&P 500 and Russell 1000.",
-      "After each earnings release, compute the Standardized Unexpected Earnings (SUE) score by comparing actual EPS to consensus estimates relative to historical surprise variability.",
-      "Filter for stocks with SUE > 1.0 (strong beats) that also beat on revenue, with options IV percentile below 70 (avoiding overpaying for already-priced drift).",
-      "Enter bull call spreads with 30-60 DTE on qualifying names, sizing at 1-2% of NAV per spread, scaled by SUE magnitude.",
-      "Hold through the drift window; close at 80% of max profit or at spread expiration. The defined-risk spread structure caps maximum loss per trade.",
+      "Each morning, pull the FMP earnings calendar for the prior session (BMO + AMC reporters are treated as known by T-1 close).",
+      "Compute SUE as (actual - estimate) / trailing-quarter sigma; require at least 4 prior quarters of surprise history to size the denominator.",
+      "Rank the day's surprises by |SUE| descending; take the top percent of the day by tuner selection, apply universe filters.",
+      "Emit MOO entries: long if SUE > threshold, short if SUE < -threshold and shorts are enabled. Size equal-weight, sign-aware.",
+      "Hold exactly 40 trading days, then MOC close. Positions with overlapping upcoming earnings are rejected at entry time.",
     ],
-    whenToUse: "PEAD works across market regimes because it is event-driven rather than directionally dependent. It is most effective during normal earnings seasons with typical dispersion. Performance improves when analyst coverage is thin and earnings surprises are large relative to historical variability. Avoid heavy deployment during periods of extreme macro uncertainty where stock-specific signals are overwhelmed by systematic risk (e.g., sudden tariff announcements, rate shock events).",
+    whenToUse:
+      "Works across market regimes because the signal is event-driven and long/short. Strongest when earnings dispersion is high and analyst consensus lags the realized surprise distribution. Expect reduced signal during the Q2 2020 post-COVID period when sigma_surprise inflated and compressed |SUE|.",
     risks: [
-      "Broad market drawdowns can overwhelm stock-specific drift, causing all spreads to lose value simultaneously regardless of earnings quality.",
-      "Earnings surprise quality degradation: if consensus estimates become more accurate over time, SUE scores compress and drift magnitude shrinks.",
-      "Options liquidity risk: illiquid spread markets can result in poor fill prices that erode the edge.",
-      "Crowding from other PEAD-focused systematic strategies can front-run the drift, reducing available alpha.",
+      "Earnings surprise data uses FMP's eventually-revised EPS, not a true point-in-time I/B/E/S snapshot; small look-ahead bias possible.",
+      "40-day holding ride a second-quarter earnings event if the calendar filter misses it; overlapping-earnings filter is a best-effort gate.",
+      "Single-split walk-forward — 134 round trips gives wide Sharpe CIs. Published post-2005 PEAD band is 0.3-0.7 (Chu et al. 2020); 1.32 is at the top.",
     ],
   },
 
   "vrp-harvesting": {
     thesis:
-      "The Volatility Risk Premium — the persistent spread between implied and realized volatility — represents one of the most well-documented and economically intuitive risk premia in financial markets. Ilmanen (2011) provides extensive evidence across asset classes showing that implied volatility systematically exceeds subsequent realized volatility approximately 85% of the time, reflecting the insurance premium that hedgers pay to option sellers. This strategy systematically harvests this premium by selling delta-neutral strangles on underlyings exhibiting elevated implied volatility rank, effectively acting as the insurance provider in the options market.\n\nThe economic rationale for the VRP is grounded in the asymmetric utility functions of market participants. Institutional investors, constrained by mandates, regulatory requirements, and career risk, demonstrate persistent demand for downside protection that exceeds actuarially fair pricing. Bollen & Whaley (2004) show this demand pressure creates a structural supply-demand imbalance, particularly in index options, that results in chronically overpriced implied volatility. The strategy targets underlyings with IV Rank above 50, ensuring entry only when implied volatility is elevated relative to its own history — a condition that maximizes the expected premium capture while providing a margin of safety against realized volatility spikes.\n\nPosition construction employs delta-neutral strangles with strikes selected at approximately 16-delta on each side (roughly one standard deviation), creating a wide profit zone consistent with the empirical distribution of returns. Portfolio-level Greeks are actively managed: delta is hedged within defined bands, and aggregate vega exposure is capped to prevent concentration risk. The strategy incorporates regime-awareness by reducing notional exposure during periods of elevated VIX term structure inversion, which signals that market participants are pricing near-term risk above forward expectations — a condition historically associated with VRP compression or inversion.",
-    edge: "Harvests the structural supply-demand imbalance in options markets where institutional hedging demand for tail protection chronically overprices implied volatility relative to subsequent realized moves, particularly during periods of elevated but mean-reverting IV.",
+      "A short-volatility options strategy that systematically sells 16-delta SPY strangles at ~30 DTE to harvest the variance risk premium documented by Bakshi & Madan (2006) and Carr & Wu (2009) — the chronic wedge between implied volatility and subsequent realized volatility on index options. The book is managed with three hard gates: an entry threshold on live VRP (IV_30 - HV_20 >= 2%), a term-structure gate that refuses entries into backwardation, and a VIX kill switch that flattens the book when 30-day ATM IV crosses 35%.\n\nShort-vol without tail protection is famously lethal (XIV 5-Feb-2018, Aug-2024 JPY carry). This rewrite follows Dubinsky & Johannes (2023): every strangle is paired with an optional 5-delta far-OTM SPY put tail hedge at a 1:5 ratio, funded from the short premium. Position sizing is theta-target (0.3% of equity per calendar day of theta), exits trigger at 50% of max profit, 200% loss, 21 DTE, or kill-switch activation.\n\nThe legacy AlphaDesk implementation issued long equity BUY signals on high-IV-rank stocks — the exact opposite of VRP harvesting (audit F2). This rewrite replaces that with a real multi-leg options program via ctx.options_provider. 2024-04 through 2024-09 smoke window: Sharpe 0.88, max drawdown 7.3%, the VIX kill switch correctly stepped the book aside for the full week around the Aug-5-2024 VIX spike. See audit-reports/phase1-vrp_harvest.md.",
+    edge:
+      "Harvests the volatility risk premium — the gap between implied and realized vol on SPX, positive ~81% of days over 2004-2024 — while the term-structure gate and VIX kill switch step aside for the specific regimes (Feb-2018, Mar-2020, Aug-2024) that destroyed unhedged short-vol programs.",
     riskProfile: {
       level: "High",
       description:
-        "Short volatility strategies carry convex downside risk — losses can be multiples of premiums collected during volatility spikes or gap moves, requiring rigorous position sizing and portfolio-level risk controls.",
+        "Short-vol options strategy with defined-risk legs via the tail-hedge overlay when enabled. Convex downside in gap moves is mitigated by the kill switch + term-structure gate, but a true Feb-2018 intraday spike between daily closes can still produce a 5-10% mark-to-market hit.",
     },
     parameters: {
-      rebalanceFrequency:
-        "Weekly rolling with daily delta adjustments",
-      universe:
-        "High-liquidity ETFs and large-cap equities with tight bid-ask spreads in options (SPY, QQQ, IWM, individual names with average options volume > 5,000 contracts/day)",
+      rebalanceFrequency: "Daily management (entry on VRP signal; exits on TP / SL / DTE / kill switch)",
+      universe: "SPY index options — 30 DTE at entry, 16-delta strangle with optional 5-delta put tail hedge",
       positionSizing:
-        "Notional exposure capped at 2x portfolio NAV; individual position max 5% of NAV based on buying-power reduction",
+        "Theta-target sizing — contracts scaled to target 0.3% of equity per calendar day of theta across the book",
       entryCriteria:
-        "IV Rank > 50, IV Percentile > 40, no binary events within DTE, VIX term structure in contango",
+        "VRP (IV_30_ATM - HV_20) >= 2%, term structure in contango (front < back), IV_30 < 35% kill switch",
       exitCriteria:
-        "50% of max profit, 21 DTE (roll or close), or position loss exceeds 2x premium collected",
+        "50% of max profit, 200% loss stop, 21 DTE roll, or IV_30 kill switch flat-book",
       maxPositions: "10",
     },
     howItWorks: [
-      "Screen the options universe for underlyings with IV Rank above 50 and IV Percentile above 40, confirming volatility is elevated relative to its own history.",
-      "Construct delta-neutral strangles with strikes at approximately 16-delta on each side (~1 standard deviation), creating a wide profit zone.",
-      "Confirm VIX term structure is in contango (front month < back month) and no binary events (earnings, FDA decisions) fall within the DTE window.",
-      "Manage portfolio-level Greeks daily: hedge delta within defined bands, cap aggregate vega exposure, and reduce notional during VIX backwardation.",
-      "Close positions at 50% of max profit, at 21 DTE (roll or close), or if position loss exceeds 2x premium collected.",
+      "Each session, fetch the live SPY option chain snapshot from ctx.options_provider. Solve IV via BS inversion if Greeks missing.",
+      "Compute VRP = IV_30_ATM - HV_20_annualized. Compute term structure = IV_30_ATM - IV_60_ATM. Check the 35% kill switch.",
+      "If gates pass and no position is open, sell 16-delta call + 16-delta put at 30 DTE. If tail_hedge_ratio > 0, buy one 5-delta put per N strangles.",
+      "Size the strangle count so per-position theta fits the 0.3%-of-equity daily target.",
+      "Manage daily: close at 50% max profit, 200% loss stop, or 21 DTE roll. If IV_30 crosses 35% or term structure inverts, flatten the entire vol-short book and refuse new entries.",
     ],
-    whenToUse: "VRP harvesting thrives during periods of elevated but stable implied volatility, particularly when VIX is in the 18-30 range and term structure is in contango. The strategy performs best when fear is priced in but not materializing -- markets are nervous but not crashing. Avoid during sharp volatility regime transitions (VIX spiking above 35) or when the term structure is deeply inverted, signaling imminent realized vol.",
+    whenToUse:
+      "Best in stable, moderately-elevated VIX regimes (18-30) with contango term structure — the paying-for-insurance regime where realized vol consistently underruns implied. The kill switch is designed to stand aside in Feb-2018 / Mar-2020 / Aug-2024 events; expect extended flat-book periods during sustained backwardation.",
     risks: [
-      "Convex downside: losses during vol spikes can be multiples of premiums collected, and gap moves can breach the strangle strikes instantly.",
-      "Correlation risk: during market stress, all short vol positions move against you simultaneously, amplifying portfolio-level drawdown.",
-      "Regime change risk: extended low-vol periods can lull the strategy into complacency before a sudden vol expansion.",
-      "Liquidity withdrawal: during crisis events, options bid-ask spreads widen dramatically, making it expensive to close losing positions.",
+      "Tail events where VIX gaps 17->37 intraday: the kill switch triggers on the next daily close, so a single-session gap can still produce a 5-10% mark-to-market loss.",
+      "Tuner may select tail_hedge_ratio=0 on a train window without a true tail event; the spec flags this as the 2018/2020/2024 failure mode and the default keeps the hedge on.",
+      "Polygon Developer tier lacks historical bid/ask — synthetic ~5% spread is conservative but may under-price real-world execution friction.",
     ],
   },
 
   "earnings-vol-premium": {
     thesis:
-      "This strategy exploits the well-documented tendency of options markets to overestimate the magnitude of earnings-driven price moves. Research by Dubinsky & Johannes (2006) and Gao, Xing & Zhang (2018) demonstrates that at-the-money straddle prices systematically overstate realized post-earnings moves by a median of 20-30%, creating a persistent opportunity for volatility sellers. The strategy sells at-the-money straddles 1-3 days before scheduled earnings announcements, capturing the characteristic IV crush that occurs as the event risk resolves and implied volatility rapidly collapses toward realized levels.\n\nThe theoretical basis for this premium lies in the Peso Problem interpretation of earnings volatility pricing. Market makers, facing the asymmetric risk of occasional extreme earnings reactions, rationally price options to reflect a fat-tailed distribution that incorporates the possibility of 3+ standard deviation moves. However, because these tail events occur in roughly 30% of cases — while the remaining 70% see moves within or below the implied range — the aggregate expected value favors the straddle seller over a large sample. Ederington & Lee (1996) confirm that options implied volatility provides biased forecasts of future volatility around scheduled events, with the bias being most pronounced for high-IV-rank names.\n\nThe strategy is currently paused pending refinement of the underlying selection model and position sizing framework. Historical analysis revealed that while the aggregate win rate is favorable, the distribution of losses is heavy-tailed — the occasional large earnings surprise generates losses that can consume multiple winning trades. Enhancements under development include incorporating historical earnings move accuracy for each underlying, weighting toward names with lower surprise variability, and implementing a portfolio-level straddle-correlation cap to prevent simultaneous losses during earnings season clustering.",
-    edge: "Monetizes the systematic overpricing of event-implied volatility around earnings announcements, where market makers embed a fear premium that exceeds realized moves approximately 70% of the time.",
+      "An event-driven short-volatility strategy that sells defined-risk iron butterflies one session before a scheduled earnings release and closes at the post-event open/close the following session. The edge is the Ederington & Lee (1996) IV-ramp-then-crush pattern: front-week implied vol systematically elevates into scheduled announcements and collapses within minutes of the next open, regardless of the direction of the underlying move.\n\nThe body of the butterfly (short ATM call + short ATM put) collects a large net credit; wings (long call + long put at ±1.4x the implied move) cap risk at the wing width minus the credit. Dubinsky, Johannes, Kaeck & Seeger (2019) decompose option prices into diffusive and event components and document that the event component is empirically mispriced on average; Gao, Xing & Zhang (2018) show the cross-sectional smirk richness persists around earnings.\n\nEntry is gated by a richness ratio: implied straddle move / trailing-8-quarter median realized earnings move >= 1.2. Below that ratio the market isn't over-pricing the event by enough to cover slippage. Universe is a fixed 29-name weekly-options liquidity list (mega-cap tech + major financials + select healthcare / semis). 2023-2024 OOS on synthetic BS exit pricing: Sharpe 6.10, max drawdown 1.26%, 132 trades, 89% win rate. The headline Sharpe is almost certainly inflated by the synthetic pricing model — expect a 30-50% haircut when moving from model to real single-name weekly options fills. See audit-reports/phase1-earnings_vol.md.",
+    edge:
+      "Exploits the Ederington-Lee pre-earnings IV ramp and post-event crush, gated on a historical-realized-move richness filter so the position only fires when the market is over-pricing the event relative to the last 8 quarters of actual single-name earnings-day reactions.",
     riskProfile: {
       level: "High",
       description:
-        "Naked short straddles carry unlimited theoretical risk on the call side and substantial risk on the put side; a single earnings miss or guidance shock can produce losses far exceeding accumulated premiums.",
+        "Short-vol around single-name earnings with defined max loss per trade via the wing structure. Left tail is strictly bounded at (wing_width * 100 - credit), but AI-boom outliers (NVDA, META, NFLX) regularly print 3-6 sigma earnings moves that will pin against the wings.",
     },
     parameters: {
-      rebalanceFrequency:
-        "Event-driven (1-3 days before scheduled earnings releases)",
+      rebalanceFrequency: "Event-driven (T-1 MOC entry before earnings; T or T+1 open/close exit)",
       universe:
-        "S&P 500 components with weekly options, historical earnings move data of 8+ quarters, and average straddle bid-ask spread < 5% of mid-price",
+        "29-name fixed list with liquid weekly options — mega-cap tech, major banks, select healthcare/semis; underlying price >= $50",
       positionSizing:
-        "0.5-1% of portfolio NAV per straddle, reduced for names with high historical earnings surprise variability",
+        "Max loss per trade capped at ~1.9% of equity; contract count = floor(equity * max_loss / (wing_width*100 - credit))",
       entryCriteria:
-        "Implied earnings move > 1.3x median historical realized earnings move, IV Rank > 60, no concurrent macro events",
+        "Implied straddle move / 8-quarter median realized earnings move >= 1.2, wing bid-ask < 10% of mid, earnings after close only",
       exitCriteria:
-        "Close immediately after earnings release (next trading day open), or intraday if profit exceeds 60% of premium collected pre-announcement",
-      maxPositions:
-        "8 (currently paused — strategy under review for position sizing refinement)",
+        "First post-event open (or next close, per tuner) — all four legs closed together. No intraday stops.",
+      maxPositions: "10",
     },
     howItWorks: [
-      "Scan the earnings calendar for S&P 500 components reporting within 1-3 days that have weekly options with tight bid-ask spreads.",
-      "For each candidate, compute the ratio of implied earnings move (ATM straddle price / stock price) to the median historical realized earnings move over the past 8+ quarters.",
-      "Enter positions only when the implied/realized ratio exceeds 1.3x and IV Rank is above 60, confirming the vol premium is wide enough.",
-      "Sell ATM straddles 1-3 days pre-earnings, sizing at 0.5-1% of NAV per position, with reduced sizing for names with high historical surprise variability.",
-      "Close immediately after earnings release (next trading day open) to capture the IV crush, or earlier if intraday profit exceeds 60% of premium collected.",
+      "On each session, pull the FMP earnings calendar for the next session. Filter to after-market-close announcements in the 29-name universe.",
+      "For each candidate, pull the Polygon chain snapshot, solve ATM straddle mid, compute implied move = straddle / underlying_close.",
+      "Compute the 8-quarter median |close_T / close_T-1 - 1| from historical earnings dates. Require implied / historical >= 1.2.",
+      "At T-1 close, emit a single 4-leg Signal: short ATM call + short ATM put + long OTM call at ATM + 1.4 * implied_move + long OTM put at ATM - 1.4 * implied_move.",
+      "Exit all four legs together at the first post-event open (or next close, per tuner). Crush is captured on the opening print; holding beyond adds gamma risk.",
     ],
-    whenToUse: "Best during normal earnings seasons with typical dispersion and no overlapping macro events (FOMC, CPI) that could amplify post-earnings moves. Works well when options markets are pricing in more fear than earnings history justifies. Currently paused -- the strategy needs tighter position sizing to handle the fat-tailed loss distribution from occasional extreme earnings surprises.",
+    whenToUse:
+      "Diversified across 20+ names per year produces a smooth P&L stream. The Sharpe collapses if the universe is narrowed (single-name concentration risk) or the richness filter is lowered below 1.2. Historically struggled in Q1 2020 COVID vol explosion; 2020 bars are not in the reported OOS window.",
     risks: [
-      "Unlimited theoretical risk on the call side of naked short straddles; a single massive earnings beat or miss can erase months of premium income.",
-      "Earnings season clustering: multiple concurrent straddles can all lose simultaneously during broad earnings misses, creating concentrated drawdowns.",
-      "Guidance risk: even when EPS beats, negative forward guidance can cause outsized moves that exceed the straddle premium.",
-      "Regulatory/M&A surprises that coincide with earnings releases, creating moves far outside the implied range.",
+      "Reported Sharpe uses a synthetic BS exit-pricing model because Polygon Developer lacks historical IV and bid/ask. Real single-name weekly options will give up meaningful spread and slippage — expect a 30-50% haircut.",
+      "AI-boom outliers (NVDA / META / NFLX) have produced 3-6 sigma earnings realizations that pin the trade against the wings; wing width is the guard, but 2024 losses on LLY were real.",
+      "5-trial Optuna tuning — small parameter budget relative to RSI2 (80) and momentum_quality (25). Longer runs could shift exit_timing back to 'next_open'.",
     ],
   },
 
   "regime-adaptive": {
     thesis:
-      "This strategy employs a machine-learning-based market regime detection framework to dynamically shift portfolio allocation between risk-on and risk-off positioning. Building on the Hidden Markov Model approach to regime identification pioneered by Hamilton (1989) and extended by Ang & Bekaert (2002), the system classifies the prevailing market environment into three discrete states — bull, bear, and sideways — using a feature set that includes price momentum across multiple timeframes, credit spreads, yield curve shape, breadth indicators, and cross-asset volatility signals. The regime classifier outputs a probability distribution over states, enabling smooth transitions rather than binary switches that generate excessive turnover.\n\nThe academic motivation draws from the extensive literature on time-varying risk premia and the failure of static asset allocation to account for changing market dynamics. Guidolin & Timmermann (2007) demonstrate that regime-switching models significantly improve out-of-sample portfolio performance relative to unconditional allocation strategies. In bull regimes, the strategy increases equity beta exposure through leveraged index positions and concentrated sector bets; in bear regimes, it shifts to a defensive posture emphasizing treasury duration, gold, and low-volatility equities; during sideways or transitional periods, it adopts a neutral stance with emphasis on carry and mean-reversion strategies.\n\nA critical design consideration is the avoidance of overfitting — the primary failure mode of ML-based tactical allocation systems. The regime classifier is trained on expanding windows with walk-forward validation, uses regularization to penalize model complexity, and requires a sustained probability threshold (above 70% for two consecutive weeks) before executing a regime transition. Feature importance is monitored for stability, and the model is periodically retrained with the most recent data to adapt to evolving market microstructure while maintaining structural integrity through a core set of regime-defining indicators.",
-    edge: "Captures the time-varying nature of risk premia by systematically identifying macro regime shifts before they are fully reflected in prices, exploiting the lag between leading indicators and the consensus narrative that drives institutional positioning.",
+      "A macro / tactical asset-allocation strategy that classifies the market into one of four regimes — TrendUp, MeanRevert, HighVol, Crisis — using transparent rule-based signals on SPY, its 50/200 SMAs, and a VIX proxy, then maps each regime to a pre-defined allocation across an eight-ETF universe (SPY, QQQ, EFA, IEF, TLT, GLD, BIL, VXX). Confirmation hysteresis requires the new regime label to persist for 10 consecutive trading days before the allocation flips, bounding whipsaw.\n\nThe design is close to Faber (2007) tactical asset allocation crossed with the regime-switching premise of Ang & Bekaert (2002) and Guidolin & Timmermann (2007), but deliberately rule-based rather than HMM-fitted. The audit (strategy-05-regime_adaptive.md) flagged the legacy HMM as both lookahead-prone (full-series Viterbi smoother used at inference) and never actually plugged in; the shipped 'neutral'-hardcoded runner had no regime logic at all. Rule-based labels are transparent and do not drift with the sample.\n\nVIX is a non-tradable index; when Polygon index feed is unavailable the strategy computes a realized-vol proxy from SPY's 20-day stdev annualized. 2023-2024 OOS Sharpe: 1.62, max drawdown 7.9%, 27 fills across four regime transitions (MeanRevert -> TrendUp in Feb-Mar 2023; brief MeanRevert dip in Sep-Oct 2024). Target was 0.60; the 2023-24 regime was TrendUp-dominant and didn't stress-test the Crisis allocation. See audit-reports/phase1-regime_adaptive.md.",
+    edge:
+      "Classifies the macro environment into four transparent rule-based regimes with a 10-day hysteresis buffer, then rebalances a diversified ETF book to a pre-defined weight vector for that regime. The edge is drawdown control across cycles, not upside capture in any single regime.",
     riskProfile: {
       level: "Medium",
       description:
-        "Model risk is the dominant concern — regime misclassification during transitional periods can result in pro-cyclical positioning at inflection points, though probability-based transitions mitigate whipsaw risk.",
+        "Multi-asset ETF allocation, long-only, no leverage. Crisis regime allocation is 50% bonds / 15% gold / 35% T-bills — vulnerable to the specific 2022-style dual bear where stocks and bonds fall together.",
     },
     parameters: {
-      rebalanceFrequency:
-        "Weekly regime assessment with intra-week rebalancing on confirmed regime transitions",
-      universe:
-        "Multi-asset: US equity indices (SPY, QQQ, IWM), sector ETFs, US Treasuries (TLT, IEF, SHY), gold (GLD), and VIX-linked instruments",
+      rebalanceFrequency: "Monthly (last trading day; optionally bimonthly)",
+      universe: "SPY, QQQ, EFA, IEF, TLT, GLD, BIL — 8-ETF diversified sleeve (VXX reserved at 0 weight)",
       positionSizing:
-        "Risk-parity weighted within regime allocations; overall portfolio volatility targeted at 12% annualized",
+        "Pre-defined weight vector per regime (e.g. TrendUp: 40/20/10 SPY/QQQ/EFA + 15 IEF + 5 GLD + 10 BIL)",
       entryCriteria:
-        "Regime classifier probability > 70% sustained for 2 consecutive weekly observations, confirmed by at least 3 of 5 macro indicator categories",
+        "Confirmed regime label (10 consecutive days of the same instantaneous label) differs from the current allocation at a rebalance boundary",
       exitCriteria:
-        "Regime probability drops below 50% OR competing regime probability exceeds 60%, triggering transition to new allocation",
-      maxPositions: "12-18 depending on active regime",
+        "Next confirmed regime change at the next rebalance day — no intra-month intervention",
+      maxPositions: "8",
     },
     howItWorks: [
-      "Run the HMM regime classifier weekly on a feature set including price momentum (multiple timeframes), credit spreads, yield curve shape, market breadth, and cross-asset volatility.",
-      "The classifier outputs a probability distribution over three states: bull, bear, and sideways. A regime transition requires sustained probability above 70% for two consecutive weekly observations.",
-      "In bull regime, increase equity beta through leveraged index positions and concentrated sector bets. In bear regime, shift to treasury duration, gold, and low-vol equities. In sideways, adopt carry and mean-reversion positioning.",
-      "Confirm regime transitions with at least 3 of 5 macro indicator categories (rates, credit, equity, volatility, breadth) before executing allocation changes.",
-      "Rebalance within-regime allocations using risk-parity weighting, targeting 12% annualized portfolio volatility.",
+      "Each bar, classify the market using SPY close vs SMA_50 / SMA_200 and the VIX proxy: Crisis if VIX > 25 AND SPY < SMA_200 (or 20 consecutive closes below SMA_200); HighVol if VIX > 25 AND SPY >= SMA_200; TrendUp if SPY > SMA_200 AND SMA_50 > SMA_200 AND VIX < 20; MeanRevert as the default.",
+      "Require the new label to persist for 10 consecutive trading days before accepting it as confirmed. Hysteresis bounds whipsaw from one-bar regime flickers.",
+      "On the last trading day of each month, if the confirmed label != current allocation label, close any held positions not in the new weight vector and emit MOO entries to reach the new target weights.",
+      "Between rebalances the strategy does nothing — drift is allowed within the monthly cadence.",
+      "If Polygon VIX feed is unavailable, fall back to SPY 20-day realized-vol proxy; thresholds are calibrated on the realized-vol scale.",
     ],
-    whenToUse: "This strategy is designed to adapt to any market environment, but it adds the most value during clear regime transitions -- pivots from bull to bear, or bear to recovery. It outperforms static allocation most during sustained directional markets where regime persistence is high. It may underperform during whipsaw, choppy markets where regimes change faster than the classifier's 2-week confirmation window.",
+    whenToUse:
+      "Designed as a portfolio anchor that trades upside for drawdown control across full cycles. Expect to underperform SPY in sustained TrendUp regimes (strategy runs at ~60% equity beta) and to protect capital in HighVol / Crisis. The 2022 dual bear (stocks + bonds both down) is the strategy's documented Achilles heel.",
     risks: [
-      "Model risk: regime misclassification at inflection points can result in pro-cyclical positioning (bullish at the top, bearish at the bottom).",
-      "Overfitting: ML-based classifiers are prone to finding patterns in noise, though walk-forward validation and regularization mitigate this.",
-      "Transition lag: the 2-week confirmation requirement means the strategy is always late to regime changes by design, trading off whipsaw protection for timeliness.",
-      "Feature drift: the macro indicators that define regimes may evolve over time (e.g., new Fed framework), requiring periodic model retraining.",
+      "Rule-based regime labels are transparent but lag at inflection points — 10-day confirmation means entry into Crisis is always ~2 weeks late (cost ~5% in Mar-2020).",
+      "HighVol and Crisis allocations are 45-50% Treasuries; 2022 saw AGG/TLT down 13%/31% while SPY fell, with no safe-haven bid to exploit.",
+      "Realized-vol-proxy VIX under-reads true CBOE VIX by 3-5 points in normal regimes; thresholds are calibrated but can drift if the VRP structure changes.",
     ],
   },
 
   "claude-alpha": {
     thesis:
       "Claude Alpha represents a novel approach to systematic equity selection that leverages large language model reasoning as the core analytical engine. Rather than relying on predefined quantitative factors, the strategy uses Claude to perform multi-dimensional analysis of each candidate stock, integrating fundamental data (earnings quality, balance sheet strength, capital allocation efficiency), technical signals (trend structure, volume patterns, relative strength), sentiment indicators (earnings call transcript tone, news flow, social media positioning), and options market signals (unusual flow, put-call skew shifts, term structure anomalies). The synthesis of these heterogeneous data sources into a unified investment thesis for each position mirrors the cognitive process of a skilled discretionary portfolio manager, but with the consistency, scalability, and absence of emotional bias that systematic approaches provide.\n\nThe theoretical basis for this approach draws from the information aggregation literature, particularly Grossman & Stiglitz (1980), who argue that prices cannot fully reflect all available information when information acquisition is costly. A large language model's ability to rapidly process and synthesize vast quantities of unstructured data — earnings transcripts, management commentary, industry reports, macro context — represents a step function reduction in the cost of information processing. This creates an edge in the speed and completeness of fundamental analysis, particularly for mid-cap names where analyst coverage is thinner and informational inefficiencies persist, consistent with the findings of Hong, Lim & Stein (2000) on the relationship between analyst coverage and the speed of price adjustment.\n\nThe strategy maintains epistemic humility by treating Claude's analysis as a sophisticated signal rather than an oracle. Position sizing reflects conviction levels derived from the model's own uncertainty estimates, and all positions are subject to systematic risk management overlays including stop-losses, correlation caps, and sector concentration limits. The approach is inherently adaptive — as the model's training data and reasoning capabilities evolve, the analytical framework improves without requiring manual factor engineering or backtesting of new signals.",
-    edge: "Achieves information processing breadth and speed that exceeds human capacity, synthesizing unstructured fundamental, technical, sentiment, and flow data into unified stock-level views — particularly effective in the mid-cap space where analyst coverage gaps create persistent informational inefficiencies.",
+    edge:
+      "Achieves information processing breadth and speed that exceeds human capacity, synthesizing unstructured fundamental, technical, sentiment, and flow data into unified stock-level views — particularly effective in the mid-cap space where analyst coverage gaps create persistent informational inefficiencies.",
     riskProfile: {
       level: "High",
       description:
@@ -231,7 +232,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Positions are sized based on Claude's confidence: 1-3% per position for standard conviction, up to 5% for highest-conviction ideas, with a maximum of 15 concurrent positions.",
       "Exit management: Claude reviews all positions weekly for thesis invalidation. Hard 8% stop-loss from entry. Maximum 60-day holding period without catalyst realization triggers review.",
     ],
-    whenToUse: "Claude Alpha adds the most value in markets with active stock-level dispersion and abundant catalysts -- earnings seasons, sector rotations, and periods of policy uncertainty where fundamental analysis drives returns. It excels in the mid-cap space (market cap $2-10B) where analyst coverage is thinner and informational inefficiencies persist. Less effective during macro-driven, high-correlation environments where all stocks move together.",
+    whenToUse:
+      "Claude Alpha adds the most value in markets with active stock-level dispersion and abundant catalysts -- earnings seasons, sector rotations, and periods of policy uncertainty where fundamental analysis drives returns. It excels in the mid-cap space (market cap $2-10B) where analyst coverage is thinner and informational inefficiencies persist. Less effective during macro-driven, high-correlation environments where all stocks move together.",
     risks: [
       "Novel strategy without extensive live track record; past performance of the analytical framework in backtesting may not predict forward results.",
       "Model opacity: Claude's reasoning is not fully interpretable, making it difficult to understand why specific positions are selected during drawdown periods.",
@@ -243,7 +245,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "mean-reversion": {
     thesis:
       "This strategy targets short-term mean reversion in fundamentally sound equities that have experienced transient price dislocations. The core premise rests on the overreaction hypothesis formalized by De Bondt & Thaler (1985, 1987), which demonstrates that stocks experiencing sharp declines tend to exhibit subsequent reversals as the initial price move overshoots fundamental value. By conditioning entry on both a technical oversold signal (RSI below 30) and a fundamental quality floor (Piotroski F-Score of 5 or higher), the strategy isolates temporary liquidity-driven dislocations from genuine fundamental deterioration — a critical distinction that separates profitable mean reversion from value traps.\n\nThe quality filter addresses the primary failure mode of naive mean reversion: buying stocks that are cheap for a reason. Stambaugh, Yu & Yuan (2012) show that many apparent mean reversion opportunities are concentrated in low-quality, high-short-interest names where the \"reversion\" never materializes because the price decline reflects rational repricing of impaired fundamentals. By requiring a minimum F-Score, the strategy ensures that purchased stocks have demonstrated profitability, improving leverage ratios, and adequate operating efficiency — characteristics that support the thesis that the current drawdown represents a buying opportunity rather than the beginning of a sustained decline.\n\nThe holding period is deliberately short — positions are closed when RSI recovers above 50 (indicating normalization of selling pressure) or after a maximum of 20 trading days, whichever comes first. This time-boxed approach reflects the empirical evidence from Gutierrez & Kelley (2008) showing that mean reversion in fundamentally sound stocks is a short-duration phenomenon, with the majority of the reversal occurring within the first 15-20 trading days. Extended holding periods dilute returns and introduce exposure to new information that may alter the original thesis.",
-    edge: "Exploits the behavioral tendency of market participants to overreact to negative news in fundamentally healthy companies, creating transient mispricings that correct as panic selling subsides and fundamental value reasserts itself.",
+    edge:
+      "Exploits the behavioral tendency of market participants to overreact to negative news in fundamentally healthy companies, creating transient mispricings that correct as panic selling subsides and fundamental value reasserts itself.",
     riskProfile: {
       level: "Medium",
       description:
@@ -269,7 +272,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Enter qualifying positions at equal weight (3-5% per position, reduced to 2% when VIX > 25) on signal confirmation.",
       "Close when RSI recovers above 50 (mean reversion achieved), at the 20 trading day maximum holding period, or at the 10% stop-loss from entry -- whichever comes first.",
     ],
-    whenToUse: "Mean reversion works best during sideways or mildly volatile markets where individual stock dislocations occur against a stable macro backdrop. It excels during sector-specific selloffs (e.g., biotech rotation, bank stress) where the broad market is stable but individual names are temporarily depressed. Avoid during systemic crises where 'oversold' stocks can become much more oversold, and the quality filter alone cannot protect against cascading failures.",
+    whenToUse:
+      "Mean reversion works best during sideways or mildly volatile markets where individual stock dislocations occur against a stable macro backdrop. It excels during sector-specific selloffs (e.g., biotech rotation, bank stress) where the broad market is stable but individual names are temporarily depressed. Avoid during systemic crises where 'oversold' stocks can become much more oversold, and the quality filter alone cannot protect against cascading failures.",
     risks: [
       "Catching falling knives: even with the quality filter, stocks can continue declining if the dislocation is driven by a fundamental change the F-Score hasn't yet captured.",
       "Correlated drawdowns: during broad market selloffs, multiple mean-reversion positions can all move against you simultaneously.",
@@ -281,7 +285,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "vcp-breakout": {
     thesis:
       "The Volatility Contraction Pattern (VCP) strategy systematizes the breakout methodology developed by Mark Minervini, a US Investing Champion, which identifies stocks completing a specific base-building pattern characterized by progressively tightening price ranges and declining volume. The VCP reflects the sequential absorption of overhead supply: each successive contraction represents a wave of selling from trapped holders at lower prices, and the narrowing of volatility signals that the available supply at current levels is being exhausted. When the stock breaks above the pivot point of the final contraction on expanding volume, it indicates a shift in the supply-demand balance that often precedes a sustained advance.\n\nThe theoretical underpinning connects to the microstructure literature on supply and demand zones and the information content of volume. Karpoff (1987) establishes the relationship between volume and price changes, while more recent work by Lo & Wang (2000) on turnover-based asset pricing models supports the thesis that declining volume during consolidation reflects genuine supply absorption rather than disinterest. The VCP pattern can be viewed as an observable manifestation of the accumulation phase described in Wyckoff methodology — sophisticated institutional buyers building positions without disrupting price, creating a coiled-spring setup where breakout above resistance encounters minimal selling pressure.\n\nRisk management is integral to the strategy's edge. Each position is initiated with a predefined 3% stop-loss from the pivot point, ensuring that failed breakouts — which occur in approximately 40-50% of setups depending on market environment — result in small, contained losses. The 10% take-profit target establishes a favorable risk-reward ratio of approximately 3:1, and partial profit-taking at intermediate levels locks in gains while allowing runners to capture extended moves. This asymmetric payoff structure means the strategy can maintain profitability with a win rate below 50%, provided the average winner materially exceeds the average loser — a characteristic confirmed by Minervini's published track record and by O'Neil's (2009) CAN SLIM research on growth stock breakouts.",
-    edge: "Identifies the precise moment when selling pressure is exhausted in high-quality growth stocks, entering at the inflection point where supply absorption is complete and incremental demand drives price discovery into uncontested territory above resistance.",
+    edge:
+      "Identifies the precise moment when selling pressure is exhausted in high-quality growth stocks, entering at the inflection point where supply absorption is complete and incremental demand drives price discovery into uncontested territory above resistance.",
     riskProfile: {
       level: "High",
       description:
@@ -307,7 +312,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Enter on breakout confirmation with position size calculated to risk 0.5-1% of portfolio NAV based on the 3% entry-to-stop distance.",
       "Set a hard 3% stop-loss below the pivot (no discretion), a 10% take-profit target with the option to trail 50% of the position using the 10-day EMA, and close immediately if the stock re-enters the base below the pivot.",
     ],
-    whenToUse: "VCP Breakout requires bull market conditions with clear uptrends and expanding market breadth. It works best during growth-led advances where leading stocks form constructive base patterns. The strategy is most effective in the early-to-mid stages of a market uptrend, when institutional accumulation creates the supply-absorption patterns the VCP identifies. Avoid during bear markets, late-cycle distribution phases, or periods of declining market breadth.",
+    whenToUse:
+      "VCP Breakout requires bull market conditions with clear uptrends and expanding market breadth. It works best during growth-led advances where leading stocks form constructive base patterns. The strategy is most effective in the early-to-mid stages of a market uptrend, when institutional accumulation creates the supply-absorption patterns the VCP identifies. Avoid during bear markets, late-cycle distribution phases, or periods of declining market breadth.",
     risks: [
       "High failure rate: approximately 40-50% of breakouts fail and are stopped out, requiring psychological discipline to accept frequent small losses.",
       "Market regime sensitivity: during bear markets or broad distribution phases, even perfect-looking VCPs fail because there is no institutional demand to absorb supply.",
@@ -318,41 +324,45 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "pairs-trading": {
     thesis:
-      "Pairs trading is a market-neutral statistical arbitrage strategy that exploits temporary mispricings between historically correlated securities. The foundational work by Gatev, Goetzmann & Rouwenhorst (2006) demonstrated that pairs selected using a simple distance-based method generated annualized excess returns of approximately 11% per year, net of transaction costs, with the profits concentrated in the convergence phase of the trade. This strategy employs a more sophisticated cointegration-based approach using the Engle-Granger (1987) two-step method to identify pairs with a stable long-run equilibrium relationship, entering when the spread deviates beyond 2 standard deviations from its mean.\n\nThe market-neutral construction -- simultaneously long the underperformer and short the outperformer in equal dollar amounts -- isolates the relative value signal from broader market movements. This means the strategy's returns are theoretically uncorrelated with equity market direction, making it a valuable portfolio diversifier. The persistence of the pairs trading edge is attributed to several microstructure factors: institutional capital flows create temporary demand/supply imbalances between related stocks, sector rotation driven by macro narratives pushes correlated stocks apart, and idiosyncratic news in one name creates temporary spread dislocations that reliably revert to equilibrium as the fundamental relationship reasserts itself.\n\nA critical innovation in the strategy's implementation is the rolling cointegration test framework. Rather than relying on a static set of cointegrated pairs, the system re-runs the Engle-Granger test monthly on expanding windows, dropping pairs that lose cointegration significance (p > 0.05) and adding newly identified pairs. This adaptive approach, consistent with the findings of Krauss (2017), addresses the primary failure mode of pairs trading: structural regime changes that permanently alter the equilibrium spread between two securities.",
-    edge: "Harvests the mean-reverting spread between cointegrated pairs, profiting from temporary dislocations driven by institutional flows and idiosyncratic news while maintaining market neutrality and near-zero beta exposure.",
+      "A cointegration-gated dollar-neutral statistical arbitrage strategy. Every ~63 trading days the strategy re-runs the Engle-Granger (1987) two-step ADF test on all within-sector pairs drawn from a 49-ticker S&P 500 mega-cap universe, keeping only pairs with ADF p < 0.05, Ornstein-Uhlenbeck half-life <= 30 days, and Hurst exponent < 0.45 (mean-reverting). Qualifying pairs are ranked by ADF p-value, and the top-N (up to 8) survivors with no ticker overlap form the active set.\n\nEntries fire on the spread's 60-day rolling z-score: at |z| >= 2.0 the strategy opens both legs simultaneously as MOO orders — one +w on the cheap leg, one -w on the rich leg, sized dollar-neutral via the OLS or Kalman hedge ratio. Exits fire at |z| < 0.5 (mean reversion), |z| > 3.5 (stop), or when a 21-day structural-break watchdog re-runs Engle-Granger on an active pair and ADF p exceeds 0.10 (force-close and retire).\n\nThe legacy AlphaDesk implementation was single-leg (shorts silently discarded, so 'market-neutral' was fiction), had no cointegration test at all, used a static hand-picked pair list with no rescreening, and held hedge ratios fixed indefinitely. This rewrite enforces a two-signal-per-pair invariant at emit time and verifies it empirically (254/254 entries, 247/248 exits in OOS). 2023-2024 OOS Sharpe: 1.23, max drawdown 4.0%, 502 trades across 64 active pairs. Published post-2006 realistic Sharpe band is 0.3-0.7 (Do & Faff 2012); 1.23 sits at the top with wide confidence intervals (~+/-0.5 on a 502-trade sample). See audit-reports/phase1-pairs_trading.md.",
+    edge:
+      "Dollar-neutral spread convergence between cointegrated mega-cap pairs, with a quarterly Engle-Granger rescreen and a 21-day structural-break watchdog that ejects pairs whose p-value exceeds 0.10 — the mechanism the legacy code lacked that allowed T/VZ, AMZN/WMT, XOM/CVX to silently decouple.",
     riskProfile: {
       level: "Low",
       description:
-        "Market-neutral construction limits directional exposure, but spread blow-outs from structural regime changes or pair decoupling can generate outsized losses if stops are not respected.",
+        "Long/short dollar-neutral, beta near zero by construction. Primary risk is structural-break drawdowns on pairs the quarterly rescreen doesn't catch fast enough; the 21-day watchdog and z=3.5 stop bound each event.",
     },
     parameters: {
-      rebalanceFrequency: "Daily z-score monitoring with immediate entry on threshold breach",
-      universe: "S&P 500 sector pairs with 2+ year cointegration history (Engle-Granger p < 0.05)",
-      positionSizing: "Equal dollar long/short per pair, 3-5% of NAV per pair position",
-      entryCriteria: "Z-score > 2.0 or < -2.0 on the cointegrated spread",
-      exitCriteria: "Z-score crosses 0 (mean reversion) or stop at z-score > 3.5 (spread blow-out)",
+      rebalanceFrequency: "Daily z-score monitoring with MOO entries; ~quarterly (63-day) pair rescreen and 21-day watchdog",
+      universe: "49 sector-grouped S&P 500 mega-caps (Tech, Financials, Energy, Health, Consumer, Industrial) — 149 within-sector candidate pairs per rescreen",
+      positionSizing: "Dollar-neutral, ~6-10% NAV per pair; max 8 concurrent pairs with no ticker overlap",
+      entryCriteria:
+        "|z-score| >= z_entry (~2.0-2.5), spread ADF p < 0.05, OU half-life <= 30 days, Hurst < 0.45, no active position on either leg",
+      exitCriteria:
+        "|z| < z_exit (~0.5-0.7) mean-revert, |z| > z_stop (~3.5-4.7) spread-break stop, or watchdog ADF p > 0.10 force-close",
       maxPositions: "8",
     },
     howItWorks: [
-      "Run monthly cointegration tests (Engle-Granger two-step method) across all within-sector stock pairs in the S&P 500, requiring p < 0.05 on a 2+ year lookback window.",
-      "For qualifying pairs, compute the cointegrating regression to establish the hedge ratio, then calculate the spread (residual) and its rolling z-score.",
-      "Monitor z-scores daily. When a pair's z-score breaches +/- 2.0, enter the trade: go long the underperformer, short the outperformer, in equal dollar amounts using the hedge ratio.",
-      "Hold the position until the z-score crosses 0 (mean reversion target achieved) or exits are triggered at z-score > 3.5 (spread blow-out stop).",
-      "Drop pairs that lose cointegration significance at the monthly re-test, and add newly qualifying pairs to the watchlist.",
+      "Every ~63 trading days, run Engle-Granger ADF on all 149 within-sector pairs over a 252-day formation window. Keep survivors with ADF p < 0.05, OU half-life <= 30 days, Hurst < 0.45.",
+      "Rank survivors by ADF p-value ascending; admit the top 8 with no ticker overlap to the active set. Cache hedge ratios and spread statistics.",
+      "Daily: compute the spread z-score from the 60-day rolling mean/std (strict no-look-ahead). For each active pair with no open position, enter at |z| >= z_entry — two coincident MOO signals, opposite signs, sized dollar-neutral via beta_t.",
+      "Exit both legs together via MOC when |z| < z_exit (convergence), |z| > z_stop (spread blow-out), or the 21-day Engle-Granger watchdog reports p > 0.10 (structural break).",
+      "When hedge_method='kalman', re-estimate beta each bar via a 2-D Kalman filter (Chan 2013 eq 3.5); with 'ols' the hedge ratio is fixed from the formation fit until the next rescreen.",
     ],
-    whenToUse: "Pairs trading works across all market regimes because it is direction-agnostic. It excels during periods of elevated sector dispersion, where correlated stocks within the same industry temporarily diverge due to idiosyncratic catalysts. Performance is strongest in normal volatility environments (VIX 15-25) where mean-reversion dynamics are reliable. Avoid during structural regime changes (industry disruption, regulatory shifts) that can permanently alter pair relationships.",
+    whenToUse:
+      "Market-neutral by construction, so the book is uncorrelated with equity beta. Works across regimes but produces the cleanest P&L in normal-volatility environments; sector-wide news (e.g. 2022 energy rally, 2023 NVDA-led tech dispersion) can decouple multiple pairs at once.",
     risks: [
-      "Pair decoupling: structural changes (M&A, fundamental deterioration, industry disruption) can permanently break the cointegration relationship, turning a mean-reverting spread into a trending one.",
-      "Short squeeze risk on the short leg: if the overperformer experiences a short squeeze, the loss on the short side can exceed the gain on the long side.",
-      "Convergence timing: even when pairs eventually revert, the holding period can be longer than expected, tying up capital and requiring margin maintenance.",
-      "Transaction costs: frequent rebalancing to maintain the hedge ratio and entering/exiting pairs generates costs that can erode the edge, especially in less liquid names.",
+      "Cost model uses the engine default (5 bps flat spread, 1% p.a. flat borrow); real pairs traders pay 5-10 bps round-trip and 1-5% borrow on HTB names. Net Sharpe impact estimated within +/-0.10.",
+      "502-trade OOS sample has a 95% Sharpe CI of roughly +/-0.5; the 1.235 point estimate could plausibly be 0.7-1.7 on a replayed sample.",
+      "Capacity estimate on this 49-name universe is ~$100M total AUM before edge decays (Do & Faff 2012); unsuitable for institutional scaling past ~$50M without universe expansion.",
     ],
   },
 
   "dividend-capture": {
     thesis:
       "The dividend capture strategy systematically harvests dividend payments by entering positions shortly before the ex-dividend date and exiting shortly after. The theoretical framework rests on the ex-dividend day pricing anomaly first documented by Elton & Gruber (1970), who showed that stock prices do not fully adjust by the dividend amount on the ex-date. Subsequent research by Frank & Jagannathan (1998) and Graham, Michaely & Roberts (2003) confirmed that the average ex-date price drop is approximately 80-90% of the dividend amount, creating a small but consistent capture opportunity when combined with the actual dividend income.\n\nThe strategy screens for stocks with dividend yields above 3%, adequate daily liquidity (> $10M ADV), positive 20-day momentum, and Piotroski F-Score of 5 or higher to avoid value traps. The momentum filter is critical -- it ensures entry into dividend stocks that are in a supportive technical environment, which increases the probability of rapid price recovery after the ex-date drop. Research by Hartzmark & Solomon (2013) demonstrates that dividend-paying stocks experience predictable demand patterns around ex-dates, with buying pressure building before the ex-date and selling pressure immediately after, creating a systematic pattern the strategy can exploit.\n\nThe quality filter (F-Score >= 5) serves to eliminate stocks that are high-yielding because of fundamental deterioration -- the classic dividend yield trap where a declining stock price inflates the yield, luring income-seeking investors into deteriorating businesses. By requiring minimum financial health, the strategy targets genuine income generators whose dividends are sustainable and whose price recovery after the ex-date is supported by solid fundamentals.",
-    edge: "Captures reliable dividend income from high-quality stocks while momentum and quality filters minimize ex-date price drop risk, exploiting the empirically documented tendency of ex-date price adjustments to be less than the full dividend amount.",
+    edge:
+      "Captures reliable dividend income from high-quality stocks while momentum and quality filters minimize ex-date price drop risk, exploiting the empirically documented tendency of ex-date price adjustments to be less than the full dividend amount.",
     riskProfile: {
       level: "Low",
       description:
@@ -373,7 +383,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Enter positions 2-3 trading days before the ex-dividend date at equal weight (3-5% per position), with a maximum of 5 concurrent captures.",
       "Exit 3-5 trading days after the ex-dividend date, or earlier if 80% of the ex-date price drop has been recovered. Hard 5% stop-loss below entry protects against broader market selloffs during the capture window.",
     ],
-    whenToUse: "Dividend capture performs best during stable-to-bullish market environments where high-quality income stocks maintain their uptrends. The strategy is most effective in low-volatility periods (VIX < 20) where the ex-date price drop is small relative to the dividend, and recovery is swift. It also works well during rate-cutting cycles when demand for dividend stocks increases. Avoid during high-volatility market environments where the ex-date drop can be amplified by broader selling pressure.",
+    whenToUse:
+      "Dividend capture performs best during stable-to-bullish market environments where high-quality income stocks maintain their uptrends. The strategy is most effective in low-volatility periods (VIX < 20) where the ex-date price drop is small relative to the dividend, and recovery is swift. It also works well during rate-cutting cycles when demand for dividend stocks increases. Avoid during high-volatility market environments where the ex-date drop can be amplified by broader selling pressure.",
     risks: [
       "Broad market selloff during the capture window: if the market drops sharply between entry and exit, the capital loss can far exceed the dividend captured.",
       "Dividend cut risk: even with the F-Score filter, a surprise dividend cut announced near the ex-date can cause a sharp price decline.",
@@ -385,7 +396,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "sector-rotation": {
     thesis:
       "Sector rotation capitalizes on the well-documented tendency of sector performance to persist over intermediate time horizons, driven by macroeconomic regime dynamics and institutional capital flow inertia. The academic foundation rests on the business cycle framework established by Stangl, Jacobsen & Visaltanachoti (2009), who demonstrated that sector returns exhibit strong time-series momentum linked to economic cycle phases: cyclical sectors (Technology, Industrials, Consumer Discretionary) outperform during expansions, while defensive sectors (Utilities, Consumer Staples, Healthcare) outperform during contractions.\n\nBy ranking all 11 GICS sectors on a composite relative strength score (equally-weighted 1-month and 3-month returns), the strategy identifies the sectors with the strongest momentum and allocates to the top 3. This approach exploits two complementary forces: first, macro-driven institutional flows into favored sectors that create persistent outperformance as large asset managers rebalance into economic themes with multi-month horizons; second, the behavioral tendency of market participants to underweight the speed of sector rotation, creating trending opportunities as capital gradually shifts.\n\nExecution uses sector ETFs (XLK, XLV, XLF, etc.) for liquid, low-cost implementation with tight bid-ask spreads and no single-stock idiosyncratic risk. Monthly rebalancing on the first trading day balances the need for timely rotation against excessive turnover costs. Research by Moskowitz & Grinblatt (1999) on industry momentum shows that sector-level momentum effects are even stronger than individual stock momentum, with lower volatility and fewer momentum crash episodes.",
-    edge: "Rides sector-level momentum driven by macro themes, business cycle dynamics, and institutional capital flows, exploiting the persistence of sector leadership that is stronger and less crash-prone than individual stock momentum.",
+    edge:
+      "Rides sector-level momentum driven by macro themes, business cycle dynamics, and institutional capital flows, exploiting the persistence of sector leadership that is stronger and less crash-prone than individual stock momentum.",
     riskProfile: {
       level: "Medium",
       description:
@@ -406,7 +418,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "At the next monthly rebalance, re-rank sectors and replace any that have dropped below the 10th percentile rank or are no longer in the top 3.",
       "Maintain full investment -- no cash buffer. If a sector is replaced, the capital is immediately reallocated to the new top-3 sector.",
     ],
-    whenToUse: "Sector rotation excels during sustained economic trends where sector leadership persists for multiple months -- early-to-mid business cycle expansions (overweight cyclicals), late-cycle tightening (overweight defensives), and recovery phases (overweight rate-sensitive sectors). It adds the most value when macro themes are clear and institutional flows are directional. Avoid during rapid, unpredictable sector rotations (e.g., tariff whiplash, sudden policy reversals) where monthly rebalancing is too slow to capture the shift.",
+    whenToUse:
+      "Sector rotation excels during sustained economic trends where sector leadership persists for multiple months -- early-to-mid business cycle expansions (overweight cyclicals), late-cycle tightening (overweight defensives), and recovery phases (overweight rate-sensitive sectors). It adds the most value when macro themes are clear and institutional flows are directional. Avoid during rapid, unpredictable sector rotations (e.g., tariff whiplash, sudden policy reversals) where monthly rebalancing is too slow to capture the shift.",
     risks: [
       "Whipsaw: monthly rebalancing can lag rapid sector rotations driven by macro shocks, causing the strategy to overweight lagging sectors after a sudden regime change.",
       "Concentration risk: 33% per sector is aggressive; a sharp reversal in a single sector can cause outsized portfolio-level drawdowns.",
@@ -418,7 +431,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "gap-fill": {
     thesis:
       "The gap fill strategy exploits the well-documented tendency of overnight price gaps in liquid large-cap stocks to partially or fully revert during the first 30-90 minutes of regular trading. Research by Branch & Ma (2012) demonstrated that gap-fill rates exceed 70% for gaps between 1-3% in liquid S&P 500 stocks, with the fill typically occurring within the first hour of trading. The edge arises from the microstructure of the opening auction: overnight news, pre-market algorithmic activity, and thin pre-market liquidity create exaggerated price dislocations that the full regular-session order book rapidly normalizes.\n\nThe strategy enters at the market open in the direction of the fill -- shorting gap-ups and buying gap-downs -- targeting 50-80% gap closure as the profit target. Position sizing is inversely scaled with gap magnitude: larger gaps receive smaller positions because they are more likely to be driven by genuine catalysts (earnings surprises, M&A announcements) that justify the price change. The VIX filter (< 25) excludes high-volatility environments where gaps tend to extend rather than fill, as documented by Cooper, Cliff & Gulen (2008) in their study of market open return predictability.\n\nAll positions are closed by 11:00 AM ET regardless of profit or loss, eliminating overnight risk entirely. This strict time stop ensures the strategy remains purely intraday, with no exposure to the gap risk it is designed to exploit. The strategy is currently paused as it requires a more sophisticated catalyst-screening layer to distinguish fillable gaps (driven by noise and pre-market overreaction) from genuine gaps (driven by material news events).",
-    edge: "Fades exaggerated overnight gaps in liquid stocks, profiting from the reliable tendency of pre-market dislocations to revert as the full regular-session order book absorbs the overnight information asymmetry.",
+    edge:
+      "Fades exaggerated overnight gaps in liquid stocks, profiting from the reliable tendency of pre-market dislocations to revert as the full regular-session order book absorbs the overnight information asymmetry.",
     riskProfile: {
       level: "High",
       description:
@@ -439,7 +453,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "At market open (9:30 AM), enter in the direction of the fill: short gap-up stocks, buy gap-down stocks. Size inversely with gap magnitude (1-2% of NAV).",
       "Close positions when 50-80% of the gap is filled (profit target), at the gap extreme (stop-loss), or at 11:00 AM ET (time stop) -- whichever comes first. All positions are flat by mid-morning.",
     ],
-    whenToUse: "Gap fill works best during normal-volatility market environments (VIX 12-22) where overnight gaps are driven by noise, pre-market algorithmic activity, or minor news rather than genuine catalysts. The strategy excels on days with low macro event risk (no FOMC, no CPI) where the opening auction normalizes overnight dislocations efficiently. Currently paused pending implementation of a catalyst-screening layer.",
+    whenToUse:
+      "Gap fill works best during normal-volatility market environments (VIX 12-22) where overnight gaps are driven by noise, pre-market algorithmic activity, or minor news rather than genuine catalysts. The strategy excels on days with low macro event risk (no FOMC, no CPI) where the opening auction normalizes overnight dislocations efficiently. Currently paused pending implementation of a catalyst-screening layer.",
     risks: [
       "Catalyst-driven gaps: gaps caused by genuine material events (earnings, M&A, FDA rulings) can extend violently rather than fill, leading to rapid stop-loss hits.",
       "VIX regime lag: the VIX filter may not capture sudden intraday volatility spikes that cause gap extensions after the strategy has entered.",
@@ -451,7 +466,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   "manual-discretionary": {
     thesis:
       "The Manual/Discretionary strategy bucket captures all trades placed directly on Alpaca outside of the automated pipeline. These positions represent personal conviction trades, hedging adjustments, or opportunistic entries that don't fit neatly into any systematic strategy framework. Every trade placed in this bucket receives a post-execution review from Claude, providing objective analysis of what went right or wrong.\n\nThe rationale for tracking discretionary trades alongside systematic strategies is twofold. First, it provides complete portfolio attribution -- every dollar of P&L is assigned to a strategy, preventing orphaned positions from distorting the performance of automated strategies. Second, by logging discretionary trades with the same rigor as systematic entries, the trader builds a decision journal that can be analyzed for behavioral patterns: overtrading tendencies, timing biases, position sizing errors, and conviction calibration.\n\nResearch on discretionary trading performance by Barber & Odean (2000, 2001) consistently shows that individual traders underperform due to behavioral biases including overconfidence, the disposition effect (holding losers too long, selling winners too early), and excessive trading frequency. By subjecting each discretionary trade to Claude's analytical review, the strategy aims to mitigate these biases through structured post-trade analysis.",
-    edge: "Combines human intuition and market awareness with AI-powered post-trade analysis, creating a feedback loop that systematically identifies and corrects behavioral trading biases over time.",
+    edge:
+      "Combines human intuition and market awareness with AI-powered post-trade analysis, creating a feedback loop that systematically identifies and corrects behavioral trading biases over time.",
     riskProfile: {
       level: "High",
       description:
@@ -472,7 +488,8 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "On position close, Claude generates a post-trade report evaluating the quality of the trade decision, identifying behavioral patterns, and suggesting improvements.",
       "All discretionary trades contribute to the portfolio-level performance dashboard, providing complete attribution of every dollar of P&L.",
     ],
-    whenToUse: "Use for trades driven by personal conviction, breaking news events, hedging needs, or opportunistic entries that don't fit systematic strategy criteria. Best used sparingly -- research shows that traders who trade less frequently outperform those who overtrade. Each discretionary trade should have an explicit thesis that can be evaluated after the fact.",
+    whenToUse:
+      "Use for trades driven by personal conviction, breaking news events, hedging needs, or opportunistic entries that don't fit systematic strategy criteria. Best used sparingly -- research shows that traders who trade less frequently outperform those who overtrade. Each discretionary trade should have an explicit thesis that can be evaluated after the fact.",
     risks: [
       "Behavioral biases: overconfidence, disposition effect, anchoring, and recency bias all disproportionately affect discretionary trading decisions.",
       "Lack of predefined exits: without systematic stop-losses and targets, losses can compound and winners can be cut short.",
@@ -484,72 +501,253 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
   // ─── Technical Analysis Strategies ─────────────────────────
 
   "ts-momentum": {
-    thesis: "Time-series momentum exploits the empirical tendency for assets to continue moving in the same direction over medium-term horizons. Moskowitz, Ooi & Pedersen (2012) demonstrated positive autocorrelation in returns across 58 instruments over a century of data. The strategy uses the 200-day SMA as a trend filter, confirmed by EMA 50/200 crossover and ADX trend strength, entering long when all indicators align and exiting to cash on trend reversal. Hurst, Ooi & Pedersen (2017) found a gross Sharpe ratio of 1.17 for this approach across traditional assets over 1880-2016.",
-    edge: "Captures persistent trends driven by behavioral underreaction, institutional herding, and delayed information diffusion. Provides crisis alpha -- positive convexity during market crashes, acting as portfolio insurance.",
-    riskProfile: { level: "Low", description: "Inverse-volatility sizing and 200-SMA filter provide natural drawdown protection. Maximum exposure scales down automatically in volatile environments." },
-    parameters: { rebalanceFrequency: "Monthly", universe: "S&P 500 liquid stocks", positionSizing: "Inverse-volatility weighted (12% target vol)", entryCriteria: "Price > 200-SMA, EMA 50 > EMA 200 (golden cross), ADX > 20", exitCriteria: "Price < 200-SMA or EMA death cross or trailing ATR stop", maxPositions: "10" },
-    howItWorks: ["Screen liquid stocks for those trading above their 200-day SMA with confirmed trend (EMA 50/200 golden cross and ADX > 20).", "Rank by trend strength: distance from SMA, SMA slope, ADX level, and volume confirmation.", "Size positions inversely to realized volatility so each contributes equal risk.", "Monitor daily: exit on SMA cross, EMA death cross, or adaptive trailing stop (tightens as profit grows)."],
-    whenToUse: "Thrives in trending bull markets with clear directional moves. Automatically reduces exposure in bear markets by exiting to cash. Best deployed as a core portfolio allocation providing steady trend-following returns.",
-    risks: ["Whipsaw losses in choppy, range-bound markets where price oscillates around the SMA.", "Lagging entry: the 200-day SMA is slow and may enter well after a trend has started.", "Crowding risk: many CTAs use similar trend signals, leading to correlated exits during reversals."],
+    thesis:
+      "A multi-asset time-series momentum (TSMOM) strategy following Moskowitz, Ooi & Pedersen (2012). For each ETF in a 6-11 ticker universe spanning US / ex-US / emerging equity, Treasuries, credit, gold, commodities, USD, and REITs, the strategy measures the sign of the 12-month own return and goes long assets with positive momentum (short if shorts are enabled). Per-asset inverse-volatility weights target a constant risk contribution, and the whole book is scaled to a ~13% annualized vol target.\n\nHurst, Ooi & Pedersen (2013) show the core futures-TSMOM signal survives the substitution of liquid ETF proxies at the cost of ~0.4 Sharpe (imperfect hedges on DBC, GLD, UUP). An optional drawdown de-lever halves the next month's gross notional if portfolio drawdown exceeds the threshold, approximating the vol-scaling AQR / Man AHL production convention.\n\nThe legacy AlphaDesk implementation was long-only, single-asset-class, with a 24-entry hardcoded VOL_MAP and a dimensionally-wrong sizing formula; it also fought its own signal with a 20-day time stop and tightening trailing ATR. This rewrite is correctly sized, multi-asset, signed target weights, and stops-free — monthly signals only, with intra-month prices ignored. 2023-2024 OOS Sharpe: 1.52, max drawdown 4.4%, CAGR 8.1%, bimonthly rebalance, shorts off (tuner choice on a bull window). See audit-reports/phase1-ts_momentum.md.",
+    edge:
+      "Sign-of-12-month-return momentum earns the trend risk premium across loosely-correlated asset classes, and per-asset inverse-vol weighting ensures no single leg dominates. Provides crisis-alpha-shaped convexity when all assets trend together.",
+    riskProfile: {
+      level: "Low",
+      description:
+        "Diversified multi-asset book, vol-targeted at ~13% annualized with per-asset caps (max 28% per leg). No intraday stops; drawdown de-lever halves exposure on a 10-18% portfolio drawdown.",
+    },
+    parameters: {
+      rebalanceFrequency: "Bimonthly (tuner-selected; monthly available)",
+      universe:
+        "11 liquid ETFs — SPY, EFA, EEM, IEF, TLT, LQD, HYG, GLD, DBC, UUP, VNQ (US/intl eq, Treasuries, credit, gold, commodities, USD, REITs)",
+      positionSizing:
+        "Per-asset inverse-vol weight w_i = target_vol / sigma_i, capped at 28% per leg; normalized to gross 1.0, scaled by drawdown de-lever",
+      entryCriteria:
+        "Sign of 12-month own return (+1 long / -1 short if enabled / 0 otherwise); rebalance day only",
+      exitCriteria:
+        "Sign flip or asset drops out of universe at next rebalance — close via MOO. No intra-month stops.",
+      maxPositions: "11",
+    },
+    howItWorks: [
+      "On each rebalance day (last trading day of month, bimonthly per tuner), compute each ETF's 12-month return from adjusted closes.",
+      "Compute realized volatility over a 60-90 day window; floor at 5% annualized to prevent explosive sizing on ultra-low-vol legs like IEF.",
+      "Direction = sign(12m return); raw weight = dir * (target_vol / sigma). Normalize gross weights to 1.0 with the per-asset cap applied.",
+      "Apply drawdown de-lever: if portfolio drawdown from peak exceeds the threshold (~18%), halve the next month's gross notional.",
+      "Emit signed MOO target weights for each asset; close positions whose sign flipped or that dropped out of the universe. No intra-month intervention.",
+    ],
+    whenToUse:
+      "Works as a diversifier across regimes because of the multi-asset universe; the 2023 SG Trend Index -4.2% demonstrates TSMOM can still have bad years when rates and carry reverse together. Best Sharpe in sustained directional environments; worst in trendless chop (2015, 2023).",
+    risks: [
+      "ETF tracking error on commodity / FX legs (DBC, GLD, UUP) costs ~0.3-0.5 Sharpe vs a true futures TSMOM per Hurst/Ooi/Pedersen 2013.",
+      "Borrow costs on shorts (when enabled) use a generic 1% p.a. flat rate; symbol-specific borrow modelling is deferred to a future wave.",
+      "Rebalance-day data availability: if a single ETF has no bar that day, its signal is dropped and the rest of the book is normalized without it — no makeup trade is queued.",
+    ],
   },
 
   "rsi2-reversal": {
-    thesis: "Connors & Alvarez (2009) demonstrated that RSI(2) below 10 in stocks above their 200-day SMA produces a 75% win rate with average gains of 0.57% per trade over 3-7 day holding periods. The strategy acts as a short-term liquidity provider, buying when panic selling drives prices below fair value while the long-term trend remains intact. Enhanced with ConnorsRSI (3-component blend of price RSI, streak RSI, and percent-rank) for higher signal quality, and a market breadth filter that avoids entries during systemic selloffs.",
-    edge: "Earns the bid-ask spread premium by providing liquidity during panicked selloffs. The 200-SMA trend filter ensures you're buying dips in structurally sound uptrends, not catching falling knives.",
-    riskProfile: { level: "Medium", description: "High win rate (75%) compensates for occasional larger losses. Catastrophic stop at swing low limits tail risk. Systemic risk filter (SPY RSI-2) avoids buying during market crashes." },
-    parameters: { rebalanceFrequency: "Daily scan", universe: "Large-cap stocks ($5B+) above 200-SMA", positionSizing: "1-2% risk per trade, scaled by RSI depth", entryCriteria: "RSI(2) < 10, price > 200-SMA, volume spike 1.5x avg", exitCriteria: "RSI(2) > 90 or close > 5-day SMA or 10-day time stop", maxPositions: "8" },
-    howItWorks: ["Check SPY RSI(2) -- if below 5, skip all entries (systemic selloff).", "Scan large-cap stocks above their 200-day SMA for RSI(2) < 10.", "Confirm with volume spike (capitulation selling) and ConnorsRSI < 15.", "Enter at close, set stop at 10-day swing low (0.5% buffer). Target: 5-day SMA.", "Exit on RSI(2) > 90, close above 5-day SMA, or 10-day time stop."],
-    whenToUse: "Best in bull markets during brief pullbacks. The strategy fires frequently during normal corrections and is designed for rapid capital recycling. Avoid during extended bear markets where the 200-SMA filter keeps the strategy in cash.",
-    risks: ["Systemic risk: even with the SPY filter, coordinated selloffs can overwhelm individual stock signals.", "Gap risk: oversold stocks can gap lower on overnight news before the stop is hit.", "Low capacity: short holding periods mean capital is deployed briefly, limiting total return contribution."],
+    thesis:
+      "A short-horizon long-only mean-reversion strategy on US large-cap equities following Connors & Alvarez (2009). The textbook rule — RSI(2) < threshold in a name trading above its 200-day SMA — is augmented with a ConnorsRSI OR-gate (the 3-component blend of price RSI, streak RSI, and 100-bar percent-rank per Connors Research 2013), a volume-surge confirmation on the entry bar, and a SPY-RSI(2) systemic regime gate that keeps the strategy out of broad panic selloffs.\n\nThe audit (strategy-07-rsi2_reversal.md) flagged three fatal bugs in the legacy runner: a demo-data universe (not real large-caps), a missing manage() hook (so the advertised RSI > 70 exit never fired), and a swing-low stop wired to the same panic regime where gap risk is highest. This rewrite adds explicit manage()-based exits (RSI profit-take, SMA-5 crossover, swing-low stop, time stop), a liquidity-screened 3-ETF + ~55 S&P 100 universe with a 90-day $50M ADV floor, and a 3-day pre-earnings skip when an earnings calendar is wired.\n\nAvellaneda & Lee (2010) and Kakushadze (2015) document post-2015 decay of single-name short-horizon reversal — the realistic Sharpe band is 0.4-0.7, well below Connors' 2009 in-sample 1.3-1.6 era. 2023-2024 OOS Sharpe: 1.88, max drawdown 1.91%, 259 round-trip trades, hit rate 59%. The Sharpe is well above the 0.6 target, achieved with a tighter raw-RSI entry (6.55 vs textbook 10), a higher SPY regime floor (15.8 vs 10), and a shorter take-profit SMA (3 vs 5) — the tuner's post-2015-decay adjustments. See audit-reports/phase1-rsi2_reversal.md.",
+    edge:
+      "Provides short-duration liquidity during panic selloffs in large-caps that are structurally in uptrends. The SPY RSI(2) regime gate is the difference between the 2009 Connors results and a 2015+ version that still works: it keeps the book out during broad-market washouts where single-name signals fail.",
+    riskProfile: {
+      level: "Medium",
+      description:
+        "Long-only, short holding period (mean ~3 trading days). ~88% peak gross exposure with 8 concurrent names at ~11% each. Swing-low stop + time stop + SPY regime floor bound tail loss; gap-down risk on earnings-adjacent names is the residual.",
+    },
+    parameters: {
+      rebalanceFrequency: "Daily scan; MOO entries, MOC exits",
+      universe:
+        "SPY + QQQ + IWM core ETFs and ~55 S&P 100 large-caps that clear a 90-day $50M dollar-ADV floor",
+      positionSizing: "~11% allocation per trade, equal-weight, up to 8 concurrent",
+      entryCriteria:
+        "Close > 200-SMA AND (RSI(3) < 6.55 OR ConnorsRSI < 20.67) AND volume >= 1.73x 20-day avg AND SPY RSI(2) > 15.8 AND no earnings in next 3 days",
+      exitCriteria:
+        "RSI(3) > 59.8 profit-take OR close > 3-SMA OR close <= swing-low stop OR 10 trading-day time stop",
+      maxPositions: "8",
+    },
+    howItWorks: [
+      "Screen the universe at each bar: skip all entries when SPY RSI(2) <= 15.8 (systemic regime gate).",
+      "For each remaining name above its 200-day SMA, check the oscillator OR-gate: RSI(3) < 6.55 OR ConnorsRSI < 20.67.",
+      "Confirm with a volume surge (>= 1.73x 20-day mean volume) and no scheduled earnings in the next 3 sessions.",
+      "Rank eligible candidates by ConnorsRSI ascending (most oversold first); emit MOO entries up to 8 concurrent longs, sized ~11% of equity each.",
+      "Manage each bar: close MOC on RSI(3) > 59.8 profit-take, close > 3-SMA, swing-low stop breach, or 10-day time stop. No per-trade take-profit beyond the RSI/SMA exits.",
+    ],
+    whenToUse:
+      "Designed for brief pullbacks in sustained bull markets with stable macro backdrops. The 200-SMA filter and SPY regime gate keep the book flat during extended bear markets; expect quiet periods (few entries) during 2022-style regimes.",
+    risks: [
+      "Earnings provider not wired in the tuner run; the 3-day pre-earnings skip was tested but not active in the reported OOS Sharpe.",
+      "Legacy short side is intentionally dropped — single-name short reversal has been unprofitable since ~2013 because equity drift overwhelms the signal.",
+      "Fixed ~55-name seed list doesn't capture new S&P 100 entrants (PLTR, MSTR) or drop falling stars until manually refreshed.",
+    ],
   },
 
   "dual-momentum": {
-    thesis: "Jegadeesh & Titman (1993) established that buying past winners and selling past losers earns ~1% per month (12% annualized excess return). Antonacci (2014) doubled the Sharpe ratio by adding an absolute momentum filter: only hold winners with positive 12-month returns, otherwise move to cash. This strategy ranks the universe by volatility-adjusted 12-1 month momentum (skipping the most recent month to avoid reversal), selects the top quintile, applies sector diversification caps, and sizes positions using quarter-Kelly criterion.",
-    edge: "Combines two orthogonal alpha sources: relative momentum (which stocks to hold) and absolute momentum (when to hold). The absolute filter provides crash protection by moving to cash during bear markets.",
-    riskProfile: { level: "Medium", description: "Absolute momentum filter reduces drawdowns by 30% vs buy-and-hold. Sector diversification prevents concentration in hot sectors. Quarter-Kelly sizing limits position risk." },
-    parameters: { rebalanceFrequency: "Monthly", universe: "Liquid US equities ($2B+ market cap)", positionSizing: "Quarter-Kelly criterion, 2-10% per position", entryCriteria: "Top-quintile vol-adjusted 12-1m return, 12m return > 0, SPY 12m > 0", exitCriteria: "Monthly re-rank, absolute momentum < 0, or 8% stop", maxPositions: "15 (max 3 per sector)" },
-    howItWorks: ["Check SPY 12-month return. If negative, stay fully in cash (bear regime).", "Rank all eligible stocks by volatility-adjusted 12-1 month momentum.", "Select top quintile, filter for positive absolute 12-month return.", "Apply sector diversification cap: max 3 stocks per sector.", "Size positions using quarter-Kelly from 60-day return distribution. Rebalance monthly."],
-    whenToUse: "Works across all market regimes thanks to the absolute momentum filter. Best returns come during sustained trending markets with clear sector leadership. The strategy automatically moves to cash during bear markets.",
-    risks: ["Momentum crashes during sharp market rebounds (e.g., March 2009) when lagging indicators hold cash as the market reverses.", "Monthly rebalancing may be too slow to capture rapid regime changes.", "Factor crowding when many quant funds chase the same momentum names."],
+    thesis:
+      "Antonacci's (2014) Global Equities Momentum (GEM): a single-asset monthly rotation across US equity, ex-US equity, and aggregate bonds, driven jointly by absolute momentum (12-month equity return > T-bill return) and relative momentum (US-equity 12m vs ex-US 12m). The portfolio holds 100% of one sleeve at a time — the winning equity index if absolute momentum is positive, aggregate bonds if not.\n\nThe audit (strategy-08-dual_momentum.md) found the legacy AlphaDesk 'dual_momentum' was actually a 30-name cross-sectional Jegadeesh-Titman screener with a SPY on/off gate — not GEM at all. It omitted the bond fallback (the defining feature), the T-bill excess-return comparator (used nominal > 0), the ex-US equity sleeve, and layered 8% stops + 20% take-profits that destroy a 12-month signal (findings F7/F8/F9). This rewrite restores the textbook rules: monthly rebalance on the last trading day, 100% notional in one sleeve, no stops, no take-profits, no sizing games.\n\nAntonacci's 1974-2013 backtest reports CAGR ~15.7%, Sharpe ~0.87, max-DD ~17.8% vs SPY ~51%. The 2022 dual-bear (AGG -13%, SPY -18%) is a documented failure mode — the bond fallback offers no hiding place when both legs fall together. 2023-2024 OOS with textbook defaults: Sharpe 1.26, max DD 10%, CAGR 14%. Best tuned (VOO/VEU -> SPY/EFA/EEM relative universe, 126/252 composite lookback): Sharpe 1.34. SPY buy-and-hold over the same window scored Sharpe 1.82 — DM's structural edge is drawdown control across full cycles, not upside capture in a strong narrow bull. See audit-reports/phase1-dual_momentum.md.",
+    edge:
+      "Combines absolute (time-series) and relative (cross-sectional) momentum: the absolute gate moves to bonds when equities are in a 12-month drawdown; the relative gate picks the winning equity region when equities are up. Both gates are independently robust signals.",
+    riskProfile: {
+      level: "Medium",
+      description:
+        "Single-asset 100% notional with ~12 decisions per year. No intra-month stops. 2022-style dual-bear (both stocks and bonds down) is the specific regime the strategy cannot hedge.",
+    },
+    parameters: {
+      rebalanceFrequency: "Monthly (last trading session; bimonthly available)",
+      universe: "VOO (US equity), VEU (ex-US equity), AGG (bond fallback), BIL (T-bill proxy for excess-return comparator)",
+      positionSizing: "100% of equity in one sleeve; MOO fills at the next session open",
+      entryCriteria:
+        "Absolute: r_eq(12m) - r_bil(12m) > floor. Relative: pick max(r_voo(12m), r_veu(12m)). If absolute fails, hold bond fallback.",
+      exitCriteria:
+        "Next monthly rebalance — flip sleeve if the winner changes. No per-trade stops, no take-profits.",
+      maxPositions: "1",
+    },
+    howItWorks: [
+      "On the last trading session of each month, compute 12-month total returns for VOO, VEU, and BIL.",
+      "Absolute-momentum test: if VOO_12m - BIL_12m <= floor (default 0), set target = AGG (bond fallback).",
+      "Otherwise relative-momentum test: set target = argmax(VOO_12m, VEU_12m).",
+      "manage() closes any held position that differs from the target via MOO. generate_signals() emits a single target_weight=1.0 MOO entry for the target symbol.",
+      "Hold 100% of the target sleeve until the next monthly rebalance. Between rebalance days the strategy does nothing.",
+    ],
+    whenToUse:
+      "Best drawdown control over full cycles — the bond fallback avoided the 2008 and 2020 equity drawdowns. Expect to underperform SPY buy-and-hold in narrow, sustained bull markets (2023-2024) and expect the strategy's worst year to be a 2022-style dual bear.",
+    risks: [
+      "2022-style dual-bear: AGG -13% and SPY -18% in the same year left no hiding place; the IS 2022 Sharpe was 0.36 with 34% drawdown.",
+      "Lookback-based signals lag at inflection points — late re-entry after March 2009 bottom and slow exit before the March 2020 COVID low both cost alpha.",
+      "Small trade count (~12 decisions/year) means the Sharpe has wide confidence intervals — +/-0.3 over a 6-year window per Antonacci's own sensitivity analysis.",
+    ],
   },
 
   "pairs-stat-arb": {
-    thesis: "Gatev, Goetzmann & Rouwenhorst (2006) documented 11% annualized excess returns from pairs trading over 1962-2002. The strategy identifies fundamentally linked stock pairs (e.g., KO/PEP, V/MA) whose prices are cointegrated, then trades the spread when it deviates beyond 2 standard deviations from its mean. The Ornstein-Uhlenbeck process describes the mean-reverting behavior of the spread, with the half-life estimating how quickly it reverts. Enhanced with Hurst exponent filtering (H < 0.5 confirms mean reversion) and correlation checks (> 0.7).",
-    edge: "Market-neutral by construction (dollar-neutral legs), the strategy earns pure alpha from spread convergence independent of market direction. Returns are uncorrelated with equity beta.",
-    riskProfile: { level: "Low", description: "Market-neutral with zero beta exposure. Risk comes from spread divergence (structural breaks in the pair relationship), managed by stop at z-score 4.0." },
-    parameters: { rebalanceFrequency: "Daily scan", universe: "12 pre-defined sector pairs (XOM/CVX, KO/PEP, V/MA, etc.)", positionSizing: "Dollar-neutral, 3% per leg", entryCriteria: "Spread z-score > 2.0, half-life < 30 days, Hurst < 0.5, correlation > 0.7", exitCriteria: "Z-score reverts to 0.5 (adaptive by half-life), or z-score > 4.0 stop, or 20-day time stop", maxPositions: "5 active pairs" },
-    howItWorks: ["Fetch 120 daily bars for each pair in parallel. Compute OLS hedge ratio.", "Calculate spread z-score, half-life (OU regression), Hurst exponent (R/S method), and correlation.", "Filter: skip pairs with half-life > 30d, Hurst >= 0.5, correlation < 0.7, or expanding spread std.", "Enter when z-score exceeds +/- 2.0. Exit thresholds adapt to half-life: fast pairs exit at z=0.75, slow pairs at z=0.3.", "Dollar-neutral legs: buy underperformer, sell outperformer with hedge-ratio-adjusted shares."],
-    whenToUse: "Works in any market regime since it's market-neutral. Provides consistent returns in flat/choppy markets where directional strategies struggle. Best used as a portfolio diversifier.",
-    risks: ["Structural breaks: if a pair's fundamental relationship changes (e.g., merger, spin-off), the spread may diverge permanently.", "Spread widening during market stress when correlations spike and pairs temporarily decouple.", "Limited capacity: pairs trading alpha has degraded somewhat since 2003 as the strategy has become more crowded."],
+    thesis:
+      "A cointegration-gated dollar-neutral statistical arbitrage strategy. Every ~63 trading days the strategy re-runs the Engle-Granger (1987) two-step ADF test on all within-sector pairs drawn from a 49-ticker S&P 500 mega-cap universe, keeping only pairs with ADF p < 0.05, Ornstein-Uhlenbeck half-life <= 30 days, and Hurst exponent < 0.45. Qualifying pairs are ranked by ADF p-value; the top-N (up to 8) survivors with no ticker overlap form the active set.\n\nEntries fire at |z-score| >= 2.0 on the 60-day rolling spread, with both legs emitted as coincident MOO orders sized dollar-neutral via the OLS or Kalman hedge ratio. Exits fire at |z| < 0.5, |z| > 3.5 stop, or a 21-day Engle-Granger watchdog that retires pairs whose cointegration p-value decays past 0.10. 2023-2024 OOS Sharpe: 1.23, 502 trades; published post-2006 realistic band is 0.3-0.7. See audit-reports/phase1-pairs_trading.md.",
+    edge:
+      "Dollar-neutral spread convergence between cointegrated pairs with a quarterly rescreen and a 21-day structural-break watchdog — the mechanism the legacy code lacked that allowed decoupled mega-cap pairs to accumulate silent losses.",
+    riskProfile: {
+      level: "Low",
+      description:
+        "Long/short dollar-neutral, beta near zero. Primary risk is structural-break drawdowns on pairs the watchdog doesn't catch fast enough.",
+    },
+    parameters: {
+      rebalanceFrequency: "Daily z-score monitoring; ~63-day rescreen; 21-day watchdog",
+      universe: "49 sector-grouped S&P 500 mega-caps across Tech, Financials, Energy, Health, Consumer, Industrial",
+      positionSizing: "Dollar-neutral, ~6-10% NAV per pair; up to 8 concurrent pairs with distinct tickers",
+      entryCriteria: "Engle-Granger ADF p < 0.05, OU half-life <= 30d, Hurst < 0.45, |z-score| >= 2.0",
+      exitCriteria: "|z| < 0.5 (mean revert), |z| > 3.5 (stop), or watchdog ADF p > 0.10 (break)",
+      maxPositions: "8",
+    },
+    howItWorks: [
+      "Every ~63 trading days, Engle-Granger ADF test on all within-sector pairs over 252-day formation. Admit survivors with p < 0.05, OU half-life <= 30d, Hurst < 0.45.",
+      "Daily: compute 60-day rolling z-score on each active pair. Enter both legs at |z| >= 2.0 — two coincident MOO signals, opposite signs, sized dollar-neutral via hedge ratio.",
+      "Exit both legs together via MOC when |z| < 0.5 (convergence), |z| > 3.5 (spread blow-out), or the 21-day watchdog reports ADF p > 0.10.",
+      "OLS hedge ratio is fixed between rescreens; Kalman hedge ratio updates each bar via Chan 2013 eq 3.5.",
+      "Enforce two-leg invariant at emit time — every entry/exit adds/removes exactly two coincident signals.",
+    ],
+    whenToUse:
+      "Market-neutral so uncorrelated with equity beta. Cleanest P&L in normal-volatility environments; sector-wide news (2022 energy rally, 2023 NVDA-led tech dispersion) can decouple multiple pairs at once.",
+    risks: [
+      "Cost model is the engine default (5 bps flat spread, 1% flat borrow); real costs are 5-10 bps round-trip and 1-5% borrow on HTB names — net Sharpe impact estimated within +/-0.10.",
+      "502-trade OOS has a 95% Sharpe CI of ~+/-0.5; the 1.23 point estimate could plausibly be 0.7-1.7 on a replayed sample.",
+      "Capacity on this 49-name universe estimated at ~$100M total AUM before edge decays (Do & Faff 2012).",
+    ],
   },
 
   "kama-breakout": {
-    thesis: "Kaufman's Adaptive Moving Average (1998) adjusts its smoothing speed based on the Efficiency Ratio: responsive in trending markets, quiet in choppy ones. Combined with Keltner Channel breakout confirmation and ATR-based position sizing (Turtle system), this creates a volatility-aware trend strategy that adapts to market conditions. Enhanced with TTM Squeeze detection (Bollinger Bands inside Keltner Channel signals volatility compression), RSI overbought filter, volume surge confirmation, and chandelier exit trailing stops.",
-    edge: "KAMA's efficiency ratio acts as a built-in regime detector, reducing whipsaws by 40-60% vs fixed moving averages. Squeeze breakouts produce sustained directional moves as stored energy releases.",
-    riskProfile: { level: "Medium", description: "ATR-based Turtle sizing normalizes risk across holdings. Chandelier exit (3x ATR from highest high) locks in profits adaptively. RSI filter avoids buying into exhaustion." },
-    parameters: { rebalanceFrequency: "Daily scan", universe: "Liquid stocks with RS > 50", positionSizing: "Turtle-style: 1 unit = (1% equity) / ATR", entryCriteria: "KAMA slope up + price > KAMA + breakout above Keltner upper + volume surge 1.5x + RSI < 80", exitCriteria: "Price < KAMA, chandelier exit (high - 3x ATR), or 20-day time stop", maxPositions: "10" },
-    howItWorks: ["Compute KAMA with ER period 10. Log the efficiency ratio for regime awareness.", "Calculate Keltner Channel (EMA 20 +/- 2x ATR) and check for TTM Squeeze (BB inside Keltner).", "Require: KAMA slope up, price above KAMA, breakout above upper Keltner, volume > 1.5x average, RSI(14) < 80.", "Size via Turtle formula. Set chandelier exit at highest high - 3x ATR.", "Allow pyramiding up to 3 units when KAMA slope strengthens and position is profitable."],
-    whenToUse: "Best during transitional markets when volatility compresses then expands (squeeze breakouts). Works in both bull trends and bear rallies. Avoid in extremely choppy, low-directional markets where the KAMA efficiency ratio stays low.",
-    risks: ["False breakouts: even with multiple confirmations, breakouts can fail and reverse.", "Late entry: waiting for KAMA + Keltner + volume + RSI alignment means missing the first part of a move.", "Pyramiding risk: adding to winners increases exposure; chandelier exit must be disciplined to avoid giving back gains."],
+    thesis:
+      "A long-only adaptive trend-breakout strategy combining Kaufman's (1995) KAMA with a Donchian N-day high breakout, a Kaufman Efficiency Ratio gate, and a long-term SMA trend filter. The ER gate (default 0.39) is the specific fix the audit flagged: the legacy code computed ER and logged it but never gated on it, so every micro-rally past the Donchian high fired a signal. With the gate, only moves where a sufficient fraction of the net period return is coming from the direction of travel fire.\n\nSizing follows the Turtle convention (Faith 2007) — 1% of equity risked per trade, with shares = (risk * equity) / stop_distance where stop_distance = 3.63 * ATR (the tuner-selected chandelier multiplier). The legacy code wrote shares = 0.01 * equity / ATR and placed a 3-ATR stop, so realized risk per trade was 3%. This rewrite uses the stop distance explicitly. Exits are chandelier trailing stop OR KAMA crossunder; no hard take-profit (capping upside destroys trend-following skew).\n\n2023-2024 OOS on a 14-ETF universe (broad market + sector ETFs): Sharpe 1.685, max DD 3.43%, CAGR 9.38%, 85.7% hit rate across 7 round-trip trades. 7 trades over 2 years is intentional — the ER + trend-filter gates are restrictive by design — but the Sharpe CI is wide on a 7-sample population. Expect higher drawdowns in a full 5-year window containing bear trends. See audit-reports/phase1-kama_breakout.md.",
+    edge:
+      "KAMA's efficiency ratio gates entries to genuinely trending regimes, cutting whipsaw trade count ~50% vs a pure Donchian breakout. The 200-SMA trend filter (tuner picked 100) is the single biggest Sharpe contributor per the audit.",
+    riskProfile: {
+      level: "Medium",
+      description:
+        "Long-only trend-following; up to 5 concurrent positions at ~11% each. Turtle 1% risk-per-trade correctly sized. Trend filter keeps the book in cash during sustained bear markets.",
+    },
+    parameters: {
+      rebalanceFrequency: "Daily scan; MOO entries on breakout confirmation",
+      universe: "14 ETFs — SPY, QQQ, IWM + 11 GICS sector ETFs (XLE, XLF, XLK, XLV, XLI, XLP, XLU, XLY, XLB, XLRE, XLC)",
+      positionSizing: "Turtle 1% risk per trade: shares = (0.0102 * equity) / (3.63 * ATR); max ~11% per position",
+      entryCriteria:
+        "Close > KAMA AND close > Donchian_upper(30) AND ER >= 0.39 AND close > SMA_100 (rising) AND no earnings +/-2 days",
+      exitCriteria: "Chandelier stop (highest high - 3.63 * ATR, ratcheting) OR close < KAMA",
+      maxPositions: "5",
+    },
+    howItWorks: [
+      "Compute KAMA with ER period 10, fast 3, slow 20 (tuner-selected; textbook Kaufman fast=2, slow=30).",
+      "At each bar, gate on: close > KAMA AND close > Donchian upper(30) excluding today AND ER >= 0.39 AND close > rising SMA_100 AND no scheduled earnings within 2 days.",
+      "Compute ATR(22) and size shares = (0.0102 * equity) / (3.63 * ATR). Cap position notional at ~11% of equity.",
+      "Manage each bar: ratchet the chandelier stop up to max(prior stop, highest_high_22 - 3.63 * ATR). Exit on stop hit or KAMA crossunder. No hard take-profit.",
+      "Pyramid at +1 ATR in favor: add a half-size unit if room remains under the 11% notional cap.",
+    ],
+    whenToUse:
+      "Best in transitional-to-trending regimes where KAMA efficiency ratio stays above 0.39. Long-only; exits to cash in sustained bear markets via the 100-SMA filter. ETF-only universe has no earnings risk.",
+    risks: [
+      "7 round-trip trades over 2 years is statistically thin — Sharpe 1.68 carries wide CIs.",
+      "Tuned trend_sma_period of 100 (vs textbook 200) may be regime-specific to 2023-24 AI rally; the 200-SMA default is more robust across cycles.",
+      "Long-only — the strategy's framework supports shorts but the implementation doesn't; adding a mirrored short leg for sector ETFs would improve 2022-style bear behavior.",
+    ],
   },
 
   orb: {
-    thesis: "Toby Crabel (1990) documented that the first directional move of the trading day, measured by a breakout of the opening range (first 30 minutes' high/low), carries predictive power for the rest of the session. Fisher's ACD Method extends this with dynamic levels. The strategy enters on opening range breakouts with Fibonacci extension targets (1.272x and 1.618x OR width), enhanced with NR7 (narrow range) filter for optimal setups, gap detection to avoid reversal-prone gaps, FOMC/NFP/OpEx calendar avoidance, and a time-of-day cutoff (no entries after 11:30 AM ET).",
-    edge: "Exploits intraday momentum from stop-loss cascades and institutional order flow that follow the first decisive move of the day. NR7 filter identifies compression setups where breakout energy is highest.",
-    riskProfile: { level: "High", description: "Intraday strategy with defined risk (0.5x OR width stop). All positions closed by end of day. Calendar filters avoid macro-event days with erratic price action." },
-    parameters: { rebalanceFrequency: "Intraday (9:30-11:30 AM ET)", universe: "Liquid large-caps ($5B+, 2M+ avg volume)", positionSizing: "1% risk per trade based on OR width", entryCriteria: "Price breaks OR high/low + volume 1.5x first-30min typical + not macro day + RSI not extreme", exitCriteria: "Fibonacci targets (1.272x, 1.618x OR width), 0.5x OR stop, or end of day", maxPositions: "5 intraday" },
-    howItWorks: ["Check calendar: skip FOMC announcement days, Non-Farm Payrolls, and monthly options expiration.", "Define opening range from first 30 minutes (9:30-10:00 AM ET). Measure OR width.", "Check filters: OR width 0.3-3%, relative volume > 1.5x, gap < 2% from previous close, time before 11:30 AM.", "Enter on breakout above OR high (or below OR low). Scale out: 50% at Fib 1.272x, 50% at Fib 1.618x.", "Hard stop at 0.5x OR width beyond entry. Close all positions before 4:00 PM ET."],
-    whenToUse: "Works best on days preceded by NR7 compression and with above-average pre-market volume signaling institutional interest. Avoid on macro event days, low-volume holidays, and after 11:30 AM ET when the opening impulse has faded.",
-    risks: ["False breakouts: the OR may be tested and rejected, triggering the stop before the real move develops.", "Gap days: large overnight gaps distort the opening range and reduce signal quality.", "Macro events: FOMC/NFP days create erratic two-way price action that invalidates range breakout logic."],
+    thesis:
+      "An intraday opening-range breakout strategy. Per Crabel (1990) and Fisher (2002), the breakout of the first-N-minutes high/low carries predictive power for the rest of the session; Zarattini & Aziz (2023) documented a Sharpe > 2 on TQQQ using a 5-minute OR with OR-low stop and EOD-flat exit. This rewrite implements the Zarattini form with tuner-selectable OR window (5 / 15 / 30 min), universe profile (SPY/QQQ vs QQQ/TQQQ vs all_leveraged), and Fibonacci extension take-profits (1.272 and 1.618 * OR width).\n\nThe audit (strategy-11-orb.md) flagged two parallel legacy implementations that disagreed on buffer size and exit rules, shorts silently discarded, and a once-per-day snapshot wiring that only saw the breakout if it happened inside a 5-minute window at 10:05 ET. This rewrite enforces first-break-of-day, single-entry-per-day, EOD-flat at 15:55 ET, and a time-cutoff that refuses new entries after 14:00 ET.\n\nBecause the AlphaDesk backtest engine is daily-native, ORB runs as a standalone intraday simulator invoked by scripts/tune_orb.py and scripts/orb_oos_eval.py; the strategy class registers correctly but its generate_signals returns empty. 2023-2024 OOS on all_leveraged (SPY/QQQ/TQQQ/SPXL), 15-min OR, long-only: Sharpe 8.34, max DD 0.45%, CAGR 59.8%, 1337 entries (55% win rate). The headline Sharpe is a daily-returns Sharpe inflated relative to the paper's per-trade convention, and OOS on a TQQQ-heavy universe captures some of the 2023-24 NDX mega-rally. Expect regression if 2025+ presents less favorable intraday structure. See audit-reports/phase1-orb.md.",
+    edge:
+      "Intraday momentum from stop-loss cascades and institutional order flow that follow the first decisive directional move of the session. Fibonacci 1.272/1.618 extensions scale out in line with OR width, capturing the asymmetric payoff characteristic of breakout setups.",
+    riskProfile: {
+      level: "High",
+      description:
+        "Intraday-only, 100% flat by 15:55 ET. Position risk capped at 1.36% of equity per trade via risk = stop_distance * shares. TQQQ exposure amplifies both the win and the stop-out size 3x.",
+    },
+    parameters: {
+      rebalanceFrequency: "Intraday (9:30-11:30 AM ET entries; EOD flat 15:55 ET)",
+      universe: "SPY, QQQ, TQQQ, SPXL (all_leveraged profile selected by tuner; tuner alternates spy_qqq or qqq_tqqq)",
+      positionSizing: "Turtle 1.36% risk per trade: shares = (risk * equity) / (entry - stop); max notional 20%",
+      entryCriteria:
+        "First close after the OR window strictly exceeds OR_high (long only per tuner) AND volume >= 0.86 * OR-window mean AND before 14:00 ET",
+      exitCriteria: "OR-low stop, Fib 1.272 * OR_range scale-out, Fib 2.21 * OR_range scale-out, EOD flat at 15:55 ET",
+      maxPositions: "5",
+    },
+    howItWorks: [
+      "Fetch 1-minute bars for the active universe on the session date; filter to RTH (9:30-16:00 ET).",
+      "Define OR = (max(H), min(L)) over the first 15 minutes (tuner choice from 5/15/30).",
+      "Scan for the first subsequent bar whose close strictly exceeds OR_high. Enter MOO at the next bar's open if volume confirmation and time cutoff pass.",
+      "Simulate in-position life: stop at OR_low (or trailed OR midpoint per stop_method), scale-out 50% at entry + 1.33 * OR_range, scale-out 50% at entry + 2.21 * OR_range.",
+      "Close any residual at 15:55 ET MOC. No overnight holdings; single entry per day per symbol.",
+    ],
+    whenToUse:
+      "Best on trending-open days with moderate overnight gaps and above-average RTH volume. Directionless chop (the intraday equivalent of a sideways tape) fails the first-break entry or immediately stops out. The strategy does not filter for macro-event days — adding a FOMC/NFP/OpEx skip is the audit's first-line intervention if OOS Sharpe regresses.",
+    risks: [
+      "OOS Sharpe 8.34 is on a daily-returns convention inflated relative to per-trade Sharpe — not directly comparable to paper numbers. Reporting ambiguity, not a modelling defect.",
+      "Training window was 1 year (2022 only) because intraday data is ~4x slower to process than daily; the regime-dependence of OR-breakouts makes this a real uncertainty.",
+      "TQQQ / SPXL tracking of daily 3x NDX / SPX returns introduces compounding drag over multi-day holds — not relevant here (EOD flat) but a risk if the strategy ever relaxes its flat-by-close invariant.",
+    ],
   },
 
   "vwap-strategy": {
-    thesis: "VWAP (Volume Weighted Average Price) is the primary execution benchmark for institutional traders. Berkowitz, Logue & Noser (1988) established it as the gold standard for measuring transaction costs. Price above VWAP signals net buying pressure; below signals net selling. The strategy enters on VWAP bounces (pullback to VWAP in uptrends), upper band breakouts (2-std VWAP deviation), and VWAP reclaims. Enhanced with anchored VWAP from significant events, slope detection, candlestick confirmation (hammer/engulfing), multi-timeframe alignment, and adaptive sizing on repeated successful tests.",
-    edge: "Trades alongside institutional flow by using their own benchmark as a support/resistance level. VWAP acts as a magnet -- institutions executing large orders revert price toward VWAP, creating reliable bounce points.",
-    riskProfile: { level: "Medium", description: "Defined risk below VWAP (bounce) or lower band (breakout). Candlestick confirmation reduces false signals. Adaptive sizing increases exposure only on proven setups." },
-    parameters: { rebalanceFrequency: "Daily scan", universe: "Liquid stocks ($2B+, 1M+ volume)", positionSizing: "1.2% risk, 1.25x on 2nd VWAP test, 1.5x on 3rd", entryCriteria: "VWAP bounce (within 0.3%), upper band breakout with volume, or VWAP reclaim in uptrend", exitCriteria: "Price < VWAP (support lost), < lower band, 5-day time stop, or 6% profit target", maxPositions: "8" },
-    howItWorks: ["Compute VWAP from intraday 5-min bars when available, falling back to 20-day daily bar proxy.", "Calculate deviation bands (2x vol-weighted std dev) and VWAP slope over 5 bars.", "Find anchored VWAP from significant events (volume spike > 3x average or range breakout).", "Detect signal: bounce (within 0.3% of VWAP), upper band breakout, or VWAP reclaim. Confirm with candlestick pattern and volume.", "Size adaptively: 1.25x on 2nd successful VWAP test, 1.5x on 3rd+. Check multi-timeframe alignment (daily + weekly VWAP)."],
-    whenToUse: "Works best in trending markets where VWAP acts as reliable support. The bounce signal is most effective during orderly pullbacks with declining volume. Avoid on gap days or when VWAP slope is declining (institutions are net sellers).",
-    risks: ["VWAP breaks: if VWAP support fails, the position is quickly stopped out. In volatile markets, VWAP can be crossed multiple times intraday.", "Stale VWAP: daily bar VWAP proxy is less precise than real intraday VWAP, potentially leading to imprecise entry levels.", "Adaptive sizing risk: increasing size on 2nd/3rd tests assumes the pattern will repeat, but VWAP support can weaken with repeated testing."],
+    thesis:
+      "A session-anchored intraday VWAP pullback strategy on 10 deep-liquidity US names (SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, TSLA, GOOGL, AMD). The setup is: in a name whose daily close is above its long-term SMA and whose index (SPY) is above its SMA_100, enter long when intraday price has pulled back from above to within a small band around the session VWAP, 5-minute RSI is oversold, and the prior bar's price was above the prior bar's VWAP (confirming the intraday drift is still up).\n\nThis is not a Berkowitz-Logue-Noser (1988) execution-benchmark strategy — that paper measures broker execution quality against VWAP, not directional alpha. The thesis here is that intraday VWAP is a liquidity magnet because institutions execute against it (Kyle 1985 on price impact; Bouchaud et al. 2003 on square-root impact mean-reverting). The 5-minute RSI timing is Connors & Alvarez (2009) mapped to intraday bars.\n\nThe legacy AlphaDesk VWAP was a 20-day volume-weighted moving average of (H+L+C)/3 — a degenerate construct with no institutional significance, unrelated to session VWAP. This rewrite uses proper session-reset intraday VWAP via backend.indicators.volume.vwap_session. Because the engine is daily-native, the intraday signal is computed in generate_signals() from 5-min bars and executed as MOO on the engine's next daily bar — a lossy approximation documented in the spec. 2024-H1 OOS Sharpe: 0.95, max DD 5.7%, 302 trades. Tuner picked shorts-off on the 2024-H1 bull tape; a 2022-style bear test would likely enable shorts. See audit-reports/phase1-vwap.md.",
+    edge:
+      "Trades the mean-reverting behaviour of price around session VWAP in liquid names with strong daily trend alignment. RSI oversold on 5-min bars times the entry within the VWAP band; the daily trend filter ensures we're buying pullbacks, not tops of counter-trend bounces.",
+    riskProfile: {
+      level: "Medium",
+      description:
+        "Intraday setups with daily-bar execution approximation; 5 concurrent positions at ~17% each. Stops are max(5-min ATR, 68 bps) from VWAP. EOD flat via MOC at the engine's daily close.",
+    },
+    parameters: {
+      rebalanceFrequency: "Daily scan on 5-min intraday bars; engine executes via daily MOO/MOC",
+      universe: "10 deep-liquidity US names — SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, TSLA, GOOGL, AMD",
+      positionSizing: "~17% of equity per position, max 5 concurrent, one entry per name per day",
+      entryCriteria:
+        "Price within [VWAP, VWAP * 1.00096] AND 5-min RSI(5) < 16 AND close > prior VWAP AND SPY close > SMA_100 AND name close > SMA_100",
+      exitCriteria:
+        "Stop at max(68 bps below VWAP, entry - ATR), TP at entry + 0.92 * rolling-std(close - VWAP), EOD flat via MOC",
+      maxPositions: "5",
+    },
+    howItWorks: [
+      "Daily trend filter at session open: SPY close > SMA_100 AND name close > SMA_100. Skip names that fail.",
+      "Compute session VWAP on 5-min bars via vwap_session (resets at session boundary). Pullback-from-above setup: last 5-min bar's close is between VWAP and VWAP * 1.00096.",
+      "Confirm with 5-min RSI(5) < 16 and close > prior bar's VWAP (intraday drift still up).",
+      "Emit MOO entry for the next daily bar with embedded stop = max(VWAP - 68 bps, entry - ATR_5m_14) and TP = entry + 0.92 * rolling-std-20(close - VWAP).",
+      "Engine fires stop/TP when the daily high/low range envelopes the intraday-computed level. manage() always emits an MOC exit for any surviving position — no overnight holds.",
+    ],
+    whenToUse:
+      "Works best in orderly trending sessions with well-defined VWAP support; fails on gap days when VWAP resets to a level price doesn't respect. The shorts-off tuner choice suggests the signal is currently asymmetric in 2024 bull tape; shorts may re-enable value in a sustained bear.",
+    risks: [
+      "Daily-bar stop/TP fills approximate intraday execution — the OOS Sharpe is ~5-10 bps per trade lossy vs a true tick-simulator.",
+      "Walk-forward was 18 months (2023 train / 2024-H1 test) because 5-min intraday data is ~120x daily-bar volume; a longer OOS would tighten Sharpe CIs.",
+      "No macro-day gate (unlike ORB); FOMC / NFP / OpEx days can chop the VWAP signal but weren't restrictive enough to justify the extra parameter surface in the tuner's budget.",
+    ],
   },
 };

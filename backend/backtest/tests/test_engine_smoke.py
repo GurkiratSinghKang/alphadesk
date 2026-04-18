@@ -271,5 +271,184 @@ def test_deterministic_output():
     )
 
 
+# ---------------------------------------------------------------------------
+# End-to-end multi-leg options: short strangle with IV crush
+# ---------------------------------------------------------------------------
+
+
+class FakeOptionsProvider:
+    """Simple in-memory options provider for engine tests.
+
+    ``contract_prices[(contract_id, date)] -> close``.
+    """
+
+    def __init__(self, contract_prices):
+        self._prices = contract_prices
+
+    def contract_bars(self, contract, start, end, tf="1D"):
+        d = start.date() if hasattr(start, "date") else start
+        key = (contract, d)
+        if key not in self._prices:
+            return pd.DataFrame(columns=["contract", "ts", "close"])
+        return pd.DataFrame(
+            [{"contract": contract, "ts": pd.Timestamp(d), "close": self._prices[key]}]
+        )
+
+    def chain_snapshot(self, underlying, asof):
+        return pd.DataFrame()
+
+
+class ShortStrangleStrategy:
+    """Opens a 1-day short strangle on day 1; closes it on day N."""
+
+    name = "toy_strangle"
+    required_bars = ["1D"]
+    required_lookback_days = 0
+
+    def __init__(self):
+        self.opened = False
+        self.closed = False
+        self._close_on: date | None = None
+
+    def configure(self, params):
+        self.underlying = (params or {}).get("underlying", "SPY")
+        self._close_on = (params or {}).get("close_on", date(2023, 1, 6))
+
+    def universe(self, asof, ctx):
+        return [self.underlying]
+
+    def generate_signals(self, asof, ctx):
+        from backend.backtest.types import OptionLeg, Side
+        if self.opened:
+            return []
+        # Open on the first session.
+        self.opened = True
+        legs = (
+            OptionLeg(
+                contract_id="O:TEST240119C00400000",
+                side=Side.SELL,
+                qty=1,
+                underlying=self.underlying,
+                expiry=date(2024, 1, 19),
+                strike=Decimal("400"),
+                right="C",
+                multiplier=100,
+            ),
+            OptionLeg(
+                contract_id="O:TEST240119P00400000",
+                side=Side.SELL,
+                qty=1,
+                underlying=self.underlying,
+                expiry=date(2024, 1, 19),
+                strike=Decimal("400"),
+                right="P",
+                multiplier=100,
+            ),
+        )
+        return [
+            Signal(
+                symbol=self.underlying,
+                quantity=-1,
+                legs=legs,
+                order_type=OrderType.MOC,
+                time_in_force=TimeInForce.DAY,
+                asof=asof,
+            )
+        ]
+
+    def manage(self, asof, ctx):
+        from backend.backtest.types import OptionLeg, Side
+        if not self.opened or self.closed:
+            return []
+        if asof < self._close_on:
+            return []
+        # Close: flip leg sides (SELL → BUY).
+        self.closed = True
+        close_legs = (
+            OptionLeg(
+                contract_id="O:TEST240119C00400000",
+                side=Side.BUY,
+                qty=1,
+                underlying=self.underlying,
+                expiry=date(2024, 1, 19),
+                strike=Decimal("400"),
+                right="C",
+                multiplier=100,
+            ),
+            OptionLeg(
+                contract_id="O:TEST240119P00400000",
+                side=Side.BUY,
+                qty=1,
+                underlying=self.underlying,
+                expiry=date(2024, 1, 19),
+                strike=Decimal("400"),
+                right="P",
+                multiplier=100,
+            ),
+        )
+        return [
+            Signal(
+                symbol=self.underlying,
+                quantity=1,
+                legs=close_legs,
+                order_type=OrderType.MOC,
+                time_in_force=TimeInForce.DAY,
+                asof=asof,
+            )
+        ]
+
+    def on_fill(self, fill, ctx):
+        return None
+
+
+def test_engine_short_strangle_end_to_end_with_real_leg_prices():
+    """End-to-end: the engine opens a short strangle at the real leg
+    premiums from the options provider, marks position, and closes it.
+    The P&L must match the spread-level credit minus cost-to-close
+    (times the multiplier), not the underlying's close price."""
+
+    bp = FakeBarProvider(symbol="SPY", start_price=400.0, drift=0.0, vol=0.005, seed=1)
+    # Day 1: call=3.20, put=2.80 → open credit 6.00
+    # Day 5 (close): call=1.00, put=0.80 → close debit 1.80
+    # P&L = (6.00 - 1.80) * 100 = $420 per spread
+    options = FakeOptionsProvider(
+        contract_prices={
+            ("O:TEST240119C00400000", date(2023, 1, 3)): 3.20,
+            ("O:TEST240119P00400000", date(2023, 1, 3)): 2.80,
+            ("O:TEST240119C00400000", date(2023, 1, 9)): 1.00,
+            ("O:TEST240119P00400000", date(2023, 1, 9)): 0.80,
+        }
+    )
+    strat = ShortStrangleStrategy()
+    engine = BacktestEngine(
+        strategy=strat,
+        bar_provider=bp,
+        options_provider=options,
+        config=EngineConfig(
+            start=date(2023, 1, 3),
+            end=date(2023, 1, 9),
+            starting_cash=Decimal("100000"),
+        ),
+        strategy_params={"close_on": date(2023, 1, 9)},
+    )
+    result = engine.run()
+    # One spread's P&L = (6.00 - 1.80) * 100 = $420.
+    # Minus two commission tickets (@ $0.65/leg-minimum + reg fees on sells).
+    # Commissions ballpark to <$5 total, so gross should be close to $420.
+    realized = float(engine.portfolio.realized_pnl)
+    # We expect realized P&L near +$420 (short strangle profit from IV crush).
+    assert 350 < realized < 450, (
+        f"Expected realized P&L between $350 and $450, got {realized}"
+    )
+    # Not dominated by the underlying's 400-dollar close!
+    assert realized < 40000, (
+        "Realized P&L should not scale with the underlying price — that was "
+        "the old bug."
+    )
+    # The final equity should reflect the real credit received & close cost.
+    final_cash = float(engine.portfolio.cash)
+    assert final_cash > 100000, f"Should have net profit: {final_cash}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

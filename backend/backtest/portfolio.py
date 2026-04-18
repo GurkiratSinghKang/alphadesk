@@ -67,18 +67,19 @@ class Portfolio:
     def positions_value(
         self, prices: Optional[Mapping[str, Decimal]] = None
     ) -> Decimal:
-        """Total signed mark-to-market value of open positions."""
+        """Total signed mark-to-market value of open positions.
+
+        ``prices`` maps symbol -> price. For equities the key is the ticker;
+        for option legs (``AssetClass.OPTION``) the key is the contract id
+        (e.g. ``O:SPY240119C00475000``). Unknown keys fall back to
+        ``position.last_price`` and finally to ``avg_price``.
+        """
 
         prices = prices or {}
         total = Decimal("0")
         for p in self.positions:
             mark = _d(prices.get(p.symbol, p.last_price or p.avg_price))
-            if p.asset_class is AssetClass.MULTILEG:
-                # Multi-leg spreads quote as a net per-spread price; the
-                # option multiplier is baked into the provided ``mark``.
-                total += Decimal(p.quantity) * mark
-            else:
-                total += Decimal(p.quantity) * mark
+            total += p.market_value(mark)
         return total
 
     def unrealized_pnl(
@@ -263,61 +264,139 @@ class Portfolio:
             pos.opened_at = fill.ts
 
     def _apply_multileg_fill(self, fill: Fill) -> None:
-        """Apply a multi-leg options fill.
+        """Apply a multi-leg options fill leg-by-leg.
 
-        ``fill.price`` is the net per-spread premium (buy side pays, sell side
-        receives). ``fill.quantity`` is the number of spreads filled.
+        Each :class:`OptionLeg` becomes an ``AssetClass.OPTION`` :class:`Position`
+        keyed by its ``contract_id``. Cash is debited/credited per-leg using
+        the matching entry in ``fill.leg_prices`` (per-contract premium);
+        commission and slippage are shared across the whole ticket.
+
+        **Sign convention:** each leg's ``side`` is taken at face value —
+        a SELL leg credits cash at its per-contract price, a BUY leg
+        debits it. ``fill.side`` is derived from ``signal.quantity`` sign
+        for routing purposes only and does NOT flip the leg direction.
+        Strategy code that wants to close a short leg emits a BUY leg
+        (the inverse of what it opened); see the VRP Harvest ``manage()``
+        code for the canonical pattern.
+
+        ``fill.price`` is reported for analytics as the absolute net
+        per-spread premium (positive for credit spreads, positive for
+        debit spreads — direction is conveyed via ``fill.side``).
         """
 
         qty = fill.quantity
-        if qty <= 0:
+        if qty <= 0 or not fill.legs:
             return
 
-        net_premium_per_spread = fill.price  # already signed per leg math upstream
-        notional = Decimal(qty) * net_premium_per_spread
-        if fill.side is Side.BUY:
-            self.cash -= notional
-        else:
-            self.cash += notional
+        if fill.leg_prices and len(fill.leg_prices) != len(fill.legs):
+            raise ValueError(
+                f"Fill has {len(fill.legs)} legs but {len(fill.leg_prices)} "
+                "leg_prices entries; they must align."
+            )
+
+        leg_px: list[Decimal] = list(fill.leg_prices) if fill.leg_prices else []
+        if not leg_px:
+            # Legacy fallback: split net per-spread price evenly across
+            # legs. Imprecise — matches the pre-fix behaviour for old
+            # callers that never supplied leg_prices.
+            n = len(fill.legs)
+            per_leg = fill.price / Decimal(n) if n else Decimal("0")
+            leg_px = [per_leg] * n
+
+        # Commission / slippage are booked once against the ticket
+        # regardless of per-leg count (CostModel already sums across legs).
         self.cash -= fill.commission
         self.cash -= fill.slippage
 
-        pos = self.get_position(fill.symbol)
+        for leg, px in zip(fill.legs, leg_px):
+            multiplier = int(leg.multiplier or 100)
+
+            # Per-contract premium is always positive. Signed cashflow =
+            # -contracts * price when buying, +contracts * price when
+            # selling. Leg.side is the canonical direction — we use it
+            # directly without flipping.
+            leg_contracts = leg.qty * qty  # total option contracts on this leg
+            leg_notional = Decimal(leg_contracts) * px * Decimal(multiplier)
+            if leg.side is Side.BUY:
+                self.cash -= leg_notional
+            else:
+                self.cash += leg_notional
+
+            # Signed leg position quantity.
+            signed_leg_qty = (
+                +leg_contracts if leg.side is Side.BUY else -leg_contracts
+            )
+            self._merge_option_leg(
+                contract_id=leg.contract_id,
+                signed_qty=signed_leg_qty,
+                price=px,
+                ts=fill.ts,
+                leg_meta=leg,
+                parent_tag=fill.tag,
+            )
+
+    def _merge_option_leg(
+        self,
+        *,
+        contract_id: str,
+        signed_qty: int,
+        price: Decimal,
+        ts: datetime,
+        leg_meta: OptionLeg,
+        parent_tag: str,
+    ) -> None:
+        """Merge a single option leg fill into the leg's :class:`Position`.
+
+        Mirrors :meth:`_merge_equity_fill` but with the OPTION asset class
+        and contract metadata.
+        """
+
+        pos = self.get_position(contract_id)
         if pos is None:
             pos = Position(
-                symbol=fill.symbol,
+                symbol=contract_id,
                 quantity=0,
                 avg_price=Decimal("0"),
-                asset_class=AssetClass.MULTILEG,
-                legs=fill.legs,
-                opened_at=fill.ts,
+                asset_class=AssetClass.OPTION,
+                multiplier=int(leg_meta.multiplier or 100),
+                underlying=leg_meta.underlying,
+                expiry=leg_meta.expiry,
+                strike=leg_meta.strike,
+                right=leg_meta.right,
+                opened_at=ts,
+                tag=parent_tag,
             )
             self.positions.append(pos)
-            pos.avg_price = net_premium_per_spread
-            pos.quantity = qty if fill.side is Side.BUY else -qty
-            return
 
-        signed = qty if fill.side is Side.BUY else -qty
         prev_qty = pos.quantity
-        new_qty = prev_qty + signed
+        new_qty = prev_qty + signed_qty
 
-        same_dir = (prev_qty >= 0 and signed > 0) or (prev_qty <= 0 and signed < 0)
+        same_dir = (prev_qty >= 0 and signed_qty > 0) or (
+            prev_qty <= 0 and signed_qty < 0
+        )
         if prev_qty == 0 or same_dir:
-            if new_qty != 0:
+            if new_qty == 0:
+                pos.avg_price = Decimal("0")
+            else:
                 total_cost = (
                     pos.avg_price * Decimal(abs(prev_qty))
-                    + net_premium_per_spread * Decimal(abs(signed))
+                    + price * Decimal(abs(signed_qty))
                 )
                 pos.avg_price = total_cost / Decimal(abs(new_qty))
             pos.quantity = new_qty
+            if pos.opened_at is None:
+                pos.opened_at = ts
             return
 
-        closing = min(abs(prev_qty), abs(signed))
-        dir_sign = 1 if prev_qty > 0 else -1
+        # Closing / flipping path: realize P&L on the portion that closes.
+        closing_qty = min(abs(prev_qty), abs(signed_qty))
+        direction_sign = 1 if prev_qty > 0 else -1
+        multiplier = Decimal(pos.multiplier or 100)
         realized = (
-            Decimal(closing)
-            * (net_premium_per_spread - pos.avg_price)
-            * Decimal(dir_sign)
+            Decimal(closing_qty)
+            * (price - pos.avg_price)
+            * Decimal(direction_sign)
+            * multiplier
         )
         pos.realized_pnl += realized
         self.realized_pnl += realized
@@ -325,20 +404,26 @@ class Portfolio:
             Trade(
                 symbol=pos.symbol,
                 side=Side.BUY if prev_qty > 0 else Side.SELL,
-                quantity=closing,
-                entry_ts=pos.opened_at or fill.ts,
+                quantity=closing_qty,
+                entry_ts=pos.opened_at or ts,
                 entry_price=pos.avg_price,
-                exit_ts=fill.ts,
-                exit_price=net_premium_per_spread,
+                exit_ts=ts,
+                exit_price=price,
                 pnl=realized,
-                commission=fill.commission,
-                tag=pos.tag or fill.tag,
+                commission=Decimal("0"),  # ticket commission is at the Fill
+                tag=pos.tag or parent_tag,
             )
         )
 
         pos.quantity = new_qty
         if new_qty == 0:
+            pos.avg_price = Decimal("0")
+            pos.opened_at = None
+            # Clean up the flat leg position.
             self.positions = [p for p in self.positions if p is not pos]
+        elif (prev_qty > 0 and new_qty < 0) or (prev_qty < 0 and new_qty > 0):
+            pos.avg_price = price
+            pos.opened_at = ts
 
     # ------------------------------------------------------------------
     # Daily hooks

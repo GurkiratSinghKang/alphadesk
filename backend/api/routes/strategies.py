@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import random
@@ -8,6 +9,7 @@ import statistics
 from collections import defaultdict
 from datetime import datetime, date, timedelta, timezone
 from enum import Enum
+from pathlib import Path as FilePath
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path
@@ -38,8 +40,8 @@ class StrategyPerformance(BaseModel):
     annualized_return_pct: float
     return_dollars: float
     win_rate: float
-    sharpe_ratio: float
-    max_drawdown: float
+    sharpe_ratio: float | None = None
+    max_drawdown: float | None = None
     active_positions_count: int
     equity_curve: list[dict[str, Any]]  # [{date, value}]
     last_trade_date: str
@@ -52,7 +54,7 @@ class StrategySummary(BaseModel):
     status: StrategyStatus
     invested_amount: float
     total_return_pct: float
-    sharpe_ratio: float
+    sharpe_ratio: float | None = None
     win_rate: float
     active_positions_count: int
     sparkline: list[float] = []
@@ -391,6 +393,329 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
 }
 
 
+# --------------------------------------------------------------------------- #
+# Registry ↔ route-id mapping                                                  #
+# --------------------------------------------------------------------------- #
+# The frontend talks hyphen-IDs; the registry uses underscore names.  We keep
+# both forward and reverse maps so callers can hand us either form.
+_REGISTRY_TO_ROUTE: dict[str, str] = {
+    "momentum_quality": "momentum-quality",
+    "pead": "pead",
+    "vrp_harvest": "vrp-harvesting",
+    "earnings_vol": "earnings-vol-premium",
+    "regime_adaptive": "regime-adaptive",
+    "ts_momentum": "ts-momentum",
+    "rsi2_reversal": "rsi2-reversal",
+    "dual_momentum": "dual-momentum",
+    "pairs_trading": "pairs-trading",
+    "kama_breakout": "kama-breakout",
+    "orb": "orb",
+    "vwap": "vwap-strategy",
+}
+_ROUTE_TO_REGISTRY: dict[str, str] = {v: k for k, v in _REGISTRY_TO_ROUTE.items()}
+
+# Static fallback registry metadata -- used when the registry hasn't been
+# imported yet (e.g. during partial test collection).  Mirrors the
+# ``StrategyMeta`` fields declared on each Phase 1 package; keep in sync
+# with the ``@register_strategy`` decorator in each ``strategy.py``.
+_FALLBACK_META: dict[str, dict[str, Any]] = {
+    "momentum_quality": {
+        "category": "equity", "required_bars": ["daily"],
+        "required_lookback_days": 420, "min_universe_size": 10,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Long-only cross-sectional momentum + quality "
+            "(Jegadeesh-Titman 12-1 momentum + Piotroski F-score). Top-N "
+            "composite rank, monthly rebalance."
+        ),
+    },
+    "pead": {
+        "category": "equity", "required_bars": ["daily"],
+        "required_lookback_days": 1100, "min_universe_size": 50,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Post-Earnings Announcement Drift. Entries on T+1 open after a "
+            "positive earnings surprise; hold 30-60 days."
+        ),
+    },
+    "vrp_harvest": {
+        "category": "options", "required_bars": ["daily"],
+        "required_lookback_days": 252, "min_universe_size": 1,
+        "supports_shorts": True, "supports_options": True,
+        "description": (
+            "Volatility Risk Premium harvest. Short-vega SPY option "
+            "structures when implied vs. realized spread is positive."
+        ),
+    },
+    "earnings_vol": {
+        "category": "options", "required_bars": ["daily"],
+        "required_lookback_days": 800, "min_universe_size": 1,
+        "supports_shorts": True, "supports_options": True,
+        "description": (
+            "Earnings volatility premium: short-vega structures T-1 pre-"
+            "earnings on names with historically overstated IV."
+        ),
+    },
+    "regime_adaptive": {
+        "category": "macro", "required_bars": ["daily"],
+        "required_lookback_days": 400, "min_universe_size": 2,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Macro regime detection (risk-on / risk-off). Rotates the "
+            "allocation between risk assets and cash-equivalents."
+        ),
+    },
+    "ts_momentum": {
+        "category": "macro", "required_bars": ["daily"],
+        "required_lookback_days": 260, "min_universe_size": 1,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Time-Series Momentum (Moskowitz et al. 2012). Long when price "
+            "is above the 200-day SMA, flat otherwise. Crisis-alpha convex."
+        ),
+    },
+    "rsi2_reversal": {
+        "category": "equity", "required_bars": ["daily"],
+        "required_lookback_days": 300, "min_universe_size": 20,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Connors RSI-2 mean reversion. MOC entries when RSI(2) < 10 "
+            "while price is above the 200-day SMA."
+        ),
+    },
+    "dual_momentum": {
+        "category": "macro", "required_bars": ["daily"],
+        "required_lookback_days": 400, "min_universe_size": 2,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Antonacci Dual Momentum (GEM). Relative + absolute momentum "
+            "picks between US equities, ex-US equities, and bonds."
+        ),
+    },
+    "pairs_trading": {
+        "category": "pairs", "required_bars": ["daily"],
+        "required_lookback_days": 400, "min_universe_size": 2,
+        "supports_shorts": True, "supports_options": False,
+        "description": (
+            "Cointegrated pairs arbitrage (Gatev et al. 2006). Long/short "
+            "on z-score deviations, exits on mean reversion."
+        ),
+    },
+    "kama_breakout": {
+        "category": "equity", "required_bars": ["daily"],
+        "required_lookback_days": 260, "min_universe_size": 1,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Kaufman Adaptive Moving Average + Keltner breakout. "
+            "ATR-based Turtle sizing, chandelier trailing exit."
+        ),
+    },
+    "orb": {
+        "category": "intraday", "required_bars": ["1min"],
+        "required_lookback_days": 0, "min_universe_size": 1,
+        "supports_shorts": True, "supports_options": False,
+        "description": (
+            "Crabel Opening-Range Breakout. 30-minute OR, enter on high/low "
+            "break with 1.5x OR target."
+        ),
+    },
+    "vwap": {
+        "category": "intraday", "required_bars": ["daily", "5Min"],
+        "required_lookback_days": 30, "min_universe_size": 1,
+        "supports_shorts": True, "supports_options": False,
+        "description": (
+            "Institutional VWAP bounce / band breakout. Enters on pullback "
+            "to VWAP in uptrend or 2-sigma upper-band breakout with volume."
+        ),
+    },
+}
+
+
+def _canonical_id(strategy_id: str) -> str:
+    """Map either hyphen or underscore form to the canonical route id."""
+    if strategy_id in _REGISTRY_TO_ROUTE:
+        return _REGISTRY_TO_ROUTE[strategy_id]
+    return strategy_id
+
+
+# --------------------------------------------------------------------------- #
+# OOS metric extraction                                                        #
+# --------------------------------------------------------------------------- #
+_OOS_DIR = FilePath(__file__).resolve().parents[3] / "audit-reports"
+
+
+def _extract_oos_metrics(payload: Any) -> dict[str, float] | None:
+    """Shape-tolerant reader for ``phase1-<name>-oos.json`` payloads.
+
+    Supports several historical shapes:
+
+    * ``{"metrics": {...}}`` — Wave A flat form.
+    * ``{"oos_metrics": {...}}`` — older alt label.
+    * ``{"summary": {...}}`` — super-thin summaries.
+    * ``{"walkforward": {"oos": {...}}}`` — walk-forward reports.
+    * ``{"tuned": {"metrics": {...}}}`` — tuner outputs.
+    """
+    if not isinstance(payload, dict) or not payload:
+        return None
+    for key in ("metrics", "oos_metrics", "summary"):
+        val = payload.get(key)
+        if isinstance(val, dict) and val:
+            return val
+    wf = payload.get("walkforward")
+    if isinstance(wf, dict):
+        oos = wf.get("oos")
+        if isinstance(oos, dict) and oos:
+            return oos
+    tuned = payload.get("tuned")
+    if isinstance(tuned, dict):
+        tm = tuned.get("metrics")
+        if isinstance(tm, dict) and tm:
+            return tm
+    return None
+
+
+def _load_oos_for(registry_name: str) -> dict[str, Any]:
+    """Load the phase-1 OOS JSON for a registry strategy, if present.
+
+    Returns a dict with the canonical metric fields we surface through the
+    catalogue (``sharpe``, ``max_drawdown``, ``hit_rate``, ``cagr``,
+    ``profit_factor``).  Missing fields are ``None``; never zero.
+    """
+    path = _OOS_DIR / f"phase1-{registry_name}-oos.json"
+    if not path.exists():
+        return {
+            "sharpe": None, "max_drawdown": None, "hit_rate": None,
+            "cagr": None, "profit_factor": None,
+        }
+    try:
+        payload = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {
+            "sharpe": None, "max_drawdown": None, "hit_rate": None,
+            "cagr": None, "profit_factor": None,
+        }
+    m = _extract_oos_metrics(payload) or {}
+
+    def _f(k: str) -> float | None:
+        v = m.get(k)
+        try:
+            return round(float(v), 4) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "sharpe": _f("sharpe"),
+        "max_drawdown": _f("max_drawdown"),
+        "hit_rate": _f("hit_rate"),
+        "cagr": _f("cagr"),
+        "profit_factor": _f("profit_factor"),
+    }
+
+
+def _reload_oos_metrics() -> dict[str, dict[str, Any]]:
+    """Refresh ``_STRATEGIES`` entries with live OOS metrics.
+
+    Registry-backed entries get real Sharpe / max-drawdown from
+    ``audit-reports/phase1-<name>-oos.json``.  Entries without an OOS JSON
+    (``dual-momentum``, ``kama-breakout``, ``claude-alpha``, etc.) are set
+    to ``None`` — the frontend distinguishes missing-metric from zero.
+    """
+    # Pull registry meta if whatever called us has already warmed the
+    # registry (via the pipeline, the tuner CLI, or direct ``load_all()``).
+    # We do NOT trigger ``load_all()`` or individual-module imports here:
+    # the per-strategy test conftests cross-alias ``strategies.*`` ↔
+    # ``backend.strategies.*`` around their own test collection, and any
+    # import from THIS module that precedes them re-registers the same
+    # strategy class under two names, raising ``StrategyRegistrationError``.
+    # Falling back to ``_FALLBACK_META`` below keeps the catalogue
+    # authoritative even when the registry hasn't been loaded yet.
+    try:
+        from backend.strategies.registry import get_meta as _get_meta
+    except Exception:
+        _get_meta = None  # type: ignore[assignment]
+
+    for reg_name, route_id in _REGISTRY_TO_ROUTE.items():
+        oos = _load_oos_for(reg_name)
+        if route_id not in _STRATEGIES:
+            # Registry-only entry; seed the minimum shape.
+            _STRATEGIES[route_id] = {
+                "name": reg_name.replace("_", " ").title(),
+                "description": "",
+                "status": StrategyStatus.ACTIVE,
+                "invested_amount": 0,
+                "total_return_pct": 0,
+                "win_rate": 0,
+                "active_positions_count": 0,
+                "annualized_return_pct": 0,
+                "last_trade_date": "",
+            }
+        entry = _STRATEGIES[route_id]
+        entry["registry_name"] = reg_name
+        entry["sharpe_ratio"] = oos["sharpe"]
+        entry["max_drawdown"] = oos["max_drawdown"]
+        entry["hit_rate"] = oos["hit_rate"]
+        entry["cagr"] = oos["cagr"]
+        entry["profit_factor"] = oos["profit_factor"]
+        # Attach registry static-meta (category / description / bars / etc).
+        # Prefer the live registry -- falls back to the hard-coded
+        # ``_FALLBACK_META`` above when the registry hasn't been loaded yet
+        # (this is the usual path during partial test collection).
+        meta_dict: dict[str, Any] | None = None
+        if _get_meta is not None:
+            try:
+                meta = _get_meta(reg_name)
+                meta_dict = {
+                    "category": meta.category,
+                    "description": meta.description,
+                    "required_bars": list(meta.required_bars),
+                    "required_lookback_days": meta.required_lookback_days,
+                    "min_universe_size": meta.min_universe_size,
+                    "supports_shorts": meta.supports_shorts,
+                    "supports_options": meta.supports_options,
+                }
+            except KeyError:
+                meta_dict = None
+        if meta_dict is None:
+            meta_dict = _FALLBACK_META.get(reg_name)
+        if meta_dict is not None:
+            entry["category"] = meta_dict["category"]
+            entry["description"] = meta_dict["description"] or entry.get("description", "")
+            entry["required_bars"] = list(meta_dict["required_bars"])
+            entry["required_lookback_days"] = meta_dict["required_lookback_days"]
+            entry["min_universe_size"] = meta_dict["min_universe_size"]
+            entry["supports_shorts"] = meta_dict["supports_shorts"]
+            entry["supports_options"] = meta_dict["supports_options"]
+
+    # Non-registry entries (claude-alpha, manual-discretionary, gap-fill, …)
+    # must surface ``None`` for metrics, not zeros.  Leave description intact.
+    _REGISTRY_ROUTE_IDS = set(_REGISTRY_TO_ROUTE.values())
+    for route_id, entry in _STRATEGIES.items():
+        if route_id in _REGISTRY_ROUTE_IDS:
+            continue
+        entry.setdefault("sharpe_ratio", None)
+        entry.setdefault("max_drawdown", None)
+        entry.setdefault("hit_rate", None)
+        entry.setdefault("cagr", None)
+        entry.setdefault("profit_factor", None)
+        # Force null metrics even if the old placeholder had 0.
+        for k in ("sharpe_ratio", "max_drawdown", "hit_rate", "cagr", "profit_factor"):
+            if entry.get(k) == 0:
+                entry[k] = None
+
+    return _STRATEGIES
+
+
+# Apply at import so ``_STRATEGIES`` reflects reality from the first call.
+# NOTE: we swallow registry-load failures here so a partial strategy package
+# (e.g. mid-refactor) doesn't take the whole API down at import.  The route
+# handlers call _reload_oos_metrics() again on demand when the catalogue is
+# served, so any recovered state is picked up later.
+try:
+    _reload_oos_metrics()
+except Exception:  # pragma: no cover - defensive import-time guard
+    logger.warning("initial _reload_oos_metrics failed", exc_info=True)
+
+
 def _annualized_return(return_pct: float, first_trade_date: str | None = None) -> float:
     """Calculate proper CAGR-based annualized return.
 
@@ -558,11 +883,12 @@ async def _set_strategy_status_override(strategy_id: str, status: StrategyStatus
 
 
 async def _get_strategy_data(strategy_id: str) -> dict[str, Any] | None:
-    data = _STRATEGIES.get(strategy_id)
+    canonical = _canonical_id(strategy_id)
+    data = _STRATEGIES.get(canonical)
     if data is None:
         return None
     result = dict(data)
-    override = await _get_strategy_status_override(strategy_id)
+    override = await _get_strategy_status_override(canonical)
     if override is not None:
         result["status"] = override
     return result

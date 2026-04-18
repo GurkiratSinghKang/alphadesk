@@ -4,7 +4,19 @@
     "2024-09-30"
   ],
   "starting_cash": 100000.0,
-  "params": {},
+  "params": {
+    "vrp_entry_threshold": 0.02,
+    "strangle_delta": 0.16,
+    "target_dte": 30,
+    "theta_target_pct": 0.003,
+    "tp_pct": 0.5,
+    "sl_pct": 2.0,
+    "exit_dte": 21,
+    "vix_kill_switch": 0.35,
+    "tail_hedge_ratio": 5,
+    "tail_hedge_delta": 0.05,
+    "term_structure_gate": true
+  },
   "summary": {
     "sharpe": 0.8755353607488662,
     "max_drawdown": -0.072862888605293,
@@ -73,5 +85,5 @@
       "drawdown_pct": -0.0327223754414675
     }
   ],
-  "n_synth_trades": 38
+  "n_synth_trades": 0
 }

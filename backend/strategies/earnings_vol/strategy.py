@@ -44,6 +44,7 @@ from typing import Any, Iterable, Mapping, Optional
 import numpy as np
 import pandas as pd
 
+from backend.backtest.types import AssetClass
 from backend.indicators.options import bs_price, iv_from_price
 from backend.strategies.base import Context, cache_of
 from backend.strategies.registry import (
@@ -57,7 +58,6 @@ from .config import DEFAULTS, UNIVERSE, search_space
 from .polygon_helpers import (
     contract_close,
     list_weekly_contracts,
-    register_synthetic_price,
 )
 
 log = logging.getLogger("alphadesk.strategies.earnings_vol")
@@ -186,56 +186,40 @@ class EarningsVolStrategy:
 
         We do the heavy lifting (chain pulls, historical-move calc, BS
         inversion) inside ``universe()`` rather than ``generate_signals``
-        so the engine's single bar-fetch pass (step 2) includes the
-        synthetic spread symbols we'll emit signals against. The scored
-        candidates are stashed on ``ctx.cache`` and consumed by
-        ``generate_signals`` without redoing the work.
+        so the engine's single bar-fetch pass (step 2) sees every symbol
+        we may emit signals against. The scored candidates are stashed
+        on ``ctx.cache`` and consumed by ``generate_signals`` without
+        redoing the work.
         """
         out = set(UNIVERSE)
         for p in ctx.positions:
-            out.add(p.symbol)
+            # OPTION leg Positions are keyed by contract_id; skip those —
+            # only underlying tickers belong in the universe.
+            if p.asset_class is AssetClass.OPTION:
+                if p.underlying:
+                    out.add(p.underlying)
+            else:
+                out.add(p.symbol)
         cache = cache_of(ctx)
-        pending: dict = cache.get(f"{_NS}.pending", {}) or {}
-        for pen in pending.values():
-            out.add(pen.synthetic_symbol)
 
-        # Pre-register exit prices for any position whose exit MOO is
-        # due to FILL today. MOO orders staged on prior session T fill
-        # on T+1 open — so if exit_date was yesterday we need a price
-        # today. Additionally, register today's synthetic so M2M values
-        # the position during the hold.
-        for pen in pending.values():
-            # While we're holding (entry_date <= today < exit_date): mark
-            # at entry price so equity curve doesn't jump.
-            from .polygon_helpers import SYNTHETIC_LEDGER as _LED
-            if pen.entry_date <= asof < pen.exit_date:
-                _LED.setdefault((pen.synthetic_symbol, asof), pen.entry_spread_px)
-            # On the exit-fill day (T+1 open after exit MOO staged at T),
-            # publish the synthetic BS-computed exit price.
-            if asof >= pen.exit_date:
-                exit_px = self._synthetic_exit_net_premium(ctx, pen, asof)
-                if exit_px is None:
-                    exit_px = pen.entry_spread_px
-                register_synthetic_price(pen.synthetic_symbol, asof, exit_px)
-
-        # Early-score any candidate whose earnings fire tomorrow so we
-        # can register its synthetic spread price **before** the engine
-        # pulls bars. Without this, the engine's step 2 sees an empty
-        # ledger and the MOC fill in step 10 has no bar to match.
+        # Early-score any candidate whose earnings fire tomorrow. The
+        # engine now prices legs directly via options_provider, so we no
+        # longer need to publish synthetic spread bars.
         ep = getattr(ctx, "earnings_provider", None)
         if ep is not None:
             scored_today = self._pre_score_today(ctx, asof)
             cache[f"{_NS}.scored_today"] = scored_today
+            # Include every scored underlying in the universe so the
+            # engine's bar pull sees it.
             for plan in scored_today:
-                out.add(plan["synthetic_symbol"])
+                out.add(plan["symbol"])
 
         return sorted(out)
 
     def _pre_score_today(self, ctx: Context, asof: date) -> list[dict]:
         """Run the scoring pipeline for every candidate with earnings
-        tomorrow and register the spread price in the synthetic ledger.
-
-        Returns the list of passing plans (also cached on ``ctx.state``).
+        tomorrow. Returns the list of passing plans, also cached on
+        ``ctx.state``.
         """
         p = self.params
         ep = getattr(ctx, "earnings_provider", None)
@@ -246,10 +230,14 @@ class EarningsVolStrategy:
         if not events:
             return []
 
-        held_symbols = {
-            (pos.symbol.split(":", 2)[1] if pos.symbol.startswith("EVOL:") else pos.symbol)
-            for pos in ctx.positions
-        }
+        # Symbols we already hold — resolved via OPTION leg positions'
+        # ``underlying`` metadata (each leg is its own Position).
+        held_symbols: set[str] = set()
+        for pos in ctx.positions:
+            if pos.asset_class is AssetClass.OPTION and pos.underlying:
+                held_symbols.add(pos.underlying.upper())
+            elif pos.symbol:
+                held_symbols.add(pos.symbol.upper())
 
         scored: list[dict] = []
         seen: set[str] = set()
@@ -261,13 +249,6 @@ class EarningsVolStrategy:
             plan = self._score_candidate(ctx, asof, sym, ev)
             if plan is None:
                 continue
-            # Synthetic symbol must be deterministic given expiry.
-            synth = f"EVOL:{sym}:{plan['expiration'].strftime('%Y%m%d')}"
-            plan["synthetic_symbol"] = synth
-            # Publish entry price now; generate_signals will emit against it.
-            mult = 100
-            entry_net_px = plan["net_credit_per_contract"] * mult
-            register_synthetic_price(synth, asof, entry_net_px)
             scored.append(plan)
         return scored
 
@@ -279,30 +260,34 @@ class EarningsVolStrategy:
         p = self.params
         cache = cache_of(ctx)
 
-        held = [pos for pos in ctx.positions if pos.quantity != 0]
-        capacity = int(p["max_concurrent_positions"]) - len(held)
+        # Count concurrent positions at the UNDERLYING level (each
+        # multi-leg spread contributes one logical concurrent position,
+        # not one per leg).
+        held_underlyings: set[str] = set()
+        for pos in ctx.positions:
+            if pos.quantity == 0:
+                continue
+            if pos.asset_class is AssetClass.OPTION and pos.underlying:
+                held_underlyings.add(pos.underlying.upper())
+            elif pos.symbol:
+                held_underlyings.add(pos.symbol.upper())
+
+        capacity = int(p["max_concurrent_positions"]) - len(held_underlyings)
         if capacity <= 0:
             return []
 
-        def _real_sym_of(s: str) -> str:
-            if s.startswith("EVOL:"):
-                parts = s.split(":")
-                if len(parts) >= 2:
-                    return parts[1]
-            return s
-
-        held_symbols = {_real_sym_of(pos.symbol) for pos in held}
         pending_syms = {
-            pen.symbol for pen in cache.get(f"{_NS}.pending", {}).values()
+            pen.symbol.upper()
+            for pen in cache.get(f"{_NS}.pending", {}).values()
         }
-        already = held_symbols | pending_syms
+        already = held_underlyings | pending_syms
 
         scored = list(cache.get(f"{_NS}.scored_today", []) or [])
         scored = sorted(scored, key=lambda pl: pl.get("ratio", 0), reverse=True)
 
         out: list[Signal] = []
         for plan in scored[:capacity]:
-            sym = plan["symbol"]
+            sym = plan["symbol"].upper()
             if sym in already:
                 continue
             sig = self._emit_signal(asof, plan, cache)
@@ -318,29 +303,32 @@ class EarningsVolStrategy:
         cache = cache_of(ctx)
         pending: dict[str, _Pending] = cache.get(f"{_NS}.pending", {})
 
-        # Remove any pending entry whose position has actually gone flat
-        # (the engine booked the round-trip). This is how we retire
-        # ``_Pending`` rather than popping when we emit the exit signal
-        # (the MOO fill happens a session later, so the pending record
-        # must stay around until then).
-        open_syms = {
+        # Position-based retirement: drop any pending entry whose leg
+        # Positions have been fully closed by the engine. Each leg lives
+        # as its own contract_id-keyed Position under AssetClass.OPTION.
+        open_contracts = {
             p.symbol for p in ctx.positions if p.quantity != 0
         }
-        for synth in list(pending):
-            if synth not in open_syms:
-                pending.pop(synth, None)
+        for pid in list(pending):
+            pen = pending[pid]
+            # Pending is "still alive" iff at least one of its legs is
+            # still held (contract_id match).
+            leg_ids = {leg.contract_id for leg in pen.legs}
+            if not leg_ids & open_contracts:
+                pending.pop(pid, None)
         cache[f"{_NS}.pending"] = pending
 
         out: list[Signal] = []
-        emitted_syms: list[str] = []
-        for synth, pen in pending.items():
+        emitted_ids: list[str] = []
+        for pid, pen in pending.items():
             if asof < pen.exit_date:
                 continue
             # Only emit the exit signal once — track in cache.
             exit_emitted = cache.get(f"{_NS}.exit_emitted", set())
-            if synth in exit_emitted:
+            if pid in exit_emitted:
                 continue
-            # Close out.
+            # Close out: flip each leg's side so the engine's multi-leg
+            # fill path books each leg's closing cashflow correctly.
             close_legs = tuple(
                 OptionLeg(
                     contract_id=leg.contract_id,
@@ -355,34 +343,10 @@ class EarningsVolStrategy:
                 for leg in pen.legs
             )
 
-            # Synthetic exit premium using BS with crushed IV.
-            exit_net_px = self._synthetic_exit_net_premium(ctx, pen, asof)
-            if exit_net_px is None:
-                # Data hole — mark flat at entry price so P&L is 0.
-                exit_net_px = pen.entry_spread_px
-
-            # Publish the exit price to the synthetic-bar ledger so the
-            # engine can fill at this price on the exit session.
-            register_synthetic_price(synth, asof, exit_net_px)
-
-            # We also need the entry bar to exist on every session between
-            # entry and exit so the engine's mark-to-market doesn't flatten
-            # the position value. Re-publish the last-known close on any
-            # session we've held through.
-            pub_date = pen.entry_date
-            from datetime import timedelta as _td
-            while pub_date < asof:
-                # If not already published, use entry price; the engine only
-                # reads these if universe() pulls the symbol.
-                from .polygon_helpers import SYNTHETIC_LEDGER
-                if (synth, pub_date) not in SYNTHETIC_LEDGER:
-                    SYNTHETIC_LEDGER[(synth, pub_date)] = pen.entry_spread_px
-                pub_date += _td(days=1)
-
             out.append(
                 Signal(
-                    symbol=synth,
-                    quantity=pen.contracts,   # same sign as entry (pos=short)
+                    symbol=pen.symbol,
+                    quantity=pen.contracts,   # same abs sign as entry
                     legs=close_legs,
                     order_type=_exit_order_type(pen.exit_timing),
                     time_in_force=TimeInForce.DAY,
@@ -390,12 +354,12 @@ class EarningsVolStrategy:
                     asof=asof,
                 )
             )
-            emitted_syms.append(synth)
+            emitted_ids.append(pid)
 
-        if emitted_syms:
+        if emitted_ids:
             exit_emitted = cache.setdefault(f"{_NS}.exit_emitted", set())
-            for synth in emitted_syms:
-                exit_emitted.add(synth)
+            for pid in emitted_ids:
+                exit_emitted.add(pid)
         cache[f"{_NS}.pending"] = pending
         return out
 
@@ -656,30 +620,30 @@ class EarningsVolStrategy:
             ),
         )
 
-        # Net spread price in $ per spread. We emit using a *synthetic*
-        # symbol (``EVOL:<sym>:<expiry-yyyymmdd>``) so the engine's
-        # multi-leg fill path uses our injected spread-price bar instead
-        # of the underlying's stock price. The entry price has already
-        # been registered with the synthetic ledger in ``universe()`` so
-        # the engine's bar pull (step 2) sees the price.
+        # The engine now prices each leg at its real per-contract premium
+        # via :class:`ExecutionSimulator._fill_multileg_option`, so we can
+        # emit regular Signals keyed off the real underlying. The legacy
+        # synthetic ledger / EVOL: prefix is gone.
         entry_net_px = plan["net_credit_per_contract"] * mult
-        synth = plan.get("synthetic_symbol") or f"EVOL:{plan['symbol']}:{exp.strftime('%Y%m%d')}"
-        register_synthetic_price(synth, asof, entry_net_px)
 
         sig = Signal(
-            symbol=synth,
+            symbol=plan["symbol"],
             quantity=-int(plan["contracts"]),    # short = negative spreads
             legs=legs,
             order_type=OrderType.MOC,
             time_in_force=TimeInForce.DAY,
+            limit_price=Decimal(str(plan["net_credit_per_contract"])),
             tag=f"earnings_vol-entry-{plan['symbol']}",
             asof=asof,
         )
 
+        # We still key the in-strategy pending-trade ledger off the
+        # underlying + expiry so manage() can find its own entries.
+        pending_id = f"{plan['symbol']}:{exp.strftime('%Y%m%d')}"
         pending = cache.setdefault(f"{_NS}.pending", {})
-        pending[synth] = _Pending(
+        pending[pending_id] = _Pending(
             symbol=plan["symbol"],
-            synthetic_symbol=synth,
+            synthetic_symbol=pending_id,  # retained for backcompat
             entry_date=asof,
             exit_date=plan["exit_date"],
             strike_body=plan["body_strike"],

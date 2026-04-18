@@ -176,7 +176,21 @@ class Signal:
 
 @dataclass(frozen=True)
 class Fill:
-    """A completed fill."""
+    """A completed fill.
+
+    For single-leg equity / option fills ``price`` is the fill price and
+    ``legs`` is empty.
+
+    For multi-leg option fills ``price`` is the **net per-spread premium**
+    (positive for a net credit, negative for a net debit — sign is consistent
+    with the ``side`` of the parent :class:`Signal`: a SELL spread has
+    ``side=Side.SELL`` and a positive net credit flows into cash). ``legs``
+    carries the individual :class:`OptionLeg` records, and ``leg_prices``
+    carries each leg's *per-contract* fill price (already slippage-adjusted)
+    in the same order as ``legs``. The portfolio uses ``leg_prices`` when
+    booking leg-by-leg :class:`Position` state; the net ``price`` remains
+    the canonical cashflow summary for analytics.
+    """
 
     symbol: str
     ts: datetime
@@ -186,6 +200,7 @@ class Fill:
     commission: Decimal = Decimal("0")
     slippage: Decimal = Decimal("0")
     legs: tuple[OptionLeg, ...] = field(default_factory=tuple)
+    leg_prices: tuple[Decimal, ...] = field(default_factory=tuple)
     tag: str = ""
 
     @property
@@ -207,9 +222,18 @@ class Position:
     """A single open position.
 
     For equities: ``symbol`` is the ticker, ``quantity`` is signed (negative
-    means short), ``avg_price`` is the volume-weighted average cost. For
-    options spreads: ``legs`` contains the surviving legs; ``quantity`` is the
-    number of spreads held (each spread = one unit of each leg's qty).
+    means short), ``avg_price`` is the volume-weighted average cost.
+
+    For options legs (``asset_class == AssetClass.OPTION``): ``symbol`` is the
+    contract ticker (e.g. ``O:SPY240119C00475000``), ``quantity`` is signed
+    (negative = short leg), ``avg_price`` is the per-contract premium paid or
+    received, ``multiplier`` is the contract multiplier (typically 100),
+    ``underlying`` is the stock ticker, and ``expiry`` / ``strike`` / ``right``
+    are carried for reporting and lifecycle (expiry-based closes).
+
+    The historical ``AssetClass.MULTILEG`` form is still accepted for legacy
+    call sites that pre-date the per-leg model; in that mode ``legs`` carries
+    the full leg tuple and ``avg_price`` is a net per-spread premium.
     """
 
     symbol: str
@@ -223,6 +247,12 @@ class Position:
     stop_price: Optional[Decimal] = None
     take_profit: Optional[Decimal] = None
     tag: str = ""
+    # Option-leg metadata. Only populated when ``asset_class == OPTION``.
+    multiplier: int = 1
+    underlying: Optional[str] = None
+    expiry: Optional[date] = None
+    strike: Optional[Decimal] = None
+    right: Optional[str] = None  # "C" / "P"
 
     @property
     def is_long(self) -> bool:
@@ -237,17 +267,28 @@ class Position:
         return self.quantity == 0
 
     def market_value(self, price: Decimal) -> Decimal:
-        """Current market value of the position (signed)."""
+        """Current market value of the position (signed).
 
-        if self.asset_class is AssetClass.MULTILEG:
-            # Each leg is already signed by side; ``price`` here is the net
-            # per-spread mid.
-            return Decimal(self.quantity) * price
+        Equities: ``quantity * price``.
+        Options legs: ``quantity * price * multiplier`` because option prices
+        quote per-share but each contract controls ``multiplier`` shares.
+        Legacy MULTILEG: treated like equities (net per-spread price is
+        already baked in).
+        """
+
+        if self.asset_class is AssetClass.OPTION:
+            return Decimal(self.quantity) * price * Decimal(self.multiplier or 100)
         return Decimal(self.quantity) * price
 
     def unrealized_pnl(self, price: Decimal) -> Decimal:
         if self.quantity == 0:
             return Decimal("0")
+        if self.asset_class is AssetClass.OPTION:
+            return (
+                Decimal(self.quantity)
+                * (price - self.avg_price)
+                * Decimal(self.multiplier or 100)
+            )
         return Decimal(self.quantity) * (price - self.avg_price)
 
 

@@ -155,12 +155,20 @@ def test_borrow_cost_charges_shorts_only():
     assert p.cash == cash_before - expected
 
 
-def test_multi_leg_option_fill_creates_multileg_position():
+def test_multi_leg_option_fill_creates_leg_positions():
+    """A multi-leg fill should book each leg as its own OPTION Position
+    keyed by contract_id (rather than a single composite Position).
+    """
+
     p = Portfolio(starting_cash=Decimal("100000"))
     legs = (
         OptionLeg(contract_id="C1", side=Side.BUY, qty=1, underlying="SPY"),
         OptionLeg(contract_id="P1", side=Side.SELL, qty=1, underlying="SPY"),
     )
+    # Per-leg prices: long call @ 3.00, short put @ 0.50 → net premium PAID
+    # per spread = 3.00 - 0.50 = 2.50 (matches the legacy single-price
+    # composite test). Cash flow: 10 spreads × (−3.00 call + 0.50 put)
+    # × 100 multiplier = 10 × −2.50 × 100 = −2500 (we pay $2500).
     f = Fill(
         symbol="SPY_COMBO",
         ts=datetime(2024, 1, 2),
@@ -168,15 +176,24 @@ def test_multi_leg_option_fill_creates_multileg_position():
         quantity=10,
         price=Decimal("2.50"),
         legs=legs,
+        leg_prices=(Decimal("3.00"), Decimal("0.50")),
     )
     p.apply_fill(f)
-    pos = p.get_position("SPY_COMBO")
-    assert pos is not None
-    assert pos.asset_class is AssetClass.MULTILEG
-    assert pos.quantity == 10
-    assert pos.avg_price == Decimal("2.50")
-    # Cash: 100000 - 10 * 2.50 = 99975
-    assert p.cash == Decimal("99975")
+    # Each leg becomes its own Position.
+    call_pos = p.get_position("C1")
+    put_pos = p.get_position("P1")
+    assert call_pos is not None and put_pos is not None
+    assert call_pos.asset_class is AssetClass.OPTION
+    assert put_pos.asset_class is AssetClass.OPTION
+    # Bought 10 contracts of the call (10 spreads * 1 contract/spread).
+    assert call_pos.quantity == 10
+    assert call_pos.avg_price == Decimal("3.00")
+    assert call_pos.multiplier == 100
+    # Shorted 10 contracts of the put.
+    assert put_pos.quantity == -10
+    assert put_pos.avg_price == Decimal("0.50")
+    # Cash: 100000 - 10 * 100 * 3.00 + 10 * 100 * 0.50 = 100000 - 3000 + 500 = 97500
+    assert p.cash == Decimal("97500")
 
 
 def test_snapshot_keys():
@@ -191,6 +208,119 @@ def test_snapshot_keys():
         "unrealized_pnl",
     }
     assert snap["equity"] == Decimal("100100")
+
+
+def test_short_strangle_lifecycle_open_mtm_close():
+    """Open a 2-leg short strangle, mark to market with changing leg
+    prices, then close it at a profit."""
+
+    p = Portfolio(starting_cash=Decimal("100000"))
+    c_id = "O:SPY240119C00480000"
+    p_id = "O:SPY240119P00470000"
+    open_legs = (
+        OptionLeg(
+            contract_id=c_id, side=Side.SELL, qty=1, underlying="SPY",
+            multiplier=100,
+        ),
+        OptionLeg(
+            contract_id=p_id, side=Side.SELL, qty=1, underlying="SPY",
+            multiplier=100,
+        ),
+    )
+    # Enter: sell 1 strangle for 3.00 + 2.50 = 5.50 credit.
+    open_fill = Fill(
+        symbol="SPY",
+        ts=datetime(2024, 1, 2),
+        side=Side.SELL,
+        quantity=1,  # 1 spread
+        price=Decimal("5.50"),
+        legs=open_legs,
+        leg_prices=(Decimal("3.00"), Decimal("2.50")),
+    )
+    p.apply_fill(open_fill)
+    # Cash: 100000 + 300 + 250 = 100550 (we received credit)
+    assert p.cash == Decimal("100550")
+    # Two leg Positions.
+    call_pos = p.get_position(c_id)
+    put_pos = p.get_position(p_id)
+    assert call_pos.quantity == -1 and call_pos.asset_class is AssetClass.OPTION
+    assert put_pos.quantity == -1 and put_pos.asset_class is AssetClass.OPTION
+    assert call_pos.avg_price == Decimal("3.00")
+    assert put_pos.avg_price == Decimal("2.50")
+
+    # Mark-to-market: IV crushes, legs now worth 1.00 and 0.80 each.
+    prices = {c_id: Decimal("1.00"), p_id: Decimal("0.80")}
+    p.mark_to_market(prices)
+    # Unrealized P&L: short 1 call from 3.00 → now 1.00 = +2.00 * 100 = +200
+    #                 short 1 put from 2.50 → now 0.80 = +1.70 * 100 = +170
+    # Total +370.
+    assert p.unrealized_pnl(prices) == Decimal("370")
+    # Equity = cash + positions_value. Position values:
+    # call: -1 * 1.00 * 100 = -100; put: -1 * 0.80 * 100 = -80 → -180
+    # Equity = 100550 + (-180) = 100370 → +370 from start ✓
+    eq = p.current_equity(prices)
+    assert eq == Decimal("100370")
+
+    # Close: buy back both legs (flipped to BUY as the strategy would
+    # emit them on exit).
+    close_legs = (
+        OptionLeg(
+            contract_id=c_id, side=Side.BUY, qty=1, underlying="SPY",
+            multiplier=100,
+        ),
+        OptionLeg(
+            contract_id=p_id, side=Side.BUY, qty=1, underlying="SPY",
+            multiplier=100,
+        ),
+    )
+    close_fill = Fill(
+        symbol="SPY",
+        ts=datetime(2024, 1, 9),
+        side=Side.BUY,
+        quantity=1,
+        price=Decimal("1.80"),
+        legs=close_legs,
+        leg_prices=(Decimal("1.00"), Decimal("0.80")),
+    )
+    p.apply_fill(close_fill)
+    # After close both leg positions flatten.
+    assert p.get_position(c_id) is None
+    assert p.get_position(p_id) is None
+    # Realized P&L = 370 (same as MTM at close).
+    assert p.realized_pnl == Decimal("370")
+    # Cash: 100550 - 100 - 80 = 100370
+    assert p.cash == Decimal("100370")
+    # Two round-trip Trade records (one per leg).
+    assert len(p.trades) == 2
+
+
+def test_option_position_mtm_uses_multiplier():
+    """An OPTION leg Position marks to market using ``quantity * price *
+    multiplier`` — critical for correct equity calculation."""
+
+    p = Portfolio(starting_cash=Decimal("100000"))
+    leg = (
+        OptionLeg(contract_id="O:X", side=Side.BUY, qty=1,
+                  underlying="X", multiplier=100),
+    )
+    fill = Fill(
+        symbol="X",
+        ts=datetime(2024, 1, 2),
+        side=Side.BUY,
+        quantity=5,  # 5 contracts
+        price=Decimal("2.00"),
+        legs=leg,
+        leg_prices=(Decimal("2.00"),),
+    )
+    p.apply_fill(fill)
+    # We paid 5 * 1 * 2.00 * 100 = $1000 of cash.
+    assert p.cash == Decimal("99000")
+    pos = p.get_position("O:X")
+    assert pos is not None and pos.quantity == 5
+    # If the market re-prices to 3.00 the position value is
+    # 5 * 3.00 * 100 = $1500, not 5 * 3.00 = $15.
+    assert pos.market_value(Decimal("3.00")) == Decimal("1500")
+    assert pos.unrealized_pnl(Decimal("3.00")) == Decimal("500")
 
 
 if __name__ == "__main__":
