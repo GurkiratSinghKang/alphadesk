@@ -55,6 +55,12 @@ export function useWebSocket(): UseWebSocketReturn {
     }
 
     try {
+      // Prefer explicit NEXT_PUBLIC_WS_URL when set; otherwise use a
+      // same-origin /ws upgrade (nginx proxies to FastAPI's /ws endpoint
+      // per backend/main.py:168). If the harness ever reports "no WS
+      // traffic" in the network log again, verify (a) nginx forwards
+      // /ws with Upgrade/Connection headers and (b) the auth cookie is
+      // set before this component mounts.
       const wsUrl = env.WS_URL || (
         typeof window !== "undefined"
           ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`

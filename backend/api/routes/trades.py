@@ -77,6 +77,15 @@ class TimeInForce(str, Enum):
 
 
 class OrderStatus(str, Enum):
+    # Alpaca-compatible filter values for GET /orders (see
+    # https://docs.alpaca.markets/reference/getallorders — the broker's
+    # ``status`` query accepts ``open`` / ``closed`` / ``all`` only).
+    OPEN = "open"
+    CLOSED = "closed"
+    ALL = "all"
+    # Individual-order states emitted by ``_alpaca_status_map`` when normalising
+    # the per-order response; also accepted as filter values for backward compat
+    # with callers that pass e.g. ``?status=pending``.
     PENDING = "pending"
     SUBMITTED = "submitted"
     PARTIAL = "partial_fill"

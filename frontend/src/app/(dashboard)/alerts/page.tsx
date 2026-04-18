@@ -93,9 +93,15 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
           <label htmlFor="alert-condition" className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Condition
           </label>
-          <div className="flex gap-1 mt-1">
+          <div
+            role="radiogroup"
+            aria-label="Alert condition"
+            className="flex gap-1 mt-1"
+          >
             <button
               type="button"
+              role="radio"
+              aria-checked={condition === "above"}
               onClick={() => setCondition("above")}
               className={cn(
                 "flex-1 rounded-md h-9 text-xs font-medium transition-colors flex items-center justify-center gap-1",
@@ -108,6 +114,8 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             </button>
             <button
               type="button"
+              role="radio"
+              aria-checked={condition === "below"}
               onClick={() => setCondition("below")}
               className={cn(
                 "flex-1 rounded-md h-9 text-xs font-medium transition-colors flex items-center justify-center gap-1",
@@ -172,6 +180,7 @@ function AlertRow({
 
   return (
     <div
+      data-testid="alert-row"
       className={cn(
         "flex items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-accent/30",
         alert.triggered && "opacity-60"

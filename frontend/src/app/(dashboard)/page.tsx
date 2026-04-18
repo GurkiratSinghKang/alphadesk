@@ -149,10 +149,35 @@ export default function DeskPage() {
   const clock = useDeskClock();
   const memo = emptyMemo(clock.slice(0, 8));
 
+  // Re-render every 2s so the "Last tick" pill's elapsed seconds stay fresh
+  // without piggy-backing on a full-clock re-render.
+  const [tickHeartbeat, setTickHeartbeat] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTickHeartbeat((t) => t + 1), 2_000);
+    return () => clearInterval(id);
+  }, []);
+  const lastTickSec = useMemo(() => {
+    // Referenced in deps so the memo re-evaluates on each heartbeat.
+    void tickHeartbeat;
+    // Pick the freshest timestamp across quotes the desk might care about.
+    const ts = Object.values(quotes).reduce<number>((max, q) => {
+      const t = Number(q?.timestamp) || 0;
+      return t > max ? t : max;
+    }, 0);
+    if (!ts) return undefined;
+    // Server timestamps are usually seconds — normalise if they look like ms.
+    const epochMs = ts > 1e12 ? ts : ts * 1000;
+    const delta = (Date.now() - epochMs) / 1000;
+    return delta >= 0 && delta < 86_400 ? delta : undefined;
+  }, [quotes, tickHeartbeat]);
+
   const statusPills = toStatusPills({
     brokerConnected: !portfolioSummary.is_demo,
     marketOpen: isMarketOpen(),
     claudeHealthy: true,
+    // Always pass a tick value so the StatusBar renders 4 pills — even
+    // when we have no data yet, show "Last tick —" rather than omit.
+    lastTickSec,
   });
 
   /* ─── Event handlers — kept inline because they're trivial ─ */

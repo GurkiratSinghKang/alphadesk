@@ -82,11 +82,18 @@ function SegmentPicker<T extends string>({
 }) {
   return (
     <div className="py-1.5">
-      <p className="text-xs font-medium text-foreground mb-2">{label}</p>
-      <div className="flex rounded-lg border border-border overflow-hidden">
+      <p className="text-xs font-medium text-foreground mb-2" id={`segment-${label.replace(/\s+/g, "-").toLowerCase()}`}>{label}</p>
+      <div
+        role="radiogroup"
+        aria-labelledby={`segment-${label.replace(/\s+/g, "-").toLowerCase()}`}
+        className="flex rounded-lg border border-border overflow-hidden"
+      >
         {options.map((opt) => (
           <button
             key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={value === opt.value}
             onClick={() => onChange(opt.value)}
             className={cn(
               "flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors",
@@ -123,17 +130,24 @@ function IntervalSlider({
   return (
     <div className="py-1.5">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-medium text-foreground">
+        <p className="text-xs font-medium text-foreground" id="interval-label">
           Portfolio Refresh Interval
         </p>
         <span className="text-xs font-semibold text-primary tabular-nums">
           {labels[value]}
         </span>
       </div>
-      <div className="flex rounded-lg border border-border overflow-hidden">
+      <div
+        role="radiogroup"
+        aria-labelledby="interval-label"
+        className="flex rounded-lg border border-border overflow-hidden"
+      >
         {options.map((opt) => (
           <button
             key={opt}
+            type="button"
+            role="radio"
+            aria-checked={value === opt}
             onClick={() => onChange(opt)}
             className={cn(
               "flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors",

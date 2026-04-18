@@ -51,7 +51,13 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
                   "font-mono tabular-nums font-medium",
                   cell.emphasis
                     ? "text-gold-300 text-[14px]"
-                    : "text-ink-1000 text-[13px]"
+                    : cell.valueTone === "profit"
+                      ? "text-up-500 text-[13px]"
+                      : cell.valueTone === "loss"
+                        ? "text-down-500 text-[13px]"
+                        : cell.valueTone === "muted"
+                          ? "text-fg-muted text-[13px]"
+                          : "text-ink-1000 text-[13px]"
                 )}
                 style={{ letterSpacing: "-0.005em" }}
               >

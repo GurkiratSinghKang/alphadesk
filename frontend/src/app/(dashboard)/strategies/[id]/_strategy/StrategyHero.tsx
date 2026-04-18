@@ -20,6 +20,12 @@ export interface MetricCell {
   value: string | null;
   /** Optional tone override — defaults to neutral. */
   tone?: "profit" | "loss" | "neutral";
+  /**
+   * Stable test hook e.g. "sharpe" | "dd" | "cagr" | "hit". When set,
+   * the rendered chip carries `data-testid={`metric-${testId}`}` so
+   * harness selectors can target it deterministically.
+   */
+  testId?: string;
 }
 
 export interface StrategyHeroProps {
@@ -69,6 +75,7 @@ export default function StrategyHero({
           return (
             <div
               key={c.label}
+              data-testid={c.testId ? `metric-${c.testId}` : undefined}
               className="flex flex-col gap-1 border-l border-border-hair pl-4"
             >
               <dt>

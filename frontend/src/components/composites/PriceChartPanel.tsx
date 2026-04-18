@@ -144,19 +144,24 @@ function ChartCanvas({
 }
 
 function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit" | "loss" }) {
+  const isDash = value === "\u2014" || value === "—";
   return (
     <div className="flex flex-col">
       <span
         className="font-sans font-semibold text-[9.5px] uppercase text-fg-hint mb-0.5"
         style={{ letterSpacing: "0.14em" }}
       >{k}</span>
-      <Mono
-        size="body"
-        className={cn(
-          "font-medium",
-          tone === "profit" ? "text-up-500" : tone === "loss" ? "text-down-500" : "text-fg"
-        )}
-      >{value}</Mono>
+      {isDash ? (
+        <span className="font-display italic text-[13px] text-fg-hint">{value}</span>
+      ) : (
+        <Mono
+          size="body"
+          className={cn(
+            "font-medium",
+            tone === "profit" ? "text-up-500" : tone === "loss" ? "text-down-500" : "text-fg"
+          )}
+        >{value}</Mono>
+      )}
     </div>
   );
 }
@@ -179,12 +184,47 @@ function LegendChip({ swatchColor, label, dashed, block }: { swatchColor: string
   );
 }
 
+const EM_DASH = "\u2014";
+
+/**
+ * Render an em-dash when a numeric value is missing / not-a-number /
+ * exactly zero. Matches the `formatOrDash` pattern used in
+ * `strategies/[id]/_strategy/StrategyHero.tsx`. Returns `null` when
+ * the caller should render the em-dash fallback JSX instead of the
+ * real numeric string.
+ */
+function numberOrNull(value: number | null | undefined): number | null {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) return null;
+  // A literal zero coming from "no data" (e.g. `toQuote` on undefined)
+  // should still render as a dash; real zero prices don't exist in
+  // liquid markets.
+  if (value === 0) return null;
+  return value;
+}
+
+/** Pretty em-dash span — italic serif, fg-hint, matches StrategyHero. */
+function DashSpan({ size = 13 }: { size?: number }) {
+  return (
+    <span
+      className="font-display italic text-fg-hint"
+      style={{ fontSize: `${size}px`, lineHeight: 1 }}
+    >
+      {EM_DASH}
+    </span>
+  );
+}
+
 export default function PriceChartPanel({
   symbol, quote, meta, series, smaSeries, regimeBands,
   activeRange, onRangeChange, className,
 }: PriceChartPanelProps) {
-  const deltaSign = quote.change >= 0 ? "+" : "−";
-  const deltaTone = quote.change >= 0 ? "text-up-500" : "text-down-500";
+  const last = numberOrNull(quote.last);
+  const change = numberOrNull(quote.change);
+  const changePct = numberOrNull(quote.changePct);
+  const regimeFit = numberOrNull(meta.regimeFit);
+
+  const deltaSign = (change ?? 0) >= 0 ? "+" : "\u2212";
+  const deltaTone = (change ?? 0) >= 0 ? "text-up-500" : "text-down-500";
 
   return (
     <section data-slot="price-chart-panel" className={cn("flex flex-col overflow-hidden", className)}>
@@ -204,9 +244,17 @@ export default function PriceChartPanel({
           <div
             className="font-mono tabular-nums text-[36px] font-light text-ink-1000"
             style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
-          >{quote.last.toFixed(2)}</div>
-          <div className={cn("font-mono tabular-nums text-[13px] mt-1", deltaTone)}>
-            {deltaSign}{Math.abs(quote.change).toFixed(2)} · {deltaSign}{Math.abs(quote.changePct).toFixed(2)}%
+          >
+            {last == null ? <DashSpan size={36} /> : last.toFixed(2)}
+          </div>
+          <div className={cn("font-mono tabular-nums text-[13px] mt-1", change == null ? "text-fg-hint" : deltaTone)}>
+            {change == null || changePct == null ? (
+              <DashSpan size={13} />
+            ) : (
+              <>
+                {deltaSign}{Math.abs(change).toFixed(2)} · {deltaSign}{Math.abs(changePct).toFixed(2)}%
+              </>
+            )}
           </div>
         </div>
 
@@ -217,8 +265,8 @@ export default function PriceChartPanel({
           <MetaCell k="IV" value={meta.iv} />
           <MetaCell
             k="Regime fit"
-            value={meta.regimeFit.toFixed(2)}
-            tone={meta.regimeFit >= 0.5 ? "profit" : "loss"}
+            value={regimeFit == null ? EM_DASH : regimeFit.toFixed(2)}
+            tone={regimeFit == null ? undefined : regimeFit >= 0.5 ? "profit" : "loss"}
           />
         </div>
       </header>

@@ -15,6 +15,9 @@ interface TourStep {
 }
 
 const STORAGE_KEY = "alphadesk-tour-complete";
+// New key used by the QA harness (see qa/harness/helpers.mjs::login).
+// Either key dismisses the tour; the new key is preferred for fresh writes.
+const DISMISSED_KEY = "alphadesk.onboarding_dismissed";
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -60,8 +63,11 @@ const TOUR_STEPS: TourStep[] = [
 // ─── Component ──────────────────────────────────────────────
 
 export function OnboardingTour() {
-  // Check synchronously — never show if already completed
-  const alreadyCompleted = typeof window !== "undefined" && !!localStorage.getItem(STORAGE_KEY);
+  // Check synchronously — never show if already completed (either key dismisses).
+  const alreadyCompleted =
+    typeof window !== "undefined" &&
+    (!!localStorage.getItem(STORAGE_KEY) ||
+      localStorage.getItem(DISMISSED_KEY) === "true");
   const [active, setActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
@@ -119,6 +125,7 @@ export function OnboardingTour() {
 
   const completeTour = useCallback(() => {
     localStorage.setItem(STORAGE_KEY, "1");
+    localStorage.setItem(DISMISSED_KEY, "true");
     setActive(false);
     setCommandPaletteOpen(false);
   }, [setCommandPaletteOpen]);
@@ -204,11 +211,22 @@ export function OnboardingTour() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100]" aria-modal="true" role="dialog">
+    <div
+      className="fixed inset-0 z-[100]"
+      aria-modal="true"
+      role="dialog"
+      data-testid="onboarding-tour"
+    >
       {/* Dark overlay with cutout */}
       <div className="absolute inset-0">
-        {/* Full overlay */}
-        <div className="absolute inset-0 bg-black/60 transition-all duration-300" />
+        {/* Full overlay — click-through dismiss */}
+        <button
+          type="button"
+          aria-label="Dismiss onboarding tour"
+          onClick={completeTour}
+          className="absolute inset-0 bg-black/60 transition-all duration-300 cursor-pointer"
+          data-testid="onboarding-tour-backdrop"
+        />
 
         {/* Spotlight cutout */}
         {spotlightRect && (

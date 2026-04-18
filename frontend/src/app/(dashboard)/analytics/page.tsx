@@ -7,6 +7,30 @@ import { DashboardPageLayout } from "@/components/layouts";
 import { getPortfolioPerformance, getTradeHistory, type TradeHistoryEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+// ─── Token helpers ──────────────────────────────────────────
+// SVG `fill` / `stroke` attributes need a concrete color string at runtime —
+// the browser does not resolve `var(--down-500)` inside those attributes.
+// Read the design-token off :root and fall back to the literal hex in the
+// token file so the chart still renders pre-hydration. Mirrors the helper
+// in `components/charts/TradingChart.tsx`.
+function getTokenVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
+
+// Compose a rgba() string from a hex color + alpha. Used for chart fills
+// where the design-token `--loss-tint` / `--profit-tint` pre-alpha is not
+// the alpha we need (histogram bars want 0.4, heatmap wants 0.15–0.7).
+function rgbaFromHex(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ─── Types ──────────────────────────────────────────────────
 
 interface EquityPoint {
@@ -179,6 +203,13 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
   // Y-axis labels
   const yTicks = [0, minDD / 2, minDD];
 
+  // Design-token aware stroke + fill. Drawdown is a loss signal → coral
+  // `--down-500`; fill uses the pre-alpha'd `--loss-tint` (rgba at 0.12).
+  // Fallback hex matches the token's literal value so the chart still
+  // paints before CSS loads.
+  const downColor = getTokenVar("--down-500", "#e07856");
+  const lossTint = getTokenVar("--loss-tint", "rgba(224, 120, 86, 0.12)");
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
       {/* Grid lines */}
@@ -190,10 +221,10 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
           </text>
         </g>
       ))}
-      {/* Area fill */}
-      <path d={areaD} fill="rgba(239,68,68,0.15)" />
-      {/* Line */}
-      <path d={pathD} fill="none" stroke="#ef4444" strokeWidth="1.5" />
+      {/* Area fill (coral tint) */}
+      <path d={areaD} fill={lossTint} />
+      {/* Line (coral) */}
+      <path d={pathD} fill="none" stroke={downColor} strokeWidth="1.5" />
       {/* X-axis labels */}
       {[0, Math.floor(data.length / 2), data.length - 1].map((idx) => (
         <text key={idx} x={xScale(idx)} y={h - 2} textAnchor="middle" fill="var(--muted-foreground)" fontSize="8" fontFamily="monospace">
@@ -264,6 +295,15 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
     return `${i === 0 ? "M" : "L"}${(midX ?? 0).toFixed(1)},${(Math.max(py, normY) ?? 0).toFixed(1)}`;
   }).join(" ");
 
+  // Bar fills must be a concrete color — resolve design tokens at runtime
+  // and compose a 0.4 alpha histogram fill. Chartreuse positive / coral
+  // negative, matching the rest of the F0 palette. Normal-curve stroke
+  // uses `--chart-4` (ice) which is already token-resolved via CSS var.
+  const upHex = getTokenVar("--up-500", "#a8d04d");
+  const downHex = getTokenVar("--down-500", "#e07856");
+  const upFill = rgbaFromHex(upHex, 0.4);
+  const downFill = rgbaFromHex(downHex, 0.4);
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
       {/* Bars */}
@@ -274,7 +314,7 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
         const midVal = (b.min + b.max) / 2;
         return (
           <rect key={i} x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={barH}
-            fill={midVal >= 0 ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}
+            fill={midVal >= 0 ? upFill : downFill}
             rx="1"
           />
         );
@@ -301,10 +341,17 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
 
   const maxAbs = Math.max(...Array.from(monthlyReturns.values()).map(Math.abs), 1);
 
+  // Design-token aware heatmap. Chartreuse `--up-500` for positive months,
+  // coral `--down-500` for negatives; intensity is the same 0.15 → 0.70
+  // ramp as before, just composed from the tokens' literal RGB.
+  const upHex = getTokenVar("--up-500", "#a8d04d");
+  const downHex = getTokenVar("--down-500", "#e07856");
+
   function cellColor(val: number): string {
     const intensity = Math.min(Math.abs(val) / maxAbs, 1);
-    if (val > 0) return `rgba(34,197,94,${0.15 + intensity * 0.55})`;
-    if (val < 0) return `rgba(239,68,68,${0.15 + intensity * 0.55})`;
+    const alpha = 0.15 + intensity * 0.55;
+    if (val > 0) return rgbaFromHex(upHex, alpha);
+    if (val < 0) return rgbaFromHex(downHex, alpha);
     return "var(--panel)";
   }
 

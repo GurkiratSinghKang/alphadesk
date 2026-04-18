@@ -161,7 +161,10 @@ function RiskMonitorToggle() {
 
   return (
     <button
+      type="button"
       onClick={toggle}
+      aria-pressed={enabled}
+      aria-label={`Risk Monitor ${enabled ? "enabled" : "disabled"} — click to toggle`}
       className={cn(
         "flex items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
         enabled
@@ -600,11 +603,21 @@ export default function PipelinePage() {
                         return (
                           <TableRow
                             key={h.date}
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={isExpanded}
+                            aria-label={`Pipeline run for ${h.date}. ${isExpanded ? "Expanded" : "Collapsed"} — press Enter or Space to toggle.`}
                             className={cn(
                               "border-border cursor-pointer",
                               isExpanded && "bg-muted/30"
                             )}
                             onClick={() => handleExpandHistory(h.date)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleExpandHistory(h.date);
+                              }
+                            }}
                           >
                             <TableCell className="text-muted-foreground">
                               {isExpanded ? (

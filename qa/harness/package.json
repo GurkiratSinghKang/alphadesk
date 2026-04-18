@@ -1,0 +1,16 @@
+{
+  "name": "alphadesk-qa-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Structured Playwright QA harness for AlphaDesk. Walks every route in qa/test-plan.md, exercises documented interactions, and writes a full run manifest (PNG + DOM + console + network) to qa/runs/<timestamp>/.",
+  "type": "module",
+  "scripts": {
+    "run": "node run-all.mjs",
+    "run:prod": "node run-all.mjs --base=https://tradingalpha.net",
+    "run:login": "node run-all.mjs --filter=login"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
+  },
+  "notes": "Do NOT `npm install` here — Playwright is already resolved from the repo-root node_modules. This file exists for documentation / future extraction only."
+}

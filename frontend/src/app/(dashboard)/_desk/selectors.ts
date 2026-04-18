@@ -78,6 +78,27 @@ export interface RawStrategy {
   sparkline: number[];
 }
 
+/**
+ * Registry-backed Phase 1 strategy route IDs — keep this list in sync
+ * with `backend/api/routes/strategies.py::_REGISTRY_TO_ROUTE`. No
+ * marketing placeholders (no "claude-alpha" / "dividend-capture" /
+ * "sector-rotation") — only strategies the backend can actually run.
+ */
+export const REGISTRY_STRATEGY_IDS: readonly string[] = [
+  "momentum-quality",
+  "pead",
+  "vrp-harvesting",
+  "earnings-vol-premium",
+  "regime-adaptive",
+  "ts-momentum",
+  "rsi2-reversal",
+  "dual-momentum",
+  "pairs-trading",
+  "kama-breakout",
+  "orb",
+  "vwap-strategy",
+];
+
 /** Shape API strategies onto StrategyRailItem. If the backend hasn't
  *  returned any strategies yet we render the canonical ordered list
  *  as paused rows with null return — no fake numbers. */
@@ -85,19 +106,34 @@ export function toRailItems(
   raw: RawStrategy[] | undefined
 ): StrategyRailItem[] {
   const byId = new Map((raw ?? []).map((s) => [s.id, s]));
-  return STRATEGY_ORDER.map((id, i) => {
+  // Only render strategies that actually exist in the backend registry,
+  // preserving STRATEGY_ORDER for stable visual sequencing.
+  const allowed = new Set(REGISTRY_STRATEGY_IDS);
+  const ids = STRATEGY_ORDER.filter((id) => allowed.has(id));
+  return ids.map((id, i) => {
     const meta = STRATEGY_META[id];
     const api = byId.get(id);
     const active = (api?.status ?? "").toLowerCase() === "active";
+    // Backend currently returns a live `total_return_pct` that is 0
+    // until the ledger has closed trades. Treat 0 as "not yet" so the
+    // rail renders an honest em-dash instead of a misleading 0.00%.
+    // Once R-A populates a real `return_pct` off the ledger, non-zero
+    // values will flow through naturally.
+    const live = api?.total_return_pct;
+    const returnPct =
+      api == null || live == null || !Number.isFinite(live) || live === 0
+        ? null
+        : live;
     return {
       id,
       name: meta?.shortName ?? id,
       subtitle: meta?.regimeNote ?? "",
       status: active ? "active" : "paused",
-      returnPct: api ? api.total_return_pct : null,
+      returnPct,
       indexLabel: String(i + 1).padStart(2, "0"),
     } satisfies StrategyRailItem;
-  }).slice(0, 8); // cap the rail at 8 rows; full catalogue lives on /strategies
+  });
+  // No cap — the registry is 12 rows, which matches the rail's natural height.
 }
 
 export function toStrategyOptions(
@@ -138,6 +174,9 @@ export function toContextCells(
     {
       label: "Day P&L",
       value: s ? (dayPnl >= 0 ? `+${fmtDollars(dayPnl)}` : `−${fmtDollars(Math.abs(dayPnl))}`) : "—",
+      // Tone the value itself so negatives render coral and positives chartreuse.
+      // Treat an exact zero as muted so it doesn't flash green for no movement.
+      valueTone: !s ? "muted" : dayPnl > 0 ? "profit" : dayPnl < 0 ? "loss" : "muted",
     },
     {
       label: "Cash",
@@ -279,12 +318,15 @@ export function toStatusPills(opts: {
           : "Claude · idle",
     tone: opts.claudeHealthy ? "profit" : "muted",
   });
-  if (opts.lastTickSec != null) {
-    pills.push({
-      label: `Last tick ${opts.lastTickSec.toFixed(2)}s`,
-      tone: "muted",
-    });
-  }
+  // Always emit the 4th pill so the StatusBar has a stable shape even
+  // before the first tick arrives. Render "—" when we have no data.
+  pills.push({
+    label:
+      opts.lastTickSec != null
+        ? `Last tick ${opts.lastTickSec.toFixed(2)}s`
+        : "Last tick —",
+    tone: "muted",
+  });
   return pills;
 }
 

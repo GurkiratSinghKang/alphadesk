@@ -233,11 +233,13 @@ export default function StrategyDetailPage() {
     {
       label: "OOS SHARPE",
       value: formatOrDash(perf?.sharpe_ratio ?? null, signedNumber),
+      testId: "sharpe",
     },
     {
       label: "MAX DD",
       value: formatOrDash(perf?.max_drawdown ?? null, negPct),
       tone: (perf?.max_drawdown ?? 0) !== 0 ? ("loss" as const) : undefined,
+      testId: "dd",
     },
     {
       label: "CAGR",
@@ -247,10 +249,12 @@ export default function StrategyDetailPage() {
         : (perf?.annualized_return_pct ?? 0) < 0
           ? ("loss" as const)
           : undefined,
+      testId: "cagr",
     },
     {
       label: "HIT RATE",
       value: hitRate != null ? `${hitRate.toFixed(0)}%` : "\u2014",
+      testId: "hit",
     },
   ];
 
@@ -337,6 +341,7 @@ export default function StrategyDetailPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-testid="strategy-pause"
             onClick={handleToggle}
             disabled={toggling || !perf}
             className={cn(

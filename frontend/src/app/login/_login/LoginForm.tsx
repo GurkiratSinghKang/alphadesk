@@ -151,11 +151,24 @@ export default function LoginForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      method="POST"
-      action="#"
       className="flex flex-col gap-5"
       aria-describedby={error ? "login-error" : undefined}
     >
+      {/*
+        No-JS fallback. Previously the form had `action="#" method="POST"`
+        which would silently post credentials to the current URL on submit
+        if JS never loaded — flagged by the audit (qa-3a-auth-marketing.md
+        P2) as a credential-exposure risk. Without an `action`, browsers
+        fall back to the current URL but also surface the native "submit
+        did nothing" to the user. This message makes the requirement
+        explicit before they try.
+      */}
+      <noscript>
+        <p className="font-display italic text-[13px] text-fg-muted">
+          JavaScript is required to sign in to AlphaDesk.
+        </p>
+      </noscript>
+
       <div className="flex flex-col gap-1.5">
         <Eyebrow as="div">
           <label htmlFor="login-username">Username</label>

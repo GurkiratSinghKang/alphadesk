@@ -125,6 +125,8 @@ export default function EquityPanel({
                 type="button"
                 role="radio"
                 aria-checked={active}
+                data-range={r}
+                data-testid={`range-${r}`}
                 onClick={() => onRangeChange(r)}
                 className={cn(
                   "font-mono text-[11px] px-2.5 py-1 rounded transition-colors",

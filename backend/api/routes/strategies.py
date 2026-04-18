@@ -42,6 +42,9 @@ class StrategyPerformance(BaseModel):
     win_rate: float
     sharpe_ratio: float | None = None
     max_drawdown: float | None = None
+    hit_rate: float | None = None
+    cagr: float | None = None
+    profit_factor: float | None = None
     active_positions_count: int
     equity_curve: list[dict[str, Any]]  # [{date, value}]
     last_trade_date: str
@@ -1238,6 +1241,19 @@ async def get_strategy_performance(
 
     equity_curve = _generate_equity_curve(strategy_id, max(invested, 1), return_pct) if invested > 0 else []
 
+    # Re-read OOS metrics from the canonical _STRATEGIES entry. _reload_oos_metrics()
+    # merges real Sharpe / max-drawdown / hit-rate / CAGR / profit-factor from the
+    # audit-reports/phase1-*-oos.json files into this dict at import time; the raw
+    # `data` returned by _get_strategy_data() already carries them (None when the
+    # strategy has no OOS payload on disk).
+    canonical = _canonical_id(strategy_id)
+    oos_source = _STRATEGIES.get(canonical, data)
+    oos_sharpe = oos_source.get("sharpe_ratio")
+    oos_max_dd = oos_source.get("max_drawdown")
+    oos_hit_rate = oos_source.get("hit_rate")
+    oos_cagr = oos_source.get("cagr")
+    oos_profit_factor = oos_source.get("profit_factor")
+
     return StrategyPerformance(
         name=data["name"],
         description=data["description"],
@@ -1248,8 +1264,11 @@ async def get_strategy_performance(
         annualized_return_pct=_annualized_return(return_pct, first_trade),
         return_dollars=return_dollars,
         win_rate=win_rate,
-        sharpe_ratio=0,
-        max_drawdown=0,
+        sharpe_ratio=oos_sharpe,
+        max_drawdown=oos_max_dd,
+        hit_rate=oos_hit_rate,
+        cagr=oos_cagr,
+        profit_factor=oos_profit_factor,
         active_positions_count=active_count,
         equity_curve=equity_curve,
         last_trade_date=last_trade,

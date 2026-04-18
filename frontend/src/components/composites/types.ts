@@ -32,6 +32,8 @@ export interface ContextCell {
   value: string;
   delta?: string;
   deltaTone?: "profit" | "loss";
+  /** Optional tone for the main value — used by Day P&L so negatives render coral. */
+  valueTone?: "profit" | "loss" | "muted";
   /** Hero cell — gold-300 value, slightly larger. */
   emphasis?: boolean;
 }
