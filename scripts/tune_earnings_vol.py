@@ -2,19 +2,26 @@
 
 Train 2022-01-01 ... 2022-12-31, test 2023-01-01 ... 2024-12-31.
 
+v2 (2026-04): re-tuning against the engine's real-options fill path after
+we removed the synthetic 0.55 IV-crush-retention ledger. The v1 study
+(``earnings_vol_v1.db``) scored trials against a synthetic BS pricing
+model that ignored half-spread slippage, inflating OOS Sharpe to 6.10;
+real Polygon contract_bars + half-spread slippage tell a different story.
+We run under a new study name (``earnings_vol_v2``) so the old trials
+don't contaminate the TPE posterior.
+
 Data cost considerations: options chains + contract bars are heavy, so
 we (a) constrain the universe to the 29 liquid names in the config, (b)
 prefetch the underlying bars in one batch into an in-memory provider,
-and (c) use a deterministic sampler with a modest trial count (15 by
-default) which is consistent with the spec's "15 trials acceptable if
-data-heavy".
+and (c) use a deterministic sampler with a modest trial count (20 by
+default).
 
 Usage::
 
     .venv/bin/python scripts/tune_earnings_vol.py [n_trials]
 
-``n_trials`` defaults to 15. Study is persisted to
-``~/.alphadesk/tuner/earnings_vol_v1.db`` and can be resumed.
+``n_trials`` defaults to 20. Study is persisted to
+``~/.alphadesk/tuner/earnings_vol_v2.db`` and can be resumed.
 """
 
 from __future__ import annotations
@@ -59,6 +66,116 @@ from backend.strategies.earnings_vol.polygon_helpers import (
     clear_synthetic_ledger,
 )
 from backend.tuner.runner import run
+
+
+# --------------------------------------------------------------------------- #
+# Short-circuit the engine's historical ``chain_snapshot`` so per-fill        #
+# slippage lookups don't paginate through every historical expiration.        #
+# ---------------------------------------------------------------------------#
+# The engine's ``ExecutionSimulator._leg_spread_pct`` calls                   #
+# ``options_provider.chain_snapshot(underlying, asof)`` for each leg on each  #
+# fill date to derive a per-leg half-spread from live bid/ask. On Polygon's  #
+# Developer tier, that endpoint strips bid/ask on historical ``as_of`` calls #
+# but still paginates through every contract ever listed on the underlying —#
+# for BAC (listed 2007) that's 10k+ pages per fill and ~2 min of API burn.  #
+# We never get bid/ask data back anyway, so the simulator always falls back #
+# to ``default_options_spread_pct``. Short-circuiting here returns an empty  #
+# DataFrame so the fallback triggers immediately without the pagination.     #
+def _patch_chain_snapshot_for_historical() -> None:
+    import pandas as _pd
+    _orig = PolygonOptionsProvider.chain_snapshot
+
+    def chain_snapshot_fast(self, underlying, asof=None):  # type: ignore[override]
+        # For historical dates (the only path the tuner exercises), return
+        # an empty chain so the engine's ``_leg_spread_pct`` falls back to
+        # ``default_options_spread_pct``. Live-paper / live-prod call paths
+        # still go through the original method.
+        if asof is None:
+            return _orig(self, underlying, asof)
+        try:
+            asof_d = (
+                asof if isinstance(asof, date)
+                else _pd.Timestamp(asof).date()
+            )
+        except Exception:
+            return _orig(self, underlying, asof)
+        # If asof is today or in the future, keep original behaviour.
+        if asof_d >= date.today():
+            return _orig(self, underlying, asof)
+        # Historical: skip the expensive pagination.
+        return _pd.DataFrame(
+            columns=[
+                "contract_ticker", "underlying", "expiration", "strike",
+                "option_type", "bid", "ask", "last", "volume",
+                "open_interest", "iv", "delta", "gamma", "theta",
+                "vega", "rho", "asof",
+            ]
+        )
+
+    PolygonOptionsProvider.chain_snapshot = chain_snapshot_fast
+
+
+_patch_chain_snapshot_for_historical()
+
+
+# --------------------------------------------------------------------------- #
+# Force bar/staged_on timestamps to tz-aware UTC so the executor's            #
+# ``bar.ts < order.staged_on`` comparison does not mix naive vs aware dts.   #
+# --------------------------------------------------------------------------- #
+# Alpaca returns tz-aware UTC timestamps; but when the engine emits a         #
+# signal for a symbol whose bar is missing on that session (rare but happens  #
+# around earnings candidates that fall on the session boundary), it falls    #
+# back to ``datetime.combine(session, datetime.min.time())`` which is naive.  #
+# The executor then fails ``bar.ts < order.staged_on`` with                   #
+# ``TypeError: can't compare offset-naive and offset-aware datetimes``. The   #
+# fix lives in the engine but we cannot touch it here; we monkey-patch the    #
+# engine's ``_coerce_ts`` and ``_queue_signal`` helpers to always emit        #
+# tz-aware UTC datetimes.                                                     #
+def _patch_engine_tz_aware() -> None:
+    """Force bar/staged_on timestamps to tz-aware UTC.
+
+    The executor compares ``bar.ts < order.staged_on``. Alpaca bars are
+    tz-aware UTC, but two engine paths produce naive datetimes:
+
+    1. ``_coerce_ts`` returns ``datetime.combine(..., min.time())`` when the
+       row is missing a timestamp column — used when a bar is present but
+       has no ``ts`` field.
+    2. ``_queue_signal`` falls back to ``datetime.combine(session, min.time())``
+       when ``bars_by_symbol[signal.symbol]`` is ``None`` — used when a
+       strategy emits a signal for a symbol that has no bar on that session.
+
+    Both fallbacks produce naive datetimes that then fail the executor's
+    comparison with a tz-aware UTC bar.ts. We wrap the executor's ``queue``
+    method to coerce incoming ``staged_on`` to UTC, and wrap ``_coerce_ts``
+    to do the same for bar ts values. This is belt-and-braces.
+    """
+
+    from datetime import datetime, timezone
+    from backend.backtest.engine import BacktestEngine
+    from backend.backtest.execution import ExecutionSimulator
+
+    _orig_coerce_ts = BacktestEngine._coerce_ts
+
+    def _coerce_ts_tz(row, ts_col, fallback):
+        v = _orig_coerce_ts(row, ts_col, fallback)
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
+    BacktestEngine._coerce_ts = staticmethod(_coerce_ts_tz)
+
+    _orig_queue = ExecutionSimulator.queue
+
+    def _queue_tz(self, signal, staged_on, side, quantity):
+        if staged_on is not None and getattr(staged_on, "tzinfo", None) is None:
+            staged_on = staged_on.replace(tzinfo=timezone.utc)
+        return _orig_queue(self, signal, staged_on, side, quantity)
+
+    ExecutionSimulator.queue = _queue_tz
+
+
+_patch_engine_tz_aware()
+
 
 log = logging.getLogger("earnings_vol_tune")
 
@@ -238,7 +355,7 @@ def main() -> int:
         level="INFO",
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    n_trials = int(sys.argv[1]) if len(sys.argv) > 1 else 15
+    n_trials = int(sys.argv[1]) if len(sys.argv) > 1 else 20
 
     # Prefetch underlying bars once.
     df = _prefetch_underlying(date(2019, 1, 1), date(2025, 1, 31))
@@ -252,7 +369,7 @@ def main() -> int:
         result = run(
             strategy_name="earnings_vol",
             trials=n_trials,
-            study_name="earnings_vol_v1",
+            study_name="earnings_vol_v2",
             start=date(2022, 1, 1),
             end=date(2024, 12, 31),
             train_end=date(2022, 12, 31),

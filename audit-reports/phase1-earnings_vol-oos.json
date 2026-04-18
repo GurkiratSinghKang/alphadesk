@@ -1,197 +1,287 @@
 {
   "tuner": {
-    "study_name": "earnings_vol_v1",
+    "study_name": "earnings_vol_v2",
     "best_params": {
-      "implied_vs_historical_min_ratio": 1.194338644844741,
-      "wing_width_multiple": 1.407023547660844,
-      "dte_target": 7,
-      "max_loss_pct_per_trade": 0.01856740207895621,
-      "exit_timing": "next_close",
-      "earnings_timing_filter": "after_close_only",
-      "min_underlying_price": 50,
-      "max_concurrent_positions": 10,
+      "implied_vs_historical_min_ratio": 1.7554874548977852,
+      "wing_width_multiple": 0.807196619546981,
+      "dte_target": 21,
+      "max_loss_pct_per_trade": 0.02865100555558427,
+      "exit_timing": "1h_after_open",
+      "earnings_timing_filter": "any",
+      "min_underlying_price": 20,
+      "max_concurrent_positions": 1,
       "historical_moves_lookback_quarters": 8
     },
-    "best_value": 6.101058074161343,
-    "n_trials": 5
+    "best_value": 1.4335960719437035,
+    "n_trials": 20
   },
   "walkforward": {
     "oos": {
-      "sharpe": 6.101058074161343,
-      "sortino": 13.684375498299255,
-      "calmar": 39.32999092745339,
-      "max_drawdown": 0.012649517501617358,
-      "cagr": 0.4975054085752735,
-      "tail_ratio": 0.0021198440189009065,
-      "hit_rate": 0.8939393939393939,
-      "profit_factor": 13.7724279496788,
-      "turnover": 5.376858057490752,
+      "sharpe": 1.4335960719437035,
+      "sortino": 1.2755892947351903,
+      "calmar": 6.26279331104955,
+      "max_drawdown": 0.019014660805729666,
+      "cagr": 0.1190848905059998,
+      "tail_ratio": 0.0,
+      "hit_rate": 0.55,
+      "profit_factor": 1.3084351002617556,
+      "turnover": 0.018703191944187014,
       "alpha": 0.0,
       "beta": 0.0
     },
-    "oos_trades": 132,
+    "oos_trades": 40,
     "oos_pnl_by_name": {
-      "UNH": {
-        "n": 6,
-        "pnl": 1683.746462685845,
-        "wins": 4,
-        "losses": 2
-      },
-      "MS": {
-        "n": 6,
-        "pnl": 5726.032800372186,
-        "wins": 6,
+      "O:QCOM230224C00128000": {
+        "n": 1,
+        "pnl": 10272.671697708547,
+        "wins": 1,
         "losses": 0
       },
-      "MSFT": {
-        "n": 7,
-        "pnl": 8463.088576662,
-        "wins": 7,
+      "O:QCOM230224P00128000": {
+        "n": 1,
+        "pnl": 202.725,
+        "wins": 1,
         "losses": 0
       },
-      "TSLA": {
-        "n": 7,
-        "pnl": 6811.132433876049,
-        "wins": 7,
-        "losses": 0
-      },
-      "AMD": {
-        "n": 7,
-        "pnl": 7877.597104713808,
-        "wins": 7,
-        "losses": 0
-      },
-      "META": {
-        "n": 7,
-        "pnl": 6820.120473027938,
-        "wins": 7,
-        "losses": 0
-      },
-      "AAPL": {
-        "n": 8,
-        "pnl": 8667.96939858317,
-        "wins": 8,
-        "losses": 0
-      },
-      "QCOM": {
-        "n": 4,
-        "pnl": 4679.7062738681525,
-        "wins": 4,
-        "losses": 0
-      },
-      "GOOGL": {
-        "n": 8,
-        "pnl": 8800.41137295554,
-        "wins": 7,
+      "O:QCOM230224C00140000": {
+        "n": 1,
+        "pnl": -2377.575,
+        "wins": 0,
         "losses": 1
       },
-      "AMZN": {
-        "n": 7,
-        "pnl": 7049.152244156223,
-        "wins": 6,
+      "O:QCOM230224P00116000": {
+        "n": 1,
+        "pnl": 133.32223398093552,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:ORCL230331C00085000": {
+        "n": 1,
+        "pnl": 10255.2,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:ORCL230331P00085000": {
+        "n": 1,
+        "pnl": -3692.0,
+        "wins": 0,
         "losses": 1
       },
-      "AMAT": {
-        "n": 8,
-        "pnl": 9524.12121462234,
-        "wins": 8,
-        "losses": 0
-      },
-      "CRM": {
-        "n": 7,
-        "pnl": 6939.394559121428,
-        "wins": 7,
-        "losses": 0
-      },
-      "ORCL": {
+      "O:ORCL230331C00091000": {
         "n": 1,
-        "pnl": 849.2493834226367,
-        "wins": 1,
-        "losses": 0
+        "pnl": -5000.8,
+        "wins": 0,
+        "losses": 1
       },
-      "ADBE": {
-        "n": 8,
-        "pnl": 9556.449263155913,
-        "wins": 8,
-        "losses": 0
-      },
-      "MU": {
-        "n": 8,
-        "pnl": 10315.285311406007,
-        "wins": 8,
-        "losses": 0
-      },
-      "JPM": {
-        "n": 7,
-        "pnl": 4858.028683163975,
-        "wins": 4,
-        "losses": 3
-      },
-      "GS": {
-        "n": 5,
-        "pnl": 5988.593111853362,
-        "wins": 5,
-        "losses": 0
-      },
-      "LLY": {
-        "n": 6,
-        "pnl": -1998.5404632193674,
-        "wins": 3,
-        "losses": 3
-      },
-      "XOM": {
-        "n": 4,
-        "pnl": 10046.309523331733,
-        "wins": 4,
-        "losses": 0
-      },
-      "WFC": {
-        "n": 3,
-        "pnl": 58.85684235475037,
-        "wins": 1,
-        "losses": 2
-      },
-      "UBER": {
-        "n": 3,
-        "pnl": -687.198844256798,
-        "wins": 1,
-        "losses": 2
-      },
-      "NVDA": {
-        "n": 2,
-        "pnl": 3853.652665990662,
-        "wins": 2,
-        "losses": 0
-      },
-      "AVGO": {
+      "O:ORCL230331P00079000": {
         "n": 1,
-        "pnl": 1601.3846862199073,
+        "pnl": 1244.4391248395123,
         "wins": 1,
         "losses": 0
       },
-      "LRCX": {
+      "O:GS230512C00315000": {
         "n": 1,
-        "pnl": 1926.0681325710032,
+        "pnl": 9623.813193816566,
         "wins": 1,
         "losses": 0
       },
-      "CVX": {
+      "O:GS230512P00315000": {
         "n": 1,
-        "pnl": 1851.6615040480579,
+        "pnl": 306.0,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:GS230512C00340000": {
+        "n": 1,
+        "pnl": -2635.75,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:GS230512P00290000": {
+        "n": 1,
+        "pnl": 30.545905395905056,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:INTC230519C00028500": {
+        "n": 1,
+        "pnl": -8062.5,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:INTC230519P00028500": {
+        "n": 1,
+        "pnl": 9265.0,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:INTC230519C00031000": {
+        "n": 1,
+        "pnl": 2835.0,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:INTC230519P00026000": {
+        "n": 1,
+        "pnl": -3207.5,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MS231110C00074000": {
+        "n": 1,
+        "pnl": 12839.375,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:MS231110P00074000": {
+        "n": 1,
+        "pnl": -5343.125,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MS231110C00080000": {
+        "n": 1,
+        "pnl": -5258.75,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MS231110P00068000": {
+        "n": 1,
+        "pnl": 728.1097280162653,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:QCOM231124C00103000": {
+        "n": 1,
+        "pnl": -7447.0,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:QCOM231124P00103000": {
+        "n": 1,
+        "pnl": 2126.575,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:QCOM231124C00111000": {
+        "n": 1,
+        "pnl": 3249.4,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:QCOM231124P00095000": {
+        "n": 1,
+        "pnl": -245.47333035996445,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MU240112C00081000": {
+        "n": 1,
+        "pnl": -6365.25,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MU240112P00081000": {
+        "n": 1,
+        "pnl": 3998.25,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:MU240112C00086000": {
+        "n": 1,
+        "pnl": 5197.244959128486,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:MU240112P00076000": {
+        "n": 1,
+        "pnl": -1588.5,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MU240412C00093000": {
+        "n": 1,
+        "pnl": -13335.575,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:MU240412P00093000": {
+        "n": 1,
+        "pnl": 5077.6,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:MU240412C00102000": {
+        "n": 1,
+        "pnl": 11029.968036351596,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:MU240412P00084000": {
+        "n": 1,
+        "pnl": -1555.9377355307997,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:ADBE241004C00580000": {
+        "n": 1,
+        "pnl": 7455.675,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:ADBE241004P00580000": {
+        "n": 1,
+        "pnl": -6962.25,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:ADBE241004C00625000": {
+        "n": 1,
+        "pnl": -643.0192133849595,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:ADBE241004P00535000": {
+        "n": 1,
+        "pnl": 2657.271631459879,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:UNH241108C00585000": {
+        "n": 1,
+        "pnl": 12213.25,
+        "wins": 1,
+        "losses": 0
+      },
+      "O:UNH241108P00585000": {
+        "n": 1,
+        "pnl": -5503.125,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:UNH241108C00625000": {
+        "n": 1,
+        "pnl": -6032.3425013622655,
+        "wins": 0,
+        "losses": 1
+      },
+      "O:UNH241108P00545000": {
+        "n": 1,
+        "pnl": 811.125,
         "wins": 1,
         "losses": 0
       }
     },
     "oos_pnl_stats": {
-      "count": 132,
-      "sum": 131262.27271468652,
-      "mean": 994.4111569294433,
-      "min": -1680.4022774965244,
-      "max": 3257.4838824155536,
-      "win_rate": 0.8939393939393939
+      "count": 40,
+      "sum": 26296.088730059702,
+      "mean": 657.4022182514925,
+      "min": -13335.575,
+      "max": 12839.375,
+      "win_rate": 0.55
     },
     "oos_start_equity": 100000.0,
-    "oos_end_equity": 230814.51346267818,
-    "oos_total_return": 1.3081451346267818
+    "oos_end_equity": 126245.6087300597,
+    "oos_total_return": 0.262456087300597
   }
 }

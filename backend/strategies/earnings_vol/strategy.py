@@ -626,13 +626,21 @@ class EarningsVolStrategy:
         # synthetic ledger / EVOL: prefix is gone.
         entry_net_px = plan["net_credit_per_contract"] * mult
 
+        # LMT floor: accept any net credit that's within ~5% of the
+        # mid-mid theoretical. The engine applies per-leg half-spread
+        # slippage (default 5%) which trims ~3-4% off the net credit;
+        # setting the limit at 95% of mid gives us realistic fills without
+        # bleeding the whole edge to the spread.
+        min_acceptable_credit = (
+            float(plan["net_credit_per_contract"]) * 0.95
+        )
         sig = Signal(
             symbol=plan["symbol"],
             quantity=-int(plan["contracts"]),    # short = negative spreads
             legs=legs,
             order_type=OrderType.MOC,
             time_in_force=TimeInForce.DAY,
-            limit_price=Decimal(str(plan["net_credit_per_contract"])),
+            limit_price=Decimal(str(min_acceptable_credit)),
             tag=f"earnings_vol-entry-{plan['symbol']}",
             asof=asof,
         )
