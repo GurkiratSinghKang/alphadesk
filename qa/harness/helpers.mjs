@@ -306,6 +306,21 @@ export async function runStep(page, step, runDir, baseUrl) {
         break;
       }
 
+      case "click-if-present": {
+        // Click the first match of `selector` if any exist; otherwise mark the
+        // step `skipped` so empty-state pages don't break the run. Used e.g.
+        // for chart range buttons that only appear once data arrives.
+        const count = await page.locator(step.selector).count().catch(() => 0);
+        if (count === 0) {
+          result.status = "skipped";
+          result.skipReason = `no match for ${step.selector}`;
+          break;
+        }
+        await page.locator(step.selector).first().click({ timeout: TIMEOUTS.action });
+        if (step.waitFor) await page.waitForTimeout(step.waitFor);
+        break;
+      }
+
       case "press": {
         if (step.on) await page.focus(step.on, { timeout: TIMEOUTS.action });
         await page.keyboard.press(step.key);

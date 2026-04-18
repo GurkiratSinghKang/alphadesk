@@ -19,18 +19,14 @@ export const spec = {
     },
     { kind: "snapshot", label: "metric-hover" },
 
-    // Chart range switcher — try to click "1M" / "3M" buttons if present.
+    // Chart range switcher. EquityPanel only renders range buttons when the
+    // strategy has enough ledger data to draw a curve. If the strategy hasn't
+    // traded yet (common for freshly-registered strategies), the panel shows
+    // a "Not enough data" empty state — in which case this step is skipped.
     {
-      kind: "wait",
-      for: "selector",
-      selector: "[data-range='1M']",
-      timeout: 5000,
-    },
-    {
-      kind: "click",
+      kind: "click-if-present",
       selector: "[data-range='1M']",
       label: "range-1M",
-      options: { force: false },
     },
     { kind: "wait", for: "networkidle", timeout: 5000 },
     { kind: "snapshot", label: "chart-1m" },
