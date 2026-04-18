@@ -3,8 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("access_token")?.value;
   const { pathname } = request.nextUrl;
-  const isLoginPage = pathname === "/login";
-  const isPublicPage = ["/privacy", "/terms", "/risk", "/docs"].includes(pathname);
+  // Login subpaths (e.g. /login/reset) are public alongside /login itself.
+  const isLoginPage = pathname === "/login" || pathname.startsWith("/login/");
+  const isPublicPage = [
+    "/privacy",
+    "/terms",
+    "/risk",
+    "/docs",
+    "/request-access",
+  ].includes(pathname);
 
   // Check if token is structurally valid (3-part JWT, not expired)
   let isValidToken = false;
