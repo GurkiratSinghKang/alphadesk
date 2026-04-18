@@ -14,15 +14,22 @@ export const spec = {
     // Hover a metric chip to reveal tooltip (first chip).
     {
       kind: "hover",
-      selector: "[data-testid^=metric-chip], [data-chip=metric], [role=note]",
+      selector: "[data-testid^=metric-]",
       waitFor: 400,
     },
     { kind: "snapshot", label: "metric-hover" },
 
     // Chart range switcher — try to click "1M" / "3M" buttons if present.
     {
+      kind: "wait",
+      for: "selector",
+      selector: "[data-range='1M']",
+      timeout: 5000,
+    },
+    {
       kind: "click",
-      selector: "button:has-text('1M'), [data-range='1M']",
+      selector: "[data-range='1M']",
+      label: "range-1M",
       options: { force: false },
     },
     { kind: "wait", for: "networkidle", timeout: 5000 },

@@ -214,7 +214,10 @@ export function CommandPalette() {
 
   return (
     <Dialog open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen}>
-      <DialogContent className="overflow-hidden p-0 max-w-xl bg-[var(--surface)] border-border shadow-2xl [&>button]:hidden">
+      <DialogContent
+        data-testid="command-palette"
+        className="overflow-hidden p-0 max-w-xl bg-[var(--surface)] border-border shadow-2xl [&>button]:hidden"
+      >
         <Command
           className="bg-transparent"
           loop

@@ -52,6 +52,10 @@ export default function OrderBar({
     defaults?.strategyId ?? strategies[0]?.id ?? ""
   );
   const [side, setSide] = React.useState<OrderSide>(defaults?.side ?? "buy");
+  const [symbolValue, setSymbolValue] = React.useState<string>(symbol);
+  React.useEffect(() => {
+    setSymbolValue(symbol);
+  }, [symbol]);
   const [quantity, setQuantity] = React.useState<string>(
     String(defaults?.quantity ?? 100)
   );
@@ -64,7 +68,7 @@ export default function OrderBar({
   const stage = () => {
     onSubmit({
       strategyId,
-      symbol,
+      symbol: symbolValue || symbol,
       side,
       quantity: Number(quantity) || 0,
       type,
@@ -123,9 +127,22 @@ export default function OrderBar({
         </div>
       </Field>
 
+      <Field label="Symbol">
+        <Input
+          aria-label="Symbol"
+          name="symbol"
+          data-testid="order-bar-symbol"
+          value={symbolValue}
+          onChange={(e) => setSymbolValue(e.target.value.toUpperCase())}
+          className="min-w-[90px]"
+        />
+      </Field>
+
       <Field label="Qty">
         <Input
           aria-label="Quantity"
+          name="qty"
+          data-testid="order-bar-qty"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           className="min-w-[90px]"
