@@ -720,7 +720,7 @@ async def _run_pipeline_inner(
             # ---- Populate momentum data for the momentum filter ----
             try:
                 from data.ingestion.strategy_runner import get_screener_results
-                screened = get_screener_results(limit=100)
+                screened = await get_screener_results(limit=100)
                 momentum_data: dict[str, float] = {}
                 for stock in screened:
                     momentum_data[stock["symbol"]] = stock.get("change_pct", 0)
@@ -750,6 +750,9 @@ async def _run_pipeline_inner(
                         pass
 
                 MasterAgent.set_momentum_data(momentum_data)
+                # Also patch the already-constructed master so it sees this
+                # snapshot for the current pipeline run (P1 #7 fix).
+                master.update_momentum_data(momentum_data)
                 logger.info("Momentum data populated for %d symbols", len(momentum_data))
 
                 # Fetch 12-month absolute momentum (Antonacci Dual Momentum)
@@ -778,6 +781,7 @@ async def _run_pipeline_inner(
                         pass
 
                 MasterAgent.set_absolute_momentum(abs_momentum)
+                master.update_absolute_momentum(abs_momentum)
                 logger.info("Absolute momentum (12-month) data populated for %d symbols", len(abs_momentum))
             except Exception as e:
                 logger.error("Failed to populate momentum data: %s", e)

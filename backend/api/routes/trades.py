@@ -355,7 +355,12 @@ async def list_orders(
         raise
     except Exception:
         logger.warning("Failed to fetch orders from broker", exc_info=True)
-        return []
+        # Don't mask outages as "no orders" — return 503 so the frontend
+        # can render an error state instead of an empty grid.
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "broker_unavailable", "retry": True},
+        )
 
 
 @router.delete("/orders/{order_id}", status_code=204, response_model=None)
@@ -426,7 +431,10 @@ async def list_positions() -> list[PositionResponse]:
         raise
     except Exception:
         logger.warning("Failed to fetch positions from broker", exc_info=True)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "broker_unavailable", "retry": True},
+        )
 
 
 @router.get("/history", response_model=list[TradeHistoryEntry])

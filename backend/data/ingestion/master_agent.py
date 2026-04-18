@@ -34,43 +34,91 @@ class MasterAgent:
     - Circuit breaker
     """
 
-    # Price momentum data (populated from screener)
-    MOMENTUM_DATA: dict[str, float] = {}  # {symbol: 6-month return %}
-
-    # Absolute momentum data — 12-month returns from Alpaca (Antonacci Dual Momentum)
-    ABSOLUTE_MOMENTUM_DATA: dict[str, float] = {}  # {symbol: 12-month return %}
+    # Shared momentum data — module-level snapshot, used when an instance
+    # is constructed without explicit data. Each MasterAgent takes a COPY at
+    # __init__, so later mutations on one instance don't silently affect
+    # decisions another instance has already made (P1 #7).
+    _SHARED_MOMENTUM_DATA: dict[str, float] = {}
+    _SHARED_ABSOLUTE_MOMENTUM_DATA: dict[str, float] = {}
 
     @classmethod
     def set_momentum_data(cls, data: dict[str, float]) -> None:
-        """Set momentum data from screener results."""
-        cls.MOMENTUM_DATA = data
+        """Update the shared snapshot (read at the next ``MasterAgent()``).
+
+        Existing instances are NOT affected — they retain the snapshot they
+        took at construction time. To push new data into an existing
+        instance, use :meth:`update_momentum_data`.
+        """
+        cls._SHARED_MOMENTUM_DATA = dict(data)
 
     @classmethod
     def set_absolute_momentum(cls, data: dict[str, float]) -> None:
-        """Set 12-month absolute momentum data (Antonacci Dual Momentum)."""
-        cls.ABSOLUTE_MOMENTUM_DATA = data
+        """Update the shared 12-month absolute momentum snapshot."""
+        cls._SHARED_ABSOLUTE_MOMENTUM_DATA = dict(data)
 
-    # Equal allocation: $100k / 15 strategies = $6,667 each (competition mode)
-    STRATEGY_LIMITS: dict[str, float] = {
-        # Fundamental / options strategies
-        "momentum_quality": 0.0667, # $6,667
-        "pead": 0.0667,             # $6,667
-        "vrp_harvest": 0.0667,      # $6,667
-        "earnings_vol": 0.0667,     # $6,667
-        "regime_adaptive": 0.0667,  # $6,667
-        "claude_alpha": 0.0667,     # $6,667
-        "mean_reversion": 0.0667,   # $6,667
-        "vcp_breakout": 0.0667,     # $6,667
-        # Technical analysis strategies
-        "ts_momentum": 0.0667,      # $6,667
-        "rsi2_reversal": 0.0667,    # $6,667
-        "dual_momentum": 0.0667,    # $6,667
-        "pairs_trading": 0.0667,    # $6,667
-        "kama_breakout": 0.0667,    # $6,667
-        "orb": 0.0667,              # $6,667
-        "vwap_strategy": 0.0667,    # $6,667
+    def update_momentum_data(self, data: dict[str, float]) -> None:
+        """Replace THIS instance's 6-month momentum data."""
+        self.MOMENTUM_DATA = dict(data)
+
+    def update_absolute_momentum(self, data: dict[str, float]) -> None:
+        """Replace THIS instance's 12-month absolute momentum data."""
+        self.ABSOLUTE_MOMENTUM_DATA = dict(data)
+
+    # Per-strategy notional caps as a fraction of equity.
+    # Built dynamically from the registry at first use via
+    # :meth:`_build_strategy_limits`; strategies requiring a different
+    # allocation cap can be added to ``STRATEGY_LIMIT_OVERRIDES`` below.
+    # The previous hardcoded 15-entry dict left 3 "ghost" strategies
+    # (claude_alpha, mean_reversion, vcp_breakout) reserving notional they
+    # never actually used — and silently starved any future registry addition
+    # to a 10% fallback that blew the portfolio deployment limit.
+    STRATEGY_LIMIT_OVERRIDES: dict[str, float] = {
+        # Reserved for strategies that need a different cap than equal-weight.
+        # Example: "claude_alpha": 0.15  # larger discretionary allocation.
     }
-    # Total: 1.00
+
+    _STRATEGY_LIMITS_CACHE: dict[str, float] | None = None
+
+    @classmethod
+    def _build_strategy_limits(cls) -> dict[str, float]:
+        """Build the per-strategy notional cap dict from the registry.
+
+        Equal-weight across registered strategies (``1/N`` each), with
+        per-name overrides applied on top. Cached so the registry is only
+        walked once per process.
+        """
+        if cls._STRATEGY_LIMITS_CACHE is not None:
+            return cls._STRATEGY_LIMITS_CACHE
+        try:
+            from strategies.registry import load_all, list_names
+            load_all()  # idempotent — ensures registry is populated
+            names = list_names()
+        except Exception as exc:
+            logger.warning(
+                "Could not load strategy registry (%s); STRATEGY_LIMITS "
+                "will fall back to the per-call 10%% default.", exc,
+            )
+            names = []
+
+        limits: dict[str, float] = {}
+        if names:
+            equal = 1.0 / len(names)
+            for n in names:
+                limits[n] = equal
+        # Apply overrides on top of equal-weight
+        limits.update(cls.STRATEGY_LIMIT_OVERRIDES)
+        cls._STRATEGY_LIMITS_CACHE = limits
+        logger.info(
+            "STRATEGY_LIMITS built from registry: %d strategies, equal weight=%.4f",
+            len(names), (1.0 / len(names)) if names else 0.0,
+        )
+        return limits
+
+    # Backwards-compat read-only view. Eager-build so any code that iterates
+    # ``STRATEGY_LIMITS.items()`` still works. (Property on a class isn't
+    # trivially picklable, so we use a class-level dict updated on first
+    # construction and via _build_strategy_limits.)
+    STRATEGY_LIMITS: dict[str, float] = {}
     MAX_POSITIONS = 20  # raised for 15 strategies
     MAX_DEPLOYED_PCT = 0.90  # 90% of equity deployable (competition mode)
     MAX_PER_POSITION = 0.08  # max 8% per position
@@ -133,13 +181,32 @@ class MasterAgent:
         cash: float,
         existing_positions: dict[str, dict[str, Any]],
         vix_level: float = 16.5,
+        momentum_data: dict[str, float] | None = None,
+        absolute_momentum_data: dict[str, float] | None = None,
     ) -> None:
+        # Ensure the registry-driven STRATEGY_LIMITS is populated. Safe to
+        # call repeatedly — ``_build_strategy_limits`` caches on the class.
+        MasterAgent.STRATEGY_LIMITS = MasterAgent._build_strategy_limits()
+
         self.equity = equity
         self.cash = cash
         # {symbol: {strategy, notional, shares, entry_price, ...}}
         self.existing_positions = dict(existing_positions)
         self.pending_orders: list[dict[str, Any]] = []
         self.rejections: list[dict[str, Any]] = []
+
+        # Instance-local copy of the momentum snapshot. If the caller doesn't
+        # inject one we snapshot the shared dict at construction time, so
+        # later mutations via set_momentum_data() don't retroactively change
+        # decisions this instance has already made.
+        self.MOMENTUM_DATA: dict[str, float] = (
+            dict(momentum_data) if momentum_data is not None
+            else dict(self._SHARED_MOMENTUM_DATA)
+        )
+        self.ABSOLUTE_MOMENTUM_DATA: dict[str, float] = (
+            dict(absolute_momentum_data) if absolute_momentum_data is not None
+            else dict(self._SHARED_ABSOLUTE_MOMENTUM_DATA)
+        )
 
         # P1: Strategy drawdown tracking
         self.strategy_peaks: dict[str, float] = {}
@@ -346,6 +413,9 @@ class MasterAgent:
     # Strategy-aware momentum gate exemption
     # ------------------------------------------------------------------
 
+    # Per-strategy warning de-duplication for registry lookup failures.
+    _MOMENTUM_GATE_WARNED: set[str] = set()
+
     def _momentum_gate_exempt(self, strategy: str) -> bool:
         """Return True if momentum gates should NOT apply to this strategy.
 
@@ -358,8 +428,13 @@ class MasterAgent:
           :attr:`MOMENTUM_GATE_SKIP_CATEGORIES` (``options``, ``pairs``,
           ``intraday`` trade counter to or orthogonal to trend).
 
-        Registry lookup errors are swallowed: if the strategy isn't in the
-        registry, we conservatively apply the gate (not exempt).
+        Behaviour on registry errors:
+          * ``KeyError`` (strategy not registered) — the expected miss path
+            for fallback adapters and ad-hoc strategy names. Logged once per
+            name at WARNING so it's visible but not spammy, then treated as
+            "not exempt" so the gate still applies.
+          * Any other exception propagates upward — a broken registry is an
+            operational problem we want surfaced, not silently swallowed.
         """
         if strategy in self.MOMENTUM_GATE_SKIP_STRATEGIES:
             return True
@@ -369,7 +444,15 @@ class MasterAgent:
             # tests that don't exercise it).
             from strategies.registry import get_meta
             meta = get_meta(strategy)
-        except Exception:
+        except KeyError:
+            if strategy not in self._MOMENTUM_GATE_WARNED:
+                self._MOMENTUM_GATE_WARNED.add(strategy)
+                logger.warning(
+                    "_momentum_gate_exempt: strategy %r not in registry; "
+                    "defaulting to exempt=False (gate will apply). Every "
+                    "pairs/options/intraday signal from this name will be "
+                    "rejected until it is registered.", strategy,
+                )
             return False
         return meta.category in self.MOMENTUM_GATE_SKIP_CATEGORIES
 

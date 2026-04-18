@@ -22,6 +22,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
       data-slot="context-bar"
       className={cn(
         "flex items-stretch h-[38px]",
+        "overflow-x-auto md:overflow-visible snap-x snap-mandatory md:snap-none scrollbar-none",
         "border-b border-border bg-ink-100",
         className
       )}
@@ -33,7 +34,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
             key={cell.label + i}
             data-emphasis={cell.emphasis || undefined}
             className={cn(
-              "flex flex-col justify-center gap-[2px] px-[22px]",
+              "flex flex-col justify-center gap-[2px] shrink-0 snap-start px-3 md:px-[22px]",
               !isLast && "border-r border-border-hair"
             )}
           >

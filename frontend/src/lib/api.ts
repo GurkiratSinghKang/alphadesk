@@ -14,11 +14,11 @@ import type {
 
 // ─── Base Fetch ──────────────────────────────────────────────
 
-function getAccessToken(): string | undefined {
-  if (typeof document === "undefined") return undefined;
-  const match = document.cookie.match(/(?:^|; )access_token=([^;]*)/);
-  return match?.[1];
-}
+// Auth tokens are stored in HttpOnly cookies set by the backend on login.
+// JavaScript cannot read HttpOnly cookies, so the browser attaches them
+// automatically via `credentials: "include"`. There is no `getAccessToken`
+// helper — any prior code that tried to read `document.cookie` was a dead
+// path that always returned undefined.
 
 /**
  * Default request timeout. Chrome enforces a 6-per-host socket ceiling and
@@ -40,14 +40,10 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     : (env.API_URL || "http://localhost:8000");
   const url = `${base}${path}`;
 
-  const token = getAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((init?.headers as Record<string, string>) ?? {}),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const { timeoutMs, signal: callerSignal, ...rest } = init ?? {};
   const effectiveTimeout = typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS;
@@ -95,11 +91,20 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 
   if (res.status === 401 && typeof window !== "undefined") {
     if (window.location.pathname !== "/login") {
-      // Clear any legacy JS-set cookies and redirect to login
-      document.cookie = "access_token=; path=/; max-age=0";
-      document.cookie = "refresh_token=; path=/; max-age=0";
-      // Request backend to clear HttpOnly cookies
-      fetch(`${base}/api/v1/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+      // Ask the backend to revoke the access token and clear its HttpOnly
+      // cookies. `await` before navigating so the POST actually completes —
+      // a fire-and-forget fetch is cancelled by `window.location.href =`
+      // immediately after. We still redirect on logout failure (rate-limit,
+      // Redis blip, network blip) so the user doesn't end up stuck on a
+      // broken page.
+      try {
+        await fetch(`${base}/api/v1/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch {
+        // swallow: redirect happens regardless
+      }
       window.location.href = "/login";
     }
     throw new Error("Session expired");
@@ -114,6 +119,13 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
       }));
     }
     throw new Error(`API ${res.status}: ${res.statusText} – ${body}`);
+  }
+
+  // 204 No Content (e.g. DELETE /orders/:id) and any other empty-bodied
+  // response shouldn't try to parse JSON. `res.json()` throws on empty
+  // bodies in all modern browsers, so branch before calling it.
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
   }
   return res.json() as Promise<T>;
 }
@@ -178,8 +190,17 @@ export function getStrategyTrades(strategyId: string, limit = 100) {
   return apiFetch<StrategyTrade[]>(`/api/v1/trades/history?strategy=${strategyId}&limit=${limit}`);
 }
 
+export interface ToggleStrategyResponse {
+  /** Strategy identifier. Matches `strategies.py:ToggleResponse.id`. */
+  id: string;
+  name: string;
+  /** One of "active" | "paused" | "backtest" (StrategyStatus enum). */
+  previous_status: string;
+  new_status: string;
+}
+
 export function toggleStrategy(strategyId: string) {
-  return apiFetch<{ strategy_id: string; new_status: string }>(`/api/v1/strategies/${strategyId}/toggle`, { method: "POST" });
+  return apiFetch<ToggleStrategyResponse>(`/api/v1/strategies/${strategyId}/toggle`, { method: "POST" });
 }
 
 export interface StrategyAnalytics {
@@ -483,7 +504,9 @@ export function placeOrder(payload: PlaceOrderPayload) {
 }
 
 export function cancelOrder(orderId: string) {
-  return apiFetch<{ success: boolean }>(`/api/v1/trades/orders/${orderId}`, {
+  // Backend returns 204 No Content on success (see backend/api/routes/trades.py:361).
+  // apiFetch short-circuits on 204 and resolves to `undefined`; no body to parse.
+  return apiFetch<void>(`/api/v1/trades/orders/${orderId}`, {
     method: "DELETE",
   });
 }
@@ -669,8 +692,58 @@ export function deletePriceAlert(alertId: string) {
 
 // ─── Portfolio Performance ──────────────────────────────────
 
-export function getPortfolioPerformance() {
-  return apiFetch<{ equity_curve: { date: string; cumulative_pnl: number }[] }>(`/api/v1/portfolio/performance`);
+/**
+ * Drawdown detail nested under `PerformanceMetrics.drawdown_detail`.
+ * Matches `backend/api/routes/portfolio.py:DrawdownInfo`.
+ */
+export interface DrawdownInfo {
+  max_drawdown: number;
+  max_drawdown_pct: number;
+  peak_date: string | null;
+  trough_date: string | null;
+}
+
+/**
+ * Point on the equity curve. Backend returns `value` (synonym for equity
+ * level) plus `cumulative_pnl` (running P&L since the curve's epoch). Both
+ * are always set; consumers can pick whichever they need.
+ * Matches `_build_performance_from_pnls` in `backend/api/routes/portfolio.py`.
+ */
+export interface EquityCurvePoint {
+  date: string;
+  value: number;
+  cumulative_pnl: number;
+}
+
+/**
+ * PerformanceMetrics — exact mirror of `backend/api/routes/portfolio.py:41`.
+ * Optional fields use `| null` because the backend emits `None` when there
+ * is not enough data to compute (e.g. Sharpe with zero variance).
+ */
+export interface PerformanceMetrics {
+  period: string;
+  total_return: number;
+  total_return_pct: number;
+  sharpe_ratio: number | null;
+  sortino_ratio: number | null;
+  max_drawdown: number | null;
+  calmar_ratio: number | null;
+  drawdown_detail: DrawdownInfo;
+  rolling_sharpe_30d: Array<Record<string, unknown>>;
+  daily_returns: Array<Record<string, unknown>>;
+  win_rate: number | null;
+  profit_factor: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  best_trade: number | null;
+  worst_trade: number | null;
+  total_trades: number;
+  equity_curve: EquityCurvePoint[];
+  is_demo: boolean;
+}
+
+export function getPortfolioPerformance(period: string = "30d") {
+  return apiFetch<PerformanceMetrics>(`/api/v1/portfolio/performance?period=${encodeURIComponent(period)}`);
 }
 
 // ─── Morning Brief ────────────────────────────────────────────

@@ -46,42 +46,39 @@ export default function DeskLayout({
   return (
     <div
       data-slot="desk-layout"
-      className={cn("h-screen w-full overflow-hidden bg-bg", className)}
-      style={{
-        display: "grid",
-        gridTemplateRows: "48px 38px 1fr 22px",
-      }}
+      className={cn(
+        "min-h-screen md:h-screen w-full overflow-x-hidden md:overflow-hidden bg-bg",
+        "grid grid-rows-[48px_38px_1fr_22px]",
+        className
+      )}
     >
       {topBar}
       {contextBar}
 
       <div
         data-slot="desk-main"
-        className="min-h-0 overflow-hidden"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "260px 1fr 340px",
-          gap: "1px",
-          background: "var(--border)",
-        }}
+        className={cn(
+          "min-h-0 overflow-x-hidden md:overflow-hidden bg-[var(--border)]",
+          "grid grid-cols-1 md:grid-cols-[260px_1fr] lg:grid-cols-[260px_1fr_340px] gap-px"
+        )}
       >
         <aside
           data-slot="desk-rail"
-          className="min-h-0 overflow-auto bg-bg"
+          className="hidden md:block min-h-0 overflow-auto bg-bg"
         >
           {rail}
         </aside>
 
         <section
           data-slot="desk-center"
-          className="flex min-h-0 flex-col overflow-hidden bg-bg"
+          className="flex min-h-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg"
         >
           {center}
         </section>
 
         <aside
           data-slot="desk-right"
-          className="flex min-h-0 flex-col overflow-hidden bg-bg"
+          className="flex min-h-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg"
         >
           {right}
         </aside>

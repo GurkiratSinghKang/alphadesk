@@ -159,7 +159,7 @@ export function AICopilot() {
       {/* Sidebar panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 z-50 flex h-full w-[400px] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-2xl transition-transform duration-300 ease-in-out",
+          "fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] sm:w-[400px] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-2xl transition-transform duration-300 ease-in-out",
           open ? "translate-x-0" : "translate-x-full"
         )}
         role="complementary"
@@ -296,7 +296,7 @@ export function AICopilot() {
               }}
               placeholder="Ask anything..."
               disabled={loading}
-              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+              className="min-w-0 flex-1 bg-transparent text-base sm:text-xs text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />
             <button
               onClick={handleSend}

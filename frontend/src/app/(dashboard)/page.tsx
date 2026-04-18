@@ -27,7 +27,7 @@ import {
   type StagedOrder,
 } from "@/components/composites";
 import { DeskLayout } from "@/components/layouts";
-import { getBars, getOrders } from "@/lib/api";
+import { getBars, getOrders, placeOrder } from "@/lib/api";
 import {
   useIndices,
   usePortfolioSummary,
@@ -36,7 +36,8 @@ import {
 } from "@/hooks/useQueries";
 import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
-import type { Position } from "@/types";
+import { useToast } from "@/hooks/useToast";
+import type { Position, Order } from "@/types";
 
 import {
   emptyMemo,
@@ -65,6 +66,7 @@ const BUILD_VERSION =
 
 export default function DeskPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const quotes = useMarketStore((s) => s.quotes);
@@ -193,11 +195,61 @@ export default function DeskPage() {
     setSelectedSymbol(symbol);
   }
 
-  function handleStageOrder(_order: StagedOrder) {
-    // Staging flow lands in F4 — the OrderBar's validation already ran
-    // client-side. Route to the confirmation page where the preview +
-    // server-side risk check happen.
-    router.push("/trade");
+  const [orderBarResetTick, setOrderBarResetTick] = useState(0);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+
+  async function handleStageOrder(order: StagedOrder) {
+    // Submit the staged order to the real trading API. On success,
+    // push the returned order into the local store, clear the OrderBar,
+    // and toast. On failure, keep the form state and toast the error.
+    if (submittingOrder) return;
+    // Basic client-side validation — the OrderBar's inputs should already
+    // have enforced most of this, but a last-line-of-defense guard keeps
+    // us from firing a 422 at the backend.
+    const symbol = (order.symbol || "").trim().toUpperCase();
+    const qty = Number(order.quantity);
+    if (!symbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol)) {
+      toast({ type: "error", message: "Enter a valid symbol (1–10 letters/digits)" });
+      return;
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast({ type: "error", message: "Quantity must be a positive number" });
+      return;
+    }
+    if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
+      toast({ type: "error", message: "Limit orders require a price" });
+      return;
+    }
+    const stopNum = order.stop ? Number(order.stop) : undefined;
+    if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
+      toast({ type: "error", message: "Stop orders require a stop price" });
+      return;
+    }
+
+    setSubmittingOrder(true);
+    try {
+      const placed: Order = await placeOrder({
+        symbol,
+        side: order.side,
+        type: order.type,
+        quantity: qty,
+        price: order.price,
+        stop_price: stopNum,
+      });
+      usePortfolioStore.getState().addOrder(placed);
+      toast({
+        type: "success",
+        message: `${order.side.toUpperCase()} ${qty} ${symbol} staged — ${placed.status ?? "pending"}`,
+      });
+      // Bump a tick so OrderBar resets its internal field state via `key`.
+      setOrderBarResetTick((t) => t + 1);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Order submission failed";
+      toast({ type: "error", message });
+      // Keep the OrderBar populated so the user can correct + retry.
+    } finally {
+      setSubmittingOrder(false);
+    }
   }
 
   return (
@@ -241,9 +293,11 @@ export default function DeskPage() {
             className="flex-1 min-h-0"
           />
           <OrderBar
+            key={`orderbar-${orderBarResetTick}`}
             symbol={selectedSymbol}
             strategies={strategyOptions}
             onSubmit={handleStageOrder}
+            submitting={submittingOrder}
             defaults={{
               strategyId: selectedStrategyId,
               side: "buy",

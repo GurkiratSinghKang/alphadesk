@@ -49,6 +49,15 @@ export default function StrategyHero({
   cells,
   className,
 }: StrategyHeroProps) {
+  // If every metric is empty, the dl renders as a 4-column grid of em-dashes
+  // and the user is left guessing. Swap in a single italic-serif copy block
+  // that explains *why* — matches the editorial voice used elsewhere.
+  const allEmpty =
+    cells.length > 0 &&
+    cells.every(
+      (c) => c.value == null || c.value === "\u2014" || c.value === "—"
+    );
+
   return (
     <header
       data-slot="strategy-hero"
@@ -69,33 +78,44 @@ export default function StrategyHero({
         ) : null}
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:gap-x-10">
-        {cells.map((c) => {
-          const empty = c.value == null || c.value === "\u2014" || c.value === "—";
-          return (
-            <div
-              key={c.label}
-              data-testid={c.testId ? `metric-${c.testId}` : undefined}
-              className="flex flex-col gap-1 border-l border-border-hair pl-4"
-            >
-              <dt>
-                <Eyebrow as="span">{c.label}</Eyebrow>
-              </dt>
-              <dd>
-                {empty ? (
-                  <span className="font-display italic text-[15px] text-fg-hint">
-                    &mdash;
-                  </span>
-                ) : (
-                  <Mono size="display" className={cn(toneClass(c.tone))}>
-                    {c.value}
-                  </Mono>
-                )}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
+      {allEmpty ? (
+        <div
+          data-slot="strategy-hero-empty"
+          className="flex max-w-[520px] items-start border-l border-border-hair pl-5"
+        >
+          <p className="font-display italic text-[15.5px] leading-relaxed text-fg-muted">
+            This strategy has not traded yet. Metrics will appear after the first closed trade.
+          </p>
+        </div>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:gap-x-10">
+          {cells.map((c) => {
+            const empty = c.value == null || c.value === "\u2014" || c.value === "—";
+            return (
+              <div
+                key={c.label}
+                data-testid={c.testId ? `metric-${c.testId}` : undefined}
+                className="flex flex-col gap-1 border-l border-border-hair pl-4"
+              >
+                <dt>
+                  <Eyebrow as="span">{c.label}</Eyebrow>
+                </dt>
+                <dd>
+                  {empty ? (
+                    <span className="font-display italic text-[15px] text-fg-hint">
+                      &mdash;
+                    </span>
+                  ) : (
+                    <Mono size="display" className={cn(toneClass(c.tone))}>
+                      {c.value}
+                    </Mono>
+                  )}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      )}
     </header>
   );
 }

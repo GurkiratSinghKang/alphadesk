@@ -7,6 +7,27 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { getBars } from "@/lib/api";
 import type { OHLCVBar } from "@/types";
 
+/**
+ * SVG `fill` / `stroke` don't resolve CSS vars, so read the tokens off
+ * :root and return concrete strings. Fallbacks match the tokens' hex so
+ * pre-hydration paints still look correct.
+ */
+function getTokenVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
+function tokenRgba(name: string, alpha: number, fallbackHex: string): string {
+  const raw = getTokenVar(name, fallbackHex).trim();
+  const hex = raw.startsWith("#") ? raw : fallbackHex;
+  const h = hex.replace("#", "");
+  if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ─── Types ─────────────────────────────────────────────────
 
 interface TradeRecord {
@@ -413,13 +434,21 @@ function EquityCurveSvg({
   });
   const ddAreaPath = `M${ddPoints[0].x},0 ${ddPoints.map(p => `L${p.x},${p.y}`).join(" ")} L${ddPoints[ddPoints.length - 1].x},0 Z`;
 
+  // Token-derived fills / strokes. Profit-tint for "above start",
+  // loss-tint for "below start"; amber for the Strategy-B compare line.
+  const profitFill = tokenRgba("--up-500", 0.12, "#a8d04d");
+  const lossFill = tokenRgba("--down-500", 0.12, "#e07856");
+  const lossStroke = getTokenVar("--down-500", "#e07856");
+  const ddFill = tokenRgba("--down-500", 0.2, "#e07856");
+  const amber = getTokenVar("--amber-500", "#d9a441");
+
   return (
     <div className="space-y-1">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[140px] rounded border border-border bg-[var(--panel)]" preserveAspectRatio="none">
-        {/* Green area (above start) */}
-        <path d={areaPathAbove} fill="rgba(34,197,94,0.12)" />
-        {/* Red area (below start) */}
-        <path d={areaPathBelow} fill="rgba(239,68,68,0.12)" />
+        {/* Profit area (above start) */}
+        <path d={areaPathAbove} fill={profitFill} />
+        {/* Loss area (below start) */}
+        <path d={areaPathBelow} fill={lossFill} />
         {/* Start line */}
         <line x1={0} y1={startY} x2={w} y2={startY} stroke="var(--muted-foreground)" strokeWidth="0.5" strokeDasharray="4 2" opacity={0.4} />
         {/* Benchmark curve */}
@@ -428,7 +457,7 @@ function EquityCurveSvg({
         )}
         {/* Compare B curve */}
         {curveBPolyline && (
-          <polyline points={curveBPolyline} fill="none" stroke="#f59e0b" strokeWidth="1.5" opacity={0.8} />
+          <polyline points={curveBPolyline} fill="none" stroke={amber} strokeWidth="1.5" opacity={0.8} />
         )}
         {/* Main equity curve */}
         <polyline points={polyline} fill="none" stroke={isUp ? "var(--profit)" : "var(--loss)"} strokeWidth="1.5" />
@@ -448,7 +477,7 @@ function EquityCurveSvg({
         )}
         {curveBPolyline && resultB && (
           <div className="flex items-center gap-1.5">
-            <div className="h-0.5 w-4 rounded" style={{ background: "#f59e0b" }} />
+            <div className="h-0.5 w-4 rounded" style={{ background: amber }} />
             <span className="text-[9px] text-muted-foreground">{resultB.label ?? "Strategy B"}</span>
           </div>
         )}
@@ -459,10 +488,10 @@ function EquityCurveSvg({
         <div>
           <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5 px-1">Drawdown</p>
           <svg viewBox={`0 0 ${w} ${ddH}`} className="w-full h-[40px] rounded border border-border bg-[var(--panel)]" preserveAspectRatio="none">
-            <path d={ddAreaPath} fill="rgba(239,68,68,0.2)" />
+            <path d={ddAreaPath} fill={ddFill} />
             <polyline
               points={ddPoints.map(p => `${p.x},${p.y}`).join(" ")}
-              fill="none" stroke="#ef4444" strokeWidth="1" opacity={0.7}
+              fill="none" stroke={lossStroke} strokeWidth="1" opacity={0.7}
             />
           </svg>
         </div>
@@ -512,7 +541,7 @@ function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
       <div className="grid grid-cols-3 gap-0 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold border-b border-border">
         <div className="px-3 py-2">Metric</div>
         <div className="px-3 py-2 text-center" style={{ color: "var(--profit)" }}>{a.label ?? "A"}</div>
-        <div className="px-3 py-2 text-center" style={{ color: "#f59e0b" }}>{b.label ?? "B"}</div>
+        <div className="px-3 py-2 text-center" style={{ color: "var(--amber-500)" }}>{b.label ?? "B"}</div>
       </div>
       {rows.map(({ label, valA, valB, highlight }) => {
         const better = getBetter(valA, valB, highlight);

@@ -19,7 +19,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       className={cn(
         "h-9 w-full min-w-0 px-3",
         "rounded-sm border border-border bg-bg-elev-1",
-        "font-mono tabular-nums text-[13px] text-ink-1000",
+        "font-mono tabular-nums text-base md:text-[13px] text-ink-1000",
         "placeholder:text-fg-hint placeholder:font-sans",
         "outline-none transition-colors",
         "focus-visible:border-brand focus-visible:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",

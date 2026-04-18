@@ -187,9 +187,13 @@ function PortfolioStatement({
       </div>
 
       {/* Current Positions Table */}
-      {positions.length > 0 && (
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Current Positions</p>
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Current Positions</p>
+        {positions.length === 0 ? (
+          <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
+            No positions in this period.
+          </p>
+        ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-xs">
               <thead>
@@ -218,15 +222,19 @@ function PortfolioStatement({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Recent Closed Trades */}
-      {closedTrades.length > 0 && (
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-            Closed Trades ({closedTrades.length} total)
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          Closed Trades{closedTrades.length > 0 ? ` (${closedTrades.length} total)` : ""}
+        </p>
+        {closedTrades.length === 0 ? (
+          <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
+            No closed trades in this period.
           </p>
+        ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-xs">
               <thead>
@@ -255,8 +263,8 @@ function PortfolioStatement({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <Button onClick={handleDownload} size="sm" className="gap-1.5">
         <Download className="h-3 w-3" />

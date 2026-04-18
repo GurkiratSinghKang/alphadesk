@@ -19,42 +19,44 @@ const STORAGE_KEY = "alphadesk-tour-complete";
 // Either key dismisses the tour; the new key is preferred for fresh writes.
 const DISMISSED_KEY = "alphadesk.onboarding_dismissed";
 
+// Selectors target composites mounted by the flagship `DeskLayout`. The
+// audit (R2) caught the old selectors still pointing at legacy dashboard
+// panels that no longer exist on `/`. Each step is resolved at
+// display-time via `document.querySelector`; if the element isn't on the
+// page we skip that step forward automatically.
 const TOUR_STEPS: TourStep[] = [
   {
     title: "Welcome to AlphaDesk!",
     description:
-      "This is your portfolio dashboard. Track equity, daily P&L, and your overall performance at a glance.",
-    selector: "[data-tour='portfolio-hero']",
+      "Your portfolio KPIs — equity, day P&L, cash, exposure — live here at the top of every desk.",
+    selector: "[data-slot='context-bar']",
     position: "bottom",
   },
   {
     title: "Automated Strategies",
     description:
-      "Your strategies run automatically based on market conditions. Click any card to see full details, positions, and performance.",
-    selector: "[data-tour='strategy-grid']",
-    position: "left",
+      "The rail on the left lists every strategy. Click one to highlight it and see its positions in the panel.",
+    selector: "[data-slot='strategy-rail']",
+    position: "right",
   },
   {
-    title: "Real-Time Positions",
+    title: "Chart & Execution",
     description:
-      "Monitor all active positions with live P&L tracking, entry prices, and strategy attribution.",
-    selector: "[data-tour='positions-summary']",
+      "Pick a range with the chart buttons; stage orders below with the symbol, qty, and type you need.",
+    selector: "[data-slot='price-chart-panel']",
+    position: "bottom",
+  },
+  {
+    title: "Order Bar",
+    description:
+      "Buy, sell, limits, stops — all from the same row. Press B or S for a quick buy/sell at market.",
+    selector: "[data-tour='order-bar']",
     position: "top",
   },
   {
-    title: "Search Any Symbol",
+    title: "Command Palette",
     description:
       "Press Cmd+K (or Ctrl+K) to instantly search symbols, run commands, or navigate anywhere in the app.",
-    selector: "[data-tour='search-bar']",
-    position: "bottom",
-    action: () => {
-      // We'll open the command palette briefly
-    },
-  },
-  {
-    title: "Keyboard Shortcuts",
-    description:
-      "Press ? at any time to see all available keyboard shortcuts. Master them for a faster workflow.",
     selector: "[data-tour='profile-menu']",
     position: "bottom",
   },
@@ -81,7 +83,9 @@ export function OnboardingTour() {
     return () => clearTimeout(timer);
   }, [alreadyCompleted]);
 
-  // Position the spotlight on the current step's element
+  // Position the spotlight on the current step's element. If the target
+  // element isn't on the page, advance to the next step that *is* (up to
+  // the last step, which falls back to a center-positioned tooltip).
   const updateSpotlight = useCallback(() => {
     if (!active) return;
     const step = TOUR_STEPS[currentStep];
@@ -91,10 +95,20 @@ export function OnboardingTour() {
     if (el) {
       const rect = el.getBoundingClientRect();
       setSpotlightRect(rect);
-    } else {
-      // Element not found — use center fallback
-      setSpotlightRect(null);
+      return;
     }
+
+    // Element not on page — try the next available step rather than
+    // showing an un-anchored tooltip.
+    for (let i = currentStep + 1; i < TOUR_STEPS.length; i += 1) {
+      const nextEl = document.querySelector(TOUR_STEPS[i].selector);
+      if (nextEl) {
+        setCurrentStep(i);
+        return;
+      }
+    }
+    // No remaining steps have targets — show center fallback
+    setSpotlightRect(null);
   }, [active, currentStep]);
 
   useEffect(() => {

@@ -70,8 +70,10 @@ _sync_engine_failed: bool = False
 def _get_sync_engine() -> Any | None:
     """Lazy-construct (and cache) a sync SQLAlchemy engine.
 
-    Returns ``None`` if the DB can't be reached — callers should fall back to
-    the in-memory cache in that case.
+    Returns ``None`` if the DB can't be reached. Callers MUST raise rather
+    than silently fall back to an in-memory list — the old behaviour caused
+    per-worker divergence where some workers saw real trades and others saw
+    a ghost memory-only copy (P0 #5).
     """
     global _sync_engine, _sync_engine_failed
     if _sync_engine is not None:
@@ -92,7 +94,9 @@ def _get_sync_engine() -> Any | None:
             conn.execute(_text("SELECT 1"))
         return _sync_engine
     except Exception as exc:
-        logger.warning("TradeLedger: DB unavailable, using in-memory fallback: %s", exc)
+        # Module-level error so oncall sees this in Sentry/logs. Callers will
+        # see RuntimeError rather than a silently-diverged in-memory list.
+        logger.error("TradeLedger: DB unavailable — all ledger calls will fail: %s", exc)
         _sync_engine_failed = True
         _sync_engine = None
         return None
@@ -314,9 +318,6 @@ class TradeLedger:
                 _run_migration(self._engine)
             except Exception as exc:
                 logger.warning("TradeLedger: schema/migration failure: %s", exc)
-        # In-memory fallback, used only when the DB isn't available. Kept
-        # per-instance so tests can exercise it in isolation.
-        self._memory: list[dict[str, Any]] = []
         # Legacy compatibility for callers that poke at ledger._data["trades"]
         self._data: Any = _LegacyDataView(self)
 
@@ -324,10 +325,26 @@ class TradeLedger:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _require_engine(self) -> Any:
+        """Return the engine or raise RuntimeError — no silent fallback."""
+        if self._engine is None:
+            raise RuntimeError(
+                "TradeLedger: database unavailable. Refusing to return "
+                "in-memory ghost data (would diverge across workers)."
+            )
+        return self._engine
+
     def _list_all(self) -> list[dict[str, Any]]:
         """Return every trade record in id order."""
         if self._engine is None:
-            return list(self._memory)
+            # Divergence protection: if DB is unreachable, an empty list is
+            # safer than a stale in-memory list that doesn't match what
+            # another worker sees. Caller sees "no trades" rather than
+            # conflicting partial results.
+            logger.error(
+                "TradeLedger._list_all: DB unavailable — returning empty list"
+            )
+            return []
         try:
             with self._engine.connect() as conn:
                 rows = conn.execute(
@@ -339,26 +356,29 @@ class TradeLedger:
             return []
 
     def _next_id(self) -> int:
-        """Allocate the next primary key atomically via the DB sequence."""
+        """Allocate the next primary key atomically via the DB sequence.
+
+        The sequence is the ONLY safe source of primary keys under concurrency.
+        A ``MAX(id) + 1`` fallback is non-atomic and silently drops trades when
+        two writers collide, so we deliberately raise on sequence failure
+        instead — the caller sees the error, and ops can intervene.
+        """
         if self._engine is None:
-            return len(self._memory) + 1
-        try:
-            with self._engine.begin() as conn:
-                val = conn.execute(
-                    _text("SELECT nextval('trade_ledger_id_seq')")
-                ).scalar()
-                return int(val or 0)
-        except Exception as exc:
-            logger.error("TradeLedger._next_id: %s", exc)
-            # Best-effort fallback — monotonically increasing but not atomic
-            try:
-                with self._engine.connect() as conn:
-                    mx = conn.execute(
-                        _text("SELECT COALESCE(MAX(id), 0) + 1 FROM trade_ledger")
-                    ).scalar()
-                return int(mx or 1)
-            except Exception:
-                return 1
+            # DB unavailable — fail loudly. The previous in-memory fallback
+            # caused per-worker divergence (P0 #5).
+            raise RuntimeError(
+                "TradeLedger._next_id: database unavailable; refusing to "
+                "allocate an id. Fix DB connectivity before retrying."
+            )
+        with self._engine.begin() as conn:
+            val = conn.execute(
+                _text("SELECT nextval('trade_ledger_id_seq')")
+            ).scalar()
+        if val is None:
+            raise RuntimeError(
+                "TradeLedger._next_id: sequence 'trade_ledger_id_seq' returned NULL"
+            )
+        return int(val)
 
     # ------------------------------------------------------------------
     # Record keeping
@@ -373,7 +393,12 @@ class TradeLedger:
         rationale: str,
         strategy: str = "claude_alpha",
     ) -> dict[str, Any]:
-        """Insert a new open trade and return the persisted record."""
+        """Insert a new open trade and return the persisted record.
+
+        Raises :class:`RuntimeError` if the database is unavailable — the
+        previous in-memory fallback caused per-worker divergence.
+        """
+        engine = self._require_engine()
         trade = {
             "id": self._next_id(),
             "symbol": symbol,
@@ -392,45 +417,36 @@ class TradeLedger:
             "pnl": None,
             "pnl_pct": None,
         }
-        if self._engine is None:
-            self._memory.append(trade)
-        else:
-            try:
-                with self._engine.begin() as conn:
-                    conn.execute(
-                        _text(
-                            """
-                            INSERT INTO trade_ledger (
-                                id, symbol, shares, entry_price, entry_time,
-                                stop_loss, take_profit, conviction, rationale,
-                                strategy, status
-                            )
-                            VALUES (
-                                :id, :symbol, :shares, :entry_price, :entry_time,
-                                :stop_loss, :take_profit, :conviction, :rationale,
-                                :strategy, 'open'
-                            )
-                            """
-                        ),
-                        trade,
+        with engine.begin() as conn:
+            conn.execute(
+                _text(
+                    """
+                    INSERT INTO trade_ledger (
+                        id, symbol, shares, entry_price, entry_time,
+                        stop_loss, take_profit, conviction, rationale,
+                        strategy, status
                     )
-            except Exception as exc:
-                logger.error("TradeLedger.record_entry: %s — using in-memory fallback", exc)
-                self._memory.append(trade)
+                    VALUES (
+                        :id, :symbol, :shares, :entry_price, :entry_time,
+                        :stop_loss, :take_profit, :conviction, :rationale,
+                        :strategy, 'open'
+                    )
+                    """
+                ),
+                trade,
+            )
         logger.info("Ledger: recorded ENTRY %s %d @ %.2f", symbol, shares, price)
         return trade
 
     def update_entry_price(self, symbol: str, new_price: float) -> bool:
         """Replace the pre-trade estimate with the broker fill for the most
-        recent open trade of ``symbol``."""
-        if self._engine is None:
-            for trade in reversed(self._memory):
-                if trade["symbol"] == symbol and trade["status"] == "open":
-                    trade["entry_price"] = float(new_price)
-                    return True
-            return False
+        recent open trade of ``symbol``.
+
+        Raises :class:`RuntimeError` if DB is unavailable.
+        """
+        engine = self._require_engine()
         try:
-            with self._engine.begin() as conn:
+            with engine.begin() as conn:
                 # Update the most recent open trade matching symbol
                 rc = conn.execute(
                     _text(
@@ -461,23 +477,13 @@ class TradeLedger:
         price: float,
         reason: str,
     ) -> dict[str, Any] | None:
-        """Close the oldest open trade for ``symbol`` and return the updated row."""
-        if self._engine is None:
-            for trade in self._memory:
-                if trade["symbol"] == symbol and trade["status"] == "open":
-                    trade["exit_price"] = float(price)
-                    trade["exit_time"] = datetime.now(timezone.utc).isoformat()
-                    trade["exit_reason"] = reason
-                    trade["pnl"] = round((price - trade["entry_price"]) * shares, 2)
-                    trade["shares"] = int(shares)
-                    trade["pnl_pct"] = round(
-                        ((price - trade["entry_price"]) / trade["entry_price"]) * 100, 2
-                    )
-                    trade["status"] = "closed"
-                    return trade
-            return None
+        """Close the oldest open trade for ``symbol`` and return the updated row.
+
+        Raises :class:`RuntimeError` if DB is unavailable.
+        """
+        engine = self._require_engine()
         try:
-            with self._engine.begin() as conn:
+            with engine.begin() as conn:
                 row = conn.execute(
                     _text(
                         """
@@ -543,7 +549,9 @@ class TradeLedger:
         """Insert a full trade record and return the new id.
 
         Ignores any ``id`` in the dict — the DB sequence assigns one.
+        Raises :class:`RuntimeError` if DB is unavailable.
         """
+        engine = self._require_engine()
         trade = dict(trade_dict)
         trade["id"] = self._next_id()
         trade.setdefault("status", "open")
@@ -551,54 +559,50 @@ class TradeLedger:
         trade.setdefault(
             "entry_time", datetime.now(timezone.utc).isoformat()
         )
-        if self._engine is None:
-            self._memory.append(trade)
-            return trade["id"]
-        try:
-            with self._engine.begin() as conn:
-                conn.execute(
-                    _text(
-                        """
-                        INSERT INTO trade_ledger (
-                            id, symbol, shares, entry_price, entry_time,
-                            stop_loss, take_profit, conviction, rationale,
-                            strategy, status, exit_price, exit_time,
-                            exit_reason, pnl, pnl_pct
-                        )
-                        VALUES (
-                            :id, :symbol, :shares, :entry_price, :entry_time,
-                            :stop_loss, :take_profit, :conviction, :rationale,
-                            :strategy, :status, :exit_price, :exit_time,
-                            :exit_reason, :pnl, :pnl_pct
-                        )
-                        """
-                    ),
-                    {
-                        "id": trade["id"],
-                        "symbol": trade.get("symbol"),
-                        "shares": int(trade.get("shares") or 0),
-                        "entry_price": trade.get("entry_price"),
-                        "entry_time": trade.get("entry_time"),
-                        "stop_loss": trade.get("stop_loss"),
-                        "take_profit": trade.get("take_profit"),
-                        "conviction": trade.get("conviction") or 0,
-                        "rationale": trade.get("rationale"),
-                        "strategy": trade.get("strategy"),
-                        "status": trade.get("status"),
-                        "exit_price": trade.get("exit_price"),
-                        "exit_time": trade.get("exit_time"),
-                        "exit_reason": trade.get("exit_reason"),
-                        "pnl": trade.get("pnl"),
-                        "pnl_pct": trade.get("pnl_pct"),
-                    },
-                )
-        except Exception as exc:
-            logger.error("TradeLedger.add: %s", exc)
-            self._memory.append(trade)
+        with engine.begin() as conn:
+            conn.execute(
+                _text(
+                    """
+                    INSERT INTO trade_ledger (
+                        id, symbol, shares, entry_price, entry_time,
+                        stop_loss, take_profit, conviction, rationale,
+                        strategy, status, exit_price, exit_time,
+                        exit_reason, pnl, pnl_pct
+                    )
+                    VALUES (
+                        :id, :symbol, :shares, :entry_price, :entry_time,
+                        :stop_loss, :take_profit, :conviction, :rationale,
+                        :strategy, :status, :exit_price, :exit_time,
+                        :exit_reason, :pnl, :pnl_pct
+                    )
+                    """
+                ),
+                {
+                    "id": trade["id"],
+                    "symbol": trade.get("symbol"),
+                    "shares": int(trade.get("shares") or 0),
+                    "entry_price": trade.get("entry_price"),
+                    "entry_time": trade.get("entry_time"),
+                    "stop_loss": trade.get("stop_loss"),
+                    "take_profit": trade.get("take_profit"),
+                    "conviction": trade.get("conviction") or 0,
+                    "rationale": trade.get("rationale"),
+                    "strategy": trade.get("strategy"),
+                    "status": trade.get("status"),
+                    "exit_price": trade.get("exit_price"),
+                    "exit_time": trade.get("exit_time"),
+                    "exit_reason": trade.get("exit_reason"),
+                    "pnl": trade.get("pnl"),
+                    "pnl_pct": trade.get("pnl_pct"),
+                },
+            )
         return trade["id"]
 
     def update(self, trade_id: int, patch: dict[str, Any]) -> bool:
-        """Apply a field-level patch to a single trade row."""
+        """Apply a field-level patch to a single trade row.
+
+        Raises :class:`RuntimeError` if DB is unavailable.
+        """
         if not patch:
             return False
         allowed = {
@@ -609,15 +613,10 @@ class TradeLedger:
         patch = {k: v for k, v in patch.items() if k in allowed}
         if not patch:
             return False
-        if self._engine is None:
-            for t in self._memory:
-                if t["id"] == trade_id:
-                    t.update(patch)
-                    return True
-            return False
+        engine = self._require_engine()
         try:
             sets = ", ".join(f"{k} = :{k}" for k in patch)
-            with self._engine.begin() as conn:
+            with engine.begin() as conn:
                 rc = conn.execute(
                     _text(f"UPDATE trade_ledger SET {sets} WHERE id = :_id"),
                     {**patch, "_id": trade_id},
@@ -628,14 +627,33 @@ class TradeLedger:
             return False
 
     def list(self, filter: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        """Return trades matching an optional ``{column: value}`` filter."""
+        """Return trades matching an optional ``{column: value}`` filter.
+
+        Column names are validated against an allowlist — arbitrary keys are
+        rejected with :class:`ValueError`. Values are always parameterised.
+        """
         filter = filter or {}
         if not filter:
             return self._list_all()
+        # Allowlist — must match _ensure_schema columns. Prevents SQL injection
+        # if a caller ever accidentally (or maliciously) routes user input
+        # into the filter dict.
+        allowed = {
+            "id", "symbol", "shares", "entry_price", "entry_time", "stop_loss",
+            "take_profit", "conviction", "rationale", "strategy", "status",
+            "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
+        }
+        bad = [k for k in filter if k not in allowed]
+        if bad:
+            raise ValueError(
+                f"TradeLedger.list: unknown filter column(s) {bad!r}; "
+                f"allowed: {sorted(allowed)}"
+            )
         if self._engine is None:
-            def _match(t: dict[str, Any]) -> bool:
-                return all(t.get(k) == v for k, v in filter.items())
-            return [t for t in self._memory if _match(t)]
+            raise RuntimeError(
+                "TradeLedger.list: database unavailable; refusing to return "
+                "potentially stale in-memory data."
+            )
         try:
             where = " AND ".join(f"{k} = :{k}" for k in filter)
             with self._engine.connect() as conn:
@@ -649,14 +667,13 @@ class TradeLedger:
             return []
 
     def get(self, trade_id: int) -> dict[str, Any] | None:
-        """Return a single trade by id, or ``None`` if absent."""
-        if self._engine is None:
-            for t in self._memory:
-                if t["id"] == trade_id:
-                    return dict(t)
-            return None
+        """Return a single trade by id, or ``None`` if absent.
+
+        Raises :class:`RuntimeError` if DB is unavailable.
+        """
+        engine = self._require_engine()
         try:
-            with self._engine.connect() as conn:
+            with engine.connect() as conn:
                 row = conn.execute(
                     _text("SELECT * FROM trade_ledger WHERE id = :id"),
                     {"id": trade_id},

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
+import { useMarketStore } from "@/stores/market";
 
 export const DEFAULT_BINDINGS: Record<string, string> = {
   "?": "toggle:shortcuts",
@@ -127,6 +128,37 @@ function loadBindings(): Record<string, string> {
 
 const TAB_ORDER = ["/", "/trade", "/analytics", "/alerts", "/pipeline"];
 
+/* ─── Page-scoped handler registry ──────────────────────────
+ * Pages that want to intercept a specific action (e.g. the desk page
+ * wiring b/s to its OrderBar) register via `useShortcutHandler`. If a
+ * handler is registered for a given action, the shortcut invokes it and
+ * skips the default dispatch. Plain object keyed by action id so multiple
+ * handlers don't clobber each other (last-registered wins — matches React
+ * effect semantics).
+ */
+type ShortcutHandler = (action: string) => void;
+const shortcutHandlers: Map<string, ShortcutHandler> = new Map();
+
+/**
+ * Register a handler for a specific shortcut action. The handler runs
+ * only while the component is mounted; unmounting removes it.
+ *
+ * Example:
+ *   useShortcutHandler("chart:quick-buy", () => openOrderBar({ side: "buy" }));
+ */
+export function useShortcutHandler(action: string, handler: ShortcutHandler) {
+  useEffect(() => {
+    shortcutHandlers.set(action, handler);
+    return () => {
+      // Only remove if still ours (avoid clearing a handler registered by a
+      // later instance of the same component).
+      if (shortcutHandlers.get(action) === handler) {
+        shortcutHandlers.delete(action);
+      }
+    };
+  }, [action, handler]);
+}
+
 export function useKeyboardShortcuts() {
   const router = useRouter();
   const pathname = usePathname();
@@ -138,6 +170,13 @@ export function useKeyboardShortcuts() {
 
   const handleAction = useCallback(
     (actionId: string) => {
+      // If a page registered a handler for this action, defer to it.
+      const pageHandler = shortcutHandlers.get(actionId);
+      if (pageHandler) {
+        pageHandler(actionId);
+        return;
+      }
+
       switch (actionId) {
         case "toggle:shortcuts":
           setOverlayOpen((prev) => !prev);
@@ -175,6 +214,38 @@ export function useKeyboardShortcuts() {
         case "refresh:page":
           window.dispatchEvent(new CustomEvent("alphadesk:refresh"));
           break;
+        /* ─── Watchlist j/k — fallback to market store cycling ─── */
+        case "watchlist:next":
+        case "watchlist:prev": {
+          const { watchlist, selectedSymbol, setSelectedSymbol } = useMarketStore.getState();
+          if (watchlist.length === 0) break;
+          const currentIdx = watchlist.indexOf(selectedSymbol);
+          const nextIdx =
+            actionId === "watchlist:next"
+              ? (currentIdx + 1) % watchlist.length
+              : (currentIdx - 1 + watchlist.length) % watchlist.length;
+          setSelectedSymbol(watchlist[nextIdx] ?? watchlist[0]);
+          break;
+        }
+        /* ─── Quick buy/sell — focus the OrderBar side chip if present ─── */
+        case "chart:quick-buy":
+        case "chart:quick-sell": {
+          const root = document.querySelector<HTMLElement>("[data-slot='order-bar']");
+          if (!root) {
+            // No order bar on this page — dispatch the event for any listeners.
+            window.dispatchEvent(new CustomEvent("alphadesk:shortcut", { detail: actionId }));
+            break;
+          }
+          const targetLabel = actionId === "chart:quick-buy" ? "Buy" : "Sell";
+          const btns = Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+          const target = btns.find((b) => b.textContent?.trim() === targetLabel);
+          target?.click();
+          const qty = root.querySelector<HTMLInputElement>("[data-testid='order-bar-qty']");
+          qty?.focus();
+          qty?.select();
+          break;
+        }
+        /* ─── Chart timeframe / positions / copilot — still event-driven ─── */
         default:
           window.dispatchEvent(new CustomEvent("alphadesk:shortcut", { detail: actionId }));
           break;

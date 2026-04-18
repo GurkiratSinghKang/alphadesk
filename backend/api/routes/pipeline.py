@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.auth import require_auth
 
 logger = logging.getLogger("alphadesk.pipeline.api")
 
@@ -17,20 +19,79 @@ router = APIRouter()
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "pipeline_logs"
 
 
+# Rate-limit POST /pipeline/run — 1 run per 60 seconds per user. The pipeline
+# itself is expensive (dozens of Alpaca/Polygon calls + Claude spawns). Reuse
+# the same Redis-pipeline pattern auth.py uses for login. Fail-closed on Redis
+# errors: this endpoint is too expensive to let through on a Redis blip.
+_PIPELINE_RATE_WINDOW = 60
+_PIPELINE_RATE_MAX = 1
+
+
+async def _pipeline_rate_limit(username: str) -> None:
+    key = f"pipeline_run:{username}"
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _PIPELINE_RATE_WINDOW, nx=True)
+        results = await pipe.execute()
+        count = int(results[0])
+    except Exception as e:
+        logger.warning("pipeline rate-limit: Redis unavailable: %s", e)
+        # Fail closed — skipping the limiter on such an expensive endpoint
+        # would let a panicked user burn the Polygon quota in 30 seconds.
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "rate_limiter_unavailable", "retry": True},
+        )
+
+    if count > _PIPELINE_RATE_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limited",
+                "message": "Pipeline can only be triggered once per minute. Please wait.",
+            },
+            headers={"Retry-After": str(_PIPELINE_RATE_WINDOW)},
+        )
+
+
 # ---- POST /run — manually trigger the pipeline ----
 
 @router.post("/run")
 async def trigger_pipeline(
     screen_limit: int = Query(100, ge=1, le=500, description="Number of stocks to screen"),
     analyze_limit: int = Query(40, ge=1, le=200, description="Total analysis budget across all strategies"),
+    username: str = Depends(require_auth),
 ) -> dict[str, Any]:
     """Manually trigger a full multi-strategy pipeline run.
 
     The response includes per-strategy breakdown plus master agent decisions.
     """
-    from data.ingestion.daily_pipeline import run_daily_pipeline
+    # Rate-limit (1 per 60s per user) — this is an expensive endpoint.
+    await _pipeline_rate_limit(username)
+
+    from data.ingestion.daily_pipeline import run_daily_pipeline, _pipeline_lock
+
+    # If the pipeline is already running, return 409 Conflict instead of the
+    # legacy HTTP 200 + {"error": ...} payload that swallowed the signal.
+    if _pipeline_lock.locked():
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "already_running", "message": "Pipeline is already running"},
+        )
 
     result = await run_daily_pipeline(screen_limit=screen_limit, analyze_limit=analyze_limit)
+
+    # Defence-in-depth: ``run_daily_pipeline`` can still short-circuit with
+    # {"error": ...} if the lock was taken between our check and the call —
+    # surface that as 409 too.
+    if isinstance(result, dict) and result.get("error") == "Pipeline already running":
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "already_running", "message": "Pipeline is already running"},
+        )
 
     # Build a concise summary for the API response
     strategies_summary = {}

@@ -30,17 +30,17 @@ const EXPANDED_COUNT = 20;
 const REFRESH_INTERVAL_MS = 60_000;
 
 const TYPE_BORDER: Record<Signal["type"], string> = {
-  buy: "border-l-[var(--profit)]",
-  sell: "border-l-[var(--loss)]",
-  watch: "border-l-amber-400",
-  alert: "border-l-blue-400",
+  buy: "border-l-profit",
+  sell: "border-l-loss",
+  watch: "border-l-amber",
+  alert: "border-l-ice",
 };
 
 const TYPE_BADGE_CLASS: Record<Signal["type"], string> = {
-  buy: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  sell: "bg-red-500/15 text-red-400 border-red-500/30",
-  watch: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  alert: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  buy: "bg-profit/15 text-profit border-profit/30",
+  sell: "bg-loss/15 text-loss border-loss/30",
+  watch: "bg-amber/15 text-amber border-amber/30",
+  alert: "bg-ice/15 text-ice border-ice/30",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -257,9 +257,9 @@ const SignalCard = React.memo(function SignalCard({
               <div
                 className={cn(
                   "h-1 rounded-full transition-all duration-500",
-                  signal.confidence >= 70 ? "bg-emerald-500" :
-                  signal.confidence >= 40 ? "bg-amber-400" :
-                  "bg-red-400"
+                  signal.confidence >= 70 ? "bg-profit" :
+                  signal.confidence >= 40 ? "bg-amber" :
+                  "bg-loss"
                 )}
                 style={{ width: `${signal.confidence}%` }}
               />

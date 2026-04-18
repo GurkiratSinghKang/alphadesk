@@ -24,9 +24,9 @@ function getMarketStatus(): { label: string; color: string } {
   const day = et.getDay();
 
   if (day === 0 || day === 6) return { label: "Closed", color: "text-muted-foreground" };
-  if (mins < 570) return { label: "Pre-Market", color: "text-blue-400" };       // before 9:30
-  if (mins < 960) return { label: "Market Open", color: "text-emerald-400" };   // 9:30–16:00
-  if (mins < 1200) return { label: "After Hours", color: "text-amber-400" };    // 16:00–20:00
+  if (mins < 570) return { label: "Pre-Market", color: "text-ice" };       // before 9:30
+  if (mins < 960) return { label: "Market Open", color: "text-profit" };   // 9:30–16:00
+  if (mins < 1200) return { label: "After Hours", color: "text-amber" };    // 16:00–20:00
   return { label: "Closed", color: "text-muted-foreground" };
 }
 
@@ -110,13 +110,16 @@ function MorningBriefContent({
 
   return (
     <div className="group relative overflow-hidden rounded-xl border border-border bg-[var(--panel)]">
-      {/* Subtle gradient accent along the top */}
+      {/* Subtle gradient accent along the top. Reads the design-system
+          P&L tokens so it stays on-brand (chartreuse → ice for profit,
+          coral → gold for loss). */}
       <div
         className="absolute inset-x-0 top-0 h-[2px]"
         style={{
           background: isUp
-            ? "linear-gradient(90deg, rgba(16,185,129,0.6) 0%, rgba(59,130,246,0.4) 100%)"
-            : "linear-gradient(90deg, rgba(239,68,68,0.6) 0%, rgba(168,85,247,0.4) 100%)",
+            ? "linear-gradient(90deg, var(--profit) 0%, var(--ice-500) 100%)"
+            : "linear-gradient(90deg, var(--loss) 0%, var(--gold-500) 100%)",
+          opacity: 0.6,
         }}
       />
 
@@ -129,7 +132,7 @@ function MorningBriefContent({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <GreetingIcon className="h-3.5 w-3.5 text-amber-400" />
+                <GreetingIcon className="h-3.5 w-3.5 text-amber" />
                 <h3 className="text-sm font-semibold text-foreground">
                   {greeting.text}
                 </h3>
@@ -159,9 +162,9 @@ function MorningBriefContent({
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               {isUp ? (
-                <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                <TrendingUp className="h-3.5 w-3.5 text-profit" />
               ) : (
-                <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                <TrendingDown className="h-3.5 w-3.5 text-loss" />
               )}
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Overnight
@@ -171,7 +174,7 @@ function MorningBriefContent({
               <span
                 className={cn(
                   "text-lg font-bold tabular-nums",
-                  isUp ? "text-emerald-500" : "text-red-500"
+                  isUp ? "text-profit" : "text-loss"
                 )}
               >
                 {isUp ? "+" : ""}
@@ -180,7 +183,7 @@ function MorningBriefContent({
               <span
                 className={cn(
                   "text-xs font-medium tabular-nums",
-                  isUp ? "text-emerald-500/70" : "text-red-500/70"
+                  isUp ? "text-profit/70" : "text-loss/70"
                 )}
               >
                 ({isUp ? "+" : ""}
@@ -195,7 +198,7 @@ function MorningBriefContent({
           {/* Top Movers */}
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <BarChart3 className="h-3.5 w-3.5 text-blue-400" />
+              <BarChart3 className="h-3.5 w-3.5 text-ice" />
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Top Movers
               </span>
@@ -215,7 +218,7 @@ function MorningBriefContent({
                       <span
                         className={cn(
                           "text-[11px] font-medium tabular-nums",
-                          mUp ? "text-emerald-500" : "text-red-500"
+                          mUp ? "text-profit" : "text-loss"
                         )}
                       >
                         {mUp ? "+" : ""}
@@ -225,8 +228,8 @@ function MorningBriefContent({
                         className={cn(
                           "text-[11px] tabular-nums",
                           m.impact >= 0
-                            ? "text-emerald-500/70"
-                            : "text-red-500/70"
+                            ? "text-profit/70"
+                            : "text-loss/70"
                         )}
                       >
                         {m.impact >= 0 ? "+" : ""}${Math.abs(m.impact).toFixed(0)}
@@ -241,7 +244,7 @@ function MorningBriefContent({
           {/* Market Snapshot */}
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <Zap className="h-3.5 w-3.5 text-amber-400" />
+              <Zap className="h-3.5 w-3.5 text-amber" />
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Market
               </span>
@@ -265,8 +268,8 @@ function MorningBriefContent({
                     className={cn(
                       "ml-1 text-[11px]",
                       (data.market.vix_change ?? 0) >= 0
-                        ? "text-red-500/70"
-                        : "text-emerald-500/70"
+                        ? "text-loss/70"
+                        : "text-profit/70"
                     )}
                   >
                     ({(data.market.vix_change ?? 0) >= 0 ? "+" : ""}
@@ -281,8 +284,8 @@ function MorningBriefContent({
                   className={cn(
                     "text-xs font-medium tabular-nums",
                     data.market.spy_change_pct >= 0
-                      ? "text-emerald-500"
-                      : "text-red-500"
+                      ? "text-profit"
+                      : "text-loss"
                   )}
                 >
                   {(data.market.spy_change_pct ?? 0) >= 0 ? "+" : ""}

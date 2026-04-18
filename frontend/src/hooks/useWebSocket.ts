@@ -70,16 +70,18 @@ export function useWebSocket(): UseWebSocketReturn {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // Send auth token first
-        const token = document.cookie.match(/(?:^|; )access_token=([^;]*)/)?.[1];
-        if (token) {
-          ws.send(JSON.stringify({ action: "auth", token }));
-        }
-
+        // Auth: the access_token is HttpOnly, so JS cannot read it. The
+        // browser attaches same-origin cookies to the WebSocket Upgrade
+        // request automatically, and the backend
+        // (backend/api/websocket/handler.py:197) reads
+        // `ws.cookies.get("access_token")` on connect and responds with
+        // `{"type": "authenticated"}`. No client-side auth frame needed.
         setIsConnected(true);
         retriesRef.current = 0;
 
-        // Re-subscribe to all channels after a short delay for auth to process
+        // Re-subscribe to all channels after a short delay so the backend
+        // has time to send the `authenticated` ack before we flood it with
+        // subscribe frames.
         setTimeout(() => {
           subscribedChannels.current.forEach((channel) => {
             ws.send(JSON.stringify({ action: "subscribe", channel }));

@@ -89,9 +89,9 @@ function getRegimeDisplay(label: string, _vixLevel?: number): {
     return {
       text: "Caution",
       indicator: "\ud83d\udfe1",
-      color: "text-amber-400",
-      bgColor: "bg-amber-500/10",
-      borderColor: "border-amber-500/30",
+      color: "text-amber",
+      bgColor: "bg-amber/10",
+      borderColor: "border-amber/30",
     };
   }
   // Fallback: unknown label
@@ -259,7 +259,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               "text-lg font-bold tabular-nums",
               metrics.betaEstimate == null
                 ? "text-muted-foreground"
-                : metrics.betaEstimate > 1.3 ? "text-amber-400" : metrics.betaEstimate > 0.5 ? "text-foreground" : "text-muted-foreground"
+                : metrics.betaEstimate > 1.3 ? "text-amber" : metrics.betaEstimate > 0.5 ? "text-foreground" : "text-muted-foreground"
             )}>
               {positions.length === 0
                 ? "--"
@@ -291,7 +291,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
-              metrics.maxPosPct > 20 ? "text-amber-400" : "text-foreground"
+              metrics.maxPosPct > 20 ? "text-amber" : "text-foreground"
             )}>
               {positions.length > 0 ? `${(metrics.maxPosPct ?? 0).toFixed(1)}%` : "--"}
             </p>
@@ -308,7 +308,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
-              metrics.maxSectorPct > 30 ? "text-amber-400" : "text-foreground"
+              metrics.maxSectorPct > 30 ? "text-amber" : "text-foreground"
             )}>
               {positions.length > 0 ? `${(metrics.maxSectorPct ?? 0).toFixed(1)}%` : "--"}
             </p>
@@ -325,7 +325,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
             <span className={cn(
               "text-[11px] font-semibold tabular-nums",
               regime.vix_level < 18 ? "text-[var(--profit)]" :
-              regime.vix_level < 25 ? "text-amber-400" :
+              regime.vix_level < 25 ? "text-amber" :
               "text-[var(--loss)]"
             )}>
               {(regime.vix_level ?? 0).toFixed(1)}

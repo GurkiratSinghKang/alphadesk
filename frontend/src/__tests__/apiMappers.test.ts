@@ -310,14 +310,19 @@ describe('getStrategyTrades', () => {
 
 describe('toggleStrategy', () => {
   it('returns strategy id and new status', async () => {
-    mockFetch.mockReturnValueOnce(ok({ strategy_id: 'pead', new_status: 'inactive' }));
+    mockFetch.mockReturnValueOnce(
+      ok({ id: 'pead', name: 'PEAD', previous_status: 'active', new_status: 'inactive' }),
+    );
     const result = await toggleStrategy('pead');
-    expect(result.strategy_id).toBe('pead');
+    expect(result.id).toBe('pead');
     expect(result.new_status).toBe('inactive');
+    expect(result.previous_status).toBe('active');
   });
 
   it('calls POST method', async () => {
-    mockFetch.mockReturnValueOnce(ok({ strategy_id: 'vcp', new_status: 'active' }));
+    mockFetch.mockReturnValueOnce(
+      ok({ id: 'vcp', name: 'VCP', previous_status: 'inactive', new_status: 'active' }),
+    );
     await toggleStrategy('vcp');
     const [, init] = mockFetch.mock.calls[0];
     expect(init.method).toBe('POST');
@@ -819,11 +824,17 @@ describe('placeOrder', () => {
 // ─── cancelOrder ─────────────────────────────────────────────────────────────
 
 describe('cancelOrder', () => {
-  it('sends DELETE and returns success', async () => {
-    mockFetch.mockReturnValueOnce(ok({ success: true }));
+  it('sends DELETE and resolves on 204', async () => {
+    mockFetch.mockReturnValueOnce(
+      Promise.resolve(
+        new Response(null, {
+          status: 204,
+          headers: { 'content-length': '0' },
+        }),
+      ),
+    );
 
-    const result = await cancelOrder('ord-123');
-    expect(result.success).toBe(true);
+    await expect(cancelOrder('ord-123')).resolves.toBeUndefined();
     const [calledUrl, init] = mockFetch.mock.calls[0];
     expect(calledUrl).toContain('ord-123');
     expect(init.method).toBe('DELETE');

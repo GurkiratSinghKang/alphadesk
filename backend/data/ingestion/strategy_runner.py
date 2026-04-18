@@ -55,7 +55,7 @@ logger.info(
 # --------------------------------------------------------------------------- #
 # Public helpers                                                              #
 # --------------------------------------------------------------------------- #
-def get_screener_results(
+async def get_screener_results(
     strategy_name: str | None = None, limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Return a list of screener-style dicts for pipeline consumption.
@@ -69,6 +69,10 @@ def get_screener_results(
     strategy (whose universe is the closest match to the old demo list).
     Each entry has at minimum ``{"symbol", "price"}``; ``change_pct`` and
     ``sector`` are filled from Alpaca when available, or left at defaults.
+
+    Fully async: callers in an event loop must ``await`` this. Pure-sync
+    callers can use :func:`get_screener_results_sync` below, which starts a
+    fresh event loop via ``asyncio.run`` only when no loop is running.
     """
     # Select the adapter(s) to query.
     adapters: list[LiveStrategyAdapter] = []
@@ -92,48 +96,57 @@ def get_screener_results(
         if not adapters and ALL_STRATEGIES:
             adapters.append(ALL_STRATEGIES[0]())
 
-    async def _collect() -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for adapter in adapters:
-            try:
-                rows = await adapter.screen()
-            except Exception as e:
-                logger.warning(
-                    "get_screener_results: %s.screen() failed: %s", adapter.name, e,
-                )
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for adapter in adapters:
+        try:
+            rows = await adapter.screen()
+        except Exception as e:
+            logger.warning(
+                "get_screener_results: %s.screen() failed: %s", adapter.name, e,
+            )
+            continue
+        for r in rows:
+            sym = r.get("symbol")
+            if not sym or sym in seen:
                 continue
-            for r in rows:
-                sym = r.get("symbol")
-                if not sym or sym in seen:
-                    continue
-                seen.add(sym)
-                out.append({
-                    "symbol": sym,
-                    "name": r.get("name", sym),
-                    "price": r.get("price", 0.0),
-                    "sector": r.get("sector", "Unknown"),
-                    "change_pct": r.get("change_pct", 0.0),
-                    "volume": r.get("volume", 0),
-                    "composite_score": r.get("composite_score", 0.0),
-                    "metrics": r.get("metrics", {}),
-                })
-                if len(out) >= limit:
-                    return out
-        return out
+            seen.add(sym)
+            out.append({
+                "symbol": sym,
+                "name": r.get("name", sym),
+                "price": r.get("price", 0.0),
+                "sector": r.get("sector", "Unknown"),
+                "change_pct": r.get("change_pct", 0.0),
+                "volume": r.get("volume", 0),
+                "composite_score": r.get("composite_score", 0.0),
+                "metrics": r.get("metrics", {}),
+            })
+            if len(out) >= limit:
+                return out
+    return out
 
-    # Run the async collect in whatever event-loop context we're called from.
+
+def get_screener_results_sync(
+    strategy_name: str | None = None, limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Synchronous wrapper for callers that are NOT inside an event loop.
+
+    Raises :class:`RuntimeError` if called from inside a running loop — the
+    correct call there is ``await get_screener_results(...)``. This prevents
+    the previous anti-pattern of spinning a new event loop in a thread pool,
+    which blocked the outer loop and created a new httpx connection pool per
+    call.
+    """
     try:
         loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # We're already inside an event loop — caller should have used
-            # the async path but we support sync too by running in a thread.
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(asyncio.run, _collect()).result()
     except RuntimeError:
-        pass
-    return asyncio.run(_collect())
+        loop = None
+    if loop is not None and loop.is_running():
+        raise RuntimeError(
+            "get_screener_results_sync called from inside a running event loop; "
+            "use `await get_screener_results(...)` instead."
+        )
+    return asyncio.run(get_screener_results(strategy_name, limit))
 
 
 __all__ = [
@@ -141,4 +154,5 @@ __all__ = [
     "LiveStrategyAdapter",
     "ALL_STRATEGIES",
     "get_screener_results",
+    "get_screener_results_sync",
 ]

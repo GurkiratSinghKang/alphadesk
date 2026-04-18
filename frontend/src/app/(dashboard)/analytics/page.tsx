@@ -409,9 +409,14 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
 }
 
 function EmptyState({ label }: { label: string }) {
+  // Italic serif + warm muted matches the editorial voice used across the
+  // app so partial-empty states (some charts populated, some not) still
+  // read consistently.
   return (
-    <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-      {label}
+    <div className="flex h-32 items-center justify-center px-4 text-center">
+      <p className="font-display italic text-[13px] text-fg-muted leading-snug">
+        {label}
+      </p>
     </div>
   );
 }
@@ -499,6 +504,9 @@ export default function AnalyticsPage() {
   const histogram = useMemo(() => computeHistogram(dailyReturns), [dailyReturns]);
   const monthlyReturns = useMemo(() => computeMonthlyReturns(equityCurve), [equityCurve]);
   const tradeStats = useMemo(() => computeTradeStats(trades), [trades]);
+  // closedTradesCount lives here (not after the early return below) so the
+  // Rules of Hooks are preserved regardless of the loading branch.
+  const closedTradesCount = tradeStats.totalTrades;
 
   if (loading) {
     return (
@@ -511,6 +519,45 @@ export default function AnalyticsPage() {
             <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
           </div>
           <div className="h-[200px] animate-pulse rounded-lg bg-bg-elev-1" />
+        </DashboardPageLayout>
+      </ScrollArea>
+    );
+  }
+
+  // Global-empty: every chart/table is empty. Collapse into a single
+  // editorial card explaining *why* instead of 4 "No drawdown data" pills.
+  const allEmpty =
+    drawdownData.length === 0 &&
+    rollingSharpe.length === 0 &&
+    histogram.length === 0 &&
+    monthlyReturns.size === 0 &&
+    closedTradesCount === 0;
+
+  if (allEmpty) {
+    return (
+      <ScrollArea className="h-full">
+        <DashboardPageLayout
+          eyebrow="§ ANALYTICS"
+          title="Portfolio analytics"
+        >
+          <div className="rounded-xl border border-border bg-[var(--panel)] px-8 py-12">
+            <div className="flex flex-col gap-3 max-w-[640px]">
+              <p
+                className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
+                style={{ letterSpacing: "0.14em" }}
+              >
+                Awaiting data
+              </p>
+              <p className="font-display italic text-[20px] leading-snug text-fg">
+                Analytics become available after your first closed trades.
+              </p>
+              <p className="font-sans text-[13px] leading-relaxed text-fg-muted">
+                Today: {closedTradesCount} closed trades. The drawdown, returns,
+                monthly heatmap and trade stats will appear here as trades
+                accumulate.
+              </p>
+            </div>
+          </div>
         </DashboardPageLayout>
       </ScrollArea>
     );

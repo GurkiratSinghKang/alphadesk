@@ -168,27 +168,62 @@ async def refresh(request: RefreshRequest) -> TokenResponse:
     if jti and await is_token_revoked(jti):
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
+    # Revoke OLD refresh token FIRST, before minting a new one. If revocation
+    # fails (Redis blip), bail out — we cannot guarantee the old token won't
+    # be replayed if we've already handed out a new pair.
+    from core.auth import revoke_token
+    try:
+        await revoke_token(request.refresh_token)
+    except Exception:
+        logger.warning("refresh: failed to revoke old token — aborting", exc_info=True)
+        raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
+
+    # Verify the revocation landed. revoke_token() swallows failures internally,
+    # so we double-check by querying the blocklist.
+    if jti and not await is_token_revoked(jti):
+        logger.warning("refresh: revoke_token did not persist jti=%s — aborting", jti)
+        raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
+
     new_tokens = TokenResponse(
         access_token=create_access_token(username),
         refresh_token=create_refresh_token(username),
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
-    # Revoke the old refresh token so it cannot be reused
-    from core.auth import revoke_token
-    await revoke_token(request.refresh_token)
-
     return new_tokens
 
 
 @router.post("/logout")
 async def logout(request: Request):
-    """Clear HttpOnly auth cookies and revoke the access token."""
-    # Revoke the current access token
-    token = request.cookies.get("access_token")
-    if token:
-        from core.auth import revoke_token
-        await revoke_token(token)
+    """Clear HttpOnly auth cookies and revoke BOTH access and refresh tokens."""
+    from core.auth import revoke_token
+
+    # Revoke the current access token (if present)
+    access_token = request.cookies.get("access_token")
+    if access_token:
+        try:
+            await revoke_token(access_token)
+        except Exception:
+            logger.warning("logout: revoke access token failed", exc_info=True)
+
+    # Revoke the refresh token too — otherwise POST /refresh could mint a new
+    # access token right after logout. Check cookie first, then JSON body for
+    # callers that send it that way.
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        # Non-blocking attempt to read body — some callers post JSON
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                refresh_token = body.get("refresh_token")
+        except Exception:
+            pass
+
+    if refresh_token:
+        try:
+            await revoke_token(refresh_token)
+        except Exception:
+            logger.warning("logout: revoke refresh token failed", exc_info=True)
 
     response = JSONResponse(content={"ok": True})
     is_prod = settings.is_production

@@ -13,6 +13,10 @@ interface PortfolioHeroProps {
   dayPnlPct: number;
   equityHistory: { date: string; value: number }[];
   isDemo?: boolean;
+  /** True during the first fetch of equity history. When false and
+   *  `equityHistory` is empty, the hero renders an explicit empty-state
+   *  copy block instead of a permanent "Loading..." label. */
+  isLoading?: boolean;
 }
 
 function filterByPeriod(
@@ -120,6 +124,7 @@ export function PortfolioHero({
   dayPnlPct,
   equityHistory,
   isDemo,
+  isLoading,
 }: PortfolioHeroProps) {
   const [period, setPeriod] = useState<Period>("1M");
 
@@ -206,14 +211,22 @@ export function PortfolioHero({
       <div className="relative h-[160px] border-t border-border/30">
         {filteredHistory.length > 0 ? (
           <EquityCurveSVG data={filteredHistory} />
-        ) : (
+        ) : isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-xs text-muted-foreground">Equity curve loading...</p>
+            <p className="font-display italic text-[13px] text-fg-muted">
+              Loading equity curve.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full px-6 text-center">
+            <p className="font-display italic text-[13px] text-fg-muted max-w-[420px] leading-snug">
+              Not enough data for an equity curve &mdash; trades will accumulate into a chart.
+            </p>
           </div>
         )}
       </div>
       {isDemo && hasLoaded && (
-        <div className="text-xs text-blue-400/70 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>
+        <div className="text-xs text-ice/80 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>
       )}
     </div>
     </>

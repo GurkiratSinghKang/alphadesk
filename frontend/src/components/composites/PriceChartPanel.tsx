@@ -44,6 +44,14 @@ export interface PriceChartPanelProps {
   regimeBands?: RegimeBand[];
   activeRange: ChartRange;
   onRangeChange: (r: ChartRange) => void;
+  /** Parent-controlled loading flag — true while bars are being fetched
+   *  for the first time. Renders a pulse skeleton instead of an empty div. */
+  isLoading?: boolean;
+  /** Parent-controlled error state. When set, the canvas is replaced with
+   *  a "Failed to load — retry" CTA wired to `onRetry`. */
+  error?: boolean;
+  /** Retry handler invoked from the error-state button. */
+  onRetry?: () => void;
   className?: string;
 }
 
@@ -216,7 +224,7 @@ function DashSpan({ size = 13 }: { size?: number }) {
 
 export default function PriceChartPanel({
   symbol, quote, meta, series, smaSeries, regimeBands,
-  activeRange, onRangeChange, className,
+  activeRange, onRangeChange, isLoading, error, onRetry, className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -295,7 +303,48 @@ export default function PriceChartPanel({
       </div>
 
       <div className="flex-1 relative px-7 py-4 min-h-[220px]">
-        <ChartCanvas series={series} smaSeries={smaSeries} regimeBands={regimeBands} />
+        {error ? (
+          <div
+            role="alert"
+            className="flex flex-col items-center justify-center gap-2.5 h-full min-h-[200px]"
+          >
+            <span
+              className="font-display italic text-[13px] text-fg-muted"
+              style={{ letterSpacing: "-0.005em" }}
+            >
+              Failed to load chart data.
+            </span>
+            {onRetry ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="font-sans font-semibold text-[10px] uppercase text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
+                style={{ letterSpacing: "0.14em" }}
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : isLoading ? (
+          <div
+            aria-hidden="true"
+            className="w-full h-[200px] rounded-md bg-bg-elev-1 animate-pulse"
+          />
+        ) : series.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
+            <span
+              className="font-display italic text-[14px] text-fg-muted"
+              style={{ letterSpacing: "-0.005em" }}
+            >
+              Not enough price data.
+            </span>
+            <span className="font-sans text-[10.5px] text-fg-hint">
+              Try a wider range or check back once bars arrive.
+            </span>
+          </div>
+        ) : (
+          <ChartCanvas series={series} smaSeries={smaSeries} regimeBands={regimeBands} />
+        )}
       </div>
     </section>
   );

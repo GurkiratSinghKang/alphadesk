@@ -3,6 +3,15 @@
 import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
 
+// SVG `fill` / `stroke` don't resolve CSS vars, so read tokens at render
+// time and return concrete strings. Fallbacks match the tokens' hex so
+// pre-hydration paints still look correct.
+function getTokenVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
+
 // ─── Types ──────────────────────────────────────────────────
 
 export interface OptionLeg {
@@ -125,6 +134,16 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
   const xTicks = [minX, ...legs.map((l) => l.strike).sort((a, b) => a - b), maxX];
   const uniqueXTicks = Array.from(new Set(xTicks.map((t) => Math.round(t * 100) / 100)));
 
+  // Design-token palette — same semantics as the rest of the app
+  const profit = getTokenVar("--up-500", "#a8d04d");
+  const loss = getTokenVar("--down-500", "#e07856");
+  const brand = getTokenVar("--brand", "#c9a66b");
+  const lavender = getTokenVar("--ice-500", "#8db3c4");
+  const fgMuted = getTokenVar("--fg-muted", "#7d7665");
+  const fgHint = getTokenVar("--fg-hint", "#5b5547");
+  const ink000 = getTokenVar("--ink-000", "#050503");
+  const fontUi = getTokenVar("--font-ui", "Inter, system-ui, sans-serif");
+
   return (
     <div className={cn("rounded-md border border-border bg-[var(--surface)] p-2", className)}>
       <div className="flex items-center justify-between mb-1">
@@ -180,32 +199,32 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
           strokeDasharray="4 2"
         />
 
-        {/* Green fill (above zero) */}
+        {/* Profit fill (above zero) */}
         <path
           d={fillPathAbove}
-          fill="#22c55e"
+          fill={profit}
           fillOpacity={0.12}
           clipPath="url(#clip-above-zero)"
         />
 
-        {/* Red fill (below zero) */}
+        {/* Loss fill (below zero) */}
         <path
           d={fillPathBelow}
-          fill="#ef4444"
+          fill={loss}
           fillOpacity={0.12}
           clipPath="url(#clip-below-zero)"
         />
 
-        {/* Payoff line */}
+        {/* Payoff line — ice/info tone so it reads as neutral trajectory */}
         <path
           d={linePath}
           fill="none"
-          stroke="#a78bfa"
+          stroke={lavender}
           strokeWidth={1.5}
           strokeLinejoin="round"
         />
 
-        {/* Current price vertical line */}
+        {/* Current price vertical line (gold brand) */}
         {currentPrice != null && currentPrice >= minX && currentPrice <= maxX && (
           <>
             <line
@@ -213,41 +232,41 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
               y1={PAD_T}
               x2={toSvgX(currentPrice)}
               y2={PAD_T + PLOT_H}
-              stroke="#f59e0b"
+              stroke={brand}
               strokeWidth={1}
               strokeDasharray="3 2"
             />
             <text
               x={toSvgX(currentPrice)}
               y={PAD_T - 4}
-              fill="#f59e0b"
+              fill={brand}
               fontSize={8}
               textAnchor="middle"
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily={fontUi}
             >
               {(currentPrice ?? 0).toFixed(0)}
             </text>
           </>
         )}
 
-        {/* Breakeven dots */}
+        {/* Breakeven dots (gold brand) */}
         {breakevens.map((bx, i) => (
           <g key={`be-${i}`}>
             <circle
               cx={toSvgX(bx)}
               cy={zeroY}
               r={3}
-              fill="#f59e0b"
-              stroke="#000"
+              fill={brand}
+              stroke={ink000}
               strokeWidth={0.5}
             />
             <text
               x={toSvgX(bx)}
               y={zeroY + 10}
-              fill="#f59e0b"
+              fill={brand}
               fontSize={7.5}
               textAnchor="middle"
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily={fontUi}
             >
               BE ${(bx ?? 0).toFixed(0)}
             </text>
@@ -279,10 +298,10 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
             key={`yl-${i}`}
             x={PAD_L - 4}
             y={toSvgY(tick) + 3}
-            fill="#8a8a95"
+            fill={fgMuted}
             fontSize={7.5}
             textAnchor="end"
-            fontFamily="Inter, system-ui, sans-serif"
+            fontFamily={fontUi}
           >
             {Math.abs(tick) >= 1000
               ? `$${(tick / 1000).toFixed(1)}k`
@@ -299,10 +318,10 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
               key={`xl-${i}`}
               x={sx}
               y={CHART_H - 4}
-              fill="#8a8a95"
+              fill={fgMuted}
               fontSize={7.5}
               textAnchor="middle"
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily={fontUi}
             >
               ${(tick ?? 0).toFixed(0)}
             </text>
@@ -310,10 +329,10 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
         })}
 
         {/* Axis labels */}
-        <text x={PAD_L - 4} y={PAD_T - 4} fill="#666" fontSize={7} textAnchor="end" fontFamily="Inter, system-ui, sans-serif">
+        <text x={PAD_L - 4} y={PAD_T - 4} fill={fgHint} fontSize={7} textAnchor="end" fontFamily={fontUi}>
           P&L
         </text>
-        <text x={CHART_W - PAD_R} y={CHART_H - 4} fill="#666" fontSize={7} textAnchor="end" fontFamily="Inter, system-ui, sans-serif">
+        <text x={CHART_W - PAD_R} y={CHART_H - 4} fill={fgHint} fontSize={7} textAnchor="end" fontFamily={fontUi}>
           Price
         </text>
       </svg>

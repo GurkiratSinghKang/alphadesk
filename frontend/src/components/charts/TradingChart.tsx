@@ -482,13 +482,24 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         const chart = chartRef.current;
         if (!chart) return;
 
+        // Design-token palette for indicator overlays. The F0 system
+        // doesn't carry a rainbow of hues, so we cycle the available
+        // semantic tokens: amber for the primary EMA / fast line,
+        // ice for the slow line, gold-300 for SMA-fast, and `--fg-dim`
+        // for SMA-slow. Two indicators of the same family look related
+        // (fast = warmer, slow = cooler) instead of arbitrary rainbow.
+        const amber = getTokenVar("--amber-500", "#d9a441");
+        const ice = getTokenVar("--ice-500", "#8db3c4");
+        const goldMid = getTokenVar("--gold-300", "#e0c070");
+        const fgDim = getTokenVar("--fg-dim", "#a8a08d");
+
         // BUG #12: Add indicator overlays
         if (indicators.includes("EMA")) {
           const ema20 = computeEMA(bars, 20);
           const ema50 = computeEMA(bars, 50);
           if (ema20.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#f59e0b",
+              color: amber,
               lineWidth: 1,
               priceScaleId: "right",
             });
@@ -497,7 +508,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
           if (ema50.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#8b5cf6",
+              color: ice,
               lineWidth: 1,
               priceScaleId: "right",
             });
@@ -511,7 +522,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           const sma50 = computeSMA(bars, 50);
           if (sma20.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#06b6d4",
+              color: goldMid,
               lineWidth: 1,
               priceScaleId: "right",
             });
@@ -520,7 +531,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
           if (sma50.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#ec4899",
+              color: fgDim,
               lineWidth: 1,
               priceScaleId: "right",
             });
@@ -553,12 +564,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
-        // VWAP overlay
+        // VWAP overlay — brand gold so it reads as the "canonical" mean
+        const brandGold = getTokenVar("--gold-500", "#c9a66b");
         if (indicators.includes("VWAP")) {
           const vwap = computeVWAP(bars);
           if (vwap.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#f472b6",
+              color: brandGold,
               lineWidth: 2,
               priceScaleId: "right",
             });
@@ -567,12 +579,14 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
-        // Stochastic sub-panel (%K and %D, 0-100)
+        // Stochastic sub-panel (%K and %D, 0-100). %K uses ice (info),
+        // %D uses amber as a warm companion — same fast/slow pairing
+        // pattern as EMA above.
         if (indicators.includes("Stochastic")) {
           const stoch = computeStochastic(bars);
           if (stoch.k.length) {
             const sK = chart.addSeries(LineSeries, {
-              color: "#38bdf8",
+              color: ice,
               lineWidth: 1,
               priceScaleId: "stochastic",
             });
@@ -585,7 +599,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
           if (stoch.d.length) {
             const sD = chart.addSeries(LineSeries, {
-              color: "#fb923c",
+              color: amber,
               lineWidth: 1,
               lineStyle: 2,
               priceScaleId: "stochastic",
@@ -595,12 +609,12 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
-        // ATR sub-panel
+        // ATR sub-panel — ice (neutral/info) since ATR is volatility, not direction.
         if (indicators.includes("ATR")) {
           const atr = computeATR(bars);
           if (atr.length) {
             const s = chart.addSeries(LineSeries, {
-              color: "#a78bfa",
+              color: ice,
               lineWidth: 1,
               priceScaleId: "atr",
             });

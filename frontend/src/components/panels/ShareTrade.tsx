@@ -14,6 +14,18 @@ import { useMarketStore } from "@/stores/market";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
 import type { Analysis } from "@/types";
 
+/**
+ * Read a CSS variable off :root. Canvas `fillStyle` / `strokeStyle`
+ * need concrete color strings — the browser does not resolve `var(--up-500)`
+ * inside those properties. Fallback hex values match the tokens' literal
+ * hex so the card still paints if the stylesheet hasn't applied yet.
+ */
+function token(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
+
 // ─── Share Card Data ────────────────────────────────────────
 
 interface ShareCardData {
@@ -78,7 +90,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
 
   return (
     <div
-      className="w-[420px] rounded-xl border border-[#2a2a3e] bg-gradient-to-br from-[#0e0e18] to-[#12121f] p-5 shadow-2xl"
+      className="w-[420px] rounded-xl border border-border bg-gradient-to-br from-[var(--bg)] to-[var(--bg-elev-2)] p-5 shadow-2xl"
       data-share-card
     >
       {/* Header */}
@@ -109,7 +121,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2">
+        <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
           <div className="text-[10px] text-muted-foreground mb-0.5">Technical</div>
           <div className={cn(
             "text-sm font-bold tabular-nums",
@@ -120,11 +132,11 @@ function ShareCard({ data }: { data: ShareCardData }) {
             {data.technicalScore ?? "--"}/100
           </div>
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2">
+        <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
           <div className="text-[10px] text-muted-foreground mb-0.5">RSI (14)</div>
           <div className="text-sm font-bold text-foreground tabular-nums">{data.rsi ?? "--"}</div>
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2">
+        <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
           <div className="text-[10px] text-muted-foreground mb-0.5">Volume</div>
           <div className="text-sm font-bold text-foreground tabular-nums">{formatVolume(data.volume)}</div>
         </div>
@@ -184,7 +196,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
       )}
 
       {/* Footer watermark */}
-      <div className="flex items-center justify-between border-t border-[#2a2a3e] pt-3 mt-1">
+      <div className="flex items-center justify-between border-t border-border pt-3 mt-1">
         <div className="flex items-center gap-1.5">
           <div className="h-4 w-4 rounded bg-primary/20 flex items-center justify-center">
             <span className="text-[8px] font-bold text-primary">A</span>
@@ -280,145 +292,161 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
 
       ctx.scale(scale, scale);
 
-      // Dark background
-      ctx.fillStyle = "#0e0e18";
+      // Design-token aware palette. Reading at call time so updates to
+      // :root propagate automatically and the PNG matches whatever the
+      // user sees in the card preview.
+      const bg = token("--bg", "#0b0a09");
+      const border = token("--border", "#2a271d");
+      const brand = token("--brand", "#c9a66b");
+      const profit = token("--profit", "#a8d04d");
+      const loss = token("--loss", "#e07856");
+      const amber = token("--amber-500", "#d9a441");
+      const fg = token("--fg", "#ece6d2");
+      const fgMuted = token("--fg-muted", "#7d7665");
+      const fgHint = token("--fg-hint", "#5b5547");
+      const fontUi = token("--font-ui", "Inter, system-ui, sans-serif");
+
+      // Dark background (warm near-black)
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
 
       // Border
-      ctx.strokeStyle = "#2a2a3e";
+      ctx.strokeStyle = border;
       ctx.lineWidth = 1;
       ctx.roundRect(0, 0, width, height, 12);
       ctx.stroke();
 
-      // Symbol
-      ctx.fillStyle = "#3b82f6";
-      ctx.font = "bold 14px Inter, system-ui, sans-serif";
+      // Symbol (brand gold)
+      ctx.fillStyle = brand;
+      ctx.font = `bold 14px ${fontUi}`;
       ctx.fillText(cardData.symbol, 60, 32);
 
       // Price
-      ctx.fillStyle = "#e2e2ea";
-      ctx.font = "bold 20px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fg;
+      ctx.font = `bold 20px ${fontUi}`;
       const priceStr = formatCurrency(cardData.price);
       const priceWidth = ctx.measureText(priceStr).width;
       ctx.fillText(priceStr, width - 20 - priceWidth, 30);
 
       // Change
       const changeSign = cardData.change >= 0 ? "+" : "";
-      const changeColor = cardData.change >= 0 ? "#22c55e" : "#ef4444";
+      const changeColor = cardData.change >= 0 ? profit : loss;
       ctx.fillStyle = changeColor;
-      ctx.font = "500 11px Inter, system-ui, sans-serif";
+      ctx.font = `500 11px ${fontUi}`;
       const changeStr = `${changeSign}${(cardData.change ?? 0).toFixed(2)} (${changeSign}${formatPercent(cardData.changePct)})`;
       const changeWidth = ctx.measureText(changeStr).width;
       ctx.fillText(changeStr, width - 20 - changeWidth, 48);
 
       // Volume info
-      ctx.fillStyle = "#71717a";
-      ctx.font = "11px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `11px ${fontUi}`;
       ctx.fillText(`Vol: ${formatVolume(cardData.volume)} | H: ${(cardData.high ?? 0).toFixed(2)} L: ${(cardData.low ?? 0).toFixed(2)}`, 60, 48);
 
-      // Metrics
+      // Metrics — use a subtle warm-black elevation for pill backgrounds
+      const metricBg = token("--bg-elev-2", "#15140f");
       const metricsY = 75;
       const metricW = (width - 50) / 3;
 
       // Technical Score
-      ctx.fillStyle = "rgba(255,255,255,0.03)";
+      ctx.fillStyle = metricBg;
       ctx.fillRect(20, metricsY, metricW, 45);
-      ctx.fillStyle = "#71717a";
-      ctx.font = "10px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `10px ${fontUi}`;
       ctx.fillText("Technical", 28, metricsY + 15);
-      ctx.fillStyle = (cardData.technicalScore ?? 50) >= 60 ? "#22c55e"
-        : (cardData.technicalScore ?? 50) < 40 ? "#ef4444" : "#eab308";
-      ctx.font = "bold 13px Inter, system-ui, sans-serif";
+      ctx.fillStyle = (cardData.technicalScore ?? 50) >= 60 ? profit
+        : (cardData.technicalScore ?? 50) < 40 ? loss : amber;
+      ctx.font = `bold 13px ${fontUi}`;
       ctx.fillText(`${cardData.technicalScore ?? "--"}/100`, 28, metricsY + 35);
 
       // RSI
-      ctx.fillStyle = "rgba(255,255,255,0.03)";
+      ctx.fillStyle = metricBg;
       ctx.fillRect(20 + metricW + 5, metricsY, metricW, 45);
-      ctx.fillStyle = "#71717a";
-      ctx.font = "10px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `10px ${fontUi}`;
       ctx.fillText("RSI (14)", 28 + metricW + 5, metricsY + 15);
-      ctx.fillStyle = "#e2e2ea";
-      ctx.font = "bold 13px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fg;
+      ctx.font = `bold 13px ${fontUi}`;
       ctx.fillText(cardData.rsi ?? "--", 28 + metricW + 5, metricsY + 35);
 
       // Volume metric
-      ctx.fillStyle = "rgba(255,255,255,0.03)";
+      ctx.fillStyle = metricBg;
       ctx.fillRect(20 + (metricW + 5) * 2, metricsY, metricW, 45);
-      ctx.fillStyle = "#71717a";
-      ctx.font = "10px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `10px ${fontUi}`;
       ctx.fillText("Volume", 28 + (metricW + 5) * 2, metricsY + 15);
-      ctx.fillStyle = "#e2e2ea";
-      ctx.font = "bold 13px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fg;
+      ctx.font = `bold 13px ${fontUi}`;
       ctx.fillText(formatVolume(cardData.volume), 28 + (metricW + 5) * 2, metricsY + 35);
 
       // Key Levels
       let yOffset = metricsY + 65;
-      ctx.fillStyle = "#22c55e";
+      ctx.fillStyle = profit;
       ctx.beginPath();
       ctx.arc(28, yOffset, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#71717a";
-      ctx.font = "11px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `11px ${fontUi}`;
       ctx.fillText("Support:", 36, yOffset + 4);
-      ctx.fillStyle = "#22c55e";
-      ctx.font = "500 11px Inter, system-ui, sans-serif";
+      ctx.fillStyle = profit;
+      ctx.font = `500 11px ${fontUi}`;
       ctx.fillText(cardData.support ? formatCurrency(cardData.support) : "N/A", 88, yOffset + 4);
 
-      ctx.fillStyle = "#ef4444";
+      ctx.fillStyle = loss;
       ctx.beginPath();
       ctx.arc(width / 2 + 10, yOffset, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#71717a";
-      ctx.font = "11px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `11px ${fontUi}`;
       ctx.fillText("Resistance:", width / 2 + 18, yOffset + 4);
-      ctx.fillStyle = "#ef4444";
-      ctx.font = "500 11px Inter, system-ui, sans-serif";
+      ctx.fillStyle = loss;
+      ctx.font = `500 11px ${fontUi}`;
       ctx.fillText(cardData.resistance ? formatCurrency(cardData.resistance) : "N/A", width / 2 + 82, yOffset + 4);
 
       yOffset += 25;
 
       // P&L
       if (cardData.pnl != null) {
-        const pnlColor = cardData.pnl >= 0 ? "#22c55e" : "#ef4444";
-        ctx.fillStyle = pnlColor + "0d";
+        const pnlColor = cardData.pnl >= 0 ? profit : loss;
+        // Translucent fill — approx 0.05 alpha
+        ctx.fillStyle = pnlColor + "14";
         ctx.fillRect(20, yOffset, width - 40, 32);
-        ctx.fillStyle = "#71717a";
-        ctx.font = "10px Inter, system-ui, sans-serif";
+        ctx.fillStyle = fgMuted;
+        ctx.font = `10px ${fontUi}`;
         ctx.fillText("Unrealized P&L", 28, yOffset + 14);
         ctx.fillStyle = pnlColor;
-        ctx.font = "bold 12px Inter, system-ui, sans-serif";
+        ctx.font = `bold 12px ${fontUi}`;
         const pnlStr = `${cardData.pnl >= 0 ? "+" : ""}${formatCurrency(cardData.pnl)}`;
         const pnlW = ctx.measureText(pnlStr).width;
         ctx.fillText(pnlStr, width - 28 - pnlW, yOffset + 22);
         yOffset += 42;
       }
 
-      // AI Summary
+      // AI Summary — faint brand tint instead of the old blue
       if (cardData.summary) {
-        ctx.fillStyle = "rgba(59,130,246,0.05)";
+        ctx.fillStyle = brand + "0d"; // ~5% alpha
         ctx.fillRect(20, yOffset, width - 40, 50);
-        ctx.fillStyle = "rgba(59,130,246,0.7)";
-        ctx.font = "500 10px Inter, system-ui, sans-serif";
+        ctx.fillStyle = brand;
+        ctx.font = `500 10px ${fontUi}`;
         ctx.fillText("AI Analysis", 28, yOffset + 14);
-        ctx.fillStyle = "rgba(226,226,234,0.8)";
-        ctx.font = "11px Inter, system-ui, sans-serif";
+        ctx.fillStyle = fg;
+        ctx.font = `11px ${fontUi}`;
         const summaryTruncated = cardData.summary.length > 100 ? cardData.summary.slice(0, 100) + "..." : cardData.summary;
         ctx.fillText(summaryTruncated, 28, yOffset + 32);
         yOffset += 60;
       }
 
       // Footer
-      ctx.fillStyle = "#2a2a3e";
+      ctx.fillStyle = border;
       ctx.fillRect(20, yOffset, width - 40, 1);
       yOffset += 15;
-      ctx.fillStyle = "#3b82f6";
-      ctx.font = "bold 8px Inter, system-ui, sans-serif";
+      ctx.fillStyle = brand;
+      ctx.font = `bold 8px ${fontUi}`;
       ctx.fillText("A", 28, yOffset + 4);
-      ctx.fillStyle = "#71717a";
-      ctx.font = "500 10px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgMuted;
+      ctx.font = `500 10px ${fontUi}`;
       ctx.fillText("AlphaDesk", 40, yOffset + 4);
-      ctx.fillStyle = "rgba(113,113,122,0.6)";
-      ctx.font = "9px Inter, system-ui, sans-serif";
+      ctx.fillStyle = fgHint;
+      ctx.font = `9px ${fontUi}`;
       const urlStr = "tradingalpha.net";
       const urlWidth = ctx.measureText(urlStr).width;
       ctx.fillText(urlStr, width - 20 - urlWidth, yOffset + 4);
@@ -457,7 +485,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-[480px] bg-[var(--surface)] border-[#2a2a3e] p-0 overflow-hidden">
+        <DialogContent className="max-w-[480px] bg-[var(--surface)] border-border p-0 overflow-hidden">
           <DialogHeader className="px-5 pt-5 pb-0">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Share2 className="h-4 w-4 text-primary" />
@@ -474,7 +502,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 border-t border-[#2a2a3e] px-5 py-3 bg-[#0a0a0f]">
+          <div className="flex items-center gap-2 border-t border-border px-5 py-3 bg-[var(--bg)]">
             <Button
               onClick={handleCopyText}
               variant="outline"

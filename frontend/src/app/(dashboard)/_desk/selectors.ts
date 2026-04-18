@@ -163,6 +163,15 @@ export function toContextCells(
   const gross = longVal + shortVal;
   const exposurePct = equity > 0 ? (gross / equity) * 100 : 0;
 
+  // Swap out Sharpe·30d / Beta (not exposed by the summary endpoint, so
+  // they used to render permanent em-dashes in the ContextBar) for two
+  // stats the summary does expose — `unrealized_pnl` and
+  // `realized_pnl_today`. The former is the live P&L running on open
+  // positions; the latter is today's closed-trade P&L.
+  const unrealizedPnl = s?.unrealizedPnl ?? 0;
+  const unrealizedPnlPct = s?.unrealizedPnlPct ?? 0;
+  const realizedToday = s?.realizedPnlToday ?? 0;
+
   return [
     {
       label: "Book equity",
@@ -189,8 +198,38 @@ export function toContextCells(
         ? `${pctOfEquity(longVal, equity)} / ${pctOfEquity(shortVal, equity)}`
         : undefined,
     },
-    { label: "Sharpe · 30d", value: "—" }, // not in summary endpoint
-    { label: "Beta", value: "—" },         // not in summary endpoint
+    {
+      label: "Unrealized P&L",
+      value: !s
+        ? "—"
+        : unrealizedPnl >= 0
+          ? `+${fmtDollars(unrealizedPnl)}`
+          : `−${fmtDollars(Math.abs(unrealizedPnl))}`,
+      delta:
+        s && unrealizedPnlPct !== 0 ? fmtPct(unrealizedPnlPct) : undefined,
+      valueTone: !s
+        ? "muted"
+        : unrealizedPnl > 0
+          ? "profit"
+          : unrealizedPnl < 0
+            ? "loss"
+            : "muted",
+    },
+    {
+      label: "Realized today",
+      value: !s
+        ? "—"
+        : realizedToday >= 0
+          ? `+${fmtDollars(realizedToday)}`
+          : `−${fmtDollars(Math.abs(realizedToday))}`,
+      valueTone: !s
+        ? "muted"
+        : realizedToday > 0
+          ? "profit"
+          : realizedToday < 0
+            ? "loss"
+            : "muted",
+    },
     {
       label: "Positions · Orders",
       value: `${positions.length} · ${orderCount}`,
@@ -332,15 +371,18 @@ export function toStatusPills(opts: {
 
 /* ─── AI memo placeholder ──────────────────────────────────── */
 
-/** When no pre-trade memo is available, return a minimal "awaiting
- *  analysis" placeholder so the gold-pulse pane still renders. No
- *  fake numbers — confidence 0, latency 0, empty chips. */
+/** When no pre-trade memo is available, return an "awaiting analysis"
+ *  placeholder so the gold-pulse pane still renders intentionally. The
+ *  copy is explicit about being an empty-state (not a loading state) so
+ *  the user knows the panel isn't broken. The footer is still rendered
+ *  by AIMemoPanel itself — we pass `NaN` confidence + "awaiting" as a
+ *  signal the panel can choose to hide the footer on. */
 export function emptyMemo(timestamp: string): AIMemo {
   return {
-    text: "No pre-trade memo available. Stage an order to request analysis.",
+    text: "No memo yet — add one or wait for the AI to summarize.",
     chips: [],
     confidence: 0,
-    model: "—",
+    model: "awaiting",
     latencyMs: 0,
     timestamp,
   };

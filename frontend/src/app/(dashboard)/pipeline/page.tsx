@@ -438,7 +438,8 @@ export default function PipelinePage() {
                 </Card>
               ) : (
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
-                  <Table>
+                  <div className="overflow-x-auto">
+                  <Table className="min-w-[900px]">
                     <TableHeader>
                       <TableRow className="border-border">
                         <TableHead className="text-[11px]">Symbol</TableHead>
@@ -518,6 +519,7 @@ export default function PipelinePage() {
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 </Card>
               )}
             </section>
@@ -530,9 +532,30 @@ export default function PipelinePage() {
                   Latest Pipeline Run
                 </h2>
               </div>
-              <PipelineFlow run={todayRun} />
-              {!todayRun && (
-                <p className="text-hint mt-2">No runs available — click Run Now to trigger manually</p>
+              {todayRun ? (
+                <PipelineFlow run={todayRun} />
+              ) : (
+                <Card className="border-border bg-[var(--surface)]">
+                  <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+                    <Zap className="h-7 w-7 text-muted-foreground/40" />
+                    <p className="font-display italic text-[15px] text-fg leading-snug max-w-[440px]">
+                      No pipeline run yet today. Next scheduled run: 09:30 ET.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={handleRunNow}
+                      disabled={running}
+                      className="h-7 text-[11px] gap-1.5 mt-1"
+                    >
+                      {running ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      {running ? "Running..." : "Run now"}
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
             </section>
 

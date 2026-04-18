@@ -4,6 +4,23 @@ import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import type { PositionRow, PositionTab } from "./types";
 
+// Tab-aware empty-state copy. Kept in one place so future tabs stay
+// consistent with the editorial voice used on the Strategy hero.
+const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
+  positions: {
+    title: "No open positions.",
+    hint: "Stage an order below to open one.",
+  },
+  orders: {
+    title: "No working orders.",
+    hint: "Place an order from the ticket to see it here.",
+  },
+  journal: {
+    title: "No journal entries yet.",
+    hint: "Closed trades will appear here with rationale.",
+  },
+};
+
 /**
  * PositionsList (composite)
  * ─────────────────────────
@@ -33,6 +50,9 @@ export default function PositionsList({
   onRowClick,
   className,
 }: PositionsListProps) {
+  const isEmpty = positions.length === 0;
+  const empty = EMPTY_COPY[activeTab];
+
   return (
     <div
       data-slot="positions-list"
@@ -72,11 +92,44 @@ export default function PositionsList({
             );
           })}
         </div>
-        <span className="font-mono text-[10px] text-fg-muted">
-          {positions.length}
-        </span>
+        {isEmpty ? null : (
+          <span className="font-mono text-[10px] text-fg-muted">
+            {positions.length}
+          </span>
+        )}
       </header>
 
+      {isEmpty ? (
+        <div
+          role="status"
+          className="flex flex-col items-center justify-center gap-1.5 px-6 py-10 text-center"
+        >
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-fg-hint mb-1 opacity-60"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="M7 10h10M7 14h6" />
+          </svg>
+          <p
+            className="font-display italic text-[14px] text-fg"
+            style={{ letterSpacing: "-0.005em" }}
+          >
+            {empty.title}
+          </p>
+          <p className="font-sans text-[11px] text-fg-muted max-w-[220px]">
+            {empty.hint}
+          </p>
+        </div>
+      ) : (
       <ul role="list" className="flex flex-col">
         {positions.map((p) => {
           const isLoss = p.pnl < 0;
@@ -135,6 +188,7 @@ export default function PositionsList({
           );
         })}
       </ul>
+      )}
     </div>
   );
 }

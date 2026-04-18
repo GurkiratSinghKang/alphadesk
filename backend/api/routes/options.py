@@ -111,8 +111,12 @@ def _symbol_seed(symbol: str) -> int:
     return int(hashlib.md5(symbol.upper().encode()).hexdigest()[:8], 16)
 
 
-def _demo_spot(symbol: str) -> float:
-    """Get spot price -- tries real Alpaca price first, falls back to demo."""
+async def _demo_spot(symbol: str) -> float:
+    """Get spot price -- tries real Alpaca price first, falls back to demo.
+
+    Async: uses httpx.AsyncClient so callers in async routes don't block the
+    event loop on a slow Alpaca response.
+    """
     s = symbol.upper()
 
     # Check cache first
@@ -121,21 +125,23 @@ def _demo_spot(symbol: str) -> float:
     if cached and (now - cached[1]) < _SPOT_CACHE_TTL:
         return cached[0]
 
-    # Try to fetch real price from Alpaca
+    # Try to fetch real price from Alpaca (non-blocking)
     try:
         headers = _alpaca_headers()
-        resp = httpx.get(
-            f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
-            headers=headers,
-            timeout=5,
-        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
+                headers=headers,
+            )
         if resp.status_code == 200:
             price = resp.json().get("trade", {}).get("p", 0)
             if price > 0:
                 _real_spot_cache[s] = (price, now)
                 return price
+    except httpx.TimeoutException:
+        logger.warning("Alpaca spot-price request timed out for %s", s)
     except Exception:
-        pass
+        logger.debug("Alpaca spot-price fetch failed for %s", s, exc_info=True)
 
     # Fallback to demo prices
     if s in _DEMO_BASE_PRICES:
@@ -168,12 +174,12 @@ def _approx_bsm_price(spot: float, strike: float, T: float, sigma: float,
         return strike * math.exp(-r * T) * _ncdf(-d2) - spot * _ncdf(-d1)
 
 
-def _demo_chain(symbol: str, expiry_filter: date | None,
+async def _demo_chain(symbol: str, expiry_filter: date | None,
                 strike_min: float | None, strike_max: float | None,
                 option_type_filter: OptionType | None) -> OptionChain:
     s = symbol.upper()
     rng = random.Random(_symbol_seed(s))
-    spot = _demo_spot(s)
+    spot = await _demo_spot(s)
     base_iv = _DEMO_BASE_IV.get(s, 0.30)
     r = 0.05
 
@@ -272,7 +278,7 @@ def _demo_chain(symbol: str, expiry_filter: date | None,
     )
 
 
-def _demo_iv(symbol: str) -> IVData:
+async def _demo_iv(symbol: str) -> IVData:
     s = symbol.upper()
     rng = random.Random(_symbol_seed(s))
     base_iv = _DEMO_BASE_IV.get(s, 0.30)
@@ -284,7 +290,7 @@ def _demo_iv(symbol: str) -> IVData:
     hv_50 = round(current_iv * rng.uniform(0.75, 1.05), 4)
     hv_100 = round(current_iv * rng.uniform(0.8, 1.0), 4)
 
-    spot = _demo_spot(s)
+    spot = await _demo_spot(s)
     # IV skew: 5 strikes around ATM
     if spot < 200:
         inc = 2.5
@@ -455,7 +461,7 @@ async def _fetch_real_chain(
             return None
 
         # Also fetch current spot price
-        spot_price = _demo_spot(s)  # quick sync fallback
+        spot_price = await _demo_spot(s)  # async fallback
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 spot_resp = await client.get(
@@ -666,7 +672,7 @@ async def get_options_chain(
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
     logger.info("Using demo options chain for %s (Alpaca OPRA unavailable)", symbol)
-    return _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
+    return await _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
 
 
 @router.get("/iv/{symbol}", response_model=IVData)
@@ -697,7 +703,7 @@ async def get_iv_analysis(symbol: str) -> IVData:
         if not iv_values:
             if not _is_valid_demo_symbol(symbol):
                 raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
-            return _demo_iv(symbol)
+            return await _demo_iv(symbol)
 
         current_iv = iv_values[-1]
 
@@ -725,7 +731,7 @@ async def get_iv_analysis(symbol: str) -> IVData:
         )
     except Exception:
         logger.warning("Failed to compute IV analysis for %s, falling back to demo", symbol, exc_info=True)
-        return _demo_iv(symbol)
+        return await _demo_iv(symbol)
 
 
 @router.get("/greeks/{symbol}/{strike}/{expiry}", response_model=Greeks)
@@ -749,7 +755,7 @@ async def get_greeks(
 
     # Get spot price
     quote = await cache_get(f"quote:{symbol}") or {}
-    spot = quote.get("last", 0) or _demo_spot(symbol)
+    spot = quote.get("last", 0) or await _demo_spot(symbol)
 
     # Get IV
     iv_data = await cache_get(f"iv:{symbol}") or {}

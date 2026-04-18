@@ -15,7 +15,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { toggleStrategy } from "@/lib/api";
+import { getStrategies, toggleStrategy } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 
 // ─── Template Definitions ───────────────────────────────────
 
@@ -235,6 +236,7 @@ interface StrategyTemplatesProps {
 export function StrategyTemplates({ open, onClose }: StrategyTemplatesProps) {
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
+  const { toast } = useToast();
 
   if (!open) return null;
 
@@ -246,27 +248,56 @@ export function StrategyTemplates({ open, onClose }: StrategyTemplatesProps) {
       const template = TEMPLATES.find((t) => t.id === templateId);
       if (!template) return;
 
-      // Deactivate if already active
+      // Deactivate if already active (local visual — real toggles below)
       if (activeTemplate === templateId) {
         setActiveTemplate(null);
         setActivating(false);
         return;
       }
 
-      // Toggle strategies: activate included ones, pause others
-      const togglePromises = ALL_STRATEGY_IDS.map((sid) => {
-        const shouldBeActive = template.strategies.includes(sid);
-        // We call toggleStrategy for each — server-side it toggles active/paused
-        // We send the desired state via the API
-        return toggleStrategy(sid).catch(() => {
-          // Silently handle individual failures
+      // Read current state so we only toggle strategies whose state
+      // actually needs to change. The previous implementation toggled every
+      // strategy unconditionally which produced a half-random portfolio.
+      let currentStates: Record<string, boolean> = {};
+      try {
+        const strategies = await getStrategies();
+        currentStates = Object.fromEntries(
+          strategies.map((s) => [s.id, (s.status ?? "").toLowerCase() === "active"])
+        );
+      } catch {
+        toast({
+          type: "error",
+          message: "Couldn't read current strategy states — aborting template",
         });
-      });
+        setActivating(false);
+        return;
+      }
+
+      const enabledList: string[] = [];
+      const disabledList: string[] = [];
+      const togglePromises: Promise<unknown>[] = [];
+
+      for (const sid of ALL_STRATEGY_IDS) {
+        const shouldBeActive = template.strategies.includes(sid);
+        const currentlyActive = currentStates[sid] === true;
+        if (shouldBeActive && !currentlyActive) {
+          enabledList.push(sid);
+          togglePromises.push(toggleStrategy(sid).catch(() => null));
+        } else if (!shouldBeActive && currentlyActive) {
+          disabledList.push(sid);
+          togglePromises.push(toggleStrategy(sid).catch(() => null));
+        }
+        // Else: already in the desired state — do nothing.
+      }
 
       await Promise.allSettled(togglePromises);
       setActiveTemplate(templateId);
+      toast({
+        type: "success",
+        message: `Applying template: enabled ${enabledList.length}, disabled ${disabledList.length}`,
+      });
     } catch {
-      // Error handled silently
+      toast({ type: "error", message: "Template activation failed" });
     } finally {
       setActivating(false);
     }

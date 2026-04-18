@@ -22,8 +22,9 @@ import {
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { analyzeSymbol, searchSymbols } from "@/lib/api";
+import { searchSymbols } from "@/lib/api";
 import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
+import { useToast } from "@/hooks/useToast";
 
 const POPULAR_SYMBOLS = [
   "SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "AMD",
@@ -79,9 +80,10 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
 }
 
 export function CommandPalette() {
-  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, setActiveTab, setTradingMode } = useUIStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, setTradingMode } = useUIStore();
   const { selectedSymbol, setSelectedSymbol, addToWatchlist } = useMarketStore();
   const router = useRouter();
+  const { toast } = useToast();
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SymbolResult[]>([]);
@@ -168,24 +170,31 @@ export function CommandPalette() {
   const showApiResults = query.trim().length > 0;
   const symbolsToShow = showApiResults ? searchResults : POPULAR_SYMBOLS.map((s) => ({ symbol: s, name: "", type: "stock", exchange: "", sector: "" }));
 
-  // Analyze current symbol — trigger analysis API + switch to TA tab
+  // Analyze current symbol — the dedicated analysis surface isn't mounted
+  // on the desk yet; toast honestly until it lands instead of flipping a
+  // state nothing reads.
   function handleAnalyze() {
-    if (!selectedSymbol) return;
     setCommandPaletteOpen(false);
-    setActiveTab("right", "technical");
-    analyzeSymbol(selectedSymbol).catch(() => {});
+    if (!selectedSymbol) {
+      toast({ type: "info", message: "Select a symbol first (⌘K → pick ticker)" });
+      return;
+    }
+    toast({
+      type: "info",
+      message: `Deep analysis for ${selectedSymbol} — coming soon`,
+    });
   }
 
-  // BUG #9: "Screen momentum stocks" — switch to screener tab + trigger screen
+  // Screen momentum — route to the momentum-quality strategy page
   function handleScreenMomentum() {
     setCommandPaletteOpen(false);
-    setActiveTab("left", "screener");
+    router.push("/strategies/momentum-quality");
   }
 
-  // BUG #9: "Show portfolio" — switch bottom-right panel to positions tab
+  // Show portfolio — analytics page owns portfolio-level charts
   function handleShowPortfolio() {
     setCommandPaletteOpen(false);
-    setActiveTab("bottom", "positions");
+    router.push("/analytics");
   }
 
   // Switch trading mode — live requires explicit action, paper is always safe
@@ -200,16 +209,32 @@ export function CommandPalette() {
     }
   }
 
-  // Focus options chain — scroll to panel, or navigate to trade page first if not there
+  // Focus chart panel — scroll the desk chart into view
+  function handleFocusChart() {
+    setCommandPaletteOpen(false);
+    setTimeout(() => {
+      const el =
+        document.querySelector("[data-slot='price-chart-panel']") ??
+        document.querySelector("[data-slot='chart-panel']") ??
+        document.querySelector(".tradingview-widget-container");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        toast({ type: "info", message: "Chart not mounted on this page" });
+      }
+    }, 50);
+  }
+
+  // Focus options chain — router.push rather than hard nav
   function handleFocusOptions() {
     setCommandPaletteOpen(false);
     const el = document.querySelector("[data-slot='options-panel']");
     if (el) {
       el.scrollIntoView({ behavior: "smooth" });
-    } else {
-      // Navigate to trade page if not already there
-      window.location.href = "/trade";
+      return;
     }
+    // No options surface today — toast rather than loop via /trade.
+    toast({ type: "info", message: "Options chain — coming soon" });
   }
 
   return (
@@ -306,14 +331,7 @@ export function CommandPalette() {
                 icon={<LineChart className="h-4 w-4" />}
                 label="Focus chart panel"
                 shortcut="1"
-                onSelect={() => {
-                  setCommandPaletteOpen(false);
-                  // Scroll chart into view and dispatch timeframe event to signal focus
-                  setTimeout(() => {
-                    const el = document.querySelector("[data-slot='chart-panel']") ?? document.querySelector(".tradingview-widget-container");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }, 100);
-                }}
+                onSelect={handleFocusChart}
               />
               <CommandItem
                 icon={<BarChart3 className="h-4 w-4" />}
@@ -417,7 +435,8 @@ export function CommandPalette() {
                         onSelect={() => {
                           setCommandPaletteOpen(false);
                           if (a.id === "last-order" || a.id === "last-trade") {
-                            setActiveTab("bottom", "orders");
+                            // Recent orders live on the /trade workspace
+                            router.push("/trade");
                           } else if (a.id === "last-alert") {
                             router.push("/alerts");
                           }

@@ -29,7 +29,10 @@ class Settings(BaseSettings):
 
     # --- Application ---
     APP_NAME: str = "AlphaDesk"
-    ENVIRONMENT: Environment = Environment.DEV
+    # Default to PROD — the safer default. A forgotten ENVIRONMENT=prod in a
+    # prod deploy previously meant /docs was live and cookies weren't Secure.
+    # Developers must explicitly opt into dev mode via ENVIRONMENT=dev.
+    ENVIRONMENT: Environment = Environment.PROD
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 

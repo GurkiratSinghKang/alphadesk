@@ -15,23 +15,29 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { usePnlCalendar } from "@/hooks/useQueries";
 
 // ─── Color scale for P&L ────────────────────────────────────
-
+//
+// Reads the design-token palette so the calendar speaks the same
+// language as PortfolioHero / StrategyGrid / MorningBrief. Six tiers:
+// strong loss / mid loss / weak loss / neutral / weak gain / strong
+// gain — composed from `--down-500` (coral) and `--up-500` (chartreuse)
+// at graduated alpha. Text uses `--ink-1000` on strong cells (readable
+// on a saturated bg) and the warm `--fg` on weak tints.
 function getPnlBg(pnl: number): string {
-  if (pnl < -500) return "#991b1b";
-  if (pnl < -100) return "#dc2626";
-  if (pnl < 0) return "#f87171";
-  if (pnl === 0) return "#3f3f46";
-  if (pnl <= 100) return "#86efac";
-  if (pnl <= 500) return "#22c55e";
-  return "#15803d";
+  if (pnl < -500) return "rgb(from var(--down-500) r g b / 0.7)";
+  if (pnl < -100) return "rgb(from var(--down-500) r g b / 0.45)";
+  if (pnl < 0) return "rgb(from var(--down-500) r g b / 0.2)";
+  if (pnl === 0) return "var(--bg-elev-2)";
+  if (pnl <= 100) return "rgb(from var(--up-500) r g b / 0.22)";
+  if (pnl <= 500) return "rgb(from var(--up-500) r g b / 0.5)";
+  return "rgb(from var(--up-500) r g b / 0.75)";
 }
 
 function getPnlText(pnl: number): string {
-  if (pnl < -100) return "#fecaca";
-  if (pnl < 0) return "#1c1917";
-  if (pnl === 0) return "#d4d4d8";
-  if (pnl <= 100) return "#052e16";
-  return "#f0fdf4";
+  if (pnl < -100) return "var(--ink-1000)";
+  if (pnl < 0) return "var(--fg)";
+  if (pnl === 0) return "var(--fg-muted)";
+  if (pnl <= 100) return "var(--fg)";
+  return "var(--ink-000)";
 }
 
 const DAY_NAMES = ["M", "T", "W", "T", "F", "S", "S"];
@@ -204,7 +210,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                         key={cell.dateStr}
                         className={cn(
                           cellSize,
-                          "rounded-md bg-[#1a1a2e]/50 flex flex-col items-center justify-center"
+                          "rounded-md bg-bg-elev-1 flex flex-col items-center justify-center"
                         )}
                       >
                         <span className="text-[10px] text-muted-foreground/40">{cell.day}</span>
@@ -218,7 +224,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                         key={cell.dateStr}
                         className={cn(
                           cellSize,
-                          "rounded-md bg-[#1a1a2e]/30 flex flex-col items-center justify-center",
+                          "rounded-md bg-bg-elev-1/70 flex flex-col items-center justify-center",
                           cell.isToday && "ring-2 ring-primary"
                         )}
                       >
@@ -267,7 +273,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                           </div>
                           <div>
                             P&L:{" "}
-                            <span className={cell.calDay.pnl >= 0 ? "text-green-300" : "text-red-300"}>
+                            <span className={cell.calDay.pnl >= 0 ? "text-profit" : "text-loss"}>
                               {cell.calDay.pnl >= 0 ? "+" : ""}
                               {formatCurrency(cell.calDay.pnl)}
                             </span>

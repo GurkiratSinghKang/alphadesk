@@ -145,7 +145,22 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])  # Caddy is the only upstream
+# Only trust X-Forwarded-For from Caddy and the loopback. Caddy lives in the
+# ``alphadesk`` user bridge network (172.18+.0.0/16 range, depending on Docker
+# assignment). ``trusted_hosts=["*"]`` let any client rotate X-Forwarded-For
+# to bypass per-IP rate limits; we now restrict to the private IP ranges Caddy
+# actually uses plus loopback for local dev.
+_TRUSTED_PROXY_HOSTS = [
+    "127.0.0.1",
+    "::1",
+    # Docker default bridge + user-defined bridges
+    "172.16.0.0/12",
+    # Compose user networks sometimes land on 10.x
+    "10.0.0.0/8",
+    # docker-compose default subnet range (rare but legal)
+    "192.168.0.0/16",
+]
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
 
 # --- Routers ---
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])

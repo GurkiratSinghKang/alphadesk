@@ -99,7 +99,10 @@ function filterCurve(curve: EquityPoint[], range: EquityRange): EquityPoint[] {
 // ─── Metric cell formatters ────────────────────────────────────
 
 function formatOrDash(value: number | null | undefined, format: (n: number) => string): string {
-  if (value == null || Number.isNaN(value) || value === 0) return "\u2014";
+  // Only `null` / `undefined` / NaN should collapse to an em-dash. A literal
+  // zero is meaningful (a real 0.00% return after a round-trip trade) and
+  // should render through the formatter just like any other value.
+  if (value == null || Number.isNaN(value)) return "\u2014";
   return format(value);
 }
 function signedPct(v: number): string {
@@ -130,6 +133,32 @@ function formatLastTrade(dateStr: string | undefined | null): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── Empty-section helper ──────────────────────────────────────
+
+/**
+ * EmptySection
+ * ────────────
+ * Drop-in replacement for any § section that has no data yet. Keeps the
+ * editorial rhythm (italic-serif copy, warm-muted tone) so the page reads
+ * intentional instead of collapsed. Used when the performance endpoint
+ * returns null (common on a freshly activated strategy).
+ */
+function EmptySection({ title, reason }: { title: string; reason: string }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border-hair bg-bg-elev-1 px-5 py-6">
+      <p
+        className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
+        style={{ letterSpacing: "0.14em" }}
+      >
+        {title}
+      </p>
+      <p className="font-display italic text-[14.5px] text-fg-muted leading-snug">
+        {reason}
+      </p>
+    </div>
+  );
 }
 
 // ─── Regime signal from status ────────────────────────────────
@@ -385,9 +414,9 @@ export default function StrategyDetailPage() {
       ) : null}
 
       {/* § 02 Performance */}
-      {perf ? (
-        <section className="flex flex-col gap-6">
-          <SectionRule tag="§ 02 · Performance" />
+      <section className="flex flex-col gap-6">
+        <SectionRule tag="§ 02 · Performance" />
+        {perf ? (
           <EquityPanel
             data={equityData}
             benchmark={benchmarkData.length > 1 ? benchmarkData : undefined}
@@ -395,8 +424,13 @@ export default function StrategyDetailPage() {
             onRangeChange={setRange}
             summary={returnSummary}
           />
-        </section>
-      ) : null}
+        ) : (
+          <EmptySection
+            title="Equity curve"
+            reason="Strategy has not produced closed trades yet. The curve, drawdowns and summary will populate after the first exit."
+          />
+        )}
+      </section>
 
       {/* § 03 Positions */}
       <section className="flex flex-col gap-6">
@@ -442,6 +476,24 @@ export default function StrategyDetailPage() {
             {content.whenToUse}
           </p>
         </section>
+      ) : null}
+
+      {/* Retry — shown only when perf didn't load. Gives the user a way
+          to refetch without refreshing the whole page. */}
+      {!perf ? (
+        <div className="flex flex-col items-center gap-2 border-t border-border-hair pt-6">
+          <span className="font-display italic text-[13px] text-fg-muted">
+            Performance data unavailable.
+          </span>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3 py-1.5 font-sans text-[11px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+            style={{ letterSpacing: "0.1em" }}
+          >
+            Retry
+          </button>
+        </div>
       ) : null}
     </div>
   );

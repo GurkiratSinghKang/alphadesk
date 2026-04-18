@@ -151,7 +151,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             <span
               className={cn(
                 "font-medium",
-                hoveredCell.value > 0.3 ? "text-red-400" : hoveredCell.value < -0.3 ? "text-blue-400" : "text-foreground"
+                hoveredCell.value > 0.3 ? "text-loss" : hoveredCell.value < -0.3 ? "text-ice" : "text-foreground"
               )}
             >
               {(hoveredCell.value ?? 0).toFixed(3)}
@@ -246,7 +246,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
               <div className="flex items-baseline gap-2">
                 <span className={cn(
                   "text-2xl font-bold tabular-nums",
-                  insights.divScore >= 70 ? "text-emerald-400" : insights.divScore >= 40 ? "text-amber-400" : "text-red-400"
+                  insights.divScore >= 70 ? "text-profit" : insights.divScore >= 40 ? "text-amber" : "text-loss"
                 )}>
                   {insights.divScore}
                 </span>
@@ -254,7 +254,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
               </div>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted/30 overflow-hidden">
                 <div
-                  className={cn("h-full rounded-full transition-all", insights.divScore >= 70 ? "bg-emerald-500" : insights.divScore >= 40 ? "bg-amber-500" : "bg-red-500")}
+                  className={cn("h-full rounded-full transition-all", insights.divScore >= 70 ? "bg-profit" : insights.divScore >= 40 ? "bg-amber" : "bg-loss")}
                   style={{ width: `${insights.divScore}%` }}
                 />
               </div>
@@ -267,7 +267,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             {insights.mostCorrelated && (
               <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <TrendingUp className="h-3 w-3 text-red-400" />
+                  <TrendingUp className="h-3 w-3 text-loss" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Most Correlated
                   </span>
@@ -275,7 +275,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                 <p className="text-xs font-medium text-foreground">
                   {insights.mostCorrelated.nameA} / {insights.mostCorrelated.nameB}
                 </p>
-                <span className="text-sm font-bold tabular-nums text-red-400">
+                <span className="text-sm font-bold tabular-nums text-loss">
                   {insights.mostCorrelated.value >= 0 ? "+" : ""}{insights.mostCorrelated.value.toFixed(3)}
                 </span>
               </div>
@@ -285,7 +285,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             {insights.mostInverse && (
               <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <TrendingDown className="h-3 w-3 text-blue-400" />
+                  <TrendingDown className="h-3 w-3 text-ice" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Most Diversified
                   </span>
@@ -293,7 +293,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                 <p className="text-xs font-medium text-foreground">
                   {insights.mostInverse.nameA} / {insights.mostInverse.nameB}
                 </p>
-                <span className="text-sm font-bold tabular-nums text-blue-400">
+                <span className="text-sm font-bold tabular-nums text-ice">
                   {insights.mostInverse.value >= 0 ? "+" : ""}{insights.mostInverse.value.toFixed(3)}
                 </span>
               </div>
@@ -313,7 +313,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                       </span>
                       <span className={cn(
                         "text-[10px] font-medium tabular-nums shrink-0",
-                        p.value > 0.3 ? "text-red-400" : p.value < -0.3 ? "text-blue-400" : "text-muted-foreground"
+                        p.value > 0.3 ? "text-loss" : p.value < -0.3 ? "text-ice" : "text-muted-foreground"
                       )}>
                         {p.value >= 0 ? "+" : ""}{p.value.toFixed(2)}
                       </span>

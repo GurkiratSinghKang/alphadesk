@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { refineStrategy, type StrategyRefinement } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 
 interface StrategyRule {
   id: string;
@@ -56,6 +57,30 @@ export function StrategyBuilder() {
   const [aiThinking, setAiThinking] = useState(false);
   const [aiResult, setAiResult] = useState<StrategyRefinement | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [backtestRunning, setBacktestRunning] = useState(false);
+  const { toast } = useToast();
+
+  // Backtest requires at least a named strategy + one rule. The dedicated
+  // runBacktest endpoint is not exposed in lib/api.ts yet (Wave 3 owns
+  // api.ts), so we toast honestly when the user clicks and gate the
+  // button on validity rather than pretending an engine exists.
+  const canBacktest =
+    strategyName.trim().length > 0 && rules.length > 0 && !backtestRunning;
+
+  async function handleBacktest() {
+    if (!canBacktest) return;
+    setBacktestRunning(true);
+    try {
+      // No frontend wrapper for a backtest endpoint exists yet. Until it
+      // lands, toast so the click is acknowledged instead of silent.
+      toast({
+        type: "info",
+        message: "Backtest engine coming soon — AI refinement is available today",
+      });
+    } finally {
+      setBacktestRunning(false);
+    }
+  }
 
   const addRule = () => {
     if (!input.trim()) return;
@@ -202,8 +227,18 @@ export function StrategyBuilder() {
             {aiThinking ? <Sparkles className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
             {aiThinking ? "Analyzing with Claude..." : "Refine with AI"}
           </Button>
-          <Button size="sm" className="text-xs gap-1.5">
-            <Play className="h-3 w-3" /> Backtest
+          <Button
+            size="sm"
+            className="text-xs gap-1.5"
+            onClick={handleBacktest}
+            disabled={!canBacktest}
+          >
+            {backtestRunning ? (
+              <Sparkles className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            {backtestRunning ? "Running..." : "Backtest"}
           </Button>
         </div>
       )}

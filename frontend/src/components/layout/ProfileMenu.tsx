@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Settings, Keyboard, LogOut, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -11,6 +11,26 @@ import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
+import { env } from "@/env";
+
+/** Best-effort JWT payload read for the displayed username. */
+function decodeJwtSub(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|; )access_token=([^;]*)/);
+  const token = match?.[1];
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (typeof payload.sub === "string" && payload.sub.trim()) return payload.sub;
+    if (typeof payload.email === "string" && payload.email.trim()) return payload.email;
+    if (typeof payload.username === "string" && payload.username.trim()) return payload.username;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export function ProfileMenu() {
   const router = useRouter();
@@ -20,6 +40,18 @@ export function ProfileMenu() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
   const pathname = usePathname();
+
+  // Resolve display name from JWT once per mount — HttpOnly cookies are not
+  // readable, so this is best-effort and falls back to "Account".
+  const [displayName, setDisplayName] = useState<string>("Account");
+  useEffect(() => {
+    const sub = decodeJwtSub();
+    if (sub) setDisplayName(sub);
+  }, []);
+  const avatarInitial = useMemo(() => {
+    const trimmed = (displayName || "A").trim();
+    return trimmed.charAt(0).toUpperCase() || "A";
+  }, [displayName]);
 
   useEffect(() => {
     setSettingsOpen(false);
@@ -31,15 +63,45 @@ export function ProfileMenu() {
     else setTradingMode("paper");
   };
 
+  async function handleLogout() {
+    // Use the absolute API base so cross-origin deployments hit the real
+    // backend instead of 404ing on the frontend origin.
+    const base = env.API_URL || "";
+    try {
+      await fetch(`${base}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Best-effort; proceed to the login page even if the POST fails so
+      // the user doesn't get stuck.
+    }
+    // HttpOnly cookies can't be cleared from JS — rely on the backend's
+    // Set-Cookie: Max-Age=0 header in the /logout response.
+    window.location.href = "/login";
+  }
+
+  async function handleConfirmLive() {
+    setModeConfirmOpen(false);
+    // There is no `/auth/switch-mode` endpoint today (confirmed via audit —
+    // the profile menu previously flipped state AND toasted "contact admin"
+    // which contradicted itself). Until the backend exposes a switcher we
+    // keep the mode on paper and toast honestly.
+    toast({
+      type: "warning",
+      message: "Live mode is not enabled on this account. Contact support to unlock live trading.",
+    });
+  }
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger data-tour="profile-menu" className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors" aria-label="User menu">
-          A
+          {avatarInitial}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">
           <div className="px-3 py-2 space-y-1">
-            <p className="text-xs font-medium text-foreground">admin</p>
+            <p className="text-xs font-medium text-foreground truncate" title={displayName}>{displayName}</p>
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-[#8a8a95]">Equity</span>
               <span className="text-foreground tabular-nums">{formatCurrency(summary.equity > 0 ? summary.equity : 0)}</span>
@@ -58,7 +120,7 @@ export function ProfileMenu() {
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}><Settings className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
           <DropdownMenuItem onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={async () => { try { await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" }); } catch {} document.cookie = "access_token=; path=/; max-age=0"; window.location.href = "/login"; }}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -103,7 +165,7 @@ export function ProfileMenu() {
           <DialogHeader><DialogTitle>Switch to Live Trading?</DialogTitle><DialogDescription>Real orders will be submitted to your broker.</DialogDescription></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModeConfirmOpen(false)} className="text-xs">Cancel</Button>
-            <Button onClick={() => { setTradingMode("live"); setModeConfirmOpen(false); toast({ type: "warning", message: "Trading mode is configured server-side. Contact admin to switch between paper and live." }); }} className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs">Confirm Live Mode</Button>
+            <Button onClick={handleConfirmLive} className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs">Confirm Live Mode</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

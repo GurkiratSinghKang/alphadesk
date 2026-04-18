@@ -421,35 +421,37 @@ export default function AlertsPage() {
       {/* Active Alerts */}
       {!loading && (
         <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
-            <Clock className="h-3.5 w-3.5 text-primary" />
-            <span className="text-xs font-semibold text-foreground">
-              Active Alerts ({activeAlerts.length})
-            </span>
-          </div>
-
-          {/* Column headers */}
+          {/* Header + column row only shown when there are alerts — the
+              centered empty-state block below is enough on its own. */}
           {activeAlerts.length > 0 && (
-            <div className="flex items-center gap-3 px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/50">
-              <span className="w-4 shrink-0" />
-              <span className="w-16 shrink-0">Symbol</span>
-              <span className="w-20 shrink-0">Condition</span>
-              <span className="w-24 shrink-0">Target</span>
-              <span className="w-20 shrink-0">Status</span>
-              <span className="flex-1">Date</span>
-              <span className="w-8 shrink-0" />
-            </div>
+            <>
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
+                <Clock className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-semibold text-foreground">
+                  Active Alerts ({activeAlerts.length})
+                </span>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/50">
+                <span className="w-4 shrink-0" />
+                <span className="w-16 shrink-0">Symbol</span>
+                <span className="w-20 shrink-0">Condition</span>
+                <span className="w-24 shrink-0">Target</span>
+                <span className="w-20 shrink-0">Status</span>
+                <span className="flex-1">Date</span>
+                <span className="w-8 shrink-0" />
+              </div>
+            </>
           )}
 
           <ScrollArea className="max-h-[400px]">
             {activeAlerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <AlertTriangle className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                <p className="text-sm text-muted-foreground">
+                <p className="font-display italic text-[15px] text-fg">
                   No active alerts
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  Create one above to get started
+                  Create one above to get started.
                 </p>
               </div>
             ) : (
