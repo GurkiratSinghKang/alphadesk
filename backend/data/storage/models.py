@@ -104,6 +104,14 @@ def _define_models() -> dict[str, Any]:
 
         __table_args__ = (
             Index("ix_trades_strategy_status", "strategy", "status"),
+            # Composite index for the most common filter shape on this table:
+            # ``WHERE symbol = :s ORDER BY entry_time DESC`` used by
+            # ``GET /trades/history`` and the trade-ledger sync helpers.
+            # Declared at the ORM level only — migration NOT generated in this
+            # wave to keep the change reversible and reviewable on its own.
+            # Index declared; generate migration separately with
+            #   alembic revision --autogenerate
+            Index("ix_trades_symbol_entry_time", "symbol", "entry_time"),
         )
 
     class Position(Base):

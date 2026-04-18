@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "lucide-react";
+import { useToast } from "@/hooks/useToast";
 
 // ─── Workspace Types ────────────────────────────────────────────
 
@@ -72,15 +73,31 @@ export function useWorkspace() {
 }
 
 export function WorkspaceSelector() {
-  const { workspace, setWorkspace } = useWorkspace();
+  const { workspace, setWorkspace, config } = useWorkspace();
+  const { toast } = useToast();
+
+  const handleChange = (ws: WorkspaceId) => {
+    if (ws === workspace) return;
+    setWorkspace(ws);
+    // Give honest feedback — the event is fired so that non-desk pages
+    // using `useWorkspace().isExpanded(...)` collapse/expand accordingly,
+    // but the desk route currently ignores it (audit P1). Toast the switch
+    // so the user knows the preference was saved, and mention which
+    // sections become emphasised.
+    toast({
+      type: "info",
+      message: `Workspace: ${WORKSPACE_CONFIGS[ws].label} (${WORKSPACE_CONFIGS[ws].expanded.length} sections emphasised)`,
+    });
+  };
 
   return (
     <div className="flex items-center gap-1.5">
       <Layout className="h-3 w-3 text-muted-foreground" />
       <select
         value={workspace}
-        onChange={(e) => setWorkspace(e.target.value as WorkspaceId)}
+        onChange={(e) => handleChange(e.target.value as WorkspaceId)}
         aria-label="Workspace layout"
+        title={`Current: ${config.label} — ${config.expanded.length} sections`}
         className="h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground cursor-pointer hover:border-primary/50 transition-colors"
       >
         <option value="default">Default</option>

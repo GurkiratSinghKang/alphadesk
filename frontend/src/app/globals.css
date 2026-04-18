@@ -51,6 +51,8 @@
   --color-loss: var(--loss);
   --color-profit-tint: var(--profit-tint);
   --color-loss-tint: var(--loss-tint);
+  --color-profit-foreground: var(--profit-foreground);
+  --color-loss-foreground: var(--loss-foreground);
 
   /* Informational / regime colors */
   --color-ice: var(--ice-500);

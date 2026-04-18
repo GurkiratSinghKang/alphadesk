@@ -9,7 +9,7 @@
  * entirely in the primitives/composites/typography — this page invents
  * no colors and holds no markup beyond slot wiring.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/composites";
 import { DeskLayout } from "@/components/layouts";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
+import { isMarketOpen } from "@/lib/marketHours";
 import {
   useIndices,
   usePortfolioSummary,
@@ -101,21 +102,35 @@ export default function DeskPage() {
   /* ─── Chart bars — daily + current range toggle ─────────── */
   const [range, setRange] = useState<ChartRange>("1M");
   const [series, setSeries] = useState<ChartBar[]>([]);
+  const [barsLoading, setBarsLoading] = useState(false);
+  const [barsError, setBarsError] = useState(false);
+  // Nonce bumped by `retryBars` so the fetch effect re-runs without needing
+  // the symbol or range to change. PriceChartPanel calls it from the
+  // error-state Retry button.
+  const [barsNonce, setBarsNonce] = useState(0);
+  const retryBars = useCallback(() => setBarsNonce((n) => n + 1), []);
   useEffect(() => {
     let cancelled = false;
     async function fetchBars() {
+      setBarsLoading(true);
+      setBarsError(false);
       try {
         const bars = await getBars(selectedSymbol, "D", rangeToLimit(range));
         if (!cancelled) setSeries(bars);
       } catch {
-        if (!cancelled) setSeries([]);
+        if (!cancelled) {
+          setSeries([]);
+          setBarsError(true);
+        }
+      } finally {
+        if (!cancelled) setBarsLoading(false);
       }
     }
     fetchBars();
     return () => {
       cancelled = true;
     };
-  }, [selectedSymbol, range]);
+  }, [selectedSymbol, range, barsNonce]);
 
   /* ─── Book tab + live orders count for context bar ─────── */
   const [bookTab, setBookTab] = useState<PositionTab>("positions");
@@ -290,6 +305,9 @@ export default function DeskPage() {
             series={series}
             activeRange={range}
             onRangeChange={setRange}
+            isLoading={barsLoading}
+            error={barsError}
+            onRetry={retryBars}
             className="flex-1 min-h-0"
           />
           <OrderBar
@@ -343,14 +361,5 @@ function rangeToLimit(r: ChartRange): number {
   }
 }
 
-function isMarketOpen(): boolean {
-  const now = new Date();
-  // Rough US-session heuristic — precise NYSE calendar lands in F4.
-  const day = now.getUTCDay();
-  if (day === 0 || day === 6) return false;
-  const h = now.getUTCHours();
-  const m = now.getUTCMinutes();
-  const mins = h * 60 + m;
-  // 13:30 UTC → 20:00 UTC covers 9:30am–4:00pm ET during EST.
-  return mins >= 13 * 60 + 30 && mins < 20 * 60;
-}
+// isMarketOpen now lives in @/lib/marketHours and uses Intl America/New_York
+// so it handles EST/EDT correctly year-round. See wave-8 audit finding.

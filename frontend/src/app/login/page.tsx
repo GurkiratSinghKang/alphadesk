@@ -25,8 +25,8 @@ export const metadata: Metadata = {
 export default function LoginPage() {
   const todayIso = new Date().toISOString().slice(0, 10);
   return (
-    <div className="mx-auto grid min-h-screen max-w-[1440px] grid-cols-1 gap-16 px-12 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-      <section className="flex flex-col gap-10">
+    <div className="mx-auto grid min-h-screen max-w-[1440px] grid-cols-1 gap-8 sm:gap-12 lg:gap-16 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+      <section className="flex flex-col gap-6 sm:gap-8 lg:gap-10">
         <EditorialNameplate
           volume="01"
           issue="01"
@@ -88,7 +88,7 @@ export default function LoginPage() {
       </section>
 
       <section className="flex w-full justify-center lg:justify-end">
-        <div className="w-full max-w-[380px] rounded-md border border-border bg-bg-elev-1 p-8">
+        <div className="w-full max-w-[380px] rounded-md border border-border bg-bg-elev-1 p-5 sm:p-8">
           <div className="mb-6 flex items-baseline justify-between">
             <span
               className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"

@@ -245,7 +245,7 @@ export function OptionsPanel() {
   return (
     <div data-slot="options-panel" className="flex h-full flex-col bg-[var(--panel)] border-t border-border">
       {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-[#14141e]">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-bg-elev-2">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-foreground">
             {selectedSymbol} Options
@@ -270,7 +270,7 @@ export function OptionsPanel() {
       </div>
 
       {/* Expiration selector */}
-      <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 scrollbar-thin shrink-0 bg-[#14141e]">
+      <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 scrollbar-thin shrink-0 bg-bg-elev-2">
         {expirations.map((exp) => {
           const d = new Date(exp + "T00:00:00");
           const label = d.toLocaleDateString("en-US", {
@@ -301,7 +301,7 @@ export function OptionsPanel() {
       {/* Chain table */}
       {chainLoading && (
         <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground shrink-0">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching options chain...
+          <Loader2 className="size-4 animate-spin" /> Fetching options chain...
         </div>
       )}
       {chainEmpty ? (
@@ -316,7 +316,7 @@ export function OptionsPanel() {
       ) : chain == null ? null : (
         <ScrollArea className="flex-1 overflow-auto">
           <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
-            <thead className="sticky top-0 z-10 bg-[#14141e]">
+            <thead className="sticky top-0 z-10 bg-bg-elev-2">
               <tr className="border-b border-border">
                 {colHeaders.map((h) => (
                   <th

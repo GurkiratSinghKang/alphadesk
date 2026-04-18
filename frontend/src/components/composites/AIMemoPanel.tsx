@@ -28,12 +28,29 @@ const chipClass: Record<AIMemo["chips"][number]["tone"], string> = {
 };
 
 export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
+  // `emptyMemo` in the desk selectors sets `model: "awaiting"` as a signal
+  // that no real Claude memo has been produced yet — the footer
+  // "Confidence 0.00 · awaiting · 0 ms" would read as broken telemetry, so
+  // we suppress it until a real model response arrives. Optional chaining
+  // guards against callers that omit any of the optional fields.
+  const isAwaiting =
+    memo?.model === "awaiting" ||
+    memo?.model === undefined ||
+    memo?.model === "";
+  const confidence = typeof memo?.confidence === "number" && Number.isFinite(memo.confidence)
+    ? memo.confidence
+    : null;
+  const latencyMs = typeof memo?.latencyMs === "number" && Number.isFinite(memo.latencyMs)
+    ? memo.latencyMs
+    : null;
+  const showFooter = !isAwaiting && confidence !== null && latencyMs !== null;
+
   return (
     <section
       data-slot="ai-memo-panel"
       aria-label="Claude memo"
       className={cn(
-        "px-[18px] py-[18px] border-t border-border bg-ink-100",
+        "px-4 py-4 sm:px-[18px] sm:py-[18px] border-t border-border bg-ink-100",
         className
       )}
     >
@@ -49,7 +66,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
           className="ml-auto font-mono text-[9.5px] text-fg-hint"
           style={{ letterSpacing: "0.06em" }}
         >
-          {memo.timestamp}
+          {memo?.timestamp}
         </span>
       </header>
 
@@ -58,10 +75,10 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
         className="font-display italic text-[15px] text-ink-900 leading-[1.4]"
         style={{ letterSpacing: "-0.005em" }}
       >
-        {memo.text}
+        {memo?.text}
       </p>
 
-      {memo.chips.length > 0 ? (
+      {memo?.chips && memo.chips.length > 0 ? (
         <div className="flex gap-1.5 flex-wrap mt-3">
           {memo.chips.map((c, i) => (
             <span
@@ -78,12 +95,14 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
         </div>
       ) : null}
 
-      <footer className="flex justify-between mt-3 font-mono text-[10px] text-fg-muted">
-        <span>Confidence {memo.confidence.toFixed(2)}</span>
-        <span>
-          {memo.model} · {memo.latencyMs} ms
-        </span>
-      </footer>
+      {showFooter ? (
+        <footer className="flex flex-wrap justify-between gap-x-2 gap-y-1 mt-3 font-mono text-[10px] text-fg-muted">
+          <span className="shrink-0">Confidence {confidence!.toFixed(2)}</span>
+          <span className="truncate max-w-[60%] text-right">
+            {memo!.model} · {latencyMs} ms
+          </span>
+        </footer>
+      ) : null}
     </section>
   );
 }

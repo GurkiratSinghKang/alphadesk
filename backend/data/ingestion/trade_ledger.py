@@ -878,17 +878,53 @@ class TradeLedger:
         logger.info("Ledger sync complete: %s", summary)
         return summary
 
-    def _match_strategy_for_symbol(self, symbol: str) -> str:
-        """Find the most recent non-manual strategy that traded ``symbol``."""
-        recent = self._list_all()[-50:]
+    def _match_strategy_for_symbol(
+        self,
+        symbol: str,
+        days_back: int = 90,
+        window: int = 500,
+    ) -> str:
+        """Find the most recent non-manual strategy that traded ``symbol``.
+
+        Previously this only searched the last 50 ledger rows, which wrongly
+        attributed sync-recreated trades to ``manual`` when a strategy-owned
+        trade was older than the 50-row tail. We now widen the window to the
+        last ``window`` rows (default 500) *and* accept any trade whose
+        ``entry_time`` is within ``days_back`` days (default 90).
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+        all_trades = self._list_all()
+        # Search up to ``window`` most recent rows (by id order).
+        recent = all_trades[-window:]
         for trade in reversed(recent):
-            if trade.get("symbol") == symbol and trade.get("strategy", "manual") != "manual":
-                logger.info(
-                    "Matched %s to strategy '%s' from recent trade #%d",
-                    symbol, trade["strategy"], trade.get("id", 0),
-                )
-                return trade["strategy"]
-        logger.warning("No strategy match for %s — defaulting to 'manual'", symbol)
+            if trade.get("symbol") != symbol:
+                continue
+            strat = trade.get("strategy", "manual") or "manual"
+            if strat == "manual":
+                continue
+            # Respect the recency window
+            entry_time_raw = trade.get("entry_time") or ""
+            try:
+                entry_dt = datetime.fromisoformat(entry_time_raw)
+                if entry_dt.tzinfo is None:
+                    entry_dt = entry_dt.replace(tzinfo=timezone.utc)
+                if entry_dt < cutoff:
+                    continue
+            except (ValueError, TypeError):
+                # If entry_time is unparseable, still accept — the audit
+                # concern is attribution correctness, not strict recency.
+                pass
+            logger.info(
+                "Matched %s to strategy '%s' from recent trade #%d",
+                symbol, strat, trade.get("id", 0),
+            )
+            return strat
+        logger.warning(
+            "No strategy match for %s within %d trades / %d days — defaulting to 'manual'",
+            symbol, window, days_back,
+        )
         return "manual"
 
     def count_today_trades(self) -> int:

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from core.config import settings
-from core.redis import cache_get, cache_set
+from core.redis import cache_get, cache_set, get_redis
 
 logger = logging.getLogger("alphadesk.news")
 
@@ -26,6 +26,8 @@ router = APIRouter()
 
 NEWSDATA_BASE = "https://newsdata.io/api/1/news"
 NEWS_CACHE_TTL = 900  # 15 minutes (avoid newsdata.io rate limits)
+NEWSDATA_RATE_LIMIT_COOLDOWN = 900  # 15 minutes, matches NEWS_CACHE_TTL
+NEWSDATA_RATE_KEY = "rate:news:newsdata"
 
 
 # ---------------------------------------------------------------------------
@@ -91,20 +93,53 @@ def _company_query(symbol: str) -> str:
 # newsdata.io fetcher
 # ---------------------------------------------------------------------------
 
-_rate_limited_until: float = 0  # timestamp until which we skip requests
+# Rate-limit cooldown is shared across workers via Redis key
+# ``rate:news:newsdata`` (see NEWSDATA_RATE_KEY). The key is TTL'd to the
+# cooldown window — while it exists, no worker will hit the provider. Local
+# module-level fallback (_local_rate_limited_until) is only used when Redis is
+# unavailable; in that degraded mode each worker backs off independently.
+_local_rate_limited_until: float = 0
+
+
+async def _is_rate_limited() -> bool:
+    """True if the cross-worker cooldown is active. Falls back to per-worker state."""
+    import time
+
+    try:
+        r = await get_redis()
+        # ``EXISTS`` returns 1 if the cooldown key is still alive.
+        if await r.exists(NEWSDATA_RATE_KEY):
+            return True
+    except Exception:
+        logger.debug("Redis unavailable for news rate-limit check, using local state")
+
+    return time.time() < _local_rate_limited_until
+
+
+async def _mark_rate_limited(cooldown_s: int = NEWSDATA_RATE_LIMIT_COOLDOWN) -> None:
+    """Mark newsdata.io as rate-limited across all workers for ``cooldown_s`` seconds."""
+    import time
+
+    global _local_rate_limited_until
+    _local_rate_limited_until = time.time() + cooldown_s
+    try:
+        r = await get_redis()
+        # SET with NX so the first worker to hit 429 wins the race; others reuse
+        # the same cooldown window. EX ensures auto-expiry.
+        await r.set(NEWSDATA_RATE_KEY, "1", nx=True, ex=cooldown_s)
+    except Exception:
+        logger.debug("Redis unavailable for news rate-limit set; cooldown is per-worker only")
+
 
 async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
     """Fetch articles from newsdata.io. Returns raw article dicts."""
-    import time
-
     api_key = settings.NEWSDATA_API_KEY.get_secret_value()
     if not api_key:
         logger.warning("NEWSDATA_API_KEY is not configured — cannot fetch real news")
         return []
 
-    global _rate_limited_until
-    if time.time() < _rate_limited_until:
-        return []  # skip silently during cooldown
+    if await _is_rate_limited():
+        return []  # skip silently during cooldown (shared across workers via Redis)
 
     params = {
         "apikey": api_key,
@@ -118,8 +153,8 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(NEWSDATA_BASE, params=params)
             if resp.status_code == 429:
-                _rate_limited_until = time.time() + 900  # back off 15 minutes
-                logger.warning("newsdata.io rate limit hit, backing off 15m")
+                await _mark_rate_limited()
+                logger.warning("newsdata.io rate limit hit, backing off 15m (shared via Redis)")
                 return []
             resp.raise_for_status()
             data = resp.json()

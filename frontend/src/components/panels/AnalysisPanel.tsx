@@ -241,7 +241,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Analyzing {symbol}...
+        <Loader2 className="size-4 animate-spin" /> Analyzing {symbol}...
       </div>
     );
   }
@@ -395,7 +395,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading fundamentals...
+        <Loader2 className="size-4 animate-spin" /> Loading fundamentals...
       </div>
     );
   }
@@ -419,8 +419,8 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
     return (
       <div className="space-y-4 p-3">
         <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-          <p className="text-[11px] text-muted-foreground">
+          <AlertTriangle className="size-4 text-fg-muted shrink-0 mt-0.5" />
+          <p className="text-[11px] text-fg-muted">
             Analysis unavailable &mdash; connect data source for fundamental metrics
           </p>
         </div>
@@ -456,9 +456,9 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
   return (
     <div className="space-y-4 p-3">
       {isETF && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber-300">ETF &mdash; individual fundamental metrics are aggregated estimates</p>
+        <div className="flex items-start gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-2">
+          <AlertTriangle className="size-4 text-amber shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber">ETF &mdash; individual fundamental metrics are aggregated estimates</p>
         </div>
       )}
       <div>
@@ -502,7 +502,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading sentiment...
+        <Loader2 className="size-4 animate-spin" /> Loading sentiment...
       </div>
     );
   }
@@ -688,7 +688,7 @@ function ChatTab({ symbol }: { symbol: string }) {
           ))}
           {loading && (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
               Analyzing...
             </div>
           )}
@@ -710,7 +710,7 @@ function ChatTab({ symbol }: { symbol: string }) {
           size="icon"
           className="h-8 w-8 shrink-0"
         >
-          <Send className="h-3.5 w-3.5" />
+          <Send />
         </Button>
       </div>
     </div>
@@ -818,7 +818,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Quantity */}
       <div>
-        <label htmlFor="order-quantity" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Quantity</label>
+        <label htmlFor="order-quantity" className="text-[10px] uppercase tracking-wider text-fg-muted">Quantity</label>
         <div className="flex items-center gap-1 mt-1">
           <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">-</button>
           <input
@@ -835,7 +835,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Order Type */}
       <div>
-        <label htmlFor="order-type" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Order Type</label>
+        <label htmlFor="order-type" className="text-[10px] uppercase tracking-wider text-fg-muted">Order Type</label>
         <select
           id="order-type"
           value={orderType}
@@ -853,7 +853,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       {/* Conditional price fields based on order type */}
       {orderType === "limit" && (
         <div>
-          <label htmlFor="order-limit-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Limit Price</label>
+          <label htmlFor="order-limit-price" className="text-[10px] uppercase tracking-wider text-fg-muted">Limit Price</label>
           <input
             id="order-limit-price"
             type="number"
@@ -867,7 +867,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {orderType === "stop" && (
         <div>
-          <label htmlFor="order-stop-price" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Stop Price</label>
+          <label htmlFor="order-stop-price" className="text-[10px] uppercase tracking-wider text-fg-muted">Stop Price</label>
           <input
             id="order-stop-price"
             type="number"
@@ -882,7 +882,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       {orderType === "stop_limit" && (
         <>
           <div>
-            <label htmlFor="order-stop-price-sl" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Stop Price</label>
+            <label htmlFor="order-stop-price-sl" className="text-[10px] uppercase tracking-wider text-fg-muted">Stop Price</label>
             <input
               id="order-stop-price-sl"
               type="number"
@@ -893,7 +893,7 @@ function OrderTab({ symbol }: { symbol: string }) {
             />
           </div>
           <div>
-            <label htmlFor="order-limit-price-sl" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Limit Price</label>
+            <label htmlFor="order-limit-price-sl" className="text-[10px] uppercase tracking-wider text-fg-muted">Limit Price</label>
             <input
               id="order-limit-price-sl"
               type="number"
@@ -909,14 +909,14 @@ function OrderTab({ symbol }: { symbol: string }) {
       {orderType === "trailing_stop" && (
         <>
           <div>
-            <label htmlFor="trail-type" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Trail Type</label>
+            <label htmlFor="trail-type" className="text-[10px] uppercase tracking-wider text-fg-muted">Trail Type</label>
             <div className="flex gap-1 mt-1">
               <button onClick={() => setTrailType("dollar")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "dollar" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>$ Amount</button>
               <button onClick={() => setTrailType("percent")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "percent" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>% Percent</button>
             </div>
           </div>
           <div>
-            <label htmlFor="trail-amount" className="text-[10px] uppercase tracking-wider text-[#8a8a95]">
+            <label htmlFor="trail-amount" className="text-[10px] uppercase tracking-wider text-fg-muted">
               Trail Amount {trailType === "dollar" ? "($)" : "(%)"}
             </label>
             <input
@@ -934,7 +934,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Time in Force */}
       <div>
-        <label className="text-[10px] uppercase tracking-wider text-[#8a8a95]">Time in Force</label>
+        <label className="text-[10px] uppercase tracking-wider text-fg-muted">Time in Force</label>
         <div className="flex gap-1 mt-1">
           <button onClick={() => setTif("day")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "day" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>Day</button>
           <button onClick={() => setTif("gtc")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", tif === "gtc" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>GTC</button>
@@ -944,7 +944,7 @@ function OrderTab({ symbol }: { symbol: string }) {
       {/* Separator + Preview */}
       <div className="border-t border-border pt-3 space-y-1.5">
         <div className="flex justify-between text-xs">
-          <span className="text-[#8a8a95]">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
+          <span className="text-fg-muted">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
           <span className="text-foreground tabular-nums font-medium">${(estimatedCost ?? 0).toFixed(2)}</span>
         </div>
       </div>
@@ -956,8 +956,8 @@ function OrderTab({ symbol }: { symbol: string }) {
         className={cn(
           "w-full rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-50",
           side === "buy"
-            ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
-            : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-black"
+            ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-profit-foreground"
+            : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-loss-foreground"
         )}
       >
         {submitting ? "Placing..." : buildOrderLabel()}
@@ -983,14 +983,14 @@ export function AnalysisPanel() {
   }, [setActiveTab]);
 
   return (
-    <div className="flex h-full flex-col bg-[var(--panel)] border-l border-[#2a2a3e]">
+    <div className="flex h-full flex-col bg-[var(--panel)] border-l border-border">
       <Tabs
         value={activePanels.right}
         onValueChange={(v) => setActiveTab("right", v)}
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0 relative z-20">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 overflow-x-auto overflow-y-hidden border border-[#2a2a3e] relative z-20">
+          <TabsList className="h-7 bg-bg-elev-1 p-0.5 flex-1 min-w-0 overflow-x-auto overflow-y-hidden border border-border relative z-20">
             <TabsTrigger value="technical" className="text-[10px] h-6 px-1.5 gap-0.5 shrink-0" title="Technical Analysis">
               <BarChart2 className="h-3 w-3 shrink-0" /> Tech
             </TabsTrigger>

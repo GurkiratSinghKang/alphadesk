@@ -17,6 +17,7 @@ from core.database import init_db, close_db
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news
+from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
 from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeline_scheduler
@@ -50,7 +51,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Database unavailable: %s", e)
     else:
-        logger.info("Skipping DB init (SKIP_DB_INIT=True)")
+        # Oncall visibility: this is a degraded mode — every DB-backed route
+        # will return empty results. The SkipDbInitWarningMiddleware will also
+        # tag every HTTP response with X-Alphadesk-Warning.
+        logger.warning(
+            "SKIP_DB_INIT=True — database is not initialised; "
+            "DB-backed routes will return empty results and every response "
+            "will carry the X-Alphadesk-Warning header."
+        )
 
     try:
         await get_redis()
@@ -161,6 +169,11 @@ _TRUSTED_PROXY_HOSTS = [
     "192.168.0.0/16",
 ]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
+
+# Tag every response with X-Alphadesk-Warning when SKIP_DB_INIT is True so
+# clients can detect the degraded mode rather than interpreting empty
+# responses as genuinely empty datasets.
+app.add_middleware(SkipDbInitWarningMiddleware)
 
 # --- Routers ---
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])

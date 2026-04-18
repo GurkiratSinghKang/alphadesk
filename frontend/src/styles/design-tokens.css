@@ -76,6 +76,15 @@
   --profit-tint: rgba(168, 208, 77, 0.12);
   --loss-tint:   rgba(224, 120, 86, 0.12);
 
+  /* Readable text colors on colored backgrounds.
+     - profit bg (luminous chartreuse #a8d04d) → near-black reads cleanly.
+     - loss bg (coral #e07856) → warm off-white reads cleanly (WCAG AA).
+     - primary bg (liquid gold #c9a66b) already uses --color-primary-foreground
+       (#1a1206) in globals.css @theme inline. */
+  --primary-foreground: #1a1206;
+  --profit-foreground: var(--ink-000);
+  --loss-foreground:   var(--ink-1000);
+
   /* ─── TYPE ───────────────────────────────────────────────────── */
 
   /* --font-display / --font-ui / --font-mono are now owned by next/font,

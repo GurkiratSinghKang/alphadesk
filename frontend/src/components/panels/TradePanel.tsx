@@ -801,6 +801,10 @@ function OrdersTab() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
+  // Track which order IDs are currently mid-cancel so the row can show
+  // "Cancelling…" feedback and the button stays disabled until the
+  // backend confirms the 204.
+  const [cancelling, setCancelling] = useState<Set<string>>(new Set());
 
   // Fetch orders from API on mount
   useEffect(() => {
@@ -842,11 +846,30 @@ function OrdersTab() {
   };
 
   const handleCancel = async (id: string) => {
+    // Don't re-enter while a cancel is already in flight for this order.
+    if (cancelling.has(id)) return;
+    setCancelling((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     try {
+      // cancelOrder resolves to `undefined` on the backend's 204 response
+      // (audit P0, now fixed in api.ts). We treat no-throw as success.
       await cancelOrder(id);
       updateOrderStatus(id, "cancelled");
+      toast({ type: "success", message: "Order cancelled" });
     } catch (err: any) {
-      toast({ type: "error", message: "Cancel failed: " + (err?.message || "Unknown error") });
+      toast({
+        type: "error",
+        message: "Cancel failed: " + (err?.message || "Unknown error"),
+      });
+    } finally {
+      setCancelling((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -901,15 +924,20 @@ function OrdersTab() {
             <span className="w-6 flex justify-end">
               {o.status === "pending" && (
                 <button
-                  aria-label="Cancel order"
+                  aria-label={cancelling.has(o.id) ? "Cancelling order" : "Cancel order"}
+                  disabled={cancelling.has(o.id)}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCancel(o.id);
                   }}
-                  className="text-muted-foreground hover:text-[var(--loss)] transition-colors"
-                  title="Cancel order"
+                  className="text-muted-foreground hover:text-[var(--loss)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={cancelling.has(o.id) ? "Cancelling…" : "Cancel order"}
                 >
-                  <X className="h-3 w-3" />
+                  {cancelling.has(o.id) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <X className="h-3 w-3" />
+                  )}
                 </button>
               )}
             </span>

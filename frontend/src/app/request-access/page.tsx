@@ -23,20 +23,20 @@ export const metadata: Metadata = {
 export default function RequestAccessPage() {
   return (
     <MarketingShell route="/request-access">
-      <article className="mx-auto max-w-[780px] py-16">
+      <article className="mx-auto max-w-[780px] py-10 sm:py-16">
         <Eyebrow as="div">§ 01 · Access</Eyebrow>
         <Display size="lg" as="h1" className="mt-2 max-w-[16ch]">
           Request access
         </Display>
-        <p className="mt-4 max-w-[620px] font-display italic text-[16px] leading-snug text-fg-muted">
+        <p className="mt-4 max-w-[620px] font-display italic text-[15px] sm:text-[16px] leading-snug text-fg-muted">
           AlphaDesk is invite-only. The desk onboards one book at a time, so
           the process is deliberately manual.
         </p>
 
-        <div className="mt-12">
+        <div className="mt-8 sm:mt-12">
           <SectionRule tag="§ 02 · What we ask for" />
         </div>
-        <ul className="mt-6 flex flex-col gap-3 font-sans text-[14.5px] leading-[1.65] text-fg-dim">
+        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[14px] sm:text-[14.5px] leading-[1.65] text-fg-dim">
           <li>
             Your name, firm or context, and the jurisdiction you trade from.
           </li>
@@ -49,10 +49,10 @@ export default function RequestAccessPage() {
           </li>
         </ul>
 
-        <div className="mt-12">
+        <div className="mt-8 sm:mt-12">
           <SectionRule tag="§ 03 · What happens next" />
         </div>
-        <ul className="mt-6 flex flex-col gap-3 font-sans text-[14.5px] leading-[1.65] text-fg-dim">
+        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[14px] sm:text-[14.5px] leading-[1.65] text-fg-dim">
           <li>
             A human reads the request, usually within a few days.
           </li>
@@ -66,7 +66,7 @@ export default function RequestAccessPage() {
           </li>
         </ul>
 
-        <div className="mt-16 border-t border-border pt-6">
+        <div className="mt-10 sm:mt-16 border-t border-border pt-6">
           <p className="font-display italic text-[15px] text-fg-muted">
             Send the request to{" "}
             <a

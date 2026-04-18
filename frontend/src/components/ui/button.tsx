@@ -6,18 +6,25 @@ import { cn } from "@/lib/utils"
 /**
  * AlphaDesk Button
  * ────────────────
- * Six canonical variants from the editorial design system:
- *  - primary   gold bg, near-black text (#1a1206)
- *  - secondary transparent + strong border, hover gold border
- *  - ghost     transparent, hover muted background
- *  - buy       chartreuse tint, uppercase tracked label
- *  - sell      coral tint, uppercase tracked label
- *  - link      gold text + gold-dim underline, no padding
+ * Canonical variants from the editorial design system:
+ *  - primary    gold bg, near-black text (`text-primary-foreground` = #1a1206)
+ *  - secondary  transparent + strong border, hover gold border
+ *  - ghost      transparent, hover muted background
+ *  - buy        chartreuse tint, uppercase tracked label
+ *  - sell       coral tint, uppercase tracked label
+ *  - buy-solid  solid chartreuse bg with `text-profit-foreground` (near-black)
+ *  - sell-solid solid coral bg with `text-loss-foreground` (near-white)
+ *  - link       gold text + gold-dim underline, no padding
  *
- * Sizes: sm (26px) · default (34px) · lg (42px) · icon variants preserved for callers.
+ * Sizes: xs · sm (26px) · default (md, 34px) · lg (42px) · icon variants preserved.
  *
- * Legacy aliases (default/outline/destructive/xs/icon*) remain mapped so the rest
- * of the codebase keeps rendering; F2/F3 will migrate them to the new names.
+ * Icon sizing is driven by the variant: the base style applies `size-4` to any
+ * svg that doesn't already carry a `size-*` class. `xs` and `icon-xs` override
+ * to `size-3` for tight chrome. Callers should import lucide icons without a
+ * size class and let the button paint them.
+ *
+ * Legacy aliases (default/outline/destructive/xs/icon*) remain mapped so the
+ * rest of the codebase keeps rendering.
  */
 const buttonVariants = cva(
   [
@@ -41,6 +48,10 @@ const buttonVariants = cva(
           "bg-transparent text-fg-dim hover:text-fg hover:bg-bg-elev-1",
         buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-[11px]",
         sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-[11px]",
+        "buy-solid":
+          "bg-profit text-profit-foreground border-transparent hover:bg-up-700 uppercase tracking-[0.08em]",
+        "sell-solid":
+          "bg-loss text-loss-foreground border-transparent hover:bg-down-700 uppercase tracking-[0.08em]",
         link: "bg-transparent text-brand border-0 border-b border-brand-dim rounded-none px-0 h-auto hover:text-gold-300",
 
         // Legacy aliases — keep older callers working
@@ -59,8 +70,8 @@ const buttonVariants = cva(
         xs: "h-6 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
         icon: "size-[34px] p-0",
         "icon-xs": "size-6 p-0 [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-[30px] p-0",
-        "icon-lg": "size-[42px] p-0",
+        "icon-sm": "size-[30px] p-0 [&_svg:not([class*='size-'])]:size-4",
+        "icon-lg": "size-[42px] p-0 [&_svg:not([class*='size-'])]:size-5",
       },
     },
     defaultVariants: {

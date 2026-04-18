@@ -65,29 +65,29 @@ export default function StrategyRail({
                 onClick={() => onSelect?.(it.id)}
                 data-selected={selected || undefined}
                 className={cn(
-                  "w-full text-left px-4 py-3 border-l-2 border-l-transparent",
+                  "w-full text-left px-4 py-3 md:py-3 border-l-2 border-l-transparent min-h-[56px] md:min-h-0",
                   "transition-colors duration-100",
-                  "hover:bg-bg-elev-1",
+                  "hover:bg-bg-elev-1 active:bg-bg-elev-1",
                   selected && "bg-bg-elev-1 border-l-brand"
                 )}
               >
                 <div className="flex justify-between items-baseline mb-0.5">
                   <span
-                    className="font-sans font-medium text-[12.5px] text-fg"
+                    className="font-sans font-medium text-sm md:text-[12.5px] text-fg"
                     style={{ letterSpacing: "0.02em" }}
                   >
                     {it.name}
                   </span>
-                  <span className="font-mono text-[10px] text-fg-hint">
+                  <span className="font-mono text-[11px] md:text-[10px] text-fg-hint">
                     {it.indexLabel}
                   </span>
                 </div>
 
-                <div className="font-display italic text-[11.5px] text-fg-muted mb-1.5">
+                <div className="font-display italic text-[13px] md:text-[11.5px] text-fg-muted mb-1.5">
                   {it.subtitle}
                 </div>
 
-                <div className="flex justify-between items-center font-mono text-[10.5px] tabular-nums">
+                <div className="flex justify-between items-center font-mono text-[11.5px] md:text-[10.5px] tabular-nums">
                   <span className="flex items-center gap-1.5">
                     <StatusDot
                       tone={paused ? "muted" : "profit"}

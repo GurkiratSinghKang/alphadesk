@@ -2,7 +2,7 @@
 
 import DashboardErrorPage from "@/components/error/DashboardError";
 
-export default function AnalyticsError({
+export default function SettingsError({
   error,
   reset,
 }: {
@@ -13,9 +13,9 @@ export default function AnalyticsError({
     <DashboardErrorPage
       error={error}
       reset={reset}
-      route="analytics"
-      headline="Analytics failed to load"
-      fallbackMessage="We couldn't build the analytics view. Try again, or head back to the dashboard."
+      route="settings"
+      headline="Settings failed to load"
+      fallbackMessage="We couldn't open the settings panel. Try again, or head back to the dashboard."
     />
   );
 }

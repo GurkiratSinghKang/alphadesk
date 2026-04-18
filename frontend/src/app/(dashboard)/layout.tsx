@@ -11,6 +11,7 @@ import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
+import { useNotifications } from "@/hooks/useNotifications";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { ReactNode } from "react";
 
@@ -31,6 +32,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
+  // Mount the notification producer exactly once at the dashboard root.
+  // It subscribes to WS channels (portfolio, alerts) and global custom
+  // events (alphadesk:pipeline-status, alphadesk:system-notify) and
+  // pushes user-gated notifications into the store consumed by the bell.
+  useNotifications();
   // Defer persisted store read to avoid hydration mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -38,9 +44,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleApiError(e: CustomEvent) {
-      const { status, message } = e.detail;
+      // Hardened against missing detail (audit P1). The dispatch sites in
+      // api.ts always set { status, message } but a custom consumer could
+      // fire a bare event.
+      const detail = (e?.detail ?? {}) as { status?: number; message?: string };
+      const status = detail.status;
+      const message = detail.message;
       if (status !== 401) {
         toast({ type: "error", message: message || "An API error occurred" });
+        // Also surface a durable system notification — toasts disappear after
+        // a few seconds; the bell keeps a record the user can review later.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("alphadesk:system-notify", {
+              detail: {
+                kind: "error",
+                title: status ? `API error (${status})` : "API error",
+                message: message || "An API error occurred",
+              },
+            })
+          );
+        }
       }
     }
     window.addEventListener("alphadesk:api-error", handleApiError as EventListener);

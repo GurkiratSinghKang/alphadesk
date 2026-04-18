@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 _stream_task: asyncio.Task | None = None
 _should_stop = False
+# NOTE: _last_quotes / _last_published / _current_symbols are PER-WORKER
+# module-level state. Only the worker that owns the Alpaca WebSocket
+# connection (one per process) reads/writes these dicts, so per-worker state
+# is correct for this module: other workers have no websocket and never
+# populate these dicts. If the stream ever moved to a multi-consumer model
+# these would need Redis backing.
 _last_quotes: dict[str, dict] = {}  # track last bid/ask per symbol
 
 # --- No throttle: SIP feed is real-time, publish every tick ---
@@ -313,6 +319,49 @@ async def _run_stream() -> None:
     logger.info("Alpaca SIP stream loop exited")
 
 
+async def _supervised_run() -> None:
+    """Supervisor wrapper for ``_run_stream``.
+
+    ``_run_stream`` contains an internal reconnect loop, but if it ever exits
+    unexpectedly (e.g. an exception raised outside its try/except envelope, or
+    a bug in the inner loop logic that lets the ``while`` terminate without
+    ``_should_stop`` being set), the entire quote feed would stop until the
+    process restart. This wrapper guarantees that as long as ``_should_stop``
+    is False, the stream task will be respawned with exponential backoff.
+    """
+    global _should_stop
+
+    backoff = 1
+    while not _should_stop:
+        try:
+            await _run_stream()
+            if _should_stop:
+                break
+            # _run_stream returned cleanly without a stop request — that's
+            # unexpected. Treat it as a crash and retry with backoff.
+            logger.warning(
+                "alpaca_stream: _run_stream exited without _should_stop set — supervising a restart in %ds",
+                backoff,
+            )
+        except asyncio.CancelledError:
+            # Intentional cancellation — propagate so stop_alpaca_stream's
+            # awaited cancel() sees a clean exit.
+            raise
+        except Exception as e:
+            logger.error(
+                "alpaca_stream: _run_stream crashed: %s — reconnecting in %ds",
+                e,
+                backoff,
+            )
+        if _should_stop:
+            break
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 60)
+        # Reset backoff on the next successful long-running connection —
+        # measured indirectly by _run_stream's own backoff reset on connect.
+    logger.info("alpaca_stream supervisor exited")
+
+
 async def start_alpaca_stream() -> None:
     """Start the Alpaca WebSocket stream as a background task."""
     global _stream_task, _should_stop
@@ -323,7 +372,9 @@ async def start_alpaca_stream() -> None:
         return
 
     _should_stop = False
-    _stream_task = asyncio.create_task(_run_stream())
+    # Wrap in supervisor so the task cannot silently die on an uncaught
+    # exception — it will always attempt to reconnect until _should_stop.
+    _stream_task = asyncio.create_task(_supervised_run())
     watchlist = await get_dynamic_watchlist()
     logger.info("Alpaca SIP stream started for %d symbols", len(watchlist))
 

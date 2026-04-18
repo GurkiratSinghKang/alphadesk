@@ -115,8 +115,11 @@ export function NotificationCenter() {
     [notifications, activeTab]
   );
 
-  // Notifications start empty — real notifications come from trade events,
-  // alerts, pipeline completions, and system events.
+  // Notifications are produced by the `useNotifications` hook mounted in
+  // the dashboard layout. It subscribes to the websocket (portfolio + alerts
+  // channels) and the global `alphadesk:pipeline-status` /
+  // `alphadesk:system-notify` custom events, gates each push on the user's
+  // preferences (Settings → Notifications), and calls `addNotification`.
 
   return (
     <Popover>

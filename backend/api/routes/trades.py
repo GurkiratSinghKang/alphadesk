@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
 from core.auth import require_auth
@@ -150,6 +150,9 @@ class PositionResponse(BaseModel):
 
 
 class TradeHistoryEntry(BaseModel):
+    # ``side`` is required — callers MUST derive the correct value from the
+    # underlying record. Previously this silently defaulted to "buy", which
+    # misrepresented shorts/sells for half the ledger.
     id: int
     symbol: str
     strategy: str | None = None
@@ -163,6 +166,40 @@ class TradeHistoryEntry(BaseModel):
     exit_time: datetime | None = None
     status: str
     notes: str | None = None
+
+
+def _derive_side(record: dict[str, Any]) -> str:
+    """Derive the correct trade side from a ledger record.
+
+    Priority:
+      1. Explicit ``side`` field if present.
+      2. Sign of quantity/shares (negative => "sell").
+      3. Strategy-level convention (short-biased strategies default to "sell").
+      4. Fallback to "buy".
+    """
+    explicit = record.get("side")
+    if isinstance(explicit, str) and explicit.lower() in {"buy", "sell", "short", "cover"}:
+        return explicit.lower()
+
+    # Derive from signed quantity
+    qty = record.get("shares")
+    if qty is None:
+        qty = record.get("qty")
+    try:
+        if qty is not None and float(qty) < 0:
+            return "sell"
+    except (TypeError, ValueError):
+        pass
+
+    # Short-biased strategy heuristic
+    strategy = (record.get("strategy") or "").lower()
+    if "short" in strategy or strategy in {"pairs_trading"}:
+        # Pairs are long/short — mark the short leg correctly when we can't
+        # tell from the record; this is a conservative hint.
+        if record.get("is_short") is True:
+            return "sell"
+
+    return "buy"
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +536,7 @@ async def get_trade_history(
                     id=t.get("id", 0),
                     symbol=t.get("symbol", ""),
                     strategy=t.get("strategy"),
-                    side=t.get("side", "buy"),
+                    side=_derive_side(t),
                     quantity=float(t.get("shares", 0)),
                     entry_price=float(t.get("entry_price", 0)),
                     exit_price=float(t["exit_price"]) if t.get("exit_price") else None,
@@ -537,13 +574,23 @@ async def get_trade_history(
 
         results = []
         for t in trades:
-            qty = t.legs[0].get("qty", 1) if t.legs else 1
+            leg = t.legs[0] if t.legs else {}
+            qty = leg.get("qty", 1) or 1
+            # Derive side from the first leg; required field on TradeHistoryEntry
+            leg_side = leg.get("side") if isinstance(leg, dict) else None
+            if leg_side not in {"buy", "sell", "short", "cover"}:
+                # Synthesize a record for _derive_side using strategy + qty
+                leg_side = _derive_side({
+                    "side": leg_side,
+                    "qty": leg.get("qty") if isinstance(leg, dict) else None,
+                    "strategy": t.strategy,
+                })
             results.append(TradeHistoryEntry(
                 id=t.id,
                 symbol=t.symbol,
                 strategy=t.strategy,
-                side=t.legs[0].get("side", "buy") if t.legs else "buy",
-                quantity=t.legs[0].get("qty", 0) if t.legs else 0,
+                side=leg_side,
+                quantity=leg.get("qty", 0) if isinstance(leg, dict) else 0,
                 entry_price=t.entry_price or 0,
                 exit_price=t.exit_price,
                 pnl=t.pnl,
@@ -740,13 +787,24 @@ async def _delete_alert_from_redis(alert_id: str) -> bool:
 
 @router.get("/alerts")
 async def list_alerts(
+    response: Response,
     symbol: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     username: str = Depends(require_auth),
 ):
-    """List all price alerts, optionally filtered by symbol."""
+    """List price alerts, optionally filtered by symbol.
+
+    Paginated: use ``limit`` (default 100, max 500) and ``offset``.
+    The total number of matching alerts is returned in the ``X-Total-Count``
+    response header so clients can compute page counts.
+    """
     alerts = await _get_all_alerts()
     if symbol:
         alerts = [a for a in alerts if a["symbol"] == symbol.upper()]
+    total = len(alerts)
+    alerts = alerts[offset : offset + limit]
+    response.headers["X-Total-Count"] = str(total)
     return alerts
 
 

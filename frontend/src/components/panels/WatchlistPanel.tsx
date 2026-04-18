@@ -17,6 +17,7 @@ import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 import type { Quote, QuickOrderEvent } from "@/types";
 
 // ─── Column Configuration ────────────────────────────────────
@@ -90,12 +91,12 @@ function ColumnSelector({
         onClick={() => setOpen((v) => !v)}
         aria-label="Configure watchlist columns"
         className={cn(
-          "flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
+          "flex h-9 w-9 sm:h-5 sm:w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
           open && "text-primary bg-primary/10"
         )}
         title="Configure columns"
       >
-        <Settings className="h-3 w-3" />
+        <Settings className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20">
@@ -258,7 +259,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onSelect();
       }}
-      className={`group flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 cursor-pointer ${flashClass} ${
+      className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-[13px] sm:text-xs min-h-[44px] sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
       }`}
     >
@@ -284,17 +285,17 @@ const WatchlistRow = React.memo(function WatchlistRow({
           {showQuickTrade && quote && (
             <div
               ref={popoverRef}
-              className="absolute right-0 top-full mt-1 z-50 flex gap-1 rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg"
+              className="absolute right-0 top-full mt-1 z-50 flex gap-1.5 sm:gap-1 rounded-md border border-border bg-[var(--panel)] p-2 sm:p-1.5 shadow-lg"
             >
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
-                className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 BUY
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
-                className="rounded px-2.5 py-1 text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 SELL
               </button>
@@ -349,10 +350,10 @@ const WatchlistRow = React.memo(function WatchlistRow({
         <DropdownMenuTrigger
           aria-label={`Options for ${symbol}`}
           onClick={(e) => e.stopPropagation()}
-          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 opacity-0 group-hover:opacity-100 shrink-0"
+          className="flex h-9 w-9 sm:h-5 sm:w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
           style={{ opacity: isSelected ? 1 : undefined }}
         >
-          <MoreHorizontal className="h-3 w-3" />
+          <MoreHorizontal className="h-4 w-4 sm:h-3 sm:w-3" />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           side="right"
@@ -794,6 +795,7 @@ export function WatchlistPanel() {
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const removeFromWatchlist = useMarketStore((s) => s.removeFromWatchlist);
   const { activePanels, setActiveTab } = useUIStore();
+  const { toast } = useToast();
   const [addInput, setAddInput] = useState("");
   const [sortKey, setSortKey] = useState<"default" | "symbol" | "last" | "changePct">("default");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -840,12 +842,22 @@ export function WatchlistPanel() {
     (e: React.FormEvent) => {
       e.preventDefault();
       const sym = addInput.trim().toUpperCase();
-      if (sym && /^[A-Z]{1,5}$/i.test(sym)) {
+      if (!sym) return;
+      // Wave 8: relaxed regex to accept modern tickers with dots and dashes
+      // (e.g. "BRK.B", "BTC-USD", "SHEL.L", 6-char SPACs). Must start with a
+      // letter and stay <=10 chars to match the backend `^[A-Z]{1,10}$`
+      // contract with some slack for composite symbols.
+      if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) {
         addToWatchlist(sym);
         setAddInput("");
+      } else {
+        toast({
+          type: "error",
+          message: `Invalid ticker "${sym}". Use uppercase letters, digits, dot, or hyphen (≤10 chars).`,
+        });
       }
     },
-    [addInput, addToWatchlist]
+    [addInput, addToWatchlist, toast]
   );
 
   const handleAnalyze = useCallback(
@@ -871,15 +883,15 @@ export function WatchlistPanel() {
         onValueChange={(v) => setActiveTab("left", v)}
         className="flex flex-col h-full"
       >
-        <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[var(--background)] p-0.5 flex-1 border border-border">
-          <TabsTrigger value="watchlist" className="text-[11px] h-6 px-2.5">
+        <div className="flex items-center justify-between gap-2 mx-2 mt-2 shrink-0">
+          <TabsList className="h-10 sm:h-7 bg-[var(--background)] p-0.5 flex-1 border border-border">
+          <TabsTrigger value="watchlist" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
             Watchlist
           </TabsTrigger>
-          <TabsTrigger value="screener" className="text-[11px] h-6 px-2.5">
+          <TabsTrigger value="screener" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
             Screener
           </TabsTrigger>
-          <TabsTrigger value="signals" className="text-[11px] h-6 px-2.5">
+          <TabsTrigger value="signals" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
             Signals
           </TabsTrigger>
           </TabsList>
@@ -887,20 +899,20 @@ export function WatchlistPanel() {
         </div>
 
         <TabsContent value="watchlist" className="flex-1 mt-0 overflow-hidden">
-          <form onSubmit={handleAdd} className="flex gap-1 px-2 py-1.5">
+          <form onSubmit={handleAdd} className="flex gap-2 sm:gap-1 px-2 py-2 sm:py-1.5">
             <Input
               placeholder="Add symbol..."
               aria-label="Add symbol to watchlist"
               value={addInput}
               onChange={(e) => setAddInput(e.target.value.toUpperCase())}
-              className="h-7 bg-[var(--background)] text-xs border-border placeholder:text-muted-foreground/60"
+              className="h-11 sm:h-7 bg-[var(--background)] text-base sm:text-xs border-border placeholder:text-muted-foreground/60"
             />
             <button
               type="submit"
               aria-label="Add symbol to watchlist"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              className="flex h-11 w-11 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-md border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             </button>
           </form>
 

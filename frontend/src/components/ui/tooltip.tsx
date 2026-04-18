@@ -50,10 +50,15 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5",
+            "z-50 inline-flex w-fit max-w-[min(calc(100vw-1rem),20rem)] origin-(--transform-origin) items-center gap-1.5",
             "rounded-md border border-border bg-bg-elev-2 text-fg",
             "px-3 py-1.5 text-xs",
             "shadow-lg shadow-black/40",
+            // On touch-only devices (no hover), suppress tooltip popups —
+            // base-ui renders them on long-press/focus which is jarring on
+            // mobile. Interactive triggers should expose their state via
+            // visible labels instead.
+            "[@media(hover:none)]:hidden",
             "has-data-[slot=kbd]:pr-1.5",
             "data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
             "**:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
