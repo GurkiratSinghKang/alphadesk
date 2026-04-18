@@ -3,7 +3,10 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: alphadesk-timescaledb
     ports:
-      - "5432:5432"
+      # Loopback-only: accessible from host for local dev (psql, migrations),
+      # NOT exposed on 0.0.0.0. Docker publishes via its own iptables chain
+      # which bypasses UFW — binding to 127.0.0.1 is the only safe default.
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: alphadesk
       POSTGRES_PASSWORD: alphadesk_dev
@@ -21,7 +24,8 @@ services:
     image: redis:7-alpine
     container_name: alphadesk-redis
     ports:
-      - "6379:6379"
+      # Loopback-only — see timescaledb comment above.
+      - "127.0.0.1:6379:6379"
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-alphadesk_redis_dev}
     volumes:
       - redis_data:/data
@@ -38,7 +42,9 @@ services:
       dockerfile: Dockerfile
     container_name: alphadesk-backend
     ports:
-      - "8000:8000"
+      # Loopback-only — Caddy proxies to backend:8000 on the internal
+      # docker network. No reason to expose publicly.
+      - "127.0.0.1:8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://alphadesk:alphadesk_dev@timescaledb:5432/alphadesk
       REDIS_URL: redis://:${REDIS_PASSWORD:-alphadesk_redis_dev}@redis:6379/0
@@ -57,7 +63,8 @@ services:
       dockerfile: Dockerfile
     container_name: alphadesk-frontend
     ports:
-      - "3000:3000"
+      # Loopback-only — Caddy proxies to frontend:3000 on the internal network.
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
     restart: unless-stopped

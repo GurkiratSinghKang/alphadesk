@@ -7,7 +7,13 @@
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{$DOMAIN:localhost} ws://{$DOMAIN:localhost}; frame-ancestors 'none'"
+        # CSP: 'unsafe-inline' kept for script-src because Next.js inlines its
+        # JSON hydration state in a <script> tag. It's kept for style-src
+        # because Next/Tailwind also emit inline style attributes.
+        # 'unsafe-eval' REMOVED — Next.js production builds do not need it.
+        # fonts.googleapis.com and fonts.gstatic.com whitelisted so the
+        # Google-hosted font stylesheet and font binaries load.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost} ws://{$DOMAIN:localhost}; frame-ancestors 'none'"
         -Server
         -X-Powered-By
     }

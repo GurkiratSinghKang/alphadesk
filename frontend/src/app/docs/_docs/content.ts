@@ -46,11 +46,11 @@ export const DOC_SECTIONS: DocSection[] = [
     index: "04",
     title: "Strategies",
     content: [
-      "AlphaDesk runs 12 parallel trading strategies, each targeting different market conditions and opportunities:",
-      "Momentum strategies (Trend Surfer, Breakout Hunter, Dip Buyer) follow price action patterns. Mean Reversion and Pairs Trading exploit statistical relationships.",
-      "Sector Rotation and Growth at a Reasonable Price (GARP) focus on fundamental analysis. Options Wheel and Volatility Harvester generate income from options.",
-      "Macro Regime, Event Catalyst, and Quality Compounder round out the strategy mix with macro-aware and event-driven approaches.",
-      "Each strategy can be toggled on or off from the Strategy Grid on the dashboard. Click any strategy card to see its detail page with full performance history, open positions, and configuration.",
+      "AlphaDesk runs twelve parallel trading strategies, grouped into fundamental, technical, and options books. Every strategy shares the same execution layer, risk policy, and audit trail.",
+      "Fundamental / regime books: Cross-Sectional Momentum + Quality (momentum-quality), Post-Earnings Announcement Drift (PEAD), Systematic VRP Harvesting, Earnings Volatility Premium, HMM Regime-Adaptive Allocation, and Claude Alpha — the AI-driven adaptive sleeve.",
+      "Technical books: Time-Series Momentum (ts-momentum), RSI-2 Mean Reversion (rsi2-reversal), Dual Momentum, Statistical Arbitrage Pairs (pairs-trading), KAMA + ATR Breakout (kama-breakout), Opening Range Breakout (ORB), and VWAP Bounce / Breakout.",
+      "Each strategy card on the dashboard exposes status (active / paused), return percentage, win rate, and current position count. The full registry with descriptions and regime notes lives in lib/strategies.ts and is the source of truth — the docs reflect the registry rather than the other way around.",
+      "Toggle any strategy on or off from the Strategy Grid. Click a card to see its detail page with full performance history, open positions, monthly return heatmap, correlations, conviction distribution, and hold-time statistics.",
     ],
   },
   {

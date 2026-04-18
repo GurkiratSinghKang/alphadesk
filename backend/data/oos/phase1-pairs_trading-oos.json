@@ -1,0 +1,494 @@
+{
+  "best_params": {
+    "z_window": 60,
+    "z_entry": 2.4808261108522114,
+    "z_exit": 0.7022307111076418,
+    "z_stop": 4.730630785271586,
+    "pair_weight": 0.06568411770746943,
+    "max_pairs": 8,
+    "hedge_method": "kalman",
+    "rescreen_days": 42,
+    "ou_halflife_max_days": 27.203347196145536,
+    "adf_pvalue_max": 0.03248028963184327
+  },
+  "period": {
+    "start": "2023-01-01",
+    "end": "2024-12-31"
+  },
+  "metrics": {
+    "sharpe": 1.2348935716495109,
+    "sortino": 1.3020580973520617,
+    "calmar": 1.1883654453437251,
+    "max_drawdown": 0.039784860356223084,
+    "cagr": 0.047278953295160964,
+    "tail_ratio": 0.8770675462928657,
+    "hit_rate": 0.5258964143426295,
+    "profit_factor": 1.1550298692056709,
+    "turnover": 65.2193410583353,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "fills": 1003,
+  "trades": 502,
+  "two_leg_invariant": {
+    "entry_ok": 254,
+    "entry_total": 254,
+    "exit_ok": 247,
+    "exit_total": 248
+  },
+  "pair_contrib": [
+    {
+      "pair_id": "DHR-LLY",
+      "trades": 20,
+      "pnl": 1679.11412,
+      "wins": 14,
+      "losses": 6
+    },
+    {
+      "pair_id": "META-NVDA",
+      "trades": 14,
+      "pnl": 1615.1708424999997,
+      "wins": 7,
+      "losses": 7
+    },
+    {
+      "pair_id": "COST-TGT",
+      "trades": 2,
+      "pnl": 1386.0447075,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "DHR-UNH",
+      "trades": 12,
+      "pnl": 1354.30148,
+      "wins": 9,
+      "losses": 3
+    },
+    {
+      "pair_id": "PFE-UNH",
+      "trades": 16,
+      "pnl": 1194.8061175000003,
+      "wins": 10,
+      "losses": 6
+    },
+    {
+      "pair_id": "CRM-META",
+      "trades": 20,
+      "pnl": 1087.4445699999999,
+      "wins": 11,
+      "losses": 9
+    },
+    {
+      "pair_id": "LOW-TGT",
+      "trades": 12,
+      "pnl": 892.6912175000001,
+      "wins": 8,
+      "losses": 4
+    },
+    {
+      "pair_id": "AAPL-CRM",
+      "trades": 11,
+      "pnl": 868.9053825,
+      "wins": 6,
+      "losses": 5
+    },
+    {
+      "pair_id": "ADBE-MSFT",
+      "trades": 12,
+      "pnl": 797.971795,
+      "wins": 6,
+      "losses": 6
+    },
+    {
+      "pair_id": "NOC-UPS",
+      "trades": 4,
+      "pnl": 796.5842799999999,
+      "wins": 3,
+      "losses": 1
+    },
+    {
+      "pair_id": "ABT-LLY",
+      "trades": 2,
+      "pnl": 789.84426,
+      "wins": 2,
+      "losses": 0
+    },
+    {
+      "pair_id": "AAPL-GOOGL",
+      "trades": 4,
+      "pnl": 730.55037,
+      "wins": 3,
+      "losses": 1
+    },
+    {
+      "pair_id": "COP-EOG",
+      "trades": 8,
+      "pnl": 699.5954775000001,
+      "wins": 3,
+      "losses": 5
+    },
+    {
+      "pair_id": "C-WFC",
+      "trades": 2,
+      "pnl": 684.2021075,
+      "wins": 2,
+      "losses": 0
+    },
+    {
+      "pair_id": "FDX-UPS",
+      "trades": 2,
+      "pnl": 550.1787225,
+      "wins": 2,
+      "losses": 0
+    },
+    {
+      "pair_id": "DHR-JNJ",
+      "trades": 8,
+      "pnl": 493.9920049999999,
+      "wins": 5,
+      "losses": 3
+    },
+    {
+      "pair_id": "CAT-RTX",
+      "trades": 2,
+      "pnl": 471.2182125,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "GOOGL-ORCL",
+      "trades": 10,
+      "pnl": 448.52064249999995,
+      "wins": 8,
+      "losses": 2
+    },
+    {
+      "pair_id": "COST-LOW",
+      "trades": 2,
+      "pnl": 346.3307425,
+      "wins": 2,
+      "losses": 0
+    },
+    {
+      "pair_id": "AAPL-AMZN",
+      "trades": 6,
+      "pnl": 342.8970599999999,
+      "wins": 4,
+      "losses": 2
+    },
+    {
+      "pair_id": "AMZN-NVDA",
+      "trades": 16,
+      "pnl": 279.1964425,
+      "wins": 10,
+      "losses": 6
+    },
+    {
+      "pair_id": "COST-WMT",
+      "trades": 6,
+      "pnl": 270.6019525,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "GOOGL-NVDA",
+      "trades": 8,
+      "pnl": 261.1149725,
+      "wins": 5,
+      "losses": 3
+    },
+    {
+      "pair_id": "ADBE-AMZN",
+      "trades": 6,
+      "pnl": 259.58004750000003,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "OXY-SLB",
+      "trades": 8,
+      "pnl": 253.46208749999997,
+      "wins": 4,
+      "losses": 4
+    },
+    {
+      "pair_id": "GOOGL-META",
+      "trades": 4,
+      "pnl": 231.85216250000008,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "DHR-PFE",
+      "trades": 2,
+      "pnl": 213.56697,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "AAPL-MSFT",
+      "trades": 6,
+      "pnl": 172.11779,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "LOW-MCD",
+      "trades": 4,
+      "pnl": 167.177125,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "ABT-UNH",
+      "trades": 2,
+      "pnl": 165.618055,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "FDX-HON",
+      "trades": 8,
+      "pnl": 157.32817750000004,
+      "wins": 5,
+      "losses": 3
+    },
+    {
+      "pair_id": "AXP-C",
+      "trades": 4,
+      "pnl": 76.19784750000002,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "DE-UPS",
+      "trades": 6,
+      "pnl": 72.37996750000013,
+      "wins": 5,
+      "losses": 1
+    },
+    {
+      "pair_id": "CVX-XOM",
+      "trades": 8,
+      "pnl": 55.638307499999996,
+      "wins": 6,
+      "losses": 2
+    },
+    {
+      "pair_id": "JPM-WFC",
+      "trades": 6,
+      "pnl": 55.0529700000001,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "MCD-SBUX",
+      "trades": 6,
+      "pnl": 15.18136500000002,
+      "wins": 4,
+      "losses": 2
+    },
+    {
+      "pair_id": "HON-UPS",
+      "trades": 6,
+      "pnl": -50.514192499999936,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "BAC-MS",
+      "trades": 6,
+      "pnl": -74.85455500000002,
+      "wins": 2,
+      "losses": 4
+    },
+    {
+      "pair_id": "C-GS",
+      "trades": 6,
+      "pnl": -88.59548749999988,
+      "wins": 2,
+      "losses": 4
+    },
+    {
+      "pair_id": "HD-MCD",
+      "trades": 8,
+      "pnl": -90.08395250000001,
+      "wins": 4,
+      "losses": 4
+    },
+    {
+      "pair_id": "C-MS",
+      "trades": 2,
+      "pnl": -119.06208499999997,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "SBUX-WMT",
+      "trades": 9,
+      "pnl": -128.06754749999996,
+      "wins": 3,
+      "losses": 6
+    },
+    {
+      "pair_id": "AMZN-MSFT",
+      "trades": 10,
+      "pnl": -133.0821175,
+      "wins": 7,
+      "losses": 3
+    },
+    {
+      "pair_id": "EOG-SLB",
+      "trades": 6,
+      "pnl": -149.05640749999998,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "CRM-MSFT",
+      "trades": 6,
+      "pnl": -155.97501000000005,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "BAC-USB",
+      "trades": 4,
+      "pnl": -177.62266500000004,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "HD-SBUX",
+      "trades": 4,
+      "pnl": -188.97953500000003,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "AXP-JPM",
+      "trades": 6,
+      "pnl": -195.19251999999994,
+      "wins": 1,
+      "losses": 5
+    },
+    {
+      "pair_id": "LOW-WMT",
+      "trades": 13,
+      "pnl": -254.05899999999997,
+      "wins": 7,
+      "losses": 6
+    },
+    {
+      "pair_id": "ABT-MRK",
+      "trades": 6,
+      "pnl": -266.6986525,
+      "wins": 3,
+      "losses": 3
+    },
+    {
+      "pair_id": "OXY-XOM",
+      "trades": 22,
+      "pnl": -285.29782249999994,
+      "wins": 9,
+      "losses": 13
+    },
+    {
+      "pair_id": "BAC-GS",
+      "trades": 26,
+      "pnl": -292.701415,
+      "wins": 13,
+      "losses": 13
+    },
+    {
+      "pair_id": "MCD-WMT",
+      "trades": 2,
+      "pnl": -323.46353999999997,
+      "wins": 0,
+      "losses": 2
+    },
+    {
+      "pair_id": "CVX-EOG",
+      "trades": 4,
+      "pnl": -396.38383500000003,
+      "wins": 1,
+      "losses": 3
+    },
+    {
+      "pair_id": "GS-WFC",
+      "trades": 8,
+      "pnl": -519.1203425,
+      "wins": 5,
+      "losses": 3
+    },
+    {
+      "pair_id": "ADBE-ORCL",
+      "trades": 4,
+      "pnl": -549.5444975,
+      "wins": 2,
+      "losses": 2
+    },
+    {
+      "pair_id": "DHR-MRK",
+      "trades": 20,
+      "pnl": -616.4815799999999,
+      "wins": 11,
+      "losses": 9
+    },
+    {
+      "pair_id": "COP-OXY",
+      "trades": 4,
+      "pnl": -702.35346,
+      "wins": 1,
+      "losses": 3
+    },
+    {
+      "pair_id": "MS-WFC",
+      "trades": 10,
+      "pnl": -707.44033,
+      "wins": 3,
+      "losses": 7
+    },
+    {
+      "pair_id": "TGT-WMT",
+      "trades": 9,
+      "pnl": -776.8638574999999,
+      "wins": 2,
+      "losses": 7
+    },
+    {
+      "pair_id": "LOW-SBUX",
+      "trades": 6,
+      "pnl": -832.2564375,
+      "wins": 1,
+      "losses": 5
+    },
+    {
+      "pair_id": "CRM-GOOGL",
+      "trades": 2,
+      "pnl": -967.1783774999999,
+      "wins": 1,
+      "losses": 1
+    },
+    {
+      "pair_id": "MRK-UNH",
+      "trades": 12,
+      "pnl": -1470.95538,
+      "wins": 3,
+      "losses": 9
+    },
+    {
+      "pair_id": "AXP-MS",
+      "trades": 12,
+      "pnl": -1795.5720724999996,
+      "wins": 3,
+      "losses": 9
+    }
+  ],
+  "equity": {
+    "start": 100000.0,
+    "end": 110041.82349390411,
+    "total_return": 0.10041823493904123
+  }
+}

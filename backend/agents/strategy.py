@@ -4,6 +4,26 @@ from typing import Any
 
 from agents.base import BaseAgent, MODEL_SONNET
 
+# TODO(user): The ANTHROPIC_API_KEY currently deployed on the Hetzner VPS is
+# an OAuth access token (prefix ``sk-ant-oat01-*``), not a permanent API key,
+# so every Claude call returns ``401 invalid x-api-key`` and the pipeline
+# silently drops analyses from claude_alpha / momentum_quality.
+#
+# Action required:
+#   1. Generate a real API key at https://console.anthropic.com/settings/keys
+#      (prefix ``sk-ant-api03-*``).
+#   2. Update the ANTHROPIC_API_KEY env var on the server:
+#        ssh -i ~/.ssh/alphadesk root@87.99.143.65
+#        edit /root/alphadesk/.env (or the compose env file) and replace the
+#        ``sk-ant-oat01-...`` value with the new ``sk-ant-api03-...`` key.
+#        docker compose up -d --force-recreate alphadesk-backend
+#   3. Confirm by checking ``docker logs alphadesk-backend | grep -i anthropic``
+#      -- the 401s should disappear and the next pipeline log should show
+#      non-null ``analyses`` for MQ and claude_alpha.
+#
+# Code cannot fix this -- the runtime key must be replaced.  Full detail in
+# ``audit-reports/iter-2-user-actions.md``.
+
 
 class StrategyAgent(BaseAgent):
     """Maps analysis signals to concrete trade structures.

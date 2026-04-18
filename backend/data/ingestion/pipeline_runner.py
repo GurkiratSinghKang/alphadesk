@@ -38,6 +38,11 @@ from data.ingestion.daily_pipeline import (
 
 logger = logging.getLogger("alphadesk.pipeline.scheduler")
 
+# How often to reconcile the trade ledger with Alpaca (seconds).
+# 5 minutes is short enough to catch broker-side fills quickly, long enough
+# that it doesn't dominate API quota or step on the main scheduler cadence.
+LEDGER_SYNC_INTERVAL_SEC = 300
+
 ET = ZoneInfo("America/New_York")
 
 # ─── Strategy Groups by Optimal Run Time ────────────────────
@@ -84,7 +89,85 @@ WINDOWS = {
 }
 
 _scheduler_task: asyncio.Task | None = None
+_ledger_sync_task: asyncio.Task | None = None
 _should_stop = False
+
+
+def _is_market_hours() -> bool:
+    """Return True if current ET time is within US equity RTH (roughly)."""
+    now = datetime.now(ET)
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    return dt_time(9, 30) <= t <= dt_time(16, 0)
+
+
+async def _sync_ledger_with_alpaca() -> None:
+    """Reconcile trade ledger with Alpaca positions.
+
+    Extracted from the old in-request handlers as part of the C2 fix: GET
+    endpoints must never mutate state, so the reconciliation runs here
+    on a 5-minute cadence during market hours.
+    """
+    import httpx
+    from core.config import settings
+    from data.ingestion.trade_ledger import TradeLedger
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions",
+                headers={
+                    "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                    "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                },
+            )
+    except Exception as exc:
+        logger.warning("Ledger sync: Alpaca request failed: %s", exc)
+        return
+
+    if resp.status_code != 200:
+        logger.warning(
+            "Ledger sync: Alpaca returned HTTP %s, body=%s",
+            resp.status_code, resp.text[:200],
+        )
+        return
+
+    try:
+        alpaca_positions = resp.json()
+    except Exception as exc:
+        logger.warning("Ledger sync: Alpaca response not JSON: %s", exc)
+        return
+
+    try:
+        ledger = TradeLedger()
+        summary = ledger.sync_with_alpaca(alpaca_positions)
+        logger.info("Ledger sync tick: %s", summary)
+    except Exception as exc:
+        logger.exception("Ledger sync failed: %s", exc)
+
+
+async def _ledger_sync_loop() -> None:
+    """Background coroutine: reconcile ledger with Alpaca every N seconds."""
+    global _should_stop
+    logger.info(
+        "Ledger→Alpaca sync loop started (every %ds during market hours)",
+        LEDGER_SYNC_INTERVAL_SEC,
+    )
+    while not _should_stop:
+        try:
+            if _is_market_hours():
+                await _sync_ledger_with_alpaca()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.exception("Ledger sync loop error: %s", exc)
+        # Sleep in small chunks so stop_pipeline_scheduler returns quickly.
+        slept = 0
+        while slept < LEDGER_SYNC_INTERVAL_SEC and not _should_stop:
+            await asyncio.sleep(min(30, LEDGER_SYNC_INTERVAL_SEC - slept))
+            slept += 30
+    logger.info("Ledger→Alpaca sync loop stopped")
 
 
 def _is_weekday() -> bool:
@@ -223,22 +306,25 @@ async def _scheduler_loop() -> None:
 
 
 async def start_pipeline_scheduler() -> None:
-    """Start the daily pipeline scheduler as a background task."""
-    global _scheduler_task, _should_stop
+    """Start the daily pipeline scheduler + ledger sync as background tasks."""
+    global _scheduler_task, _ledger_sync_task, _should_stop
     _should_stop = False
     _scheduler_task = asyncio.create_task(_scheduler_loop())
-    logger.info("Pipeline scheduler background task created")
+    _ledger_sync_task = asyncio.create_task(_ledger_sync_loop())
+    logger.info("Pipeline scheduler + ledger sync background tasks created")
 
 
 async def stop_pipeline_scheduler() -> None:
-    """Stop the scheduler gracefully."""
-    global _should_stop, _scheduler_task
+    """Stop the scheduler + ledger sync gracefully."""
+    global _should_stop, _scheduler_task, _ledger_sync_task
     _should_stop = True
-    if _scheduler_task:
-        _scheduler_task.cancel()
-        try:
-            await _scheduler_task
-        except (asyncio.CancelledError, Exception):
-            pass
-        _scheduler_task = None
-    logger.info("Pipeline scheduler stopped")
+    for label, task_ref in (("scheduler", "_scheduler_task"), ("ledger_sync", "_ledger_sync_task")):
+        task = globals().get(task_ref)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+            globals()[task_ref] = None
+    logger.info("Pipeline scheduler + ledger sync stopped")

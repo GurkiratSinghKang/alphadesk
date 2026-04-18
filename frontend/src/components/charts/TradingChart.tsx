@@ -51,6 +51,18 @@ interface TradingChartProps {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
+/**
+ * Read a CSS variable off :root with a fallback. Mirrors the helper in
+ * `components/composites/PriceChartPanel.tsx` so TradingView reads the F0
+ * design tokens (chartreuse `--up-500` / coral `--down-500` / gold brand)
+ * instead of the pre-overhaul SaaS-green/red/blue hexes.
+ */
+function getTokenVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
+
 /** Ensure time is a valid Unix timestamp in seconds for LWC v5. */
 function normalizeTime(t: number): number {
   if (!t || !isFinite(t)) return Math.floor(Date.now() / 1000);
@@ -74,13 +86,23 @@ function toLineData(bar: OHLCVBar): SingleValueData<Time> {
 }
 
 function toChartVolume(bar: OHLCVBar): HistogramData<Time> {
+  // Design-token aware volume histogram — reads chartreuse (--up-500) /
+  // coral (--down-500) so F0 identity applies to this chart. Fallback
+  // colors match the tokens' hex values.
+  const upFill = getTokenVar("--up-500", "#a8d04d");
+  const downFill = getTokenVar("--down-500", "#e07856");
+  const rgb = (hex: string): string => {
+    const h = hex.replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `${r}, ${g}, ${b}`;
+  };
+  const isUp = bar.close >= bar.open;
   return {
     time: normalizeTime(bar.time) as unknown as Time,
     value: bar.volume,
-    color:
-      bar.close >= bar.open
-        ? "rgba(34, 197, 94, 0.25)"
-        : "rgba(239, 68, 68, 0.25)",
+    color: `rgba(${rgb(isUp ? upFill : downFill)}, 0.25)`,
   };
 }
 
@@ -279,35 +301,45 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     useEffect(() => {
       if (!containerRef.current) return;
 
+      // F0 palette read from CSS tokens. Fallback hex values match the
+      // tokens' literal values so the chart still renders sensibly if the
+      // stylesheet hasn't applied yet (hydration window).
+      const bg = getTokenVar("--bg", "#0b0a09");
+      const textColor = getTokenVar("--fg-hint", "#5b5547");
+      const border = getTokenVar("--border", "#2a271d");
+      const up = getTokenVar("--up-500", "#a8d04d");
+      const down = getTokenVar("--down-500", "#e07856");
+      const brand = getTokenVar("--gold-500", "#c9a66b");
+
       const chart = createChart(containerRef.current, {
         layout: {
-          background: { type: ColorType.Solid, color: "#0a0a0f" },
-          textColor: "#71717a",
+          background: { type: ColorType.Solid, color: bg },
+          textColor,
           fontSize: 11,
-          fontFamily: "Inter, sans-serif",
+          fontFamily: getTokenVar("--font-ui", "Inter, sans-serif"),
           attributionLogo: false,
         },
         grid: {
-          vertLines: { color: "rgba(42, 42, 62, 0.4)" },
-          horzLines: { color: "rgba(42, 42, 62, 0.4)" },
+          vertLines: { color: border },
+          horzLines: { color: border },
         },
         crosshair: {
           mode: CrosshairMode.Normal,
           vertLine: {
-            color: "rgba(59, 130, 246, 0.4)",
-            labelBackgroundColor: "#3b82f6",
+            color: brand,
+            labelBackgroundColor: brand,
           },
           horzLine: {
-            color: "rgba(59, 130, 246, 0.4)",
-            labelBackgroundColor: "#3b82f6",
+            color: brand,
+            labelBackgroundColor: brand,
           },
         },
         rightPriceScale: {
-          borderColor: "#2a2a3e",
+          borderColor: border,
           scaleMargins: { top: 0.05, bottom: 0.2 },
         },
         timeScale: {
-          borderColor: "#2a2a3e",
+          borderColor: border,
           timeVisible: true,
           secondsVisible: false,
         },
@@ -317,28 +349,38 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
 
       chartRef.current = chart;
 
-      // BUG #11: Create main series based on chartType
+      // Candles read chartreuse (`--up-500`) / coral (`--down-500`).
+      // Line + area use the gold brand token to match PriceChartPanel's
+      // gold price line (F2 reference).
       let mainSeries: ISeriesApi<SeriesType>;
       if (chartType === "candle") {
         mainSeries = chart.addSeries(CandlestickSeries, {
-          upColor: "#22c55e",
-          downColor: "#ef4444",
-          borderUpColor: "#22c55e",
-          borderDownColor: "#ef4444",
-          wickUpColor: "#22c55e",
-          wickDownColor: "#ef4444",
+          upColor: up,
+          downColor: down,
+          borderUpColor: up,
+          borderDownColor: down,
+          wickUpColor: up,
+          wickDownColor: down,
         });
       } else if (chartType === "line") {
         mainSeries = chart.addSeries(LineSeries, {
-          color: "#3b82f6",
+          color: brand,
           lineWidth: 2,
         });
       } else {
         // area
+        const rgb = (hex: string): string => {
+          const h = hex.replace("#", "");
+          const r = parseInt(h.slice(0, 2), 16);
+          const g = parseInt(h.slice(2, 4), 16);
+          const b = parseInt(h.slice(4, 6), 16);
+          return `${r}, ${g}, ${b}`;
+        };
+        const brandRgb = rgb(brand);
         mainSeries = chart.addSeries(AreaSeries, {
-          topColor: "rgba(59, 130, 246, 0.4)",
-          bottomColor: "rgba(59, 130, 246, 0.02)",
-          lineColor: "#3b82f6",
+          topColor: `rgba(${brandRgb}, 0.35)`,
+          bottomColor: `rgba(${brandRgb}, 0.02)`,
+          lineColor: brand,
           lineWidth: 2,
         });
       }
@@ -584,10 +626,17 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
 
       const lines: ReturnType<typeof series.createPriceLine>[] = [];
 
+      // Entry line uses the gold brand; SL uses coral (--down-500); TP uses
+      // chartreuse (--up-500). Read lazily from the token system so dark /
+      // light variants would carry through automatically.
+      const entryColor = getTokenVar("--gold-500", "#c9a66b");
+      const slColor = getTokenVar("--down-500", "#e07856");
+      const tpColor = getTokenVar("--up-500", "#a8d04d");
+
       if (positionLines?.entry != null) {
         lines.push(series.createPriceLine({
           price: positionLines.entry,
-          color: "#3b82f6",
+          color: entryColor,
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
@@ -597,7 +646,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
       if (positionLines?.stopLoss != null) {
         lines.push(series.createPriceLine({
           price: positionLines.stopLoss,
-          color: "#ef4444",
+          color: slColor,
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
@@ -607,7 +656,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
       if (positionLines?.takeProfit != null) {
         lines.push(series.createPriceLine({
           price: positionLines.takeProfit,
-          color: "#22c55e",
+          color: tpColor,
           lineWidth: 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,

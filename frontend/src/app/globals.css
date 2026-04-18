@@ -142,15 +142,21 @@
 /* ─── Fallback defaults ─────────────────────────────────────────── */
 /* design-tokens.css defines :root already; this is only a shadcn-
    compatibility fallback so components that reference --background /
-   --foreground directly keep working. */
+   --foreground directly keep working. Also aliases the legacy
+   `--panel` / `--surface` token names — 174 hits across 43 files still
+   use them. Mapping here avoids a 43-file sweep. */
 :root {
   --background: var(--bg);
   --foreground: var(--fg);
+  --panel: var(--bg-elev-1);
+  --surface: var(--bg-card);
 }
 
 .dark {
   --background: var(--bg);
   --foreground: var(--fg);
+  --panel: var(--bg-elev-1);
+  --surface: var(--bg-card);
 }
 
 /* ─── Base layer ───────────────────────────────────────────────── */

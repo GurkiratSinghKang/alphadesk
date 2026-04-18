@@ -26,33 +26,66 @@ router = APIRouter()
 #       be rate limited (those routes live in separate files).
 # ---------------------------------------------------------------------------
 _RATE_LIMIT_WINDOW = 300  # 5 minutes
-_RATE_LIMIT_MAX = 15
+_RATE_LIMIT_MAX = 5  # 5 attempts per window per IP (credential-stuffing defence)
+
+# In-memory fallback when Redis is unreachable. Process-local; under multi-worker
+# deployment each worker maintains its own table, which still bounds the blast
+# radius. Keyed by client IP; value is a list of unix-epoch timestamps of recent
+# failed attempts within the window.
+_INMEM_ATTEMPTS: dict[str, list[float]] = {}
+_INMEM_MAX_KEYS = 10_000  # protect against unbounded memory growth
+
+
+def _inmem_check(client_ip: str) -> int:
+    """Increment in-memory attempt counter and return current count within the window."""
+    import time as _t
+
+    now = _t.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+
+    # Occasional cleanup so the dict does not grow unbounded across many IPs.
+    if len(_INMEM_ATTEMPTS) > _INMEM_MAX_KEYS:
+        _INMEM_ATTEMPTS.clear()
+
+    hits = _INMEM_ATTEMPTS.setdefault(client_ip, [])
+    # Drop stale timestamps
+    hits[:] = [t for t in hits if t >= window_start]
+    hits.append(now)
+    return len(hits)
 
 
 async def _check_rate_limit(client_ip: str) -> None:
-    """Rate limit login attempts using Redis sliding window."""
-    from core.redis import get_redis
-    redis = await get_redis()
-    if not redis:
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    """Rate limit login attempts.
 
+    FAIL CLOSED: this is the login endpoint — abuse here is catastrophic
+    (credential stuffing, account takeover), so if Redis is down we fall back
+    to a per-process in-memory counter instead of simply allowing every
+    request through. The in-memory counter is process-local, so a multi-worker
+    deployment will permit N * _RATE_LIMIT_MAX attempts while Redis is down,
+    which is still dramatically lower than unlimited.
+    """
     key = f"login_attempts:{client_ip}"
+    count: int
     try:
+        from core.redis import get_redis
+        redis = await get_redis()
         pipe = redis.pipeline()
         pipe.incr(key)
         pipe.expire(key, _RATE_LIMIT_WINDOW, nx=True)
         results = await pipe.execute()
-        count = results[0]
-        if count > _RATE_LIMIT_MAX:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many login attempts. Please try again in a few minutes.",
-            )
-    except HTTPException:
-        raise
+        count = int(results[0])
     except Exception as e:
-        # Degrade gracefully — allow login when Redis is unavailable
-        logger.warning("Rate limit check failed (Redis unavailable), allowing login: %s", e)
+        # Redis unavailable — degrade to in-memory counter rather than allowing
+        # uncapped login attempts.
+        logger.warning("Rate limit: Redis unavailable, using in-memory fallback: %s", e)
+        count = _inmem_check(client_ip)
+
+    if count > _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again in a few minutes.",
+            headers={"Retry-After": str(_RATE_LIMIT_WINDOW)},
+        )
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""

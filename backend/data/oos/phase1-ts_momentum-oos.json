@@ -1,0 +1,33 @@
+{
+  "strategy": "ts_momentum",
+  "start": "2019-01-02",
+  "end": "2024-12-30",
+  "train_end": "2022-12-30",
+  "n_trials": 40,
+  "best_oos_sharpe": 1.51989961453546,
+  "best_params": {
+    "lookback_months": 12,
+    "signal_ensemble": "single_12m",
+    "target_vol": 0.1288024218860967,
+    "rebalance_freq": "bimonthly",
+    "realized_vol_window": 90,
+    "max_weight_per_asset": 0.28565806695223983,
+    "drawdown_delever_threshold": 0.1764242561373246,
+    "shorts_enabled": false,
+    "universe_size": "full_11"
+  },
+  "oos_metrics": {
+    "sharpe": 1.51989961453546,
+    "sortino": 1.4460060629149667,
+    "calmar": 1.8205397323260843,
+    "max_drawdown": 0.04422859319333028,
+    "cagr": 0.08051991121334479,
+    "tail_ratio": 0.9301161466087865,
+    "hit_rate": 0.84,
+    "profit_factor": 3.886472112603192,
+    "turnover": 4.615125782560098,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "elapsed_seconds": 588
+}

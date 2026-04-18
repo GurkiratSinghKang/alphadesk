@@ -20,7 +20,21 @@ function getAccessToken(): string | undefined {
   return match?.[1];
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Default request timeout. Chrome enforces a 6-per-host socket ceiling and
+ * the dashboard polls many endpoints in parallel; without a timeout, one
+ * hung TCP socket wedges an entire refresh cycle. 15s covers every routine
+ * endpoint; callers can pass `{ timeoutMs: 60_000 }` (or similar) for
+ * genuinely long-running endpoints such as backtests.
+ */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+export interface ApiFetchOptions extends RequestInit {
+  /** Override the default 15s request timeout. */
+  timeoutMs?: number;
+}
+
+async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   const base = typeof window !== "undefined"
     ? (env.API_URL || "")
     : (env.API_URL || "http://localhost:8000");
@@ -35,11 +49,49 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  const { timeoutMs, signal: callerSignal, ...rest } = init ?? {};
+  const effectiveTimeout = typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS;
+
+  // Combine the caller's signal (if any) with our timeout signal so either
+  // can abort the request. `AbortSignal.any` is the spec-sanctioned combiner
+  // as of baseline 2024; all modern browsers ship it.
+  let signal: AbortSignal;
+  if (effectiveTimeout > 0 && typeof AbortSignal !== "undefined") {
+    const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
+    if (callerSignal && typeof (AbortSignal as unknown as { any?: unknown }).any === "function") {
+      signal = (AbortSignal as unknown as { any: (s: AbortSignal[]) => AbortSignal }).any([
+        timeoutSignal,
+        callerSignal,
+      ]);
+    } else {
+      signal = callerSignal ?? timeoutSignal;
+    }
+  } else {
+    signal = (callerSignal ?? undefined) as AbortSignal;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...rest,
+      headers,
+      credentials: "include",
+      signal,
+    });
+  } catch (err) {
+    // AbortError from a timeout should surface as a legible error so the
+    // toast system + React Query can decide how to react. Other network
+    // failures propagate unchanged.
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
+          detail: { status: 0, message: `Request timed out after ${effectiveTimeout}ms`, path },
+        }));
+      }
+      throw new Error(`API timeout: ${path} (> ${effectiveTimeout}ms)`);
+    }
+    throw err;
+  }
 
   if (res.status === 401 && typeof window !== "undefined") {
     if (window.location.pathname !== "/login") {
@@ -774,6 +826,12 @@ export interface PipelineRun {
   strategies?: Record<string, any>;
   /** Master agent decisions/rejections */
   master_agent?: Record<string, any>;
+  /**
+   * Numeric counts surfaced when the backend returns aggregate totals
+   * without per-row detail. The UI renders these in an editorial empty
+   * state rather than synthesizing `stock-0`/`${stratName}-${i}` rows.
+   */
+  counts?: { screened: number; analyzed: number };
 }
 
 export interface PipelinePosition {
@@ -833,23 +891,23 @@ export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
     }));
   }
 
-  // Aggregate from per-strategy data when top-level arrays are absent
+  // Aggregate from per-strategy data when top-level arrays are absent.
+  // We NEVER synthesize rows to pad a count — if the backend only gave us a
+  // number, the UI renders the count in an editorial empty state instead of
+  // fake `stock-0` / `${stratName}-${i}` placeholders.
   const strategies = r.strategies ?? {};
-  if (screened.length === 0 && typeof strategies === "object") {
-    let totalScreened = 0;
-    for (const strat of Object.values(strategies) as any[]) {
-      if (typeof strat?.screened === "number") totalScreened += strat.screened;
-    }
-    // Create placeholder entries so PipelineFlow can show the count
-    if (totalScreened > 0) {
-      screened = Array.from({ length: totalScreened }, (_, i) => ({
-        symbol: `stock-${i}`, name: "", price: 0,
-        compositeScore: 0, sector: "", changePct: 0,
-      }));
-    }
-  }
+  const screenedCounts = typeof strategies === "object"
+    ? Object.values(strategies as Record<string, { screened?: number }>)
+        .reduce((acc, s) => acc + (typeof s?.screened === "number" ? s.screened : 0), 0)
+    : 0;
+  const analyzedCounts = typeof strategies === "object"
+    ? Object.values(strategies as Record<string, { analyzed?: number }>)
+        .reduce((acc, s) => acc + (typeof s?.analyzed === "number" ? s.analyzed : 0), 0)
+    : 0;
   if (analyzed.length === 0 && typeof strategies === "object") {
-    // Collect analyses from each strategy's analyses array
+    // Collect analyses from each strategy's analyses array. A numeric-only
+    // `analyzed` count does NOT fabricate rows — it survives as part of
+    // `counts` below for the UI's empty state to display.
     for (const [stratName, strat] of Object.entries(strategies) as [string, any][]) {
       if (Array.isArray(strat?.analyses)) {
         for (const a of strat.analyses) {
@@ -860,14 +918,6 @@ export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
             stopLoss: a.stop_loss ?? a.stopLoss ?? null,
             takeProfit: a.take_profit ?? a.takeProfit ?? null,
             rationale: a.rationale ?? "",
-          });
-        }
-      } else if (typeof strat?.analyzed === "number" && strat.analyzed > 0) {
-        // Only have a count — create placeholders
-        for (let i = 0; i < strat.analyzed; i++) {
-          analyzed.push({
-            symbol: `${stratName}-${i}`, signal: "hold", conviction: 0,
-            entryPrice: null, stopLoss: null, takeProfit: null, rationale: "",
           });
         }
       }
@@ -898,6 +948,10 @@ export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
     errors: r.errors ?? [],
     strategies: typeof strategies === "object" && strategies ? strategies : undefined,
     master_agent: r.master_agent ?? undefined,
+    counts: {
+      screened: screened.length > 0 ? screened.length : screenedCounts,
+      analyzed: analyzed.length > 0 ? analyzed.length : analyzedCounts,
+    },
   };
 }
 

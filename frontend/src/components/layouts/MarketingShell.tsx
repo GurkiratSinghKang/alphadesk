@@ -58,7 +58,8 @@ const FOOTER_COLS: { heading: string; items: { label: string; href: string }[] }
   {
     heading: "Legal",
     items: [
-      { label: "Not investment advice", href: "/risk" },
+      // "Risk disclosure" is the canonical label for /risk; the earlier
+      // "Not investment advice" duplicate link was removed.
       { label: "Risk disclosure", href: "/risk" },
       { label: "Terms", href: "/terms" },
       { label: "Privacy", href: "/privacy" },
@@ -77,7 +78,7 @@ export default function MarketingShell({
       data-slot="marketing-shell"
       className={cn("min-h-screen bg-bg text-fg", className)}
     >
-      <div className="mx-auto max-w-[1440px] px-12">
+      <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
         <nav
           aria-label="Primary"
           className="flex h-[72px] items-center gap-8"

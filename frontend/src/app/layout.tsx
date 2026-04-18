@@ -1,18 +1,34 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter_Tight, Newsreader, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/lib/providers";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-sans",
+// Self-hosted via next/font — no runtime fetch to fonts.googleapis.com,
+// avoids the CSP `style-src` / `font-src` restriction and eliminates the
+// third-party @import in design-tokens.css. next/font injects CSS that
+// assigns each variable on <html> (higher specificity than :root), so the
+// tokens resolve to the self-hosted face and fall back cleanly otherwise.
+const interTight = Inter_Tight({
+  variable: "--font-ui",
   subsets: ["latin"],
   display: "swap",
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+});
+
+const newsreader = Newsreader({
+  variable: "--font-display",
+  subsets: ["latin"],
+  style: ["italic", "normal"],
+  axes: ["opsz"],
+  display: "swap",
+  fallback: ["Iowan Old Style", "Times New Roman", "Georgia", "serif"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  fallback: ["SF Mono", "Menlo", "monospace"],
 });
 
 export const metadata: Metadata = {
@@ -42,7 +58,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`dark ${interTight.variable} ${newsreader.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>

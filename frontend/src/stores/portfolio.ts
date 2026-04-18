@@ -26,7 +26,10 @@ const defaultSummary: PortfolioSummary = {
   positionsCount: 0,
   dayPnl: 0,
   dayPnlPct: 0,
-  is_demo: true,
+  // `is_demo` is intentionally omitted here so `undefined` reads as
+  // "unknown until the API confirms." Consumers must check strictly for
+  // `=== true` to render a DEMO badge — otherwise the first paint on a
+  // live account flashes "DEMO" for a frame before the fetch resolves.
 };
 
 const defaultGreeks: PortfolioGreeks = {

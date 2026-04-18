@@ -1,0 +1,79 @@
+{
+  "strategy": "regime_adaptive",
+  "window": {
+    "start": "2023-01-02",
+    "end": "2024-12-30"
+  },
+  "target_sharpe": 0.6,
+  "defaults": {
+    "label": "defaults (textbook)",
+    "params": {
+      "sma_fast": 50,
+      "sma_slow": 200,
+      "vix_low_threshold": 20.0,
+      "vix_high_threshold": 25.0,
+      "confirmation_days": 10,
+      "rebalance_freq": "monthly",
+      "crisis_equity_floor": 0.0,
+      "defensive_bond_weight": null,
+      "crisis_slow_trigger_days": 20
+    },
+    "bars": 521,
+    "fills": 27,
+    "final_equity": 135990.82965,
+    "metrics": {
+      "sharpe": 1.621995970313037,
+      "sortino": 1.5466004879846424,
+      "calmar": 2.020844866218016,
+      "max_drawdown": 0.07933163978223456,
+      "cagr": 0.16031693698258564,
+      "tail_ratio": 0.9568228662096742,
+      "hit_rate": 0.8,
+      "profit_factor": 12.219785823708959,
+      "turnover": 2.8466401769992973,
+      "alpha": 0.0,
+      "beta": 0.0
+    },
+    "regime_timeline": {
+      "2023-02-01": "MeanRevert",
+      "2023-03-01": "TrendUp",
+      "2024-09-03": "MeanRevert",
+      "2024-10-01": "TrendUp"
+    }
+  },
+  "tuned": {
+    "label": "tuned (best Optuna params)",
+    "params": {
+      "sma_fast": 50,
+      "sma_slow": 150,
+      "vix_low_threshold": 18.55999483815292,
+      "vix_high_threshold": 34.07566473926093,
+      "confirmation_days": 8,
+      "rebalance_freq": "bimonthly",
+      "crisis_equity_floor": 0.03431972482374337,
+      "defensive_bond_weight": 0.3153959819657586
+    },
+    "bars": 521,
+    "fills": 27,
+    "final_equity": 135990.82965,
+    "metrics": {
+      "sharpe": 1.621995970313037,
+      "sortino": 1.5466004879846424,
+      "calmar": 2.020844866218016,
+      "max_drawdown": 0.07933163978223456,
+      "cagr": 0.16031693698258564,
+      "tail_ratio": 0.9568228662096742,
+      "hit_rate": 0.8,
+      "profit_factor": 12.219785823708959,
+      "turnover": 2.8466401769992973,
+      "alpha": 0.0,
+      "beta": 0.0
+    },
+    "regime_timeline": {
+      "2023-02-01": "MeanRevert",
+      "2023-03-01": "TrendUp",
+      "2024-09-03": "MeanRevert",
+      "2024-10-01": "TrendUp"
+    }
+  }
+}

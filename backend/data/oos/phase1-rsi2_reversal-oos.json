@@ -1,0 +1,35 @@
+{
+  "params": {
+    "rsi_period": 3,
+    "rsi_entry_max": 6.5455937584805355,
+    "connors_entry_max": 20.669660780676914,
+    "trend_sma_period": 200,
+    "stop_lookback_bars": 6,
+    "time_stop_days": 10,
+    "exit_sma_period": 3,
+    "rsi_exit_min": 59.80019737917527,
+    "max_positions": 8,
+    "allocation_per_trade": 0.10929658241168426,
+    "volume_surge_min": 1.7282241946483636,
+    "spy_rsi_regime_floor": 15.795284945718572
+  },
+  "start": "2023-01-01",
+  "end": "2024-12-31",
+  "metrics": {
+    "sharpe": 1.8827702770422905,
+    "sortino": 1.3992993637267142,
+    "calmar": 2.6772325989272514,
+    "max_drawdown": 0.01909205630947297,
+    "cagr": 0.051113875532275754,
+    "tail_ratio": 0.6333843052576734,
+    "hit_rate": 0.5907335907335908,
+    "profit_factor": 1.6855568010817858,
+    "turnover": 56.384856820610175,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "round_trip_trades": 259,
+  "fills": 518,
+  "equity_start": 100000.0,
+  "equity_end": 110878.144705
+}

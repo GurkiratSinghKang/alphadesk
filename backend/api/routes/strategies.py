@@ -541,7 +541,18 @@ def _canonical_id(strategy_id: str) -> str:
 # --------------------------------------------------------------------------- #
 # OOS metric extraction                                                        #
 # --------------------------------------------------------------------------- #
-_OOS_DIR = FilePath(__file__).resolve().parents[3] / "audit-reports"
+# The OOS metric JSONs live in two places depending on environment:
+#   * Container: ``backend/data/oos/`` is inside the image (the Dockerfile's
+#     COPY . . ships only the backend/ tree, so the repo-root
+#     ``audit-reports/`` directory is not reachable). The bundled copy is the
+#     canonical source in production.
+#   * Dev: both the bundled copy and ``<repo>/audit-reports/`` exist; either
+#     works. We prefer the bundled copy for parity with prod; if it's absent
+#     (e.g. a fresh checkout before the sync script has run), we fall back to
+#     the repo-root directory so dev workflows keep working.
+_BUNDLED_OOS_DIR = FilePath(__file__).resolve().parents[2] / "data" / "oos"
+_REPO_OOS_DIR = FilePath(__file__).resolve().parents[3] / "audit-reports"
+_OOS_DIR = _BUNDLED_OOS_DIR if _BUNDLED_OOS_DIR.is_dir() else _REPO_OOS_DIR
 
 
 def _extract_oos_metrics(payload: Any) -> dict[str, float] | None:
@@ -929,19 +940,16 @@ async def list_strategies() -> list[StrategySummary]:
         logger.warning("Failed to fetch Alpaca positions for strategy sync", exc_info=True)
 
     # ------------------------------------------------------------------
-    # 2. Sync ledger with Alpaca (creates missing entries, fixes shares)
+    # 2. Read-only ledger access — C2 fix.
+    #    sync_with_alpaca used to run here on every GET, which mutated state
+    #    on a read and repeatedly corrupted open trades whenever Alpaca
+    #    returned an empty positions list. Sync now runs exclusively from
+    #    the scheduler (backend/data/ingestion/pipeline_runner.py).
     # ------------------------------------------------------------------
     ledger = TradeLedger()
-    if alpaca_positions:
-        try:
-            ledger.sync_with_alpaca(alpaca_positions)
-            # Reload ledger data after sync so real_perf reflects updates
-            ledger = TradeLedger()
-        except Exception:
-            logger.warning("Ledger sync with Alpaca failed", exc_info=True)
 
     # ------------------------------------------------------------------
-    # 3. Compute real performance from the (now-synced) ledger
+    # 3. Compute real performance from the ledger
     # ------------------------------------------------------------------
     real_perf = _get_real_strategy_performance(ledger)
 
@@ -1048,13 +1056,8 @@ async def strategy_leaderboard() -> dict[str, Any]:
     except Exception:
         logger.warning("Failed to fetch Alpaca positions for leaderboard", exc_info=True)
 
+    # Read-only: sync_with_alpaca removed from GET per C2.
     ledger = TradeLedger()
-    if alpaca_positions:
-        try:
-            ledger.sync_with_alpaca(alpaca_positions)
-            ledger = TradeLedger()
-        except Exception:
-            logger.warning("Ledger sync failed in leaderboard", exc_info=True)
 
     real_perf = _get_real_strategy_performance(ledger)
 
@@ -1161,13 +1164,8 @@ async def get_strategy_performance(
     except Exception:
         logger.warning("Failed to fetch Alpaca positions for strategy performance", exc_info=True)
 
+    # Read-only: sync_with_alpaca removed from GET per C2.
     ledger = TradeLedger()
-    if alpaca_positions:
-        try:
-            ledger.sync_with_alpaca(alpaca_positions)
-            ledger = TradeLedger()
-        except Exception:
-            logger.warning("Ledger sync failed in strategy performance", exc_info=True)
 
     # ------------------------------------------------------------------
     # Map Alpaca positions to this strategy
@@ -1572,13 +1570,8 @@ async def get_strategy_positions(
     except Exception:
         logger.warning("Failed to fetch Alpaca positions for strategy positions", exc_info=True)
 
+    # Read-only: sync_with_alpaca removed from GET per C2.
     ledger = TradeLedger()
-    if alpaca_positions:
-        try:
-            ledger.sync_with_alpaca(alpaca_positions)
-            ledger = TradeLedger()
-        except Exception:
-            pass
 
     # Build alpaca price map
     alpaca_by_sym: dict[str, dict] = {}

@@ -604,12 +604,17 @@ async def run_daily_pipeline(
         return {"error": "Pipeline already running"}
 
     async with _pipeline_lock:
-        return await _run_pipeline_inner(screen_limit=screen_limit, analyze_limit=analyze_limit)
+        return await _run_pipeline_inner(
+            screen_limit=screen_limit,
+            analyze_limit=analyze_limit,
+            only_strategies=only_strategies,
+        )
 
 
 async def _run_pipeline_inner(
     screen_limit: int = SCREEN_TOP_N,
     analyze_limit: int = ANALYZE_TOP_N,
+    only_strategies: list[str] | None = None,
 ) -> dict[str, Any]:
     """Inner pipeline logic, called under _pipeline_lock."""
     global _pipeline_status

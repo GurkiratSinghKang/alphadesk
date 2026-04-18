@@ -5,7 +5,11 @@
    Works via CSS vars; no Tailwind dependency.
    ═══════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+/* Fonts are self-hosted via `next/font/google` in app/layout.tsx, which
+   injects --font-ui / --font-display / --font-mono as CSS vars on <html>.
+   We consume those vars here and keep the old family names as fallbacks so
+   anything rendered before hydration still gets the intended face. No
+   third-party @import — nothing for CSP to block. */
 
 :root {
   /* ─── COLORS ─────────────────────────────────────────────────── */
@@ -74,9 +78,13 @@
 
   /* ─── TYPE ───────────────────────────────────────────────────── */
 
-  --font-display: 'Newsreader', 'Iowan Old Style', 'Times New Roman', Georgia, serif;
-  --font-ui:      'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  /* --font-display / --font-ui / --font-mono are now owned by next/font,
+     which assigns them on <html> via its generated className. We do NOT
+     redeclare them at :root to avoid shadowing next/font's self-hosted
+     family and `adjustFontFallback` sibling. Any consumer that reads
+     var(--font-ui) / var(--font-display) / var(--font-mono) resolves
+     through the next/font CSS chain, which already includes an automatic
+     size-matched fallback. */
 
   /* Type scale — editorial. Larger jumps than typical web. */
   --fs-display-xl: clamp(64px, 10vw, 128px);   /* hero marketing */

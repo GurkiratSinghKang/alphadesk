@@ -1,0 +1,33 @@
+{
+  "best_params": {
+    "pullback_pct_max": 0.0009576253713180461,
+    "rsi_entry_max": 16.079871338457277,
+    "rsi_period": 5,
+    "stop_bps_or_atr_max": 68.6646615008226,
+    "tp_sigma_band": 0.919986462905457,
+    "trend_sma_daily": 100,
+    "allow_shorts": false,
+    "max_positions": 5,
+    "max_allocation": 0.16921072592303313
+  },
+  "start": "2024-01-01",
+  "end": "2024-06-30",
+  "metrics": {
+    "sharpe": 0.9489091282434157,
+    "sortino": 0.78810980680137,
+    "calmar": 1.3225770121260354,
+    "max_drawdown": 0.056754725224147595,
+    "cagr": 0.07506249491098727,
+    "tail_ratio": 0.7455668097269702,
+    "hit_rate": 0.5629139072847682,
+    "profit_factor": 1.3066088219210468,
+    "turnover": 101.51457890206092,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "trades": 302,
+  "fills": 604,
+  "start_equity": 100000.0,
+  "end_equity": 103804.4097625,
+  "total_return": 0.03804409762500005
+}

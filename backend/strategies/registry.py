@@ -46,7 +46,19 @@ log = logging.getLogger("alphadesk.strategies.registry")
 T = TypeVar("T")
 
 # Package we scan in :func:`load_all`.
-_PACKAGE = "backend.strategies"
+#
+# In the container the backend is WORKDIR=/app with ``strategies/`` as a
+# top-level package (no ``backend.`` prefix). In local dev / tests the same
+# code is imported as ``backend.strategies``. We prefer ``strategies`` because
+# it works in both environments: when ``strategies`` is importable from sys.path
+# (container), it resolves; in dev where backend/ is often added to sys.path,
+# ``strategies`` resolves to the same modules.
+#
+# Override with ``ALPHADESK_STRATEGIES_PACKAGE`` if a deployment needs a
+# different layout.
+import os as _os
+
+_PACKAGE = _os.environ.get("ALPHADESK_STRATEGIES_PACKAGE", "strategies")
 
 # name -> class
 _STRATEGY_CLASSES: dict[str, type] = {}
@@ -261,25 +273,33 @@ def load_all(package: str | None = None) -> list[str]:
         if ".tests" in name or name.endswith(".tests") or name.endswith(".conftest"):
             continue
         # Skip the legacy dead-code modules (they import BaseStrategy and have
-        # been flagged for Phase 2 removal). They live directly under
-        # backend.strategies and use single-module rather than package layout.
-        _LEGACY = {
-            "backend.strategies.momentum_quality",
-            "backend.strategies.pead",
-            "backend.strategies.vrp_harvest",
-            "backend.strategies.earnings_vol",
-            "backend.strategies.regime_adaptive",
-            "backend.strategies.ts_momentum",
-            "backend.strategies.rsi2_reversal",
-            "backend.strategies.dual_momentum",
-            "backend.strategies.pairs_trading",
-            "backend.strategies.kama_breakout",
-            "backend.strategies.orb",
-            "backend.strategies.vwap_strategy",
-            "backend.strategies.plugins",
+        # been flagged for Phase 2 removal). They live directly under the
+        # strategies package and use single-module rather than package layout.
+        # We match on the bare suffix so this works whether we were imported
+        # as ``strategies`` (container) or ``backend.strategies`` (dev).
+        _LEGACY_SUFFIXES = {
+            "momentum_quality",
+            "pead",
+            "vrp_harvest",
+            "earnings_vol",
+            "regime_adaptive",
+            "ts_momentum",
+            "rsi2_reversal",
+            "dual_momentum",
+            "pairs_trading",
+            "kama_breakout",
+            "orb",
+            "vwap_strategy",
+            "plugins",
         }
-        if name in _LEGACY:
-            continue
+        # name is e.g. "strategies.momentum_quality" or
+        # "backend.strategies.momentum_quality". Strip the package prefix
+        # (target) to get the module leaf.
+        if name.startswith(f"{target}."):
+            leaf = name[len(target) + 1 :]
+            # Only match top-level legacy modules, not subpackages.
+            if leaf in _LEGACY_SUFFIXES:
+                continue
         try:
             importlib.import_module(name)
             imported.append(name)

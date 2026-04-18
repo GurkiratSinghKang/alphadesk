@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: "Sign in — AlphaDesk",
   description:
     "Sign in to AlphaDesk — a systematic trading terminal for equity strategies with Claude as a pre-trade second opinion.",
+  // Auth surfaces should never appear in search results. Without this,
+  // Google will index the sign-in page, which is both an SEO leak and a
+  // footprint expansion.
+  robots: { index: false, follow: false },
 };
 
 /**
@@ -74,7 +78,7 @@ export default function LoginPage() {
               className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
               style={{ letterSpacing: "0.18em" }}
             >
-              Six strategies, one execution layer
+              Twelve strategies, one execution layer
             </span>
             <p className="font-display italic text-[15px] text-fg">
               Same risk policy, same audit trail, different alphas.

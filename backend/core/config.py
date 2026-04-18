@@ -93,10 +93,22 @@ class Settings(BaseSettings):
 
     @property
     def jwt_secret_value(self) -> str:
+        """Return the JWT signing secret.
+
+        Hard-fails in ALL environments if unset. There is no legitimate reason
+        to run WITHOUT a secret, and shipping a hardcoded fallback ("known-
+        insecure") meant that anyone who started the backend with
+        ENVIRONMENT=dev in production would sign tokens with a publicly-known
+        key (reproducible auth bypass). Dev and CI must provide a secret via
+        `.env.local` or `JWT_SECRET` env var. Generate one with:
+            openssl rand -hex 32
+        """
         val = self.JWT_SECRET.get_secret_value()
-        if not val and self.is_production:
-            raise ValueError("JWT_SECRET must be set in production")
-        return val or "dev-insecure-secret-change-me"
+        if not val:
+            raise ValueError(
+                "JWT_SECRET must be set. Generate one with: openssl rand -hex 32"
+            )
+        return val
 
 
 settings = Settings()

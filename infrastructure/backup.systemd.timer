@@ -1,0 +1,18 @@
+[Unit]
+Description=Daily AlphaDesk TimescaleDB backup
+Documentation=file:///opt/alphadesk/infrastructure/backup.sh
+Requires=alphadesk-backup.service
+
+[Timer]
+# 04:00 America/New_York = 08:00 UTC (ignores DST — same wall-clock offset is
+# acceptable for a nightly backup; if precise ET is required, switch to
+# OnCalendar=*-*-* 04:00:00 America/New_York on systemd >= 252).
+OnCalendar=*-*-* 08:00:00 UTC
+# Run missed jobs (e.g. if the VPS was down at 08:00) as soon as possible.
+Persistent=true
+# Small randomised delay to avoid thundering-herd when many VPSes share a host.
+RandomizedDelaySec=5min
+Unit=alphadesk-backup.service
+
+[Install]
+WantedBy=timers.target

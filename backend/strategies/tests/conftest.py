@@ -68,9 +68,15 @@ def fresh_registry():
     clear()
 
     # Drop cached strategy modules so their decorators re-fire on import.
+    # The package may be imported under either ``backend.strategies`` (dev
+    # convention) or ``strategies`` (container convention — now the default
+    # in :data:`backend.strategies.registry._PACKAGE`), so evict both.
     evicted = {}
     for mod_name in list(sys.modules):
-        if mod_name.startswith("backend.strategies._smoke"):
+        if (
+            mod_name.startswith("backend.strategies._smoke")
+            or mod_name.startswith("strategies._smoke")
+        ):
             evicted[mod_name] = sys.modules.pop(mod_name)
 
     try:

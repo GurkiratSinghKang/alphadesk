@@ -65,6 +65,15 @@ chown -R deploy:deploy /var/lib/alphadesk
 mkdir -p /opt/alphadesk
 chown deploy:deploy /opt/alphadesk
 
+# Lock down .env.prod if it already exists (idempotent — no-op on first run).
+# .env.prod contains JWT_SECRET, REDIS_PASSWORD, POLYGON_API_KEY, ALPACA_SECRET_KEY,
+# ANTHROPIC_API_KEY, ADMIN_PASSWORD_HASH — any world-readable bit is a disaster.
+if [ -f /opt/alphadesk/.env.prod ]; then
+    chmod 600 /opt/alphadesk/.env.prod
+    chown deploy:deploy /opt/alphadesk/.env.prod
+    echo ".env.prod locked to 0600"
+fi
+
 echo ""
 echo "=== Setup complete ==="
 echo "Next steps:"

@@ -1,0 +1,28 @@
+[Unit]
+Description=AlphaDesk TimescaleDB backup (dump + retain 30d)
+Documentation=file:///opt/alphadesk/infrastructure/backup.sh
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Fail the unit if the script exits non-zero so the failure is visible in
+# ``systemctl status alphadesk-backup.service`` and the journal.
+ExecStart=/opt/alphadesk/infrastructure/backup.sh
+# Keep stderr/stdout in journal for post-mortems.
+StandardOutput=journal
+StandardError=journal
+# Do not restart on failure — daily runs are driven by the timer.
+Restart=no
+# A 30-minute ceiling is plenty for a 9 MB DB with headroom for growth.
+TimeoutStartSec=30min
+
+# Hardening — the script talks to docker + writes to the backup dir only.
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/alphadesk/backups /tmp
+
+[Install]
+WantedBy=multi-user.target

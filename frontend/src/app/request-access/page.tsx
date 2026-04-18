@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Request access — AlphaDesk",
   description:
     "Request access to the AlphaDesk trading terminal. Access is by invitation; the desk onboards one book at a time.",
+  robots: { index: false, follow: false },
 };
 
 /**

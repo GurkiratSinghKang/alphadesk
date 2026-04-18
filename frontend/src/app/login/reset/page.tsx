@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Password reset — AlphaDesk",
   description:
     "Request a manual password reset for your AlphaDesk account. Automated reset is not wired yet; the desk will rotate your password on request.",
+  robots: { index: false, follow: false },
 };
 
 /**

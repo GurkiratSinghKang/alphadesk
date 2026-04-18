@@ -64,14 +64,25 @@ function SignalBadge({ signal }: { signal: string }) {
 // ─── Pipeline Flow Diagram ──────────────────────────────────
 
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
+  // Prefer the aggregate `counts` surfaced by the backend — they are the
+  // source of truth when per-row detail is not available. Falling back to
+  // array lengths keeps the UI working if the backend gives us rows instead.
+  const screenedCount = run?.counts?.screened ?? run?.screened?.length ?? 0;
+  const analyzedCount = run?.counts?.analyzed ?? run?.analyzed?.length ?? 0;
   const stages = [
-    { label: "Screened", count: run?.screened?.length ?? 0 },
-    { label: "Analyzed", count: run?.analyzed?.length ?? 0 },
+    { label: "Screened", count: screenedCount },
+    { label: "Analyzed", count: analyzedCount },
     { label: "Signals", count: run?.signals?.length ?? 0 },
     { label: "Orders", count: run?.ordersPlaced?.length ?? 0 },
   ];
 
   const allZero = stages.every((s) => s.count === 0);
+  // When we have counts but no per-row detail, say so plainly rather than
+  // synthesizing fake rows inside the table below.
+  const countsOnly =
+    !allZero &&
+    (screenedCount > (run?.screened?.length ?? 0) ||
+      analyzedCount > (run?.analyzed?.length ?? 0));
 
   // Determine if this run is from today or an earlier date
   const today = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
@@ -108,6 +119,11 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
       {!allZero && runDateLabel && (
         <p className="text-xs text-muted-foreground mt-2 text-center">
           Showing latest run{runDateLabel}
+        </p>
+      )}
+      {countsOnly && (
+        <p className="mt-2 text-center font-display italic text-[12px] text-muted-foreground">
+          Details not available &mdash; counts only.
         </p>
       )}
     </div>
@@ -605,10 +621,10 @@ export default function PipelinePage() {
                                 <div className="space-y-1 py-1">
                                   <div className="flex gap-4 text-[11px]">
                                     <span>
-                                      Screened: {run.screened.length}
+                                      Screened: {run.counts?.screened ?? run.screened.length}
                                     </span>
                                     <span>
-                                      Analyzed: {run.analyzed.length}
+                                      Analyzed: {run.counts?.analyzed ?? run.analyzed.length}
                                     </span>
                                     <span>
                                       Signals: {run.signals.length}

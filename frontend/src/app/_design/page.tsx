@@ -3,9 +3,11 @@
  *
  * Route: /_design
  * Purpose: eyeball every token, type class, and Layer-1 primitive we ship.
- * NOT linked from navigation.
+ * NOT linked from navigation. In production builds this returns a 404 so
+ * the 698 lines of fixture data below never ship to end users' browsers.
  */
 
+import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -162,6 +164,12 @@ const SERIES = Array.from({ length: 40 }, (_, i) => {
 });
 
 export default function DesignPreviewPage() {
+  // Dev-only surface. In production the whole page (including the fixture
+  // constants above that would otherwise sit in the client bundle) is
+  // short-circuited to a 404 via Next's notFound().
+  if (process.env.NODE_ENV !== "development") {
+    notFound();
+  }
   return (
     <main className="min-h-screen bg-bg text-fg">
       <div className="mx-auto max-w-5xl px-8 py-16">

@@ -69,9 +69,9 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=512MB
+      - shared_buffers=128MB
       - -c
-      - work_mem=16MB
+      - work_mem=4MB
       - -c
       - max_connections=50
     networks:
@@ -103,15 +103,10 @@ services:
     mem_limit: 640m
     cpus: 0.5
 
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    restart: unless-stopped
-    volumes:
-      - /var/lib/alphadesk/uptime-kuma:/app/data
-    networks:
-      - alphadesk
-    mem_limit: 256m
-    cpus: 0.25
+  # uptime-kuma: removed 2026-04-17 (Wave E / iter-2).
+  # Had zero monitors configured; consuming ~56 MB RSS + 724 MB image for
+  # no benefit. On-disk data preserved at /var/lib/alphadesk/uptime-kuma
+  # so the service can be re-added later and pick up its existing DB.
 
 networks:
   alphadesk:

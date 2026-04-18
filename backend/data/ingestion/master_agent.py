@@ -99,6 +99,24 @@ class MasterAgent:
     # P4: VaR-based risk budget
     MAX_PORTFOLIO_VAR = 0.02  # max 2% daily VaR
 
+    # Strategy categories whose trades SHOULD NOT be gated on absolute /
+    # trailing momentum. These strategies trade counter to trend
+    # (mean-reversion, short-vol, market-neutral, intraday pivots) and a
+    # long-only momentum gate rejects their signals by construction.
+    #
+    # Category values come from StrategyMeta.category on the registry record:
+    #   - "options"   -> VRP harvest, earnings_vol (short-vol structures)
+    #   - "pairs"     -> pairs_trading (market-neutral)
+    #   - "intraday"  -> VWAP, ORB (intraday reversion / breakout on thin lookback)
+    # The "smoke" category is a dev-only bucket; we skip it for safety.
+    MOMENTUM_GATE_SKIP_CATEGORIES: set[str] = {"options", "pairs", "intraday", "smoke"}
+    # Per-name overrides for equity-category strategies that are explicitly
+    # mean-reversion (so category="equity" alone isn't enough to tell).
+    MOMENTUM_GATE_SKIP_STRATEGIES: set[str] = {
+        "rsi2_reversal",     # 2-period RSI bounce -- buys oversold dips
+        "mean_reversion",    # legacy adapter still referenced in some logs
+    }
+
     # Typical daily volatilities (shared across VaR + crowding detection)
     VOL_MAP: dict[str, float] = {
         "TSLA": 0.035, "NVDA": 0.030, "AMD": 0.030, "COIN": 0.040,
@@ -325,6 +343,37 @@ class MasterAgent:
         return min(vol_sized, max_notional)
 
     # ------------------------------------------------------------------
+    # Strategy-aware momentum gate exemption
+    # ------------------------------------------------------------------
+
+    def _momentum_gate_exempt(self, strategy: str) -> bool:
+        """Return True if momentum gates should NOT apply to this strategy.
+
+        Consulted in :meth:`request_trade` before checks 6b/6c.  A strategy is
+        exempt if:
+
+        * its name is in :attr:`MOMENTUM_GATE_SKIP_STRATEGIES` (explicit
+          per-name whitelist for mean-reversion equities), or
+        * its registry :class:`StrategyMeta.category` is in
+          :attr:`MOMENTUM_GATE_SKIP_CATEGORIES` (``options``, ``pairs``,
+          ``intraday`` trade counter to or orthogonal to trend).
+
+        Registry lookup errors are swallowed: if the strategy isn't in the
+        registry, we conservatively apply the gate (not exempt).
+        """
+        if strategy in self.MOMENTUM_GATE_SKIP_STRATEGIES:
+            return True
+        try:
+            # Import here to avoid a hard dependency at module-import time
+            # (the registry may not be populated when this module loads in
+            # tests that don't exercise it).
+            from strategies.registry import get_meta
+            meta = get_meta(strategy)
+        except Exception:
+            return False
+        return meta.category in self.MOMENTUM_GATE_SKIP_CATEGORIES
+
+    # ------------------------------------------------------------------
     # Trade gating
     # ------------------------------------------------------------------
 
@@ -481,9 +530,22 @@ class MasterAgent:
             self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
             return {"approved": False, "reason": reason, "remediation": remediation}
 
-        # Check 6b: Absolute momentum gate (Antonacci Dual Momentum)
-        # If 12-month return is significantly negative, don't go long
-        if side == "buy":
+        # Check 6b / 6c: Momentum gates -- strategy-aware.
+        #
+        # The absolute-momentum gate (12-month) and trailing-momentum gate
+        # (6-month) are long-only trend filters. Strategies whose intent is
+        # to trade AGAINST the prevailing trend (mean-reversion, short-vol,
+        # pairs, intraday) should not be gated by these checks, otherwise
+        # every signal from them is rejected by construction.
+        #
+        # We consult StrategyMeta.category from the registry; unknown names
+        # (not yet registered, or fallback adapters) default to applying the
+        # gate -- safer than silently disabling it for a strategy that
+        # actually IS trend-following.
+        gate_momentum = side == "buy" and not self._momentum_gate_exempt(strategy)
+
+        if gate_momentum:
+            # Check 6b: Absolute momentum gate (Antonacci Dual Momentum)
             abs_mom = self.ABSOLUTE_MOMENTUM_DATA.get(symbol)
             if abs_mom is not None and abs_mom < -5:
                 reason = f"Absolute momentum gate: {symbol} 12-month return is {abs_mom:.1f}% (below -5% threshold). Not buying downtrends."
@@ -491,8 +553,7 @@ class MasterAgent:
                 self.rejections.append({"strategy": strategy, "symbol": symbol, "reason": reason, "remediation": remediation})
                 return {"approved": False, "reason": reason, "remediation": remediation}
 
-        # Check 6c: Require non-severely-negative 6-month momentum (avoid strong downtrends)
-        if side == "buy":
+            # Check 6c: Require non-severely-negative 6-month momentum
             momentum = self.MOMENTUM_DATA.get(symbol)
             if momentum is not None and momentum < -10:
                 reason = f"Momentum gate: {symbol} has strongly negative momentum ({momentum:.1f}%, below -10% threshold)."
