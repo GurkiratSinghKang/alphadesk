@@ -434,9 +434,14 @@ async def get_bars(
             }
             span, mult = tf_map[timeframe.value]
 
+            # sort=desc + reverse() below guarantees the N *most recent*
+            # bars are returned regardless of how wide the date window is.
+            # With sort=asc, a limit < (window in days) truncates to the
+            # OLDEST N bars instead of the newest — that's why
+            # /bars/SPY?limit=3 was returning bars from a year ago.
             params: dict = {
                 "adjusted": "true",
-                "sort": "asc",
+                "sort": "desc",
                 "limit": limit,
                 "apiKey": settings.POLYGON_API_KEY.get_secret_value(),
             }
@@ -461,6 +466,11 @@ async def get_bars(
                         )
                         for r in data.get("results", [])
                     ]
+                    # Upstream returned newest-first; flip back to
+                    # chronological ascending order before caching and
+                    # returning so downstream (chart, cache, etc) sees the
+                    # series in natural time order.
+                    bars.reverse()
                     await cache_set(
                         cache_key,
                         [b.model_dump(mode="json") for b in bars],
@@ -480,6 +490,10 @@ async def get_bars(
             # Use current time as end (not midnight) so intraday charts
             # only show bars up to NOW, not the full day to 4PM
             end_dt = datetime.now(timezone.utc) if effective_end == date.today() else datetime.combine(effective_end, datetime.max.time(), tzinfo=timezone.utc)
+            # sort=desc so the N *most recent* bars come back when limit is
+            # smaller than the date window. Reversed below to restore
+            # chronological ascending order. See the Polygon branch above
+            # for the detailed rationale.
             params_alpaca: dict = {
                 "timeframe": alpaca_tf,
                 "start": datetime.combine(effective_start, datetime.min.time(), tzinfo=timezone.utc).isoformat(),
@@ -487,7 +501,7 @@ async def get_bars(
                 "limit": limit,
                 "adjustment": "raw",
                 "feed": "sip",
-                "sort": "asc",
+                "sort": "desc",
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
@@ -509,6 +523,8 @@ async def get_bars(
                         )
                         for r in data.get("bars", []) or []
                     ]
+                    # Flip newest-first back to chronological before caching.
+                    bars.reverse()
                     await cache_set(
                         cache_key,
                         [b.model_dump(mode="json") for b in bars],

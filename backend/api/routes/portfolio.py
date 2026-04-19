@@ -488,7 +488,12 @@ async def get_portfolio_summary() -> PortfolioSummary:
         # Use position-level unrealized P&L from positions endpoint
         unrealized_pnl = positions_unrealized
         total_mv = long_mv + abs(short_mv)
-        unrealized_pnl_pct = (unrealized_pnl / total_mv * 100) if total_mv > 0 else 0
+        # Percent unrealized is (current_mv - cost_basis) / cost_basis, not
+        # / market_value. Previously divided by total_mv, which understates
+        # the percentage on winners (denominator includes the gain) and
+        # overstates on losers. Cost basis = market value - unrealized_pnl.
+        cost_basis = total_mv - unrealized_pnl
+        unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis > 0 else 0
 
         # Compute realized_pnl_today DIRECTLY from the trade ledger: sum of
         # pnl on trades whose exit_time falls on today's date. The old

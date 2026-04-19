@@ -110,7 +110,21 @@ export const useMarketStore = create<MarketState>()(
           let maxTs = state.freshestTs;
           for (const q of quotes) {
             const existing = next[q.symbol];
-            const merged = existing ? { ...existing, ...q } : { ...q };
+            // Mirror updateQuote: PRESERVE snapshot-only fields
+            // (close/open/high/low) across WS updates. A raw spread
+            // (`{...existing, ...q}`) would let a WS-only payload blow
+            // away prior-close/open etc. with undefined because WS
+            // delivers only bid/ask/last/volume/timestamp.
+            const merged = existing
+              ? {
+                  ...existing,
+                  ...q,
+                  close: existing.close || q.close,
+                  open: existing.open || q.open,
+                  high: Math.max(existing.high || 0, q.high || 0) || existing.high,
+                  low: (existing.low && q.low) ? Math.min(existing.low, q.low) : existing.low || q.low,
+                }
+              : { ...q };
             // Always recompute change/changePct from prev close
             if (merged.last && merged.close && merged.close > 0) {
               merged.change = +(merged.last - merged.close).toFixed(4);

@@ -10,7 +10,7 @@
  * no colors and holds no markup beyond slot wiring.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   AIMemoPanel,
@@ -67,6 +67,7 @@ const BUILD_VERSION =
 
 export default function DeskPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
@@ -101,6 +102,17 @@ export default function DeskPage() {
       setSelectedStrategyId(rail[0].id);
     }
   }, [rail, selectedStrategyId]);
+
+  // Reciprocal to the strategy-detail "View trades →" button, which routes
+  // back here with `?strategy={id}`. When that query param is present on
+  // mount (or changes), auto-select the matching rail item so the user
+  // lands on the desk with their strategy highlighted.
+  useEffect(() => {
+    const q = searchParams?.get("strategy");
+    if (q && rail.some((r) => r.id === q)) {
+      setSelectedStrategyId(q);
+    }
+  }, [searchParams, rail]);
 
   /* ─── Chart bars — daily + current range toggle ─────────── */
   const [range, setRange] = useState<ChartRange>("1M");
@@ -248,7 +260,11 @@ export default function DeskPage() {
   }
 
   function handleSelectStrategy(id: string) {
+    // Keep the visual highlight on the current desk for when the user
+    // navigates back — then route to the strategy detail page per the
+    // design spec (`qa/pages/strategies-detail.md`).
     setSelectedStrategyId(id);
+    router.push(`/strategies/${id}`);
   }
 
   function handleSelectSymbol(symbol: string) {

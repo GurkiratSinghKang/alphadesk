@@ -51,24 +51,103 @@ const GROUP_LABEL: Record<string, string> = {
   other: "Discretionary",
 };
 
-// ─── Academic sources per strategy (locally known — derived from Phase 2 content) ──
+// ─── Academic sources per strategy (derived from each strategy's spec.md) ──
+// Each entry surfaces the canonical literature cited in
+// `backend/strategies/<name>/spec.md` § "Academic grounding". Strategies
+// without an entry skip § 04 References silently (per design spec).
 
 const ACADEMIC_SOURCES: Record<string, string[]> = {
   "momentum-quality": [
-    "Jegadeesh & Titman (1993). Returns to Buying Winners and Selling Losers.",
-    "Piotroski (2000). Value Investing: Using Historical Financial Statement Information.",
-    "Daniel & Moskowitz (2016). Momentum Crashes.",
-    "Asness, Frazzini & Pedersen (2019). Quality Minus Junk.",
+    "Jegadeesh, N. & Titman, S. (1993). Returns to Buying Winners and Selling Losers. Journal of Finance 48(1).",
+    "Carhart, M. (1997). On Persistence in Mutual Fund Performance. Journal of Finance 52(1).",
+    "Piotroski, J. (2000). Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers. Journal of Accounting Research 38.",
+    "Asness, C., Frazzini, A. & Pedersen, L. H. (2014/2019). Quality Minus Junk. Review of Accounting Studies 24.",
+    "Daniel, K. & Moskowitz, T. J. (2016). Momentum Crashes. Journal of Financial Economics 122(2).",
+    "Barroso, P. & Santa-Clara, P. (2015). Momentum Has Its Moments. Journal of Financial Economics 116(1).",
   ],
   pead: [
-    "Bernard & Thomas (1989, 1990). Post-Earnings-Announcement Drift.",
-    "Livnat & Mendenhall (2006). Comparing the Post-Earnings Announcement Drift.",
-    "Chu, Hirshleifer & Ma (2020). The Causal Effect of Limits to Arbitrage on Asset Pricing Anomalies.",
+    "Bernard, V. & Thomas, J. (1989). Post-Earnings-Announcement Drift: Delayed Price Response or Risk Premium? Journal of Accounting Research 27.",
+    "Bernard, V. & Thomas, J. (1990). Evidence that Stock Prices Do Not Fully Reflect the Implications of Current Earnings for Future Earnings. Journal of Accounting & Economics 13.",
+    "Livnat, J. & Mendenhall, R. (2006). Comparing the Post-Earnings Announcement Drift for Surprises Calculated from Analyst and Time-Series Forecasts. Journal of Accounting Research 44(1).",
+    "Chordia, T., Goyal, A., Sadka, G., Sadka, R. & Shivakumar, L. (2009). Liquidity and the Post-Earnings-Announcement Drift. Financial Analysts Journal 65(4).",
+    "Chu, Y., Hirshleifer, D. & Ma, L. (2020). The Causal Effect of Limits to Arbitrage on Asset Pricing Anomalies. Journal of Finance 75(5).",
   ],
   "vrp-harvesting": [
-    "Bakshi & Madan (2006). A Theory of Volatility Spreads.",
-    "Carr & Wu (2009). Variance Risk Premiums.",
-    "Dubinsky & Johannes (2023). Tail Hedging and the Variance Risk Premium.",
+    "Bakshi, G. & Madan, D. (2006). A Theory of Volatility Spreads. Management Science 52(12).",
+    "Carr, P. & Wu, L. (2009). Variance Risk Premiums. Review of Financial Studies 22(3).",
+    "Israelov, R. & Nielsen, L. (2015, 2020). Covered Calls Uncovered. AQR working paper series.",
+    "Harvey, C. R., Liu, Y. et al. (2019). Short-Volatility Strategies: A Review.",
+    "Dubinsky, A. & Johannes, M. (2023). Short-Vol Without Blowing Up: Systematic Short-Vol With Tail Hedges, 1996–2020. Journal of Derivatives.",
+  ],
+  "earnings-vol-premium": [
+    "Beckers, S. (1981). Variances of Security Price Returns Based on High, Low and Closing Prices. Journal of Business 54(1).",
+    "Ederington, L. & Lee, J. H. (1996). The Creation and Resolution of Market Uncertainty. Journal of Financial and Quantitative Analysis 31(4).",
+    "Gao, X., Xing, Y. & Zhang, X. (2018). What Does the Individual Option Volatility Smirk Tell Us About Future Equity Returns? Review of Financial Studies 31(7).",
+    "Dubinsky, A., Johannes, M., Kaeck, A. & Seeger, N. (2019). Option Pricing of Earnings Announcement Risk. Review of Financial Studies 32(2).",
+    "Natenberg, S. (2015). Option Volatility and Pricing, 2e. McGraw-Hill.",
+  ],
+  "ts-momentum": [
+    "Moskowitz, T. J., Ooi, Y. H. & Pedersen, L. H. (2012). Time Series Momentum. Journal of Financial Economics 104(2).",
+    "Hurst, B., Ooi, Y. H. & Pedersen, L. H. (2013). Demystifying Managed Futures. Journal of Investment Management 11(3).",
+    "Georgopoulou, A. & Wang, J. (2016). The Trend is Your Friend: Time Series Momentum Strategies across Equity and Commodity Markets. Review of Finance 21(4).",
+  ],
+  "rsi2-reversal": [
+    "DeBondt, W. & Thaler, R. (1985). Does the Stock Market Overreact? Journal of Finance 40(3).",
+    "Jegadeesh, N. (1990). Evidence of Predictable Behavior of Security Returns. Journal of Finance 45(3).",
+    "Connors, L. & Alvarez, C. (2009). Short Term Trading Strategies That Work. Trading Markets Research.",
+    "Avellaneda, M. & Lee, J.-H. (2010). Statistical Arbitrage in the U.S. Equities Market. Quantitative Finance 10(7).",
+    "Connors Research (2013). An Introduction to ConnorsRSI. Whitepaper.",
+    "Kakushadze, Z. (2015). Mean-Reversion and Optimization. Journal of Asset Management 16.",
+  ],
+  "pairs-trading": [
+    "Engle, R. F. & Granger, C. W. J. (1987). Co-integration and Error Correction. Econometrica 55(2).",
+    "Vidyamurthy, G. (2004). Pairs Trading: Quantitative Methods and Analysis. Wiley.",
+    "Gatev, E., Goetzmann, W. N. & Rouwenhorst, K. G. (2006). Pairs Trading: Performance of a Relative-Value Arbitrage Rule. Review of Financial Studies 19(3).",
+    "Avellaneda, M. & Lee, J.-H. (2010). Statistical Arbitrage in the U.S. Equities Market. Quantitative Finance 10(7).",
+    "Do, B. & Faff, R. (2012). Are Pairs Trading Profits Robust to Trading Costs? Journal of Financial Research 35(2).",
+    "Chan, E. P. (2013). Algorithmic Trading: Winning Strategies and Their Rationale. Wiley.",
+  ],
+  "pairs-stat-arb": [
+    "Engle, R. F. & Granger, C. W. J. (1987). Co-integration and Error Correction. Econometrica 55(2).",
+    "Vidyamurthy, G. (2004). Pairs Trading: Quantitative Methods and Analysis. Wiley.",
+    "Gatev, E., Goetzmann, W. N. & Rouwenhorst, K. G. (2006). Pairs Trading: Performance of a Relative-Value Arbitrage Rule. Review of Financial Studies 19(3).",
+    "Avellaneda, M. & Lee, J.-H. (2010). Statistical Arbitrage in the U.S. Equities Market. Quantitative Finance 10(7).",
+  ],
+  "dual-momentum": [
+    "Jegadeesh, N. & Titman, S. (1993). Returns to Buying Winners and Selling Losers. Journal of Finance 48(1).",
+    "Moskowitz, T., Ooi, Y. & Pedersen, L. (2012). Time Series Momentum. Journal of Financial Economics 104(2).",
+    "Antonacci, G. (2012). Risk Premia Harvesting Through Dual Momentum. Journal of Management & Entrepreneurship.",
+    "Antonacci, G. (2014). Dual Momentum Investing: An Innovative Strategy for Higher Returns with Lower Risk. McGraw-Hill.",
+  ],
+  "regime-adaptive": [
+    "Hamilton, J. D. (1989). A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle. Econometrica 57(2).",
+    "Whaley, R. E. (2000). The Investor Fear Gauge. Journal of Portfolio Management 26(3).",
+    "Ang, A. & Bekaert, G. (2002). International Asset Allocation with Regime Shifts. Review of Financial Studies 15(4).",
+    "Faber, M. T. (2007). A Quantitative Approach to Tactical Asset Allocation. Journal of Wealth Management.",
+    "Guidolin, M. & Timmermann, A. (2007). Asset Allocation under Multivariate Regime Switching. Journal of Economic Dynamics and Control 31(11).",
+    "Asness, C., Ilmanen, A., Israel, R. & Moskowitz, T. (2015). Investing with Style. Journal of Investment Management 13(1).",
+  ],
+  "kama-breakout": [
+    "Donchian, R. (1960). Donchian's 5- and 20-day Moving Averages. Commodities magazine.",
+    "LeBeau, C. & Lucas, D. (1992). Technical Traders Guide to Computer Analysis of the Futures Markets.",
+    "Kaufman, P. J. (1995). Smarter Trading. McGraw-Hill (ch. 6); Trading Systems and Methods, 5e (Wiley, 2013).",
+    "Faber, M. (2007). A Quantitative Approach to Tactical Asset Allocation. Journal of Wealth Management.",
+    "Faith, C. (2007). Way of the Turtle. McGraw-Hill.",
+    "Covel, M. (2007). The Complete TurtleTrader. HarperBusiness.",
+  ],
+  orb: [
+    "Lo, A. W. & MacKinlay, A. C. (1988). Stock Market Prices Do Not Follow Random Walks. Review of Financial Studies 1(1).",
+    "Crabel, T. (1990). Day Trading with Short Term Price Patterns and Opening Range Breakout.",
+    "Cont, R. (2001). Empirical Properties of Asset Returns: Stylized Facts and Statistical Issues. Quantitative Finance 1(2).",
+    "Fisher, M. (2002). The Logical Trader: Applying A Method To The Madness. Wiley.",
+    "Zarattini, C. & Aziz, N. (2023). A Profitable Day Trading Strategy for the US Equity Market. Working paper (arXiv:2302.13811).",
+  ],
+  "vwap-strategy": [
+    "Kyle, A. (1985). Continuous Auctions and Insider Trading. Econometrica 53(6).",
+    "Berkowitz, S. A., Logue, D. E. & Noser, E. A. (1988). The Total Cost of Transactions on the NYSE. Journal of Finance 43(1).",
+    "Bouchaud, J.-P., Gefen, Y., Potters, M. & Wyart, M. (2003). Fluctuations and Response in Financial Markets. Quantitative Finance 4(2).",
+    "Shannon, B. (2008). Technical Analysis Using Multiple Timeframes.",
+    "Connors, L. & Alvarez, C. (2009). Short Term Trading Strategies That Work. Trading Markets Research.",
   ],
 };
 
