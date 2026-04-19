@@ -48,10 +48,17 @@ describe('useToast (real implementation)', () => {
     expect(() => result.current.dismiss('nonexistent-id')).not.toThrow();
   });
 
-  it('throws when used outside ToastProvider', async () => {
+  it('returns a no-op toast when used outside ToastProvider', async () => {
+    // Previously useToast threw between hook calls, which broke the
+    // rules-of-hooks invariant and caused React error #310 when the
+    // provider was briefly absent during hydration. It now returns
+    // a warn-and-no-op shim instead.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { useToast } = await import('@/hooks/useToast');
-    expect(() => {
-      renderHook(() => useToast());
-    }).toThrow('useToast must be used within ToastProvider');
+    const { result } = renderHook(() => useToast());
+    expect(result.current.toast({ type: 'info', message: 'x' })).toBe('');
+    expect(warnSpy).toHaveBeenCalled();
+    expect(() => result.current.dismiss('whatever')).not.toThrow();
+    warnSpy.mockRestore();
   });
 });
