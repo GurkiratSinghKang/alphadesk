@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Activity, Wifi, WifiOff, Clock, Gauge, MemoryStick, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMarketStore } from "@/stores/market";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -160,18 +161,8 @@ function usePerformanceMonitor() {
       memoryMB = Math.round(perfMemory.usedJSHeapSize / (1024 * 1024));
     }
 
-    // Count active WebSocket subscriptions by checking market store
-    // This is approximate based on watchlist size
-    let activeSubs = 0;
-    try {
-      const stored = localStorage.getItem("alphadesk-watchlist");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        activeSubs = parsed?.state?.watchlist?.length ?? 0;
-      }
-    } catch {
-      // ignore
-    }
+    // Count active WebSocket subscriptions — approximated by watchlist size.
+    const activeSubs = useMarketStore.getState().watchlist.length;
 
     // WebSocket connected: check if quotes are flowing
     const recentTimings = timings.filter((t) => Date.now() - t.timestamp < 30000);
