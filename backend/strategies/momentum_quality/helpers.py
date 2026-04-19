@@ -90,7 +90,54 @@ def fetch_close_panel(
         long.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
         .sort_index()
     )
-    return wide.ffill()
+    wide = wide.ffill()
+    return _drop_halted_symbols(wide)
+
+
+# --------------------------------------------------------------------------- #
+# Halt detection (cross-cutting fix #10)                                      #
+# --------------------------------------------------------------------------- #
+# Number of identical trailing closes that flag a symbol as halted. Five
+# is a deliberately conservative threshold: legitimate flat-tape sessions
+# (e.g. holiday-eve early closes for a single ticker) rarely exceed 3-4
+# zero-return days in a row.
+HALT_THRESHOLD_BARS = 5
+
+
+def _drop_halted_symbols(wide: pd.DataFrame) -> pd.DataFrame:
+    """Drop symbols whose trailing closes are flat for >= HALT_THRESHOLD_BARS.
+
+    After ``ffill()`` a halted symbol presents as a long run of identical
+    closes. Strategies that consume this panel (momentum, vol, RSI) treat
+    such names as tradable with zero-vol / zero-return readings, which
+    sizing formulas can blow up on. Audit P0 #10 (cross-cutting):
+    explicitly drop halted symbols from the panel and warn so operators
+    notice. Halts that resolve will reappear once real prints arrive.
+    """
+
+    if wide is None or wide.empty:
+        return wide
+    n = len(wide.index)
+    if n < HALT_THRESHOLD_BARS + 1:
+        return wide
+    tail = wide.tail(HALT_THRESHOLD_BARS + 1)
+    flat: list[str] = []
+    for col in wide.columns:
+        vals = tail[col].dropna().values
+        if len(vals) < HALT_THRESHOLD_BARS + 1:
+            continue
+        # All bars in the tail equal? Treat as halted.
+        if np.all(vals == vals[0]):
+            flat.append(str(col))
+    if flat:
+        log.warning(
+            "mq: dropping %d halted symbols (>=%d identical trailing closes): %s",
+            len(flat),
+            HALT_THRESHOLD_BARS,
+            ",".join(sorted(flat)),
+        )
+        wide = wide.drop(columns=flat)
+    return wide
 
 
 # --------------------------------------------------------------------------- #

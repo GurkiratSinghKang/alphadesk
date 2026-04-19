@@ -527,7 +527,10 @@ class ExecutionSimulator:
                             if px > 0:
                                 return px
             except Exception:
-                pass
+                log.debug(
+                    "multileg fill: contract_bars parse failed for %s",
+                    leg.contract_id, exc_info=True,
+                )
 
         # BS fallback.
         if self.options_bs_fallback is not None:
@@ -607,7 +610,10 @@ class ExecutionSimulator:
                     spread_pct = (ask_f - bid_f) / mid
                     return _d(max(spread_pct, 0.0))
         except Exception:
-            pass
+            log.debug(
+                "leg_spread_pct: chain snapshot parse failed for %s",
+                leg.contract_id, exc_info=True,
+            )
         return self.default_options_spread_pct
 
     def _build_fill(

@@ -77,6 +77,10 @@ class ConnectionManager:
                     timeout=2.0,
                 )
             except Exception:
+                logger.debug(
+                    "broadcast: dropped client on channel %s (will reap)",
+                    channel, exc_info=True,
+                )
                 dead.append(ws)
 
         if dead:
@@ -122,6 +126,10 @@ async def _redis_listener() -> None:
                     try:
                         data = orjson.loads(message["data"])
                     except Exception:
+                        logger.debug(
+                            "Redis pubsub: non-JSON message on %s, passing raw",
+                            channel, exc_info=True,
+                        )
                         data = {"raw": message["data"]}
                     await manager.broadcast(channel, data)
             except asyncio.CancelledError:
@@ -129,19 +137,28 @@ async def _redis_listener() -> None:
                     await pubsub.unsubscribe()
                     await pubsub.aclose()
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Redis listener: unsubscribe/close raised during cancel",
+                        exc_info=True,
+                    )
                 return
-            except Exception as exc:
-                logger.error("Redis listener stream error: %s", exc)
+            except Exception:
+                logger.error("Redis listener stream error", exc_info=True)
                 try:
                     await pubsub.unsubscribe()
                     await pubsub.aclose()
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Redis listener: unsubscribe/close raised after stream error",
+                        exc_info=True,
+                    )
         except asyncio.CancelledError:
             return
-        except Exception as exc:
-            logger.error("Redis listener connection error: %s (retrying in %.1fs)", exc, retry_delay)
+        except Exception:
+            logger.error(
+                "Redis listener connection error (retrying in %.1fs)",
+                retry_delay, exc_info=True,
+            )
 
         consecutive_failures += 1
         if consecutive_failures >= max_consecutive_failures:
@@ -221,6 +238,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             await ws.close(code=4001, reason="Auth timeout")
             return
         except Exception:
+            logger.debug("websocket auth failed", exc_info=True)
             await ws.send_text(orjson.dumps({"error": "Invalid token"}).decode())
             await ws.close(code=4001, reason="Auth failed")
             return
@@ -235,6 +253,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             try:
                 msg = orjson.loads(raw)
             except Exception:
+                logger.debug("websocket: received invalid JSON from client", exc_info=True)
                 await manager._send(ws, {"error": "Invalid JSON"})
                 continue
 
@@ -253,8 +272,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as exc:
-        logger.error("WebSocket error: %s", exc)
+    except Exception:
+        logger.error("WebSocket error", exc_info=True)
     finally:
         await manager.disconnect(ws)
         await _maybe_stop_listener()

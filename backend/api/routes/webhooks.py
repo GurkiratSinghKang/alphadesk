@@ -85,7 +85,7 @@ async def receive_tradingview_webhook(
     try:
         alert = TradingViewAlert(**body)
     except Exception as e:
-        logger.error("Failed to parse TradingView alert: %s", e)
+        logger.error("Failed to parse TradingView alert", exc_info=True)
         raise HTTPException(status_code=422, detail=f"Invalid alert payload: {e}")
 
     logger.info(
@@ -188,8 +188,8 @@ async def _send_notification(message: str) -> None:
                         "parse_mode": "HTML",
                     },
                 )
-        except Exception as e:
-            logger.error("Failed to send Telegram notification: %s", e)
+        except Exception:
+            logger.error("Failed to send Telegram notification", exc_info=True)
 
     # Discord
     if settings.DISCORD_WEBHOOK_URL.get_secret_value():
@@ -199,5 +199,5 @@ async def _send_notification(message: str) -> None:
                     settings.DISCORD_WEBHOOK_URL.get_secret_value(),
                     json={"content": f"**[AlphaDesk]** {message}"},
                 )
-        except Exception as e:
-            logger.error("Failed to send Discord notification: %s", e)
+        except Exception:
+            logger.error("Failed to send Discord notification", exc_info=True)

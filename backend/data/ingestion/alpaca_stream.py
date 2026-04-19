@@ -69,7 +69,7 @@ async def _maybe_publish(channel: str, symbol: str, price: float, data: dict) ->
         from api.routes.trades import check_alerts_for_symbol
         await check_alerts_for_symbol(symbol, price)
     except Exception:
-        pass
+        logger.debug("price-alert check failed for %s", symbol, exc_info=True)
 
 
 # Default symbols when Redis cache and trade ledger are empty
@@ -251,8 +251,8 @@ async def _watchlist_refresh_loop(ws) -> None:
                 await _update_subscriptions(ws, new_symbols)
             # Defence-in-depth eviction sweep — internal interval guard.
             _sweep_stale_quotes()
-        except Exception as e:
-            logger.warning("Watchlist refresh failed: %s", e)
+        except Exception:
+            logger.warning("Watchlist refresh failed", exc_info=True)
 
 
 async def _run_stream() -> None:
@@ -293,7 +293,10 @@ async def _run_stream() -> None:
                     logger.error("Auth/connection error: %s — will retry with backoff", e)
                     raise  # Let the outer except handler apply backoff and retry
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to parse Alpaca auth response — will continue to subscribe",
+                        exc_info=True,
+                    )
 
                 # Build dynamic watchlist and do initial subscription
                 watchlist = await get_dynamic_watchlist()
@@ -316,6 +319,7 @@ async def _run_stream() -> None:
                     try:
                         msgs = json.loads(raw)
                     except Exception:
+                        logger.debug("Alpaca stream: malformed JSON frame dropped", exc_info=True)
                         continue
 
                     if not isinstance(msgs, list):
@@ -381,10 +385,12 @@ async def _run_stream() -> None:
 
         except asyncio.CancelledError:
             break
-        except Exception as e:
+        except Exception:
             if _should_stop:
                 break
-            logger.error("Alpaca SIP stream error: %s (reconnecting in %ds)", e, backoff)
+            logger.error(
+                "Alpaca SIP stream error (reconnecting in %ds)", backoff, exc_info=True,
+            )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 300)  # exponential backoff, max 5 minutes
         finally:
@@ -392,8 +398,13 @@ async def _run_stream() -> None:
                 refresh_task.cancel()
                 try:
                     await refresh_task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError:
                     pass
+                except Exception:
+                    logger.debug(
+                        "alpaca_stream: refresh_task raised during cancel",
+                        exc_info=True,
+                    )
 
     logger.info("Alpaca SIP stream loop exited")
 
@@ -426,11 +437,11 @@ async def _supervised_run() -> None:
             # Intentional cancellation — propagate so stop_alpaca_stream's
             # awaited cancel() sees a clean exit.
             raise
-        except Exception as e:
+        except Exception:
             logger.error(
-                "alpaca_stream: _run_stream crashed: %s — reconnecting in %ds",
-                e,
+                "alpaca_stream: _run_stream crashed — reconnecting in %ds",
                 backoff,
+                exc_info=True,
             )
         if _should_stop:
             break

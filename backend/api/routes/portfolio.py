@@ -896,7 +896,10 @@ async def get_pnl_calendar(
                                     cur = resp.json().get("trade", {}).get("p", 0)
                                     total_unrealized += (cur - entry) * shares
                             except Exception:
-                                pass
+                                logger.debug(
+                                    "calendar: latest-trade fetch failed for %s",
+                                    sym, exc_info=True,
+                                )
                     if total_unrealized != 0:
                         daily_pnl[today_str] = round(total_unrealized, 2)
                         daily_trades[today_str] = len(open_positions)

@@ -708,7 +708,7 @@ async def _get_current_price(symbol: str) -> float:
                 if price and price > 0:
                     return float(price)
     except Exception:
-        logger.warning("Failed to fetch price from Alpaca for %s", symbol)
+        logger.warning("Failed to fetch price from Alpaca for %s", symbol, exc_info=True)
 
     return 0.0
 
@@ -747,8 +747,8 @@ async def halt_trading(username: str = Depends(require_auth)):
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.delete(f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers)
-    except Exception as e:
-        logger.error("Failed to cancel orders during halt: %s", e)
+    except Exception:
+        logger.error("Failed to cancel orders during halt", exc_info=True)
     return {"halted": True, "message": "All trading halted. All open orders cancelled."}
 
 
@@ -803,6 +803,7 @@ async def _get_all_alerts() -> list[dict]:
                 alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
                 alerts.append(alert)
             except Exception:
+                logger.debug("Skipping malformed alert in Redis", exc_info=True)
                 continue
         # Sort by created_at descending
         alerts.sort(key=lambda a: a.get("created_at", ""), reverse=True)

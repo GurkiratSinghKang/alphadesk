@@ -165,8 +165,8 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
     except httpx.HTTPStatusError as e:
         logger.error("newsdata.io fetch failed (HTTP %d): %s", e.response.status_code, e.response.text[:200])
         return []
-    except Exception as e:
-        logger.error("newsdata.io fetch failed: %s: %s", type(e).__name__, e)
+    except Exception:
+        logger.error("newsdata.io fetch failed", exc_info=True)
         return []
 
 
@@ -188,8 +188,8 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
                 sentiment=item.get("sentiment"),
                 symbols=symbols or [],
             ))
-        except Exception as e:
-            logger.debug("Skipping malformed news article: %s", e)
+        except Exception:
+            logger.debug("Skipping malformed news article", exc_info=True)
             continue
     return articles
 

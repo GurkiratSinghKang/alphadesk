@@ -20,6 +20,7 @@ pick the order type that matches the rule.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -27,6 +28,8 @@ from typing import Any, Iterable, Mapping, Optional
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger("alphadesk.backtest.engine")
 
 from backtest.costs import CostModel, DefaultCostModel
 from backtest.execution import ExecutionSimulator
@@ -178,7 +181,7 @@ class BacktestEngine:
         try:
             self.strategy.configure(self.strategy_params)
         except Exception:
-            pass
+            logger.debug("backtest: strategy.configure raised", exc_info=True)
 
     # ------------------------------------------------------------------
     # Public
@@ -260,7 +263,7 @@ class BacktestEngine:
                 try:
                     self.strategy.on_fill(f, ctx)
                 except Exception:
-                    pass
+                    logger.debug("backtest: strategy.on_fill (session) raised", exc_info=True)
 
             # 5. Mark-to-market mid-day so strategy.manage() sees up-to-date
             # P&L.
@@ -295,7 +298,7 @@ class BacktestEngine:
                 try:
                     self.strategy.on_fill(f, ctx)
                 except Exception:
-                    pass
+                    logger.debug("backtest: strategy.on_fill (close) raised", exc_info=True)
 
             session_fills.extend(close_fills)
             fills.extend(session_fills)
@@ -331,7 +334,7 @@ class BacktestEngine:
                 try:
                     self.strategy.on_fill(f, ctx)
                 except Exception:
-                    pass
+                    logger.debug("backtest: strategy.on_fill (MOC) raised", exc_info=True)
             fills.extend(moc_fills)
 
             # 11. Record daily notional (for turnover) and equity snapshot.
@@ -358,7 +361,7 @@ class BacktestEngine:
                 try:
                     cfg.progress_cb(session)
                 except Exception:
-                    pass
+                    logger.debug("backtest: progress_cb raised", exc_info=True)
 
         # Compile the result.
         eq_df = pd.DataFrame(equity_rows)
@@ -423,7 +426,10 @@ class BacktestEngine:
                 if raw:
                     return [_to_date(d) for d in raw]
             except Exception:
-                pass
+                logger.debug(
+                    "backtest: calendar_provider.sessions raised — falling back to bdate_range",
+                    exc_info=True,
+                )
         # Fallback: business-day calendar (Mon-Fri, no holidays).
         idx = pd.bdate_range(start=start, end=end)
         return [d.date() for d in idx]

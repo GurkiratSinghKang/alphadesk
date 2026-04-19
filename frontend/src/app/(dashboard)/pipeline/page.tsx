@@ -438,7 +438,13 @@ export default function PipelinePage() {
                 </Card>
               ) : (
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
-                  <div className="overflow-x-auto">
+                  {/* Viewport audit r5 #4: at 768-900 the table's min-w-[900px]
+                      forces horizontal scroll, but macOS/iOS hide scrollbars
+                      until actively scrolling — traders missed Stop Loss,
+                      Take Profit and Signal columns. scrollbar-thin (defined
+                      in globals.css) keeps the bar visible as a scroll
+                      affordance at tablet widths. */}
+                  <div className="overflow-x-auto scrollbar-thin">
                   <Table className="min-w-[900px]">
                     <TableHeader>
                       <TableRow className="border-border">
@@ -737,7 +743,10 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
               ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+              // Viewport audit r5 #3: previous grid jumped 3→6 at exactly
+              // 1280px (xl) with no intermediate step — violent reflow on
+              // mid-laptop resize. Add lg:grid-cols-4 for 2→3→4→6.
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-gradient-to-r from-[var(--profit)] to-[var(--loss)]" />
                   <CardContent className="p-4 text-center">

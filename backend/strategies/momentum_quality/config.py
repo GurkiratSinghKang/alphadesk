@@ -12,7 +12,11 @@ this file) for the academic rationale for each knob.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+
+_log = logging.getLogger("alphadesk.strategies.momentum_quality.config")
 
 
 # --------------------------------------------------------------------------- #
@@ -52,13 +56,13 @@ DEFAULTS: dict[str, Any] = {
 # is that it picks up leadership rotation within a stable universe.
 UNIVERSE_SEED: tuple[str, ...] = (
     # Mega-cap tech
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "AVGO",
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "AVGO",
     "ORCL", "ADBE", "CRM", "CSCO", "AMD", "INTC", "TXN", "QCOM", "IBM", "NFLX", "ACN",
     # Healthcare
     "LLY", "UNH", "ABBV", "MRK", "TMO", "PFE", "DHR", "ABT", "AMGN", "MDT",
     # Consumer
     "AMZN", "PG", "HD", "COST", "PEP", "KO", "WMT", "NKE", "MCD", "DIS",
-    "LOW",
+    "LOW", "TSLA",
     # Communication / services
     "CMCSA", "VZ",
     # Industrials / energy / materials
@@ -81,6 +85,7 @@ SECTOR_MAP: dict[str, str] = {
     "AAPL": "Information Technology",
     "MSFT": "Information Technology",
     "GOOGL": "Communication Services",
+    "GOOG": "Communication Services",
     "AMZN": "Consumer Discretionary",
     "NVDA": "Information Technology",
     "META": "Communication Services",
@@ -116,6 +121,7 @@ SECTOR_MAP: dict[str, str] = {
     "MCD": "Consumer Discretionary",
     "DIS": "Communication Services",
     "LOW": "Consumer Discretionary",
+    "TSLA": "Consumer Discretionary",
     "CMCSA": "Communication Services",
     "VZ": "Communication Services",
     "XOM": "Energy",
@@ -168,17 +174,29 @@ def eligible_universe() -> list[str]:
     """Return the seed list with the excluded-sector names removed.
 
     Symbols with no entry in ``SECTOR_MAP`` are conservatively dropped
-    (unknown sector → not eligible).
+    (unknown sector → not eligible). When that happens we log a single
+    WARNING so future drift between :data:`UNIVERSE_SEED` and
+    :data:`SECTOR_MAP` is caught at run-time instead of being absorbed
+    silently (audit P0 #8 — silent universe shrinkage).
     """
 
     out: list[str] = []
+    missing: list[str] = []
     for s in UNIVERSE_SEED:
         sector = SECTOR_MAP.get(s)
         if sector is None:
+            missing.append(s)
             continue
         if sector in EXCLUDED_SECTORS:
             continue
         out.append(s)
+    if missing:
+        _log.warning(
+            "momentum_quality: %d UNIVERSE_SEED symbols silently dropped "
+            "(missing from SECTOR_MAP): %s",
+            len(missing),
+            ",".join(sorted(set(missing))),
+        )
     return out
 
 

@@ -352,7 +352,7 @@ async def _generate_var() -> VaRResponse:
                                 vol = (sum((r - sum(returns) / len(returns)) ** 2 for r in returns) / len(returns)) ** 0.5
                                 position_vols[sym] = vol
                 except Exception:
-                    pass
+                    logger.debug("VaR: bars fetch failed for %s", sym, exc_info=True)
 
             if not position_vols:
                 return _empty_var("Insufficient price history to estimate volatility.")

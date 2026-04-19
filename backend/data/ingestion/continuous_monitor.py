@@ -54,7 +54,7 @@ async def _check_news_for_positions() -> list[dict]:
                     alerts.append({"symbol": sym, "headline": h, "severity": "high"})
                     logger.warning("NEWS ALERT [%s]: %s", sym, h[:100])
         except Exception:
-            pass
+            logger.warning("news alert check failed for %s", sym, exc_info=True)
 
     if alerts:
         # Publish alerts to Redis for frontend
@@ -68,7 +68,7 @@ async def _check_news_for_positions() -> list[dict]:
                     "severity": alert["severity"],
                 })
         except Exception:
-            pass
+            logger.warning("failed to publish news alerts to Redis", exc_info=True)
 
     return alerts
 
@@ -125,7 +125,7 @@ async def _check_price_alerts() -> list[dict]:
                         "severity": "medium",
                     })
             except Exception:
-                pass
+                logger.warning("price alert check failed for %s", sym, exc_info=True)
 
     # Publish alerts
     if alerts:
@@ -139,7 +139,7 @@ async def _check_price_alerts() -> list[dict]:
                     "severity": alert["severity"],
                 })
         except Exception:
-            pass
+            logger.warning("failed to publish price alerts to Redis", exc_info=True)
 
     return alerts
 
@@ -222,14 +222,14 @@ async def _run_monitor() -> None:
                         logger.info("Strategy evaluation triggered (%s ET)", slot_key)
                         try:
                             await run_daily_pipeline(screen_limit=20, analyze_limit=5)
-                        except Exception as e:
-                            logger.error("Strategy evaluation failed: %s", e)
+                        except Exception:
+                            logger.error("Strategy evaluation failed", exc_info=True)
                     await asyncio.sleep(60)  # skip rest of this minute
 
             await asyncio.sleep(10)  # check every 10 seconds
 
-        except Exception as e:
-            logger.error("Monitor error: %s", e)
+        except Exception:
+            logger.error("Monitor error", exc_info=True)
             await asyncio.sleep(30)
 
 
@@ -249,6 +249,8 @@ async def stop_continuous_monitor() -> None:
         _monitor_task.cancel()
         try:
             await _monitor_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.debug("continuous monitor task raised during shutdown", exc_info=True)
     logger.info("Continuous market monitor stopped")

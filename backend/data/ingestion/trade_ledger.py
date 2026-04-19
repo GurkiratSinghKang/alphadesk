@@ -245,7 +245,10 @@ def _run_migration(engine: Any) -> None:
             try:
                 LEDGER_PATH.replace(MIGRATED_PATH)
             except Exception:
-                pass
+                logger.warning(
+                    "TradeLedger: failed to rename %s -> %s",
+                    LEDGER_PATH, MIGRATED_PATH, exc_info=True,
+                )
             return
 
         inserted = 0

@@ -463,7 +463,13 @@ class ORBStrategy:
         exit_reason = ""
         tp_hits = 0
 
-        remaining_bars = post_or.iloc[fill_idx:].reset_index(drop=True)
+        # Walk strictly forward from the bar AFTER the fill. Including
+        # the fill bar would let the same-bar high/low trigger the stop
+        # or take-profit at entry, even though our fill executed at that
+        # bar's open — produces negative expectancy on volatile breakout
+        # mornings (audit P0 #6). The fill bar's high/low is still used
+        # to seed the trailing-extreme state above.
+        remaining_bars = post_or.iloc[fill_idx + 1:].reset_index(drop=True)
         for _, rbar in remaining_bars.iterrows():
             if remaining <= 0:
                 break
@@ -567,9 +573,16 @@ class ORBStrategy:
                     if candidate < trail_stop:
                         trail_stop = candidate
 
-        # If we fell off the loop without flattening, close at the last bar's close.
+        # If we fell off the loop without flattening, close at the last
+        # available bar's close. When the fill bar was the last tradable
+        # bar of the session, ``remaining_bars`` is empty (the
+        # walk-forward starts strictly after the fill bar — see fix
+        # P0 #6); fall back to the fill bar itself for the EOD mark.
         if remaining > 0:
-            last_bar = remaining_bars.iloc[-1]
+            if not remaining_bars.empty:
+                last_bar = remaining_bars.iloc[-1]
+            else:
+                last_bar = fill_row
             raw_exit = float(last_bar["close"])
             exit_price = self._apply_exit_slippage(raw_exit, direction, slip_frac)
             exit_ts = last_bar["ts"].to_pydatetime() if hasattr(last_bar["ts"], "to_pydatetime") else last_bar["ts"]

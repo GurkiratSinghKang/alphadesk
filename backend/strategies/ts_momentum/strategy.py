@@ -31,6 +31,7 @@ we emit none.
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date, timedelta
 from decimal import Decimal
@@ -144,8 +145,15 @@ class TSMomentumStrategy:
         """On a rebalance day, compute the new target weights and close
         any position whose weight has flipped to ~zero.
 
-        On non-rebalance days, return [].
+        On non-rebalance days we still update the running drawdown peak
+        so the de-lever gate sees intra-month equity drawdowns. The
+        previous behaviour anchored ``peak`` only on rebalance days,
+        which made intra-month drawdowns that recovered by month-end
+        invisible to the risk-control gate (audit P0 #4).
         """
+
+        # Daily peak tracking — runs every bar regardless of rebalance.
+        self._update_drawdown_peak(ctx)
 
         if not self._is_rebalance_day(asof, ctx):
             return []
@@ -212,6 +220,28 @@ class TSMomentumStrategy:
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
+    def _update_drawdown_peak(self, ctx: Context) -> None:
+        """Refresh the running peak-equity high-water mark.
+
+        Called from ``manage()`` on every bar (not just rebalance days)
+        so the drawdown gate inside :meth:`_compute_target_weights` sees
+        the true peak — including intra-month highs that recover before
+        the next rebalance. The peak is stored on ``ctx.state`` so it
+        survives across bars in the same backtest run.
+        """
+
+        cache = cache_of(ctx)
+        peak_key = f"{_NS}.peak_equity"
+        try:
+            cur_equity = float(ctx.equity)
+        except Exception:
+            return
+        if not math.isfinite(cur_equity):
+            return
+        prev = cache.get(peak_key)
+        if prev is None or cur_equity > prev:
+            cache[peak_key] = cur_equity
+
     def _is_rebalance_day(self, asof: date, ctx: Context) -> bool:
         freq = self.config.rebalance_freq
         if freq == "monthly":
@@ -277,17 +307,18 @@ class TSMomentumStrategy:
             weights, cfg.max_weight_per_asset, cfg.target_vol_gross_mul
         )
 
-        # Drawdown de-lever.
+        # Drawdown de-lever. The peak is now refreshed on every bar by
+        # ``_update_drawdown_peak`` (see ``manage``) so the dd reading
+        # reflects the highest equity seen since inception, not just the
+        # last rebalance-day equity. This catches intra-month drawdowns
+        # that recover by month-end which the previous code missed.
         cache = cache_of(ctx)
-        peak_key = f"{_NS}.peak_equity"
-        peak = cache.get(peak_key)
+        self._update_drawdown_peak(ctx)
+        peak = cache.get(f"{_NS}.peak_equity")
         try:
             cur_equity = float(ctx.equity)
         except Exception:
             cur_equity = float(DEFAULT_PARAMS.get("target_vol_gross_mul", 1.0))
-        if peak is None or cur_equity > peak:
-            cache[peak_key] = cur_equity
-            peak = cur_equity
         dd = 0.0
         if peak and peak > 0:
             dd = (peak - cur_equity) / peak
@@ -526,6 +557,42 @@ def _fetch_close_panel_raw(
         .sort_index()
     )
     wide = wide.ffill()
+    return _drop_halted_symbols(wide)
+
+
+# --------------------------------------------------------------------------- #
+# Halt detection (audit P0 #10 cross-cutting fix)                             #
+# --------------------------------------------------------------------------- #
+# A symbol whose ffilled close panel ends in a long flat tail is almost
+# certainly halted (BBBY/SIVB/FRC pattern). The momentum sign + realised
+# vol pipeline reads such a tail as a tradable zero-vol / zero-return
+# signal, which sizes positions to absurd levels (vol denominator -> 0)
+# or treats the name as flat-and-tradable when in reality nothing prints.
+_TS_HALT_BARS = 5
+_ts_log = logging.getLogger("alphadesk.strategies.ts_momentum")
+
+
+def _drop_halted_symbols(wide: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    if wide is None or wide.empty:
+        return wide
+    if len(wide.index) < _TS_HALT_BARS + 1:
+        return wide
+    tail = wide.tail(_TS_HALT_BARS + 1)
+    flat: list[str] = []
+    for col in wide.columns:
+        vals = tail[col].dropna().values
+        if len(vals) < _TS_HALT_BARS + 1:
+            continue
+        if np.all(vals == vals[0]):
+            flat.append(str(col))
+    if flat:
+        _ts_log.warning(
+            "ts_momentum: dropping %d halted symbols (>=%d flat closes): %s",
+            len(flat),
+            _TS_HALT_BARS,
+            ",".join(sorted(flat)),
+        )
+        wide = wide.drop(columns=flat)
     return wide
 
 

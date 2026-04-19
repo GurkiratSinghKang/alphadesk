@@ -17,9 +17,11 @@ emits the next sleeve's MOO. All other bars are no-ops.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Any, Iterable, Mapping, Optional
 
+import numpy as np
 import pandas as pd
 
 from strategies.base import Context, cache_of
@@ -27,6 +29,9 @@ from strategies.registry import register_strategy
 from strategies.signal import OrderType, Signal
 
 from .config import DEFAULT_PARAMS, DualMomentumConfig, build_search_space
+
+
+log = logging.getLogger("alphadesk.strategies.dual_momentum")
 
 
 # --------------------------------------------------------------------------- #
@@ -330,6 +335,39 @@ def _fetch_close_panel(
     # Forward-fill small gaps (holidays aligned between tickers). We
     # intentionally do NOT backfill — that would peek forward.
     wide = wide.ffill()
+    return _drop_halted_symbols(wide)
+
+
+# --- halt detection ---------------------------------------------------------#
+# After ffill a halted name presents as a flat tail of identical closes;
+# momentum / RSI / realized-vol pipelines treat that as a tradable
+# zero-vol / zero-return signal which can produce runaway sizing or
+# silent illiquid entries. Audit P0 #10 (cross-cutting): drop halted
+# symbols and log a WARNING so operators see them.
+_DM_HALT_BARS = 5
+
+
+def _drop_halted_symbols(wide: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    if wide is None or wide.empty:
+        return wide
+    if len(wide.index) < _DM_HALT_BARS + 1:
+        return wide
+    tail = wide.tail(_DM_HALT_BARS + 1)
+    flat: list[str] = []
+    for col in wide.columns:
+        vals = tail[col].dropna().values
+        if len(vals) < _DM_HALT_BARS + 1:
+            continue
+        if np.all(vals == vals[0]):
+            flat.append(str(col))
+    if flat:
+        log.warning(
+            "dual_momentum: dropping %d halted symbols (>=%d flat closes): %s",
+            len(flat),
+            _DM_HALT_BARS,
+            ",".join(sorted(flat)),
+        )
+        wide = wide.drop(columns=flat)
     return wide
 
 

@@ -331,8 +331,10 @@ async def _check_pairs_zscore() -> None:
                         remaining.append(setup)
                 else:
                     remaining.append(setup)
-            except Exception as e:
-                logger.debug("Pairs price fetch error for %s/%s: %s", sym_a, sym_b, e)
+            except Exception:
+                logger.debug(
+                    "Pairs price fetch error for %s/%s", sym_a, sym_b, exc_info=True,
+                )
                 remaining.append(setup)
 
         # Replace the live pairs list under the lock. Any setups that were
@@ -346,8 +348,8 @@ async def _check_pairs_zscore() -> None:
         for setup in triggered:
             await _execute_triggered_setup(setup)
 
-    except Exception as e:
-        logger.error("Pairs z-score check error: %s", e)
+    except Exception:
+        logger.error("Pairs z-score check error", exc_info=True)
 
 
 async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
@@ -411,8 +413,8 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
             )
             logger.info("Real-time trade executed and recorded: %s %s", strategy, symbol)
 
-    except Exception as e:
-        logger.exception("Failed to execute real-time setup: %s", e)
+    except Exception:
+        logger.exception("Failed to execute real-time setup")
 
 
 # ─── Main Scanner Loop ──────────────────────────────────────
@@ -465,8 +467,8 @@ async def _scanner_loop() -> None:
 
     except asyncio.CancelledError:
         pass
-    except Exception as e:
-        logger.exception("Scanner loop error: %s", e)
+    except Exception:
+        logger.exception("Scanner loop error")
     finally:
         logger.info("Real-time signal scanner stopped")
 

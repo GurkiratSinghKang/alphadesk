@@ -473,7 +473,9 @@ async def _fetch_real_chain(
                 if trade_price > 0:
                     spot_price = trade_price
         except Exception:
-            pass  # keep the demo spot as fallback
+            # Keep the demo spot as fallback; log at DEBUG so it's visible
+            # when something is actually broken rather than silent.
+            logger.debug("options: spot-price fetch failed", exc_info=True)
 
         contracts: list[OptionContract] = []
         expirations: set[date] = set()

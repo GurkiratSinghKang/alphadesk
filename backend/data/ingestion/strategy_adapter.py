@@ -100,40 +100,40 @@ def _build_context(asof: date, equity: float = 100_000.0) -> Any:
         from data.providers.alpaca import AlpacaBarProvider
 
         bar_provider = AlpacaBarProvider()
-    except Exception as e:
-        logger.warning("AlpacaBarProvider unavailable: %s", e)
+    except Exception:
+        logger.warning("AlpacaBarProvider unavailable", exc_info=True)
 
     # Polygon options — optional.
     try:
         from data.providers.polygon_options import PolygonOptionsProvider
 
         options_provider = PolygonOptionsProvider()
-    except Exception as e:
-        logger.debug("PolygonOptionsProvider unavailable: %s", e)
+    except Exception:
+        logger.debug("PolygonOptionsProvider unavailable", exc_info=True)
 
     # FMP earnings — optional.
     try:
         from data.providers.fmp_earnings import FMPEarningsProvider
 
         earnings_provider = FMPEarningsProvider()
-    except Exception as e:
-        logger.debug("FMPEarningsProvider unavailable: %s", e)
+    except Exception:
+        logger.debug("FMPEarningsProvider unavailable", exc_info=True)
 
     # FMP fundamentals — optional.
     try:
         from data.providers.fmp_fundamentals import FMPFundamentalsProvider
 
         fundamentals_provider = FMPFundamentalsProvider()
-    except Exception as e:
-        logger.debug("FMPFundamentalsProvider unavailable: %s", e)
+    except Exception:
+        logger.debug("FMPFundamentalsProvider unavailable", exc_info=True)
 
     # Trading calendar — optional.
     try:
         from data.calendar import USMarketCalendar
 
         calendar_provider = USMarketCalendar()
-    except Exception as e:
-        logger.debug("USMarketCalendar unavailable: %s", e)
+    except Exception:
+        logger.debug("USMarketCalendar unavailable", exc_info=True)
 
     return Context(
         asof=asof,
@@ -254,10 +254,10 @@ class LiveStrategyAdapter(BaseStrategyRunner):
         instance = cls()
         try:
             instance.configure({})
-        except Exception as e:
+        except Exception:
             logger.warning(
-                "%s: configure({}) failed (%s) — proceeding with class defaults",
-                self._registry_name, e,
+                "%s: configure({}) failed — proceeding with class defaults",
+                self._registry_name, exc_info=True,
             )
         self._strategy = instance
         self._description = meta.description
@@ -278,8 +278,8 @@ class LiveStrategyAdapter(BaseStrategyRunner):
         """Return candidate dicts ``[{symbol, price, metrics}]``."""
         try:
             strategy = self._load_strategy()
-        except Exception as e:
-            logger.error("%s: cannot load registry strategy (%s)", self.name, e)
+        except Exception:
+            logger.error("%s: cannot load registry strategy", self.name, exc_info=True)
             return []
 
         if not self._supports_daily_cadence():
@@ -298,8 +298,8 @@ class LiveStrategyAdapter(BaseStrategyRunner):
             symbols = await asyncio.to_thread(
                 lambda: list(strategy.universe(asof, ctx)) or []
             )
-        except Exception as e:
-            logger.warning("%s.universe() raised: %s", self.name, e)
+        except Exception:
+            logger.warning("%s.universe() raised", self.name, exc_info=True)
             return []
 
         # Fetch a single latest daily bar per symbol for the price field.
@@ -332,8 +332,8 @@ class LiveStrategyAdapter(BaseStrategyRunner):
             return []
         try:
             strategy = self._load_strategy()
-        except Exception as e:
-            logger.error("%s: cannot load registry strategy (%s)", self.name, e)
+        except Exception:
+            logger.error("%s: cannot load registry strategy", self.name, exc_info=True)
             return []
 
         if not self._supports_daily_cadence():
@@ -351,8 +351,8 @@ class LiveStrategyAdapter(BaseStrategyRunner):
             signals = await asyncio.to_thread(
                 lambda: list(strategy.generate_signals(asof, ctx)) or []
             )
-        except Exception as e:
-            logger.exception("%s.generate_signals() raised: %s", self.name, e)
+        except Exception:
+            logger.exception("%s.generate_signals() raised", self.name)
             return []
 
         analyses: list[dict[str, Any]] = []
@@ -367,6 +367,9 @@ class LiveStrategyAdapter(BaseStrategyRunner):
                     )
                     px = float(lookup.get(sig.symbol, 0.0))
                 except Exception:
+                    logger.debug(
+                        "live-price lookup failed for %s", sig.symbol, exc_info=True,
+                    )
                     px = 0.0
             if not px or px <= 0:
                 logger.debug(
@@ -478,8 +481,8 @@ def _latest_daily_prices(
     start = asof - timedelta(days=10)
     try:
         frame = bar_provider.bars(symbols, start, asof, tf="1D")
-    except Exception as e:
-        logger.warning("bar_provider.bars failed: %s", e)
+    except Exception:
+        logger.warning("bar_provider.bars failed", exc_info=True)
         return {}
     if frame is None or len(frame) == 0:
         return {}
@@ -491,8 +494,8 @@ def _latest_daily_prices(
             price = float(latest["close"])
             if price > 0:
                 out[str(sym)] = price
-    except Exception as e:
-        logger.warning("failed to extract close prices from bars frame: %s", e)
+    except Exception:
+        logger.warning("failed to extract close prices from bars frame", exc_info=True)
     return out
 
 

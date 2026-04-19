@@ -441,8 +441,15 @@ class EarningsVolStrategy:
         implied_move_pct = float(straddle_mid) / float(under_close)
         implied_move_abs = float(straddle_mid)
 
-        # Historical move from Alpaca daily bars.
-        hist_median = self._historical_earnings_move(ctx, symbol, asof)
+        # Historical move from Alpaca daily bars. The denominator pair
+        # is timing-aware: BMO events move from prior close → release-day
+        # open, while AMC events move from release-day close → next-day
+        # close. Misclassifying half the universe as BMO understates the
+        # historical median by ~50% (audit P0) and over-fires the
+        # implied/historical ratio gate.
+        hist_median = self._historical_earnings_move(
+            ctx, symbol, asof, earn_time
+        )
         if hist_median is None:
             return None
 
@@ -672,9 +679,26 @@ class EarningsVolStrategy:
     # Historical move                                                    #
     # ================================================================== #
     def _historical_earnings_move(
-        self, ctx: Context, symbol: str, asof: date
+        self,
+        ctx: Context,
+        symbol: str,
+        asof: date,
+        earn_time: str = "after_close",
     ) -> Optional[float]:
-        """Median |close_T / close_{T-1} - 1| across past earnings events.
+        """Median absolute earnings-day move across past events.
+
+        The denominator pair depends on the timing of the announcement:
+
+        * AMC (after market close): move = close_{D+1} / close_D − 1 —
+          the gap between the release day's close (last quote before
+          the release) and the next session's close.
+        * BMO (before market open): move = open_D / close_{D-1} − 1 —
+          the overnight gap into the release-day open.
+
+        ``earn_time`` is the classification of the *current* (forward)
+        event; we assume the symbol's typical reporting cadence is
+        stable across the historical window, which matches FMP's
+        observed metadata in the universe used by this strategy.
 
         Returns ``None`` if too few events are observable.
         """
@@ -720,10 +744,17 @@ class EarningsVolStrategy:
 
         # Fetch enough bars around the earliest event to compute close-to-close.
         earliest = min(dates) - timedelta(days=10)
+        # Pull bars through ``asof + buffer`` so AMC events near the end
+        # of the lookback window still have a D+1 close available.
         try:
-            bars = bp.bars([symbol], earliest, asof, tf="1D")
+            bars = bp.bars(
+                [symbol], earliest, asof + timedelta(days=7), tf="1D"
+            )
         except Exception:
-            return None
+            try:
+                bars = bp.bars([symbol], earliest, asof, tf="1D")
+            except Exception:
+                return None
         if bars is None or len(bars) == 0:
             return None
         bars = pd.DataFrame(bars)
@@ -740,25 +771,43 @@ class EarningsVolStrategy:
         bars["_date"] = pd.to_datetime(bars[ts_col]).dt.date
         bars = bars.sort_values("_date").reset_index(drop=True)
         closes = bars["close"].astype(float).to_numpy()
+        opens = (
+            bars["open"].astype(float).to_numpy()
+            if "open" in bars.columns
+            else None
+        )
         dt_arr = bars["_date"].tolist()
+
+        is_bmo = earn_time == "before_open"
 
         moves: list[float] = []
         for d in dates:
-            # Find the row index whose date matches d, then (d-1 session) and
-            # (d session) closes.  FMP's date can be the session *of* the
-            # report (AMC) or the session *after* (BMO). Use the close of the
-            # first post-event session relative to the pre-event session.
             try:
                 idx = _find_nearest_session_idx(dt_arr, d)
             except ValueError:
                 continue
             if idx is None or idx <= 0 or idx >= len(closes):
                 continue
-            prev_close = closes[idx - 1]
-            post_close = closes[idx]
-            if prev_close <= 0 or post_close <= 0:
-                continue
-            moves.append(abs(post_close / prev_close - 1.0))
+            if is_bmo:
+                # BMO: gap from close_{D-1} to open_D.
+                prev_close = closes[idx - 1]
+                open_d = (
+                    opens[idx] if opens is not None and not pd.isna(opens[idx])
+                    else closes[idx]
+                )
+                if prev_close <= 0 or open_d <= 0:
+                    continue
+                moves.append(abs(open_d / prev_close - 1.0))
+            else:
+                # AMC (default): gap from close_D to close_{D+1}.
+                # Need a D+1 bar; skip events at the trailing edge.
+                if idx + 1 >= len(closes):
+                    continue
+                close_d = closes[idx]
+                close_d1 = closes[idx + 1]
+                if close_d <= 0 or close_d1 <= 0:
+                    continue
+                moves.append(abs(close_d1 / close_d - 1.0))
 
         if len(moves) < min_events:
             return None

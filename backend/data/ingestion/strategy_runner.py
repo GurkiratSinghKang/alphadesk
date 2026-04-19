@@ -101,9 +101,9 @@ async def get_screener_results(
     for adapter in adapters:
         try:
             rows = await adapter.screen()
-        except Exception as e:
+        except Exception:
             logger.warning(
-                "get_screener_results: %s.screen() failed: %s", adapter.name, e,
+                "get_screener_results: %s.screen() failed", adapter.name, exc_info=True,
             )
             continue
         for r in rows:

@@ -78,8 +78,8 @@ async def _fetch_alpaca_bars(symbol: str, limit: int = 60) -> list[dict]:
                 logger.warning("Alpaca bars API returned %d for %s", resp.status_code, symbol)
                 return []
             return resp.json().get("bars", [])
-    except Exception as e:
-        logger.warning("Alpaca bars fetch failed for %s: %s", symbol, e)
+    except Exception:
+        logger.warning("Alpaca bars fetch failed for %s", symbol, exc_info=True)
         return []
 
 
@@ -98,8 +98,8 @@ async def _fetch_polygon_ticker(symbol: str) -> dict:
                 logger.warning("Polygon ticker API returned %d for %s", resp.status_code, symbol)
                 return {}
             return resp.json().get("results", {})
-    except Exception as e:
-        logger.warning("Polygon ticker fetch failed for %s: %s", symbol, e)
+    except Exception:
+        logger.warning("Polygon ticker fetch failed for %s", symbol, exc_info=True)
         return {}
 
 
@@ -308,7 +308,7 @@ def _fundamental_score(poly: dict) -> tuple[float, str, dict]:
             elif years_listed > 5:
                 score += 5
         except Exception:
-            pass
+            logger.debug("maturity bonus parse failed for list_date=%r", list_date, exc_info=True)
 
     score = max(-100, min(100, score))
     conviction = "medium" if abs(score) > 15 else "low"

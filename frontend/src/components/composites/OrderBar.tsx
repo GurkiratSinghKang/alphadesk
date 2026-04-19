@@ -103,7 +103,11 @@ export default function OrderBar({
       className={cn(
         // Mobile: 2-col grid, stacked. md+: horizontal flex row.
         "grid grid-cols-2 gap-3 items-end px-4 py-4 border-t border-border bg-ink-050",
-        "md:flex md:flex-row md:gap-5 md:px-7",
+        // Viewport audit r5 #7: 7 fields × 90px + gaps + review span + Stage
+        // button overflows the center column at 1280-1380 (mid-laptop with
+        // rail+right aside). Allow wrapping to 2 rows below xl; keep a single
+        // non-wrapping row at xl+ where the desk center has enough room.
+        "md:flex md:flex-row md:flex-wrap xl:flex-nowrap md:gap-5 md:px-7",
         className
       )}
     >

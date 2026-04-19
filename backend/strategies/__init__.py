@@ -12,7 +12,11 @@ registry: `from backend.strategies.registry import get_strategy, load_all`.
 
 from __future__ import annotations
 
+import logging
+
 from strategies.base import BaseStrategy
+
+logger = logging.getLogger("alphadesk.strategies")
 
 STRATEGIES: dict[str, type[BaseStrategy]] = {}
 
@@ -28,4 +32,8 @@ def get_strategy(name: str) -> BaseStrategy | None:
         cls = _new_get(name)
         return cls() if cls else None
     except Exception:
+        logger.debug(
+            "strategies.get_strategy(%s) shim: registry lookup failed",
+            name, exc_info=True,
+        )
         return None

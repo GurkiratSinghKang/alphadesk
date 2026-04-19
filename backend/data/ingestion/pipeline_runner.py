@@ -295,8 +295,8 @@ async def _run_window(
             "%s window complete: %d approved, %d rejected",
             window_name, len(approved), len(rejected),
         )
-    except Exception as e:
-        logger.exception("%s window failed: %s", window_name, e)
+    except Exception:
+        logger.exception("%s window failed", window_name)
 
 
 async def _scheduler_loop() -> None:
@@ -352,8 +352,8 @@ async def _scheduler_loop() -> None:
                     await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
                     try:
                         await run_position_check()
-                    except Exception as e:
-                        logger.exception("Position check failed: %s", e)
+                    except Exception:
+                        logger.exception("Position check failed")
 
                 # Weekly (Friday): regime + pairs refresh
                 if _is_friday():
@@ -367,8 +367,8 @@ async def _scheduler_loop() -> None:
 
         except asyncio.CancelledError:
             break
-        except Exception as e:
-            logger.exception("Scheduler loop error: %s", e)
+        except Exception:
+            logger.exception("Scheduler loop error")
             await asyncio.sleep(60)
 
     logger.info("Pipeline scheduler stopped")

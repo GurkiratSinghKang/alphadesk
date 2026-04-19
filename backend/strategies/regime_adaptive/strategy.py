@@ -19,9 +19,11 @@ allocation table.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Any, Iterable, Mapping, Optional
 
+import numpy as np
 import pandas as pd
 
 from indicators.trend import sma
@@ -384,8 +386,13 @@ class RegimeAdaptiveStrategy:
         last = rv.dropna()
         if last.empty:
             return None
-        # rv is a decimal (0.15 = 15%). Express in VIX points.
-        return float(last.iloc[-1]) * 100.0
+        # rv is a decimal (0.15 = 15%). Convert to a VIX-equivalent using
+        # the historical volatility-risk-premium multiplier of ~1.15
+        # (VIX has averaged 1.15× realised SPY vol over the post-1990
+        # sample). Multiplying by a flat 1.0 (the previous behaviour)
+        # under-states the VIX and made the HighVol/Crisis regime gates
+        # trigger ~15% more aggressively than spec — audit P0 #7.
+        return float(last.iloc[-1]) * 115.0
 
     # ------------------------------------------------------------------
     # Calendar
@@ -499,6 +506,41 @@ def _fetch_close_panel(
         .sort_index()
     )
     wide = wide.ffill()
+    return _drop_halted_symbols(wide)
+
+
+# --------------------------------------------------------------------------- #
+# Halt detection (audit P0 #10 cross-cutting fix)                             #
+# --------------------------------------------------------------------------- #
+# After ffill, a halted name's tail is a flat run of identical closes;
+# the realised-vol regime classifier reads that as zero-vol and slots
+# the name into a Trend regime, which then sizes into an untradable
+# name. Drop halted symbols before any regime computation runs.
+_RA_HALT_BARS = 5
+_ra_log = logging.getLogger("alphadesk.strategies.regime_adaptive.fetch")
+
+
+def _drop_halted_symbols(wide: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    if wide is None or wide.empty:
+        return wide
+    if len(wide.index) < _RA_HALT_BARS + 1:
+        return wide
+    tail = wide.tail(_RA_HALT_BARS + 1)
+    flat: list[str] = []
+    for col in wide.columns:
+        vals = tail[col].dropna().values
+        if len(vals) < _RA_HALT_BARS + 1:
+            continue
+        if np.all(vals == vals[0]):
+            flat.append(str(col))
+    if flat:
+        _ra_log.warning(
+            "regime_adaptive: dropping %d halted symbols (>=%d flat closes): %s",
+            len(flat),
+            _RA_HALT_BARS,
+            ",".join(sorted(flat)),
+        )
+        wide = wide.drop(columns=flat)
     return wide
 
 

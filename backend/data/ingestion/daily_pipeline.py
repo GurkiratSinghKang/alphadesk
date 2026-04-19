@@ -353,8 +353,8 @@ async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) ->
             try:
                 order = await _place_stop_order(client, sym, trade["shares"], stop_price)
                 placed.append({"symbol": sym, "stop_price": stop_price, "order_id": order.get("id")})
-            except Exception as e:
-                logger.error("Failed to place stop for %s: %s", sym, e)
+            except Exception:
+                logger.error("Failed to place stop for %s", sym, exc_info=True)
 
     return placed
 
@@ -386,7 +386,7 @@ async def _poll_fill_price(
                 elif status in ("canceled", "expired", "rejected"):
                     return None
         except Exception:
-            pass
+            logger.debug("order-status poll failed; will retry", exc_info=True)
         await asyncio.sleep(delay)
     return None
 
@@ -612,7 +612,7 @@ async def _execute_approved_orders(
                 "bracket": used_bracket,
             })
         except Exception as e:
-            logger.error("Order failed for %s: %s", sym, e, exc_info=True)
+            logger.error("Order failed for %s", sym, exc_info=True)
 
             # --- Ghost position rollback ---
             # The MasterAgent already added this symbol to existing_positions
@@ -658,8 +658,8 @@ async def _check_exits(
 
     try:
         positions = await _get_positions(client)
-    except Exception as e:
-        logger.error("Failed to fetch positions: %s", e)
+    except Exception:
+        logger.error("Failed to fetch positions", exc_info=True)
         return closed_orders
 
     pos_map = {p["symbol"]: p for p in positions}
@@ -741,9 +741,9 @@ async def _check_exits(
                     if e.response.status_code == 403:
                         logger.debug("Trailing stop for %s skipped (403 — check Alpaca account/permissions)", sym)
                     else:
-                        logger.warning("Failed to update trailing stop for %s: %s", sym, e)
-                except Exception as e:
-                    logger.warning("Failed to update trailing stop for %s: %s", sym, e)
+                        logger.warning("Failed to update trailing stop for %s", sym, exc_info=True)
+                except Exception:
+                    logger.warning("Failed to update trailing stop for %s", sym, exc_info=True)
 
         if reason:
             try:
@@ -781,10 +781,10 @@ async def _check_exits(
                                     "Cancelled orphaned %s order for %s (id=%s) after %s exit",
                                     otype, sym, oid, reason,
                                 )
-                except Exception as cancel_err:
+                except Exception:
                     logger.warning(
-                        "Failed to cancel bracket orders for %s: %s",
-                        sym, cancel_err,
+                        "Failed to cancel bracket orders for %s",
+                        sym, exc_info=True,
                     )
 
                 closed_orders.append({
@@ -797,7 +797,7 @@ async def _check_exits(
                     "order_id": order.get("id"),
                 })
             except Exception as e:
-                logger.error("Exit order failed for %s: %s", sym, e)
+                logger.error("Exit order failed for %s", sym, exc_info=True)
                 closed_orders.append({
                     "symbol": sym,
                     "side": "sell",
@@ -892,7 +892,7 @@ async def _run_pipeline_inner(
                     account.get("last_equity", account.get("equity", 0))
                 )
             except Exception as e:
-                logger.error("Cannot reach Alpaca account: %s", e)
+                logger.error("Cannot reach Alpaca account", exc_info=True)
                 equity = 100_000
                 cash = 100_000
                 day_pnl = 0
@@ -915,7 +915,10 @@ async def _run_pipeline_inner(
                         async with httpx.AsyncClient(timeout=5) as discord_client:
                             await discord_client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
                 except Exception:
-                    pass
+                    logger.critical(
+                        "Circuit breaker notify failed — oncall will not be paged via Discord",
+                        exc_info=True,
+                    )
 
                 _save_log(log)
                 _pipeline_status["last_result"] = "circuit_breaker"
@@ -945,7 +948,7 @@ async def _run_pipeline_inner(
                     logger.info("Placed %d missing stop-loss orders", len(stops_placed))
                     log["stops_ensured"] = stops_placed
             except Exception as e:
-                logger.error("Failed to ensure stop orders: %s", e)
+                logger.error("Failed to ensure stop orders", exc_info=True)
                 errors.append(f"Stop order check failed: {e}")
 
             # ---- Create Master Agent ----
@@ -998,7 +1001,7 @@ async def _run_pipeline_inner(
                                 if current_price and current_price > 0 and price_6m_ago and price_6m_ago > 0:
                                     momentum_data[sym] = ((current_price / price_6m_ago) - 1) * 100
                     except Exception:
-                        pass
+                        logger.debug("6-month momentum fetch failed for %s", sym, exc_info=True)
 
                 MasterAgent.set_momentum_data(momentum_data)
                 # Also patch the already-constructed master so it sees this
@@ -1029,13 +1032,13 @@ async def _run_pipeline_inner(
                                 if current and price_1y_ago:
                                     abs_momentum[sym] = ((current / price_1y_ago) - 1) * 100
                     except Exception:
-                        pass
+                        logger.debug("12-month momentum fetch failed for %s", sym, exc_info=True)
 
                 MasterAgent.set_absolute_momentum(abs_momentum)
                 master.update_absolute_momentum(abs_momentum)
                 logger.info("Absolute momentum (12-month) data populated for %d symbols", len(abs_momentum))
             except Exception as e:
-                logger.error("Failed to populate momentum data: %s", e)
+                logger.error("Failed to populate momentum data", exc_info=True)
                 errors.append(f"Momentum data failed: {e}")
 
             # ---- Update strategy PnL BEFORE running strategies (P1) ----
@@ -1159,11 +1162,12 @@ async def _run_pipeline_inner(
                     "day_pnl": day_pnl,
                 }
             except Exception as e:
+                logger.warning("Snapshot failed", exc_info=True)
                 errors.append(f"Snapshot failed: {e}")
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash}
 
     except Exception as e:
-        logger.exception("Pipeline failed: %s", e)
+        logger.exception("Pipeline failed")
         errors.append(f"Pipeline exception: {e}")
     finally:
         _save_log(log)
@@ -1184,7 +1188,7 @@ async def run_position_check() -> dict[str, Any]:
             closed = await _check_exits(client, ledger)
             result["closed"] = closed
     except Exception as e:
-        logger.error("Position check failed: %s", e)
+        logger.error("Position check failed", exc_info=True)
         result["errors"].append(str(e))
 
     return result

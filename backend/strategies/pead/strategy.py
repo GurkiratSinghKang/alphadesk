@@ -237,7 +237,7 @@ class PEADStrategy:
 
         # 2. Find yesterday's announcements. Any name reporting strictly
         # before today is eligible for a T+1 MOO entry today.
-        ann = self._yesterday_announcements(calendar, asof)
+        ann = self._yesterday_announcements(calendar, asof, ctx)
         if ann.empty:
             return []
 
@@ -407,33 +407,83 @@ class PEADStrategy:
 
     @staticmethod
     def _yesterday_announcements(
-        calendar: pd.DataFrame, asof: date
+        calendar: pd.DataFrame,
+        asof: date,
+        ctx: Optional[Context] = None,
     ) -> pd.DataFrame:
-        """Return the slice of the calendar containing announcements on
-        the most-recent prior trading day(s).
+        """Return announcements made between the previous trading day's
+        close and ``asof``'s open — i.e. *one* prior session only.
 
-        We take the single most-recent announcement date strictly before
-        ``asof``. This captures AMC reporters from the prior session and
-        BMO reporters from the prior session (both absorbed by the time
-        their announcement date appears in FMP's calendar). The MOO entry
-        fires at ``asof``'s open.
+        The previous behaviour took a 3-calendar-day window stacked on
+        the most-recent prior trading day, which on Mondays would pull
+        Tue-Fri announcements together and treat them all as fresh
+        Monday-morning PEAD opportunities (drift already 2-4 days old).
+
+        Anchor on the most-recent trading session before ``asof`` (via
+        the calendar provider when available, else a Mon-Fri fallback)
+        and return announcements whose date matches that single session.
+        Tuesday asks Monday only; Monday asks Friday only.
         """
 
         if calendar.empty:
             return calendar
 
-        dates = pd.Series(calendar["date"].unique())
-        # Filter to strictly-before-asof, then take the most-recent.
-        prior = dates[dates < asof]
-        if prior.empty:
-            return calendar.iloc[0:0]
-        # Use all announcements reported since the last trading day (e.g.
-        # Monday asof → Friday's announcements). We take the most-recent
-        # 3-calendar-day window to cover the weekend gap plus any
-        # mid-week holiday.
-        latest = prior.max()
-        window_start = latest - timedelta(days=3)
-        mask = (calendar["date"] >= window_start) & (calendar["date"] < asof)
+        # Determine the previous trading day. Prefer the engine's
+        # calendar provider for true NYSE-holiday-aware sessions.
+        prev_session: Optional[date] = None
+        cal_provider = None
+        if ctx is not None:
+            cal_provider = (
+                getattr(ctx, "calendar_provider", None)
+                or getattr(ctx, "calendar", None)
+            )
+        if cal_provider is not None:
+            try:
+                if hasattr(cal_provider, "previous_session"):
+                    raw = cal_provider.previous_session(asof)
+                    if raw is not None:
+                        prev_session = (
+                            raw if isinstance(raw, date)
+                            else pd.Timestamp(raw).date()
+                        )
+                elif hasattr(cal_provider, "sessions"):
+                    # Fallback: enumerate sessions in a small window.
+                    sess = list(
+                        cal_provider.sessions(
+                            asof - timedelta(days=14), asof
+                        )
+                    )
+                    parsed = [
+                        s if isinstance(s, date) else pd.Timestamp(s).date()
+                        for s in sess
+                    ]
+                    parsed = sorted({s for s in parsed if s < asof})
+                    if parsed:
+                        prev_session = parsed[-1]
+            except Exception:
+                prev_session = None
+
+        if prev_session is None:
+            # Mon-Fri fallback (does not honour NYSE holidays — tracked
+            # as a separate P2 audit finding). Walks back through the
+            # calendar to find a weekday before ``asof``.
+            probe = asof - timedelta(days=1)
+            for _ in range(7):
+                if probe.weekday() < 5:
+                    prev_session = probe
+                    break
+                probe -= timedelta(days=1)
+            if prev_session is None:
+                return calendar.iloc[0:0]
+
+        # Single-session slice: only events whose announcement date
+        # equals the previous trading day. AMC reporters from that
+        # session are dated with that session's date; BMO reporters
+        # are dated with their own (usually next-session) date and
+        # would therefore already match ``asof`` (handled separately
+        # if ever wanted) — for the drift signal we only act on the
+        # single freshest prior-session block.
+        mask = calendar["date"] == prev_session
         ann = calendar[mask].copy()
         # Require both actual + estimated to be non-null so SUE is computable.
         ann = ann.dropna(subset=["eps_actual", "eps_estimated"])

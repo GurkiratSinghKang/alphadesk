@@ -428,27 +428,57 @@ class VRPHarvestStrategy:
 
         out: list[Signal] = []
 
-        # Compute kill-switch once.
+        # Compute kill-switch once. The previous behaviour failed OPEN
+        # when chain data was missing — during a March 2020-style crisis
+        # the options chain frequently fails to fetch, and the strategy
+        # would silently hold short vol through the move (audit P0 #9).
+        # We now fail CLOSED: if IV is unavailable for ``kill_missing_max``
+        # consecutive sessions we treat the kill switch as active. A
+        # single transient miss does NOT trip the kill (so a flaky
+        # provider doesn't churn the book).
+        cache = cache_of(ctx)
+        miss_key = f"{_NS}.kill_missing_streak"
+        kill_missing_max = int(p.get("kill_switch_missing_sessions_max", 2))
+
         iv_30: Optional[float] = None
         if chain is not None and not chain.empty and spot is not None:
             iv_30 = self._atm_iv(chain, spot, target_dte=30, asof=asof)
 
-        kill_active = (
-            iv_30 is not None and iv_30 >= float(p["vix_kill_switch"])
-        )
+        if iv_30 is None:
+            streak = int(cache.get(miss_key, 0)) + 1
+            cache[miss_key] = streak
+            kill_active = streak >= kill_missing_max
+            if kill_active:
+                log.warning(
+                    "vrp_harvest: kill-switch active (fail-closed): IV "
+                    "unavailable for %d sessions @ asof=%s",
+                    streak,
+                    asof,
+                )
+        else:
+            cache[miss_key] = 0
+            kill_active = iv_30 >= float(p["vix_kill_switch"])
 
         for rec in positions:
             dte = rec.days_to_expiry(asof)
 
-            # Re-price every leg.
+            # Re-price every leg. When the chain or spot is unavailable
+            # we cannot compute a fresh mid; ordinarily we skip this bar
+            # and try again next session, but if the kill-switch has
+            # tripped (audit P0 #9) we MUST emit a flat-out exit even
+            # without a fresh price — otherwise the strategy holds short
+            # vol through a crisis blind. Use the entry credit as a
+            # last-resort limit price for the exit signal.
+            per_spread_mid: Optional[float]
             if spot is None:
-                # Can't mark; keep the position.
-                continue
+                per_spread_mid = None
+            else:
+                per_spread_mid = self._revalue_legs(
+                    rec.legs, spot, asof, chain, p
+                )
 
-            per_spread_mid = self._revalue_legs(
-                rec.legs, spot, asof, chain, p
-            )
-            if per_spread_mid is None:
+            if per_spread_mid is None and not kill_active:
+                # No fresh mark; defer the decision to the next bar.
                 continue
 
             # For a short strangle the "credit" is what we received; the
@@ -458,7 +488,15 @@ class VRPHarvestStrategy:
             # For a long put hedge: credit_per_spread < 0 (we paid).
             is_short_premium = rec.credit_per_spread > 0
 
-            if is_short_premium:
+            if per_spread_mid is None:
+                # Kill-switch exit with no chain mark. Use the original
+                # credit as a placeholder so downstream signal pricing
+                # has *something* sane to anchor on; the engine's
+                # opposite-side fill will mark to the actual close.
+                profit_ratio = 0.0
+                loss_mult = 0.0
+                price_for_exit = abs(float(rec.credit_per_spread))
+            elif is_short_premium:
                 current_cost = per_spread_mid  # cost to buy back
                 credit = rec.credit_per_spread
                 # Profit if we close = credit - current_cost (per spread).
@@ -471,6 +509,7 @@ class VRPHarvestStrategy:
                 # - -sl_pct = 200% loss (cost = 3x credit)
                 profit_ratio = pnl_per_spread / max(credit, 1e-9)
                 loss_mult = (current_cost - credit) / max(credit, 1e-9)
+                price_for_exit = float(per_spread_mid)
             else:
                 # Long put hedge: "credit" is negative (= -debit).
                 debit = -rec.credit_per_spread
@@ -478,6 +517,7 @@ class VRPHarvestStrategy:
                 pnl_per_spread = current_value - debit
                 profit_ratio = pnl_per_spread / max(debit, 1e-9)
                 loss_mult = -profit_ratio
+                price_for_exit = float(per_spread_mid)
 
             # Decide the reason to close.
             reason: Optional[str] = None
@@ -506,7 +546,7 @@ class VRPHarvestStrategy:
                         contract_id=lr.contract_id,
                         side=Side.BUY if opposite == "buy" else Side.SELL,
                         qty=int(lr.qty_per_spread),
-                        limit_price=Decimal(str(per_spread_mid / max(len(rec.legs), 1))),
+                        limit_price=Decimal(str(price_for_exit / max(len(rec.legs), 1))),
                         underlying=sym,
                         expiry=lr.expiry,
                         strike=Decimal(str(lr.strike)),
@@ -523,7 +563,7 @@ class VRPHarvestStrategy:
                 legs=tuple(closing_legs),
                 order_type=OrderType.MOC,
                 time_in_force=TimeInForce.DAY,
-                limit_price=Decimal(str(per_spread_mid)),
+                limit_price=Decimal(str(price_for_exit)),
                 tag=f"{_NS}-exit-{reason}",
                 asof=asof,
             )
@@ -534,7 +574,7 @@ class VRPHarvestStrategy:
             # exit repeatedly).
             rec.closed_on = asof
             rec.exit_reason = reason
-            rec.exit_debit_per_spread = float(per_spread_mid)
+            rec.exit_debit_per_spread = float(price_for_exit)
         _flush_positions(cache, positions)
         return out
 

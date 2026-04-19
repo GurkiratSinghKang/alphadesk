@@ -22,7 +22,12 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
       data-slot="context-bar"
       className={cn(
         "flex items-stretch h-[38px]",
-        "overflow-x-auto md:overflow-visible snap-x snap-mandatory md:snap-none scrollbar-none",
+        // Viewport audit r5 #5: the 7 cells (each ~100-140px at md:px-[22px])
+        // don't fit in the center column at 768-1100 once the 260px rail
+        // subtracts from width. Previously md:overflow-visible killed scroll
+        // before there was room — cells clipped silently. Keep overflow-x-auto
+        // + snap until lg where the 3-column grid finally leaves room.
+        "overflow-x-auto lg:overflow-visible snap-x snap-mandatory lg:snap-none",
         "border-b border-border bg-ink-100",
         className
       )}

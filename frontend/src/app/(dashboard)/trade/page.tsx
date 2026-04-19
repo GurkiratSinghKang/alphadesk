@@ -151,8 +151,12 @@ export default function TradePage() {
     }
   }
 
+  // Viewport audit r5 #9: 100vh jumps on iOS Safari when the address bar
+  // collapses — use dvh for the dynamic-viewport unit (Safari 15.4+).
+  // Also the StatusStrip is 22px, not the previous 32px — matches
+  // DeskLayout's grid-rows [48px_38px_1fr_22px].
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 min-h-[calc(100vh-48px-32px)]">
+    <div className="flex flex-col gap-4 p-4 md:p-6 min-h-[calc(100dvh-48px-22px)]">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">Trade</h1>

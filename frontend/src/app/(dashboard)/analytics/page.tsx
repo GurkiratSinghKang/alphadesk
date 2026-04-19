@@ -631,7 +631,10 @@ export default function AnalyticsPage() {
         title="Portfolio analytics"
       >
         {/* Row 1: Drawdown + Rolling Sharpe */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Viewport audit r5 #6: with DashboardPageLayout now lifted to
+            1480/1680 max-w at 2xl, a 4-col lay-out fits on 1920+/4K — quant
+            users can see all four charts side-by-side. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
           <SectionCard title="Underwater equity (drawdown)" icon={TrendingDown}>
             <DrawdownChart data={drawdownData} />
           </SectionCard>
@@ -641,7 +644,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Row 2: Distribution + Trade Stats */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
           <SectionCard title="Daily return distribution" icon={BarChart3}>
             <ReturnDistribution bins={histogram} dailyReturns={dailyReturns} />
           </SectionCard>

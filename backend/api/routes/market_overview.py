@@ -231,7 +231,9 @@ async def get_sectors() -> SectorsResponse:
                         if bars:
                             ytd_prices[etf_sym] = bars[0]["c"]
                 except Exception:
-                    pass
+                    logger.debug(
+                        "sector-ytd fetch failed for %s", etf_sym, exc_info=True,
+                    )
 
             for etf_sym, info in _SECTOR_ETFS.items():
                 snap = snapshots.get(etf_sym)

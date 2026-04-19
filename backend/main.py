@@ -44,8 +44,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             await init_db()
             logger.info("Database connected")
-        except Exception as e:
-            logger.warning("Database unavailable: %s", e)
+        except Exception:
+            logger.warning("Database unavailable", exc_info=True)
     else:
         # Oncall visibility: this is a degraded mode — every DB-backed route
         # will return empty results. The SkipDbInitWarningMiddleware will also
@@ -59,35 +59,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await get_redis()
         logger.info("Redis connected")
-    except Exception as e:
-        logger.warning("Redis unavailable (run docker compose up redis): %s", e)
+    except Exception:
+        logger.warning("Redis unavailable (run docker compose up redis)", exc_info=True)
 
     # Start Alpaca WebSocket stream for real-time quotes
     try:
         await start_alpaca_stream()
-    except Exception as e:
-        logger.warning("Alpaca stream failed to start: %s", e)
+    except Exception:
+        logger.warning("Alpaca stream failed to start", exc_info=True)
 
     # Start automated trading pipeline scheduler
     try:
         await start_pipeline_scheduler()
         logger.info("Pipeline scheduler started")
-    except Exception as e:
-        logger.warning("Pipeline scheduler failed to start: %s", e)
+    except Exception:
+        logger.warning("Pipeline scheduler failed to start", exc_info=True)
 
     # Start real-time signal scanner (pattern-based strategies)
     try:
         await start_realtime_scanner()
         logger.info("Real-time signal scanner started")
-    except Exception as e:
-        logger.warning("Real-time scanner failed to start: %s", e)
+    except Exception:
+        logger.warning("Real-time scanner failed to start", exc_info=True)
 
     # Start continuous market monitor (news + price alerts)
     try:
         await start_continuous_monitor()
         logger.info("Continuous market monitor started")
-    except Exception as e:
-        logger.warning("Continuous monitor failed to start: %s", e)
+    except Exception:
+        logger.warning("Continuous monitor failed to start", exc_info=True)
 
     yield
 
@@ -95,33 +95,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await stop_realtime_scanner()
     except Exception:
-        pass
+        logger.warning("shutdown: stop_realtime_scanner raised", exc_info=True)
 
     # Stop continuous monitor
     try:
         await stop_continuous_monitor()
     except Exception:
-        pass
+        logger.warning("shutdown: stop_continuous_monitor raised", exc_info=True)
 
     # Stop pipeline scheduler
     try:
         await stop_pipeline_scheduler()
     except Exception:
-        pass
+        logger.warning("shutdown: stop_pipeline_scheduler raised", exc_info=True)
 
     # Stop Alpaca stream
     try:
         await stop_alpaca_stream()
     except Exception:
-        pass
+        logger.warning("shutdown: stop_alpaca_stream raised", exc_info=True)
     try:
         await close_redis()
     except Exception:
-        pass
+        logger.warning("shutdown: close_redis raised", exc_info=True)
     try:
         await close_db()
     except Exception:
-        pass
+        logger.warning("shutdown: close_db raised", exc_info=True)
     logger.info("Shutdown complete")
 
 

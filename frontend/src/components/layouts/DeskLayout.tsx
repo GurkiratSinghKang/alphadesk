@@ -55,16 +55,25 @@ export default function DeskLayout({
       {topBar}
       {contextBar}
 
+      {/* Viewport audit r5 #1: at md (768-1023) the previous grid declared
+          only 2 columns, so <desk-right> became an orphan that flowed into
+          an implicit row and was clipped by md:overflow-hidden. Option A:
+          declare explicit rows so right-content stacks under the center
+          column at md, and sits in the 3rd column at lg+. At md the main
+          region needs to scroll vertically since right-content stacks below
+          chart (outer shell is md:h-screen); at lg+ we restore the
+          viewport-locked overflow:hidden so the desk remains non-scrolling. */}
       <div
         data-slot="desk-main"
         className={cn(
-          "min-h-0 overflow-x-hidden md:overflow-hidden bg-[var(--border)]",
-          "grid grid-cols-1 md:grid-cols-[260px_1fr] lg:grid-cols-[260px_1fr_340px] gap-px"
+          "min-h-0 overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-[var(--border)]",
+          "grid grid-cols-1 md:grid-cols-[260px_1fr] lg:grid-cols-[260px_1fr_340px] gap-px",
+          "grid-rows-[auto] md:grid-rows-[minmax(0,1fr)_auto] lg:grid-rows-[1fr]"
         )}
       >
         <aside
           data-slot="desk-rail"
-          className="hidden md:block min-h-0 overflow-auto bg-bg"
+          className="hidden md:block min-h-0 overflow-auto bg-bg md:row-start-1 md:col-start-1 lg:row-span-1"
         >
           {rail}
         </aside>
@@ -78,14 +87,20 @@ export default function DeskLayout({
           data-slot="desk-center"
           aria-label="Trading chart and order ticket"
           tabIndex={-1}
-          className="flex min-h-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg"
+          className="flex min-h-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg md:row-start-1 md:col-start-2"
         >
           {center}
         </main>
 
         <aside
           data-slot="desk-right"
-          className="flex min-h-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg"
+          className={cn(
+            "flex min-h-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
+            // md (768-1023): stacks full-width under the 2-col rail+center
+            // lg+: rejoins the 3rd column of the grid.
+            "md:row-start-2 md:col-start-1 md:col-span-2",
+            "lg:row-start-1 lg:col-start-3 lg:col-span-1"
+          )}
         >
           {right}
         </aside>

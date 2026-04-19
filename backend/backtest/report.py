@@ -5,12 +5,15 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import os
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger("alphadesk.backtest.report")
 
 import numpy as np
 import pandas as pd
@@ -188,7 +191,10 @@ class ReportWriter:
             try:
                 r.index = pd.to_datetime(r.index)
             except Exception:
-                pass
+                logger.debug(
+                    "monthly heatmap: returns index not convertible to DatetimeIndex",
+                    exc_info=True,
+                )
         monthly = (1 + r).resample("ME").prod() - 1 if isinstance(r.index, pd.DatetimeIndex) else r
         # Pivot table: rows = year, cols = month.
         idx = monthly.index

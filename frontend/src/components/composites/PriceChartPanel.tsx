@@ -236,7 +236,12 @@ export default function PriceChartPanel({
 
   return (
     <section data-slot="price-chart-panel" className={cn("flex flex-col overflow-hidden", className)}>
-      <header className="flex items-end gap-6 px-7 pt-5 pb-3.5 border-b border-border-hair">
+      {/* Viewport audit r5 #8: header is single-row flex with hero (name +
+          ticker), price, and 5 meta cells. At 500-700px center-column widths
+          (tablet with rail + right) the row overflowed and was clipped by
+          md:overflow-hidden on desk-main. Allow wrap so meta cells drop to
+          a second line rather than clip; each cell already has shrink-0. */}
+      <header className="flex flex-wrap items-end gap-6 px-7 pt-5 pb-3.5 border-b border-border-hair">
         <div>
           <div
             className="font-display italic text-[40px] text-ink-1000"
@@ -266,7 +271,7 @@ export default function PriceChartPanel({
           </div>
         </div>
 
-        <div className="flex gap-[18px] ml-auto font-mono text-[11px] text-fg-muted">
+        <div className="flex flex-wrap gap-[18px] ml-auto font-mono text-[11px] text-fg-muted">
           <MetaCell k="Vol" value={meta.volume} />
           <MetaCell k="Avg Vol" value={meta.avgVolume} />
           <MetaCell k="Range" value={meta.range} />

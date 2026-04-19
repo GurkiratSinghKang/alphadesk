@@ -107,10 +107,10 @@ async def init_db() -> None:
                 "SELECT create_hypertable('ohlcv_bars', 'timestamp', if_not_exists => TRUE)"
             ))
         logger.info("TimescaleDB hypertable ensured for ohlcv_bars")
-    except Exception as e:
+    except Exception:
         # TimescaleDB may not be installed, or table may not exist yet --
         # either way, non-fatal.
-        logger.debug("Hypertable creation skipped: %s", e)
+        logger.debug("Hypertable creation skipped", exc_info=True)
 
 
 async def close_db() -> None:

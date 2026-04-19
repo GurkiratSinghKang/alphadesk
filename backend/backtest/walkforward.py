@@ -16,8 +16,11 @@ Two modes:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+
+logger = logging.getLogger("alphadesk.backtest.walkforward")
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional
 
@@ -191,7 +194,10 @@ class WalkForwardRunner:
             try:
                 return list(self.calendar_provider.sessions(start, end))
             except Exception:
-                pass
+                logger.debug(
+                    "walkforward: calendar_provider.sessions raised — falling back to bdate_range",
+                    exc_info=True,
+                )
         return [d.date() for d in pd.bdate_range(start=start, end=end)]
 
     @staticmethod

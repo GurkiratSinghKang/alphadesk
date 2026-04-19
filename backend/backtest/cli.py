@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import date, datetime
 from decimal import Decimal
@@ -34,6 +35,8 @@ from typing import Any, Callable, Optional
 from backtest.engine import BacktestEngine, EngineConfig
 from backtest.report import ReportWriter
 from backtest.walkforward import WalkForwardConfig, WalkForwardRunner
+
+logger = logging.getLogger("alphadesk.backtest.cli")
 
 
 def _parse_date(s: str) -> date:
@@ -51,6 +54,11 @@ def _resolve_strategy_factory(name: str) -> Callable[[], Any]:
 
         return factory
     except Exception:
+        logger.debug(
+            "backtest cli: strategies.registry import failed — "
+            "factory will raise a helpful RuntimeError when invoked",
+            exc_info=True,
+        )
 
         def factory() -> Any:  # pragma: no cover
             raise RuntimeError(
@@ -70,6 +78,7 @@ def _resolve_bar_provider():
 
         return AlpacaBarProvider()
     except Exception:
+        logger.debug("backtest cli: AlpacaBarProvider unavailable", exc_info=True)
         return None
 
 
@@ -80,7 +89,7 @@ def _resolve_extra_providers() -> dict[str, Any]:
 
         providers["options_provider"] = PolygonOptionsProvider()
     except Exception:
-        pass
+        logger.debug("backtest cli: PolygonOptionsProvider unavailable", exc_info=True)
     try:  # pragma: no cover
         from data.providers.fmp import (  # type: ignore
             FmpEarningsProvider,
@@ -90,13 +99,13 @@ def _resolve_extra_providers() -> dict[str, Any]:
         providers["earnings_provider"] = FmpEarningsProvider()
         providers["fundamentals_provider"] = FmpFundamentalsProvider()
     except Exception:
-        pass
+        logger.debug("backtest cli: FMP providers unavailable", exc_info=True)
     try:  # pragma: no cover
         from data.calendar import UsMarketCalendar  # type: ignore
 
         providers["calendar_provider"] = UsMarketCalendar()
     except Exception:
-        pass
+        logger.debug("backtest cli: UsMarketCalendar unavailable", exc_info=True)
     return providers
 
 

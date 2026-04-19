@@ -46,7 +46,10 @@ export default function DashboardPageLayout({
     <div
       data-slot="dashboard-page-layout"
       className={cn(
-        "mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-6 py-8",
+        // Viewport audit r5 #2: the previous 1280px cap wasted 33-50% of the
+        // viewport on 1920+/ultrawide monitors (common for quant research).
+        // Comfortable reading width on 1440 laptop + use more pixels on 4K.
+        "mx-auto flex w-full max-w-[1480px] 2xl:max-w-[1680px] flex-col gap-6 px-6 py-8",
         className
       )}
     >

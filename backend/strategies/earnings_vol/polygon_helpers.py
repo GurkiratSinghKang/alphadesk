@@ -172,7 +172,7 @@ def contract_close(
                     _cache_put(_BARS_CACHE, key, val)
                     return val
             except Exception:
-                pass
+                log.debug("contract_close: failed to parse close for %s %s", contract_id, asof, exc_info=True)
     _cache_put(_BARS_CACHE, key, None)
     return None
 
@@ -230,7 +230,10 @@ class SyntheticBarProvider:
                 if df is not None and len(df) > 0:
                     frames.append(pd.DataFrame(df))
             except Exception:
-                pass
+                log.debug(
+                    "SyntheticBarProvider: inner.bars raised for %d real symbols",
+                    len(real), exc_info=True,
+                )
 
         if synthetic:
             start_d = pd.Timestamp(start).date()

@@ -363,21 +363,39 @@ class VWAPSessionStrategy:
     # Manage / exits — enforce EOD-flat rule
     # ------------------------------------------------------------------ #
     def manage(self, asof: date, ctx: Context) -> Iterable[Signal]:
-        """Emit an MOC exit for every held position so we never go overnight.
+        """Emit an MOC exit for every held position **owned by vwap** so
+        we never go overnight.
 
-        The engine's executor will fire the embedded stop / take-profit
-        intraday-equivalent against the daily bar high/low during the
-        same session; any surviving position is flattened at that
-        session's close.
+        Previously this iterated every position in ``ctx.positions``,
+        which in a multi-strategy run would emit MOC exits for positions
+        owned by dual_momentum, momentum_quality, etc. — silently
+        zeroing out other strategies' books at the close (audit P0 #5).
+
+        The fix filters to positions vwap actually owns: we recognise
+        them via the ``vwap-`` entry-tag stamped on the Position by the
+        engine, and (as a belt-and-braces check) any symbol present in
+        our own ``entries`` cache. The engine's executor will fire the
+        embedded stop / take-profit intraday-equivalent against the
+        daily bar high/low during the same session; any surviving
+        position is flattened at that session's close.
         """
+
+        cache = cache_of(ctx)
+        entries = cache.get(f"{_NS}.entries", {}) or {}
+        owned: set[str] = {sym for sym, meta in entries.items() if meta}
 
         out: list[Signal] = []
         for pos in list(ctx.positions):
             if pos.quantity == 0:
                 continue
+            tag = (getattr(pos, "tag", "") or "").lower()
+            sym = pos.symbol
+            is_vwap_owned = sym in owned or tag.startswith("vwap-")
+            if not is_vwap_owned:
+                continue
             out.append(
                 Signal(
-                    symbol=pos.symbol,
+                    symbol=sym,
                     target_weight=0.0,
                     order_type=OrderType.MOC,
                     time_in_force=TimeInForce.DAY,

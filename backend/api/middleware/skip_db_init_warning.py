@@ -32,5 +32,8 @@ class SkipDbInitWarningMiddleware(BaseHTTPMiddleware):
                 response.headers[SKIP_DB_INIT_WARNING_HEADER] = SKIP_DB_INIT_WARNING_VALUE
         except Exception:
             # Never let a header-injection failure mask the real response.
-            pass
+            logger.debug(
+                "skip_db_init_warning: failed to inject warning header",
+                exc_info=True,
+            )
         return response

@@ -37,8 +37,8 @@ async def _pipeline_rate_limit(username: str) -> None:
         pipe.expire(key, _PIPELINE_RATE_WINDOW, nx=True)
         results = await pipe.execute()
         count = int(results[0])
-    except Exception as e:
-        logger.warning("pipeline rate-limit: Redis unavailable: %s", e)
+    except Exception:
+        logger.warning("pipeline rate-limit: Redis unavailable", exc_info=True)
         # Fail closed — skipping the limiter on such an expensive endpoint
         # would let a panicked user burn the Polygon quota in 30 seconds.
         raise HTTPException(
@@ -284,8 +284,8 @@ async def pipeline_history_date(date: str) -> dict[str, Any]:
 
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.error(f"Failed to read log: {e}")
+    except Exception:
+        logger.error("Failed to read pipeline log %s", date, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to read pipeline log")
 
 

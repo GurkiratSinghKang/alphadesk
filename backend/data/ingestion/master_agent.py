@@ -788,7 +788,10 @@ class MasterAgent:
                     "size_adjustment": decision.get("suggested_size_adjustment", 1.0),
                 }
         except Exception:
-            pass
+            logger.warning(
+                "master_agent: Claude smart-review failed for %s — falling back to rules-based approval",
+                symbol, exc_info=True,
+            )
 
         # Fallback: approve (don't block on Claude failure)
         return {"claude_decision": "approve", "claude_reason": "Claude unavailable, rules-based approval", "size_adjustment": 1.0}

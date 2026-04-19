@@ -264,34 +264,79 @@ def has_upcoming_earnings(
 ) -> bool:
     """Return True iff ``sym`` has scheduled earnings within ``window_days``
     trading days of ``asof``. Degrades to False when no provider is wired.
+
+    The earnings calendar is cached per-process under ``ctx.state``. Rather
+    than pinning the cache to a fixed window centred on the first ``asof``
+    we observe, we track the cached date-range and extend it (in 1-year
+    increments) whenever ``asof`` advances past the upper bound — the same
+    pattern used by :func:`PEADStrategy._study_window`. This is the fix
+    for the multi-year-backtest staleness bug where earnings beyond the
+    first-asof + 1 year were silently missing and the earnings-skip gate
+    was bypassed entirely after year 2.
     """
 
     provider = getattr(ctx, "earnings_provider", None)
     if provider is None:
         return False
     cache = cache_of(ctx)
-    cal: Optional[dict[str, list[date]]] = cache.get(_EARNINGS_KEY)
-    if cal is None:
+    meta: Optional[dict[str, Any]] = cache.get(_EARNINGS_KEY)
+
+    # Horizon we need today: enough headroom past ``asof`` for the gate
+    # check below. Pad by `window_days * 2` calendar days plus a safety
+    # margin so consecutive sessions don't each trigger a refetch.
+    needed_end = asof + timedelta(days=max(window_days * 2, 30) + 30)
+
+    def _empty_meta() -> dict[str, Any]:
+        return {"data": {}, "start": None, "end": None}
+
+    def _fetch_range(start: date, end: date) -> dict[str, list[date]]:
+        out: dict[str, list[date]] = {}
         try:
-            start = date(asof.year - 1, 1, 1)
-            end = date(asof.year + 1, 12, 31)
             df = provider.calendar(start, end)
-            cal = {}
-            if df is not None and not df.empty:
-                for _, row in df.iterrows():
-                    s = str(row.get("symbol", "")).upper()
-                    d_raw = row.get("date", row.get("asof", None))
-                    if not s or d_raw is None:
-                        continue
-                    try:
-                        d_val = pd.Timestamp(d_raw).date()
-                    except Exception:
-                        continue
-                    cal.setdefault(s, []).append(d_val)
         except Exception:
-            cal = {}
-        cache[_EARNINGS_KEY] = cal
-    dates = cal.get(sym, [])
+            return out
+        if df is None or df.empty:
+            return out
+        for _, row in df.iterrows():
+            s = str(row.get("symbol", "")).upper()
+            d_raw = row.get("date", row.get("asof", None))
+            if not s or d_raw is None:
+                continue
+            try:
+                d_val = pd.Timestamp(d_raw).date()
+            except Exception:
+                continue
+            out.setdefault(s, []).append(d_val)
+        return out
+
+    if meta is None:
+        # First fetch: anchor a 2-year span around ``asof`` and extend
+        # forward as the backtest advances.
+        start = date(asof.year - 1, 1, 1)
+        end = max(date(asof.year + 1, 12, 31), needed_end)
+        data = _fetch_range(start, end)
+        meta = {"data": data, "start": start, "end": end}
+        cache[_EARNINGS_KEY] = meta
+    else:
+        # Extend forward when the backtest walks past the cached window.
+        if meta.get("end") is None or asof > meta["end"] - timedelta(days=30):
+            cur_end = meta["end"] or asof
+            new_end = max(needed_end, asof + timedelta(days=365))
+            extra = _fetch_range(cur_end + timedelta(days=1), new_end)
+            for s, ds in extra.items():
+                meta["data"].setdefault(s, []).extend(ds)
+            meta["end"] = new_end
+        # Extend backward if the backtest walked behind the cached window
+        # (rare but possible in tuner trial reuse).
+        if meta.get("start") is None or asof < meta["start"]:
+            cur_start = meta["start"] or asof
+            new_start = min(asof, asof - timedelta(days=365))
+            extra = _fetch_range(new_start, cur_start - timedelta(days=1))
+            for s, ds in extra.items():
+                meta["data"].setdefault(s, []).extend(ds)
+            meta["start"] = new_start
+
+    dates = meta["data"].get(sym, [])
     if not dates:
         return False
     horizon_end = asof + timedelta(days=window_days * 2)  # cal→trading fudge
