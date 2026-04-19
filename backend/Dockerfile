@@ -33,4 +33,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "1", "--bind", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]
+CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "3", "--bind", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]

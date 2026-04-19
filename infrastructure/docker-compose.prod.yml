@@ -45,8 +45,8 @@ services:
         # See observability-audit-r4.md P2 #14.
         max-size: "50m"
         max-file: "5"
-    mem_limit: 512m
-    cpus: 0.5
+    mem_limit: 1g
+    cpus: 1.0
 
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/OWNER/alphadesk-backend:latest}
@@ -80,8 +80,8 @@ services:
         # See observability-audit-r4.md P2 #14.
         max-size: "50m"
         max-file: "5"
-    mem_limit: 1536m
-    cpus: 1.0
+    mem_limit: 4g
+    cpus: 2.0
 
   timescaledb:
     volumes:
@@ -89,11 +89,19 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=128MB
+      - shared_buffers=1GB
       - -c
-      - work_mem=4MB
+      - work_mem=16MB
       - -c
-      - max_connections=50
+      - maintenance_work_mem=256MB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - checkpoint_completion_target=0.9
     networks:
       - alphadesk
     logging:
@@ -105,11 +113,11 @@ services:
         # See observability-audit-r4.md P2 #14.
         max-size: "50m"
         max-file: "5"
-    mem_limit: 2g
-    cpus: 1.5
+    mem_limit: 3g
+    cpus: 2.0
 
   redis:
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - /var/lib/alphadesk/redis:/data
     healthcheck:
@@ -128,8 +136,8 @@ services:
         # See observability-audit-r4.md P2 #14.
         max-size: "50m"
         max-file: "5"
-    mem_limit: 640m
-    cpus: 0.5
+    mem_limit: 1200m
+    cpus: 1.0
 
   # uptime-kuma: removed 2026-04-17 (Wave E / iter-2).
   # Had zero monitors configured; consuming ~56 MB RSS + 724 MB image for
