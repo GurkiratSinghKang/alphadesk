@@ -17,6 +17,7 @@ import math
 import os
 import re
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -133,15 +134,103 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
     return None
 
 # ----- Pipeline state -----
+# `_pipeline_lock` is the single source of truth for "is the pipeline currently
+# running" — `.locked()` is exposed via /pipeline/status. The dict below holds
+# everything else operators need to see live (persona-7 #1, #4, #5).
 _pipeline_lock = asyncio.Lock()
+
+# Live, mutable state — read by ``get_pipeline_status`` on every poll. The
+# pipeline writes to these as it crosses stage boundaries so an operator
+# refreshing /pipeline can actually see what's happening.
+CURRENT_STAGE: str | None = None
+CURRENT_STRATEGY: str | None = None
+CURRENT_PROGRESS: dict[str, int] | None = None  # {"current": N, "total": M}
+CURRENT_STARTED_AT: datetime | None = None
+CURRENT_RUN_ID: str | None = None
+
+# Cooperative cancellation flag. ``request_cancel`` flips this True; the
+# pipeline checks it at every major boundary (start of each stage, after
+# each strategy) and exits gracefully writing ``last_result = "cancelled"``.
+# Reset to False at the start of every run.
+CANCEL_REQUESTED: bool = False
+
 _pipeline_status: dict[str, Any] = {
     "last_run": None,
     "last_result": None,
 }
 
 
+def _reset_live_state() -> None:
+    """Clear all live-run globals — called at run-start AND in the finally
+    block so a crashed run does not leave stale stage/progress visible to
+    operators on the next poll."""
+    global CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
+    global CURRENT_STARTED_AT, CURRENT_RUN_ID
+    CURRENT_STAGE = None
+    CURRENT_STRATEGY = None
+    CURRENT_PROGRESS = None
+    CURRENT_STARTED_AT = None
+    CURRENT_RUN_ID = None
+
+
+def request_cancel() -> bool:
+    """Flip the cooperative cancel flag. Returns True if a run is currently
+    in flight (so the caller can confirm the cancel will be honoured), False
+    if the pipeline is already idle."""
+    global CANCEL_REQUESTED
+    if not _pipeline_lock.locked():
+        return False
+    CANCEL_REQUESTED = True
+    logger.warning(
+        "Pipeline cancel requested (run_id=%s, stage=%s, strategy=%s)",
+        CURRENT_RUN_ID, CURRENT_STAGE, CURRENT_STRATEGY,
+    )
+    return True
+
+
+class _PipelineCancelled(Exception):
+    """Raised at a cancel checkpoint to unwind the pipeline cleanly. Caught
+    in ``_run_pipeline_inner``'s try/except so the run terminates with
+    ``last_result = "cancelled"`` instead of a generic exception trace."""
+
+
+def _check_cancel(stage: str | None = None) -> None:
+    """Cooperative cancel checkpoint. Call at major stage/loop boundaries.
+    Raises ``_PipelineCancelled`` if a cancel was requested since the last
+    check — caller is expected to let it propagate to the run wrapper.
+
+    Stages where we check (in order):
+      - top of run (before any expensive call)
+      - after master agent setup
+      - before each strategy in the screen/analyze/risk loop
+      - before order execution
+      - before exit checking
+    """
+    if CANCEL_REQUESTED:
+        logger.warning(
+            "Pipeline cancel honoured at stage=%s (run_id=%s)",
+            stage or CURRENT_STAGE, CURRENT_RUN_ID,
+        )
+        raise _PipelineCancelled(stage or CURRENT_STAGE or "unknown")
+
+
 def get_pipeline_status() -> dict[str, Any]:
-    return dict(_pipeline_status)
+    """Return a JSON-serialisable snapshot of pipeline state for /status.
+
+    `running` is derived from ``_pipeline_lock.locked()`` — there is no
+    second source of truth to drift out of sync with. `started_at` is
+    serialized to ISO 8601 (the rest of the dict already is).
+    """
+    return {
+        "running": _pipeline_lock.locked(),
+        "stage": CURRENT_STAGE,
+        "current_strategy": CURRENT_STRATEGY,
+        "progress": dict(CURRENT_PROGRESS) if CURRENT_PROGRESS else None,
+        "started_at": CURRENT_STARTED_AT.isoformat() if CURRENT_STARTED_AT else None,
+        "run_id": CURRENT_RUN_ID,
+        "last_run": _pipeline_status.get("last_run"),
+        "last_result": _pipeline_status.get("last_result"),
+    }
 
 
 # =====================================================================
@@ -835,17 +924,84 @@ async def run_daily_pipeline(
         only_strategies: If provided, only run these strategy names.
             Used by the multi-window scheduler to run subsets at optimal times.
     """
-    global _pipeline_status
+    global _pipeline_status, CANCEL_REQUESTED, CURRENT_STARTED_AT, CURRENT_RUN_ID
 
     if _pipeline_lock.locked():
         return {"error": "Pipeline already running"}
 
     async with _pipeline_lock:
-        return await _run_pipeline_inner(
-            screen_limit=screen_limit,
-            analyze_limit=analyze_limit,
-            only_strategies=only_strategies,
-        )
+        # Initialise live-run state under the lock so /status sees the
+        # fields populated *before* the first heavy call. A run_id is
+        # always generated here when one was not pre-allocated (e.g. by
+        # ``start_daily_pipeline_async``).
+        if CURRENT_RUN_ID is None:
+            CURRENT_RUN_ID = uuid.uuid4().hex
+        if CURRENT_STARTED_AT is None:
+            CURRENT_STARTED_AT = datetime.now(timezone.utc)
+        # Always reset cancel flag at the start of a fresh run so a stale
+        # request from a previous (already-honoured) cancel doesn't
+        # immediately abort this one.
+        CANCEL_REQUESTED = False
+        try:
+            return await _run_pipeline_inner(
+                screen_limit=screen_limit,
+                analyze_limit=analyze_limit,
+                only_strategies=only_strategies,
+            )
+        finally:
+            # Clear live-run state when the lock is released — operators
+            # should see an idle pipeline reflect that immediately.
+            _reset_live_state()
+            CANCEL_REQUESTED = False
+
+
+async def start_daily_pipeline_async(
+    screen_limit: int = SCREEN_TOP_N,
+    analyze_limit: int = ANALYZE_TOP_N,
+    only_strategies: list[str] | None = None,
+) -> str:
+    """Fire-and-forget pipeline launcher used by ``POST /pipeline/run``.
+
+    Returns the new ``run_id`` immediately while the pipeline executes in
+    the background via ``asyncio.create_task``. Errors raised by the
+    background coroutine are captured into ``_pipeline_status['last_result']``
+    so /status can surface "error: <message>" without the operator having
+    to grep server logs.
+
+    Caller MUST check ``_pipeline_lock.locked()`` first and reject with
+    409 if a run is already in flight — this function does not sanity-check
+    the lock and will silently spawn a second task that immediately blocks
+    on ``async with _pipeline_lock``.
+
+    Single-worker assumption: AlphaDesk runs a single gunicorn worker, so
+    the lock + globals are process-wide unique. If we ever scale to multi-
+    worker, this whole module needs to move to Redis-backed state.
+    """
+    global CURRENT_RUN_ID, CURRENT_STARTED_AT
+
+    # Pre-allocate the run_id so the HTTP caller can return it immediately
+    # — the inner function will re-use this value rather than generating
+    # its own. Same for started_at.
+    run_id = uuid.uuid4().hex
+    CURRENT_RUN_ID = run_id
+    CURRENT_STARTED_AT = datetime.now(timezone.utc)
+
+    async def _wrapper() -> None:
+        try:
+            await run_daily_pipeline(
+                screen_limit=screen_limit,
+                analyze_limit=analyze_limit,
+                only_strategies=only_strategies,
+            )
+        except _PipelineCancelled:
+            # Already logged + last_result set inside the inner function.
+            pass
+        except Exception as exc:
+            logger.exception("Background pipeline run failed: %s", exc)
+            _pipeline_status["last_result"] = f"error: {exc}"
+
+    asyncio.create_task(_wrapper())
+    return run_id
 
 
 async def _run_pipeline_inner(
@@ -854,9 +1010,13 @@ async def _run_pipeline_inner(
     only_strategies: list[str] | None = None,
 ) -> dict[str, Any]:
     """Inner pipeline logic, called under _pipeline_lock."""
-    global _pipeline_status
+    global _pipeline_status, CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
 
     _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
+    CURRENT_STAGE = "init"
+    CURRENT_STRATEGY = None
+    CURRENT_PROGRESS = None
+    _check_cancel("init")
 
     errors: list[str] = []
     log: dict[str, Any] = {
@@ -884,6 +1044,8 @@ async def _run_pipeline_inner(
 
         async with httpx.AsyncClient(timeout=30) as client:
             # ---- Account state ----
+            CURRENT_STAGE = "account"
+            _check_cancel("account")
             try:
                 account = await _get_account(client)
                 equity = float(account.get("equity", 100_000))
@@ -1057,6 +1219,7 @@ async def _run_pipeline_inner(
                     )
 
             # ---- Run each strategy (screening in parallel) ----
+            _check_cancel("pre_strategies")
             if only_strategies:
                 strategy_instances = [cls() for cls in ALL_STRATEGIES if cls.name in only_strategies]
                 logger.info("Running subset: %s", [s.name for s in strategy_instances])
@@ -1065,31 +1228,60 @@ async def _run_pipeline_inner(
             num_strategies = len(strategy_instances)
             per_strategy_limit = max(2, analyze_limit // num_strategies)
 
+            # Counter for live progress — incremented as each strategy
+            # finishes. Strategies run concurrently via asyncio.gather, so
+            # the counter is "how many done so far" not "currently working
+            # on number N".
+            CURRENT_PROGRESS = {"current": 0, "total": num_strategies}
+            _completed_strategies = 0
+
             async def _run_single_strategy(strategy: BaseStrategyRunner) -> tuple[str, dict[str, Any]]:
                 """Screen, analyze, and generate trades for one strategy."""
+                global CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
+                nonlocal _completed_strategies
                 strat_name = strategy.name
+                # Cooperative cancel: check before each strategy boundary.
+                _check_cancel(f"strategy:{strat_name}")
+                # Update live status. Multiple strategies execute in
+                # parallel via gather — CURRENT_STRATEGY reflects the most
+                # recent one to start, which is good enough for UI breadcrumbs.
+                CURRENT_STRATEGY = strat_name
                 logger.info("Running strategy: %s", strat_name)
 
                 # Screen
+                CURRENT_STAGE = "screen"
                 candidates = await strategy.screen()
                 logger.info(
                     "  %s screened %d candidates", strat_name, len(candidates),
                 )
+                _check_cancel(f"strategy:{strat_name}:post_screen")
 
                 # Analyze (limit per strategy to conserve CLI calls)
+                CURRENT_STAGE = "analyze"
                 to_analyze = candidates[:per_strategy_limit]
                 analyses = await strategy.analyze(to_analyze)
                 logger.info(
                     "  %s analyzed %d candidates", strat_name, len(analyses),
                 )
+                _check_cancel(f"strategy:{strat_name}:post_analyze")
 
-                # Generate trades (asks master for permission)
+                # Generate trades (asks master for permission). This is the
+                # "risk" stage — master agent decides approve / reject per
+                # symbol against position limits, sector caps, etc.
+                CURRENT_STAGE = "risk"
                 trades = await strategy.generate_trades(analyses, master)
                 approved = [t for t in trades if t.get("approved")]
                 logger.info(
                     "  %s: %d trades requested, %d approved",
                     strat_name, len(trades), len(approved),
                 )
+
+                _completed_strategies += 1
+                if CURRENT_PROGRESS is not None:
+                    CURRENT_PROGRESS = {
+                        "current": _completed_strategies,
+                        "total": num_strategies,
+                    }
 
                 return strat_name, {
                     "screened": len(candidates),
@@ -1144,10 +1336,15 @@ async def _run_pipeline_inner(
             }
 
             # ---- Execute approved orders ----
+            CURRENT_STAGE = "execute"
+            CURRENT_STRATEGY = None  # back to "everyone" for execution
+            _check_cancel("execute")
             orders_placed = await _execute_approved_orders(client, master, ledger)
             log["orders_placed"] = orders_placed
 
             # ---- Check exits ----
+            CURRENT_STAGE = "exit_check"
+            _check_cancel("exit_check")
             closed = await _check_exits(client, ledger)
             log["orders_closed"] = closed
 
@@ -1166,12 +1363,24 @@ async def _run_pipeline_inner(
                 errors.append(f"Snapshot failed: {e}")
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash}
 
+    except _PipelineCancelled as cancelled:
+        # Cooperative cancel hit a checkpoint. Log + persist whatever
+        # partial state we accumulated so the operator can audit it.
+        msg = f"Pipeline cancelled at stage {cancelled.args[0] if cancelled.args else 'unknown'}"
+        logger.warning(msg)
+        errors.append(msg)
+        _pipeline_status["last_result"] = "cancelled"
+        _save_log(log)
+        return log
     except Exception as e:
         logger.exception("Pipeline failed")
         errors.append(f"Pipeline exception: {e}")
     finally:
-        _save_log(log)
-        _pipeline_status["last_result"] = "success" if not errors else "completed_with_errors"
+        # Don't double-save in the cancel path (it returned above) —
+        # the cancel branch already persisted its log + result.
+        if _pipeline_status.get("last_result") != "cancelled":
+            _save_log(log)
+            _pipeline_status["last_result"] = "success" if not errors else "completed_with_errors"
 
     return log
 

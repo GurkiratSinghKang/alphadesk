@@ -141,11 +141,56 @@ class OrderLeg(BaseModel):
         return self
 
 
+def _sanitize_user_text(v: str | None) -> str | None:
+    """Strip control bytes + neutralise CSV-injection prefixes from user notes.
+
+    persona-9 #8 — the ``notes`` field on orders / alerts previously
+    accepted NUL bytes, ASCII C0 control chars, and Excel/Sheets-style
+    formula prefixes (``=cmd|/c calc!A1``, ``+SUM(A1)``, ``-2+5``, ``@SUM``).
+    The first leaked into log files; the second became remote code execution
+    if a CSV export of the trade ledger was opened in Excel.
+
+    Sanitisation rules:
+        * Drop every C0 control char except ``\n`` and ``\t`` (the only ones
+          a UI legitimately emits in a notes textarea).
+        * If the cleaned string starts with one of ``= + - @`` (CSV-formula
+          triggers per OWASP), prepend a single quote so spreadsheets render
+          it as text.
+        * Hard cap at 500 characters; the ``Field(max_length=1000)`` upper
+          bound is preserved for back-compat but cap the persisted value.
+        * Empty string after stripping → ``None`` (so callers don't have to
+          treat ``""`` and ``None`` differently in the UI).
+    """
+    if v is None:
+        return None
+    cleaned = "".join(ch for ch in v if ch == "\n" or ch == "\t" or ord(ch) >= 0x20)
+    if cleaned and cleaned[0] in "=+-@":
+        cleaned = "'" + cleaned
+    if len(cleaned) > 500:
+        cleaned = cleaned[:500]
+    cleaned = cleaned.strip()
+    return cleaned or None
+
+
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
     time_in_force: TimeInForce = TimeInForce.DAY
     strategy: str | None = Field(None, description="Originating strategy name")
     notes: str | None = Field(None, max_length=1000)
+
+    @field_validator("notes")
+    @classmethod
+    def sanitize_notes(cls, v: str | None) -> str | None:
+        return _sanitize_user_text(v)
+
+    @field_validator("strategy")
+    @classmethod
+    def sanitize_strategy(cls, v: str | None) -> str | None:
+        # Strategy names are short identifiers, not free text — but the same
+        # injection vectors apply (NUL, ``=`` prefix). Reuse the helper so
+        # CSV exports of the trade ledger are safe regardless of which user
+        # field a hostile string lands in.
+        return _sanitize_user_text(v)
 
 
 class OrderResponse(BaseModel):
@@ -392,6 +437,7 @@ async def create_order(
 async def list_orders(
     status: OrderStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=1000),
 ) -> list[OrderResponse]:
     """List recent orders, optionally filtered by status.
 
@@ -403,6 +449,11 @@ async def list_orders(
     tell whether the cancellation had actually landed. With ``all``,
     cancelled + rejected + filled orders remain visible so the ledger is
     self-consistent.
+
+    persona-9 #5: ``offset`` + ``limit`` are now bounded by Pydantic so
+    negative offsets and oversized limits are rejected with HTTP 422
+    instead of being silently accepted (Alpaca then returned wrong-sized
+    pages or an opaque 400).
     """
     if _alpaca_keys_empty():
         return []
@@ -510,6 +561,10 @@ async def list_orders(
                 avg_fill_price=float(o["filled_avg_price"]) if o.get("filled_avg_price") else None,
                 reject_reason=reject_reason if mapped_status == OrderStatus.REJECTED else None,
             ))
+        # Apply offset client-side so the bounded ``offset`` query param is
+        # honoured (Alpaca's API doesn't support a generic offset).
+        if offset:
+            results = results[offset:]
         return results
     except HTTPException:
         raise
@@ -525,7 +580,18 @@ async def list_orders(
 
 @router.delete("/orders/{order_id}", status_code=204, response_model=None)
 async def cancel_order(order_id: str) -> None:
-    """Cancel a pending order by ID."""
+    """Cancel a pending order by ID.
+
+    persona-9 #9: cancel is now distinguishably idempotent. Previously every
+    DELETE returned 204, even if the order had already been cancelled, filled
+    or rejected — a caller could not tell whether their cancel landed or was
+    a no-op against an already-terminal order. Now:
+
+        * Unknown order id → 404 ``Order not found``
+        * Already terminal (cancelled/filled/rejected/expired) → 404
+          ``Order already terminal`` so the client refreshes the order list.
+        * Live order accepted by broker → 204 (unchanged).
+    """
     if _alpaca_keys_empty():
         raise HTTPException(
             status_code=503,
@@ -540,11 +606,36 @@ async def cancel_order(order_id: str) -> None:
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
     }
 
+    # Pre-flight GET — Alpaca's DELETE returns 422 / 200 / 204 depending on
+    # the order's life-cycle state and we can't reliably distinguish
+    # "already cancelled" from "unknown id" from the DELETE alone. The GET
+    # gives us the canonical status before we attempt the cancel.
+    _terminal = {"filled", "canceled", "cancelled", "expired", "rejected", "replaced"}
     async with httpx.AsyncClient(timeout=10.0) as client:
+        get_resp = await client.get(
+            f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
+            headers=headers,
+        )
+        if get_resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if get_resp.status_code == 200:
+            current_status = (get_resp.json().get("status") or "").lower()
+            if current_status in _terminal:
+                raise HTTPException(status_code=404, detail="Order already terminal")
+        # Non-404 read failure (5xx, network) — fall through to the DELETE
+        # attempt and let the broker's response shape the error.
+
         resp = await client.delete(
             f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
             headers=headers,
         )
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="Order not found")
+        # Alpaca returns 422 for "order is not cancelable" (terminal state we
+        # missed in the read above due to a race). Map that to a real 404 too
+        # — the caller's view of the order is stale either way.
+        if resp.status_code == 422:
+            raise HTTPException(status_code=404, detail="Order already terminal")
         if resp.status_code not in (200, 204):
             raise HTTPException(status_code=resp.status_code, detail="Failed to cancel order")
 
@@ -602,8 +693,14 @@ async def get_trade_history(
     symbol: str | None = Query(None),
     strategy: str | None = Query(None),
     limit: int = Query(100, ge=1, le=10000),
+    offset: int = Query(0, ge=0, le=1000),
 ) -> list[TradeHistoryEntry]:
-    """Retrieve historical trades from the trade ledger (primary) and local database (fallback)."""
+    """Retrieve historical trades from the trade ledger (primary) and local database (fallback).
+
+    persona-9 #5/#10: ``offset`` + ``limit`` are bounded by Pydantic. Negative
+    offsets, non-numeric input and oversized pages are rejected with HTTP 422
+    rather than silently producing an empty / oversized response.
+    """
 
     # Strategy route ID -> ledger strategy name mapping
     _ID_TO_LEDGER_NAME: dict[str, str] = {
@@ -638,8 +735,9 @@ async def get_trade_history(
             sym_upper = symbol.upper()
             all_trades = [t for t in all_trades if t.get("symbol") == sym_upper]
 
-        # Sort by entry_time descending, limit
-        all_trades = sorted(all_trades, key=lambda t: t.get("entry_time", ""), reverse=True)[:limit]
+        # Sort by entry_time descending, then apply offset + limit window.
+        all_trades = sorted(all_trades, key=lambda t: t.get("entry_time", ""), reverse=True)
+        all_trades = all_trades[offset : offset + limit]
 
         if all_trades:
             results: list[TradeHistoryEntry] = []
@@ -686,7 +784,12 @@ async def get_trade_history(
 
         factory = _get_session_factory()
         async with factory() as db:
-            query = select(Trade).order_by(Trade.entry_time.desc()).limit(limit)
+            query = (
+                select(Trade)
+                .order_by(Trade.entry_time.desc())
+                .offset(offset)
+                .limit(limit)
+            )
             if symbol:
                 query = query.where(Trade.symbol == symbol.upper())
             if strategy:
@@ -938,14 +1041,18 @@ async def list_alerts(
     response: Response,
     symbol: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1000),
     username: str = Depends(require_auth),
 ):
     """List price alerts, optionally filtered by symbol.
 
-    Paginated: use ``limit`` (default 100, max 500) and ``offset``.
+    Paginated: use ``limit`` (default 100, max 500) and ``offset`` (max 1000).
     The total number of matching alerts is returned in the ``X-Total-Count``
     response header so clients can compute page counts.
+
+    persona-9 #5: ``offset`` is bounded above as well as below — previously
+    ``offset=-5`` returned the tail (negative slice) and ``offset=10**9``
+    returned an empty page silently.
     """
     alerts = await _get_all_alerts()
     if symbol:
@@ -1123,9 +1230,28 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
             headers=headers,
             json=body,
         )
-        if resp.status_code not in (200, 201):
-            raise HTTPException(
-                status_code=502,
-                detail="Broker rejected order. Check order parameters and try again.",
-            )
-        return resp.json()["id"]
+        if resp.status_code in (200, 201):
+            return resp.json()["id"]
+
+        # persona-9 #6 — translate broker errors into actionable HTTP codes.
+        # 4xx from Alpaca is almost always a user-fixable validation error
+        # ("symbol AAPL.TO not tradable", "qty too small", "market closed").
+        # Surface the broker's message verbatim under HTTP 422 so the user
+        # sees what's wrong instead of an opaque 502. Only unexpected 5xx
+        # responses (broker outage, gateway error) keep the 502.
+        if 400 <= resp.status_code < 500:
+            try:
+                payload = resp.json()
+                msg = (
+                    payload.get("message")
+                    or payload.get("error")
+                    or "Broker rejected order"
+                )
+            except Exception:
+                msg = "Broker rejected order"
+            raise HTTPException(status_code=422, detail=str(msg))
+
+        raise HTTPException(
+            status_code=502,
+            detail="Broker error — please retry",
+        )

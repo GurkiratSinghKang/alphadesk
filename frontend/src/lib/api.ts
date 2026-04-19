@@ -91,6 +91,19 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 
   if (res.status === 401 && typeof window !== "undefined") {
     if (window.location.pathname !== "/login") {
+      // persona-10 #5 — UX hint before silent redirect. We stash a flag
+      // in sessionStorage so /login can render a "Your session expired"
+      // banner. sessionStorage is per-tab, so the banner only appears in
+      // the tab whose request actually 401'd; other tabs find out via
+      // the cross-tab logout broadcast (see `broadcastLogout` below).
+      try {
+        sessionStorage.setItem("alphadesk.session_expired", "1");
+      } catch {
+        // private mode / quota: redirect still happens, just no banner
+      }
+      // Drop the in-memory + sessionStorage refresh token so the
+      // scheduler stops trying to refresh against a dead cookie.
+      clearRefreshToken();
       // Ask the backend to revoke the access token and clear its HttpOnly
       // cookies. `await` before navigating so the POST actually completes —
       // a fire-and-forget fetch is cancelled by `window.location.href =`
@@ -105,6 +118,14 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
       } catch {
         // swallow: redirect happens regardless
       }
+      // Broadcast to other tabs so they don't keep polling / showing
+      // stale state. They will land on /login the same way this tab did.
+      try {
+        window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
+      } catch {
+        // event dispatch failure is non-fatal
+      }
+      broadcastLogout();
       window.location.href = "/login";
     }
     throw new Error("Session expired");
@@ -400,48 +421,163 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
 // interval (idempotent: calling it twice is a no-op) that POSTs to
 // `/api/v1/auth/refresh` ~1 hour before expiry.
 //
-// APPROACH B (in-memory refresh token):
+// APPROACH C (sessionStorage refresh token — persona-9/10 P0):
 //   * The refresh_token cookie is HttpOnly (path=/api/v1/auth). The backend
 //     refresh handler requires `{"refresh_token": "…"}` in the request body
 //     which JS cannot read from the cookie. Instead, the login response JSON
 //     includes the refresh_token — we capture it here via
-//     `captureRefreshToken(token)` and keep it in a module-level variable
-//     (NOT localStorage / NOT persistent state). This is safer than
-//     localStorage because an XSS attacker cannot read it from the DOM and
-//     it never survives a page reload.
-//   * SECURITY / UX trade-off: page reload loses the in-memory token →
-//     next refresh cycle becomes a no-op → user falls through to the 401
-//     redirect on their next request after the access_token expires. This
-//     is acceptable because (a) reloads are rare in long sessions and
-//     (b) memory-only is strictly safer than persistence.
+//     `captureRefreshToken(token)` and ALSO mirror it into sessionStorage
+//     under "alphadesk.rt".
+//   * Why sessionStorage (not module memory, not localStorage):
+//       - Module memory loses the token on F5; the user then hits a 401
+//         on the next request and gets silently kicked out (persona-9 #2 +
+//         persona-10 #2, both P0). The dashboard reload is a normal action,
+//         not a session-ending event — losing the token here is a bug.
+//       - localStorage survives tab close, which means a stale refresh
+//         token can outlive the user's intent. sessionStorage dies when
+//         the tab closes, which matches the mental model of "I closed
+//         the tab, that's logout."
+//       - SECURITY: any XSS-injected script with DOM access can read
+//         sessionStorage — same risk as localStorage. An HttpOnly cookie
+//         (read server-side on /refresh) would be strictly safer, but the
+//         current backend handler reads the token from the JSON body, not
+//         the cookie. Making this safer is a backend change tracked
+//         separately. sessionStorage is the best practical balance today.
 //   * Since LoginForm uses its own `fetch` (not `apiFetch`) we also listen
 //     for a DOM event `alphadesk:auth-login-success` with the token in the
 //     detail payload so the capture happens even if the login caller never
 //     imports `captureRefreshToken`.
 //   * We refresh at (expiry - 1 hour) so a brief outage has time to retry.
+//
+// CROSS-TAB LOGOUT (persona-10 #4):
+//   When tab A logs out (or 401s), other open tabs need to know so they
+//   stop polling and surface the session-expired banner on their next
+//   navigation. We use BroadcastChannel when available (modern browsers,
+//   ~baseline 2022), fall back to a localStorage `storage` event ping
+//   when not. Both paths converge on the same handler: clear the refresh
+//   token, set the session_expired flag, and reload — which naturally
+//   trips the 401 path because the cookie is gone.
 
+const SESSION_STORAGE_RT_KEY = "alphadesk.rt";
+const LOGOUT_BROADCAST_KEY = "alphadesk.logout_broadcast";
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 60 * 60 * 1000; // 7 hours (buffer before 8-hr expiry)
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
-// Module-local in-memory refresh token. Deliberately NOT exported as a value
-// (only via the setter/clearer) so consumers can't accidentally serialise it.
+// Module-local refresh token, mirroring sessionStorage so we don't pay the
+// storage round-trip on every tick. Initialised on module load from
+// sessionStorage so a page reload doesn't kick a logged-in user out.
 let refreshToken: string | null = null;
+if (typeof window !== "undefined") {
+  try {
+    refreshToken = sessionStorage.getItem(SESSION_STORAGE_RT_KEY) || null;
+  } catch {
+    // private mode / sessionStorage disabled — fall back to memory only
+  }
+}
+
+/**
+ * Read the refresh token. Always cross-checks sessionStorage so a
+ * cross-tab login (rare) or cleared storage takes effect immediately.
+ * Cheap (one synchronous read), but kept internal — callers should not
+ * be exposed to the storage layout.
+ */
+function readRefreshToken(): string | null {
+  if (typeof window === "undefined") return refreshToken;
+  try {
+    const stored = sessionStorage.getItem(SESSION_STORAGE_RT_KEY);
+    refreshToken = stored && stored.length > 0 ? stored : null;
+  } catch {
+    // sessionStorage may be unavailable; fall back to module memory
+  }
+  return refreshToken;
+}
 
 /**
  * Capture the refresh token after a successful login. The login flow is
  * deliberately not owned by this module (it lives in LoginForm and uses
  * raw `fetch`), so either the caller imports and calls this directly or it
  * dispatches the `alphadesk:auth-login-success` CustomEvent detailed below.
+ *
+ * Mirrors the token into sessionStorage so a page reload doesn't lose it
+ * (persona-9 #2 + persona-10 #2). Safe to call with `null` to clear.
  */
 export function captureRefreshToken(token: string | null): void {
-  refreshToken = typeof token === "string" && token.length > 0 ? token : null;
+  const value = typeof token === "string" && token.length > 0 ? token : null;
+  refreshToken = value;
+  if (typeof window === "undefined") return;
+  try {
+    if (value === null) {
+      sessionStorage.removeItem(SESSION_STORAGE_RT_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_STORAGE_RT_KEY, value);
+    }
+  } catch {
+    // private mode / quota: keep the in-memory copy
+  }
 }
 
 /** Clear the refresh token (called on logout or refresh failure). */
 export function clearRefreshToken(): void {
   refreshToken = null;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem(SESSION_STORAGE_RT_KEY);
+    } catch {
+      // ignore — module memory is cleared above
+    }
+  }
   if (tokenRefreshTimer !== null) {
     clearInterval(tokenRefreshTimer);
     tokenRefreshTimer = null;
+  }
+}
+
+// ─── Cross-tab logout broadcast (persona-10 #4) ──────────────
+//
+// BroadcastChannel is the cleanest API but only ~baseline 2022. We feature-
+// detect and fall back to a localStorage `storage` event so the UX still
+// works on slightly older Safari / niche browsers. Receivers in either case
+// react identically: clear local refresh token, mark session expired, and
+// hard-redirect (the cookie is gone server-side, so any new request would
+// 401 anyway — the redirect is just so the user doesn't see a broken UI).
+const logoutChannel: BroadcastChannel | null =
+  typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("alphadesk-auth")
+    : null;
+
+function handleCrossTabLogout(): void {
+  if (typeof window === "undefined") return;
+  // Already on /login? nothing to do — let the user finish signing in.
+  if (window.location.pathname === "/login") return;
+  try {
+    sessionStorage.setItem("alphadesk.session_expired", "1");
+  } catch {
+    // ignore — banner is best-effort
+  }
+  // Drop our own copy of the refresh token. The backend has already
+  // revoked it server-side via the originating tab's logout call.
+  clearRefreshToken();
+  // Hard redirect — easiest way to ensure no in-flight queries leak past
+  // the auth boundary.
+  window.location.href = "/login";
+}
+
+function broadcastLogout(): void {
+  if (typeof window === "undefined") return;
+  if (logoutChannel) {
+    try {
+      logoutChannel.postMessage({ type: "logout", at: Date.now() });
+      return;
+    } catch {
+      // fall through to localStorage path
+    }
+  }
+  // localStorage fallback — writing a unique value triggers the `storage`
+  // event in OTHER tabs (not the originating one, which is exactly what
+  // we want — the originator handles its own redirect).
+  try {
+    localStorage.setItem(LOGOUT_BROADCAST_KEY, String(Date.now()));
+  } catch {
+    // private mode / quota — cross-tab sync degrades gracefully
   }
 }
 
@@ -458,15 +594,35 @@ if (typeof window !== "undefined") {
     }
   });
   // On logout, clear the token + interval. Matches ProfileMenu's /auth/logout
-  // POST which clears the server-side session.
+  // POST which clears the server-side session. Also broadcast to peer tabs.
   window.addEventListener("alphadesk:auth-logout", () => {
     clearRefreshToken();
+    broadcastLogout();
+  });
+  // Receive cross-tab logout via BroadcastChannel.
+  if (logoutChannel) {
+    logoutChannel.onmessage = (event) => {
+      const data = event?.data as { type?: string } | undefined;
+      if (data?.type === "logout") handleCrossTabLogout();
+    };
+  }
+  // Receive cross-tab logout via localStorage `storage` event (fallback path
+  // for browsers without BroadcastChannel + as a belt-and-braces second
+  // signal in case the channel drops a message).
+  window.addEventListener("storage", (e: StorageEvent) => {
+    if (e.key !== LOGOUT_BROADCAST_KEY) return;
+    if (!e.newValue) return; // ignore deletes
+    handleCrossTabLogout();
   });
 }
 
 export async function refreshAccessToken(): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  if (refreshToken === null) return false;
+  // Re-read from sessionStorage on every invocation so a token captured by
+  // another tab (or cleared via logout) takes effect immediately rather
+  // than the next time the module reinits.
+  const token = readRefreshToken();
+  if (token === null) return false;
   try {
     // The backend's /auth/refresh handler returns `{access_token, refresh_token, ...}`
     // on success. Some backends rotate the refresh_token on every call
@@ -474,11 +630,12 @@ export async function refreshAccessToken(): Promise<boolean> {
     type RefreshResponse = { access_token?: string; refresh_token?: string };
     const resp = await apiFetch<RefreshResponse>("/api/v1/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refresh_token: token }),
       // Don't redirect on 401 — the scheduler manages that UX itself.
     });
     if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
-      refreshToken = resp.refresh_token;
+      // Persist the rotated token back to sessionStorage too.
+      captureRefreshToken(resp.refresh_token);
     }
     return true;
   } catch {
@@ -495,15 +652,25 @@ export async function refreshAccessToken(): Promise<boolean> {
  * Guards:
  *   * Skip entirely if no refresh_token has been captured yet (user reloaded
  *     or is not logged in) — the interval is left unstarted so we don't
- *     spam 401 calls to the backend.
+ *     spam 401 calls to the backend. Re-reads sessionStorage on each call
+ *     so a cross-tab login or post-reload init still picks up the token.
  *   * Clear the interval on refresh failure to avoid repeated 401 storms;
  *     the next login (or page reload) rearms it.
  */
 export function ensureTokenRefreshScheduled(): void {
   if (typeof window === "undefined") return;
   if (tokenRefreshTimer !== null) return;
-  if (refreshToken === null) return;
+  if (readRefreshToken() === null) return;
   tokenRefreshTimer = setInterval(() => {
+    // Re-read each tick — handles the cross-tab logout case where another
+    // tab cleared the token while this scheduler was idle.
+    if (readRefreshToken() === null) {
+      if (tokenRefreshTimer !== null) {
+        clearInterval(tokenRefreshTimer);
+        tokenRefreshTimer = null;
+      }
+      return;
+    }
     refreshAccessToken().then((ok) => {
       if (!ok && tokenRefreshTimer !== null) {
         // Refresh failed — stop the scheduler so we don't keep hitting

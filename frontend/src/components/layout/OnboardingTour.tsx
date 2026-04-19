@@ -75,6 +75,7 @@ export function OnboardingTour() {
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
   const rafRef = useRef<number>(0);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Show tour on first visit only, with delay for dashboard to render
   useEffect(() => {
@@ -143,6 +144,70 @@ export function OnboardingTour() {
     setActive(false);
     setCommandPaletteOpen(false);
   }, [setCommandPaletteOpen]);
+
+  // Wave 32 persona-6 #5: Esc closes the tour. Captures at the document
+  // level so it works regardless of whether the tooltip currently has focus.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        completeTour();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [active, completeTour]);
+
+  // Wave 32 persona-6 #5: focus the first interactive element in the tooltip
+  // (the Skip button) on tour open so keyboard users land on a real control
+  // instead of whatever sat beneath the backdrop.
+  useEffect(() => {
+    if (!active) return;
+    // RAF guarantees the tooltip is in the DOM before focusing — the
+    // spotlight effect needs a layout pass first.
+    const id = requestAnimationFrame(() => {
+      const root = tooltipRef.current;
+      if (!root) return;
+      const first = root.querySelector<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+      );
+      first?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [active, currentStep]);
+
+  // Wave 32 persona-6 #5: focus trap. Tab on the last interactive element
+  // loops back to the first; Shift+Tab on the first loops to the last.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const root = tooltipRef.current;
+      if (!root) return;
+      const focusables = root.querySelectorAll<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (activeEl === first || !root.contains(activeEl)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (activeEl === last || !root.contains(activeEl)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
 
   const handleNext = useCallback(() => {
     if (currentStep < TOUR_STEPS.length - 1) {
@@ -273,6 +338,7 @@ export function OnboardingTour() {
           to bleed past. `w-[calc(100vw-2rem)] max-w-80` keeps the natural
           320px on desk but clamps to the viewport minus 32px on mobile. */}
       <div
+        ref={tooltipRef}
         className="absolute z-10 w-[calc(100vw-2rem)] max-w-80 rounded-xl border border-primary/30 bg-[var(--surface)] p-5 shadow-2xl transition-all duration-300"
         style={getTooltipStyle()}
       >

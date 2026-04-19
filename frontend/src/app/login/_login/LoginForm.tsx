@@ -73,10 +73,22 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
+  // persona-10 #5 — when api.ts hits a 401 it stashes a flag in
+  // sessionStorage before redirecting here. We read + clear it on mount so
+  // the banner appears once per expired session (not on every visit).
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Rehydrate failure log from localStorage on mount — client-only.
   useEffect(() => {
     setFailures(pruneFailures(readFailures(), Date.now()));
+    try {
+      if (sessionStorage.getItem("alphadesk.session_expired") === "1") {
+        setSessionExpired(true);
+        sessionStorage.removeItem("alphadesk.session_expired");
+      }
+    } catch {
+      // private mode / storage disabled — banner stays hidden, login still works
+    }
   }, []);
 
   // Tick while locked out so the countdown stays accurate.
@@ -134,10 +146,20 @@ export default function LoginForm() {
         // Success — clear the failure log
         writeFailures([]);
         setFailures([]);
+        // Also clear any stale session-expired flag — even if the user
+        // landed here via expiry, they're now signed back in and the
+        // banner shouldn't follow them around.
+        try {
+          sessionStorage.removeItem("alphadesk.session_expired");
+        } catch {
+          // ignore
+        }
         const body = await res.json().catch(() => ({}));
-        // Hand the refresh token to the in-memory scheduler so
+        // Hand the refresh token to the scheduler so
         // `ensureTokenRefreshScheduled()` can rotate the access token
         // before its 8-hour TTL expires. See `frontend/src/lib/api.ts`.
+        // The api.ts listener also persists this to sessionStorage so
+        // the token survives a page reload (persona-9 #2 + persona-10 #2).
         if (body?.refresh_token) {
           window.dispatchEvent(
             new CustomEvent("alphadesk:auth-login-success", {
@@ -178,6 +200,16 @@ export default function LoginForm() {
           JavaScript is required to sign in to AlphaDesk.
         </p>
       </noscript>
+
+      {sessionExpired && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 font-mono text-[11.5px] text-amber"
+        >
+          Your session expired. Please sign in again.
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Eyebrow as="div">

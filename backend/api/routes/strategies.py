@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -20,6 +21,32 @@ from api.routes.auth import require_admin
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# In-process toggle locks (persona-9 #3 — concurrent-toggle race reinforcement)
+# ---------------------------------------------------------------------------
+# A per-strategy ``asyncio.Lock`` serialises toggles arriving at the SAME
+# Python process. The Redis WATCH/MULTI/EXEC CAS below still handles the
+# multi-worker case (and is the source of strict serializability across
+# workers) — the lock is an optimisation that eliminates the most common
+# source of contention persona-9 reproduced: 4 parallel ``fetch`` calls from
+# the same browser, all landing on the same uvicorn worker, all retrying
+# their CAS in lockstep. With the lock, those 4 requests serialize before
+# they touch Redis — no WATCH conflicts, no inconsistent reads.
+#
+# WeakValueDictionary would be ideal here, but ``asyncio.Lock`` doesn't
+# survive being weak-ref'd reliably; the small ``dict`` is fine — there are
+# at most ~25 strategies and each lock is cheap. Locks are created lazily.
+_TOGGLE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _get_toggle_lock(canonical_id: str) -> asyncio.Lock:
+    lock = _TOGGLE_LOCKS.get(canonical_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _TOGGLE_LOCKS[canonical_id] = lock
+    return lock
 
 
 # ---------------------------------------------------------------------------
@@ -952,6 +979,79 @@ async def _get_strategy_data(strategy_id: str) -> dict[str, Any] | None:
     return result
 
 
+def _is_known_strategy_id(strategy_id: str) -> bool:
+    """Return True if the given route id is a known strategy.
+
+    persona-9 #7 — used to guarantee that ``/strategies/<bad-id>/...`` paths
+    raise a real 404 instead of returning a 200 with placeholder zeros (which
+    used to happen on a few branches when ``_get_strategy_data`` was bypassed).
+    A strategy is "known" if either:
+
+      * It appears in the catalogue dict ``_STRATEGIES`` (live + planned), OR
+      * It is registered in the live strategy registry via
+        ``IMPLEMENTED_STRATEGY_ROUTE_IDS`` / ``PLANNED_STRATEGY_ROUTE_IDS``
+        (covers route ids added at registration time but not yet seeded into
+        the catalogue dict).
+
+    The registry import is lazy + best-effort: we don't want a registry-load
+    failure (e.g. a half-imported strategy module during partial test
+    collection) to take the catalogue down. ``_STRATEGIES`` alone is the
+    canonical truth in that case.
+    """
+    canonical = _canonical_id(strategy_id)
+    if canonical in _STRATEGIES:
+        return True
+    try:
+        from strategies.registry import (
+            IMPLEMENTED_STRATEGY_ROUTE_IDS,
+            PLANNED_STRATEGY_ROUTE_IDS,
+        )
+        if (
+            canonical in IMPLEMENTED_STRATEGY_ROUTE_IDS
+            or canonical in PLANNED_STRATEGY_ROUTE_IDS
+        ):
+            return True
+    except Exception:
+        logger.debug("strategies registry unavailable for is-known check", exc_info=True)
+    return False
+
+
+async def _require_strategy(strategy_id: str) -> dict[str, Any]:
+    """Resolve ``strategy_id`` or raise a real HTTP 404 (persona-9 #7).
+
+    Centralises the existence check so every id-taking endpoint reports the
+    same error shape (`detail: "Strategy '<id>' not found"`). Previously each
+    endpoint open-coded this check; if a future refactor accidentally
+    bypassed it on one branch the route would return 200 with default zeros
+    (silent 404-as-200, the persona-9 finding).
+    """
+    data = await _get_strategy_data(strategy_id)
+    if data is None and not _is_known_strategy_id(strategy_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Strategy '{strategy_id}' not found",
+        )
+    if data is None:
+        # Known strategy id (registry says yes) but no catalogue entry yet —
+        # this should never happen in production because ``_reload_oos_metrics``
+        # seeds every registry id at import time. Synthesize a minimal record
+        # so the route doesn't 500 in the rare case where the registry races
+        # ahead of the catalogue.
+        canonical = _canonical_id(strategy_id)
+        return {
+            "name": canonical.replace("-", " ").title(),
+            "description": "",
+            "status": StrategyStatus.ACTIVE,
+            "invested_amount": 0,
+            "total_return_pct": 0,
+            "win_rate": 0,
+            "active_positions_count": 0,
+            "annualized_return_pct": 0,
+            "last_trade_date": "",
+        }
+    return data
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -1224,9 +1324,9 @@ async def get_strategy_performance(
     from core.config import settings
     from data.ingestion.trade_ledger import TradeLedger
 
-    data = await _get_strategy_data(strategy_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+    # persona-9 #7 — real 404 on bad ids (was 200 with placeholder zeros
+    # on some branches before this helper existed).
+    data = await _require_strategy(strategy_id)
 
     # ------------------------------------------------------------------
     # Fetch Alpaca positions and sync ledger
@@ -1342,95 +1442,115 @@ async def toggle_strategy(
 ) -> ToggleResponse:
     """Toggle a strategy between active and paused.
 
-    Uses a Redis WATCH/MULTI/EXEC transaction so concurrent double-clicks
-    can't both read the same starting state and both invert it (which would
-    net to a single flip instead of zero). On WatchError we retry up to
-    ``max_attempts`` times. concurrency-audit-r4 P0 #6.
+    Concurrency model (persona-9 #3 — reinforced over Wave 17 baseline):
+
+      1. **In-process serialisation** — a per-strategy ``asyncio.Lock``
+         serialises toggles arriving at the same uvicorn worker. Persona-9
+         reproduced inconsistent reads from 4 parallel toggles in a single
+         browser tab; those all land on one worker, where the lock now
+         eliminates the race entirely.
+      2. **Cross-worker CAS** — Redis WATCH / MULTI / EXEC ensures that even
+         if two workers race past the in-process lock, the second one sees
+         a ``WatchError`` and retries with the fresh value. The previous
+         implementation had a 5-attempt budget and zero backoff; we now
+         bump it to 8 and add bounded jitter (5–25 ms) so retries don't
+         lockstep with each other.
+
+    The strategies table is in-code (no Postgres row) so a SELECT...FOR
+    UPDATE strategy isn't applicable here; the in-process lock + tightened
+    Redis CAS achieves equivalent serialisation for the realistic load
+    pattern (single user toggling fast).
     """
     import orjson
     from core.redis import get_redis
     from redis.exceptions import WatchError
 
-    data = await _get_strategy_data(strategy_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+    # persona-9 #7 — guarantee a real 404 on bad ids before any Redis I/O.
+    data = await _require_strategy(strategy_id)
 
     canonical = _canonical_id(strategy_id)
     redis_key = f"strategy_status:{canonical}"
 
     redis_client = await get_redis()
-    max_attempts = 5
+    max_attempts = 8  # was 5; persona-9 saw stale reads with 5 under load
     last_err: Exception | None = None
     previous_status: StrategyStatus = data["status"]
     new_status: StrategyStatus = StrategyStatus.PAUSED
 
-    for attempt in range(max_attempts):
-        try:
-            async with redis_client.pipeline(transaction=True) as pipe:
-                await pipe.watch(redis_key)
-                raw = await pipe.get(redis_key)
-                # Resolve the current status from Redis (override) or from
-                # the canonical _STRATEGIES table when no override is set.
-                current_status: StrategyStatus = data["status"]
-                if raw is not None:
-                    try:
-                        parsed = orjson.loads(raw)
-                        current_status = StrategyStatus(parsed["status"])
-                    except Exception:
-                        # Corrupt entry — fall through to inversion of the
-                        # canonical default rather than refusing the toggle.
-                        logger.warning(
-                            "toggle_strategy: corrupt Redis value for %s: %r",
-                            redis_key, raw,
-                        )
-                next_status = (
+    # In-process lock around the entire CAS loop. See module docstring on
+    # ``_TOGGLE_LOCKS`` for the rationale.
+    async with _get_toggle_lock(canonical):
+        for attempt in range(max_attempts):
+            try:
+                async with redis_client.pipeline(transaction=True) as pipe:
+                    await pipe.watch(redis_key)
+                    raw = await pipe.get(redis_key)
+                    # Resolve current status from Redis (override) or the
+                    # canonical _STRATEGIES table when no override is set.
+                    current_status: StrategyStatus = data["status"]
+                    if raw is not None:
+                        try:
+                            parsed = orjson.loads(raw)
+                            current_status = StrategyStatus(parsed["status"])
+                        except Exception:
+                            # Corrupt entry — fall through to inversion of
+                            # the canonical default rather than refusing.
+                            logger.warning(
+                                "toggle_strategy: corrupt Redis value for %s: %r",
+                                redis_key, raw,
+                            )
+                    next_status = (
+                        StrategyStatus.PAUSED
+                        if current_status == StrategyStatus.ACTIVE
+                        else StrategyStatus.ACTIVE
+                    )
+                    pipe.multi()
+                    pipe.set(
+                        redis_key,
+                        orjson.dumps({"status": next_status.value}).decode(),
+                    )
+                    await pipe.execute()
+                    previous_status = current_status
+                    new_status = next_status
+                    break
+            except WatchError as exc:
+                last_err = exc
+                logger.info(
+                    "toggle_strategy: WATCH conflict for %s (attempt %d/%d), retrying with jitter",
+                    strategy_id, attempt + 1, max_attempts,
+                )
+                # Bounded jitter so multiple workers don't lockstep their
+                # retries. 5–25 ms is short enough to feel instant in the UI
+                # and long enough to spread the contention.
+                await asyncio.sleep(random.uniform(0.005, 0.025))
+                continue
+            except Exception as exc:
+                # Redis-level failure — fall back to non-atomic write so
+                # the user toggle still lands. (`_set_strategy_status_override`
+                # itself swallows secondary Redis failures.)
+                last_err = exc
+                logger.warning(
+                    "toggle_strategy: Redis transaction failed (%s), "
+                    "falling back to non-atomic write", exc, exc_info=True,
+                )
+                previous_status = data["status"]
+                new_status = (
                     StrategyStatus.PAUSED
-                    if current_status == StrategyStatus.ACTIVE
+                    if previous_status == StrategyStatus.ACTIVE
                     else StrategyStatus.ACTIVE
                 )
-                pipe.multi()
-                pipe.set(
-                    redis_key,
-                    orjson.dumps({"status": next_status.value}).decode(),
-                )
-                await pipe.execute()
-                previous_status = current_status
-                new_status = next_status
+                await _set_strategy_status_override(canonical, new_status)
                 break
-        except WatchError as exc:
-            last_err = exc
-            logger.info(
-                "toggle_strategy: WATCH conflict for %s (attempt %d/%d), retrying",
-                strategy_id, attempt + 1, max_attempts,
+        else:
+            # Exhausted retries without breaking out — surface the conflict.
+            logger.error(
+                "toggle_strategy: %d WATCH conflicts in a row for %s; giving up",
+                max_attempts, strategy_id,
             )
-            continue
-        except Exception as exc:
-            # Redis-level failure — fall back to non-atomic write so the user
-            # toggle still lands. The previous code already had this fallback
-            # implicit via the try/except in _set_strategy_status_override.
-            last_err = exc
-            logger.warning(
-                "toggle_strategy: Redis transaction failed (%s), falling back "
-                "to non-atomic write", exc, exc_info=True,
+            raise HTTPException(
+                status_code=409,
+                detail=f"Strategy toggle conflicted with concurrent updates: {last_err}",
             )
-            previous_status = data["status"]
-            new_status = (
-                StrategyStatus.PAUSED
-                if previous_status == StrategyStatus.ACTIVE
-                else StrategyStatus.ACTIVE
-            )
-            await _set_strategy_status_override(canonical, new_status)
-            break
-    else:
-        # Exhausted retries without breaking out — surface the conflict.
-        logger.error(
-            "toggle_strategy: %d WATCH conflicts in a row for %s; giving up",
-            max_attempts, strategy_id,
-        )
-        raise HTTPException(
-            status_code=409,
-            detail=f"Strategy toggle conflicted with concurrent updates: {last_err}",
-        )
 
     return ToggleResponse(
         id=strategy_id,
@@ -1557,9 +1677,8 @@ async def get_strategy_analytics(
     strategy_id: str = Path(..., description="Strategy identifier"),
 ) -> StrategyAnalytics:
     """Return in-depth analytics for a single strategy computed from the trade ledger."""
-    data = await _get_strategy_data(strategy_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+    # persona-9 #7 — real 404 on unknown ids.
+    data = await _require_strategy(strategy_id)
 
     from data.ingestion.trade_ledger import TradeLedger
     ledger = TradeLedger()
@@ -1739,9 +1858,8 @@ async def get_strategy_positions(
     from core.config import settings
     from data.ingestion.trade_ledger import TradeLedger
 
-    data = await _get_strategy_data(strategy_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+    # persona-9 #7 — real 404 on unknown ids before any Alpaca I/O.
+    data = await _require_strategy(strategy_id)
 
     # Fetch live Alpaca positions
     alpaca_positions: list[dict] = []

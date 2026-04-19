@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
 
+// Shift+C/F/S removed in Wave 32 — position-flatten + stop-loss actions need a
+// dedicated confirmation flow; re-add when that ships.
 export const DEFAULT_BINDINGS: Record<string, string> = {
   "?": "toggle:shortcuts",
   "/": "focus:search",
@@ -12,30 +14,44 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "g d": "navigate:dashboard",
   "g t": "navigate:trade",
   "g p": "navigate:pipeline",
+  "g s": "navigate:strategies",
+  "g a": "navigate:analytics",
+  "g l": "navigate:alerts",
+  "g r": "navigate:reports",
   "n": "navigate:next-tab",
   "p": "navigate:prev-tab",
   "f": "focus:search",
   "r": "refresh:page",
-  "1": "chart:timeframe:1m",
-  "2": "chart:timeframe:5m",
-  "3": "chart:timeframe:15m",
-  "4": "chart:timeframe:1H",
-  "5": "chart:timeframe:4H",
-  "6": "chart:timeframe:D",
-  "7": "chart:timeframe:W",
-  "8": "chart:timeframe:M",
+  // Wave 32 persona-6 #1: bindings now match PriceChartPanel's ChartRange union
+  // ("1D" | "5D" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL"). Intraday keys
+  // (1m/5m/15m/1H/4H) were dispatching events nothing listened for.
+  "1": "chart:set-range:1D",
+  "2": "chart:set-range:5D",
+  "3": "chart:set-range:1M",
+  "4": "chart:set-range:3M",
+  "5": "chart:set-range:6M",
+  "6": "chart:set-range:YTD",
+  "7": "chart:set-range:1Y",
+  "8": "chart:set-range:ALL",
   "Ctrl+j": "copilot:toggle",
   "j": "watchlist:next",
   "k": "watchlist:prev",
   "b": "chart:quick-buy",
   "s": "chart:quick-sell",
-  "Shift+C": "positions:close-all",
-  "Shift+F": "positions:flatten",
-  "Shift+S": "positions:stop-loss",
 };
 
 /** Shortcuts added after 2026-04-01 are flagged as new */
-export const NEW_SHORTCUTS = new Set(["n", "p", "f", "r", "Ctrl+j", "Shift+C", "Shift+F", "Shift+S"]);
+export const NEW_SHORTCUTS = new Set([
+  "n",
+  "p",
+  "f",
+  "r",
+  "Ctrl+j",
+  "g s",
+  "g a",
+  "g l",
+  "g r",
+]);
 
 export type ShortcutGroup = {
   name: string;
@@ -62,7 +78,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { key: "g d", action: "navigate:dashboard", description: "Go to Dashboard" },
       { key: "g t", action: "navigate:trade", description: "Go to Trade" },
+      { key: "g s", action: "navigate:strategies", description: "Go to Strategies", isNew: true },
+      { key: "g a", action: "navigate:analytics", description: "Go to Analytics", isNew: true },
       { key: "g p", action: "navigate:pipeline", description: "Go to Pipeline" },
+      { key: "g l", action: "navigate:alerts", description: "Go to Alerts", isNew: true },
+      { key: "g r", action: "navigate:reports", description: "Go to Reports", isNew: true },
       { key: "n", action: "navigate:next-tab", description: "Next tab", isNew: true },
       { key: "p", action: "navigate:prev-tab", description: "Previous tab", isNew: true },
     ],
@@ -71,14 +91,14 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     name: "Chart",
     icon: "chart",
     items: [
-      { key: "1", action: "chart:timeframe:1m", description: "1 minute" },
-      { key: "2", action: "chart:timeframe:5m", description: "5 minutes" },
-      { key: "3", action: "chart:timeframe:15m", description: "15 minutes" },
-      { key: "4", action: "chart:timeframe:1H", description: "1 hour" },
-      { key: "5", action: "chart:timeframe:4H", description: "4 hours" },
-      { key: "6", action: "chart:timeframe:D", description: "Daily" },
-      { key: "7", action: "chart:timeframe:W", description: "Weekly" },
-      { key: "8", action: "chart:timeframe:M", description: "Monthly" },
+      { key: "1", action: "chart:set-range:1D", description: "1 day" },
+      { key: "2", action: "chart:set-range:5D", description: "5 days" },
+      { key: "3", action: "chart:set-range:1M", description: "1 month" },
+      { key: "4", action: "chart:set-range:3M", description: "3 months" },
+      { key: "5", action: "chart:set-range:6M", description: "6 months" },
+      { key: "6", action: "chart:set-range:YTD", description: "Year to date" },
+      { key: "7", action: "chart:set-range:1Y", description: "1 year" },
+      { key: "8", action: "chart:set-range:ALL", description: "All available history" },
     ],
   },
   {
@@ -93,17 +113,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     name: "Quick Order",
     icon: "zap",
     items: [
-      { key: "b", action: "chart:quick-buy", description: "Quick buy at market" },
-      { key: "s", action: "chart:quick-sell", description: "Quick sell at market" },
-    ],
-  },
-  {
-    name: "Positions",
-    icon: "briefcase",
-    items: [
-      { key: "Shift+C", action: "positions:close-all", description: "Close all positions", isNew: true },
-      { key: "Shift+F", action: "positions:flatten", description: "Flatten portfolio", isNew: true },
-      { key: "Shift+S", action: "positions:stop-loss", description: "Set stop loss on selected", isNew: true },
+      { key: "b", action: "chart:quick-buy", description: "Focus Order Bar with Buy preset" },
+      { key: "s", action: "chart:quick-sell", description: "Focus Order Bar with Sell preset" },
     ],
   },
   {
@@ -126,7 +137,17 @@ function loadBindings(): Record<string, string> {
   return { ...DEFAULT_BINDINGS };
 }
 
-const TAB_ORDER = ["/", "/trade", "/analytics", "/alerts", "/pipeline"];
+// Wave 32 persona-6 #7: full coverage of TopBar nav targets so n/p cycles
+// every primary tab instead of skipping /strategies and /reports.
+const TAB_ORDER = [
+  "/",
+  "/strategies",
+  "/analytics",
+  "/pipeline",
+  "/reports",
+  "/alerts",
+  "/settings",
+];
 
 /* ─── Page-scoped handler registry ──────────────────────────
  * Pages that want to intercept a specific action (e.g. the desk page
@@ -170,11 +191,24 @@ export function useKeyboardShortcuts() {
 
   const handleAction = useCallback(
     (actionId: string) => {
-      // If a page registered a handler for this action, defer to it.
+      // If a page registered a handler for this exact action, defer to it.
       const pageHandler = shortcutHandlers.get(actionId);
       if (pageHandler) {
         pageHandler(actionId);
         return;
+      }
+
+      // Wave 32 persona-6 #1: namespaced fallback. `chart:set-range:1D` will
+      // invoke a handler registered for the family `chart:set-range` so the
+      // desk page can listen once and receive every range key.
+      const colonIdx = actionId.indexOf(":", actionId.indexOf(":") + 1);
+      if (colonIdx > 0) {
+        const family = actionId.slice(0, colonIdx);
+        const familyHandler = shortcutHandlers.get(family);
+        if (familyHandler) {
+          familyHandler(actionId);
+          return;
+        }
       }
 
       switch (actionId) {
@@ -198,6 +232,18 @@ export function useKeyboardShortcuts() {
           break;
         case "navigate:pipeline":
           router.push("/pipeline");
+          break;
+        case "navigate:strategies":
+          router.push("/strategies");
+          break;
+        case "navigate:analytics":
+          router.push("/analytics");
+          break;
+        case "navigate:alerts":
+          router.push("/alerts");
+          break;
+        case "navigate:reports":
+          router.push("/reports");
           break;
         case "navigate:next-tab": {
           const currentIdx = TAB_ORDER.indexOf(pathname ?? "/");

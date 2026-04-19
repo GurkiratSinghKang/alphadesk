@@ -5,8 +5,48 @@ import { useWs } from "@/lib/providers";
 import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useAlertsStore } from "@/stores/alerts";
+import { usePreferencesStore } from "@/stores/preferences";
 import { getSnapshot, getPositions, getOrders, getPortfolioSummary, getPortfolioGreeks } from "@/lib/api";
 import type { Quote, Alert } from "@/types";
+
+/**
+ * Module-level so the initial-fetch effect and the polling effect
+ * share one definition. Pure side-effect; nothing React-specific to
+ * close over.
+ */
+function fetchPortfolioData() {
+  getPositions()
+    .then((positions) => {
+      usePortfolioStore.getState().setPositions(positions);
+    })
+    .catch((err) => {
+      console.warn("[DataPipeline] Positions fetch failed:", err.message);
+    });
+
+  getOrders()
+    .then((orders) => {
+      usePortfolioStore.getState().setOrders(orders);
+    })
+    .catch((err) => {
+      console.warn("[DataPipeline] Orders fetch failed:", err.message);
+    });
+
+  getPortfolioSummary()
+    .then((summary) => {
+      usePortfolioStore.getState().setSummary(summary);
+    })
+    .catch((err) => {
+      console.warn("[DataPipeline] Summary fetch failed:", err.message);
+    });
+
+  getPortfolioGreeks()
+    .then((greeks) => {
+      usePortfolioStore.getState().setGreeks(greeks);
+    })
+    .catch((err) => {
+      console.warn("[DataPipeline] Greeks fetch failed:", err.message);
+    });
+}
 
 /**
  * Bridges the WebSocket + REST API to Zustand stores.
@@ -17,6 +57,11 @@ import type { Quote, Alert } from "@/types";
 export function useDataPipeline(enabled: boolean = true) {
   const { subscribe, unsubscribe, onMessage } = useWs();
   const hasFetched = useRef(false);
+  // Persona-8 #1: portfolio refresh used to be a hardcoded 30s. Wire the
+  // user pref so the Settings → Data Refresh slider actually changes
+  // something. Stored as seconds in `preferences.data.refreshInterval`,
+  // clamped in the setter to [10, 300] s.
+  const refreshIntervalSec = usePreferencesStore((s) => s.data.refreshInterval);
 
   // Subscribe to WS channels on mount, unsubscribe on unmount
   useEffect(() => {
@@ -35,7 +80,9 @@ export function useDataPipeline(enabled: boolean = true) {
     };
   }, [subscribe, unsubscribe, enabled]);
 
-  // Fetch initial data on mount (with retry) + periodic portfolio refresh
+  // Fetch initial data on mount (with retry). One-shot — the polling
+  // interval lives in a sibling effect so it can re-arm on refresh-rate
+  // pref changes without re-running the initial fetch.
   useEffect(() => {
     if (!enabled) return;
     if (hasFetched.current) return;
@@ -78,56 +125,27 @@ export function useDataPipeline(enabled: boolean = true) {
       fetchPortfolioData();
     };
 
-    const fetchPortfolioData = () => {
-      if (cancelled) return;
-
-      getPositions()
-        .then((positions) => {
-          if (cancelled) return;
-          usePortfolioStore.getState().setPositions(positions);
-        })
-        .catch((err) => {
-          console.warn("[DataPipeline] Positions fetch failed:", err.message);
-        });
-
-      getOrders()
-        .then((orders) => {
-          if (cancelled) return;
-          usePortfolioStore.getState().setOrders(orders);
-        })
-        .catch((err) => {
-          console.warn("[DataPipeline] Orders fetch failed:", err.message);
-        });
-
-      getPortfolioSummary()
-        .then((summary) => {
-          if (cancelled) return;
-          usePortfolioStore.getState().setSummary(summary);
-        })
-        .catch((err) => {
-          console.warn("[DataPipeline] Summary fetch failed:", err.message);
-        });
-
-      getPortfolioGreeks()
-        .then((greeks) => {
-          if (cancelled) return;
-          usePortfolioStore.getState().setGreeks(greeks);
-        })
-        .catch((err) => {
-          console.warn("[DataPipeline] Greeks fetch failed:", err.message);
-        });
-    };
-
     fetchInitialData();
-
-    // Refresh portfolio summary every 30s for real-time P&L updates
-    const portfolioInterval = setInterval(fetchPortfolioData, 30_000);
 
     return () => {
       cancelled = true;
-      clearInterval(portfolioInterval);
     };
-  }, []);
+  }, [enabled]);
+
+  // Periodic portfolio refresh — interval driven by user pref
+  // (Settings → Data Refresh). Re-arms when the pref changes so a slider
+  // tweak takes effect on the next tick instead of the next reload.
+  useEffect(() => {
+    if (!enabled) return;
+    // The store clamps to [10, 300] s, but be defensive — if anything
+    // upstream slips an out-of-range value through we still cap at 30s.
+    const seconds = Number.isFinite(refreshIntervalSec) && refreshIntervalSec >= 10
+      ? Math.min(refreshIntervalSec, 300)
+      : 30;
+    const intervalMs = seconds * 1000;
+    const portfolioInterval = setInterval(fetchPortfolioData, intervalMs);
+    return () => clearInterval(portfolioInterval);
+  }, [enabled, refreshIntervalSec]);
 
   // Route WS messages to stores via channel callbacks (no React re-renders)
   useEffect(() => {

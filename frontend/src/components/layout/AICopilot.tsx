@@ -49,7 +49,13 @@ export function AICopilot() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Cmd+J / Ctrl+J to toggle
+  // Cmd+J / Ctrl+J to toggle. The local keydown handler covers the case
+  // where the user has focus on an INPUT (the global `useKeyboardShortcuts`
+  // hook early-returns on inputs), and the `alphadesk:shortcut` listener
+  // covers the case where the global hook dispatched `copilot:toggle`
+  // because the user pressed Ctrl+J via the rebindable global path
+  // (Wave 32 persona-6 #3 — previously this event was dispatched into
+  // the void with no listener).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "j") {
@@ -59,6 +65,17 @@ export function AICopilot() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const onShortcut = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === "copilot:toggle") {
+        setOpen((o) => !o);
+      }
+    };
+    window.addEventListener("alphadesk:shortcut", onShortcut);
+    return () => window.removeEventListener("alphadesk:shortcut", onShortcut);
   }, []);
 
   // Focus input when opened

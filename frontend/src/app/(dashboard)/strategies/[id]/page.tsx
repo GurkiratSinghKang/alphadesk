@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { Pause, Play, ArrowRight } from "lucide-react";
 
 import Display from "@/components/typography/Display";
@@ -294,6 +294,12 @@ export default function StrategyDetailPage() {
   const [range, setRange] = useState<EquityRange>("3M");
   const [toggling, setToggling] = useState(false);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
+  // persona-9 #7 — track whether the perf fetch came back as a 404 from the
+  // backend, distinct from a generic network failure. We only call Next's
+  // ``notFound()`` when both signals agree the slug is unknown (frontend
+  // ``STRATEGY_META`` doesn't list it AND the backend says 404). A
+  // transient network error on a known-good slug must NOT trigger notFound.
+  const [perfNotFound, setPerfNotFound] = useState(false);
 
   const meta = STRATEGY_META[strategyId] || {
     name: strategyId,
@@ -305,12 +311,24 @@ export default function StrategyDetailPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setPerfNotFound(false);
     const [p, t, pos] = await Promise.allSettled([
       getStrategyPerformance(strategyId),
       getStrategyTrades(strategyId),
       getStrategyPositions(strategyId),
     ]);
-    if (p.status === "fulfilled") setPerf(p.value);
+    if (p.status === "fulfilled") {
+      setPerf(p.value);
+    } else {
+      // ``apiFetch`` throws ``Error("API 404: …")`` on 404 — sniff for that
+      // shape so we can later trigger ``notFound()`` instead of rendering
+      // the editorial copy. Any other failure (network, 5xx) leaves
+      // ``perfNotFound`` false so the retry button still shows.
+      const reason = p.reason instanceof Error ? p.reason.message : "";
+      if (reason.includes("API 404")) {
+        setPerfNotFound(true);
+      }
+    }
     if (t.status === "fulfilled") setTrades(t.value);
     if (pos.status === "fulfilled") setPositions(pos.value);
     setLoading(false);
@@ -435,14 +453,34 @@ export default function StrategyDetailPage() {
     );
   }
 
-  // Wave 26 — unknown-slug editorial state. If the slug isn't in STRATEGY_META
-  // AND the performance endpoint returned nothing, render a minimal "not
-  // found" block linking back to the dashboard rather than a blank hero with
-  // the raw slug as the title (Persona 1 audit called this out). Deliberately
-  // not a 404: the strategies dropdown may still link here while a migration
-  // is in flight and an editorial state reads more intentional than a hard
-  // failure.
+  // persona-9 #7 — Wave 35: real HTTP 404 for unknown slugs.
+  //
+  // Previously this branch rendered editorial "Strategy not found" copy in a
+  // 200 response. That hurt SEO (search engines indexed the placeholder),
+  // muddled browser-history hygiene (Back from a 404 went to the placeholder
+  // page instead of the previous real page), and broke crawl-budget heuristics
+  // because every typo in the URL bar produced a unique 200.
+  //
+  // Now: if the slug is NOT in STRATEGY_META AND the backend confirmed the
+  // strategy is unknown (perf fetch returned 404), call Next's ``notFound()``
+  // to throw the framework's HTTP-404 fallback. The not-found boundary
+  // (`app/not-found.tsx` or the dashboard's nearest ancestor) renders the
+  // user-visible 404 page and Next sets the response status to 404.
+  //
+  // Editorial copy is still preserved for the legitimate case: a slug IS in
+  // STRATEGY_META but the backend hasn't produced data yet (freshly seeded
+  // strategy, OOS file missing) — that should not 404, it should explain why
+  // the page is empty and offer a retry.
+  if (!isKnownStrategy && perfNotFound) {
+    notFound();
+  }
+
   if (!isKnownStrategy && !perf) {
+    // Frontend doesn't know the slug AND the perf request didn't actually
+    // 404 (likely a network failure). Render the editorial copy + retry so a
+    // transient outage on a deep-link doesn't 404 the user. Once the network
+    // recovers, ``fetchData`` will either succeed or set ``perfNotFound`` and
+    // the branch above will fire.
     return (
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-6 py-10">
         <nav
@@ -453,18 +491,25 @@ export default function StrategyDetailPage() {
             Dashboard
           </Link>
           <span aria-hidden>/</span>
-          <span className="text-fg">Strategy not found</span>
+          <span className="text-fg">Strategy not available</span>
         </nav>
         <div className="flex flex-col gap-3 rounded-lg border border-border-hair bg-bg-elev-1 px-6 py-8">
           <Eyebrow as="div">STRATEGY</Eyebrow>
           <Display size="md" as="h1">
-            Strategy not found
+            Strategy data unavailable
           </Display>
           <p className="max-w-[520px] font-display italic text-[15px] leading-relaxed text-fg-muted">
-            No strategy exists at <Mono className="text-[13px] text-fg">{rawSlug}</Mono>.
-            It may have been retired or the URL may be mistyped.
+            Could not load <Mono className="text-[13px] text-fg">{rawSlug}</Mono>.
+            The backend may be temporarily unreachable.
           </p>
-          <div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={fetchData}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3 py-1.5 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+            >
+              Retry
+            </button>
             <Link
               href="/"
               className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"

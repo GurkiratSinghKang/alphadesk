@@ -43,6 +43,7 @@ import {
   useRegime,
   useStrategies,
 } from "@/hooks/useQueries";
+import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import { useMarketStore, useQuote, getFreshestQuoteTimestamp } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useToast } from "@/hooks/useToast";
@@ -164,6 +165,20 @@ export default function DeskPage() {
   const [series, setSeries] = useState<ChartBar[]>([]);
   const [barsLoading, setBarsLoading] = useState(false);
   const [barsError, setBarsError] = useState(false);
+
+  // Wave 32 persona-6 #1: number-key timeframes (1-8) dispatch
+  // `chart:set-range:<RANGE>` actions; the desk owns range state, so it
+  // intercepts the family handler and updates `setRange`. Uses the
+  // page-scoped registry exported from `useKeyboardShortcuts`, which
+  // rescues the previously-dead `useShortcutHandler` export.
+  const handleChartRangeShortcut = useCallback((actionId: string) => {
+    const value = actionId.split(":")[2];
+    const valid: ChartRange[] = ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "ALL"];
+    if (valid.includes(value as ChartRange)) {
+      setRange(value as ChartRange);
+    }
+  }, []);
+  useShortcutHandler("chart:set-range", handleChartRangeShortcut);
   // Nonce bumped by `retryBars` so the fetch effect re-runs without needing
   // the symbol or range to change. PriceChartPanel calls it from the
   // error-state Retry button.

@@ -111,18 +111,33 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     );
   }, [filter]);
 
+  // Wave 32 persona-6 #4: the global keyboard hook early-returns when an
+  // INPUT is focused, so Esc was swallowed once the auto-focused filter
+  // input received focus. A local capture-phase keydown handler closes the
+  // overlay before propagation and stops the event so the global hook's
+  // input-guard never has a chance to ignore it.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      e.preventDefault();
+      onClose();
+    }
+  };
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
+      onKeyDown={handleKeyDown}
     >
       <div
         ref={contentRef}
         tabIndex={-1}
         className="w-[calc(100vw-1rem)] sm:w-full max-w-[640px] max-h-[88vh] sm:max-h-[80vh] flex flex-col rounded-xl border border-border bg-[var(--surface)] shadow-2xl shadow-black/40 outline-none"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3 gap-3">
@@ -150,6 +165,16 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
               placeholder="Filter shortcuts..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                // Defensive: belt-and-suspenders for the parent capture; some
+                // browsers fire keydown on the input before the parent. Either
+                // path closes the overlay safely.
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onClose();
+                }
+              }}
               className="w-full h-10 sm:h-8 rounded-lg border border-border bg-background pl-8 pr-3 text-base sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
             />
           </div>

@@ -9,14 +9,53 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from core.auth import require_auth
+from api.routes.auth import require_admin
 
 logger = logging.getLogger("alphadesk.pipeline.api")
 
 router = APIRouter()
 
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "pipeline_logs"
+
+
+# ---- Response models ----
+
+class PipelineStatus(BaseModel):
+    """Live pipeline status surfaced by GET /pipeline/status.
+
+    `running` is derived from ``_pipeline_lock.locked()`` so it cannot
+    drift out of sync with reality (persona-7 #1). The remaining fields
+    are written by the running pipeline as it crosses stage boundaries
+    — they are ``None`` while idle.
+    """
+    running: bool
+    stage: str | None = None
+    progress: dict[str, int] | None = None
+    started_at: str | None = None  # ISO 8601 UTC
+    run_id: str | None = None
+    current_strategy: str | None = None
+    last_run: str | None = None
+    last_result: str | None = None
+
+
+class SchedulerState(BaseModel):
+    """Persisted scheduler state surfaced by GET /pipeline/scheduler_state.
+
+    Mirrors the dict the scheduler writes to Redis at key
+    ``pipeline:scheduler_state`` (see pipeline_runner.py:288). The dict
+    holds ``last_<window>`` ISO date strings; we surface them as one
+    ``last_heartbeat`` (most recent) plus ``next_scheduled_run`` (computed
+    from USMarketCalendar) and ``missed_runs`` (windows that should have
+    fired today but haven't).
+    """
+    last_heartbeat: str | None = None
+    next_scheduled_run: str | None = None
+    missed_runs: int = 0
+    raw_state: dict[str, Any] = {}
 
 
 # Rate-limit POST /pipeline/run — 1 run per 60 seconds per user. The pipeline
@@ -28,6 +67,11 @@ _PIPELINE_RATE_MAX = 1
 
 
 async def _pipeline_rate_limit(username: str) -> None:
+    """Rate-limit POST /pipeline/run. On 429 we set Retry-After to the
+    actual remaining TTL of the Redis key — not the window length — so
+    a client that hits the limit 50s in is told "wait 10s" not "wait 60s"
+    (persona-9 #10).
+    """
     key = f"pipeline_run:{username}"
     try:
         from core.redis import get_redis
@@ -35,8 +79,12 @@ async def _pipeline_rate_limit(username: str) -> None:
         pipe = redis.pipeline()
         pipe.incr(key)
         pipe.expire(key, _PIPELINE_RATE_WINDOW, nx=True)
+        # ttl returns seconds (-2 = no key, -1 = no TTL, >=0 = seconds left).
+        # We add it to the same pipeline so we don't pay an extra round-trip.
+        pipe.ttl(key)
         results = await pipe.execute()
         count = int(results[0])
+        ttl = int(results[2])
     except Exception:
         logger.warning("pipeline rate-limit: Redis unavailable", exc_info=True)
         # Fail closed — skipping the limiter on such an expensive endpoint
@@ -47,85 +95,191 @@ async def _pipeline_rate_limit(username: str) -> None:
         )
 
     if count > _PIPELINE_RATE_MAX:
+        # Use the actual remaining TTL when available; clamp to >=1 so
+        # browsers don't spin-retry.
+        retry_after = ttl if ttl > 0 else _PIPELINE_RATE_WINDOW
+        retry_after = max(1, retry_after)
         raise HTTPException(
             status_code=429,
             detail={
                 "error": "rate_limited",
                 "message": "Pipeline can only be triggered once per minute. Please wait.",
+                "retry_after": retry_after,
             },
-            headers={"Retry-After": str(_PIPELINE_RATE_WINDOW)},
+            headers={"Retry-After": str(retry_after)},
         )
 
 
-# ---- POST /run — manually trigger the pipeline ----
+# ---- POST /run — manually trigger the pipeline (fire-and-forget) ----
 
-@router.post("/run")
+@router.post("/run", status_code=202)
 async def trigger_pipeline(
     screen_limit: int = Query(100, ge=1, le=500, description="Number of stocks to screen"),
     analyze_limit: int = Query(40, ge=1, le=200, description="Total analysis budget across all strategies"),
     username: str = Depends(require_auth),
 ) -> dict[str, Any]:
-    """Manually trigger a full multi-strategy pipeline run.
+    """Kick off the multi-strategy pipeline asynchronously.
 
-    The response includes per-strategy breakdown plus master agent decisions.
+    Persona-7 #2 P0: the previous implementation awaited the full run
+    (30-180s) on the request handler, which meant the client had to keep
+    the HTTP connection open for the duration and a closed tab orphaned
+    the response. This now spawns ``run_daily_pipeline`` via
+    ``asyncio.create_task`` and returns 202 Accepted with the new
+    ``run_id`` immediately. Clients poll ``GET /pipeline/status`` to track
+    the run.
     """
     # Rate-limit (1 per 60s per user) — this is an expensive endpoint.
     await _pipeline_rate_limit(username)
 
-    from data.ingestion.daily_pipeline import run_daily_pipeline, _pipeline_lock
+    from data.ingestion.daily_pipeline import (
+        _pipeline_lock,
+        start_daily_pipeline_async,
+    )
 
-    # If the pipeline is already running, return 409 Conflict instead of the
-    # legacy HTTP 200 + {"error": ...} payload that swallowed the signal.
+    # If the pipeline is already running, return 409 Conflict.
     if _pipeline_lock.locked():
         raise HTTPException(
             status_code=409,
             detail={"error": "already_running", "message": "Pipeline is already running"},
         )
 
-    result = await run_daily_pipeline(screen_limit=screen_limit, analyze_limit=analyze_limit)
-
-    # Defence-in-depth: ``run_daily_pipeline`` can still short-circuit with
-    # {"error": ...} if the lock was taken between our check and the call —
-    # surface that as 409 too.
-    if isinstance(result, dict) and result.get("error") == "Pipeline already running":
-        raise HTTPException(
-            status_code=409,
-            detail={"error": "already_running", "message": "Pipeline is already running"},
-        )
-
-    # Build a concise summary for the API response
-    strategies_summary = {}
-    for strat_name, strat_data in result.get("strategies", {}).items():
-        if isinstance(strat_data, dict) and "error" not in strat_data:
-            strategies_summary[strat_name] = {
-                "screened": strat_data.get("screened", 0),
-                "analyzed": strat_data.get("analyzed", 0),
-                "trades_requested": strat_data.get("trades_requested", 0),
-                "trades_approved": strat_data.get("trades_approved", 0),
-            }
-        else:
-            strategies_summary[strat_name] = strat_data
+    run_id = await start_daily_pipeline_async(
+        screen_limit=screen_limit,
+        analyze_limit=analyze_limit,
+    )
 
     return {
-        "ok": True,
-        "strategies": strategies_summary,
-        "master_agent": result.get("master_agent", {}),
-        "orders_placed": result.get("orders_placed", []),
-        "orders_closed": result.get("orders_closed", []),
-        "portfolio_snapshot": result.get("portfolio_snapshot", {}),
-        "errors": result.get("errors", []),
+        "run_id": run_id,
+        "status": "started",
     }
 
 
-# ---- GET /status — current pipeline status ----
+# ---- POST /cancel — cooperative kill-switch (admin only) ----
 
-@router.get("/status")
-async def pipeline_status() -> dict[str, Any]:
-    """Get the current status of the pipeline scheduler."""
+@router.post("/cancel")
+async def cancel_pipeline(
+    _admin: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """Cooperatively cancel the in-flight pipeline run (persona-7 #3 P0).
+
+    Sets a module-level flag the running pipeline checks at every major
+    boundary (start of each stage, before each strategy, before order
+    execution, before exit checks). The pipeline exits gracefully and
+    writes ``last_result = "cancelled"`` so /status surfaces the outcome.
+
+    Returns 200 with ``{cancelled: True}`` when the flag was set against
+    a live run. Returns ``{cancelled: False, reason: "no_run"}`` when no
+    run is currently in flight — admins typically want to know they fired
+    a cancel against nothing rather than getting 404.
+    """
+    from data.ingestion.daily_pipeline import request_cancel
+
+    accepted = request_cancel()
+    if not accepted:
+        return {"cancelled": False, "reason": "no_run"}
+    return {"cancelled": True}
+
+
+# ---- GET /status — current pipeline status (live) ----
+
+@router.get("/status", response_model=PipelineStatus)
+async def pipeline_status() -> PipelineStatus:
+    """Get the live pipeline status (persona-7 #1 P0).
+
+    `running`, `stage`, `progress`, `started_at`, `run_id`, and
+    `current_strategy` are sourced from the running pipeline's module-
+    level globals. They're ``None`` while idle. `last_run` and
+    `last_result` carry over from the previous completed run so an
+    operator landing on the page sees what last happened.
+    """
     from data.ingestion.daily_pipeline import get_pipeline_status
 
-    status = get_pipeline_status()
-    return status
+    return PipelineStatus(**get_pipeline_status())
+
+
+# ---- GET /scheduler_state — persisted scheduler state (persona-7 #8) ----
+
+@router.get("/scheduler_state", response_model=SchedulerState)
+async def scheduler_state() -> SchedulerState:
+    """Surface the scheduler state Redis blob written by pipeline_runner.
+
+    The scheduler at ``data/ingestion/pipeline_runner.py:288`` persists
+    a dict like ``{"last_premarket": "2026-04-18", "last_open": ...}`` to
+    Redis under the key ``pipeline:scheduler_state``. Operators currently
+    have to SSH + ``redis-cli`` to see it; this endpoint exposes the same
+    payload plus a computed ``next_scheduled_run`` from
+    :class:`USMarketCalendar` and a count of windows that should have
+    fired today but haven't (``missed_runs``).
+    """
+    from core.redis import cache_get
+    from datetime import time as dt_time
+
+    raw_state: dict[str, Any] = {}
+    try:
+        cached = await cache_get("pipeline:scheduler_state")
+        if isinstance(cached, dict):
+            raw_state = cached
+    except Exception:
+        logger.warning("scheduler_state: Redis unavailable", exc_info=True)
+
+    # Most recent heartbeat is the highest "last_<window>" value (ISO date
+    # strings sort lexically).
+    heartbeats = [
+        v for k, v in raw_state.items()
+        if k.startswith("last_") and isinstance(v, str)
+    ]
+    last_heartbeat = max(heartbeats) if heartbeats else None
+
+    # Compute next scheduled session (the next trading-day open).
+    next_scheduled_run: str | None = None
+    try:
+        from data.calendar import USMarketCalendar
+        from zoneinfo import ZoneInfo
+        ET = ZoneInfo("America/New_York")
+        cal = USMarketCalendar()
+        today_et = datetime.now(ET).date()
+        # If today is a trading day and we're before the close window
+        # (15:30 ET), the next scheduled run is still today's close.
+        if cal.is_trading_day(today_et):
+            now_et = datetime.now(ET)
+            close_time = now_et.replace(hour=15, minute=30, second=0, microsecond=0)
+            if now_et < close_time:
+                next_scheduled_run = close_time.isoformat()
+        if next_scheduled_run is None:
+            next_session = cal.next_session(today_et)
+            # Default open: 09:35 ET (the first window the scheduler fires).
+            next_open = datetime.combine(next_session, dt_time(9, 35), tzinfo=ET)
+            next_scheduled_run = next_open.isoformat()
+    except Exception:
+        logger.debug("scheduler_state: next-session calc failed", exc_info=True)
+
+    # Missed runs: scheduler windows expected today that have no
+    # corresponding "last_<window>" matching today's date.
+    missed = 0
+    try:
+        from zoneinfo import ZoneInfo
+        ET = ZoneInfo("America/New_York")
+        from datetime import time as dt_time
+        from data.ingestion.pipeline_runner import WINDOWS, _is_trading_day
+        if _is_trading_day():
+            now_et = datetime.now(ET)
+            today_str = now_et.strftime("%Y-%m-%d")
+            for window_name, target_time in WINDOWS.items():
+                # Only count windows whose scheduled time is already past.
+                if now_et.time() < target_time:
+                    continue
+                key = f"last_{window_name}"
+                if raw_state.get(key) != today_str:
+                    missed += 1
+    except Exception:
+        logger.debug("scheduler_state: missed-runs calc failed", exc_info=True)
+
+    return SchedulerState(
+        last_heartbeat=last_heartbeat,
+        next_scheduled_run=next_scheduled_run,
+        missed_runs=missed,
+        raw_state=raw_state,
+    )
 
 
 # ---- GET /history — last 30 days of pipeline logs ----

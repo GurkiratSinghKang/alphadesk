@@ -9,7 +9,6 @@ import {
   Search,
   TrendingUp,
   Wallet,
-  Zap,
   ArrowRightLeft,
   Loader2,
   Target,
@@ -170,21 +169,6 @@ export function CommandPalette() {
   const showApiResults = query.trim().length > 0;
   const symbolsToShow = showApiResults ? searchResults : POPULAR_SYMBOLS.map((s) => ({ symbol: s, name: "", type: "stock", exchange: "", sector: "" }));
 
-  // Analyze current symbol — the dedicated analysis surface isn't mounted
-  // on the desk yet; toast honestly until it lands instead of flipping a
-  // state nothing reads.
-  function handleAnalyze() {
-    setCommandPaletteOpen(false);
-    if (!selectedSymbol) {
-      toast({ type: "info", message: "Select a symbol first (⌘K → pick ticker)" });
-      return;
-    }
-    toast({
-      type: "info",
-      message: `Deep analysis for ${selectedSymbol} — coming soon`,
-    });
-  }
-
   // Screen momentum — route to the momentum-quality strategy page
   function handleScreenMomentum() {
     setCommandPaletteOpen(false);
@@ -308,16 +292,14 @@ export function CommandPalette() {
               heading="Commands"
               className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
             >
-              <CommandItem
-                icon={<Zap className="h-4 w-4" />}
-                label="Analyze current symbol"
-                shortcut="A"
-                onSelect={handleAnalyze}
-              />
+              {/* Wave 32 persona-6 #8: "Analyze current symbol" removed —
+                  it toasted "coming soon" with no real analysis surface, and
+                  the decorative shortcut hint misled keyboard users into
+                  expecting an "A" binding that didn't exist. Re-add when the
+                  analysis page ships. */}
               <CommandItem
                 icon={<BarChart3 className="h-4 w-4" />}
                 label="Screen momentum stocks"
-                shortcut="S"
                 onSelect={handleScreenMomentum}
               />
               <CommandItem
@@ -341,7 +323,6 @@ export function CommandPalette() {
               <CommandItem
                 icon={<LineChart className="h-4 w-4" />}
                 label="Focus chart panel"
-                shortcut="1"
                 onSelect={handleFocusChart}
               />
               <CommandItem

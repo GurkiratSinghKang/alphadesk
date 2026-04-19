@@ -27,12 +27,15 @@ describe('Keyboard Shortcuts', () => {
       expect(DEFAULT_BINDINGS['g p']).toBe('navigate:pipeline');
     });
 
-    it('has number keys for chart timeframes', () => {
-      expect(DEFAULT_BINDINGS['1']).toBe('chart:timeframe:1m');
-      expect(DEFAULT_BINDINGS['5']).toBe('chart:timeframe:4H');
-      expect(DEFAULT_BINDINGS['6']).toBe('chart:timeframe:D');
-      expect(DEFAULT_BINDINGS['7']).toBe('chart:timeframe:W');
-      expect(DEFAULT_BINDINGS['8']).toBe('chart:timeframe:M');
+    it('has number keys for chart ranges matching PriceChartPanel', () => {
+      // Wave 32: bindings changed from `chart:timeframe:1m..M` (nothing
+      // listened) to `chart:set-range:1D..ALL` (actual ChartRange values
+      // the panel exposes). See audit-reports/persona-6-power-user.md #1.
+      expect(DEFAULT_BINDINGS['1']).toBe('chart:set-range:1D');
+      expect(DEFAULT_BINDINGS['5']).toBe('chart:set-range:6M');
+      expect(DEFAULT_BINDINGS['6']).toBe('chart:set-range:YTD');
+      expect(DEFAULT_BINDINGS['7']).toBe('chart:set-range:1Y');
+      expect(DEFAULT_BINDINGS['8']).toBe('chart:set-range:ALL');
     });
 
     it('has j/k for watchlist navigation', () => {
@@ -40,10 +43,10 @@ describe('Keyboard Shortcuts', () => {
       expect(DEFAULT_BINDINGS['k']).toBe('watchlist:prev');
     });
 
-    it('has all intermediate timeframe bindings', () => {
-      expect(DEFAULT_BINDINGS['2']).toBe('chart:timeframe:5m');
-      expect(DEFAULT_BINDINGS['3']).toBe('chart:timeframe:15m');
-      expect(DEFAULT_BINDINGS['4']).toBe('chart:timeframe:1H');
+    it('has all intermediate range bindings', () => {
+      expect(DEFAULT_BINDINGS['2']).toBe('chart:set-range:5D');
+      expect(DEFAULT_BINDINGS['3']).toBe('chart:set-range:1M');
+      expect(DEFAULT_BINDINGS['4']).toBe('chart:set-range:3M');
     });
   });
 
@@ -75,10 +78,12 @@ describe('Keyboard Shortcuts', () => {
       expect(global?.items.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('Chart group has timeframe items', () => {
+    it('Chart group has range items matching PriceChartPanel', () => {
+      // Wave 32: overlay groups updated to reflect real ChartRange values
+      // (1D/5D/1M/.../ALL) instead of the defunct 1m/5m/.../M timeframes.
       const chart = SHORTCUT_GROUPS.find(g => g.name === 'Chart');
-      expect(chart?.items.some(i => i.description.includes('minute'))).toBe(true);
-      expect(chart?.items.some(i => i.description.includes('Daily'))).toBe(true);
+      expect(chart?.items.some(i => i.action.startsWith('chart:set-range:'))).toBe(true);
+      expect(chart?.items.length).toBeGreaterThanOrEqual(4);
     });
 
     it('Navigation group has dashboard, trade, pipeline items', () => {

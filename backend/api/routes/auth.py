@@ -120,8 +120,27 @@ _INMEM_ATTEMPTS: dict[str, list[float]] = {}
 _INMEM_MAX_KEYS = 10_000  # protect against unbounded memory growth
 
 
-def _inmem_check(client_ip: str) -> int:
-    """Increment in-memory attempt counter and return current count within the window."""
+def _inmem_count(client_ip: str) -> int:
+    """Return current count within the window WITHOUT incrementing.
+
+    Used by the read-only check that runs before authentication. The
+    increment happens later, only on failure, in `_inmem_record_failure`.
+    """
+    import time as _t
+
+    now = _t.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+
+    hits = _INMEM_ATTEMPTS.get(client_ip)
+    if not hits:
+        return 0
+    # Drop stale timestamps in place so the list doesn't grow unboundedly.
+    hits[:] = [t for t in hits if t >= window_start]
+    return len(hits)
+
+
+def _inmem_record_failure(client_ip: str) -> int:
+    """Append a failed-attempt timestamp and return new count within the window."""
     import time as _t
 
     now = _t.time()
@@ -138,8 +157,19 @@ def _inmem_check(client_ip: str) -> int:
     return len(hits)
 
 
+def _inmem_clear(client_ip: str) -> None:
+    """Drop the failure log for this IP — called on successful authentication."""
+    _INMEM_ATTEMPTS.pop(client_ip, None)
+
+
 async def _check_rate_limit(client_ip: str) -> None:
-    """Rate limit login attempts.
+    """Reject if this IP has exceeded the failed-attempt cap (READ ONLY).
+
+    The cap counts FAILED login attempts only — this function never
+    increments. Successful logins should NOT count toward the limit
+    (persona-9 P0 #1: legitimate users were getting locked out after 5
+    successful logins in 5 minutes). The increment now happens in
+    `_record_login_failure`, called from the failure branch of `login`.
 
     FAIL CLOSED: this is the login endpoint — abuse here is catastrophic
     (credential stuffing, account takeover), so if Redis is down we fall back
@@ -153,11 +183,8 @@ async def _check_rate_limit(client_ip: str) -> None:
     try:
         from core.redis import get_redis
         redis = await get_redis()
-        pipe = redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _RATE_LIMIT_WINDOW, nx=True)
-        results = await pipe.execute()
-        count = int(results[0])
+        raw = await redis.get(key)
+        count = int(raw) if raw is not None else 0
     except Exception as e:
         # Redis unavailable — degrade to in-memory counter rather than allowing
         # uncapped login attempts. ``exc_info=True`` so the traceback reaches
@@ -168,14 +195,67 @@ async def _check_rate_limit(client_ip: str) -> None:
             e,
             exc_info=True,
         )
-        count = _inmem_check(client_ip)
+        count = _inmem_count(client_ip)
 
-    if count > _RATE_LIMIT_MAX:
+    if count >= _RATE_LIMIT_MAX:
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts. Please try again in a few minutes.",
             headers={"Retry-After": str(_RATE_LIMIT_WINDOW)},
         )
+
+
+async def _record_login_failure(client_ip: str) -> None:
+    """Increment the failed-attempt counter for this IP.
+
+    Called from the failure branch of `login` AFTER credential verification.
+    Uses the same Redis-or-in-memory dual-track as `_check_rate_limit`. We
+    do NOT raise from here — the failure branch raises 401 itself; this
+    just makes sure the *next* attempt sees the bumped count.
+    """
+    key = f"login_attempts:{client_ip}"
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        # Apply the TTL only when the key is freshly minted so the rolling
+        # window slides off as designed. If we set TTL on every incr the
+        # window would extend with every failure (lockout-forever bug).
+        pipe.expire(key, _RATE_LIMIT_WINDOW, nx=True)
+        await pipe.execute()
+    except Exception as e:
+        logger.warning(
+            "Rate limit: Redis unavailable for failure incr, using in-memory: %s",
+            e,
+            exc_info=True,
+        )
+        _inmem_record_failure(client_ip)
+
+
+async def _clear_login_failures(client_ip: str) -> None:
+    """Reset the failed-attempt counter for this IP.
+
+    Called from the success branch of `login` so that a successful auth
+    immediately wipes the slate (this is the spec — see persona-9 #1).
+    Best-effort: a Redis blip during clear is non-fatal because the worst
+    case is the user gets one fewer failed attempt before lockout.
+    """
+    key = f"login_attempts:{client_ip}"
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        await redis.delete(key)
+    except Exception as e:
+        logger.warning(
+            "Rate limit: Redis unavailable for clear, using in-memory: %s",
+            e,
+            exc_info=True,
+        )
+    # Also clear the in-memory counter — covers both the "Redis is down"
+    # path AND the "Redis is up but a previous failure landed in memory
+    # because Redis was momentarily down" edge case.
+    _inmem_clear(client_ip)
 
 def _set_token_cookies(response: JSONResponse, access_token: str, refresh_token: str, expires_in: int) -> None:
     """Set HttpOnly, Secure, SameSite cookies for JWT tokens."""
@@ -219,6 +299,8 @@ class RefreshRequest(BaseModel):
 @router.post("/login")
 async def login(request: LoginRequest, req: Request):
     client_ip = _client_ip(req)
+    # Read-only check — only failures count toward the cap. See
+    # `_check_rate_limit` docstring + persona-9 audit P0 #1.
     await _check_rate_limit(client_ip)
 
     # Strip whitespace from the submitted username BEFORE comparing against
@@ -235,6 +317,9 @@ async def login(request: LoginRequest, req: Request):
         # Audit the failed attempt. ``user`` records the *submitted* username
         # so investigations can see attempts against non-existent accounts.
         _audit("login", user=submitted_username or "-", ip=client_ip, result="failure")
+        # Bump the failed-attempt counter so the NEXT attempt sees the
+        # higher count (and the IP eventually trips the lockout).
+        await _record_login_failure(client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -243,6 +328,11 @@ async def login(request: LoginRequest, req: Request):
     access_token = create_access_token(submitted_username)
     refresh_token = create_refresh_token(submitted_username)
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # Wipe the failure counter — successful auth resets the slate so the
+    # user (or an honest sysadmin retesting after a typo) doesn't trip the
+    # lockout on the next session.
+    await _clear_login_failures(client_ip)
 
     # Audit the successful login. Do NOT log the tokens or password hash.
     _audit("login", user=submitted_username, ip=client_ip, result="success")

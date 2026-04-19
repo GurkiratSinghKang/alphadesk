@@ -11,6 +11,7 @@ import {
   Loader2,
   RefreshCw,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
@@ -80,49 +81,6 @@ function Toggle({
   );
 }
 
-// ─── Segment Picker ─────────────────────────────────────────
-
-function SegmentPicker<T extends string>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  label: string;
-}) {
-  return (
-    <div className="py-1.5">
-      <p className="text-xs font-medium text-foreground mb-2" id={`segment-${label.replace(/\s+/g, "-").toLowerCase()}`}>{label}</p>
-      <div
-        role="radiogroup"
-        aria-labelledby={`segment-${label.replace(/\s+/g, "-").toLowerCase()}`}
-        className="flex rounded-lg border border-border overflow-hidden"
-      >
-        {options.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={value === opt.value}
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              "flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors",
-              value === opt.value
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── Slider ─────────────────────────────────────────────────
 
 function IntervalSlider({
@@ -132,22 +90,25 @@ function IntervalSlider({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const options = [10, 30, 60, 120];
+  // Values are in seconds. Lower bound 10s; upper bound 300s (5m). Both
+  // bounds are also enforced in the store setter (see preferences.ts).
+  const options = [10, 30, 60, 120, 300];
   const labels: Record<number, string> = {
     10: "10s",
     30: "30s",
     60: "1m",
     120: "2m",
+    300: "5m",
   };
 
   return (
     <div className="py-1.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs font-medium text-foreground" id="interval-label">
-          Portfolio Refresh Interval
+          Portfolio refresh interval: {value} seconds
         </p>
         <span className="text-xs font-semibold text-primary tabular-nums">
-          {labels[value]}
+          {labels[value] ?? `${value}s`}
         </span>
       </div>
       <div
@@ -174,7 +135,7 @@ function IntervalSlider({
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground mt-1">
-        Lower intervals increase API usage. Default is 60s.
+        Lower intervals increase API usage. Default is 30s.
       </p>
     </div>
   );
@@ -209,11 +170,17 @@ export default function SettingsPage() {
   );
   const setDisplayPref = usePreferencesStore((s) => s.setDisplayPref);
   const setDataPref = usePreferencesStore((s) => s.setDataPref);
+  const resetAllPrefs = usePreferencesStore((s) => s.resetAll);
 
   const watchlist = useMarketStore((s) => s.watchlist);
 
   const [exportingTrades, setExportingTrades] = useState(false);
   const [exportDone, setExportDone] = useState<string | null>(null);
+  // Persona-8 #6: `resetAll` lived in the store unwired. The button below
+  // commits the reset; this dialog ensures a stray click doesn't nuke a
+  // carefully-tuned setup.
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   // ─── Export Handlers ──────────────────────────────────────
 
@@ -447,12 +414,10 @@ export default function SettingsPage() {
               label="Pipeline Completed"
               description="Notify when trading pipeline finishes a run"
             />
-            <Toggle
-              checked={notifications.strategyEvents}
-              onChange={(v) => setNotificationPref("strategyEvents", v)}
-              label="Strategy Events"
-              description="Notify on strategy activation/pause changes"
-            />
+            {/* Persona-8 #4: "Strategy Events" toggle removed — no producer
+                ever called shouldNotify("strategyEvents"); flipping it only
+                wrote to localStorage. The three categories above are the
+                ones actually wired in useNotifications. */}
           </div>
         </div>
 
@@ -473,18 +438,24 @@ export default function SettingsPage() {
               checked={display.compactStrategyView}
               onChange={(v) => setDisplayPref("compactStrategyView", v)}
               label="Compact Strategy View"
-              description="Use list view by default on the dashboard"
+              description="Single-line rows in the strategy rail. Hides subtitles, packs more strategies into the same vertical space."
             />
-            <SegmentPicker
-              value={display.animationSpeed}
-              options={[
-                { value: "normal" as const, label: "Normal" },
-                { value: "reduced" as const, label: "Reduced" },
-                { value: "none" as const, label: "None" },
-              ]}
-              onChange={(v) => setDisplayPref("animationSpeed", v)}
-              label="Animation Speed"
-            />
+            {/* Persona-8 #2: "Animation Speed" picker removed — there's no
+                single global animation-speed knob that cleanly controls
+                lightweight-charts, the marquee, the pulse dots, etc. The
+                rest of the app honours `prefers-reduced-motion` instead.
+                Honest move: don't ship a setting we can't back. */}
+            <div className="flex items-center justify-between gap-4 py-1.5">
+              <div>
+                <p className="text-xs font-medium text-foreground">Theme</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Dark. Light mode is coming soon.
+                </p>
+              </div>
+              <span className="text-[11px] font-medium text-muted-foreground rounded-md border border-border px-2 py-0.5">
+                Dark
+              </span>
+            </div>
           </div>
         </div>
 
@@ -569,6 +540,35 @@ export default function SettingsPage() {
 
         {/* Performance Monitoring */}
         <PerformanceMetrics />
+
+        {/* Persona-8 #6: reset-to-defaults. The store always exposed
+            `resetAll()`; this button is the missing UI. Confirmation
+            dialog prevents accidental clicks from blowing away a
+            carefully-tuned setup. */}
+        <div className="flex items-center justify-between rounded-lg border border-border bg-bg-elev-1 p-4">
+          <div>
+            <p className="text-xs font-medium text-foreground">
+              Reset preferences
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Restore notifications, display, and data-refresh preferences
+              to defaults. Trading mode and watchlist are not affected.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1.5 h-7"
+            onClick={() => setResetConfirmOpen(true)}
+          >
+            {resetDone ? (
+              <Check className="h-3 w-3 text-profit" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
+            Reset to defaults
+          </Button>
+        </div>
       </div>
 
       {/* Wave 29 persona-5 #3 + persona-1 #7: honest live-mode confirmation.
@@ -603,6 +603,44 @@ export default function SettingsPage() {
               className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs"
             >
               Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Persona-8 #6: confirm before nuking saved preferences. */}
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent className="bg-[var(--surface)] border-border">
+          <DialogHeader>
+            <DialogTitle>Reset preferences to defaults?</DialogTitle>
+            <DialogDescription>
+              This will restore notifications, display, and data-refresh
+              preferences to their factory defaults. Trading mode and your
+              watchlist are not affected. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setResetConfirmOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                resetAllPrefs();
+                setResetConfirmOpen(false);
+                setResetDone(true);
+                setTimeout(() => setResetDone(false), 2000);
+                toast({
+                  type: "success",
+                  message: "Preferences reset to defaults.",
+                });
+              }}
+              className="text-xs"
+            >
+              Reset
             </Button>
           </DialogFooter>
         </DialogContent>

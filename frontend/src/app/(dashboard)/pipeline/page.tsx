@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BarChart3,
   Brain,
@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Zap,
   Sparkles,
+  StopCircle,
+  Activity,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,16 +36,22 @@ import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
 import { BacktestPanel } from "@/components/panels/BacktestPanel";
 import { StrategyTemplates } from "@/components/panels/StrategyTemplates";
 import {
-  getPipelineStatus,
-  triggerPipeline,
   getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
   getPositions,
-  type PipelineStatus,
   type PipelineRun,
   type PipelinePosition,
 } from "@/lib/api";
+import {
+  getPipelineStatus,
+  startPipelineRun,
+  cancelPipeline,
+  getSchedulerState,
+  PipelineApiError,
+  type PipelineStatus,
+  type SchedulerState,
+} from "@/lib/pipeline-api";
 
 // ─── Next-session helper ────────────────────────────────────
 // The scheduler uses `USMarketCalendar` on the backend now, so the UI
@@ -212,10 +220,20 @@ function RiskMonitorToggle() {
 export default function PipelinePage() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
+  // `running` here is "the user clicked Run Now and we're awaiting the
+  // 202 acknowledgement". The authoritative running state lives in
+  // `status.running` (server-driven via the 2s poll).
+  const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  // Tick state — the running card needs to re-render every second so the
+  // "Elapsed" clock advances. The server status only refreshes every 2s,
+  // so without this `setNow` the elapsed counter would jump by 2s.
+  const [, setNow] = useState(0);
 
   const [status, setStatus] = useState<PipelineStatus | null>(null);
+  const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
   const [todayRun, setTodayRun] = useState<PipelineRun | null>(null);
   const [positions, setPositions] = useState<PipelinePosition[]>([]);
   const [brokerPositions, setBrokerPositions] = useState<PipelinePosition[]>([]);
@@ -225,21 +243,42 @@ export default function PipelinePage() {
     {}
   );
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  // Poll handle — kept in a ref so the effect can clear it without
+  // re-running on every status change.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track the prior running state so we can detect the running→idle edge
+  // and refresh history / latest run once the pipeline finishes.
+  const prevRunningRef = useRef<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Retry-After countdown — when set, decrement once a second and clear
+  // when it reaches zero so the Run Now button can re-enable.
+  useEffect(() => {
+    if (retryAfter == null || retryAfter <= 0) return;
+    const id = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev == null || prev <= 1) return null;
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [retryAfter]);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, p, h, bp] = await Promise.allSettled([
+      const [s, p, h, bp, sch] = await Promise.allSettled([
         getPipelineStatus(),
         getPipelinePositions(),
         getPipelineHistory(),
         getPositions(),
+        getSchedulerState(),
       ]);
       if (s.status === "fulfilled") setStatus(s.value);
+      if (sch.status === "fulfilled") setScheduler(sch.value);
       if (p.status === "fulfilled") {
         const val = p.value;
         if (val && typeof val === "object" && "positions" in val) {
@@ -299,6 +338,76 @@ export default function PipelinePage() {
     if (mounted) fetchAll();
   }, [mounted, fetchAll]);
 
+  // Live status polling — when `status.running` is true, poll every 2s.
+  // The status endpoint is cheap (returns module-level globals + lock
+  // state) and the running operator wants near-real-time updates of
+  // stage / current strategy. When the run flips back to idle we clear
+  // the interval and refresh derived data once.
+  useEffect(() => {
+    const isRunning = status?.running === true;
+    if (!isRunning) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      // Detect running→idle edge — refresh history and the latest run
+      // payload so the page reflects whatever the run produced /
+      // cancelled. We only do this when we previously saw "running"
+      // and now see "idle"; on a cold load with a long-since-finished
+      // run we don't refetch in a tight loop.
+      if (prevRunningRef.current) {
+        prevRunningRef.current = false;
+        // Fire-and-forget refresh; errors handled per-call.
+        void (async () => {
+          try {
+            const h = await getPipelineHistory();
+            const histArr = Array.isArray(h) ? h : [];
+            setHistory(histArr.slice(0, 7));
+            const latestDate = histArr[0]?.date;
+            if (latestDate) {
+              try {
+                const run = await getPipelineRun(latestDate);
+                setTodayRun(run);
+              } catch {
+                // no payload yet
+              }
+            }
+          } catch {
+            // ignore
+          }
+        })();
+      }
+      return;
+    }
+    // We are running — start the poll if not already running.
+    prevRunningRef.current = true;
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const next = await getPipelineStatus();
+        setStatus(next);
+      } catch {
+        // Transient error — keep polling, don't tear the interval down.
+      }
+      // Drive the elapsed-time clock between server polls.
+      setNow((n) => n + 1);
+    }, 2_000);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [status?.running]);
+
+  // Bonus elapsed-time tick — when the pipeline is running, advance the
+  // displayed "Elapsed" clock once per second even between server polls.
+  useEffect(() => {
+    if (!status?.running) return;
+    const id = setInterval(() => setNow((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [status?.running]);
+
   // TODO(auth-wave): The backend `/pipeline/run` endpoint currently uses
   // `require_auth` rather than `require_admin`, so any authenticated user
   // can trigger a (cost-bearing) pipeline run. The right fix lives in
@@ -306,35 +415,50 @@ export default function PipelinePage() {
   // this button remains open — we deliberately don't try to read the JWT
   // sub client-side because our token is HttpOnly cookie and not
   // accessible to JS.
+  //
+  // The flow is now fire-and-forget: POST /run returns 202 with a run_id,
+  // the page flips into "running" state via the live status poll, and the
+  // operator watches stage/progress in the running card.
   const handleRunNow = async () => {
-    setRunning(true);
+    setSubmitting(true);
+    setRetryAfter(null);
     try {
-      const res = await triggerPipeline();
-      if (res.result) {
-        setTodayRun(res.result);
+      await startPipelineRun();
+      // Optimistically pull a fresh status so the running card paints
+      // immediately rather than waiting for the next 2s tick.
+      try {
+        const s = await getPipelineStatus();
+        setStatus(s);
+      } catch {
+        // The polling effect will catch up on its own.
       }
-      // Refresh status
+    } catch (err) {
+      if (err instanceof PipelineApiError && err.status === 429 && err.retryAfter) {
+        setRetryAfter(err.retryAfter);
+      }
+      // Other errors fall silently — last_result on the next status
+      // poll will surface anything user-visible.
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancelPipeline();
+      // Pull fresh status so the UI reflects the cancel having been
+      // requested (the pipeline may take a few seconds to honour it).
       try {
         const s = await getPipelineStatus();
         setStatus(s);
       } catch {
         // ignore
       }
-      try {
-        const pResult = await getPipelinePositions();
-        if (pResult && "positions" in pResult) {
-          setPositions(Array.isArray(pResult.positions) ? pResult.positions : []);
-          if (pResult.performance) setPerfData(pResult.performance as any);
-        } else {
-          setPositions(Array.isArray(pResult) ? pResult : []);
-        }
-      } catch {
-        // ignore
-      }
     } catch {
-      // error triggering
+      // Likely 403 (non-admin) — could surface a toast in a follow-up.
     } finally {
-      setRunning(false);
+      setCancelling(false);
     }
   };
 
@@ -380,16 +504,38 @@ export default function PipelinePage() {
     ? displayPositions.reduce((worst, p) => ((p.pnl ?? 0) < (worst.pnl ?? 0) ? p : worst), displayPositions[0])
     : null;
 
-  const statusColor = status?.running
+  // `status.running` is the authoritative server-side flag; `submitting`
+  // covers the (sub-second) window where we've POSTed /run but haven't
+  // yet seen the server flip to running on the next poll.
+  const isRunning = status?.running === true;
+  const lastResult = status?.last_result ?? null;
+  const lastRun = status?.last_run ?? null;
+  const statusColor = isRunning
     ? "bg-[var(--profit)]"
-    : status?.lastResult === "error"
+    : lastResult === "cancelled"
+    ? "bg-amber"
+    : lastResult && lastResult.startsWith("error")
     ? "bg-[var(--loss)]"
     : "bg-muted-foreground";
-  const statusLabel = status?.running
+  const statusLabel = isRunning
     ? "Running"
-    : status?.lastResult === "error"
+    : lastResult === "cancelled"
+    ? "Cancelled"
+    : lastResult && lastResult.startsWith("error")
     ? "Error"
     : "Idle";
+
+  // Disable Run Now while submitting OR while a 429 backoff is active.
+  // Cooldown text doubles as the button label so the operator sees why
+  // the button is unavailable.
+  const runDisabled = submitting || isRunning || (retryAfter ?? 0) > 0;
+  const runLabel = retryAfter
+    ? `Wait ${retryAfter}s`
+    : submitting
+    ? "Starting..."
+    : isRunning
+    ? "Running..."
+    : "Run Now";
 
   const pipelineActions = (
     <>
@@ -397,18 +543,19 @@ export default function PipelinePage() {
         <span
           className={cn(
             "inline-block h-2 w-2 rounded-full",
-            statusColor
+            statusColor,
+            isRunning && "animate-pulse",
           )}
         />
         <span className="font-sans text-[11px] font-medium text-fg-muted">
           {statusLabel}
         </span>
       </div>
-      {status?.lastRun && (
+      {lastRun && (
         <span className="flex items-center gap-1 text-fg-muted">
           <Clock className="h-3 w-3" aria-hidden />
           <Mono className="text-[11px] text-fg-muted">
-            {new Date(status.lastRun).toLocaleString()}
+            {new Date(lastRun).toLocaleString()}
           </Mono>
         </span>
       )}
@@ -425,15 +572,15 @@ export default function PipelinePage() {
       <Button
         size="sm"
         onClick={handleRunNow}
-        disabled={running}
+        disabled={runDisabled}
         className="h-7 text-[11px] gap-1.5"
       >
-        {running ? (
+        {submitting || isRunning ? (
           <Loader2 className="h-3 w-3 animate-spin" />
         ) : (
           <Play className="h-3 w-3" />
         )}
-        {running ? "Running..." : "Run Now"}
+        {runLabel}
       </Button>
     </>
   );
@@ -450,6 +597,132 @@ export default function PipelinePage() {
           </div>
         ) : (
           <>
+            {/* Live Running Card — only visible while a run is in flight.
+                Shows stage, progress bar, current strategy, elapsed clock,
+                and a Cancel button (admin-only on the backend; we render
+                it for everyone and let the API return 403 if non-admin —
+                we have no client-side role data to gate on). */}
+            {isRunning && status && (
+              <section>
+                <Card className="border-[var(--profit)]/40 bg-[var(--profit)]/5 overflow-hidden">
+                  <div className="h-0.5 bg-[var(--profit)]/80 animate-pulse" />
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-[var(--profit)] animate-pulse" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                          Pipeline running
+                        </span>
+                        {status.stage && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {status.stage}
+                          </Badge>
+                        )}
+                        {status.current_strategy && (
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            {status.current_strategy}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-fg-muted">
+                        {status.started_at && (
+                          <span className="tabular-nums">
+                            Elapsed:{" "}
+                            {(() => {
+                              const start = new Date(status.started_at).getTime();
+                              const elapsedSec = Math.max(
+                                0,
+                                Math.floor((Date.now() - start) / 1000),
+                              );
+                              const m = Math.floor(elapsedSec / 60);
+                              const s = elapsedSec % 60;
+                              return `${m}:${String(s).padStart(2, "0")}`;
+                            })()}
+                          </span>
+                        )}
+                        {status.run_id && (
+                          <Mono className="text-[10px] text-fg-muted">
+                            #{status.run_id.slice(0, 8)}
+                          </Mono>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={handleCancel}
+                          disabled={cancelling}
+                          className="h-7 text-[11px] gap-1.5"
+                        >
+                          {cancelling ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <StopCircle className="h-3 w-3" />
+                          )}
+                          {cancelling ? "Cancelling..." : "Cancel"}
+                        </Button>
+                      </div>
+                    </div>
+                    {status.progress && status.progress.total > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-fg-muted">
+                          <span>Strategies completed</span>
+                          <span className="tabular-nums">
+                            {status.progress.current} / {status.progress.total}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-[var(--surface)] overflow-hidden">
+                          <div
+                            className="h-full bg-[var(--profit)] transition-all"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (status.progress.current / status.progress.total) *
+                                  100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+
+            {/* Scheduler State — when idle, surface the next scheduled run
+                + last heartbeat so an operator can confirm the scheduler
+                is alive (persona-7 #8). Hidden during a live run to keep
+                the page focused on the running card above. */}
+            {!isRunning && scheduler && (
+              <section>
+                <Card className="border-border bg-[var(--surface)]">
+                  <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-fg-muted">Next scheduled run:</span>
+                      <Mono className="text-foreground">
+                        {scheduler.next_scheduled_run
+                          ? new Date(scheduler.next_scheduled_run).toLocaleString()
+                          : "Unknown"}
+                      </Mono>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-fg-muted">Last heartbeat:</span>
+                      <Mono className="text-foreground">
+                        {scheduler.last_heartbeat ?? "Never"}
+                      </Mono>
+                      {scheduler.missed_runs > 0 && (
+                        <Badge
+                          className="text-[10px] bg-amber/15 text-amber border-amber/30"
+                        >
+                          {scheduler.missed_runs} missed
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+
             {/* Section 1: Current Positions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
@@ -601,15 +874,15 @@ export default function PipelinePage() {
                     <Button
                       size="sm"
                       onClick={handleRunNow}
-                      disabled={running}
+                      disabled={runDisabled}
                       className="h-7 text-[11px] gap-1.5 mt-1"
                     >
-                      {running ? (
+                      {submitting || isRunning ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <Play className="h-3 w-3" />
                       )}
-                      {running ? "Running..." : "Run now"}
+                      {runLabel}
                     </Button>
                   </CardContent>
                 </Card>

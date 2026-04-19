@@ -60,12 +60,8 @@ describe('CommandPalette', () => {
     expect(screen.getByText('Commands')).toBeDefined();
   });
 
-  it('has Analyze current symbol command', async () => {
-    useUIStore.setState({ commandPaletteOpen: true });
-    const { CommandPalette } = await import('@/components/layout/CommandPalette');
-    render(<CommandPalette />);
-    expect(screen.getByText('Analyze current symbol')).toBeDefined();
-  });
+  // Wave 32: "Analyze current symbol" command was removed — it toasted
+  // "coming soon" without a real target. See persona-6-power-user.md #8.
 
   it('has Screen momentum stocks command', async () => {
     useUIStore.setState({ commandPaletteOpen: true });

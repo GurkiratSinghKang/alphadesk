@@ -159,11 +159,71 @@ export const useMarketStore = create<MarketState>()(
     }),
     {
       name: "alphadesk-watchlist",
-      partialize: (state) => ({ watchlist: state.watchlist }),
+      // persona-9 #4 — declare version + migrate now so that any future
+      // schema change (e.g. switching watchlist to objects, or persisting
+      // selectedSymbol) lands behind a controlled migration rather than
+      // silently rehydrating partial state. v0 → v1 is a no-op promotion;
+      // future versions can branch on the persistedState shape.
+      version: 1,
+      migrate: (persistedState, version) => {
+        if (version < 1) {
+          // No-op — earlier persisted blobs are shape-compatible.
+          return persistedState as MarketState;
+        }
+        return persistedState as MarketState;
+      },
+      // Persist watchlist + selectedSymbol so cross-tab sync (below) can
+      // mirror both. quotes are deliberately excluded — they're noisy and
+      // re-fetched on mount; freshestTs is derived from quotes.
+      partialize: (state) => ({
+        watchlist: state.watchlist,
+        selectedSymbol: state.selectedSymbol,
+      }),
       skipHydration: true,
     }
   )
 );
+
+// ─── Cross-tab sync (persona-10 #1) ──────────────────────────
+//
+// Zustand persist writes to localStorage; other tabs don't get notified
+// without an explicit `storage` listener. We mirror watchlist +
+// selectedSymbol across tabs so a watchlist add in tab A shows up in
+// tab B without the user having to reload. quotes are intentionally NOT
+// synced — they'd thrash on every tick and the per-tab WebSocket already
+// keeps each tab in sync with the wire.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== "alphadesk-watchlist") return;
+    if (!e.newValue) return; // ignore localStorage clear
+    try {
+      const parsed = JSON.parse(e.newValue) as { state?: Partial<MarketState> };
+      const incoming = parsed.state ?? {};
+      const current = useMarketStore.getState();
+      const nextWatchlist = Array.isArray(incoming.watchlist)
+        ? incoming.watchlist
+        : current.watchlist;
+      const nextSelected =
+        typeof incoming.selectedSymbol === "string"
+          ? incoming.selectedSymbol
+          : current.selectedSymbol;
+      // Only call setState if something actually changed — otherwise we
+      // trigger needless rerenders in every component subscribed to either
+      // field.
+      if (
+        nextSelected !== current.selectedSymbol ||
+        nextWatchlist.join("|") !== current.watchlist.join("|")
+      ) {
+        useMarketStore.setState({
+          watchlist: nextWatchlist,
+          selectedSymbol: nextSelected,
+        });
+      }
+    } catch {
+      // malformed payload — ignore rather than corrupt local state
+    }
+  });
+}
 
 // ─── Scoped selectors (perf-audit-r3 P0 #3) ──────────────────
 //
