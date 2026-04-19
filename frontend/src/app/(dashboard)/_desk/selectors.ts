@@ -24,7 +24,7 @@ import type {
   StrategyRailItem,
 } from "@/components/composites";
 import type { Regime, RegimeVol } from "@/components/primitives/RegimePill";
-import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
+import { STRATEGY_META, STRATEGY_ORDER, metaStage } from "@/lib/strategies";
 import type { Position, PortfolioSummary, Quote as MarketQuote } from "@/types";
 
 /* ─── Regime ───────────────────────────────────────────────── */
@@ -79,36 +79,51 @@ export interface RawStrategy {
 }
 
 /**
- * Registry-backed Phase 1 strategy route IDs — keep this list in sync
- * with `backend/api/routes/strategies.py::_REGISTRY_TO_ROUTE`. No
- * marketing placeholders (no "claude-alpha" / "dividend-capture" /
- * "sector-rotation") — only strategies the backend can actually run.
+ * Registry-backed Phase 1 strategy route IDs — mirrors
+ * `backend/strategies/registry.py::IMPLEMENTED_STRATEGY_ROUTE_IDS` and
+ * `backend/api/routes/strategies.py::_REGISTRY_TO_ROUTE`. No marketing
+ * placeholders (no "claude-alpha" / "dividend-capture" /
+ * "sector-rotation" — those are ``stage: "planned"`` in ``STRATEGY_META``).
+ *
+ * Derived from `STRATEGY_META` at module load time so adding a new real
+ * backend package is a one-line change in `lib/strategies.ts` instead of
+ * here — they can't drift.
  */
-export const REGISTRY_STRATEGY_IDS: readonly string[] = [
-  "momentum-quality",
-  "pead",
-  "vrp-harvesting",
-  "earnings-vol-premium",
-  "regime-adaptive",
-  "ts-momentum",
-  "rsi2-reversal",
-  "dual-momentum",
-  "pairs-trading",
-  "kama-breakout",
-  "orb",
-  "vwap-strategy",
+export const REGISTRY_STRATEGY_IDS: readonly string[] = Object.keys(
+  STRATEGY_META
+).filter((id) => metaStage(id) === "live");
+
+/** Strategy ids the rail should surface even though they aren't decorator-
+ *  registered: ``manual-discretionary`` is the ledger-backed bucket for
+ *  user-initiated trades (persona-1 #3 flagged it as invisible despite
+ *  carrying +$57k invested capital). Keep it in a separate list so the
+ *  test for "is this backed by a Python package?" stays honest. */
+const OTHER_RAIL_STRATEGY_IDS: readonly string[] = Object.keys(
+  STRATEGY_META
+).filter((id) => metaStage(id) === "other");
+
+/** Ids that appear on the rail — live + "other" (manual). Planned ghosts
+ *  stay off the rail; the new `/strategies` listing page surfaces them
+ *  under a "Coming soon" section so researchers can see the roadmap
+ *  without the rail pretending they trade. */
+const RAIL_STRATEGY_IDS: readonly string[] = [
+  ...REGISTRY_STRATEGY_IDS,
+  ...OTHER_RAIL_STRATEGY_IDS,
 ];
 
 /** Shape API strategies onto StrategyRailItem. If the backend hasn't
  *  returned any strategies yet we render the canonical ordered list
- *  as paused rows with null return — no fake numbers. */
+ *  as paused rows with null return — no fake numbers.
+ *
+ *  Ghost ("planned") strategies are intentionally omitted — see
+ *  `STRATEGY_META[...].stage`. They surface on `/strategies` instead.
+ *  `manual-discretionary` IS included (persona-1 #3: previously invisible
+ *  despite real invested capital). */
 export function toRailItems(
   raw: RawStrategy[] | undefined
 ): StrategyRailItem[] {
   const byId = new Map((raw ?? []).map((s) => [s.id, s]));
-  // Only render strategies that actually exist in the backend registry,
-  // preserving STRATEGY_ORDER for stable visual sequencing.
-  const allowed = new Set(REGISTRY_STRATEGY_IDS);
+  const allowed = new Set(RAIL_STRATEGY_IDS);
   const ids = STRATEGY_ORDER.filter((id) => allowed.has(id));
   return ids.map((id, i) => {
     const meta = STRATEGY_META[id];
@@ -133,7 +148,8 @@ export function toRailItems(
       indexLabel: String(i + 1).padStart(2, "0"),
     } satisfies StrategyRailItem;
   });
-  // No cap — the registry is 12 rows, which matches the rail's natural height.
+  // No cap — live (12) + manual (1) = 13 rows, still matches the rail's
+  // natural height. Planned ghosts live on `/strategies` instead.
 }
 
 export function toStrategyOptions(
@@ -151,8 +167,6 @@ export function toContextCells(
 ): ContextCell[] {
   const s = summary;
   const equity = s?.equity ?? 0;
-  const dayPnl = s?.dayPnl ?? 0;
-  const dayPnlPct = s?.dayPnlPct ?? 0;
   const cash = s?.cash ?? 0;
   const longVal = positions
     .filter((p) => (p.quantity ?? 0) >= 0)
@@ -172,6 +186,40 @@ export function toContextCells(
   const unrealizedPnlPct = s?.unrealizedPnlPct ?? 0;
   const realizedToday = s?.realizedPnlToday ?? 0;
 
+  // Day P&L reconciliation (persona-3 P0 #8):
+  // The backend only always exposes `realized_pnl_today`, which is $0
+  // when no trades closed today. That produced a contradiction with the
+  // Unrealized cell ("Day P&L $0" while Unrealized +$1,506 on the same
+  // row). Until the backend surfaces a true `day_pnl = equity -
+  // last_equity` (cross-wave flag — backend owner's call), derive it as
+  // `realized_today + unrealized_pnl` so the number always moves with
+  // the market. When `summary.dayPnl` is non-zero (lib/api already
+  // forwards `rawAny.day_pnl` when the backend sends it), prefer that
+  // authoritative value.
+  const backendDayPnl = s?.dayPnl;
+  const haveBackendDayPnl =
+    backendDayPnl != null && Number.isFinite(backendDayPnl) && backendDayPnl !== 0;
+  const dayPnl = haveBackendDayPnl ? backendDayPnl! : realizedToday + unrealizedPnl;
+  const backendDayPnlPct = s?.dayPnlPct;
+  const dayPnlPct =
+    backendDayPnlPct != null &&
+    Number.isFinite(backendDayPnlPct) &&
+    backendDayPnlPct !== 0
+      ? backendDayPnlPct
+      : equity > 0
+        ? (dayPnl / equity) * 100
+        : 0;
+
+  // A realized/unrealized split so the reader can reconcile the Day P&L
+  // number with the other two cells at a glance. Rendered in the cell's
+  // `delta` line (same slot the context bar already uses for "+0.52%").
+  const realizedSign = realizedToday > 0 ? "+" : realizedToday < 0 ? "−" : "";
+  const unrealizedSign = unrealizedPnl > 0 ? "+" : unrealizedPnl < 0 ? "−" : "";
+  const dayPnlBreakdown =
+    s && (realizedToday !== 0 || unrealizedPnl !== 0)
+      ? `${realizedSign}${fmtDollars(Math.abs(realizedToday))} realized · ${unrealizedSign}${fmtDollars(Math.abs(unrealizedPnl))} unrealized`
+      : undefined;
+
   return [
     {
       label: "Book equity",
@@ -183,6 +231,10 @@ export function toContextCells(
     {
       label: "Day P&L",
       value: s ? (dayPnl >= 0 ? `+${fmtDollars(dayPnl)}` : `−${fmtDollars(Math.abs(dayPnl))}`) : "—",
+      // Surface the realized/unrealized split so the reader can reconcile
+      // the number with the Unrealized / Realized today cells without
+      // mental math.
+      delta: dayPnlBreakdown,
       // Tone the value itself so negatives render coral and positives chartreuse.
       // Treat an exact zero as muted so it doesn't flash green for no movement.
       valueTone: !s ? "muted" : dayPnl > 0 ? "profit" : dayPnl < 0 ? "loss" : "muted",

@@ -22,7 +22,7 @@ export { default as OrderBar } from "./OrderBar";
 export type { OrderBarProps } from "./OrderBar";
 
 export { default as PositionsList } from "./PositionsList";
-export type { PositionsListProps } from "./PositionsList";
+export type { PositionsListProps, OrderRow } from "./PositionsList";
 
 export { default as AIMemoPanel } from "./AIMemoPanel";
 export type { AIMemoPanelProps } from "./AIMemoPanel";

@@ -44,6 +44,9 @@ describe("PositionsList", () => {
       <PositionsList positions={rows} activeTab="orders" />,
     );
     const selected = container.querySelector('[role="tab"][aria-selected="true"]');
-    expect(selected?.textContent).toBe("orders");
+    // Wave 28: tab labels are title-cased ("Orders" not "orders") and
+    // include the per-tab count when non-zero — assert on the visible
+    // prefix to stay resilient to that formatting.
+    expect(selected?.textContent?.toLowerCase()).toContain("orders");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Share2, Copy, Download, Check, X } from "lucide-react";
+import { Share2, Copy, Download, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +37,18 @@ interface ShareCardData {
   low: number;
   volume: number;
   technicalScore: number | null;
+  /**
+   * Real RSI(14) pulled from the backend's `AnalysisTechnicals.rsi_14`,
+   * not a synthetic number derived from `technicalScore`. `null` means
+   * "not available" and the card omits the field rather than showing a
+   * fabricated value.
+   */
   rsi: string | null;
+  /**
+   * Real support/resistance pivot levels from `AnalysisTechnicals`.
+   * When the backend has not computed them yet, both are `null` and the
+   * card hides the levels row (no more spot ± 3% placeholder).
+   */
   support: number | null;
   resistance: number | null;
   summary: string | null;
@@ -46,14 +57,6 @@ interface ShareCardData {
 }
 
 // ─── Helpers ────────────────────────────────────────────────
-
-function deriveKeyLevels(price: number) {
-  const step = price * 0.03;
-  return {
-    support: Math.round((price - step) * 100) / 100,
-    resistance: Math.round((price + step) * 100) / 100,
-  };
-}
 
 function formatVolume(v: number): string {
   if (v >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
@@ -66,9 +69,29 @@ function buildTextSummary(data: ShareCardData): string {
   const changeSign = data.change >= 0 ? "+" : "";
   const lines = [
     `${data.symbol} ${formatCurrency(data.price)} (${changeSign}${formatPercent(data.changePct)})`,
-    `Technical Score: ${data.technicalScore ?? "N/A"} | RSI: ${data.rsi ?? "N/A"}`,
-    `Support: ${data.support ? formatCurrency(data.support) : "N/A"} | Resistance: ${data.resistance ? formatCurrency(data.resistance) : "N/A"}`,
   ];
+  // Technical score is always real (backend-computed); RSI only when we
+  // have a real reading — omit the line entirely otherwise so shared
+  // text never contains synthesized indicators.
+  if (data.technicalScore != null || data.rsi != null) {
+    const parts: string[] = [];
+    if (data.technicalScore != null) parts.push(`Technical Score: ${data.technicalScore}`);
+    if (data.rsi != null) parts.push(`RSI: ${data.rsi}`);
+    lines.push(parts.join(" | "));
+  }
+  // Only emit pivot-levels line when the backend supplied at least one
+  // real level; no more "Support: N/A | Resistance: N/A" noise.
+  if (data.support != null || data.resistance != null) {
+    const parts: string[] = [];
+    if (data.support != null) parts.push(`Support: ${formatCurrency(data.support)}`);
+    if (data.resistance != null) parts.push(`Resistance: ${formatCurrency(data.resistance)}`);
+    lines.push(parts.join(" | "));
+  }
+  // Today's H/L range — always available from the live quote, anchors
+  // the share card with one objective piece of intraday context.
+  if (Number.isFinite(data.low) && Number.isFinite(data.high) && data.high > 0) {
+    lines.push(`Range: ${(data.low ?? 0).toFixed(2)}–${(data.high ?? 0).toFixed(2)} | Vol: ${formatVolume(data.volume)}`);
+  }
   if (data.pnl != null) {
     const pnlSign = data.pnl >= 0 ? "+" : "";
     lines.push(
@@ -119,7 +142,9 @@ function ShareCard({ data }: { data: ShareCardData }) {
         </div>
       </div>
 
-      {/* Metrics Row */}
+      {/* Metrics Row — RSI cell is only rendered when the backend has a real
+         RSI(14) reading. When missing we replace it with today's H/L range
+         derived from the live daily bar so the grid stays a tidy 3-col. */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
           <div className="text-[10px] text-muted-foreground mb-0.5">Technical</div>
@@ -132,33 +157,50 @@ function ShareCard({ data }: { data: ShareCardData }) {
             {data.technicalScore ?? "--"}/100
           </div>
         </div>
-        <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-          <div className="text-[10px] text-muted-foreground mb-0.5">RSI (14)</div>
-          <div className="text-sm font-bold text-foreground tabular-nums">{data.rsi ?? "--"}</div>
-        </div>
+        {data.rsi != null ? (
+          <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
+            <div className="text-[10px] text-muted-foreground mb-0.5">RSI (14)</div>
+            <div className="text-sm font-bold text-foreground tabular-nums">{data.rsi}</div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
+            <div className="text-[10px] text-muted-foreground mb-0.5">Today's Range</div>
+            <div className="text-sm font-bold text-foreground tabular-nums">
+              {(data.low ?? 0).toFixed(2)}–{(data.high ?? 0).toFixed(2)}
+            </div>
+          </div>
+        )}
         <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
           <div className="text-[10px] text-muted-foreground mb-0.5">Volume</div>
           <div className="text-sm font-bold text-foreground tabular-nums">{formatVolume(data.volume)}</div>
         </div>
       </div>
 
-      {/* Key Levels */}
-      <div className="flex items-center gap-4 mb-4 text-xs">
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
-          <span className="text-muted-foreground">Support:</span>
-          <span className="font-medium text-[var(--profit)] tabular-nums">
-            {data.support ? formatCurrency(data.support) : "N/A"}
-          </span>
+      {/* Key Levels — only renders when real pivot levels are present.
+         We no longer fabricate spot ± 3% bands that look authoritative
+         but are just an arbitrary % cushion around the last price. */}
+      {(data.support != null || data.resistance != null) && (
+        <div className="flex items-center gap-4 mb-4 text-xs">
+          {data.support != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
+              <span className="text-muted-foreground">Support:</span>
+              <span className="font-medium text-[var(--profit)] tabular-nums">
+                {formatCurrency(data.support)}
+              </span>
+            </div>
+          )}
+          {data.resistance != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" />
+              <span className="text-muted-foreground">Resistance:</span>
+              <span className="font-medium text-[var(--loss)] tabular-nums">
+                {formatCurrency(data.resistance)}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" />
-          <span className="text-muted-foreground">Resistance:</span>
-          <span className="font-medium text-[var(--loss)] tabular-nums">
-            {data.resistance ? formatCurrency(data.resistance) : "N/A"}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* P&L if user has a position */}
       {data.pnl != null && (
@@ -232,8 +274,24 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
   const change = quote?.change ?? 0;
   const changePct = quote?.changePct ?? 0;
   const techScore = analysis?.technicalScore ?? null;
-  const rsi = techScore != null ? (40 + techScore * 0.3).toFixed(1) : null;
-  const levels = price > 0 ? deriveKeyLevels(price) : { support: null, resistance: null };
+  // Prefer the real RSI(14) from the backend's technicals payload. The
+  // previous implementation synthesized `40 + techScore * 0.3` which
+  // looked precise but was pure fabrication — shipped as a shareable
+  // claim that would not match any broker terminal.
+  const realRsi = analysis?.technicals?.rsi_14;
+  const rsi = typeof realRsi === "number" && Number.isFinite(realRsi)
+    ? realRsi.toFixed(1)
+    : null;
+  // Support/resistance come from the backend's pivot detector; when
+  // absent we render nothing rather than spot ± 3% placeholders.
+  const realSupport = analysis?.technicals?.support;
+  const realResistance = analysis?.technicals?.resistance;
+  const support = typeof realSupport === "number" && Number.isFinite(realSupport)
+    ? realSupport
+    : null;
+  const resistance = typeof realResistance === "number" && Number.isFinite(realResistance)
+    ? realResistance
+    : null;
 
   const cardData: ShareCardData = {
     symbol: selectedSymbol,
@@ -245,8 +303,8 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
     volume: quote?.volume ?? 0,
     technicalScore: techScore,
     rsi,
-    support: levels.support,
-    resistance: levels.resistance,
+    support,
+    resistance,
     summary: analysis?.summary ?? null,
     pnl: pnl ?? null,
     pnlPct: pnlPct ?? null,
@@ -358,15 +416,25 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       ctx.font = `bold 13px ${fontUi}`;
       ctx.fillText(`${cardData.technicalScore ?? "--"}/100`, 28, metricsY + 35);
 
-      // RSI
+      // RSI or Today's Range — mirror the DOM card: only show real RSI.
+      // When RSI isn't available fall back to the daily H/L range instead
+      // of a fabricated number.
       ctx.fillStyle = metricBg;
       ctx.fillRect(20 + metricW + 5, metricsY, metricW, 45);
       ctx.fillStyle = fgMuted;
       ctx.font = `10px ${fontUi}`;
-      ctx.fillText("RSI (14)", 28 + metricW + 5, metricsY + 15);
-      ctx.fillStyle = fg;
-      ctx.font = `bold 13px ${fontUi}`;
-      ctx.fillText(cardData.rsi ?? "--", 28 + metricW + 5, metricsY + 35);
+      if (cardData.rsi != null) {
+        ctx.fillText("RSI (14)", 28 + metricW + 5, metricsY + 15);
+        ctx.fillStyle = fg;
+        ctx.font = `bold 13px ${fontUi}`;
+        ctx.fillText(cardData.rsi, 28 + metricW + 5, metricsY + 35);
+      } else {
+        ctx.fillText("Today's Range", 28 + metricW + 5, metricsY + 15);
+        ctx.fillStyle = fg;
+        ctx.font = `bold 13px ${fontUi}`;
+        const rangeLabel = `${(cardData.low ?? 0).toFixed(2)}–${(cardData.high ?? 0).toFixed(2)}`;
+        ctx.fillText(rangeLabel, 28 + metricW + 5, metricsY + 35);
+      }
 
       // Volume metric
       ctx.fillStyle = metricBg;
@@ -378,31 +446,39 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       ctx.font = `bold 13px ${fontUi}`;
       ctx.fillText(formatVolume(cardData.volume), 28 + (metricW + 5) * 2, metricsY + 35);
 
-      // Key Levels
+      // Key Levels — only paint the row when we have at least one real
+      // pivot level. Missing side renders as an em-dash rather than N/A
+      // so the card stays composed.
       let yOffset = metricsY + 65;
-      ctx.fillStyle = profit;
-      ctx.beginPath();
-      ctx.arc(28, yOffset, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = fgMuted;
-      ctx.font = `11px ${fontUi}`;
-      ctx.fillText("Support:", 36, yOffset + 4);
-      ctx.fillStyle = profit;
-      ctx.font = `500 11px ${fontUi}`;
-      ctx.fillText(cardData.support ? formatCurrency(cardData.support) : "N/A", 88, yOffset + 4);
+      if (cardData.support != null || cardData.resistance != null) {
+        if (cardData.support != null) {
+          ctx.fillStyle = profit;
+          ctx.beginPath();
+          ctx.arc(28, yOffset, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = fgMuted;
+          ctx.font = `11px ${fontUi}`;
+          ctx.fillText("Support:", 36, yOffset + 4);
+          ctx.fillStyle = profit;
+          ctx.font = `500 11px ${fontUi}`;
+          ctx.fillText(formatCurrency(cardData.support), 88, yOffset + 4);
+        }
 
-      ctx.fillStyle = loss;
-      ctx.beginPath();
-      ctx.arc(width / 2 + 10, yOffset, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = fgMuted;
-      ctx.font = `11px ${fontUi}`;
-      ctx.fillText("Resistance:", width / 2 + 18, yOffset + 4);
-      ctx.fillStyle = loss;
-      ctx.font = `500 11px ${fontUi}`;
-      ctx.fillText(cardData.resistance ? formatCurrency(cardData.resistance) : "N/A", width / 2 + 82, yOffset + 4);
+        if (cardData.resistance != null) {
+          ctx.fillStyle = loss;
+          ctx.beginPath();
+          ctx.arc(width / 2 + 10, yOffset, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = fgMuted;
+          ctx.font = `11px ${fontUi}`;
+          ctx.fillText("Resistance:", width / 2 + 18, yOffset + 4);
+          ctx.fillStyle = loss;
+          ctx.font = `500 11px ${fontUi}`;
+          ctx.fillText(formatCurrency(cardData.resistance), width / 2 + 82, yOffset + 4);
+        }
 
-      yOffset += 25;
+        yOffset += 25;
+      }
 
       // P&L
       if (cardData.pnl != null) {

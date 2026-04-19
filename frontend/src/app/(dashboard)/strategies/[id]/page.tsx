@@ -24,6 +24,7 @@ import {
 import { STRATEGY_CONTENT, type StrategyContent } from "@/lib/strategy-content";
 import { STRATEGY_META } from "@/lib/strategies";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
 
 import StrategyHero from "./_strategy/StrategyHero";
 import EquityPanel, {
@@ -184,14 +185,36 @@ function formatOrDash(value: number | null | undefined, format: (n: number) => s
   if (value == null || Number.isNaN(value)) return "\u2014";
   return format(value);
 }
+/**
+ * Percentage-like values from the backend arrive in two shapes: live P&L
+ * uses whole-percent units (e.g. `total_return_pct = 2.6` meaning 2.6 %),
+ * but OOS / backtest numbers arrive as fractions (e.g. `cagr = 0.362`
+ * meaning 36.2 %, `max_drawdown = 0.0801` meaning 8.01 %).
+ *
+ * The previous formatters assumed whole-percent and rendered `0.0801` as
+ * `-0.1 %` — off by 100×. `toPct` auto-detects: when the magnitude is under
+ * 1.5, treat the input as a fraction and scale. `1.5` is the threshold
+ * because a 150 % live return is implausible on any production strategy and
+ * a backtest fraction > 1.5 (150 %) is also implausible. Calibrated to the
+ * live backend values from Wave 26: `max_drawdown ∈ [−0.073, 0.087]`,
+ * `cagr ∈ [0.08, 0.60]`, `total_return_pct ≤ 2.6`.
+ */
+function toPct(v: number): number {
+  return Math.abs(v) < 1.5 ? v * 100 : v;
+}
 function signedPct(v: number): string {
-  return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+  const pct = toPct(v);
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 function signedNumber(v: number): string {
   return v.toFixed(2);
 }
 function negPct(v: number): string {
-  return `${v < 0 ? v.toFixed(1) : `-${Math.abs(v).toFixed(1)}`}%`;
+  // MAX DD is always displayed as a negative number. The backend sometimes
+  // emits it as a positive fraction (`0.0801`) and sometimes as a negative
+  // fraction (`-0.0045`); the formatter normalises both to `-X.X %`.
+  const pct = toPct(v);
+  return `${pct < 0 ? pct.toFixed(1) : `-${Math.abs(pct).toFixed(1)}`}%`;
 }
 
 // ─── Hit rate derivation from closed trades ────────────────────
@@ -254,8 +277,15 @@ function statusRegime(status: string | undefined): { regime: Regime; vol?: Regim
 export default function StrategyDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { toast } = useToast();
   const rawSlug = params.id as string;
   const strategyId = resolveStrategyId(rawSlug);
+  // Wave 26 — unknown-slug detection. `resolveStrategyId` only aliases legacy
+  // slugs; any other unknown string falls through to STRATEGY_META's default
+  // object. We render a "not found" state at the bottom of the page for
+  // unknown slugs instead of silently rendering a blank hero with the slug as
+  // the title (Persona 1 audit found this reads as broken).
+  const isKnownStrategy = strategyId in STRATEGY_META;
 
   const [perf, setPerf] = useState<StrategyPerformance | null>(null);
   const [trades, setTrades] = useState<StrategyTrade[]>([]);
@@ -317,8 +347,17 @@ export default function StrategyDetailPage() {
     try {
       const res = await toggleStrategy(strategyId);
       setPerf((prev) => (prev ? { ...prev, status: res.new_status } : prev));
-    } catch {
-      // swallow — the toggle endpoint may not be available
+      toast({
+        type: "success",
+        message: `${meta.name} ${res.new_status === "active" ? "resumed" : "paused"}`,
+      });
+    } catch (e) {
+      // Persona 2 #9 — previously swallowed. Surface both to the toast stack
+      // (user-visible) and the console (for debugging). `err?.message` covers
+      // the common `Error("API 4xx: …")` shape thrown by `apiFetch`.
+      const msg = e instanceof Error ? e.message : "Pause/resume failed. Please retry.";
+      console.error("toggleStrategy failed", e);
+      toast({ type: "error", message: msg });
     }
     setToggling(false);
   }
@@ -337,6 +376,24 @@ export default function StrategyDetailPage() {
 
   const status = statusRegime(perf?.status);
 
+  // Wave 26 — hero metrics now prefer OOS backtest values. `cagr` and
+  // `hit_rate` are published by the backend (fractions) alongside the live
+  // `annualized_return_pct`/derived hitRate, which are almost always 0 / null
+  // for strategies that haven't traded yet. Fall back to the live number only
+  // when the OOS one is missing.
+  const cagrValue = perf?.cagr ?? perf?.annualized_return_pct ?? null;
+  // `hit_rate` from the backend is a fraction (0..1). Convert to whole-percent
+  // for display, then fall back to the live-derived hit rate (already in
+  // percent) when the backend didn't return it.
+  const hitRateBackend = perf?.hit_rate != null ? perf.hit_rate * 100 : null;
+  const hitRateDisplay = hitRateBackend ?? hitRate;
+  // Suspicious-Sharpe caveat threshold. ORB publishes 8.34 in the live API;
+  // the editorial caveat ("Live deployment may diverge") renders next to the
+  // OOS SHARPE cell when the value exceeds this threshold.
+  const SHARPE_CAVEAT_THRESHOLD = 3.0;
+  const suspiciousSharpe =
+    perf?.sharpe_ratio != null && perf.sharpe_ratio > SHARPE_CAVEAT_THRESHOLD;
+
   const cells = [
     {
       label: "OOS SHARPE",
@@ -346,22 +403,24 @@ export default function StrategyDetailPage() {
     {
       label: "MAX DD",
       value: formatOrDash(perf?.max_drawdown ?? null, negPct),
-      tone: (perf?.max_drawdown ?? 0) !== 0 ? ("loss" as const) : undefined,
+      tone: perf?.max_drawdown != null && perf.max_drawdown !== 0
+        ? ("loss" as const)
+        : undefined,
       testId: "dd",
     },
     {
       label: "CAGR",
-      value: formatOrDash(perf?.annualized_return_pct ?? null, signedPct),
-      tone: (perf?.annualized_return_pct ?? 0) > 0
+      value: formatOrDash(cagrValue, signedPct),
+      tone: (cagrValue ?? 0) > 0
         ? ("profit" as const)
-        : (perf?.annualized_return_pct ?? 0) < 0
+        : (cagrValue ?? 0) < 0
           ? ("loss" as const)
           : undefined,
       testId: "cagr",
     },
     {
       label: "HIT RATE",
-      value: hitRate != null ? `${hitRate.toFixed(0)}%` : "\u2014",
+      value: hitRateDisplay != null ? `${hitRateDisplay.toFixed(0)}%` : "\u2014",
       testId: "hit",
     },
   ];
@@ -376,13 +435,66 @@ export default function StrategyDetailPage() {
     );
   }
 
+  // Wave 26 — unknown-slug editorial state. If the slug isn't in STRATEGY_META
+  // AND the performance endpoint returned nothing, render a minimal "not
+  // found" block linking back to the dashboard rather than a blank hero with
+  // the raw slug as the title (Persona 1 audit called this out). Deliberately
+  // not a 404: the strategies dropdown may still link here while a migration
+  // is in flight and an editorial state reads more intentional than a hard
+  // failure.
+  if (!isKnownStrategy && !perf) {
+    return (
+      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-6 py-10">
+        <nav
+          className="flex items-center gap-2 font-sans text-[12px] text-fg-muted"
+          aria-label="Breadcrumb"
+        >
+          <Link href="/" className="transition-colors hover:text-fg">
+            Dashboard
+          </Link>
+          <span aria-hidden>/</span>
+          <span className="text-fg">Strategy not found</span>
+        </nav>
+        <div className="flex flex-col gap-3 rounded-lg border border-border-hair bg-bg-elev-1 px-6 py-8">
+          <Eyebrow as="div">STRATEGY</Eyebrow>
+          <Display size="md" as="h1">
+            Strategy not found
+          </Display>
+          <p className="max-w-[520px] font-display italic text-[15px] leading-relaxed text-fg-muted">
+            No strategy exists at <Mono className="text-[13px] text-fg">{rawSlug}</Mono>.
+            It may have been retired or the URL may be mistyped.
+          </p>
+          <div>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
+            >
+              Back to dashboard
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const totalReturnPct = perf?.total_return_pct ?? 0;
+  // Wave 26 — the summary row previously showed `TOTAL RETURN +0.00%` for
+  // every strategy that hadn't traded yet, even when the OOS Sharpe / MaxDD /
+  // CAGR cells clearly showed a real backtested strategy. Prefer the live
+  // total-return when it's non-zero (real P&L); otherwise fall through to
+  // `cagr` and label the cell "OOS CAGR" so the data and copy match.
+  const showOosCagr =
+    (totalReturnPct === 0 || totalReturnPct == null) &&
+    perf?.cagr != null;
+  const summaryReturnLabel = showOosCagr ? "OOS CAGR" : "TOTAL RETURN";
+  const summaryReturnRaw = showOosCagr ? (perf!.cagr as number) : totalReturnPct;
   const returnSummary: { label: string; value: string; tone?: "profit" | "loss" | "neutral" }[] = perf
     ? [
         {
-          label: "TOTAL RETURN",
-          value: signedPct(totalReturnPct),
-          tone: totalReturnPct >= 0 ? "profit" : "loss",
+          label: summaryReturnLabel,
+          value: signedPct(summaryReturnRaw),
+          tone: summaryReturnRaw >= 0 ? "profit" : "loss",
         },
         {
           label: "CURRENT VALUE",
@@ -430,6 +542,19 @@ export default function StrategyDetailPage() {
         description={perf?.description ?? null}
         cells={cells}
       />
+
+      {/* Wave 26 — honesty caveat for implausibly high OOS Sharpe (e.g. ORB's
+          8.34). Instead of hiding the number we attach a small italic
+          disclosure so researchers understand in-sample selection bias can
+          flatter backtest Sharpe. Renders only when the threshold is cleared. */}
+      {suspiciousSharpe ? (
+        <p
+          data-testid="sharpe-caveat"
+          className="-mt-6 font-display italic text-[12.5px] leading-snug text-fg-muted"
+        >
+          Live deployment may diverge from this OOS Sharpe — see in-sample limitations below.
+        </p>
+      ) : null}
 
       {/* Status + actions row */}
       <div className="flex flex-wrap items-center justify-between gap-4">

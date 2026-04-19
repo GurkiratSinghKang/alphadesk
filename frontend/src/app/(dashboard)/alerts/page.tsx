@@ -86,7 +86,11 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             placeholder="AAPL"
-            className="mt-1 w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/50"
+            // Wave 29 mobile a11y: `text-sm` on a native input < 16px
+            // triggers iOS Safari's auto-zoom on focus. Use text-base on
+            // mobile and drop back to text-sm at md+ where the desk lives.
+            // `h-10 md:h-9` keeps the 40px minimum tap target on phones.
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground placeholder:text-muted-foreground/50"
           />
         </div>
         <div>
@@ -140,7 +144,9 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             placeholder="150.00"
             step={0.01}
             min={0}
-            className="mt-1 w-full h-9 rounded-md border border-border bg-background px-3 text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
+            // Wave 29 mobile a11y: see symbol input above — text-base on
+            // mobile prevents iOS focus-zoom; h-10 keeps the 40px tap target.
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
           />
         </div>
         <div className="flex items-end">

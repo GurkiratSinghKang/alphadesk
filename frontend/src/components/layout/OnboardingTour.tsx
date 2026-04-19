@@ -173,7 +173,13 @@ export function OnboardingTour() {
       };
     }
 
-    const tooltipWidth = 320;
+    // Wave 29 persona-5 #6: tooltip was `w-80` (320px) with 16px side clamp,
+    // which overflowed a 390px viewport once the spotlight sat near an edge.
+    // Match the CSS width formula below so position math tracks actual size.
+    const tooltipWidth = Math.min(
+      320,
+      typeof window !== "undefined" ? window.innerWidth - 32 : 320
+    );
     const tooltipHeight = 160;
     const gap = 12;
 
@@ -262,8 +268,12 @@ export function OnboardingTour() {
       </div>
 
       {/* Tooltip */}
+      {/* Wave 29 persona-5 #6: `w-80` (320px) overflowed 390px viewport
+          because the 16px side clamps still left room for a 320px panel
+          to bleed past. `w-[calc(100vw-2rem)] max-w-80` keeps the natural
+          320px on desk but clamps to the viewport minus 32px on mobile. */}
       <div
-        className="absolute z-10 w-80 rounded-xl border border-primary/30 bg-[var(--surface)] p-5 shadow-2xl transition-all duration-300"
+        className="absolute z-10 w-[calc(100vw-2rem)] max-w-80 rounded-xl border border-primary/30 bg-[var(--surface)] p-5 shadow-2xl transition-all duration-300"
         style={getTooltipStyle()}
       >
         {/* Step counter */}

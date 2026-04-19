@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMarketStore } from "@/stores/market";
 import { PerformanceMetrics } from "@/components/dashboard/PerformanceMetrics";
 import { getTradeHistory, type TradeHistoryEntry } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 
 // ─── Toggle Switch ──────────────────────────────────────────
@@ -44,24 +46,35 @@ function Toggle({
           </p>
         )}
       </div>
+      {/* Wave 29 persona-5 #3: Apple HIG + WCAG 2.5.5 require a 44x44 tap
+          target. The switch itself stays 20x36 for visual balance; we wrap
+          in an invisible 44x44 button so fingers land without needing
+          pixel-perfect aim. `-mr-2.5` + `p-2.5` keeps the visible switch
+          aligned right. */}
       <button
         role="switch"
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
-          checked
-            ? "bg-primary border-primary/60"
-            : "bg-[var(--panel)] border-border"
+          "relative inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 p-2.5 -mr-2.5"
         )}
       >
         <span
           className={cn(
-            "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5"
+            "relative inline-flex h-5 w-9 items-center rounded-full border transition-colors",
+            checked
+              ? "bg-primary border-primary/60"
+              : "bg-[var(--panel)] border-border"
           )}
-        />
+        >
+          <span
+            className={cn(
+              "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+              checked ? "translate-x-4" : "translate-x-0.5"
+            )}
+          />
+        </span>
       </button>
     </div>
   );
@@ -172,6 +185,21 @@ function IntervalSlider({
 export default function SettingsPage() {
   const tradingMode = useUIStore((s) => s.tradingMode);
   const setTradingMode = useUIStore((s) => s.setTradingMode);
+  const { toast } = useToast();
+  // Wave 29 persona-1 #7: the old toggle flipped straight to live with no
+  // guard. There's no /auth/switch-mode endpoint yet (ProfileMenu confirms);
+  // the dialog below asks for confirmation first, and confirming toasts
+  // honestly instead of silently staying on paper.
+  const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
+
+  function handleTradingModeToggle() {
+    if (tradingMode === "live") {
+      // Switching back to paper is always safe
+      setTradingMode("paper");
+    } else {
+      setLiveConfirmOpen(true);
+    }
+  }
 
   const notifications = usePreferencesStore((s) => s.notifications);
   const display = usePreferencesStore((s) => s.display);
@@ -339,28 +367,34 @@ export default function SettingsPage() {
               >
                 Paper
               </span>
+              {/* Wave 29 persona-5 #3: trading-mode toggle is the most
+                  consequential switch on the page — wrap in 44x44 min tap
+                  target and gate switching to live through a confirmation
+                  dialog. */}
               <button
                 role="switch"
                 aria-checked={tradingMode === "live"}
                 aria-label="Trading mode toggle"
-                onClick={() =>
-                  setTradingMode(tradingMode === "paper" ? "live" : "paper")
-                }
-                className={cn(
-                  "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors",
-                  tradingMode === "live"
-                    ? "bg-loss/80 border-loss/60"
-                    : "bg-profit/60 border-profit/40"
-                )}
+                onClick={handleTradingModeToggle}
+                className="relative inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 p-2.5 -mr-2.5"
               >
                 <span
                   className={cn(
-                    "inline-block h-4 w-4 rounded-full bg-fg shadow transition-transform",
+                    "relative inline-flex h-6 w-11 items-center rounded-full border-2 transition-colors",
                     tradingMode === "live"
-                      ? "translate-x-5"
-                      : "translate-x-0.5"
+                      ? "bg-loss/80 border-loss/60"
+                      : "bg-profit/60 border-profit/40"
                   )}
-                />
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 rounded-full bg-fg shadow transition-transform",
+                      tradingMode === "live"
+                        ? "translate-x-5"
+                        : "translate-x-0.5"
+                    )}
+                  />
+                </span>
               </button>
               <span
                 className={cn(
@@ -536,6 +570,43 @@ export default function SettingsPage() {
         {/* Performance Monitoring */}
         <PerformanceMetrics />
       </div>
+
+      {/* Wave 29 persona-5 #3 + persona-1 #7: honest live-mode confirmation.
+          There is no /auth/switch-mode endpoint today, so confirming toasts
+          the real state of affairs instead of silently flipping UI state. */}
+      <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>
+        <DialogContent className="bg-[var(--surface)] border-border">
+          <DialogHeader>
+            <DialogTitle>Switch to Live Trading?</DialogTitle>
+            <DialogDescription>
+              Live trading requires broker API keys configured on the server.
+              Contact your admin to provision credentials — this toggle does
+              not enable live trading on its own.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLiveConfirmOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setLiveConfirmOpen(false);
+                toast({
+                  type: "warning",
+                  message: "Live mode is not enabled on this account. Contact support to unlock live trading.",
+                });
+              }}
+              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs"
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardPageLayout>
   );
 }

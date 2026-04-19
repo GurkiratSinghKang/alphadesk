@@ -29,6 +29,7 @@ import {
 import { DashboardPageLayout } from "@/components/layouts";
 import Mono from "@/components/typography/Mono";
 import { cn, formatCurrency } from "@/lib/utils";
+import { getMarketSession } from "@/lib/marketHours";
 import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
 import { BacktestPanel } from "@/components/panels/BacktestPanel";
 import { StrategyTemplates } from "@/components/panels/StrategyTemplates";
@@ -43,6 +44,34 @@ import {
   type PipelineRun,
   type PipelinePosition,
 } from "@/lib/api";
+
+// ─── Next-session helper ────────────────────────────────────
+// The scheduler uses `USMarketCalendar` on the backend now, so the UI
+// must not hardcode "09:30 ET" — on a weekend or after-hours slot the
+// next run isn't until the next trading day. This mirrors the backend's
+// logic well enough for copy: weekday after 16:00 → tomorrow (or Monday
+// if tomorrow is Saturday), weekend → Monday.
+function nextTradingSessionLabel(now: Date = new Date()): string {
+  const weekdayParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+  }).format(now);
+
+  const session = getMarketSession(now);
+  if (session === "pre" || session === "open") {
+    // Today itself hasn't hit the scheduler yet (or it's already running).
+    return "Today 09:30 ET";
+  }
+
+  // "post" on a weekday or "closed" on the weekend — next run is a
+  // future day at 09:30 ET. Work out which.
+  const weekday = weekdayParts; // e.g. "Friday"
+  if (weekday === "Friday") return "Monday 09:30 ET";
+  if (weekday === "Saturday") return "Monday 09:30 ET";
+  if (weekday === "Sunday") return "Monday 09:30 ET";
+  // Weekday after-hours — next session tomorrow.
+  return "Tomorrow 09:30 ET";
+}
 
 // ─── Signal badge helper ────────────────────────────────────
 
@@ -270,6 +299,13 @@ export default function PipelinePage() {
     if (mounted) fetchAll();
   }, [mounted, fetchAll]);
 
+  // TODO(auth-wave): The backend `/pipeline/run` endpoint currently uses
+  // `require_auth` rather than `require_admin`, so any authenticated user
+  // can trigger a (cost-bearing) pipeline run. The right fix lives in
+  // `backend/api/auth.py` + the pipeline route decorator. Until that lands
+  // this button remains open — we deliberately don't try to read the JWT
+  // sub client-side because our token is HttpOnly cookie and not
+  // accessible to JS.
   const handleRunNow = async () => {
     setRunning(true);
     try {
@@ -544,9 +580,24 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)]">
                   <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
                     <Zap className="h-7 w-7 text-muted-foreground/40" />
-                    <p className="font-display italic text-[15px] text-fg leading-snug max-w-[440px]">
-                      No pipeline run yet today. Next scheduled run: 09:30 ET.
-                    </p>
+                    {(() => {
+                      const session = getMarketSession();
+                      const nextLabel = nextTradingSessionLabel();
+                      // Weekend / after-hours copy acknowledges the
+                      // scheduler's market-calendar awareness rather than
+                      // claiming "next scheduled run: 09:30 ET" on Sunday.
+                      const line =
+                        session === "closed"
+                          ? `Market is closed today. Next scheduled run: ${nextLabel}.`
+                          : session === "post"
+                          ? `Today's session has ended. Next scheduled run: ${nextLabel}.`
+                          : `No pipeline run yet today. Next scheduled run: ${nextLabel}.`;
+                      return (
+                        <p className="font-display italic text-[15px] text-fg leading-snug max-w-[440px]">
+                          {line}
+                        </p>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       onClick={handleRunNow}
@@ -703,13 +754,62 @@ export default function PipelinePage() {
                                 </div>
                               ) : (
                                 h.summary || (() => {
+                                  // `strategies_run` is a count (number) on the
+                                  // current backend — `Object.values(7)` yields []
+                                  // and renders as 0. Also keep a fallback for
+                                  // legacy payloads that might still be an object
+                                  // `{strategy_id: count}` by summing values.
+                                  const sRun = h.strategies_run;
+                                  let strategiesRun = 0;
+                                  if (typeof sRun === "number" && Number.isFinite(sRun)) {
+                                    strategiesRun = sRun;
+                                  } else if (sRun && typeof sRun === "object") {
+                                    strategiesRun = Object.values(sRun).reduce(
+                                      (sum: number, v: any) =>
+                                        sum +
+                                        (typeof v === "number"
+                                          ? v
+                                          : v?.screened ?? v?.count ?? 0),
+                                      0
+                                    ) as number;
+                                  }
                                   const parts: string[] = [];
-                                  const screened = h.screened ?? (h.strategies_run ? Object.values(h.strategies_run || {}).reduce((s: number, v: any) => s + (v?.screened ?? 0), 0) : 0);
-                                  const orders = h.orders_placed ?? h.ordersPlaced ?? 0;
+                                  const screened = h.screened ?? 0;
+                                  const orders =
+                                    typeof h.orders_placed === "number"
+                                      ? h.orders_placed
+                                      : typeof h.ordersPlaced === "number"
+                                      ? h.ordersPlaced
+                                      : Array.isArray(h.orders_placed)
+                                      ? h.orders_placed.length
+                                      : 0;
+                                  const signals =
+                                    typeof h.signals === "number"
+                                      ? h.signals
+                                      : Array.isArray(h.signals)
+                                      ? h.signals.length
+                                      : 0;
+                                  const errCount = Array.isArray(h.errors)
+                                    ? h.errors.length
+                                    : typeof h.errors === "number"
+                                    ? h.errors
+                                    : 0;
+                                  if (strategiesRun)
+                                    parts.push(
+                                      `${strategiesRun} strateg${strategiesRun === 1 ? "y" : "ies"}`
+                                    );
                                   if (screened) parts.push(`${screened} screened`);
                                   if (h.analyzed) parts.push(`${h.analyzed} analyzed`);
-                                  if (orders) parts.push(`${orders} order${orders !== 1 ? "s" : ""}`);
-                                  if (h.errors?.length) parts.push(`${h.errors.length} error${h.errors.length !== 1 ? "s" : ""}`);
+                                  if (signals)
+                                    parts.push(
+                                      `${signals} signal${signals !== 1 ? "s" : ""}`
+                                    );
+                                  if (orders)
+                                    parts.push(`${orders} order${orders !== 1 ? "s" : ""}`);
+                                  if (errCount)
+                                    parts.push(
+                                      `${errCount} error${errCount !== 1 ? "s" : ""}`
+                                    );
                                   return parts.length > 0 ? parts.join(" · ") : "No activity";
                                 })()
                               )}

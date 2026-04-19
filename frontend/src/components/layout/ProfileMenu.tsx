@@ -58,9 +58,17 @@ export function ProfileMenu() {
     setModeConfirmOpen(false);
   }, [pathname]);
 
-  const handleModeToggle = () => {
-    if (tradingMode === "paper") setModeConfirmOpen(true);
-    else setTradingMode("paper");
+  // Wave 29 persona-1 #7: clicking Live used to flip local Zustand state
+  // and toast "contact admin" — the audit called this "misleading at best".
+  // There's no /auth/switch-mode endpoint, so Live click now opens an
+  // honest education dialog (option C) and never flips state. Paper click
+  // is always safe (returning to sim).
+  const handleLiveClick = () => {
+    setModeConfirmOpen(true);
+  };
+
+  const handlePaperClick = () => {
+    setTradingMode("paper");
   };
 
   async function handleLogout() {
@@ -84,15 +92,14 @@ export function ProfileMenu() {
     window.location.href = "/login";
   }
 
+  // Wave 29 persona-1 #7 (option C): "Got it" closes the dialog without
+  // flipping state. No /auth/switch-mode endpoint exists, so we never
+  // pretend to have switched — the toast reinforces the admin ask.
   async function handleConfirmLive() {
     setModeConfirmOpen(false);
-    // There is no `/auth/switch-mode` endpoint today (confirmed via audit —
-    // the profile menu previously flipped state AND toasted "contact admin"
-    // which contradicted itself). Until the backend exposes a switcher we
-    // keep the mode on paper and toast honestly.
     toast({
-      type: "warning",
-      message: "Live mode is not enabled on this account. Contact support to unlock live trading.",
+      type: "info",
+      message: "Contact admin to enable live trading on your account.",
     });
   }
 
@@ -114,8 +121,8 @@ export function ProfileMenu() {
           <div className="px-3 py-1.5">
             <p className="text-[10px] uppercase tracking-wider text-[#8a8a95] mb-1.5">Trading Mode</p>
             <div className="flex gap-1.5">
-              <button onClick={() => setTradingMode("paper")} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
-              <button onClick={handleModeToggle} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
+              <button onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
+              <button onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
             </div>
           </div>
           <DropdownMenuSeparator />
@@ -165,10 +172,16 @@ export function ProfileMenu() {
 
       <Dialog open={modeConfirmOpen} onOpenChange={setModeConfirmOpen}>
         <DialogContent className="bg-[var(--surface)] border-border">
-          <DialogHeader><DialogTitle>Switch to Live Trading?</DialogTitle><DialogDescription>Real orders will be submitted to your broker.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Live trading not available</DialogTitle>
+            <DialogDescription>
+              Live trading requires broker API keys configured on the server.
+              Contact your admin to provision credentials — this toggle
+              cannot enable live trading on its own.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModeConfirmOpen(false)} className="text-xs">Cancel</Button>
-            <Button onClick={handleConfirmLive} className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs">Confirm Live Mode</Button>
+            <Button onClick={handleConfirmLive} className="text-xs">Got it</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

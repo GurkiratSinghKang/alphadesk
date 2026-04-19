@@ -263,7 +263,11 @@ export function CommandPalette() {
             )}
             <Command.Input
               placeholder="Search symbols, commands..."
-              className="flex h-12 w-full bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground overflow-hidden text-ellipsis"
+              // Wave 29 mobile a11y: `text-sm` (14px) on a native <input>
+              // trips iOS Safari's auto-zoom on focus. Bump to text-base
+              // (16px) on mobile, drop back to text-sm on md+ where the
+              // palette lives in its desk resolution.
+              className="flex h-12 w-full bg-transparent py-3 text-base md:text-sm text-foreground outline-none placeholder:text-muted-foreground overflow-hidden text-ellipsis"
               maxLength={100}
               value={query}
               onValueChange={handleValueChange}

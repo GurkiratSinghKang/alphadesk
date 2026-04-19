@@ -4,6 +4,21 @@ import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import type { PositionRow, PositionTab } from "./types";
 
+// A lightweight shape for Orders tab rows. Kept narrow on purpose — the
+// Book panel only needs side/symbol/type/qty/status/price. Callers shape
+// their store's `Order[]` into this via the mapper in the page file.
+export interface OrderRow {
+  id: string;
+  symbol: string;
+  side: "buy" | "sell";
+  type: "market" | "limit" | "stop" | "stop_limit";
+  quantity: number;
+  limitPrice?: number;
+  stopPrice?: number;
+  status: "pending" | "filled" | "partial" | "cancelled" | "rejected";
+  rejectReason?: string;
+}
+
 // Tab-aware empty-state copy. Kept in one place so future tabs stay
 // consistent with the editorial voice used on the Strategy hero.
 const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
@@ -16,8 +31,8 @@ const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
     hint: "Place an order from the ticket to see it here.",
   },
   journal: {
-    title: "No journal entries yet.",
-    hint: "Closed trades will appear here with rationale.",
+    title: "Journal — coming soon.",
+    hint: "Closed trades with rationale will live here.",
   },
 };
 
@@ -35,6 +50,13 @@ const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
  */
 export interface PositionsListProps {
   positions: PositionRow[];
+  /** Working orders shown in the Orders tab. Pass from the parent's
+   *  portfolio store — previously the Orders tab rendered the Positions
+   *  empty-state even when real orders existed, because the tab was
+   *  cosmetic (the component only ever received `positions`). */
+  orders?: OrderRow[];
+  /** Cancel handler — wired up in the page to `cancelOrder(id)`. */
+  onCancelOrder?: (id: string) => void;
   activeTab: PositionTab;
   onTabChange?: (t: PositionTab) => void;
   onRowClick?: (id: string) => void;
@@ -43,14 +65,37 @@ export interface PositionsListProps {
 
 const TABS: PositionTab[] = ["positions", "orders", "journal"];
 
+// Tab labels (pluralised + title-cased for display). Kept separate from
+// the `PositionTab` id strings so we can show "Positions · 3" without
+// mutating the underlying state key.
+const TAB_LABEL: Record<PositionTab, string> = {
+  positions: "Positions",
+  orders: "Orders",
+  journal: "Journal",
+};
+
 export default function PositionsList({
   positions,
+  orders = [],
+  onCancelOrder,
   activeTab,
   onTabChange,
   onRowClick,
   className,
 }: PositionsListProps) {
-  const isEmpty = positions.length === 0;
+  // Journal is still gated — the data source (closed-trade notifications
+  // with rationale) hasn't landed yet. The tab is rendered but disabled so
+  // the layout stays consistent and the feature is discoverable.
+  const journalReady = false;
+
+  // Select the active collection by tab.
+  const count =
+    activeTab === "positions"
+      ? positions.length
+      : activeTab === "orders"
+        ? orders.length
+        : 0;
+  const isEmpty = count === 0;
   const empty = EMPTY_COPY[activeTab];
 
   return (
@@ -68,34 +113,61 @@ export default function PositionsList({
         <div
           role="tablist"
           aria-label="Book view"
-          className="flex gap-0.5 ml-auto mr-2.5"
+          // Slight gap bump — at the old `gap-0.5` + px-2 sizing the
+          // buttons touched each other on focus rings.
+          className="flex gap-1 ml-auto mr-2.5"
         >
           {TABS.map((t) => {
             const active = t === activeTab;
+            // The Journal tab is visually present but non-interactive
+            // until the data source is wired. Rendering it as a disabled
+            // button keeps the layout stable and signals "coming soon"
+            // rather than silently no-oping.
+            const disabled = t === "journal" && !journalReady;
+            const tabCount =
+              t === "positions" ? positions.length : t === "orders" ? orders.length : 0;
             return (
               <button
                 key={t}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => onTabChange?.(t)}
+                aria-disabled={disabled || undefined}
+                disabled={disabled}
+                onClick={() => !disabled && onTabChange?.(t)}
                 className={cn(
-                  "font-sans font-semibold text-[10px] uppercase px-2 py-[3px] rounded-xs transition-colors",
+                  // Mobile-audit r2 tap-target fix: the original pill was
+                  // ~15×20 CSS pixels — well below the WCAG 44×44 AA
+                  // recommendation. Bumped to `h-8 px-3` on mobile and
+                  // kept the tighter `md:h-auto md:px-2.5 md:py-1` on
+                  // desktop where a pointer is available.
+                  "font-sans font-semibold uppercase rounded-xs transition-colors",
+                  "h-8 px-3 text-[11px] md:h-auto md:px-2.5 md:py-1 md:text-[10px]",
+                  "flex items-center gap-1.5",
                   active
                     ? "text-ink-1000 bg-bg-elev-1"
-                    : "text-fg-muted hover:text-fg"
+                    : disabled
+                      ? "text-fg-hint opacity-60 cursor-not-allowed"
+                      : "text-fg-muted hover:text-fg"
                 )}
                 style={{ letterSpacing: "0.14em" }}
+                title={disabled ? "Coming soon" : undefined}
               >
-                {t}
+                <span>{TAB_LABEL[t]}</span>
+                {tabCount > 0 && !disabled && (
+                  <span
+                    className="font-mono text-[9px] text-fg-muted"
+                    aria-hidden
+                  >
+                    {tabCount}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
         {isEmpty ? null : (
-          <span className="font-mono text-[10px] text-fg-muted">
-            {positions.length}
-          </span>
+          <span className="font-mono text-[10px] text-fg-muted">{count}</span>
         )}
       </header>
 
@@ -129,66 +201,159 @@ export default function PositionsList({
             {empty.hint}
           </p>
         </div>
-      ) : (
-      <ul role="list" className="flex flex-col">
-        {positions.map((p) => {
-          const isLoss = p.pnl < 0;
-          const pct = Math.min(100, Math.max(0, Math.abs(p.progress) * 100));
-          return (
-            <li
-              key={p.id}
-              className="grid grid-cols-[60px_1fr_auto] gap-2.5 items-center px-[18px] py-2.5 border-b border-border-hair"
-            >
-              <button
-                type="button"
-                onClick={() => onRowClick?.(p.id)}
-                className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
-                style={{ letterSpacing: "0.02em" }}
+      ) : activeTab === "positions" ? (
+        <ul role="list" className="flex flex-col">
+          {positions.map((p) => {
+            const isLoss = p.pnl < 0;
+            const pct = Math.min(100, Math.max(0, Math.abs(p.progress) * 100));
+            return (
+              <li
+                key={p.id}
+                className="grid grid-cols-[60px_1fr_auto] gap-2.5 items-center px-[18px] py-2.5 border-b border-border-hair"
               >
-                {p.symbol}
-                <span className="block font-mono text-[9.5px] text-fg-hint mt-[1px]" style={{ letterSpacing: "0.02em" }}>
-                  {p.quantity} @ {p.entryPrice.toFixed(2)}
-                </span>
-              </button>
-
-              <div className="flex flex-col gap-[2px]">
-                <span className="font-display italic text-[11.5px] text-fg-dim">
-                  {p.strategyName}
-                </span>
-                <div
-                  className={cn(
-                    "h-[3px] bg-border rounded-xs overflow-hidden mt-1"
-                  )}
-                  aria-hidden
+                <button
+                  type="button"
+                  onClick={() => onRowClick?.(p.id)}
+                  className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                  style={{ letterSpacing: "0.02em" }}
                 >
+                  {p.symbol}
                   <span
-                    className={cn(
-                      "block h-full",
-                      isLoss ? "bg-down-500" : "bg-up-500"
-                    )}
-                    style={{ width: `${pct}%` }}
+                    className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
+                    style={{ letterSpacing: "0.02em" }}
+                  >
+                    {p.quantity} @ {p.entryPrice.toFixed(2)}
+                  </span>
+                </button>
+
+                <div className="flex flex-col gap-[2px]">
+                  <span className="font-display italic text-[11.5px] text-fg-dim">
+                    {p.strategyName}
+                  </span>
+                  <div
+                    className={cn("h-[3px] bg-border rounded-xs overflow-hidden mt-1")}
+                    aria-hidden
+                  >
+                    <span
+                      className={cn("block h-full", isLoss ? "bg-down-500" : "bg-up-500")}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-right flex flex-col">
+                  <PnLNumber value={p.pnl} format="currency" className="text-[13px] font-medium" />
+                  <PnLNumber
+                    value={p.pnlPct}
+                    format="percent"
+                    className="text-[10px] font-normal mt-[1px]"
+                    tone={isLoss ? "loss" : undefined}
                   />
                 </div>
-              </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : activeTab === "orders" ? (
+        <ul role="list" className="flex flex-col">
+          {orders.map((o) => {
+            const priceLabel = orderPriceLabel(o);
+            const cancellable = o.status === "pending" || o.status === "partial";
+            return (
+              <li
+                key={o.id}
+                className="grid grid-cols-[60px_1fr_auto] gap-2.5 items-center px-[18px] py-2.5 border-b border-border-hair"
+              >
+                <button
+                  type="button"
+                  onClick={() => onRowClick?.(o.symbol)}
+                  className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                  style={{ letterSpacing: "0.02em" }}
+                >
+                  {o.symbol}
+                  <span
+                    className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
+                    style={{ letterSpacing: "0.02em" }}
+                  >
+                    {o.side.toUpperCase()} {o.quantity} · {orderTypeLabel(o.type)}
+                  </span>
+                </button>
 
-              <div className="text-right flex flex-col">
-                <PnLNumber
-                  value={p.pnl}
-                  format="currency"
-                  className="text-[13px] font-medium"
-                />
-                <PnLNumber
-                  value={p.pnlPct}
-                  format="percent"
-                  className="text-[10px] font-normal mt-[1px]"
-                  tone={isLoss ? "loss" : undefined}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      )}
+                <div className="flex flex-col gap-[2px] min-w-0">
+                  <span className="font-mono text-[11px] text-fg-dim truncate">
+                    {priceLabel}
+                  </span>
+                  {o.rejectReason && (
+                    <span
+                      className="font-sans text-[10px] text-down-500 truncate"
+                      title={o.rejectReason}
+                    >
+                      {o.rejectReason}
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-right flex flex-col items-end gap-1">
+                  <span
+                    className={cn(
+                      "font-sans font-semibold text-[9.5px] uppercase px-1.5 py-0.5 rounded-xs",
+                      STATUS_CHIP[o.status] ?? "bg-bg-elev-1 text-fg-muted"
+                    )}
+                    style={{ letterSpacing: "0.14em" }}
+                  >
+                    {o.status}
+                  </span>
+                  {cancellable && onCancelOrder && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCancelOrder(o.id);
+                      }}
+                      className="font-sans text-[10px] text-fg-muted hover:text-down-500 underline underline-offset-2"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }
+
+// ─── Local helpers for Orders tab ────────────────────────────
+
+function orderTypeLabel(t: OrderRow["type"]): string {
+  if (t === "stop_limit") return "stop-limit";
+  return t;
+}
+
+function orderPriceLabel(o: OrderRow): string {
+  switch (o.type) {
+    case "market":
+      return "market";
+    case "limit":
+      return o.limitPrice != null ? `limit @ ${o.limitPrice.toFixed(2)}` : "limit @ —";
+    case "stop":
+      return o.stopPrice != null ? `stop @ ${o.stopPrice.toFixed(2)}` : "stop @ —";
+    case "stop_limit":
+      return `stop ${o.stopPrice != null ? o.stopPrice.toFixed(2) : "—"} / limit ${
+        o.limitPrice != null ? o.limitPrice.toFixed(2) : "—"
+      }`;
+  }
+}
+
+// Colour-token-driven chip styles keyed on order status. Using the same
+// tokens the rest of the UI uses so this stays on-theme if brand colors
+// evolve.
+const STATUS_CHIP: Record<OrderRow["status"], string> = {
+  pending: "bg-bg-elev-1 text-amber",
+  partial: "bg-bg-elev-1 text-amber",
+  filled: "bg-bg-elev-1 text-up-500",
+  cancelled: "bg-bg-elev-1 text-fg-muted",
+  rejected: "bg-bg-elev-1 text-down-500",
+};

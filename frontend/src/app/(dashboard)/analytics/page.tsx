@@ -491,12 +491,72 @@ function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats
   );
 }
 
+// ─── Range selector ─────────────────────────────────────────
+// Matches the radio-group pattern used on the strategy EquityPanel. Keys
+// are UI labels; values are the `period` strings the backend accepts
+// (see `backend/api/routes/portfolio.py` — 7d / 30d / 90d / ytd / 1y / all).
+type AnalyticsRange = "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
+const RANGES: AnalyticsRange[] = ["1W", "1M", "3M", "YTD", "1Y", "ALL"];
+const RANGE_TO_PERIOD: Record<AnalyticsRange, string> = {
+  "1W": "7d",
+  "1M": "30d",
+  "3M": "90d",
+  YTD: "ytd",
+  "1Y": "1y",
+  ALL: "all",
+};
+
+// Pure presentational; mirrors the chip-style radiogroup on the strategy
+// detail EquityPanel so the visual language is consistent across pages.
+function RangeSelector({
+  value,
+  onChange,
+}: {
+  value: AnalyticsRange;
+  onChange: (r: AnalyticsRange) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Analytics range"
+      className="flex items-center gap-1 rounded-md border border-border bg-bg p-0.5"
+    >
+      {RANGES.map((r) => {
+        const active = r === value;
+        return (
+          <button
+            key={r}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            data-range={r}
+            data-testid={`analytics-range-${r}`}
+            onClick={() => onChange(r)}
+            className={cn(
+              "font-mono text-[11px] px-2.5 py-1 rounded transition-colors",
+              active
+                ? "bg-bg-elev-2 text-fg"
+                : "text-fg-muted hover:text-fg"
+            )}
+            style={{ letterSpacing: "0.04em" }}
+          >
+            {r}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
+  // Default to 1M so the initial paint matches the prior (hardcoded-30d)
+  // behavior — users who never touch the selector see no regression.
+  const [range, setRange] = useState<AnalyticsRange>("1M");
 
   // Live account equity from the dashboard polling pipeline. `null` until
   // the first poll resolves; callers treat `null` as "not ready yet."
@@ -505,9 +565,10 @@ export default function AnalyticsPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      setLoading(true);
       try {
         const [perfRes, tradesRes] = await Promise.allSettled([
-          getPortfolioPerformance(),
+          getPortfolioPerformance(RANGE_TO_PERIOD[range]),
           getTradeHistory(5000),
         ]);
         if (cancelled) return;
@@ -527,7 +588,7 @@ export default function AnalyticsPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [range]);
 
   // `baseEquity` is the STARTING equity of the curve (equity level at
   // the curve's first point). We derive it from the live account equity
@@ -572,7 +633,11 @@ export default function AnalyticsPage() {
   if (loading || !equityReady) {
     return (
       <ScrollArea className="h-full">
-        <DashboardPageLayout eyebrow="§ ANALYTICS" title="Portfolio analytics">
+        <DashboardPageLayout
+          eyebrow="§ ANALYTICS"
+          title="Portfolio analytics"
+          actions={<RangeSelector value={range} onChange={setRange} />}
+        >
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
             <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
@@ -600,6 +665,7 @@ export default function AnalyticsPage() {
         <DashboardPageLayout
           eyebrow="§ ANALYTICS"
           title="Portfolio analytics"
+          actions={<RangeSelector value={range} onChange={setRange} />}
         >
           <div className="rounded-xl border border-border bg-[var(--panel)] px-8 py-12">
             <div className="flex flex-col gap-3 max-w-[640px]">
@@ -629,6 +695,7 @@ export default function AnalyticsPage() {
       <DashboardPageLayout
         eyebrow="§ ANALYTICS"
         title="Portfolio analytics"
+        actions={<RangeSelector value={range} onChange={setRange} />}
       >
         {/* Row 1: Drawdown + Rolling Sharpe */}
         {/* Viewport audit r5 #6: with DashboardPageLayout now lifted to

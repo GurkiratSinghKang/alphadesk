@@ -36,6 +36,14 @@ export interface OrderBarProps {
   reviewCopy?: string;
   /** Parent flag — disables Stage + shows "Submitting…" while the API request is in flight. */
   submitting?: boolean;
+  /**
+   * Small subtitle rendered under the primary button. Defaults to
+   * "Submits to paper account". Parent can swap in "Submits to LIVE account"
+   * when the backend base URL indicates live trading.
+   */
+  submitDestination?: string;
+  /** Primary button label. Defaults to "Place order". */
+  submitLabel?: string;
   className?: string;
 }
 
@@ -53,6 +61,8 @@ export default function OrderBar({
   defaults,
   reviewCopy = "Review before submit · regime check · risk policy",
   submitting = false,
+  submitDestination = "Submits to paper account",
+  submitLabel = "Place order",
   className,
 }: OrderBarProps) {
   const noStrategies = strategies.length === 0;
@@ -72,14 +82,27 @@ export default function OrderBar({
   React.useEffect(() => {
     setSymbolValue(symbol);
   }, [symbol]);
+  // Defaults after Wave 28:
+  //   · qty = 1 (not 100 — a new user accidentally placing a 100-share
+  //     order is far worse than having to type a bigger number)
+  //   · type = market (not limit — "limit" required a price and the
+  //     first click always errored with "Limit orders require a price")
   const [quantity, setQuantity] = React.useState<string>(
-    String(defaults?.quantity ?? 100)
+    String(defaults?.quantity ?? 1)
   );
-  const [type, setType] = React.useState<OrderTypeOption>(defaults?.type ?? "limit");
+  const [type, setType] = React.useState<OrderTypeOption>(defaults?.type ?? "market");
   const [price, setPrice] = React.useState<string>(
     defaults?.price != null ? String(defaults.price) : ""
   );
   const [stop, setStop] = React.useState<string>(defaults?.stop ?? "");
+
+  // Price / stop fields are meaningful only for certain order types.
+  // Gate the inputs so market orders don't ask for a price, and stop
+  // orders don't ask for a limit — matches the backend validator added
+  // in Wave 28 (limit_price required for limit/stop_limit, stop_price
+  // required for stop/stop_limit).
+  const priceRequired = type === "limit" || type === "stop_limit";
+  const stopRequired = type === "stop" || type === "stop_limit";
 
   const stage = () => {
     if (submitting) return;
@@ -214,20 +237,30 @@ export default function OrderBar({
       <Field label="Price">
         <Input
           aria-label="Price"
-          value={price}
+          value={priceRequired ? price : ""}
           onChange={(e) => setPrice(e.target.value)}
           inputMode="decimal"
-          className="min-w-[90px] w-full h-11 md:h-9"
+          placeholder={priceRequired ? undefined : "—"}
+          disabled={!priceRequired}
+          className={cn(
+            "min-w-[90px] w-full h-11 md:h-9",
+            !priceRequired && "opacity-50 cursor-not-allowed"
+          )}
         />
       </Field>
 
       <Field label="Stop">
         <Input
           aria-label="Stop"
-          value={stop}
+          value={stopRequired ? stop : ""}
           onChange={(e) => setStop(e.target.value)}
           inputMode="decimal"
-          className="min-w-[90px] w-full h-11 md:h-9 text-down-500"
+          placeholder={stopRequired ? undefined : "—"}
+          disabled={!stopRequired}
+          className={cn(
+            "min-w-[90px] w-full h-11 md:h-9 text-down-500",
+            !stopRequired && "opacity-50 cursor-not-allowed"
+          )}
         />
       </Field>
 
@@ -238,15 +271,25 @@ export default function OrderBar({
         {reviewCopy}
       </span>
 
-      <Button
-        type="button"
-        variant="primary"
-        className="col-span-2 w-full md:ml-auto md:w-auto min-h-11"
-        onClick={stage}
-        disabled={submitting || noStrategies}
-      >
-        {submitting ? "Submitting…" : "Stage order →"}
-      </Button>
+      <div className="col-span-2 md:ml-auto md:w-auto flex flex-col items-stretch md:items-end gap-0.5">
+        <Button
+          type="button"
+          variant="primary"
+          className="w-full md:w-auto min-h-11"
+          onClick={stage}
+          disabled={submitting || noStrategies}
+          data-testid="order-bar-submit"
+        >
+          {submitting ? "Submitting…" : submitLabel}
+        </Button>
+        <span
+          data-slot="order-destination"
+          className="font-mono text-[9.5px] text-fg-hint text-center md:text-right"
+          style={{ letterSpacing: "0.05em" }}
+        >
+          {submitDestination}
+        </span>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,7 @@ describe("OrderBar", () => {
     }
   });
 
-  it("stage button invokes onSubmit with current state", () => {
+  it("submit button invokes onSubmit with current state", () => {
     const fn = vi.fn();
     const { getByText } = render(
       <OrderBar
@@ -29,7 +29,11 @@ describe("OrderBar", () => {
         defaults={{ side: "buy", quantity: 100, type: "market" }}
       />,
     );
-    fireEvent.click(getByText(/Stage order/i));
+    // Wave 28: button was relabelled from "Stage order" to "Place order"
+    // because the click is live (no review step). Match either label to
+    // keep this test resilient to the copy change without forcing a
+    // rename loop.
+    fireEvent.click(getByText(/Place order|Stage order/i));
     expect(fn).toHaveBeenCalledTimes(1);
     const order = fn.mock.calls[0][0];
     expect(order.symbol).toBe("SPY");

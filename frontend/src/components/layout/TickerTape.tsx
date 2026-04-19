@@ -39,7 +39,10 @@ export function TickerTape() {
       aria-live="off"
       className="overflow-hidden whitespace-nowrap border-b border-border/20 bg-[var(--background)]"
     >
-      <div className="animate-marquee inline-flex gap-0 py-[3px]">
+      {/* Wave 29 persona-5 #7: WCAG 2.3.3 / respects prefers-reduced-motion —
+          the marquee animation is motion, so pause for users that ask to
+          reduce it. TickerStrip already does this; TickerTape was missing. */}
+      <div className="animate-marquee motion-reduce:animate-none inline-flex gap-0 py-[3px]">
         {tripled.map((item, i) => {
           const up = item.change >= 0;
           return (

@@ -150,15 +150,47 @@ export interface StrategyPerformance {
   status: string;
   invested_amount: number;
   current_value: number;
+  /**
+   * Live cumulative return since the strategy first traded. Often 0 on freshly
+   * activated strategies — prefer `cagr` (OOS backtest) for the hero CAGR cell
+   * when `total_return_pct` is 0 and `cagr` is populated.
+   */
   total_return_pct: number;
+  /**
+   * Live annualized return derived from `total_return_pct`. Mirrors the
+   * "always zero on fresh strategies" behaviour of `total_return_pct`. Kept for
+   * back-compat; `cagr` is the field to prefer when it's non-null.
+   */
   annualized_return_pct: number;
   return_dollars: number;
   win_rate: number;
   sharpe_ratio: number;
-  max_drawdown: number;
+  /**
+   * Max drawdown as a fraction (e.g. 0.0801 → 8.01%). Sign varies across
+   * strategies (some backtests emit a negative fraction, others positive);
+   * callers must use `Math.abs` before rendering. Null when no backtest ran.
+   */
+  max_drawdown: number | null;
   active_positions_count: number;
   equity_curve: { date: string; value: number }[];
   last_trade_date: string;
+  /**
+   * Out-of-sample CAGR from the strategy's backtest, as a fraction
+   * (e.g. 0.362 → 36.2%). Null when no backtest is available. Prefer this
+   * over `annualized_return_pct` for the hero CAGR cell.
+   */
+  cagr?: number | null;
+  /**
+   * Backtest hit rate as a fraction (e.g. 0.7754 → 77.54% of closed trades
+   * are wins). Prefer this over frontend-derived hit rate from live trades,
+   * which is empty for strategies that haven't traded yet.
+   */
+  hit_rate?: number | null;
+  /**
+   * Profit factor from the backtest (gross wins / gross losses). Null when
+   * there are no losing trades in the sample or the backtest wasn't run.
+   */
+  profit_factor?: number | null;
 }
 
 export function getStrategyPerformance(strategyId: string) {

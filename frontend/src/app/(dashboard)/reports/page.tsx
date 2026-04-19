@@ -15,6 +15,26 @@ import {
 import type { Position, PortfolioSummary } from "@/types";
 import { cn, formatCurrency } from "@/lib/utils";
 
+// ─── Range types ────────────────────────────────────────────
+// Matches the Analytics page radiogroup so the two pages share a
+// consistent vocabulary. Cutoff is computed client-side against the
+// trade exit/entry timestamps — `ALL` short-circuits to "no filter".
+type ReportsRange = "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
+const REPORTS_RANGES: ReportsRange[] = ["1W", "1M", "3M", "YTD", "1Y", "ALL"];
+
+function rangeCutoff(range: ReportsRange): Date | null {
+  if (range === "ALL") return null;
+  const now = new Date();
+  if (range === "YTD") return new Date(now.getFullYear(), 0, 1);
+  const days = range === "1W" ? 7
+    : range === "1M" ? 30
+    : range === "3M" ? 90
+    : /* 1Y */ 365;
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - days);
+  return cutoff;
+}
+
 // ─── CSV Helpers ───────────────────────────────────────────
 
 function downloadCsv(filename: string, csvContent: string) {
@@ -304,27 +324,60 @@ function StrategyPerformanceReport({
     return map;
   }, [trades]);
 
+  // Try to anchor drawdown on the real starting equity. Falls back to the
+  // invested amount when we have no portfolio curve (trade-sequence-only
+  // computation is still useful as a signal of cumulative drag, just needs
+  // a sensible denominator).
   const strategyRows = strategies.map(s => {
     const stratTrades = tradesByStrategy.get(s.id) ?? [];
     const closed = stratTrades.filter(t => t.exit_price !== null);
     const winningTrades = closed.filter(t => (t.pnl ?? 0) > 0);
     const tradeCount = closed.length;
-    const winRate = tradeCount > 0 ? (winningTrades.length / tradeCount) * 100 : s.win_rate;
+    // Backend `s.win_rate` is expressed as a percentage (0-100) when
+    // positive, or -1 as a "no data" sentinel. The fallback only applies
+    // when we have no trades to compute the rate from.
+    const rawWinRate = tradeCount > 0
+      ? (winningTrades.length / tradeCount) * 100
+      : s.win_rate;
+    // Guard against -1/null/NaN/Infinity so the displayed value never
+    // shows up as "-100%" or "-1%".
+    const winRate: number | null =
+      rawWinRate == null || !Number.isFinite(rawWinRate) || rawWinRate < 0
+        ? null
+        : rawWinRate;
 
-    // Compute simple max drawdown from trade P&L sequence
-    let cumPnl = 0, peak = 0, maxDd = 0;
+    // ── Max drawdown (equity-based) ──────────────────────────
+    // Previous implementation divided by peak cumulative P&L, which
+    // exaggerates drawdown dramatically (e.g. a $100 loss after a $100
+    // gain reads as 100% DD). Correct formula anchors on equity: seed
+    // with the strategy's `invested_amount` (or 1 as a fallback so the
+    // math never divides by zero), then track running equity = start +
+    // cum P&L and compare against the rolling peak equity.
+    const startEquity = s.invested_amount && s.invested_amount > 0
+      ? s.invested_amount
+      : 1;
+    let cumPnl = 0;
+    let peakEquity = startEquity;
+    let maxDdFrac = 0; // negative fraction, e.g. -0.12 = -12%
     for (const t of closed) {
       cumPnl += t.pnl ?? 0;
-      if (cumPnl > peak) peak = cumPnl;
-      const dd = peak > 0 ? (peak - cumPnl) / peak * 100 : 0;
-      if (dd > maxDd) maxDd = dd;
+      const equity = startEquity + cumPnl;
+      if (equity > peakEquity) peakEquity = equity;
+      const dd = peakEquity > 0 ? (equity - peakEquity) / peakEquity : 0;
+      if (dd < maxDdFrac) maxDdFrac = dd;
     }
+    // Emit as a positive percentage magnitude so the UI can prefix "-".
+    const maxDd = Math.abs(maxDdFrac * 100);
 
-    // Compute simple Sharpe
+    // ── Sharpe (standard annualization) ──────────────────────
+    // Prior implementation scaled by `sqrt(252 / N)` which is inverted:
+    // fewer samples blew the ratio up. Standard daily-return Sharpe is
+    // `mean/std * sqrt(252)` — the sample count only affects the
+    // mean/std estimates, not the annualization factor.
     const returns = closed.map(t => t.pnl_pct ?? 0);
     const meanRet = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-    const stdRet = returns.length > 1 ? Math.sqrt(returns.reduce((s, r) => s + (r - meanRet) ** 2, 0) / (returns.length - 1)) : 1;
-    const sharpe = stdRet > 0 ? (meanRet / stdRet) * Math.sqrt(252 / Math.max(returns.length, 1)) : 0;
+    const stdRet = returns.length > 1 ? Math.sqrt(returns.reduce((s, r) => s + (r - meanRet) ** 2, 0) / (returns.length - 1)) : 0;
+    const sharpe = stdRet > 0 ? (meanRet / stdRet) * Math.sqrt(252) : 0;
 
     return { ...s, tradeCount, winRate, maxDd, sharpe };
   });
@@ -339,7 +392,10 @@ function StrategyPerformanceReport({
         (s.sharpe ?? 0).toFixed(2),
         (s.maxDd ?? 0).toFixed(2),
         s.tradeCount,
-        (s.winRate ?? 0).toFixed(1),
+        // Preserve the same "no data" semantics in CSV — empty cell is
+        // unambiguous (downstream spreadsheets won't misinterpret -1 as
+        // a real value).
+        s.winRate == null ? "" : s.winRate.toFixed(1),
         (s.invested_amount ?? 0).toFixed(2),
       ])
     );
@@ -379,7 +435,13 @@ function StrategyPerformanceReport({
                 <td className="px-3 py-2 text-right tabular-nums text-foreground">{(s.sharpe ?? 0).toFixed(2)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-[var(--loss)]">-{(s.maxDd ?? 0).toFixed(1)}%</td>
                 <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.tradeCount}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">{(s.winRate ?? 0).toFixed(0)}%</td>
+                <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                  {s.winRate == null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    `${s.winRate.toFixed(0)}%`
+                  )}
+                </td>
               </tr>
             ))}
             {strategyRows.length === 0 && (
@@ -584,6 +646,9 @@ export default function ReportsPage() {
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [taxYear, setTaxYear] = useState(new Date().getFullYear());
+  // Default 1M to mirror Analytics, so "No closed trades in this period"
+  // now literally means "in the selected period" rather than "ever".
+  const [range, setRange] = useState<ReportsRange>("1M");
 
   useEffect(() => {
     let cancelled = false;
@@ -610,10 +675,59 @@ export default function ReportsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Filter trades by selected period. We bucket by exit_time for closed
+  // trades (the audit-relevant "closed in this period" semantics); open
+  // trades carry no exit so they drop out of period-scoped reports but
+  // remain visible in the position table which isn't historical.
+  const filteredTrades = useMemo(() => {
+    const cutoff = rangeCutoff(range);
+    if (!cutoff) return trades;
+    const cutoffMs = cutoff.getTime();
+    return trades.filter((t) => {
+      // Keep still-open trades out of period-filtered reports so the
+      // "N closed" count reflects only trades that actually closed in
+      // the window.
+      const exit = t.exit_time ? new Date(t.exit_time).getTime() : NaN;
+      return Number.isFinite(exit) && exit >= cutoffMs;
+    });
+  }, [trades, range]);
+
+  const rangeSelector = (
+    <div
+      role="radiogroup"
+      aria-label="Reports range"
+      className="flex items-center gap-1 rounded-md border border-border bg-bg p-0.5"
+    >
+      {REPORTS_RANGES.map((r) => {
+        const active = r === range;
+        return (
+          <button
+            key={r}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            data-range={r}
+            data-testid={`reports-range-${r}`}
+            onClick={() => setRange(r)}
+            className={cn(
+              "font-mono text-[11px] px-2.5 py-1 rounded transition-colors",
+              active
+                ? "bg-bg-elev-2 text-fg"
+                : "text-fg-muted hover:text-fg"
+            )}
+            style={{ letterSpacing: "0.04em" }}
+          >
+            {r}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading) {
     return (
       <ScrollArea className="h-full">
-        <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
+        <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" actions={rangeSelector}>
           <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
           <div className="h-[260px] animate-pulse rounded-lg bg-bg-elev-1" />
           <div className="h-[200px] animate-pulse rounded-lg bg-bg-elev-1" />
@@ -624,11 +738,11 @@ export default function ReportsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
+      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" actions={rangeSelector}>
         {/* Portfolio Statement */}
         <SectionCard title="Portfolio Statement" icon={FileText}>
           {summary ? (
-            <PortfolioStatement summary={summary} positions={positions} trades={trades} />
+            <PortfolioStatement summary={summary} positions={positions} trades={filteredTrades} />
           ) : (
             <p className="text-xs text-muted-foreground text-center py-6">Unable to load portfolio data.</p>
           )}
@@ -636,7 +750,7 @@ export default function ReportsPage() {
 
         {/* Strategy Performance */}
         <SectionCard title="Strategy Performance Report" icon={BarChart3}>
-          <StrategyPerformanceReport strategies={strategies} trades={trades} />
+          <StrategyPerformanceReport strategies={strategies} trades={filteredTrades} />
         </SectionCard>
 
         {/* Tax Report */}

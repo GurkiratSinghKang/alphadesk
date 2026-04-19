@@ -309,6 +309,95 @@ def load_all(package: str | None = None) -> list[str]:
     return imported
 
 
+# ---------------------------------------------------------------------------
+# Implementation-stage taxonomy (Wave 27 ghost-strategy remediation)
+# ---------------------------------------------------------------------------
+#
+# The ``@register_strategy`` decorator only runs for strategies that ship a
+# Python package under ``backend/strategies/<name>/``. That list is the ground
+# truth for "can we actually run this strategy today?".
+#
+# However the catalogue-layer (``backend/api/routes/strategies.py::_STRATEGIES``)
+# historically carried marketing placeholders — strategies we want to surface
+# to the UI but haven't built yet (``claude-alpha``, ``dividend-capture``,
+# ``gap-fill``, ``mean-reversion``, ``pairs-stat-arb``, ``sector-rotation``,
+# ``vcp-breakout``). The audit flagged these as "ghosts": they render as
+# ``status="active"`` with null metrics, confusing researchers who see an
+# "ACTIVE" label but empty charts.
+#
+# The helpers below give the rest of the codebase (API layer, rail selectors,
+# the new ``/strategies`` listing page) a single canonical place to ask
+# "is this strategy implemented, planned, or neither?" without re-hardcoding
+# the list in every caller. The registry itself only tracks decorator-registered
+# classes; this taxonomy lives beside it because it describes the same concept.
+#
+# ``PLANNED_STRATEGIES`` uses the frontend / API route-id form (hyphens) because
+# that is what UI code and REST consumers speak. Callers that have a registry
+# underscore name should translate through
+# ``backend/api/routes/strategies.py::_REGISTRY_TO_ROUTE`` before asking.
+
+#: Strategies that ship a working Python package under ``backend/strategies/``.
+#: Keep this list in sync with the directory listing — these are the names the
+#: ``@register_strategy`` decorator mints at import time. Expressed as route
+#: ids (hyphen form) for parity with ``STRATEGY_META`` on the frontend.
+IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
+    "momentum-quality",
+    "pead",
+    "vrp-harvesting",
+    "earnings-vol-premium",
+    "regime-adaptive",
+    "ts-momentum",
+    "rsi2-reversal",
+    "dual-momentum",
+    "pairs-trading",
+    "kama-breakout",
+    "orb",
+    "vwap-strategy",
+})
+
+#: Strategies we've advertised in the catalogue but haven't yet implemented.
+#: The UI surfaces these with a muted "Coming soon" affordance rather than an
+#: "Active" pill, and the listing page groups them into a separate section.
+#: ``manual-discretionary`` is deliberately NOT here — it is a real, first-class
+#: bucket backed by the trade ledger (see
+#: ``backend/data/ingestion/trade_ledger.py`` — manual trades land there).
+PLANNED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
+    "claude-alpha",
+    "dividend-capture",
+    "gap-fill",
+    "mean-reversion",
+    "pairs-stat-arb",
+    "sector-rotation",
+    "vcp-breakout",
+})
+
+
+def implementation_stage(route_id: str) -> str:
+    """Return the implementation stage for a frontend / API route-id.
+
+    Values:
+        * ``"live"`` — a Python package exists and runs in the backtester /
+          pipeline; OOS metrics are real.
+        * ``"planned"`` — advertised on the rail but no implementation yet;
+          the UI should render these as "coming soon" and disable trading
+          affordances.
+        * ``"other"`` — not one of the curated lists. Today this is just
+          ``manual-discretionary`` (ledger-backed user trades) and anything
+          we haven't categorised yet. Callers should treat ``"other"`` as
+          "don't assume it's either live or planned; show the raw status".
+    """
+    if route_id in IMPLEMENTED_STRATEGY_ROUTE_IDS:
+        return "live"
+    if route_id in PLANNED_STRATEGY_ROUTE_IDS:
+        return "planned"
+    return "other"
+
+
+def is_implemented(route_id: str) -> bool:
+    """Return True if the strategy has a real backend package."""
+    return route_id in IMPLEMENTED_STRATEGY_ROUTE_IDS
+
+
 __all__ = [
     "register_strategy",
     "get_strategy",
@@ -319,4 +408,8 @@ __all__ = [
     "clear",
     "load_all",
     "StrategyRegistrationError",
+    "IMPLEMENTED_STRATEGY_ROUTE_IDS",
+    "PLANNED_STRATEGY_ROUTE_IDS",
+    "implementation_stage",
+    "is_implemented",
 ]

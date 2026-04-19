@@ -241,10 +241,14 @@ export default function PriceChartPanel({
           (tablet with rail + right) the row overflowed and was clipped by
           md:overflow-hidden on desk-main. Allow wrap so meta cells drop to
           a second line rather than clip; each cell already has shrink-0. */}
-      <header className="flex flex-wrap items-end gap-6 px-7 pt-5 pb-3.5 border-b border-border-hair">
+      {/* Wave 29 persona-5 #1: hero was text-[40px] name + text-[36px] price
+          with `px-7` (28px gutters) — that consumed ~280px of a 390px viewport
+          and overflowed every time. Step down the type ladder on mobile so the
+          header fits, then restore at sm/md. */}
+      <header className="flex flex-wrap items-end gap-4 md:gap-6 px-4 md:px-7 pt-4 md:pt-5 pb-3.5 border-b border-border-hair">
         <div>
           <div
-            className="font-display italic text-[40px] text-ink-1000"
+            className="font-display italic text-[22px] sm:text-[32px] md:text-[40px] text-ink-1000"
             style={{ letterSpacing: "-0.025em", lineHeight: 1 }}
           >{symbol.name}</div>
           <div
@@ -255,7 +259,7 @@ export default function PriceChartPanel({
 
         <div>
           <div
-            className="font-mono tabular-nums text-[36px] font-light text-ink-1000"
+            className="font-mono tabular-nums text-[22px] sm:text-[28px] md:text-[36px] font-light text-ink-1000"
             style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
           >
             {last == null ? <DashSpan size={36} /> : last.toFixed(2)}
@@ -271,7 +275,7 @@ export default function PriceChartPanel({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-[18px] ml-auto font-mono text-[11px] text-fg-muted">
+        <div className="flex flex-wrap gap-x-3 gap-y-2 md:gap-[18px] ml-auto font-mono text-[11px] text-fg-muted">
           <MetaCell k="Vol" value={meta.volume} />
           <MetaCell k="Avg Vol" value={meta.avgVolume} />
           <MetaCell k="Range" value={meta.range} />
@@ -284,8 +288,12 @@ export default function PriceChartPanel({
         </div>
       </header>
 
-      <div className="flex justify-between items-center px-7 py-2.5 border-b border-border-hair">
-        <div className="flex gap-0.5">
+      {/* Wave 29 persona-5 #2: range row (8 buttons) + legend (3 chips) were
+          both `flex` no-wrap inside `px-7`, which clipped at 390 viewport.
+          `flex-wrap gap-1.5 md:gap-2` lets the legend drop to a second line
+          and keeps every range button tappable. */}
+      <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1.5 px-4 md:px-7 py-2.5 border-b border-border-hair">
+        <div className="flex flex-wrap gap-0.5">
           {RANGES.map((r) => (
             <button
               key={r}
@@ -300,14 +308,14 @@ export default function PriceChartPanel({
             >{r}</button>
           ))}
         </div>
-        <div className="flex gap-[14px] font-mono text-[10.5px] text-fg-muted">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 md:gap-[14px] font-mono text-[10.5px] text-fg-muted">
           <LegendChip swatchColor="var(--gold-300)" label="Price" />
           <LegendChip swatchColor="var(--up-500)" dashed label="20-SMA" />
           <LegendChip swatchColor="rgba(141,179,196,0.25)" block label="Regime bands" />
         </div>
       </div>
 
-      <div className="flex-1 relative px-7 py-4 min-h-[220px]">
+      <div className="flex-1 relative px-4 md:px-7 py-4 min-h-[220px]">
         {error ? (
           <div
             role="alert"

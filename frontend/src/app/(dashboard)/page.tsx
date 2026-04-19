@@ -23,11 +23,19 @@ import {
   TopBar,
   type ChartBar,
   type ChartRange,
+  type OrderRow,
   type PositionTab,
   type StagedOrder,
 } from "@/components/composites";
 import { DeskLayout } from "@/components/layouts";
-import { getBars, getOrders, placeOrder } from "@/lib/api";
+import {
+  cancelOrder,
+  getBars,
+  getOrders,
+  getPortfolioSummary,
+  getPositions,
+  placeOrder,
+} from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
 import {
   useIndices,
@@ -78,6 +86,43 @@ export default function DeskPage() {
 
   const portfolioSummary = usePortfolioStore((s) => s.summary);
   const positions = usePortfolioStore((s) => s.positions);
+  const ordersFromStore = usePortfolioStore((s) => s.orders);
+
+  // Shape the portfolio store's `Order[]` onto the OrderRow contract the
+  // PositionsList expects. Previously the Book panel's Orders tab was
+  // cosmetic — clicking it just changed the header highlight. This mapper
+  // is memoised on `ordersFromStore` so the tab renders real data.
+  const orderRows = useMemo<OrderRow[]>(() => {
+    return ordersFromStore.map((o) => {
+      const firstLeg = o.legs?.[0];
+      const rawAny = o as unknown as Record<string, unknown>;
+      // Prefer the typed `price` field; fall back to `limit_price` on the
+      // raw record for orders that came through the WS portfolio channel
+      // (which still uses snake-case keys). Same deal for stop_price.
+      const limitPrice =
+        firstLeg?.price ??
+        o.price ??
+        (typeof rawAny.limit_price === "number" ? (rawAny.limit_price as number) : undefined);
+      const stopPrice =
+        typeof rawAny.stop_price === "number"
+          ? (rawAny.stop_price as number)
+          : undefined;
+      return {
+        id: o.id,
+        symbol: o.symbol,
+        side: o.side,
+        type: o.type,
+        quantity: o.quantity,
+        limitPrice,
+        stopPrice,
+        status: o.status,
+        rejectReason:
+          typeof rawAny.reject_reason === "string"
+            ? (rawAny.reject_reason as string)
+            : undefined,
+      };
+    });
+  }, [ordersFromStore]);
 
   /* ─── Live market + portfolio data via React Query ─────── */
   const { data: regimeResp } = useRegime();
@@ -274,6 +319,43 @@ export default function DeskPage() {
   const [orderBarResetTick, setOrderBarResetTick] = useState(0);
   const [submittingOrder, setSubmittingOrder] = useState(false);
 
+  /**
+   * Refresh positions / orders / summary from the REST API.
+   *
+   * Wave 28 fix: previously the desk only updated via the 30-second
+   * poll in `useDataPipeline` and the WebSocket `portfolio` channel.
+   * Neither fires on immediate order-fill paths (Alpaca only publishes
+   * ``order_submitted``, not fill events through this socket), so the
+   * desk could show a stale empty Positions list for up to 30s after a
+   * market order filled. Calling this helper in the success branch of
+   * ``handleStageOrder`` closes the gap for the user who just placed
+   * the order; the poll + WS still cover concurrent changes from
+   * pipeline fills.
+   */
+  const refreshPortfolio = useCallback(async () => {
+    const results = await Promise.allSettled([
+      getPositions(),
+      getOrders(), // default = all statuses after Wave 28 backend change
+      getPortfolioSummary(),
+    ]);
+    if (results[0].status === "fulfilled") {
+      usePortfolioStore.getState().setPositions(results[0].value);
+    }
+    if (results[1].status === "fulfilled") {
+      usePortfolioStore.getState().setOrders(results[1].value);
+      setOrderCount(results[1].value.filter((o) => o.status === "pending" || o.status === "partial").length);
+    }
+    if (results[2].status === "fulfilled") {
+      usePortfolioStore.getState().setSummary(results[2].value);
+    }
+    // Also fan out a custom event so other panes listening for a
+    // portfolio refresh (strategy rail, analytics, …) can re-pull their
+    // own data without needing a ref to this callback.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:refresh-portfolio"));
+    }
+  }, []);
+
   async function handleStageOrder(order: StagedOrder) {
     // Submit the staged order to the real trading API. On success,
     // push the returned order into the local store, clear the OrderBar,
@@ -313,12 +395,28 @@ export default function DeskPage() {
         stop_price: stopNum,
       });
       usePortfolioStore.getState().addOrder(placed);
+
+      // Surface a clearer toast copy than the old "staged" wording — the
+      // button is "Place order", so the user expects the action was to
+      // place. Include a "View orders" action that jumps the Book to the
+      // Orders tab so they can see the new row.
       toast({
         type: "success",
-        message: `${order.side.toUpperCase()} ${qty} ${symbol} staged — ${placed.status ?? "pending"}`,
+        message: `Order placed: ${qty} ${symbol} ${order.type} — ${placed.status ?? "pending"}`,
+        action: {
+          label: "View orders",
+          onClick: () => setBookTab("orders"),
+        },
       });
+
       // Bump a tick so OrderBar resets its internal field state via `key`.
       setOrderBarResetTick((t) => t + 1);
+
+      // Post-fill refresh (persona-3 P0 #5). Kick off in the background
+      // so we don't block the submit flow — the toast already fired.
+      refreshPortfolio().catch(() => {
+        /* already logged in each individual fetch helper */
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order submission failed";
       toast({ type: "error", message });
@@ -327,6 +425,32 @@ export default function DeskPage() {
       setSubmittingOrder(false);
     }
   }
+
+  /**
+   * Cancel a working order from the Orders tab.
+   *
+   * Removes the order optimistically from the store so the UI updates
+   * before the network roundtrip; on failure we re-pull to correct.
+   */
+  const handleCancelOrder = useCallback(
+    async (id: string) => {
+      try {
+        await cancelOrder(id);
+        usePortfolioStore
+          .getState()
+          .updateOrderStatus(id, "cancelled");
+        toast({ type: "success", message: "Order cancelled" });
+        // Refresh so the UI reflects the broker's final status (filled
+        // vs cancelled race) and positions update if the cancel was a
+        // no-op because the order already filled.
+        refreshPortfolio().catch(() => {});
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Cancel failed";
+        toast({ type: "error", message });
+      }
+    },
+    [toast, refreshPortfolio]
+  );
 
   return (
     <DeskLayout
@@ -377,12 +501,21 @@ export default function DeskPage() {
             strategies={strategyOptions}
             onSubmit={handleStageOrder}
             submitting={submittingOrder}
+            // Honest-default set (persona-3 P0 #7):
+            //   qty = 1 (not 100) — accidental over-submission is worse
+            //   type = market — first click doesn't error asking for a price
             defaults={{
               strategyId: selectedStrategyId,
               side: "buy",
-              quantity: 100,
-              type: "limit",
+              quantity: 1,
+              type: "market",
             }}
+            // The Alpaca base URL is always the paper endpoint in this
+            // deployment (see backend config), so the button label is
+            // accurate. If/when a LIVE config lands this string is a
+            // one-line change.
+            submitDestination="Submits to paper account"
+            submitLabel="Place order"
           />
         </>
       }
@@ -391,11 +524,24 @@ export default function DeskPage() {
           <div className="flex-1 min-h-0 overflow-auto">
             <PositionsList
               positions={positionRows}
+              // Wire the Orders tab to real data (persona-3 #8) —
+              // previously this tab rendered an empty state even when
+              // the store had working orders. Cancel + tab click work
+              // without a page navigation.
+              orders={orderRows}
+              onCancelOrder={handleCancelOrder}
               activeTab={bookTab}
               onTabChange={setBookTab}
               onRowClick={(id) => {
-                const p = positionRows.find((r) => r.id === id);
-                if (p) handleSelectSymbol(p.symbol);
+                // Orders tab passes the symbol directly; Positions tab
+                // passes the composite row id (symbol-index).
+                const pos = positionRows.find((r) => r.id === id);
+                if (pos) {
+                  handleSelectSymbol(pos.symbol);
+                  return;
+                }
+                // Fallback: treat the id as a symbol (Orders tab path).
+                handleSelectSymbol(id);
               }}
             />
           </div>

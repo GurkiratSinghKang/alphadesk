@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.auth import require_auth
 
@@ -121,6 +121,25 @@ class OrderLeg(BaseModel):
             raise ValueError("stop_price must be greater than 0")
         return v
 
+    @model_validator(mode="after")
+    def _require_prices_for_order_type(self) -> "OrderLeg":
+        """Cross-field guard — stop orders need a stop_price, limit orders need a limit_price.
+
+        The per-field validators above only reject *non-positive* values; they
+        accept ``None``. Previously a trader could POST a stop-loss with
+        ``stop_price=null``, which silently passed validation and reached the
+        broker with no trigger level — Alpaca then rejected it with an opaque
+        "Broker rejected order" message. Similarly, live GTC stops surfaced
+        from Alpaca with ``stop_price=null`` (see list_orders below for the
+        read-path fix). Reject both at the boundary so the user sees a 422
+        with a useful message instead of a 502 from the broker.
+        """
+        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and self.stop_price is None:
+            raise ValueError("stop_price is required for stop and stop_limit orders")
+        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and self.limit_price is None:
+            raise ValueError("limit_price is required for limit and stop_limit orders")
+        return self
+
 
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
@@ -139,6 +158,11 @@ class OrderResponse(BaseModel):
     filled_at: datetime | None = None
     avg_fill_price: float | None = None
     notes: str | None = None
+    # Surface the broker's reject reason when an order comes back as
+    # ``rejected``. Previously ``rejected`` was silently remapped to
+    # ``cancelled`` and the reason was discarded — a trader could not tell
+    # "I cancelled it" from "broker refused it" nor why it was refused.
+    reject_reason: str | None = None
 
 
 class PositionResponse(BaseModel):
@@ -369,7 +393,17 @@ async def list_orders(
     status: OrderStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
 ) -> list[OrderResponse]:
-    """List recent orders, optionally filtered by status."""
+    """List recent orders, optionally filtered by status.
+
+    Default changed in Wave 28: when no ``status`` filter is passed, this
+    endpoint now asks Alpaca for ``status=all`` instead of relying on the
+    broker's own default (which is ``open``). Previously a user who
+    cancelled an order saw an empty list immediately afterwards — the
+    cancelled order dropped out of the default view and the user couldn't
+    tell whether the cancellation had actually landed. With ``all``,
+    cancelled + rejected + filled orders remain visible so the ledger is
+    self-consistent.
+    """
     if _alpaca_keys_empty():
         return []
 
@@ -383,8 +417,26 @@ async def list_orders(
         }
 
         params: dict[str, Any] = {"limit": limit, "nested": "true"}
-        if status:
-            params["status"] = status.value
+        # When the caller passes an explicit status filter, forward it
+        # through using Alpaca's ``open`` / ``closed`` / ``all`` vocabulary;
+        # otherwise default to ``all`` so cancelled + rejected orders stay
+        # visible in the default view.
+        if status is None:
+            params["status"] = "all"
+        else:
+            # Normalise the enum to Alpaca's supported values.
+            if status in (OrderStatus.OPEN, OrderStatus.PENDING, OrderStatus.SUBMITTED):
+                params["status"] = "open"
+            elif status in (
+                OrderStatus.CLOSED,
+                OrderStatus.FILLED,
+                OrderStatus.PARTIAL,
+                OrderStatus.CANCELLED,
+                OrderStatus.REJECTED,
+            ):
+                params["status"] = "closed"
+            else:
+                params["status"] = "all"
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -396,6 +448,11 @@ async def list_orders(
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch orders from broker")
             orders_data = resp.json()
 
+        # ``rejected`` is preserved as-is so a trader can tell the
+        # difference between "I cancelled it" and "broker refused it".
+        # Previously this was silently remapped to CANCELLED, hiding the
+        # broker's reject_reason and breaking the frontend's notification
+        # listener that keys on ``status === "rejected"``.
         _alpaca_status_map: dict[str, OrderStatus] = {
             "new": OrderStatus.SUBMITTED,
             "accepted": OrderStatus.SUBMITTED,
@@ -406,7 +463,7 @@ async def list_orders(
             "cancelled": OrderStatus.CANCELLED,
             "expired": OrderStatus.CANCELLED,
             "replaced": OrderStatus.CANCELLED,
-            "rejected": OrderStatus.CANCELLED,
+            "rejected": OrderStatus.REJECTED,
             "stopped": OrderStatus.FILLED,
             "suspended": OrderStatus.PENDING,
             "pending_new": OrderStatus.PENDING,
@@ -414,24 +471,46 @@ async def list_orders(
             "pending_replace": OrderStatus.PENDING,
         }
 
-        return [
-            OrderResponse(
+        # If a specific status filter was asked for, do a final client-side
+        # pass so we only return orders whose *normalised* status matches
+        # (Alpaca's server-side filter is coarse: "open/closed/all").
+        filtered_client_side = status is not None
+
+        results: list[OrderResponse] = []
+        for o in orders_data:
+            mapped_status = _alpaca_status_map.get(o.get("status", ""), OrderStatus.PENDING)
+            if filtered_client_side and mapped_status != status:
+                # Special-case: a caller asking for "submitted" should also
+                # see "pending" rows — they're both open/unfilled.
+                if not (status == OrderStatus.SUBMITTED and mapped_status == OrderStatus.PENDING):
+                    continue
+
+            # Round-trip Alpaca's stop_price + limit_price onto the leg so
+            # the UI can show at what price a stop will trigger. Previously
+            # only limit_price was copied and 5 live stop orders returned
+            # ``stop_price: null`` — a silent data loss.
+            leg = OrderLeg(
+                symbol=o["symbol"],
+                side=OrderSide(o["side"]),
+                qty=float(o.get("qty", 0)),
+                order_type=OrderType(o.get("type", "market")),
+                limit_price=float(o["limit_price"]) if o.get("limit_price") else None,
+                stop_price=float(o["stop_price"]) if o.get("stop_price") else None,
+            )
+
+            reject_reason = o.get("reject_reason") or o.get("message")
+
+            results.append(OrderResponse(
                 id=o["id"],
-                status=_alpaca_status_map.get(o.get("status", ""), OrderStatus.PENDING),
-                legs=[OrderLeg(
-                    symbol=o["symbol"],
-                    side=OrderSide(o["side"]),
-                    qty=float(o.get("qty", 0)),
-                    order_type=OrderType(o.get("type", "market")),
-                    limit_price=float(o["limit_price"]) if o.get("limit_price") else None,
-                )],
+                status=mapped_status,
+                legs=[leg],
                 time_in_force=TimeInForce(o.get("time_in_force", "day")),
                 submitted_at=o.get("submitted_at", datetime.now(timezone.utc).isoformat()),
                 filled_at=o.get("filled_at"),
                 avg_fill_price=float(o["filled_avg_price"]) if o.get("filled_avg_price") else None,
-            )
-            for o in orders_data
-        ]
+                reject_reason=reject_reason if mapped_status == OrderStatus.REJECTED else None,
+            ))
+        return results
     except HTTPException:
         raise
     except Exception:
@@ -659,13 +738,32 @@ async def get_trade_history(
 # ---------------------------------------------------------------------------
 
 async def _check_duplicate_order(request: CreateOrderRequest) -> None:
-    """Prevent duplicate orders within a 30-second window using atomic Redis SET NX."""
+    """Prevent duplicate orders within a 30-second window using atomic Redis SET NX.
+
+    The dedup hash now includes ``limit_price`` + ``stop_price`` + ``time_in_force``
+    — previously it only hashed symbol/side/qty/type, which meant a legitimate
+    ladder of limit orders (e.g. buy 1 @ $50, then buy 1 @ $75) got rejected
+    as "duplicate" for 30s because the qty/side/symbol match. Including price
+    makes distinct limit prices distinct orders.
+    """
     from core.redis import get_redis
 
-    # Create a hash of ALL legs (not just the first)
+    # Create a hash of ALL legs (not just the first), including prices so
+    # orders that differ only by price are not treated as duplicates.
     order_key = hashlib.sha256(
         json.dumps(
-            [{"s": l.symbol, "sd": l.side.value, "q": l.qty, "t": l.order_type.value} for l in request.legs],
+            [
+                {
+                    "s": l.symbol,
+                    "sd": l.side.value,
+                    "q": l.qty,
+                    "t": l.order_type.value,
+                    "lp": l.limit_price if l.limit_price is not None else "",
+                    "sp": l.stop_price if l.stop_price is not None else "",
+                }
+                for l in request.legs
+            ]
+            + [{"tif": request.time_in_force.value}],
             sort_keys=True,
         ).encode()
     ).hexdigest()
@@ -863,8 +961,43 @@ async def create_alert(
     body: CreateAlertRequest,
     username: str = Depends(require_auth),
 ):
-    """Create a new price alert. Persisted in Redis."""
+    """Create a new price alert. Persisted in Redis.
+
+    Dedup (Wave 28): before inserting, scan existing non-triggered alerts
+    for the same ``(symbol, price, condition)`` tuple. If one exists and
+    has not yet fired, return 409 instead of silently storing a second
+    copy. Previously clicking "Create Alert" twice (or a double-tap on
+    mobile) produced two identical alerts, and when the price crossed the
+    threshold the user got two toasts + two chips for the same event.
+    """
     import uuid
+
+    # Dedup check against the live alert set.
+    try:
+        existing = await _get_all_alerts()
+        for a in existing:
+            if a.get("triggered"):
+                continue
+            if (
+                a.get("symbol") == body.symbol.upper()
+                and float(a.get("price", 0)) == float(body.price)
+                and a.get("condition") == body.condition
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"An active alert already exists for {body.symbol.upper()} "
+                        f"{body.condition} ${body.price:.2f}."
+                    ),
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        # If Redis is unavailable the list fetch will have logged; don't
+        # block alert creation on a dedup-check failure — the save below
+        # will also fail and return a clearer error.
+        logger.debug("Alert dedup check skipped due to error", exc_info=True)
+
     alert = {
         "id": f"alert-{uuid.uuid4().hex[:8]}",
         "symbol": body.symbol.upper(),

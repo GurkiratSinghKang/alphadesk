@@ -22,10 +22,33 @@ import {
 
 export type StrategyGroup = "fundamental" | "technical" | "other";
 
-export const STRATEGY_META: Record<
-  string,
-  { name: string; shortName: string; icon: typeof Activity; regimeNote: string; group: StrategyGroup }
-> = {
+/**
+ * Implementation stage — mirrors the ``implementation_stage`` helper in
+ * ``backend/strategies/registry.py``. Keep the two lists in sync when adding
+ * or shipping a strategy.
+ *
+ *   · "live"    — a real Python package ships under ``backend/strategies/<name>/``
+ *                 and the OOS metrics are real.
+ *   · "planned" — advertised in the catalogue but no implementation yet; UI
+ *                 should render a muted "Coming soon" card instead of an
+ *                 "Active" pill.
+ *   · "other"   — ledger-backed (manual trades) or otherwise outside the
+ *                 live/planned axis. Surface raw status from the API.
+ */
+export type StrategyStage = "live" | "planned" | "other";
+
+export interface StrategyMetaEntry {
+  name: string;
+  shortName: string;
+  icon: typeof Activity;
+  regimeNote: string;
+  group: StrategyGroup;
+  /** Implementation stage (see :type:`StrategyStage`). Defaults to "live"
+   *  when omitted so adding a new real package is one line. */
+  stage?: StrategyStage;
+}
+
+export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
   // ─── Fundamental / Options Strategies ──────────────────────
   "momentum-quality": {
     name: "Cross-Sectional Momentum + Quality",
@@ -68,6 +91,7 @@ export const STRATEGY_META: Record<
     icon: Zap,
     regimeNote: "AI-driven, regime-aware",
     group: "fundamental",
+    stage: "planned",
   },
   "dividend-capture": {
     name: "Dividend Capture",
@@ -75,6 +99,7 @@ export const STRATEGY_META: Record<
     icon: DollarSign,
     regimeNote: "Income-focused, stable markets",
     group: "fundamental",
+    stage: "planned",
   },
   "sector-rotation": {
     name: "Sector Rotation Model",
@@ -82,6 +107,7 @@ export const STRATEGY_META: Record<
     icon: PieChart,
     regimeNote: "Trend-following across sectors",
     group: "fundamental",
+    stage: "planned",
   },
 
   // ─── Technical Analysis Strategies ─────────────────────────
@@ -119,6 +145,7 @@ export const STRATEGY_META: Record<
     icon: GitMerge,
     regimeNote: "Market-neutral cointegration",
     group: "technical",
+    stage: "planned",
   },
   "kama-breakout": {
     name: "KAMA + ATR Breakout",
@@ -147,6 +174,7 @@ export const STRATEGY_META: Record<
     icon: Activity,
     regimeNote: "Favored in sideways markets",
     group: "technical",
+    stage: "planned",
   },
   "vcp-breakout": {
     name: "VCP Breakout",
@@ -154,6 +182,7 @@ export const STRATEGY_META: Record<
     icon: Crosshair,
     regimeNote: "Minervini SEPA methodology",
     group: "technical",
+    stage: "planned",
   },
   "gap-fill": {
     name: "Overnight Gap Fill",
@@ -161,17 +190,34 @@ export const STRATEGY_META: Record<
     icon: ArrowLeftRight,
     regimeNote: "Intraday, paused after hours",
     group: "technical",
+    stage: "planned",
   },
 
   // ─── Other ─────────────────────────────────────────────────
+  // Manual/discretionary is NOT a ghost — it's the first-class bucket for
+  // user-initiated trades, backed by the trade ledger
+  // (``backend/data/ingestion/trade_ledger.py``). Keep ``stage: "other"``.
   "manual-discretionary": {
     name: "Manual / Discretionary",
     shortName: "Manual",
     icon: User,
     regimeNote: "Trader-initiated, all regimes",
     group: "other",
+    stage: "other",
   },
 };
+
+/** Convenience accessor: treat missing ``stage`` as "live" so callers can
+ *  write ``metaStage(id) === "planned"`` without null-handling. */
+export function metaStage(id: string): StrategyStage {
+  return STRATEGY_META[id]?.stage ?? "live";
+}
+
+/** True when the strategy ships a real backend implementation (decorator-
+ *  registered package). Ghosts and manual return false. */
+export function isStrategyLive(id: string): boolean {
+  return metaStage(id) === "live";
+}
 
 export const STRATEGY_ORDER: string[] = [
   // Fundamental
