@@ -89,6 +89,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Continuous monitor failed to start", exc_info=True)
 
+    # Wave 41: reconcile any trades submitted to Alpaca that didn't make it
+    # into the local ledger (power-loss mid-POST, container kill mid-submit).
+    # Backfills missing Trade rows and flags orphaned local pending rows.
+    try:
+        from api.routes.trades import reconcile_on_boot
+        await reconcile_on_boot()
+    except Exception:
+        logger.warning("Boot reconcile raised", exc_info=True)
+
     yield
 
     # Stop real-time scanner
@@ -146,7 +155,7 @@ app.add_middleware(
     allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Idempotency-Key"],
 )
 
 # Only trust X-Forwarded-For from Caddy and the loopback. Caddy lives in the

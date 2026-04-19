@@ -133,6 +133,38 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
     )
     return None
 
+# ----- Halt checkpoint (persona-16 P0-1) -----
+# The admin panic-button halt flag lives in Redis under the same key that
+# ``backend/api/routes/trades.py`` writes to from ``POST /api/v1/trades/halt``.
+# Before persona-16 the pipeline ignored it entirely — an operator hitting
+# the button still watched the bot trade on the next cron tick. We now check
+# the flag at every pipeline stage entry.
+
+_HALT_REDIS_KEY = "trading:halted"
+
+
+async def _is_trading_halted() -> bool:
+    """Return True if the admin halt flag is set.
+
+    Mirrors ``trades._is_trading_halted`` but kept local to avoid a circular
+    import (trades -> master_agent -> daily_pipeline loop). Fails *closed* —
+    if Redis is unreachable we treat the system as halted so an outage
+    doesn't silently enable trading during a crisis.
+    """
+    try:
+        from core.redis import cache_get
+        result = await cache_get(_HALT_REDIS_KEY)
+        if result is not None and isinstance(result, dict):
+            return bool(result.get("halted", False))
+        return False
+    except Exception:
+        logger.warning(
+            "Pipeline halt-flag check failed; treating as HALTED for safety",
+            exc_info=True,
+        )
+        return True
+
+
 # ----- Pipeline state -----
 # `_pipeline_lock` is the single source of truth for "is the pipeline currently
 # running" — `.locked()` is exposed via /pipeline/status. The dict below holds
@@ -480,6 +512,199 @@ async def _poll_fill_price(
     return None
 
 
+# =====================================================================
+# Bracket outbox (persona-65 F8 / P65)
+# =====================================================================
+# The bracket-fallback path in ``_execute_approved_orders`` places an entry
+# and then (if the bracket class wasn't accepted) posts stop + TP as
+# separate Alpaca calls. A SIGKILL between the entry fill and the stop
+# POST leaves the position naked and invisible to the next pipeline run.
+#
+# We fix this with a tiny outbox: before submitting the entry we write a
+# Redis hash ``outbox:pending:{uuid}`` with the full plan, then update its
+# status field as each leg submits, and finally delete it when all three
+# legs are either on the broker or explicitly abandoned. On boot,
+# ``replay_pending_brackets()`` walks every remaining outbox row and
+# reconciles it against Alpaca: if the entry filled and the stop is still
+# missing, we place the stop now; if the entry never filled, we discard
+# the row.
+
+_OUTBOX_PREFIX = "outbox:pending:"
+_OUTBOX_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days — plenty for recovery, bounds growth
+
+
+async def _outbox_create(
+    outbox_id: str, plan: dict[str, Any],
+) -> None:
+    """Write the pre-submission bracket plan to Redis."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return
+        key = _OUTBOX_PREFIX + outbox_id
+        plan_copy = {**plan, "status": "planned",
+                     "created_at": datetime.now(timezone.utc).isoformat()}
+        # Store as JSON in a single hash field for readability + atomic
+        # replacement. (HSET stringly-typed everywhere avoids Redis type
+        # coercion surprises.)
+        await redis.hset(key, "plan", json.dumps(plan_copy))
+        await redis.expire(key, _OUTBOX_TTL_SECONDS)
+    except Exception:
+        logger.warning(
+            "Bracket outbox create failed (id=%s) — continuing without "
+            "recovery guarantee", outbox_id, exc_info=True,
+        )
+
+
+async def _outbox_update(outbox_id: str, patch: dict[str, Any]) -> None:
+    """Merge ``patch`` into the stored plan."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return
+        key = _OUTBOX_PREFIX + outbox_id
+        raw = await redis.hget(key, "plan")
+        if not raw:
+            return
+        plan = json.loads(raw)
+        plan.update(patch)
+        plan["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await redis.hset(key, "plan", json.dumps(plan))
+    except Exception:
+        logger.warning(
+            "Bracket outbox update failed (id=%s)", outbox_id, exc_info=True,
+        )
+
+
+async def _outbox_delete(outbox_id: str) -> None:
+    """Clear an outbox row once the multi-leg order is fully settled."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return
+        await redis.delete(_OUTBOX_PREFIX + outbox_id)
+    except Exception:
+        logger.warning("Bracket outbox delete failed (id=%s)", outbox_id, exc_info=True)
+
+
+async def replay_pending_brackets() -> list[dict[str, Any]]:
+    """Replay any outbox rows left over from a previous (crashed) run.
+
+    Call on boot — walks every ``outbox:pending:*`` row and reconciles it
+    against Alpaca's order / position state:
+
+      * entry absent on broker -> discard the row (entry never reached
+        Alpaca, nothing to protect).
+      * entry filled and stop already open -> discard.
+      * entry filled and stop missing -> submit the stop now.
+      * entry still pending at broker -> leave the row for the next replay.
+
+    Returns the list of actions taken so boot code / tests can assert on
+    behaviour. Errors per-row do not abort the whole replay.
+    """
+    actions: list[dict[str, Any]] = []
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return actions
+        async for key in redis.scan_iter(match=_OUTBOX_PREFIX + "*"):
+            try:
+                raw = await redis.hget(key, "plan")
+                if not raw:
+                    await redis.delete(key)
+                    continue
+                plan = json.loads(raw)
+                sym = plan.get("symbol")
+                strategy = plan.get("strategy", "unknown")
+                qty = int(plan.get("qty", 0))
+                stop = plan.get("stop")
+                entry_order_id = plan.get("entry_order_id")
+                outbox_id = key.split(":", 2)[-1]
+                if not sym or qty <= 0:
+                    await redis.delete(key)
+                    actions.append({"id": outbox_id, "action": "discard_invalid"})
+                    continue
+
+                async with httpx.AsyncClient(timeout=10) as client:
+                    # Check current Alpaca state for this symbol
+                    try:
+                        resp = await client.get(
+                            f"{_base_url()}/v2/positions/{sym}",
+                            headers=_alpaca_headers(),
+                        )
+                        entry_filled = resp.status_code == 200
+                    except Exception:
+                        entry_filled = False
+
+                    if not entry_filled and not entry_order_id:
+                        # Never made it to broker — discard.
+                        await redis.delete(key)
+                        actions.append({"id": outbox_id, "action": "discard_no_entry", "symbol": sym})
+                        continue
+
+                    # Check if a stop is already on the books
+                    has_stop = False
+                    try:
+                        r = await client.get(
+                            f"{_base_url()}/v2/orders",
+                            headers=_alpaca_headers(),
+                            params={"status": "open", "symbols": sym},
+                        )
+                        if r.status_code == 200:
+                            for o in r.json():
+                                if o.get("type") == "stop" and o.get("side") == "sell":
+                                    has_stop = True
+                                    break
+                    except Exception:
+                        logger.warning(
+                            "replay: could not list open orders for %s", sym,
+                            exc_info=True,
+                        )
+
+                    if entry_filled and not has_stop and stop and stop > 0:
+                        try:
+                            await _place_stop_order(client, sym, qty, float(stop))
+                            await redis.delete(key)
+                            actions.append({
+                                "id": outbox_id, "action": "placed_stop",
+                                "symbol": sym, "stop": stop,
+                            })
+                            logger.warning(
+                                "Bracket replay: placed missing stop for %s @ $%.2f "
+                                "(strategy=%s)", sym, float(stop), strategy,
+                            )
+                            continue
+                        except Exception:
+                            logger.error(
+                                "Bracket replay: failed to place stop for %s",
+                                sym, exc_info=True,
+                            )
+                            actions.append({
+                                "id": outbox_id, "action": "stop_place_failed",
+                                "symbol": sym,
+                            })
+                            continue
+
+                    if entry_filled and has_stop:
+                        await redis.delete(key)
+                        actions.append({
+                            "id": outbox_id, "action": "clean_entry_and_stop",
+                            "symbol": sym,
+                        })
+            except Exception:
+                logger.error(
+                    "Bracket replay: row processing failed (key=%s)", key,
+                    exc_info=True,
+                )
+    except Exception:
+        logger.error("Bracket replay walk failed", exc_info=True)
+    return actions
+
+
 async def _execute_approved_orders(
     client: httpx.AsyncClient,
     master: MasterAgent,
@@ -527,6 +752,21 @@ async def _execute_approved_orders(
             used_bracket = False
             fill_price: float | None = None  # populated by _poll_fill_price below
 
+            # Persona-65: pre-register the multi-leg plan in the outbox BEFORE
+            # we touch Alpaca. A SIGKILL between this write and the legs
+            # lands the row in Redis for ``replay_pending_brackets()`` to
+            # reconcile on boot.
+            outbox_id = uuid.uuid4().hex
+            await _outbox_create(outbox_id, {
+                "outbox_id": outbox_id,
+                "strategy": strategy_name,
+                "symbol": sym,
+                "qty": shares,
+                "entry": order_entry_estimate,
+                "stop": effective_stop,
+                "tp": tp_estimate,
+            })
+
             if effective_stop and effective_stop > 0:
                 # Atomic bracket: entry + stop (+ optional TP). Alpaca either
                 # accepts the whole envelope or rejects it whole — no half-state
@@ -541,6 +781,13 @@ async def _execute_approved_orders(
                     )
                     order_id = result.get("id")
                     used_bracket = True
+                    # Bracket is atomic at the broker — entry + stop + TP all
+                    # booked together, so the outbox row can be retired as
+                    # soon as the POST returns 2xx.
+                    await _outbox_update(outbox_id, {
+                        "status": "bracket_submitted",
+                        "entry_order_id": order_id,
+                    })
                 except Exception as bracket_err:
                     # Bracket failed (e.g. account doesn't support it, bad
                     # params). Fall back to plain market order, but the
@@ -556,6 +803,13 @@ async def _execute_approved_orders(
                         strategy=strategy_name,
                     )
                     order_id = result.get("id")
+                    # Entry submitted, stop NOT yet on the broker — outbox
+                    # must reflect the vulnerable half-state so a SIGKILL
+                    # between here and the stop POST is recoverable.
+                    await _outbox_update(outbox_id, {
+                        "status": "entry_submitted_no_stop",
+                        "entry_order_id": order_id,
+                    })
             else:
                 # No stop available — place plain market order. We still
                 # record the trade but log a CRITICAL because the position is
@@ -570,6 +824,10 @@ async def _execute_approved_orders(
                     strategy=strategy_name,
                 )
                 order_id = result.get("id")
+                await _outbox_update(outbox_id, {
+                    "status": "entry_submitted_no_stop_planned",
+                    "entry_order_id": order_id,
+                })
 
             # Record the entry with the pre-trade estimate first
             ledger.record_entry(
@@ -638,6 +896,12 @@ async def _execute_approved_orders(
                             sym,
                             stop_oid.get("id") if isinstance(stop_oid, dict) else stop_oid,
                         )
+                        # Stop is now live at the broker — outbox no longer
+                        # needs to protect the vulnerable gap.
+                        await _outbox_update(outbox_id, {
+                            "status": "entry_and_stop_submitted",
+                            "stop_order_id": stop_oid.get("id") if isinstance(stop_oid, dict) else None,
+                        })
                     except Exception as stop_err:
                         logger.critical(
                             "CRITICAL: stop-loss order FAILED for %s after entry "
@@ -700,6 +964,11 @@ async def _execute_approved_orders(
                 "status": result.get("status"),
                 "bracket": used_bracket,
             })
+            # All legs are either at the broker or explicitly abandoned —
+            # the outbox row has served its purpose. Deleting it here keeps
+            # the Redis set bounded and makes the next ``replay_pending_brackets``
+            # pass a no-op for this order.
+            await _outbox_delete(outbox_id)
         except Exception as e:
             logger.error("Order failed for %s", sym, exc_info=True)
 
@@ -724,6 +993,9 @@ async def _execute_approved_orders(
                 o for o in master.pending_orders if o.get("symbol") != sym
             ]
 
+            # Leave the outbox row for replay to inspect — if the entry
+            # actually reached Alpaca and filled despite the exception,
+            # the replay will add the missing stop.
             orders_placed.append({
                 "symbol": sym,
                 "side": "buy",
@@ -1018,6 +1290,19 @@ async def _run_pipeline_inner(
     CURRENT_PROGRESS = None
     _check_cancel("init")
 
+    # Halt checkpoint at run entry (persona-16 P0-1): if the admin flag is
+    # set when the scheduler fires, fail fast before the pipeline does any
+    # expensive work. The same check is re-run at every strategy boundary
+    # and before execution, so a halt flipped mid-run is still honoured.
+    if await _is_trading_halted():
+        logger.warning("Pipeline aborted at entry — trading halted by admin")
+        _pipeline_status["last_result"] = "halted_by_admin"
+        return {
+            "halted_by_admin": True,
+            "message": "Pipeline did not run — trading halted by admin.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
     errors: list[str] = []
     log: dict[str, Any] = {
         "date": _now_et().strftime("%Y-%m-%d"),
@@ -1039,6 +1324,20 @@ async def _run_pipeline_inner(
             now = _now_et()
             logger.warning("Outside trading window (%s ET)", now.strftime("%H:%M"))
             errors.append(f"Outside trading window ({now.strftime('%H:%M')} ET)")
+
+        # Persona-65 P65: reconcile any bracket outbox rows left over from
+        # a previous crashed run BEFORE we start a new one. Any row whose
+        # entry filled but stop was never placed gets the missing stop
+        # submitted now. Errors here are logged but do not abort the run.
+        try:
+            replay_actions = await replay_pending_brackets()
+            if replay_actions:
+                logger.warning(
+                    "Bracket outbox replay took %d action(s)", len(replay_actions),
+                )
+                log["bracket_replay"] = replay_actions
+        except Exception:
+            logger.error("Bracket outbox replay failed", exc_info=True)
 
         ledger = TradeLedger()
 
@@ -1240,6 +1539,29 @@ async def _run_pipeline_inner(
                 global CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
                 nonlocal _completed_strategies
                 strat_name = strategy.name
+
+                # Halt checkpoint (persona-16 P0-1): the admin halt flag must
+                # stop the strategy loop at the entrance of each stage, not
+                # only in the manual-order handler. If the operator hits the
+                # panic button after screen() started, we still bail before
+                # generate_trades() can request any new orders.
+                if await _is_trading_halted():
+                    logger.warning(
+                        "Strategy %s skipped — trading halted by admin",
+                        strat_name,
+                    )
+                    _completed_strategies += 1
+                    if CURRENT_PROGRESS is not None:
+                        CURRENT_PROGRESS = {
+                            "current": _completed_strategies,
+                            "total": num_strategies,
+                        }
+                    return strat_name, {
+                        "screened": 0, "analyzed": 0, "analyses": [],
+                        "trades_requested": 0, "trades_approved": 0,
+                        "trades": [], "halted_by_admin": True,
+                    }
+
                 # Cooperative cancel: check before each strategy boundary.
                 _check_cancel(f"strategy:{strat_name}")
                 # Update live status. Multiple strategies execute in
@@ -1339,6 +1661,24 @@ async def _run_pipeline_inner(
             CURRENT_STAGE = "execute"
             CURRENT_STRATEGY = None  # back to "everyone" for execution
             _check_cancel("execute")
+
+            # Halt checkpoint (persona-16 P0-1): even if strategies produced
+            # approved orders before the halt was flipped, we MUST NOT send
+            # them to Alpaca. The halt flag takes precedence over any
+            # pre-halt work in-flight.
+            if await _is_trading_halted():
+                logger.warning(
+                    "Order execution skipped — trading halted by admin "
+                    "(approved=%d discarded)",
+                    len(master.pending_orders),
+                )
+                log["orders_placed"] = []
+                log["halted_by_admin"] = True
+                errors.append("Trading halted by admin — orders not submitted")
+                _pipeline_status["last_result"] = "halted_by_admin"
+                _save_log(log)
+                return log
+
             orders_placed = await _execute_approved_orders(client, master, ledger)
             log["orders_placed"] = orders_placed
 

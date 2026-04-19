@@ -1,4 +1,63 @@
+# ---------------------------------------------------------------------------
+# Global options block (must come before any site blocks)
+# ---------------------------------------------------------------------------
+# Timeouts close the slow-loris / slow-body hole — a client that opens a
+# connection and dribbles bytes forever will now be dropped:
+#   read_header  : how long to wait for the full request line + headers
+#   read_body    : how long to wait for the full request body
+#   write        : how long we'll spend sending the response
+#   idle         : how long a keep-alive connection can sit idle
+#
+# Without these, Caddy's defaults allow very long-lived stalled sockets that
+# tie up worker slots. See P38 (Caddy has no rate-limit directive).
+#
+# NOTE: Caddy core has NO built-in per-IP rate_limit directive. A real QPS
+# cap requires the third-party `caddy-ratelimit` plugin (github.com/mholt/
+# caddy-ratelimit). Without the plugin, timeouts + max_request_body below
+# close the slow-loris class of abuse but do NOT bound request-per-second.
+# TODO: install caddy-ratelimit plugin and add a `rate_limit` handler here
+#       once we rebuild the Caddy image with xcaddy. Until then, per-IP QPS
+#       caps live at the application layer (see auth.py `_check_rate_limit`
+#       and agents.py `_enforce_chat_rate_limit`).
+{
+    servers {
+        timeouts {
+            read_header 5s
+            read_body   10s
+            write       30s
+            idle        120s
+        }
+        # 64KB cap on request headers — defence against header-bomb / slowloris
+        # where a peer dribbles in endless headers to exhaust memory. Request
+        # *body* cap lives per-site below (Caddyfile grammar puts `request_body`
+        # inside the site block, not here).
+        max_header_size 64KB
+    }
+}
+
 {$DOMAIN:localhost} {
+    # Per-site request body cap (2 MB) — slow-body defence. Anything larger
+    # than this is rejected early instead of buffered. JSON payloads for our
+    # endpoints are a few KB at most; 2 MB leaves generous headroom for
+    # future file-upload-ish endpoints without permitting multi-GB dribbles.
+    request_body {
+        max_size 2MB
+    }
+
+    # Access log — without this, Caddy logs only errors to stderr and we have
+    # no audit trail of who hit what. ``json`` format is what our aggregator
+    # expects. Rotation is handled by Caddy itself (100 MB per file, 10 files
+    # retained, 720h = 30d max age) so the container volume does not fill.
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100MB
+            roll_keep 10
+            roll_keep_for 720h
+        }
+        format json
+        level INFO
+    }
+
     # Security headers
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

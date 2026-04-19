@@ -55,6 +55,25 @@ from core.config import settings
 
 router = APIRouter()
 
+# Precomputed bcrypt hash used as the constant-time comparison target when
+# the submitted username does NOT match ADMIN_USERNAME. Prevents a username-
+# enumeration timing oracle (P37): without this, the login handler would
+# short-circuit on unknown usernames and skip bcrypt entirely, so an
+# attacker could distinguish "user exists, wrong password" (~100ms for
+# bcrypt cost=14) from "user does not exist" (~sub-ms) and enumerate
+# accounts. With the dummy-hash path, bcrypt runs on every request
+# regardless of whether the username is real.
+#
+# The hash corresponds to a fixed throwaway string — it cannot match any
+# real password submission because bcrypt collision resistance makes that
+# infeasible. Precomputed at module load so we pay the cost once, not per
+# request. Cost factor MUST match the production hash cost so timing
+# between the real and dummy branches is indistinguishable; bcrypt defaults
+# to cost=12, our admin hashes use cost=14, so we pin 14 here too.
+_DUMMY_PASSWORD_HASH = (
+    "$2b$14$z4t5/lWyhLyKZd2QmJSdE.39Hqtyc.RzbgdFxBGrJwC38RGNmahoG"
+)
+
 # Minimum password length when accepting new credentials (signup, password
 # change, password reset). Existing bcrypt hashes with shorter passwords are
 # NOT re-validated — this is a forward bar only. See security-audit-r3.md
@@ -309,10 +328,41 @@ async def login(request: LoginRequest, req: Request):
     # auth failure. See edge-cases-audit-r3.md I/P1.
     submitted_username = (request.username or "").strip()
 
-    if (
-        submitted_username != settings.ADMIN_USERNAME
-        or not settings.ADMIN_PASSWORD_HASH
-        or not verify_password(request.password, settings.ADMIN_PASSWORD_HASH)
+    # P37 fix — username enumeration timing oracle.
+    # Previously this branch short-circuited on a username mismatch and never
+    # called bcrypt, so a non-existent account returned in ~sub-millisecond
+    # while a real account took the full bcrypt-cost-14 latency (~100ms).
+    # That delta let an attacker enumerate valid usernames by measuring
+    # response time from outside the box.
+    #
+    # Fix: always run bcrypt, against ADMIN_PASSWORD_HASH if the username
+    # matches, else against a precomputed dummy hash. Both paths pay the same
+    # bcrypt cost, so the timing no longer leaks which usernames exist. We
+    # also guard for an unconfigured admin (ADMIN_PASSWORD_HASH empty) by
+    # falling back to the dummy hash there too.
+    username_matches = submitted_username == settings.ADMIN_USERNAME
+    target_hash = (
+        settings.ADMIN_PASSWORD_HASH
+        if username_matches and settings.ADMIN_PASSWORD_HASH
+        else _DUMMY_PASSWORD_HASH
+    )
+    # verify_password can raise on a malformed hash string — guard so a
+    # config error doesn't turn into a 500 (which is itself a timing/identity
+    # side-channel). ``password_ok`` stays False on any exception.
+    try:
+        password_ok = verify_password(request.password, target_hash)
+    except Exception:
+        logger.warning("verify_password raised — treating as failed auth", exc_info=True)
+        password_ok = False
+
+    # Auth succeeds ONLY if (a) bcrypt matched AND (b) we compared against
+    # the real admin hash. The dummy-hash branch can never succeed: a match
+    # against the dummy hash would imply a bcrypt collision, and even then
+    # the explicit ``username_matches`` gate blocks it.
+    if not (
+        username_matches
+        and settings.ADMIN_PASSWORD_HASH
+        and password_ok
     ):
         # Audit the failed attempt. ``user`` records the *submitted* username
         # so investigations can see attempts against non-existent accounts.

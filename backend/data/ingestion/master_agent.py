@@ -79,20 +79,43 @@ class MasterAgent:
 
     _STRATEGY_LIMITS_CACHE: dict[str, float] | None = None
 
+    # Categories that should NOT be included in strategy-limit allocation.
+    # `smoke` strategies (category=="smoke") are registered for engine
+    # round-trip tests but excluded from `build_all_strategies()` — counting
+    # them in the 1/N divisor reserves an unused slot and makes the real
+    # runners collectively under-allocate their slice while the non-running
+    # smoke name hoards 1/N. Persona-63 P0-3.
+    EXCLUDE_FROM_LIMITS: set[str] = {"smoke"}
+
     @classmethod
     def _build_strategy_limits(cls) -> dict[str, float]:
         """Build the per-strategy notional cap dict from the registry.
 
-        Equal-weight across registered strategies (``1/N`` each), with
-        per-name overrides applied on top. Cached so the registry is only
-        walked once per process.
+        Equal-weight across registered *runnable* strategies (``1/N`` each),
+        with per-name overrides applied on top. Cached so the registry is
+        only walked once per process.
+
+        Excludes strategies whose :class:`StrategyMeta.category` is in
+        :attr:`EXCLUDE_FROM_LIMITS` (e.g. ``smoke``) so the divisor matches
+        what ``build_all_strategies`` actually runs — persona-63 P0-3. If
+        the total somehow exceeds 1.0 (override misconfiguration) we
+        normalize so the portfolio cap stays an invariant.
         """
         if cls._STRATEGY_LIMITS_CACHE is not None:
             return cls._STRATEGY_LIMITS_CACHE
         try:
-            from strategies.registry import load_all, list_names
+            from strategies.registry import load_all, list_strategies
             load_all()  # idempotent — ensures registry is populated
-            names = list_names()
+            metas = list_strategies()
+            # Filter out excluded categories (smoke, etc.) to match
+            # strategy_adapter.build_all_strategies(). This prevents the
+            # off-by-one where N=13 (incl. buy_and_hold_spy) but only 12
+            # strategies actually ran and each got 1/13 ≈ 7.69% with one
+            # slot reserved for a never-run name.
+            names = [
+                m.name for m in metas
+                if m.category not in cls.EXCLUDE_FROM_LIMITS
+            ]
         except Exception as exc:
             logger.warning(
                 "Could not load strategy registry (%s); STRATEGY_LIMITS "
@@ -107,10 +130,24 @@ class MasterAgent:
                 limits[n] = equal
         # Apply overrides on top of equal-weight
         limits.update(cls.STRATEGY_LIMIT_OVERRIDES)
+
+        # Hard invariant: sum(limits) must not exceed 1.0 — otherwise the
+        # portfolio deployment cap is unenforceable by construction. Overrides
+        # that push the sum past 1.0 get proportionally normalized.
+        total = sum(limits.values())
+        if total > 1.0:
+            logger.warning(
+                "STRATEGY_LIMITS sum=%.4f exceeds 1.0; normalizing to preserve "
+                "portfolio deployment invariant.", total,
+            )
+            limits = {k: v / total for k, v in limits.items()}
+
         cls._STRATEGY_LIMITS_CACHE = limits
         logger.info(
-            "STRATEGY_LIMITS built from registry: %d strategies, equal weight=%.4f",
+            "STRATEGY_LIMITS built from registry: %d runnable strategies, "
+            "equal weight=%.4f, sum=%.4f",
             len(names), (1.0 / len(names)) if names else 0.0,
+            sum(limits.values()),
         )
         return limits
 
@@ -208,10 +245,38 @@ class MasterAgent:
             else dict(self._SHARED_ABSOLUTE_MOMENTUM_DATA)
         )
 
-        # P1: Strategy drawdown tracking
+        # P1: Strategy drawdown tracking. Seeded from Redis so peaks and
+        # halt state survive across pipeline runs — persona-16 P0-5 /
+        # persona-63 P0-4. Falls back to empty dicts when Redis is
+        # unavailable or the keys don't yet exist; the background
+        # :meth:`_load_persisted_state` task repopulates them shortly after
+        # __init__ (fire-and-forget because __init__ is sync). Reads that
+        # happen before the task completes see the empty state — safer than
+        # blocking __init__ on Redis round-trips for a cold boot.
         self.strategy_peaks: dict[str, float] = {}
         self.strategy_current: dict[str, float] = {}
         self.halted_strategies: set[str] = set()
+        self._state_loaded: bool = False
+        # Schedule async load — if there's an event loop running we pick up
+        # persisted state shortly; if not (e.g. synchronous test), the
+        # caller can ``await master.load_persisted_state()`` explicitly.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.load_persisted_state())
+        except RuntimeError:
+            # No running loop yet — skip; caller should await load before use.
+            pass
+
+        # Per-instance asyncio lock serialising check-then-act on
+        # cash / positions / pending_orders in :meth:`request_trade` and
+        # :meth:`request_trade_smart`. Persona-63 P0-1, P0-2, P0-5: under
+        # ``asyncio.gather`` of 12 strategies, concurrent `request_trade_smart`
+        # calls await Claude between the check and the write; without a
+        # lock the deployment / sector / duplicate-symbol invariants are
+        # defeated. Cross-worker serialisation is backend-scope (single
+        # gunicorn worker today; revisit if we scale horizontally).
+        self._trade_lock = asyncio.Lock()
 
         # P3: Regime detection
         self.vix_level = vix_level
@@ -219,19 +284,164 @@ class MasterAgent:
         self.max_deployment = self.REGIME_DEPLOYMENT_LIMITS[self.regime]
 
     # ------------------------------------------------------------------
+    # Redis-persisted drawdown state (persona-16 P0-5 / persona-63 P0-4)
+    # ------------------------------------------------------------------
+    # Without persistence, ``strategy_peaks`` and ``halted_strategies`` reset
+    # on every pipeline-run because ``daily_pipeline.py`` constructs a fresh
+    # MasterAgent each invocation. Yesterday's -5% halt is forgotten before
+    # this morning's cron tick — making the drawdown limit unreachable
+    # across runs. We persist both to Redis so the 30-day-rolling drawdown
+    # view actually sticks.
+
+    # 30-day TTL: stale halts older than that are presumed resolved (strategy
+    # code has been iterated / peak definition no longer valid). Short enough
+    # that a dormant name doesn't block forever.
+    _STATE_TTL_SECONDS: int = 60 * 60 * 24 * 30
+    _REDIS_PEAKS_KEY: str = "master:strategy_peaks"
+    _REDIS_HALTED_KEY: str = "master:halted_strategies"
+
+    async def load_persisted_state(self) -> None:
+        """Populate ``strategy_peaks`` and ``halted_strategies`` from Redis.
+
+        Idempotent — safe to call more than once. Silently falls back to the
+        in-memory empty defaults if Redis is unavailable (operator still gets
+        a ``WARNING`` once per instance via the logger). The first pipeline
+        run after a Redis wipe behaves like a cold boot: peaks start over and
+        no strategies are halted.
+        """
+        if self._state_loaded:
+            return
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is None:
+                self._state_loaded = True
+                return
+            peaks_raw = await redis.hgetall(self._REDIS_PEAKS_KEY)
+            halted_raw = await redis.smembers(self._REDIS_HALTED_KEY)
+            if peaks_raw:
+                self.strategy_peaks = {
+                    str(k): float(v) for k, v in peaks_raw.items()
+                }
+            if halted_raw:
+                self.halted_strategies = set(str(s) for s in halted_raw)
+            logger.info(
+                "MasterAgent loaded persisted state: %d peaks, %d halted",
+                len(self.strategy_peaks), len(self.halted_strategies),
+            )
+        except Exception:
+            logger.warning(
+                "MasterAgent could not load persisted state from Redis; "
+                "starting from empty peaks/halts", exc_info=True,
+            )
+        finally:
+            self._state_loaded = True
+
+    async def _persist_peak(self, strategy: str, peak: float) -> None:
+        """Persist a single strategy's peak to the Redis hash + refresh TTL."""
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is None:
+                return
+            await redis.hset(self._REDIS_PEAKS_KEY, strategy, str(peak))
+            await redis.expire(self._REDIS_PEAKS_KEY, self._STATE_TTL_SECONDS)
+        except Exception:
+            logger.warning(
+                "Failed to persist strategy_peak for %s to Redis",
+                strategy, exc_info=True,
+            )
+
+    async def _persist_halt_add(self, strategy: str) -> None:
+        """Add a strategy to the Redis halted-strategies set + refresh TTL."""
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is None:
+                return
+            await redis.sadd(self._REDIS_HALTED_KEY, strategy)
+            await redis.expire(self._REDIS_HALTED_KEY, self._STATE_TTL_SECONDS)
+        except Exception:
+            logger.warning(
+                "Failed to persist halt(%s) to Redis", strategy, exc_info=True,
+            )
+
+    async def _persist_halt_remove(self, strategy: str) -> None:
+        """Remove a strategy from the Redis halted-strategies set."""
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is None:
+                return
+            await redis.srem(self._REDIS_HALTED_KEY, strategy)
+        except Exception:
+            logger.warning(
+                "Failed to remove halt(%s) from Redis", strategy, exc_info=True,
+            )
+
+    def halt_strategy(self, strategy: str) -> None:
+        """Manually halt a strategy (e.g. from an admin endpoint).
+
+        Updates in-memory state immediately and schedules a Redis persist
+        if an event loop is available. Callers that need hard persistence
+        guarantees should use :meth:`async_halt_strategy`.
+        """
+        if strategy in self.halted_strategies:
+            return
+        self.halted_strategies.add(strategy)
+        logger.warning("MANUAL HALT: strategy '%s'", strategy)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self._persist_halt_add(strategy))
+        except RuntimeError:
+            pass
+
+    async def async_halt_strategy(self, strategy: str) -> None:
+        """Async variant of :meth:`halt_strategy` that awaits the Redis write."""
+        if strategy not in self.halted_strategies:
+            self.halted_strategies.add(strategy)
+            logger.warning("MANUAL HALT: strategy '%s'", strategy)
+        await self._persist_halt_add(strategy)
+
+    # ------------------------------------------------------------------
     # P1: Strategy drawdown tracking
     # ------------------------------------------------------------------
 
     def update_strategy_pnl(self, strategy: str, current_value: float) -> dict[str, Any]:
-        """Track strategy equity and check drawdown limits."""
+        """Track strategy equity and check drawdown limits.
+
+        Peaks and halt-set mutations are mirrored to Redis via fire-and-
+        forget tasks so the Sync signature of this method is preserved
+        (callers inside sync paths don't have to await). If no event loop
+        is running the persist is skipped and the in-memory state remains
+        authoritative for the current process.
+        """
+        peak_changed = False
         if strategy not in self.strategy_peaks:
             self.strategy_peaks[strategy] = current_value
+            peak_changed = True
         if current_value > self.strategy_peaks[strategy]:
             self.strategy_peaks[strategy] = current_value
+            peak_changed = True
 
         self.strategy_current[strategy] = current_value
         peak = self.strategy_peaks[strategy]
         drawdown = (current_value - peak) / peak if peak > 0 else 0
+
+        # Helper to schedule async persistence without breaking the sync API.
+        def _schedule(coro: Any) -> None:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(coro)
+                else:
+                    coro.close()  # no loop — drop the coroutine cleanly
+            except RuntimeError:
+                coro.close()
+
+        if peak_changed:
+            _schedule(self._persist_peak(strategy, peak))
 
         if drawdown < self.STRATEGY_DRAWDOWN_LIMIT and strategy not in self.halted_strategies:
             self.halted_strategies.add(strategy)
@@ -239,6 +449,7 @@ class MasterAgent:
                 "HALT strategy '%s': drawdown %.1f%% exceeds limit %.1f%%",
                 strategy, drawdown * 100, self.STRATEGY_DRAWDOWN_LIMIT * 100,
             )
+            _schedule(self._persist_halt_add(strategy))
             return {"action": "halt", "drawdown": drawdown}
 
         if strategy in self.halted_strategies and drawdown > self.STRATEGY_RESUME_THRESHOLD:
@@ -247,6 +458,7 @@ class MasterAgent:
                 "RESUME strategy '%s': drawdown recovered to %.1f%%",
                 strategy, drawdown * 100,
             )
+            _schedule(self._persist_halt_remove(strategy))
             return {"action": "resume", "drawdown": drawdown}
 
         return {"action": "ok", "drawdown": drawdown}
@@ -810,43 +1022,54 @@ class MasterAgent:
         take_profit: float | None = None,
         sector: str = "Unknown",
     ) -> dict[str, Any]:
-        """Trade request with optional Claude review for high-conviction trades."""
-        # First run rules-based checks
-        result = self.request_trade(
-            strategy, symbol, side, notional, conviction, rationale,
-            shares=shares, entry_price=entry_price, stop_loss=stop_loss,
-            take_profit=take_profit, sector=sector,
-        )
-        if not result["approved"]:
+        """Trade request with optional Claude review for high-conviction trades.
+
+        Serialised by ``self._trade_lock`` so the check-then-write sequence
+        — risk checks -> tentative approval (symbol added + cash decremented)
+        -> 30 s Claude await -> possible rollback — runs atomically against
+        the shared mutable state (``cash``, ``existing_positions``,
+        ``pending_orders``). Without this lock, concurrent strategies under
+        ``asyncio.gather`` can race on the await inside :meth:`smart_review`
+        and defeat the deployment / duplicate-symbol invariants
+        (persona-63 P0-1 / P0-2 / P0-5).
+        """
+        async with self._trade_lock:
+            # First run rules-based checks
+            result = self.request_trade(
+                strategy, symbol, side, notional, conviction, rationale,
+                shares=shares, entry_price=entry_price, stop_loss=stop_loss,
+                take_profit=take_profit, sector=sector,
+            )
+            if not result["approved"]:
+                return result
+
+            # For trades near limits or low conviction, ask Claude
+            total_deployed = sum(p.get("notional", 0) for p in self.existing_positions.values())
+            deployment_pct = total_deployed / self.equity if self.equity > 0 else 0
+
+            if deployment_pct > 0.40 or conviction < 70:
+                review = await self.smart_review(symbol, side, notional, conviction, rationale, sector)
+                if review["claude_decision"] == "reject":
+                    # Undo the approval
+                    if symbol in self.existing_positions:
+                        del self.existing_positions[symbol]
+                    self.pending_orders = [o for o in self.pending_orders if o["symbol"] != symbol]
+                    self.cash += notional
+                    self.rejections.append({
+                        "symbol": symbol, "strategy": strategy,
+                        "reason": f"Claude review rejected: {review['claude_reason']}",
+                    })
+                    return {"approved": False, "reason": f"Claude review: {review['claude_reason']}"}
+
+                # Apply size adjustment
+                if review.get("size_adjustment", 1.0) != 1.0:
+                    adj = review["size_adjustment"]
+                    for o in self.pending_orders:
+                        if o["symbol"] == symbol:
+                            o["notional"] = notional * adj
+                            o["shares"] = max(1, int(o.get("shares", 0) * adj))
+
             return result
-
-        # For trades near limits or low conviction, ask Claude
-        total_deployed = sum(p.get("notional", 0) for p in self.existing_positions.values())
-        deployment_pct = total_deployed / self.equity if self.equity > 0 else 0
-
-        if deployment_pct > 0.40 or conviction < 70:
-            review = await self.smart_review(symbol, side, notional, conviction, rationale, sector)
-            if review["claude_decision"] == "reject":
-                # Undo the approval
-                if symbol in self.existing_positions:
-                    del self.existing_positions[symbol]
-                self.pending_orders = [o for o in self.pending_orders if o["symbol"] != symbol]
-                self.cash += notional
-                self.rejections.append({
-                    "symbol": symbol, "strategy": strategy,
-                    "reason": f"Claude review rejected: {review['claude_reason']}",
-                })
-                return {"approved": False, "reason": f"Claude review: {review['claude_reason']}"}
-
-            # Apply size adjustment
-            if review.get("size_adjustment", 1.0) != 1.0:
-                adj = review["size_adjustment"]
-                for o in self.pending_orders:
-                    if o["symbol"] == symbol:
-                        o["notional"] = notional * adj
-                        o["shares"] = max(1, int(o.get("shares", 0) * adj))
-
-        return result
 
     # ------------------------------------------------------------------
     # Summary

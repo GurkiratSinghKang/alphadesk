@@ -4,13 +4,15 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+import unicodedata
+import uuid as _uuid
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.auth import require_auth
@@ -144,31 +146,51 @@ class OrderLeg(BaseModel):
 def _sanitize_user_text(v: str | None) -> str | None:
     """Strip control bytes + neutralise CSV-injection prefixes from user notes.
 
-    persona-9 #8 — the ``notes`` field on orders / alerts previously
-    accepted NUL bytes, ASCII C0 control chars, and Excel/Sheets-style
+    persona-9 #8 / persona-37 F1–F3 — the ``notes`` field on orders / alerts
+    previously accepted NUL bytes, ASCII C0 control chars, Unicode
+    homoglyphs (e.g. ``＝`` U+FF1D), BOM / RTL-override, and Excel/Sheets-style
     formula prefixes (``=cmd|/c calc!A1``, ``+SUM(A1)``, ``-2+5``, ``@SUM``).
     The first leaked into log files; the second became remote code execution
-    if a CSV export of the trade ledger was opened in Excel.
+    if a CSV export of the trade ledger was opened in Excel. The pre-Wave-35
+    ordering was strip-AFTER-prefix-check, so a single leading space/tab/newline
+    defeated the defence (``' =cmd|/c calc!A1'`` → ``'=cmd|/c calc!A1'``).
 
-    Sanitisation rules:
-        * Drop every C0 control char except ``\n`` and ``\t`` (the only ones
-          a UI legitimately emits in a notes textarea).
-        * If the cleaned string starts with one of ``= + - @`` (CSV-formula
+    Sanitisation rules (order matters):
+        * ``unicodedata.normalize("NFKC", …)`` so fullwidth ``＝`` / ``＋``
+          collapse to ASCII before the prefix check.
+        * Drop every C0 control char plus DEL (``\\x7F``), BOM (``\\uFEFF``),
+          RTL-override (``\\u202E``) and SOFT HYPHEN (``\\u00AD``) —
+          invisible glyphs that let a payload hide the formula char at
+          visual-position-0. Keep ``\\n`` and ``\\t`` (UI legitimately emits
+          them in a notes textarea).
+        * ``.strip()`` FIRST so leading whitespace can't mask the prefix.
+        * If the stripped string starts with one of ``= + - @`` (CSV-formula
           triggers per OWASP), prepend a single quote so spreadsheets render
           it as text.
-        * Hard cap at 500 characters; the ``Field(max_length=1000)`` upper
-          bound is preserved for back-compat but cap the persisted value.
+        * Hard cap at 500 characters; ``Field(max_length=1000)`` on the
+          request bound is preserved for back-compat but we cap the
+          persisted value.
         * Empty string after stripping → ``None`` (so callers don't have to
           treat ``""`` and ``None`` differently in the UI).
     """
     if v is None:
         return None
-    cleaned = "".join(ch for ch in v if ch == "\n" or ch == "\t" or ord(ch) >= 0x20)
+    # Unicode normalisation first so homoglyphs collapse to ASCII.
+    normalized = unicodedata.normalize("NFKC", v)
+    # Invisible / control chars that could hide a formula prefix at visual pos 0.
+    _INVISIBLE = {"\ufeff", "\u202e", "\u00ad", "\x7f"}
+    cleaned = "".join(
+        ch for ch in normalized
+        if ch not in _INVISIBLE and (ch == "\n" or ch == "\t" or ord(ch) >= 0x20)
+    )
+    # Strip BEFORE the prefix check — otherwise a leading space/tab/newline
+    # hides the ``=`` from the prefix-membership test and ``.strip()`` at the
+    # end silently peels the whitespace off, leaving the raw formula.
+    cleaned = cleaned.strip()
     if cleaned and cleaned[0] in "=+-@":
         cleaned = "'" + cleaned
     if len(cleaned) > 500:
         cleaned = cleaned[:500]
-    cleaned = cleaned.strip()
     return cleaned or None
 
 
@@ -293,19 +315,50 @@ def _alpaca_keys_empty() -> bool:
 
 @router.post("/orders", response_model=OrderResponse, status_code=201)
 async def create_order(
-    request: CreateOrderRequest,
+    payload: CreateOrderRequest,
+    http_request: Request,
     username: str = Depends(require_auth),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> OrderResponse:
     """Submit a new order through the broker (Alpaca).
 
     Supports single-leg equity orders and multi-leg options orders.
     All orders pass through the RiskManagerAgent before submission.
+
+    Request header ``Idempotency-Key`` (persona-40 F2, persona-65 F1): if
+    present, the server caches the response JSON for 10 minutes and returns
+    the original response verbatim for any second call with the same key.
+    Missing / empty header falls back to the payload-hash dedup (30 s
+    window) for legacy clients.
     """
+    # persona-16 P0-1: halt MUST gate every single manual order before any
+    # side-effecting check (risk, dedup, broker POST). Previously the halt
+    # check was here but the halt gate is now also the first thing that runs
+    # on the aggregate risk path; keep this top-level guard so the 503 error
+    # response is consistent.
     if await _is_trading_halted():
-        raise HTTPException(
-            status_code=503,
-            detail="Trading is halted. Use POST /api/v1/trades/resume to resume.",
-        )
+        # Surface structured machine-readable detail for the frontend and
+        # scripted callers — previously the halt response was a plain
+        # "Trading is halted" string that offered no way to tell "halted
+        # because the panic button was hit" from "halted because Redis was
+        # down" (fail-closed path in ``_is_trading_halted``).
+        halted_detail: dict[str, Any] = {
+            "error": "trading_halted",
+            "reason": "Emergency halt active. Use POST /api/v1/trades/resume to resume.",
+            "halted_until": None,
+        }
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis:
+                ttl = await redis.ttl("trading:halted")
+                if isinstance(ttl, int) and ttl > 0:
+                    halted_detail["halted_until"] = (
+                        datetime.now(timezone.utc) + timedelta(seconds=ttl)
+                    ).isoformat()
+        except Exception:
+            logger.debug("Could not resolve halt TTL for response", exc_info=True)
+        raise HTTPException(status_code=503, detail=halted_detail)
 
     if _alpaca_keys_empty():
         raise HTTPException(
@@ -313,12 +366,46 @@ async def create_order(
             detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
         )
 
+    # persona-40 F2 / persona-65 F1: Idempotency-Key support.
+    # Cache policy — Redis SET NX EX 600 with key scoped to the caller's
+    # username so a stolen key from one user cannot mask a different user's
+    # legitimate order; a second call with the same key returns the cached
+    # response verbatim; if Redis is down we fall through to the payload-hash
+    # dedup path below (legacy behaviour preserved).
+    idem_cache_key: str | None = None
+    if idempotency_key:
+        # Bound the key length so a pathological client can't DOS Redis
+        # with a 1MB header value; 128 chars is far more than a uuid4().
+        if len(idempotency_key) > 128:
+            raise HTTPException(status_code=400, detail="Idempotency-Key must be ≤128 chars")
+        # Canonicalise through the sanitiser so a stray CRLF / NUL in the
+        # header can't land in our Redis key namespace unescaped.
+        _key_clean = _sanitize_user_text(idempotency_key) or idempotency_key
+        idem_cache_key = f"idem:orders:{_key_clean}:{username}"
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is not None:
+                cached = await redis.get(idem_cache_key)
+                if cached:
+                    try:
+                        raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+                        data = json.loads(raw)
+                        return OrderResponse(**data)
+                    except Exception:
+                        logger.warning(
+                            "Idempotency-Key cache entry malformed — falling through to re-submit",
+                            exc_info=True,
+                        )
+        except Exception:
+            logger.debug("Redis unavailable for Idempotency-Key lookup", exc_info=True)
+
     # Reject market orders outside regular trading hours (session-aware:
     # uses USMarketCalendar so US holidays and early-close afternoons are
     # rejected correctly — previously a market order on MLK day, Good Friday,
     # Christmas Eve after 13:00 ET, etc. would pass the gate and be rejected
     # by Alpaca with a confusing error).
-    if any(leg.order_type == OrderType.MARKET for leg in request.legs):
+    if any(leg.order_type == OrderType.MARKET for leg in payload.legs):
         et_now = datetime.now(ZoneInfo("America/New_York"))
         try:
             from data.calendar import USMarketCalendar
@@ -364,28 +451,54 @@ async def create_order(
     from core.config import settings
     from core.redis import publish
 
-    # Risk check
-    risk_ok, risk_msg = await _risk_check(request)
+    # persona-16 P0-4: aggregate portfolio-level checks FIRST (gross notional,
+    # position count, sector concentration) — the per-order cap alone let
+    # 5 × $16k orders through in < 1s. Aggregate check runs before the
+    # per-order check so a portfolio already at the ceiling rejects cleanly.
+    agg_ok, agg_msg = await _aggregate_risk_check(payload)
+    if not agg_ok:
+        raise HTTPException(status_code=422, detail=f"Risk check failed: {agg_msg}")
+
+    # Per-order notional cap (single-order ceiling).
+    risk_ok, risk_msg = await _risk_check(payload)
     if not risk_ok:
         raise HTTPException(status_code=422, detail=f"Risk check failed: {risk_msg}")
 
-    # Duplicate order check
-    await _check_duplicate_order(request)
+    # Duplicate order check (persona-40: now covers notes + strategy + canonical floats)
+    await _check_duplicate_order(payload)
 
-    # Submit to broker
-    order_id = await _submit_to_broker(request, settings)
+    # persona-56 / persona-65 F1: client_order_id correlation key so a
+    # mid-POST disconnect, retry, or reconciliation pass can match the
+    # broker row against the local ledger row. Format: ``manual_<user>_<12hex>``.
+    # We keep the prefix explicit ("manual_") so the reconciliation endpoint
+    # can filter these out from pipeline-originated orders
+    # (``daily_pipeline._place_order`` uses ``{strategy}_{symbol}_{ts}``).
+    # Alpaca caps client_order_id at 128 chars; username is already size-bounded
+    # by the LoginRequest schema.
+    # Sanitize username → a filesystem-safe-ish slug so an unusual character
+    # doesn't land in the Alpaca ID.
+    _user_slug = re.sub(r"[^A-Za-z0-9_\-]", "", username)[:32] or "u"
+    client_order_id = f"manual_{_user_slug}_{_uuid.uuid4().hex[:12]}"
+
+    # Submit to broker (pass client_order_id down)
+    order_id = await _submit_to_broker(payload, settings, client_order_id=client_order_id)
 
     # Observability: log every submitted order with the acting user
     logger.info(
-        "Order submitted: %s %s %s @ %s (user: %s)",
-        request.legs[0].side,
-        request.legs[0].qty,
-        request.legs[0].symbol,
-        "market" if request.legs[0].order_type == OrderType.MARKET else f"${request.legs[0].limit_price}",
+        "Order submitted: %s %s %s @ %s (user: %s, client_order_id: %s)",
+        payload.legs[0].side,
+        payload.legs[0].qty,
+        payload.legs[0].symbol,
+        "market" if payload.legs[0].order_type == OrderType.MARKET else f"${payload.legs[0].limit_price}",
         username,
+        client_order_id,
     )
 
-    # Persist trade record (best-effort)
+    # Persist trade record (best-effort).
+    # persona-65 F1/F2: we persist the client_order_id inside each leg's JSON
+    # so it survives into ``trades.legs`` without requiring a schema migration
+    # on the ``trades`` table. A proper ``trades.client_order_id`` column is
+    # flagged in the audit report for a follow-up migration.
     try:
         from core.config import settings as _s
         if not _s.SKIP_DB_INIT:
@@ -394,18 +507,26 @@ async def create_order(
 
             # Map the OrderSide on the first leg to the ledger side convention:
             # ``buy`` (opening long) -> "long"; ``sell`` (opening short) -> "short".
-            first_leg_side = request.legs[0].side
+            first_leg_side = payload.legs[0].side
             persisted_side = "short" if first_leg_side == OrderSide.SELL else "long"
+
+            # Stamp the correlation id onto the legs JSON so ``reconcile``
+            # and any downstream ledger inspector can match against it.
+            legs_payload = []
+            for leg in payload.legs:
+                ld = leg.model_dump()
+                ld["client_order_id"] = client_order_id
+                legs_payload.append(ld)
 
             factory = _get_session_factory()
             async with factory() as db:
                 trade = Trade(
-                    symbol=request.legs[0].symbol,
-                    strategy=request.strategy,
-                    legs=[leg.model_dump() for leg in request.legs],
+                    symbol=payload.legs[0].symbol,
+                    strategy=payload.strategy,
+                    legs=legs_payload,
                     entry_time=datetime.now(timezone.utc),
                     status="submitted",
-                    notes=request.notes,
+                    notes=payload.notes,
                     side=persisted_side,
                 )
                 db.add(trade)
@@ -417,12 +538,28 @@ async def create_order(
     response = OrderResponse(
         id=order_id,
         status=OrderStatus.SUBMITTED,
-        legs=request.legs,
-        time_in_force=request.time_in_force,
-        strategy=request.strategy,
+        legs=payload.legs,
+        time_in_force=payload.time_in_force,
+        strategy=payload.strategy,
         submitted_at=datetime.now(timezone.utc),
-        notes=request.notes,
+        notes=payload.notes,
     )
+
+    # persona-40 F2: cache the response under the Idempotency-Key so a
+    # retry within 10 minutes returns the same response verbatim.
+    if idem_cache_key is not None:
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            if redis is not None:
+                await redis.set(
+                    idem_cache_key,
+                    json.dumps(response.model_dump(mode="json")),
+                    ex=600,
+                    nx=True,
+                )
+        except Exception:
+            logger.warning("Failed to persist Idempotency-Key response cache", exc_info=True)
 
     # Notify via websocket
     await publish("portfolio", {
@@ -840,37 +977,71 @@ async def get_trade_history(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _canonical_float(v: float | None) -> str:
+    """Format a float for a canonical dedup-hash input.
+
+    persona-40 F6 — ``json.dumps(1.0000000000000002)`` emits the full
+    repr ("1.0000000000000002"), creating a distinct hash from ``1.0``
+    even though Alpaca rounds both to the same number. The ``%.8g``
+    format rounds machine-eps-neighbour perturbations back to the
+    canonical value (8 significant digits is > than Alpaca's max
+    precision of 4 decimals and handles every realistic price/qty).
+    ``None`` survives as an empty string so a missing price hashes
+    distinctly from a present zero price.
+    """
+    if v is None:
+        return ""
+    return f"{float(v):.8g}"
+
+
+def _order_dedup_hash(request: CreateOrderRequest) -> str:
+    """Deterministic payload hash used for both Redis dedup and audit logs.
+
+    persona-40 F4/F5/F6 — notes and strategy MUST be in the hash, and
+    floats must be canonicalised so sub-epsilon perturbations don't
+    bypass dedup. The multi-leg list is NOT reordered; that is the
+    caller's responsibility (Alpaca treats ``[long, short]`` and
+    ``[short, long]`` as the same combo so this is a pre-existing
+    weakness noted in persona-40 F7 — we keep stable order here to
+    avoid silently dropping distinct legitimate orderings).
+    """
+    payload = {
+        "legs": [
+            {
+                "s": l.symbol,
+                "sd": l.side.value,
+                "q": _canonical_float(l.qty),
+                "t": l.order_type.value,
+                "lp": _canonical_float(l.limit_price),
+                "sp": _canonical_float(l.stop_price),
+            }
+            for l in request.legs
+        ],
+        "tif": request.time_in_force.value,
+        # Include user-supplied free text so notes/strategy permutation
+        # cannot produce a fresh dedup slot (persona-40 F4, F5).
+        "notes": request.notes or "",
+        "strategy": request.strategy or "",
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()
+    ).hexdigest()
+
+
 async def _check_duplicate_order(request: CreateOrderRequest) -> None:
     """Prevent duplicate orders within a 30-second window using atomic Redis SET NX.
 
-    The dedup hash now includes ``limit_price`` + ``stop_price`` + ``time_in_force``
-    — previously it only hashed symbol/side/qty/type, which meant a legitimate
-    ladder of limit orders (e.g. buy 1 @ $50, then buy 1 @ $75) got rejected
-    as "duplicate" for 30s because the qty/side/symbol match. Including price
-    makes distinct limit prices distinct orders.
+    The dedup hash now includes ``limit_price`` + ``stop_price`` +
+    ``time_in_force`` + ``notes`` + ``strategy`` — previously it only hashed
+    symbol/side/qty/type/prices/tif, which meant one-byte perturbations of
+    ``notes`` or ``strategy`` produced fresh dedup keys (persona-40 F4/F5).
+    Floats are canonicalised through ``_canonical_float`` so machine-eps
+    neighbours (``1.0000000000000002``) don't split the hash either
+    (persona-40 F6).
     """
     from core.redis import get_redis
 
-    # Create a hash of ALL legs (not just the first), including prices so
-    # orders that differ only by price are not treated as duplicates.
-    order_key = hashlib.sha256(
-        json.dumps(
-            [
-                {
-                    "s": l.symbol,
-                    "sd": l.side.value,
-                    "q": l.qty,
-                    "t": l.order_type.value,
-                    "lp": l.limit_price if l.limit_price is not None else "",
-                    "sp": l.stop_price if l.stop_price is not None else "",
-                }
-                for l in request.legs
-            ]
-            + [{"tif": request.time_in_force.value}],
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
-
+    order_key = _order_dedup_hash(request)
     cache_key = f"order_dedup:{order_key}"
 
     redis = await get_redis()
@@ -914,12 +1085,46 @@ async def _get_current_price(symbol: str) -> float:
     return 0.0
 
 
-async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
-    """Run risk checks before submitting an order (BUG-026: simple notional check)."""
-    total_notional = 0.0
+import os as _os
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a float env override with a safe default (no crash on bad input)."""
+    try:
+        raw = _os.getenv(name)
+        return float(raw) if raw is not None and raw != "" else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        raw = _os.getenv(name)
+        return int(raw) if raw is not None and raw != "" else default
+    except (TypeError, ValueError):
+        return default
+
+
+# Aggregate caps (persona-16 P0-4). Configurable via env so an operator can
+# tighten them without a code change.
+DAILY_GROSS_NOTIONAL_CAP = _env_float("TRADES_DAILY_GROSS_NOTIONAL_CAP", 200_000.0)
+PER_ORDER_NOTIONAL_CAP = _env_float("TRADES_PER_ORDER_NOTIONAL_CAP", 50_000.0)
+MAX_OPEN_POSITIONS = _env_int("TRADES_MAX_OPEN_POSITIONS", 50)
+SECTOR_CONCENTRATION_LIMIT = _env_float("TRADES_SECTOR_CONCENTRATION_LIMIT", 0.30)
+
+
+async def _compute_order_notional(request: CreateOrderRequest) -> float:
+    """Resolve the dollar notional of the incoming order across all legs.
+
+    Shared by ``_risk_check`` and ``_aggregate_risk_check`` so both see the
+    same number (persona-16 P0-4 — previously the per-order cap and the
+    "daily gross" idea disagreed on what counted as notional for a leg
+    whose limit_price was None).
+    """
+    total = 0.0
     for leg in request.legs:
         if leg.limit_price:
-            total_notional += leg.limit_price * leg.qty
+            total += float(leg.limit_price) * float(leg.qty)
         else:
             price = await _get_current_price(leg.symbol)
             if price <= 0:
@@ -927,10 +1132,202 @@ async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
                     status_code=400,
                     detail=f"Cannot determine price for {leg.symbol}. Use a limit order.",
                 )
-            total_notional += price * leg.qty
+            total += float(price) * float(leg.qty)
+    return total
 
-    if total_notional > 50_000:
-        return False, f"Order notional ${total_notional:,.0f} exceeds single-order limit of $50,000"
+
+async def _get_todays_gross_notional() -> float:
+    """Sum today's deployed notional from the trade ledger + broker-pending.
+
+    persona-16 P0-4 — the old ``_risk_check`` only guarded a single order
+    against a $50k ceiling; N separate sub-cap orders blew past the
+    portfolio's real risk budget. This helper approximates the day's
+    gross deployed notional by combining:
+
+      1. Trade-ledger entries opened today (entry_price × shares).
+      2. Broker-side orders that are still ``open`` / ``new`` / ``partially_filled``
+         (notional estimated from ``qty`` × ``limit_price`` or ``filled_avg_price``
+         falling back to 0 when neither is known).
+
+    The function FAILS OPEN (returns 0.0 on error) so a broken ledger
+    doesn't block all trading — the per-order cap still applies, and the
+    `_is_trading_halted` gate sits in front of it for the panic path.
+    """
+    total = 0.0
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # 1. Ledger entries opened today.
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+        ledger = TradeLedger()
+        for t in ledger._list_all():
+            entry_time = t.get("entry_time") or ""
+            if not entry_time.startswith(today):
+                continue
+            price = float(t.get("entry_price", 0) or 0)
+            shares = float(t.get("shares", 0) or 0)
+            total += abs(price * shares)
+    except Exception:
+        logger.debug("Ledger unavailable for daily-notional aggregation", exc_info=True)
+
+    # 2. Broker-side in-flight orders (best-effort).
+    if not _alpaca_keys_empty():
+        try:
+            from core.config import settings as _s
+            headers = {
+                "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+                "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+            }
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    f"{_s.ALPACA_BASE_URL}/v2/orders",
+                    headers=headers,
+                    params={"status": "open", "limit": 500, "nested": "true"},
+                )
+                if resp.status_code == 200:
+                    for o in resp.json():
+                        try:
+                            qty = float(o.get("qty", 0) or 0)
+                            price = (
+                                float(o.get("limit_price") or 0)
+                                or float(o.get("filled_avg_price") or 0)
+                            )
+                            total += abs(price * qty)
+                        except (TypeError, ValueError):
+                            continue
+        except Exception:
+            logger.debug("Alpaca unavailable for daily-notional aggregation", exc_info=True)
+
+    return total
+
+
+async def _get_account_equity() -> float:
+    """Fetch account equity from Alpaca; 0.0 on failure (caller must FAIL CLOSED)."""
+    if _alpaca_keys_empty():
+        return 0.0
+    try:
+        from core.config import settings as _s
+        headers = {
+            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{_s.ALPACA_BASE_URL}/v2/account",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                return float(resp.json().get("equity", 0) or 0)
+    except Exception:
+        logger.warning("Failed to fetch Alpaca equity for risk check", exc_info=True)
+    return 0.0
+
+
+async def _get_open_position_count_and_sector_exposure() -> tuple[int, dict[str, float], float]:
+    """Return (position_count, {sector: exposure_usd}, equity_usd) from Alpaca.
+
+    Uses ``/v2/positions`` for the source of truth (matches what Alpaca
+    actually holds) and ``risk._get_symbol_sector_map`` for the sector
+    attribution.
+    """
+    if _alpaca_keys_empty():
+        return 0, {}, 0.0
+    try:
+        from core.config import settings as _s
+        headers = {
+            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            pos_resp = await client.get(f"{_s.ALPACA_BASE_URL}/v2/positions", headers=headers)
+            acct_resp = await client.get(f"{_s.ALPACA_BASE_URL}/v2/account", headers=headers)
+            equity = float(acct_resp.json().get("equity", 0) or 0) if acct_resp.status_code == 200 else 0.0
+            positions = pos_resp.json() if pos_resp.status_code == 200 else []
+    except Exception:
+        logger.warning("Failed to fetch positions/account for aggregate risk check", exc_info=True)
+        return 0, {}, 0.0
+
+    try:
+        from api.routes.risk import _get_symbol_sector_map
+        sector_map = _get_symbol_sector_map()
+    except Exception:
+        sector_map = {}
+
+    sector_exposure: dict[str, float] = {}
+    for p in positions:
+        try:
+            sym = p.get("symbol", "")
+            market_value = abs(float(p.get("market_value", 0) or 0))
+            sector = sector_map.get(sym, "Unknown")
+            sector_exposure[sector] = sector_exposure.get(sector, 0.0) + market_value
+        except (TypeError, ValueError):
+            continue
+
+    return len(positions), sector_exposure, equity
+
+
+async def _aggregate_risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
+    """Aggregate / portfolio-level risk gates (persona-16 P0-4).
+
+    Runs BEFORE the per-order cap in ``_risk_check``:
+
+      * Today's gross notional across ledger + broker-pending + this order
+        must stay below ``DAILY_GROSS_NOTIONAL_CAP`` ($200k by default).
+      * Open-position count must stay at or below ``MAX_OPEN_POSITIONS`` (50).
+      * Post-order sector exposure must stay below
+        ``SECTOR_CONCENTRATION_LIMIT`` (30% of equity).
+    """
+    # Today's gross notional
+    incoming = await _compute_order_notional(request)
+    todays_gross = await _get_todays_gross_notional()
+    if (todays_gross + incoming) > DAILY_GROSS_NOTIONAL_CAP:
+        return False, (
+            f"Daily gross notional would reach ${todays_gross + incoming:,.0f} "
+            f"(cap ${DAILY_GROSS_NOTIONAL_CAP:,.0f}). Today already deployed "
+            f"${todays_gross:,.0f}."
+        )
+
+    # Position count + sector concentration
+    pos_count, sector_exposure, equity = await _get_open_position_count_and_sector_exposure()
+    if pos_count >= MAX_OPEN_POSITIONS:
+        return False, (
+            f"Already holding {pos_count} open positions "
+            f"(limit {MAX_OPEN_POSITIONS})."
+        )
+
+    if equity > 0:
+        # Resolve the incoming order's sector (use first-leg symbol — all legs
+        # of a combo share an underlying on Alpaca's equity + mleg API).
+        try:
+            from api.routes.risk import _get_symbol_sector_map
+            sector_map = _get_symbol_sector_map()
+        except Exception:
+            sector_map = {}
+        first_leg = request.legs[0]
+        sector = sector_map.get(first_leg.symbol, "Unknown")
+        # Only count BUY-side additions; a SELL trims exposure.
+        sector_delta = incoming if first_leg.side == OrderSide.BUY else 0.0
+        projected = sector_exposure.get(sector, 0.0) + sector_delta
+        if (projected / equity) > SECTOR_CONCENTRATION_LIMIT:
+            return False, (
+                f"Sector '{sector}' would reach "
+                f"{projected / equity * 100:.1f}% of equity "
+                f"(cap {SECTOR_CONCENTRATION_LIMIT * 100:.0f}%). "
+                f"Diversify or trim existing {sector} positions first."
+            )
+
+    return True, "passed"
+
+
+async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
+    """Per-order notional ceiling (persona-16 P0-4 — see ``_aggregate_risk_check`` for portfolio-level gates)."""
+    total_notional = await _compute_order_notional(request)
+
+    if total_notional > PER_ORDER_NOTIONAL_CAP:
+        return (
+            False,
+            f"Order notional ${total_notional:,.0f} exceeds single-order limit of ${PER_ORDER_NOTIONAL_CAP:,.0f}",
+        )
 
     return True, "passed"
 
@@ -1171,10 +1568,18 @@ async def check_alerts_for_symbol(symbol: str, price: float) -> None:
             )
 
 
-async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
+async def _submit_to_broker(
+    request: CreateOrderRequest,
+    settings: Any,
+    client_order_id: str | None = None,
+) -> str:
     """Submit the order to Alpaca and return the broker order ID.
 
     Supports both single-leg equity orders and multi-leg options orders (BUG-027).
+
+    persona-65 F1: ``client_order_id`` is forwarded as Alpaca's
+    ``client_order_id`` field so a mid-POST disconnect has a stable
+    correlation key to match the broker row against the local ledger row.
     """
     # Safety: reject live trading from the manual endpoint
     base_url = settings.ALPACA_BASE_URL
@@ -1205,6 +1610,8 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
             body["limit_price"] = str(leg.limit_price)
         if leg.stop_price is not None:
             body["stop_price"] = str(leg.stop_price)
+        if client_order_id:
+            body["client_order_id"] = client_order_id
     else:
         # Multi-leg order (options combo) (BUG-027)
         body = {
@@ -1223,6 +1630,8 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
                 for leg in request.legs
             ],
         }
+        if client_order_id:
+            body["client_order_id"] = client_order_id
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
@@ -1255,3 +1664,231 @@ async def _submit_to_broker(request: CreateOrderRequest, settings: Any) -> str:
             status_code=502,
             detail="Broker error — please retry",
         )
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation (persona-65 F9) — pull Alpaca's last-24h orders, backfill
+# missing rows into the local Trade table, mark orphaned local "submitted"
+# rows whose broker counterpart has vanished.
+# ---------------------------------------------------------------------------
+
+
+async def _reconcile_last_24h() -> dict[str, int]:
+    """Core reconciliation logic. Shared by POST /trades/reconcile and the
+    boot-time lifespan hook so both see the same semantics.
+
+    Returns a dict: ``{"backfilled": N, "orphaned": M, "matched": K}``.
+
+    * ``backfilled`` — Alpaca rows for which no local Trade existed: inserted
+      as ``status="reconciled"`` so they count toward P&L / position tracking.
+    * ``orphaned`` — local Trades in ``submitted`` status from the last 24h
+      whose ``client_order_id`` is not present on the Alpaca side: marked
+      ``status="orphaned"`` so they stop inflating position counts.
+    * ``matched`` — rows where both sides agree (informational only).
+    """
+    result = {"backfilled": 0, "orphaned": 0, "matched": 0}
+
+    if _alpaca_keys_empty():
+        return result
+
+    from core.config import settings
+
+    # Fetch the last 24h of Alpaca orders.
+    since_iso = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/orders",
+                headers=headers,
+                params={
+                    "status": "all",
+                    "limit": 500,
+                    "nested": "true",
+                    "after": since_iso,
+                },
+            )
+            if resp.status_code != 200:
+                logger.warning(
+                    "reconcile: broker GET /orders returned %d", resp.status_code
+                )
+                return result
+            alpaca_orders = resp.json()
+    except Exception:
+        logger.warning("reconcile: failed to fetch Alpaca orders", exc_info=True)
+        return result
+
+    # Index Alpaca orders by client_order_id where present.
+    by_client_id: dict[str, dict[str, Any]] = {}
+    for o in alpaca_orders:
+        coid = o.get("client_order_id")
+        if coid:
+            by_client_id[coid] = o
+
+    # DB-less modes skip DB reconciliation but still return the totals from
+    # the broker-side scan (useful for oncall to confirm the broker is
+    # reachable).
+    if settings.SKIP_DB_INIT:
+        result["matched"] = len(alpaca_orders)
+        return result
+
+    try:
+        from sqlalchemy import select
+        from core.database import _get_session_factory
+        from data.storage.models import Trade
+    except Exception:
+        logger.warning("reconcile: DB imports failed", exc_info=True)
+        return result
+
+    factory = _get_session_factory()
+    try:
+        async with factory() as db:
+            # Pull local Trades created in the last 24h.
+            since_dt = datetime.now(timezone.utc) - timedelta(hours=24)
+            q = (
+                select(Trade)
+                .where(Trade.entry_time >= since_dt)
+                .order_by(Trade.entry_time.desc())
+            )
+            trades = (await db.execute(q)).scalars().all()
+
+            # Build a lookup of the local client_order_id set.
+            local_client_ids: set[str] = set()
+            local_by_client_id: dict[str, Trade] = {}
+            for t in trades:
+                for leg in (t.legs or []):
+                    if isinstance(leg, dict):
+                        coid = leg.get("client_order_id")
+                        if coid:
+                            local_client_ids.add(coid)
+                            local_by_client_id.setdefault(coid, t)
+                            break
+
+            # 1. Backfill — Alpaca rows with a client_order_id we don't have.
+            #    We intentionally only backfill orders that carry our
+            #    ``manual_*`` or ``{strategy}_*`` prefix so we don't import
+            #    third-party-originated orders (e.g. orders placed through
+            #    the Alpaca app directly by the same account owner).
+            for coid, o in by_client_id.items():
+                if coid in local_client_ids:
+                    result["matched"] += 1
+                    continue
+                try:
+                    symbol = o.get("symbol", "")
+                    qty = float(o.get("qty", 0) or 0)
+                    side = (o.get("side") or "buy").lower()
+                    persisted_side = "short" if side == "sell" else "long"
+                    entry_price = (
+                        float(o.get("filled_avg_price") or 0)
+                        or float(o.get("limit_price") or 0)
+                    )
+                    submitted_at = o.get("submitted_at")
+                    try:
+                        entry_time = (
+                            datetime.fromisoformat(submitted_at.replace("Z", "+00:00"))
+                            if submitted_at else datetime.now(timezone.utc)
+                        )
+                    except Exception:
+                        entry_time = datetime.now(timezone.utc)
+
+                    trade = Trade(
+                        symbol=symbol,
+                        strategy=None,
+                        legs=[{
+                            "symbol": symbol,
+                            "side": side,
+                            "qty": qty,
+                            "order_type": o.get("type", "market"),
+                            "limit_price": (float(o["limit_price"]) if o.get("limit_price") else None),
+                            "stop_price": (float(o["stop_price"]) if o.get("stop_price") else None),
+                            "client_order_id": coid,
+                        }],
+                        entry_time=entry_time,
+                        entry_price=entry_price or None,
+                        status="reconciled",
+                        notes=f"Reconciled from broker (alpaca_id={o.get('id')})",
+                        side=persisted_side,
+                    )
+                    db.add(trade)
+                    await db.flush()
+                    result["backfilled"] += 1
+                except Exception:
+                    logger.warning(
+                        "reconcile: failed to backfill Alpaca order %s",
+                        o.get("id"), exc_info=True,
+                    )
+
+            # 2. Orphan — local "submitted" rows whose client_order_id has
+            #    no Alpaca counterpart in the last-24h window.
+            for t in trades:
+                if t.status != "submitted":
+                    continue
+                coid: str | None = None
+                for leg in (t.legs or []):
+                    if isinstance(leg, dict) and leg.get("client_order_id"):
+                        coid = leg["client_order_id"]
+                        break
+                if not coid:
+                    # Pre-client_order_id row — can't safely decide. Skip.
+                    continue
+                if coid in by_client_id:
+                    # Already matched above.
+                    continue
+                t.status = "orphaned"
+                result["orphaned"] += 1
+
+            await db.commit()
+    except Exception:
+        logger.warning("reconcile: DB session error", exc_info=True)
+        return result
+
+    return result
+
+
+@router.post("/reconcile")
+async def reconcile_orders(username: str = Depends(require_auth)) -> dict[str, Any]:
+    """Admin-only: reconcile last-24h broker orders against the local ledger.
+
+    persona-65 F9. Backfills missing Trade rows from Alpaca and marks
+    local rows whose broker counterpart has vanished as ``orphaned``.
+    Returns the per-category counts so oncall can verify the broker /
+    DB are in sync after a restart or an incident.
+    """
+    # Admin-only — keep strict privilege semantics consistent with other
+    # state-mutating endpoints (see persona-16 comment on inconsistent halt
+    # privilege; reconcile is a write and must not be callable from a
+    # non-admin JWT).
+    from core.config import settings as _s
+    if username != _s.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    counts = await _reconcile_last_24h()
+    logger.info(
+        "Reconcile complete — backfilled=%d, orphaned=%d, matched=%d",
+        counts.get("backfilled", 0),
+        counts.get("orphaned", 0),
+        counts.get("matched", 0),
+    )
+    return counts
+
+
+async def reconcile_on_boot() -> None:
+    """Boot-time reconciliation hook (persona-65 F9).
+
+    Called from ``main.py`` lifespan so a broker-accepted / DB-silent
+    split (persona-65 F2) surfaces immediately after a restart instead
+    of accumulating. Best-effort — logged but does not block startup.
+    """
+    try:
+        counts = await _reconcile_last_24h()
+        logger.info(
+            "Boot reconcile — backfilled=%d, orphaned=%d, matched=%d",
+            counts.get("backfilled", 0),
+            counts.get("orphaned", 0),
+            counts.get("matched", 0),
+        )
+    except Exception:
+        logger.warning("Boot reconcile failed (non-fatal)", exc_info=True)

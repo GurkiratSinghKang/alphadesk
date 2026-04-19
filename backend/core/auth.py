@@ -74,25 +74,29 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
 async def is_token_revoked(jti: str) -> bool:
     """Check if a token has been revoked.
 
-    FAILS OPEN on Redis unavailability (returns False — treat as not revoked).
+    FAILS CLOSED on Redis unavailability (returns True — treat as revoked).
 
-    Rationale:
-      * The token revocation blocklist is defence-in-depth. The primary auth
-        check is the JWT signature + expiry, which runs entirely in-process
-        and is unaffected by Redis state.
-      * The previous fail-closed behaviour meant a 5-second Redis restart
-        logged out every user across every browser tab — a self-inflicted DoS
-        that was far more likely to bite us than a token-revocation bypass.
-      * To keep *some* defence during an outage, we cache recent lookups for
-        _REVOCATION_CACHE_TTL_SEC so revocations made shortly before the
-        outage remain effective.
+    Rationale (P39 reversal of prior fail-open stance):
+      * A stolen refresh or access cookie remains dangerous until the token's
+        natural expiry — potentially days for refresh tokens. If Redis is
+        down we cannot confirm the blocklist, and the prior behaviour
+        ("return False, trust the signature") meant a compromised cookie
+        continued working through the outage. That is the worse failure
+        mode: an attacker with a captured cookie can ride out a Redis blip,
+        while legitimate users can simply re-login.
+      * Re-login is a mild UX papercut; silently honouring a stolen token
+        during an outage is a security incident.
+      * The in-process cache is still consulted first, so brief outages that
+        fall within _REVOCATION_CACHE_TTL_SEC of a successful lookup don't
+        log anyone out. Only outages longer than the cache TTL force
+        re-login.
 
     Behaviour:
       * Redis up, jti in blocklist -> True, cache answer.
       * Redis up, jti not in blocklist -> False, cache answer.
-      * Redis down, cache hit -> return cached value (possibly stale but
-        better than nothing).
-      * Redis down, no cache -> False + warning log (fail open).
+      * Redis down, cache hit within TTL -> return cached value (lets brief
+        blips be invisible).
+      * Redis down, no cache -> True + error log (fail closed).
     """
     now = time.time()
 
@@ -113,21 +117,25 @@ async def is_token_revoked(jti: str) -> bool:
         # Redis unavailable.
         global _last_redis_warning_ts
         if now - _last_redis_warning_ts > 30:
-            logger.warning(
-                "Redis unavailable in is_token_revoked — failing OPEN "
-                "(defence-in-depth check skipped; JWT sig+exp still enforced)"
+            logger.error(
+                "Redis unavailable in is_token_revoked — failing CLOSED "
+                "(all tokens treated as revoked until Redis recovers). "
+                "Users will need to re-login."
             )
             _last_redis_warning_ts = now
 
         # Fall back to cached answer if we have one that's still within its TTL.
+        # This keeps brief Redis blips invisible: if we confirmed this jti was
+        # (or wasn't) revoked within the last _REVOCATION_CACHE_TTL_SEC, trust
+        # that answer.
         if cached is not None:
             revoked, expiry = cached
             if expiry >= now:
                 return revoked
 
-        # Last resort: fail open. The JWT signature + expiry checks are the
-        # primary auth mechanism and run just fine without Redis.
-        return False
+        # Last resort: fail CLOSED. Better to force re-login than to leave
+        # stolen cookies live through a Redis outage.
+        return True
 
 
 async def revoke_token(token: str) -> None:

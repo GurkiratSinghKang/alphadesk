@@ -34,6 +34,74 @@ export interface ApiFetchOptions extends RequestInit {
   timeoutMs?: number;
 }
 
+/**
+ * Error thrown from `apiFetch` on HTTP 429 Too Many Requests. Carries the
+ * parsed `Retry-After` header as a number of seconds (integer) when the
+ * server supplied one, so callers can surface a precise "try again in {n}s"
+ * toast instead of a generic "rate limited" message (persona-r/ P36, P39).
+ *
+ * `retryAfter` is `null` when the server returned 429 without a
+ * `Retry-After` header (some upstreams do this). UI code should fall back
+ * to a generic message in that case.
+ */
+export class RateLimitError extends Error {
+  readonly status = 429;
+  readonly retryAfter: number | null;
+  readonly path: string;
+  constructor(path: string, retryAfter: number | null, message?: string) {
+    const suffix = typeof retryAfter === "number" ? ` (retry in ${retryAfter}s)` : "";
+    super(message ?? `API 429: Too Many Requests${suffix}`);
+    this.name = "RateLimitError";
+    this.retryAfter = retryAfter;
+    this.path = path;
+  }
+}
+
+/**
+ * Parse the Retry-After HTTP header. Per RFC 7231 the value may be either
+ * delta-seconds (integer) or an HTTP-date; both are handled. Returns the
+ * seconds remaining as a non-negative integer, or null when the header is
+ * missing or unparseable.
+ */
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  // delta-seconds form
+  const asInt = Number(trimmed);
+  if (Number.isFinite(asInt) && asInt >= 0) return Math.floor(asInt);
+  // HTTP-date form — Date.parse returns NaN for bad input
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isFinite(dateMs)) return null;
+  const diffSec = Math.ceil((dateMs - Date.now()) / 1000);
+  return diffSec > 0 ? diffSec : 0;
+}
+
+/**
+ * Centralised `is_demo` dispatcher — the backend tags fallback responses
+ * with `is_demo: true` (or `source: "demo"`) when the broker/provider is
+ * unavailable and it has to serve synthetic data. We raise a DOM custom
+ * event so the dashboard chrome can render a "broker unavailable" banner
+ * without every caller site having to branch on the flag.
+ *
+ * Only fires when the flag is explicitly true — we deliberately do NOT
+ * infer degraded mode from missing fields, so a live response missing the
+ * tag does not flip the UI into DEMO on a whim.
+ */
+export function maybeDispatchBrokerDegraded(endpoint: string, flag: unknown): void {
+  if (typeof window === "undefined") return;
+  if (flag !== true) return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent("alphadesk:broker-degraded", {
+        detail: { endpoint, timestamp: Date.now() },
+      }),
+    );
+  } catch {
+    // event dispatch is best-effort; silent failure is fine
+  }
+}
+
 async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   const base = typeof window !== "undefined"
     ? (env.API_URL || "")
@@ -133,6 +201,22 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    // 429 Too Many Requests — parse Retry-After so the UI can render a
+    // precise "try again in {n}s" toast (persona-r P36, P39). Keep the
+    // toast dispatch generic (handled by the dashboard's api-error listener)
+    // but include the computed seconds in the detail for richer copy.
+    if (res.status === 429) {
+      const retryAfter = parseRetryAfter(res.headers.get("Retry-After"));
+      const msg = typeof retryAfter === "number"
+        ? `Rate-limited. Try again in ${retryAfter}s.`
+        : "Rate-limited. Please slow down.";
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
+          detail: { status: 429, message: msg, path, retryAfter },
+        }));
+      }
+      throw new RateLimitError(path, retryAfter, msg);
+    }
     // Dispatch error event for toast system to catch
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
@@ -312,8 +396,15 @@ export async function searchSymbols(query: string, limit = 10) {
 
 // ─── Market Data ─────────────────────────────────────────────
 
-export function getQuote(symbol: string) {
-  return apiFetch<Quote>(`/api/v1/market/quotes/${symbol}`);
+export async function getQuote(symbol: string): Promise<Quote> {
+  const resp = await apiFetch<Quote & { is_demo?: boolean; source?: string }>(
+    `/api/v1/market/quotes/${symbol}`,
+  );
+  maybeDispatchBrokerDegraded(
+    `/api/v1/market/quotes/${symbol}`,
+    resp?.is_demo === true || resp?.source === "demo",
+  );
+  return resp;
 }
 
 export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit = 500): Promise<OHLCVBar[]> {
@@ -360,15 +451,24 @@ export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit 
  */
 export async function getSnapshot(symbols: string[]): Promise<Record<string, Quote>> {
   const results: Record<string, Quote> = {};
+  let sawDemo = false;
   const fetches = symbols.map(async (s) => {
     try {
-      const quote = await apiFetch<Quote>(`/api/v1/market/quotes/${s}`);
+      const quote = await apiFetch<Quote & { is_demo?: boolean; source?: string }>(
+        `/api/v1/market/quotes/${s}`,
+      );
+      if (quote?.is_demo === true || quote?.source === "demo") sawDemo = true;
       results[s] = quote;
     } catch {
       // skip symbols that fail
     }
   });
   await Promise.all(fetches);
+  // One aggregate event for the whole fan-out — firing one per symbol would
+  // spam the banner listener on a 10-symbol watchlist.
+  if (sawDemo) {
+    maybeDispatchBrokerDegraded(`/api/v1/market/quotes (batch)`, true);
+  }
   return results;
 }
 
@@ -389,12 +489,14 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
   if (!symbols.length) return {};
   const qs = new URLSearchParams({ symbols: symbols.join(",") }).toString();
   try {
-    type BackendSnapshot = { quote?: Quote } & Partial<Quote>;
+    type BackendSnapshot = { quote?: Quote; is_demo?: boolean; source?: string } & Partial<Quote>;
     const raw = await apiFetch<Record<string, BackendSnapshot>>(
       `/api/v1/market/snapshots?${qs}`,
     );
     const out: Record<string, Quote> = {};
+    let sawDemo = false;
     for (const [sym, snap] of Object.entries(raw)) {
+      if (snap?.is_demo === true || snap?.source === "demo") sawDemo = true;
       // New `{symbol: Snapshot}` shape — unwrap the nested quote.
       if (snap && typeof snap === "object" && "quote" in snap && snap.quote) {
         out[sym] = snap.quote;
@@ -402,6 +504,9 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
         // Defensive fallback: older backend shape returns flat Quote objects.
         out[sym] = snap as Quote;
       }
+    }
+    if (sawDemo) {
+      maybeDispatchBrokerDegraded(`/api/v1/market/snapshots`, true);
     }
     return out;
   } catch {
@@ -948,6 +1053,12 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   const dayPnl = (rawAny.day_pnl as number) ?? (rawAny.profit_loss as number) ?? (raw.realized_pnl_today ?? 0);
   const lastEquity = (raw.equity ?? 0) - dayPnl;
   const dayPnlPct = lastEquity > 0 ? (dayPnl / lastEquity) * 100 : 0;
+  const isDemo = raw.is_demo === true || raw.source === "demo";
+  // Fire the global event so the dashboard chrome can surface a
+  // broker-unavailable banner. Only when the flag is explicitly true —
+  // the UI should not flash DEMO on a live response that happened to
+  // omit the field.
+  maybeDispatchBrokerDegraded(`/api/v1/portfolio/summary`, isDemo);
   return {
     equity: raw.equity,
     cash: raw.cash,
@@ -959,7 +1070,7 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     positionsCount: raw.positions_count,
     dayPnl,
     dayPnlPct,
-    is_demo: raw.is_demo === true || raw.source === "demo",
+    is_demo: isDemo,
   };
 }
 

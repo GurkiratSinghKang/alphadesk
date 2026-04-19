@@ -2,16 +2,99 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from core.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# /agents/chat rate limiting (P38, P39)
+# ---------------------------------------------------------------------------
+# /agents/chat proxies to Claude. Each call is an LLM round-trip that can cost
+# real money (Anthropic credit) and, on the Max plan, draws down the daily
+# quota. Without a cap, a single authenticated user — or a compromised
+# cookie — can burn through hundreds of dollars or exhaust the daily quota
+# in minutes.
+#
+# Design matches /auth/login's rate limiter:
+#   - Redis INCR + EXPIRE (NX) for a rolling window per key.
+#   - In-memory fallback per worker when Redis is unavailable, bounded by
+#     _CHAT_INMEM_MAX_KEYS, so a Redis outage does NOT remove the cap.
+#   - Keyed by AUTHENTICATED USERNAME, not IP: behind a proxy many users
+#     share an IP, and authenticated-user scope gives better accounting.
+#
+# Cap: 30 calls per user per 5 minutes. At ~60s per Sonnet-4 round-trip that
+# is well above any plausible human conversation rate but well below a
+# runaway loop.
+_CHAT_RATE_LIMIT_WINDOW = 300  # 5 minutes
+_CHAT_RATE_LIMIT_MAX = 30  # 30 chat calls per user per window
+_CHAT_INMEM_HITS: dict[str, list[float]] = {}
+_CHAT_INMEM_MAX_KEYS = 10_000
+
+
+def _chat_inmem_incr(key: str) -> int:
+    """Append a timestamp for ``key`` and return the count inside the window."""
+    now = time.time()
+    window_start = now - _CHAT_RATE_LIMIT_WINDOW
+
+    # Amortised cleanup so the dict can't grow without bound.
+    if len(_CHAT_INMEM_HITS) > _CHAT_INMEM_MAX_KEYS:
+        _CHAT_INMEM_HITS.clear()
+
+    hits = _CHAT_INMEM_HITS.setdefault(key, [])
+    hits[:] = [t for t in hits if t >= window_start]
+    hits.append(now)
+    return len(hits)
+
+
+async def _enforce_chat_rate_limit(username: str) -> None:
+    """Raise 429 if ``username`` has exceeded the chat cap for the window.
+
+    Performs the INCR + cap check atomically on Redis (INCR always increments;
+    EXPIRE is set NX so the window slides off at its natural end rather than
+    being extended by every call, which would otherwise create a lockout-
+    forever bug). On Redis failure, falls back to the in-memory per-worker
+    counter so the cap still applies during an outage.
+    """
+    key = f"agents_chat_attempts:{username}"
+    count: int
+    try:
+        from core.redis import get_redis
+
+        redis = await get_redis()
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _CHAT_RATE_LIMIT_WINDOW, nx=True)
+        incr_result, _ = await pipe.execute()
+        count = int(incr_result)
+    except Exception as e:
+        logger.warning(
+            "agents/chat rate limit: Redis unavailable, using in-memory fallback: %s",
+            e,
+            exc_info=True,
+        )
+        count = _chat_inmem_incr(key)
+
+    if count > _CHAT_RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Chat rate limit exceeded. Max "
+                f"{_CHAT_RATE_LIMIT_MAX} calls per {_CHAT_RATE_LIMIT_WINDOW // 60} "
+                "minutes per user. Please wait before retrying."
+            ),
+            headers={"Retry-After": str(_CHAT_RATE_LIMIT_WINDOW)},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +171,7 @@ def _claude_unavailable() -> bool:
 @router.post("/chat", response_model=ChatResponse)
 async def agent_chat(
     request: ChatRequest,
+    username: str = Depends(require_auth),
 ) -> ChatResponse:
     """Natural language interaction with the AlphaDesk agent system.
 
@@ -99,7 +183,14 @@ async def agent_chat(
     - "Screen for high momentum names with low IV rank"
     - "Show me my portfolio risk"
     - "Place a 10-delta strangle on TSLA 30 DTE"
+
+    Rate limited to _CHAT_RATE_LIMIT_MAX calls per user per window; returns
+    429 with Retry-After when exceeded (P38/P39 — Claude API spend control).
     """
+    # Enforce the per-user cap BEFORE any Claude call so rejections are cheap
+    # and cannot burn credit or quota.
+    await _enforce_chat_rate_limit(username)
+
     if _claude_unavailable():
         conversation_id = request.conversation_id or str(uuid.uuid4())
         return ChatResponse(

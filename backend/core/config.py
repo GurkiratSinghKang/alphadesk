@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     ALPACA_API_KEY: SecretStr = SecretStr("")
     ALPACA_SECRET_KEY: SecretStr = SecretStr("")
     ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
+    # Toggle the broker trade_updates WebSocket subscription in
+    # ``data/ingestion/alpaca_stream.py``. When True the backend opens a
+    # second Alpaca WS connection and publishes fill / cancel / reject
+    # events to Redis channel ``trade_updates``. Safe kill-switch if the
+    # broker side misbehaves without redeploying (persona-r P27/P43).
+    ALPACA_TRADE_UPDATES_ENABLED: bool = True
 
     # --- Broker: Interactive Brokers ---
     IB_HOST: str = "127.0.0.1"

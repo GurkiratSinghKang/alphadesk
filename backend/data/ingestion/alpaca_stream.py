@@ -5,6 +5,17 @@ and publishes quotes/trades/bars to Redis pub/sub for distribution
 to frontend WebSocket clients.
 
 SIP provides real-time consolidated data from all US exchanges.
+
+Two independent streams are supervised here:
+
+1. **Market data** (quotes + minute bars) via ``stream.data.alpaca.markets``.
+   Tracked by ``_stream_task`` and ``_run_stream`` — see below.
+2. **Trade updates** (fills / partial_fills / cancels / rejects) via
+   ``paper-api.alpaca.markets/stream`` or the live-broker equivalent.
+   Tracked by ``_trade_updates_task`` and published to Redis channel
+   ``trade_updates`` (``core.redis.CHANNEL_TRADE_UPDATES``). Gated on the
+   ``ALPACA_TRADE_UPDATES_ENABLED`` setting so it can be turned off without
+   redeploying if the broker side misbehaves (persona-r P27/P43).
 """
 from __future__ import annotations
 
@@ -452,9 +463,242 @@ async def _supervised_run() -> None:
     logger.info("alpaca_stream supervisor exited")
 
 
+# ─── Alpaca trade_updates stream (fills / cancels / rejects) ─────────
+#
+# Second independent WebSocket connection to Alpaca's broker API. While the
+# SIP market-data feed above only carries quotes / trades / bars, the broker
+# stream carries per-account lifecycle events for each submitted order:
+#
+#   * ``fill``          — full fill; ``order.status`` == ``"filled"``
+#   * ``partial_fill``  — partial, more to come; ``order.status`` == ``"partially_filled"``
+#   * ``canceled``      — order canceled by user / market close
+#   * ``rejected``      — broker rejected the order (e.g. insufficient BP)
+#   * ``new``, ``done_for_day``, ``replaced``, ``expired``, ``suspended`` …
+#
+# We normalise the event name onto the Redis payload and publish to channel
+# ``trade_updates``; the frontend subscribes in ``useNotifications`` and raises
+# a toast. The stream auth differs from the market-data stream:
+#
+#   1. Connect to ``wss://paper-api.alpaca.markets/stream`` (or the live URL).
+#   2. Send ``{"action": "authenticate", "data": {"key_id": "…", "secret_key": "…"}}``.
+#   3. On ``authorization`` success send ``{"action": "listen", "data": {"streams": ["trade_updates"]}}``.
+#
+# Payload format is also different — the broker stream sends
+# ``{"stream": "trade_updates", "data": {"event": "fill", "order": {...}}}``.
+# See https://alpaca.markets/docs/api-references/broker-api/trading/streaming-entity-events/
+
+_trade_updates_task: asyncio.Task | None = None
+
+# URL is derived from ALPACA_BASE_URL so paper vs live is configurable. We
+# keep a hard default to the paper endpoint because the rest of the codebase
+# defaults there too (core/config.py:54) — swapping to live-trading requires
+# an explicit env override.
+_TRADE_UPDATES_WS_URL_DEFAULT = "wss://paper-api.alpaca.markets/stream"
+
+
+def _trade_updates_ws_url() -> str:
+    base = (settings.ALPACA_BASE_URL or "").rstrip("/")
+    if not base:
+        return _TRADE_UPDATES_WS_URL_DEFAULT
+    # Convert the https REST base into a wss streaming endpoint.
+    # https://paper-api.alpaca.markets -> wss://paper-api.alpaca.markets/stream
+    if base.startswith("https://"):
+        return "wss://" + base[len("https://"):] + "/stream"
+    if base.startswith("http://"):
+        return "ws://" + base[len("http://"):] + "/stream"
+    return _TRADE_UPDATES_WS_URL_DEFAULT
+
+
+async def _run_trade_updates_stream() -> None:
+    """Subscribe to Alpaca's broker trade_updates stream and fan out to Redis.
+
+    Publishes one event per Alpaca message to ``CHANNEL_TRADE_UPDATES``.
+    The payload shape is:
+
+        {
+            "event": "fill" | "partial_fill" | "canceled" | "rejected" | ...,
+            "symbol": "AAPL",
+            "side": "buy" | "sell",
+            "qty": 100,
+            "filled_qty": 100,
+            "fill_price": 182.34,
+            "order_id": "...",
+            "status": "filled" | ...,
+            "reject_reason": "...",   # rejected-only
+            "timestamp": "2026-04-18T13:30:00Z",
+            "raw": { full Alpaca payload }
+        }
+
+    Runs an internal reconnect loop with exponential backoff. The outer
+    supervisor (``_supervised_trade_updates_run``) guarantees respawn on
+    any unexpected exit.
+    """
+    global _should_stop
+    backoff = 5
+    url = _trade_updates_ws_url()
+
+    while not _should_stop:
+        try:
+            async with websockets.connect(url) as ws:
+                # 1. Authenticate
+                await ws.send(json.dumps({
+                    "action": "authenticate",
+                    "data": {
+                        "key_id": settings.ALPACA_API_KEY.get_secret_value(),
+                        "secret_key": settings.ALPACA_SECRET_KEY.get_secret_value(),
+                    },
+                }))
+                auth_resp = await ws.recv()
+                logger.info("Alpaca trade_updates auth: %s", str(auth_resp)[:200])
+                try:
+                    auth_msg = json.loads(auth_resp)
+                    status = (auth_msg.get("data") or {}).get("status") or auth_msg.get("status")
+                    if status and str(status).lower() not in ("authorized", "success"):
+                        logger.error(
+                            "Alpaca trade_updates auth failed (status=%s) — retry in 60s",
+                            status,
+                        )
+                        await asyncio.sleep(60)
+                        raise ConnectionError("trade_updates auth failed")
+                except ConnectionError:
+                    raise
+                except Exception:
+                    logger.warning(
+                        "Failed to parse trade_updates auth response — continuing to listen",
+                        exc_info=True,
+                    )
+
+                # 2. Listen for trade_updates
+                await ws.send(json.dumps({
+                    "action": "listen",
+                    "data": {"streams": ["trade_updates"]},
+                }))
+                listen_resp = await ws.recv()
+                logger.info(
+                    "Alpaca trade_updates listen: %s", str(listen_resp)[:200],
+                )
+                backoff = 5  # reset on successful connect
+
+                # 3. Fan out messages
+                async for raw in ws:
+                    if _should_stop:
+                        break
+                    try:
+                        msg = json.loads(raw)
+                    except Exception:
+                        logger.debug(
+                            "trade_updates: malformed JSON frame dropped",
+                            exc_info=True,
+                        )
+                        continue
+
+                    stream_name = msg.get("stream")
+                    if stream_name != "trade_updates":
+                        # Initial listen confirmation or keepalive — ignore.
+                        continue
+
+                    data = msg.get("data") or {}
+                    event = str(data.get("event", "")).lower()
+                    order = data.get("order") or {}
+
+                    payload = {
+                        "event": event,
+                        "symbol": order.get("symbol"),
+                        "side": order.get("side"),
+                        "qty": _coerce_float(order.get("qty")),
+                        "filled_qty": _coerce_float(order.get("filled_qty")),
+                        "fill_price": _coerce_float(
+                            data.get("price") or order.get("filled_avg_price"),
+                        ),
+                        "order_id": order.get("id"),
+                        "status": order.get("status"),
+                        "reject_reason": order.get("reject_reason")
+                            or data.get("reject_reason")
+                            or data.get("message"),
+                        "timestamp": data.get("timestamp") or order.get("updated_at"),
+                        "raw": data,
+                    }
+                    try:
+                        await publish("trade_updates", payload)
+                    except Exception:
+                        # Redis outages should not crash the stream — log and
+                        # keep listening so we don't lose the next fill.
+                        logger.warning(
+                            "trade_updates: publish failed for %s",
+                            payload.get("order_id"),
+                            exc_info=True,
+                        )
+
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            if _should_stop:
+                break
+            logger.error(
+                "Alpaca trade_updates stream error (reconnect in %ds)",
+                backoff,
+                exc_info=True,
+            )
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 300)
+
+    logger.info("Alpaca trade_updates loop exited")
+
+
+def _coerce_float(v) -> float | None:
+    """Parse Alpaca's string-encoded numerics into floats, else None.
+
+    The broker API returns ``qty`` / ``filled_qty`` / ``filled_avg_price`` as
+    strings, not numbers. Frontends expect numbers in the toast detail, so
+    we coerce here and leave ``None`` passthrough for missing fields.
+    """
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _supervised_trade_updates_run() -> None:
+    """Supervisor wrapper mirroring ``_supervised_run`` for trade_updates."""
+    global _should_stop
+    backoff = 1
+    while not _should_stop:
+        try:
+            await _run_trade_updates_stream()
+            if _should_stop:
+                break
+            logger.warning(
+                "trade_updates: stream exited without _should_stop — respawn in %ds",
+                backoff,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.error(
+                "trade_updates: supervised run crashed — respawn in %ds",
+                backoff,
+                exc_info=True,
+            )
+        if _should_stop:
+            break
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 60)
+    logger.info("trade_updates supervisor exited")
+
+
 async def start_alpaca_stream() -> None:
-    """Start the Alpaca WebSocket stream as a background task."""
-    global _stream_task, _should_stop
+    """Start the Alpaca WebSocket stream(s) as background tasks.
+
+    Starts two independent streams:
+      1. SIP market-data stream (quotes / bars) — always on when the API key
+         is configured.
+      2. Broker trade_updates stream (fills / cancels / rejects) — gated on
+         ``ALPACA_TRADE_UPDATES_ENABLED`` (defaults to True) so we can disable
+         it without a redeploy if the broker side misbehaves.
+    """
+    global _stream_task, _trade_updates_task, _should_stop
 
     api_key = settings.ALPACA_API_KEY.get_secret_value()
     if not api_key:
@@ -468,10 +712,25 @@ async def start_alpaca_stream() -> None:
     watchlist = await get_dynamic_watchlist()
     logger.info("Alpaca SIP stream started for %d symbols", len(watchlist))
 
+    # Trade updates stream — feature-flagged. Default ON.
+    trade_updates_enabled = bool(
+        getattr(settings, "ALPACA_TRADE_UPDATES_ENABLED", True),
+    )
+    if trade_updates_enabled:
+        _trade_updates_task = asyncio.create_task(_supervised_trade_updates_run())
+        logger.info(
+            "Alpaca trade_updates stream started at %s",
+            _trade_updates_ws_url(),
+        )
+    else:
+        logger.info(
+            "Alpaca trade_updates stream disabled via ALPACA_TRADE_UPDATES_ENABLED",
+        )
+
 
 async def stop_alpaca_stream() -> None:
-    """Stop the Alpaca WebSocket stream gracefully."""
-    global _should_stop, _stream_task
+    """Stop the Alpaca WebSocket stream(s) gracefully."""
+    global _should_stop, _stream_task, _trade_updates_task
 
     _should_stop = True
     if _stream_task:
@@ -481,4 +740,11 @@ async def stop_alpaca_stream() -> None:
         except (asyncio.CancelledError, Exception):
             pass
         _stream_task = None
-    logger.info("Alpaca SIP stream stopped")
+    if _trade_updates_task:
+        _trade_updates_task.cancel()
+        try:
+            await _trade_updates_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        _trade_updates_task = None
+    logger.info("Alpaca SIP + trade_updates streams stopped")

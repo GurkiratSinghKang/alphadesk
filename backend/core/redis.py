@@ -44,8 +44,21 @@ CHANNEL_PORTFOLIO = "portfolio"
 CHANNEL_ALERTS = "alerts"
 CHANNEL_AGENTS = "agents"
 CHANNEL_BARS = "bars"
+# Alpaca trade_updates fan-out — published to by
+# ``data.ingestion.alpaca_stream`` when the broker emits fill / partial_fill
+# / canceled / rejected events. Keeping it on its own channel lets the
+# frontend subscribe just to trading events without receiving every
+# portfolio snapshot refresh on the portfolio channel (persona-r P27/P43).
+CHANNEL_TRADE_UPDATES = "trade_updates"
 
-ALL_CHANNELS = [CHANNEL_QUOTES, CHANNEL_PORTFOLIO, CHANNEL_ALERTS, CHANNEL_AGENTS, CHANNEL_BARS]
+ALL_CHANNELS = [
+    CHANNEL_QUOTES,
+    CHANNEL_PORTFOLIO,
+    CHANNEL_ALERTS,
+    CHANNEL_AGENTS,
+    CHANNEL_BARS,
+    CHANNEL_TRADE_UPDATES,
+]
 
 
 async def publish(channel: str, data: dict[str, Any]) -> int:

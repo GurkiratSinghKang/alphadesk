@@ -3,14 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "@/env";
 
-type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars";
+type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars" | "trade_updates";
 
 // long-session-audit-r4 P1 #9 (defence-in-depth): hard allow-list of
 // channel names. Any dispatch to a channel outside this set is rejected.
 // Mirrors the server-side check in backend/api/websocket/handler.py:49-51
 // — if a future code path ever `subscribe(symbol)`'s dynamically, the set
-// can't grow unbounded.
-const ALL_CHANNELS: readonly WsChannel[] = ["quotes", "portfolio", "alerts", "agents", "bars"] as const;
+// can't grow unbounded. `trade_updates` was added for Alpaca fill/reject
+// fan-out (persona-r P27/P43); see backend/core/redis.py:CHANNEL_TRADE_UPDATES.
+const ALL_CHANNELS: readonly WsChannel[] = [
+  "quotes",
+  "portfolio",
+  "alerts",
+  "agents",
+  "bars",
+  "trade_updates",
+] as const;
 const ALL_CHANNELS_SET: ReadonlySet<string> = new Set<string>(ALL_CHANNELS);
 function isValidChannel(channel: string): channel is WsChannel {
   return ALL_CHANNELS_SET.has(channel);
