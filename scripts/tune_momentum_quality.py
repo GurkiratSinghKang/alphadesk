@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sys
 import time
 import types
@@ -68,52 +69,21 @@ _ROOT = Path(__file__).resolve().parent.parent
 
 
 # --------------------------------------------------------------------------- #
-# Monkey-patch: skip the IS backtest inside walk-forward.                     #
+# Tune on TRAIN Sharpe, not OOS Sharpe (P1 fix).                              #
 # --------------------------------------------------------------------------- #
-# The Sharpe objective reads OOS metrics only; running the IS leg inside each
-# trial is pure overhead for a non-parametric strategy like this. Same trick
-# used by the rsi2_tune.py script.
-def _patch_walkforward_skip_is() -> None:
-    from datetime import timedelta
-    from decimal import Decimal
-    import pandas as _pd
-
-    from backend.backtest.types import BacktestResult
-    from backend.backtest.walkforward import WalkForwardResult, WalkForwardRunner
-
-    original = WalkForwardRunner.run_train_test
-
-    def run_train_test_skip_is(self):
-        cfg = self.config
-        if cfg.train_end is None:
-            raise ValueError("train_end must be set for train_test run")
-
-        out = WalkForwardResult()
-        out.in_sample_result = BacktestResult(
-            equity_curve=_pd.DataFrame(
-                {"equity": [float(cfg.starting_cash)]},
-                index=_pd.to_datetime([cfg.start]),
-            ),
-            trades=[],
-            fills=[],
-            daily_returns=_pd.Series(dtype=float),
-            metrics={"sharpe": 0.0, "max_drawdown": 0.0, "cagr": 0.0},
-            start=cfg.start,
-            end=cfg.train_end,
-        )
-
-        oos_start = cfg.train_end + timedelta(days=1)
-        if oos_start > cfg.end:
-            raise ValueError("train_end must be before end")
-        out.out_of_sample_result = self._run_single(oos_start, cfg.end)
-        out.aggregated_metrics = dict(out.out_of_sample_result.metrics)
-        return out
-
-    WalkForwardRunner.run_train_test = run_train_test_skip_is
-    WalkForwardRunner._original_run_train_test = original
-
-
-_patch_walkforward_skip_is()
+# Tuning against OOS is structural selection-on-test (see
+# expert-momentum-quality.md §"Data snooping"): every reported "OOS Sharpe"
+# becomes a max-of-N order statistic on the very window supposedly held out.
+#
+# Wave 3 of the fix campaign solved this locally with a ``run_train_test``
+# monkey-patch that stuffed IS metrics into ``out_of_sample_result``. That
+# hack has since been superseded: :class:`WalkForwardObjective` now accepts a
+# ``tune_on="train"`` flag (default) and reads
+# ``in_sample_result.metrics`` directly. The monkey-patch has been removed;
+# ``main`` simply passes ``tune_on="train"`` (the new default).
+#
+# A single authoritative OOS backtest is still run at the bottom of
+# ``main()`` so the artefact reports honest walk-forward performance.
 
 
 # --------------------------------------------------------------------------- #
@@ -233,6 +203,11 @@ def main() -> int:
         scoring="sharpe",          # raw Sharpe — the target is a raw number
         starting_cash=Decimal("100000"),
         on_result=_on_result,
+        # Tune on the 2019-22 TRAIN window. ``"train"`` is now the default,
+        # but we pass it explicitly as a tripwire — if a future refactor of
+        # WalkForwardObjective changes the default, the tune would silently
+        # revert to selection-on-test.
+        tune_on="train",
     )
 
     space = MomentumQualityStrategy.search_space()
@@ -265,7 +240,7 @@ def main() -> int:
 
     print("\n" + "=" * 70)
     print(f"Trials completed:   {len(study.trials)} in {elapsed:.0f}s")
-    print(f"Best OOS Sharpe:    {best_value:.4f}")
+    print(f"Best TRAIN Sharpe (fitness): {best_value:.4f}")
     print("Best parameters:")
     for k, v in sorted(best_params.items()):
         print(f"  {k} = {v!r}")
@@ -302,13 +277,18 @@ def main() -> int:
             f"${float(oos.equity_curve['equity'].iloc[-1]):,.2f}"
         )
 
+    oos_sharpe = float(m.get("sharpe", float("nan")))
     out = {
         "strategy": "momentum_quality",
         "start": "2019-01-01",
         "end": "2024-12-31",
         "train_end": "2022-12-31",
         "n_trials": len(study.trials),
-        "best_oos_sharpe": best_value,
+        # Best fitness observed during tuning (TRAIN-window Sharpe).
+        "best_train_sharpe": best_value,
+        # Authoritative post-tune single-shot OOS Sharpe. This is the number
+        # to compare against performance targets, not ``best_train_sharpe``.
+        "best_oos_sharpe": oos_sharpe,
         "best_params": best_params,
         "oos_metrics": {
             k: float(v) for k, v in m.items() if isinstance(v, (int, float))
@@ -325,11 +305,21 @@ def main() -> int:
     print(f"\nDumped summary to {out_path}")
 
     target = 0.80
-    if best_value >= target:
-        print(f"\nSUCCESS: OOS Sharpe {best_value:.3f} >= target {target:.2f}")
+    # Gate the return code on the authoritative OOS Sharpe, not the train
+    # fitness. The train Sharpe is biased upwards by the tuner; using it as
+    # a success criterion would paper over the selection-on-test issue we
+    # just fixed.
+    if math.isfinite(oos_sharpe) and oos_sharpe >= target:
+        print(
+            f"\nSUCCESS: OOS Sharpe {oos_sharpe:.3f} >= target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 0
     else:
-        print(f"\nBELOW TARGET: OOS Sharpe {best_value:.3f} < target {target:.2f}")
+        print(
+            f"\nBELOW TARGET: OOS Sharpe {oos_sharpe:.3f} < target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 2
 
 

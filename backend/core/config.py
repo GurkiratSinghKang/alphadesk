@@ -121,3 +121,42 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ---------------------------------------------------------------------------
+# Live-trading allowlist / denylist (Wave 4 — audit-reports
+# /00-strategy-experts-consolidation.md §4 "Hard lockouts / flags").
+# ---------------------------------------------------------------------------
+# Central source of truth for the two runtime gates a strategy can carry at
+# the routing layer. Keys use the registry's underscore names (the ones the
+# strategy classes register under) — the catalog layer maps to the hyphen ids
+# the frontend speaks, so both consumers agree.
+#
+# STRATEGY_LIVE_DISABLED — strategy is structurally unfit for live capital
+#   until the P0 defects from its expert audit land. Catalog-visible with a
+#   NOT-READY badge; ``create_order`` rejects with 422 if the Alpaca base URL
+#   points at a live endpoint. Paper routing remains allowed.
+#
+# STRATEGY_PAPER_ONLY — strategy is implementation-complete but statistically
+#   thin. Route to Alpaca paper only. ``create_order`` rejects with 422 when
+#   the Alpaca base URL is a live endpoint.
+STRATEGY_LIVE_DISABLED: set[str] = {"orb"}
+STRATEGY_PAPER_ONLY: set[str] = {"kama_breakout"}
+
+
+def is_live_alpaca_base_url(url: str | None = None) -> bool:
+    """Return True when ``url`` (or ``settings.ALPACA_BASE_URL`` if unset)
+    resolves to Alpaca's live endpoint.
+
+    Alpaca's paper URL contains the literal ``paper`` token (e.g.
+    ``https://paper-api.alpaca.markets``); the live endpoint is
+    ``https://api.alpaca.markets``. We treat "no 'paper' substring" as live
+    — the same convention ``daily_pipeline._base_url`` already enforces,
+    and the same safety posture ``_submit_to_broker`` uses for the manual
+    order endpoint. Empty / missing URL is treated as NOT-live so a misconfig
+    doesn't accidentally block paper traffic.
+    """
+    base = (url if url is not None else settings.ALPACA_BASE_URL) or ""
+    if not base:
+        return False
+    return "paper" not in base.lower()

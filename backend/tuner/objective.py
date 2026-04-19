@@ -26,8 +26,15 @@ Coordinating with F1 (walk-forward harness)
 Train/test leakage is the walk-forward harness's job, not ours. We simply
 call :meth:`WalkForwardRunner.run_train_test` (primary protocol: train
 2019-01 ... 2022-12, test 2023-01 ... 2024-12) or ``run_k_fold`` as the
-caller requested. The returned :class:`WalkForwardResult` already contains
-only OOS metrics for scoring.
+caller requested.
+
+By default (``tune_on="train"``) this objective scores trials on the
+TRAIN-window metrics of the returned :class:`WalkForwardResult`. The
+caller is then expected to perform a single authoritative OOS evaluation
+with the winning parameter set — that is the *only* time OOS metrics
+should influence a report. Opt into ``tune_on="test"`` only for
+debugging; tuning against OOS is structural selection-on-test and must
+not ship.
 """
 
 from __future__ import annotations
@@ -37,7 +44,7 @@ import math
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Literal, Mapping, Optional
 
 from backtest.types import BacktestResult
 
@@ -90,6 +97,22 @@ class WalkForwardObjective:
     on_result:
         Optional callback ``(params, wf_result, score)`` invoked after each
         trial. Used by the runner CLI to log progress.
+    tune_on:
+        Which leg of a train/test walk-forward to score the trial on.
+
+        - ``"train"`` (default): read metrics from
+          ``in_sample_result.metrics``. This is the correct protocol —
+          hyperparameters are selected on the training window, then the
+          *caller* performs a single authoritative OOS evaluation after
+          tuning completes.
+        - ``"test"``: read metrics from ``out_of_sample_result.metrics``.
+          Selection-on-test; useful ONLY for backtest debugging and must
+          never ship to production. Every strategy tuned under this mode
+          reports an OOS Sharpe that is a max-of-N order statistic on
+          the very window it claims to have held out.
+
+        For k-fold walk-forward (``train_end=None``) this flag is ignored;
+        the aggregated cross-validated metrics are used.
     """
 
     strategy_cls: type
@@ -112,12 +135,17 @@ class WalkForwardObjective:
     cost_model: Any = None
     base_params: Mapping[str, Any] | None = None
     on_result: Optional[Callable[[dict, Any, float], None]] = None
+    tune_on: Literal["train", "test"] = "train"
 
     # Validation ----------------------------------------------------------- #
     def __post_init__(self) -> None:
         if self.scoring not in {"penalised", "sharpe"}:
             raise ValueError(
                 f"scoring={self.scoring!r}; expected 'penalised' or 'sharpe'."
+            )
+        if self.tune_on not in {"train", "test"}:
+            raise ValueError(
+                f"tune_on={self.tune_on!r}; expected 'train' or 'test'."
             )
 
     # Main entry ----------------------------------------------------------- #
@@ -188,7 +216,7 @@ class WalkForwardObjective:
     def _score_from_result(self, wf_result: Any) -> float:
         """Pull the relevant metrics out of a walk-forward result."""
 
-        metrics = self._extract_oos_metrics(wf_result)
+        metrics = self._extract_metrics(wf_result)
         if not metrics:
             log.warning("walk-forward result had no metrics; returning -inf.")
             return -math.inf
@@ -221,26 +249,46 @@ class WalkForwardObjective:
         return score
 
     # Helpers -------------------------------------------------------------- #
-    @staticmethod
-    def _extract_oos_metrics(wf_result: Any) -> dict[str, float]:
-        """Pull the OOS metrics dict from a :class:`WalkForwardResult`.
+    def _extract_metrics(self, wf_result: Any) -> dict[str, float]:
+        """Pull the fitness-signal metrics dict from a :class:`WalkForwardResult`.
 
-        The F1 runner exposes two shapes:
+        Selection is governed by ``self.tune_on``:
 
-        * train/test -> ``wf_result.out_of_sample_result.metrics``
-        * k-fold    -> ``wf_result.aggregated_metrics``
+        * ``tune_on="train"`` (default, correct protocol):
+          train/test -> ``in_sample_result.metrics`` (the TRAIN window).
+          If an in-sample leg is unavailable, fall back to
+          ``out_of_sample_result.metrics`` so callers with older fake
+          result objects (e.g. unit-test fixtures) still work.
+        * ``tune_on="test"`` (debug only, selection-on-test):
+          train/test -> ``out_of_sample_result.metrics``.
 
-        We return the richer dict -- aggregated for k-fold, OOS for
-        train/test -- and let the caller look up keys.
+        For k-fold walk-forward there is no IS/OOS split; both modes
+        fall through to the aggregated cross-validated metrics.
         """
 
-        oos: BacktestResult | None = getattr(wf_result, "out_of_sample_result", None)
+        is_result: BacktestResult | None = getattr(
+            wf_result, "in_sample_result", None
+        )
+        oos: BacktestResult | None = getattr(
+            wf_result, "out_of_sample_result", None
+        )
         aggregated = dict(getattr(wf_result, "aggregated_metrics", {}) or {})
-        if oos is not None and oos.metrics:
-            merged = dict(oos.metrics)
+
+        if self.tune_on == "train":
+            primary = is_result if (is_result is not None and is_result.metrics) else oos
+        else:
+            primary = oos
+
+        if primary is not None and primary.metrics:
+            merged = dict(primary.metrics)
             merged.update(aggregated)
             return merged
         return aggregated
+
+    # Back-compat alias -- kept for any caller that still looks for the old
+    # method name. Returns metrics according to the configured ``tune_on``.
+    def _extract_oos_metrics(self, wf_result: Any) -> dict[str, float]:
+        return self._extract_metrics(wf_result)
 
     def _annualised_turnover(self, wf_result: Any, metrics: dict[str, float]) -> float:
         """Annualise cumulative turnover.
@@ -262,13 +310,25 @@ class WalkForwardObjective:
             return cum_turnover
         return cum_turnover * (TRADING_DAYS / n_days)
 
-    @staticmethod
-    def _count_days(wf_result: Any) -> int:
-        """Number of bars in the OOS window (used to annualise ratios)."""
+    def _count_days(self, wf_result: Any) -> int:
+        """Number of bars in the window used for scoring (annualisation)."""
 
-        oos: BacktestResult | None = getattr(wf_result, "out_of_sample_result", None)
-        if oos is not None and getattr(oos, "daily_returns", None) is not None:
-            return int(len(oos.daily_returns))
+        is_result: BacktestResult | None = getattr(
+            wf_result, "in_sample_result", None
+        )
+        oos: BacktestResult | None = getattr(
+            wf_result, "out_of_sample_result", None
+        )
+        if self.tune_on == "train":
+            primary = is_result if (
+                is_result is not None
+                and getattr(is_result, "daily_returns", None) is not None
+            ) else oos
+        else:
+            primary = oos
+
+        if primary is not None and getattr(primary, "daily_returns", None) is not None:
+            return int(len(primary.daily_returns))
         folds = getattr(wf_result, "folds", None) or []
         total = 0
         for f in folds:

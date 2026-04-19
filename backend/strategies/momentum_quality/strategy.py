@@ -316,7 +316,16 @@ class MomentumQualityStrategy:
             start = asof - timedelta(days=warmup)
             end = asof + timedelta(days=400)
             try:
-                panel = fetch_close_panel(ctx, list(symbols_tuple), start, end)
+                # Pass ``asof`` so halt-detection uses bars <= asof only
+                # (P0-8: the ffill window extends 400 cal days past asof,
+                # and tailing the full window was a silent look-ahead).
+                panel = fetch_close_panel(
+                    ctx,
+                    list(symbols_tuple),
+                    start,
+                    end,
+                    asof=asof,
+                )
             except Exception as exc:
                 log.warning("mq: close-panel fetch failed: %s", exc)
                 panel = None

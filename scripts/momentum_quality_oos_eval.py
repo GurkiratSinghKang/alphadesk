@@ -63,8 +63,12 @@ BEST_PARAMS = {
 
 
 def main() -> int:
-    syms = sorted(set(UNIVERSE_SEED))
-    print(f"Prefetching {len(syms)} symbols 2018-01-02 → 2024-12-31 ...")
+    # P1 fix: prefetch SPY alongside the universe so the benchmark series
+    # is available when EngineConfig(benchmark="SPY") tries to compute
+    # alpha/beta. Without SPY in the InMemoryBarProvider, metrics.summary_dict
+    # silently writes alpha=0.0 beta=0.0 (see expert-momentum-quality.md §P1).
+    syms = sorted(set(UNIVERSE_SEED) | {"SPY"})
+    print(f"Prefetching {len(syms)} symbols (incl. SPY benchmark) 2018-01-02 → 2024-12-31 ...")
     with AlpacaBarProvider() as p:
         df = p.bars(syms, date(2018, 1, 2), date(2024, 12, 31), tf="1D")
     print(f"Got {len(df)} rows")
@@ -85,6 +89,9 @@ def main() -> int:
             start=date(2023, 1, 2),
             end=date(2024, 12, 30),
             starting_cash=Decimal("100000"),
+            # P1 fix: pass benchmark so alpha/beta are computed. Previously
+            # omitted, so the OOS artefact reported alpha=0, beta=0 silently.
+            benchmark="SPY",
         ),
         strategy_params=BEST_PARAMS,
     )

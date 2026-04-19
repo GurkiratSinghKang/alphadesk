@@ -88,7 +88,12 @@ def search_space() -> dict[str, Any]:
         "sl_pct": FloatRange(1.5, 3.0),
         "exit_dte": Categorical([14, 21, 30]),
         "vix_kill_switch": FloatRange(0.25, 0.40),
-        "tail_hedge_ratio": Categorical([0, 5, 10]),
+        # Audit P0-10 (2026-04): removed 0 (the XIV-February-2018 blow-up
+        # profile). A runtime invariant in
+        # ``vrp_harvest.strategy.VRPHarvestStrategy.configure`` additionally
+        # rejects any tail_hedge_ratio < 5 so the gate fires before any
+        # trade is planned, including paths that bypass the tuner.
+        "tail_hedge_ratio": Categorical([5, 10]),
         "tail_hedge_delta": Categorical([0.03, 0.05, 0.10]),
         "term_structure_gate": Categorical([True, False]),
     }

@@ -41,6 +41,7 @@ from strategies.signal import OrderType, Signal, TimeInForce
 from .config import (
     DEFAULTS,
     UNIVERSE_SEED,
+    load_universe,
     search_space,
 )
 from .helpers import (
@@ -177,7 +178,10 @@ class PEADStrategy:
         cache = cache_of(ctx)
         syms = cache.get(f"{_NS}.universe")
         if syms is None:
-            syms = list(UNIVERSE_SEED)
+            syms = load_universe(
+                asof=asof,
+                fundamentals_provider=getattr(ctx, "fundamentals_provider", None),
+            )
             cache[f"{_NS}.universe"] = syms
         out = set(syms)
         for p in ctx.positions:
@@ -205,7 +209,11 @@ class PEADStrategy:
                 # Unknown entry date — force close (safety net).
                 out.append(self._exit_signal(pos.symbol, asof))
                 continue
-            held = trading_days_between(opened, asof)
+            held = trading_days_between(
+                opened,
+                asof,
+                calendar_provider=getattr(ctx, "calendar_provider", None),
+            )
             if held >= holding:
                 out.append(self._exit_signal(pos.symbol, asof))
         return out
@@ -317,17 +325,35 @@ class PEADStrategy:
                 continue
 
             # Overlapping earnings filter.
-            if has_overlapping_earnings(calendar, sym, asof, holding_days):
+            if has_overlapping_earnings(
+                calendar,
+                sym,
+                asof,
+                holding_days,
+                calendar_provider=getattr(ctx, "calendar_provider", None),
+            ):
                 continue
 
             weight = direction * alloc
+            # Event-conditional half-spread: base 5 bps (default) + 15 bps
+            # premium on |SUE|>=3 reporters. Stamped into the tag as
+            # ``evspread<float>`` so the execution simulator applies it to
+            # this MOO fill only — MOO after a big surprise is the bar
+            # with the widest realised gap-open spread on the tape, and a
+            # flat 5 bps understates real post-announcement cost by 10-30
+            # bps per round-trip.
+            event_spread = 0.0005 + 0.0015 * (1.0 if abs(sue) >= 3.0 else 0.0)
+            tag = (
+                f"pead-entry-{'long' if direction > 0 else 'short'}"
+                f"-sue{sue:+.2f}-evspread{event_spread:.4f}"
+            )
             out.append(
                 Signal(
                     symbol=sym,
                     target_weight=weight,
                     order_type=OrderType.MOO,
                     time_in_force=TimeInForce.DAY,
-                    tag=f"pead-entry-{'long' if direction > 0 else 'short'}-sue{sue:+.2f}",
+                    tag=tag,
                     asof=asof,
                 )
             )
@@ -411,18 +437,26 @@ class PEADStrategy:
         asof: date,
         ctx: Optional[Context] = None,
     ) -> pd.DataFrame:
-        """Return announcements made between the previous trading day's
-        close and ``asof``'s open — i.e. *one* prior session only.
+        """Return announcements that are actionable via an ``asof`` MOO entry.
 
-        The previous behaviour took a 3-calendar-day window stacked on
-        the most-recent prior trading day, which on Mondays would pull
-        Tue-Fri announcements together and treat them all as fresh
-        Monday-morning PEAD opportunities (drift already 2-4 days old).
+        Two announcement classes are distinguished via the
+        ``announcement_when`` column populated by
+        :class:`FMPEarningsProvider`:
 
-        Anchor on the most-recent trading session before ``asof`` (via
-        the calendar provider when available, else a Mon-Fri fallback)
-        and return announcements whose date matches that single session.
-        Tuesday asks Monday only; Monday asks Friday only.
+        * **AMC** (after-market close): FMP dates the row on the session
+          whose close absorbs the release, so an AMC row dated D-1 is
+          actionable at ``asof = D`` (MOO entry at D.open). This was the
+          pre-existing behaviour and is preserved.
+        * **BMO** (before-market open): FMP dates the row on the session
+          during whose open the release hits. A BMO row dated D is
+          actionable at ``asof = D+1`` (MOO entry at D+1.open). The
+          previous implementation dropped these rows entirely — treating
+          every announcement as AMC — which silently excluded ~40-50%
+          of the S&P 500 reporter population from the strategy.
+
+        Rows without an ``announcement_when`` classification fall back
+        to the AMC anchor to preserve legacy behaviour when the calendar
+        frame comes from a provider that did not populate the column.
         """
 
         if calendar.empty:
@@ -476,14 +510,38 @@ class PEADStrategy:
             if prev_session is None:
                 return calendar.iloc[0:0]
 
-        # Single-session slice: only events whose announcement date
-        # equals the previous trading day. AMC reporters from that
-        # session are dated with that session's date; BMO reporters
-        # are dated with their own (usually next-session) date and
-        # would therefore already match ``asof`` (handled separately
-        # if ever wanted) — for the drift signal we only act on the
-        # single freshest prior-session block.
-        mask = calendar["date"] == prev_session
+        # Determine the "BMO anchor" — the session whose BMO releases
+        # become actionable on ``asof``. If ``asof`` itself is a trading
+        # session, that's ``asof``; otherwise we defer to ``prev_session``.
+        bmo_anchor: date = asof
+        if cal_provider is not None and hasattr(cal_provider, "is_trading_day"):
+            try:
+                if not cal_provider.is_trading_day(asof):
+                    bmo_anchor = prev_session
+            except Exception:
+                pass
+
+        # Two-anchor slice. AMC rows dated on the previous session are
+        # eligible for today's MOO; BMO rows dated on the ``bmo_anchor``
+        # session are eligible for today's MOO (asof.open is the first
+        # tradable bar after a BMO release on the same day).
+        when = calendar.get("announcement_when")
+        if when is None:
+            # Legacy calendar without the time field — behave as before.
+            mask = calendar["date"] == prev_session
+        else:
+            when_norm = when.fillna("unknown").astype(str).str.lower()
+            is_amc = when_norm == "amc"
+            is_bmo = when_norm == "bmo"
+            # Unknown / missing time field → fall back to the AMC anchor
+            # so historical calendars without the time field remain usable.
+            is_unknown = ~(is_amc | is_bmo)
+            mask = (
+                (is_amc & (calendar["date"] == prev_session))
+                | (is_bmo & (calendar["date"] == bmo_anchor))
+                | (is_unknown & (calendar["date"] == prev_session))
+            )
+
         ann = calendar[mask].copy()
         # Require both actual + estimated to be non-null so SUE is computable.
         ann = ann.dropna(subset=["eps_actual", "eps_estimated"])

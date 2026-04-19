@@ -10,7 +10,20 @@ for the academic rationale for each knob.
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from datetime import date
+from typing import Any, Optional
+
+
+log = logging.getLogger("alphadesk.strategies.pead.config")
+
+
+# Module-level flag flipped to True by :func:`load_universe` whenever the
+# survivorship-biased static seed is used in place of a point-in-time loader.
+# OOS reporting and the strategy runtime consult this flag so an honest
+# bias-disclosure can be propagated to the artefact JSON without the caller
+# having to remember to plumb the warning through manually.
+UNIVERSE_HAS_SURVIVORSHIP_BIAS: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -119,8 +132,57 @@ def search_space() -> dict[str, Any]:
     }
 
 
+def load_universe(
+    asof: Optional[date] = None,
+    fundamentals_provider: Any = None,
+) -> list[str]:
+    """Return the PEAD candidate universe as-of ``asof``.
+
+    Preference order:
+
+    1. ``fundamentals_provider.sp500_constituents(asof)`` — a point-in-time
+       S&P 500 constituent loader. Adapters that wish to remove the
+       survivorship-bias caveat should implement this hook.
+    2. Static :data:`UNIVERSE_SEED` — a 2024-era hand list kept as a
+       last-resort fallback. Using this path flips
+       :data:`UNIVERSE_HAS_SURVIVORSHIP_BIAS` to ``True`` and emits a
+       WARNING on every call so downstream OOS JSONs carry the bias flag
+       and the operator is alerted that backtest numbers should be
+       discounted accordingly.
+    """
+
+    global UNIVERSE_HAS_SURVIVORSHIP_BIAS
+
+    if fundamentals_provider is not None and hasattr(
+        fundamentals_provider, "sp500_constituents"
+    ):
+        try:
+            names = fundamentals_provider.sp500_constituents(asof)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.warning(
+                "pead: fundamentals_provider.sp500_constituents(%s) raised %s;"
+                " falling back to static UNIVERSE_SEED",
+                asof, exc,
+            )
+        else:
+            if names:
+                UNIVERSE_HAS_SURVIVORSHIP_BIAS = False
+                return sorted({str(s).upper() for s in names})
+
+    UNIVERSE_HAS_SURVIVORSHIP_BIAS = True
+    log.warning(
+        "pead: universe falling back to static UNIVERSE_SEED (2024-era "
+        "hand-list) — survivorship_bias=True. OOS artefacts should carry "
+        "universe_has_survivorship_bias=true until a point-in-time S&P 500 "
+        "constituent loader is wired via fundamentals_provider."
+    )
+    return list(UNIVERSE_SEED)
+
+
 __all__ = [
     "DEFAULTS",
     "UNIVERSE_SEED",
+    "UNIVERSE_HAS_SURVIVORSHIP_BIAS",
+    "load_universe",
     "search_space",
 ]

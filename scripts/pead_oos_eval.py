@@ -20,9 +20,10 @@ from pathlib import Path
 def _install_stubs() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     backend = repo_root / "backend"
-    sp = str(repo_root)
-    if sp not in sys.path:
-        sys.path.insert(0, sp)
+    for _p in (repo_root, backend):
+        ps = str(_p)
+        if ps not in sys.path:
+            sys.path.insert(0, ps)
     if "backend" not in sys.modules:
         b = types.ModuleType("backend")
         b.__path__ = [str(backend)]
@@ -40,12 +41,14 @@ _install_stubs()
 
 
 import math  # noqa: E402
+from datetime import timedelta  # noqa: E402
 import pandas as pd  # noqa: E402
 import backend.strategies.pead  # noqa: F401,E402
 
 from backend.backtest.engine import BacktestEngine, EngineConfig  # noqa: E402
 from backend.data.providers.alpaca import AlpacaBarProvider  # noqa: E402
 from backend.data.providers.fmp import FMPEarningsProvider  # noqa: E402
+from backend.strategies.pead import config as _pead_cfg  # noqa: E402
 from backend.strategies.pead.config import UNIVERSE_SEED  # noqa: E402
 from backend.strategies.pead.strategy import PEADStrategy  # noqa: E402
 
@@ -90,12 +93,22 @@ class _InMemoryBarProvider:
 
 
 def _parse_sue_from_tag(tag: str) -> float | None:
-    """Fill tags are 'pead-entry-long-sue+2.34' / 'pead-entry-short-sue-1.89'."""
+    """Fill tags are 'pead-entry-long-sue+2.34[-evspread0.0005]' etc."""
 
     if "sue" not in tag:
         return None
     try:
-        return float(tag.split("sue")[-1])
+        after = tag.split("sue")[-1]
+        # Trim any trailing signal-tag suffixes that the engine appends
+        # (e.g. ``-evspread0.0005`` added by Wave 1 event-conditional slippage).
+        for sep in ("-evspread", "-"):
+            if sep in after[1:]:  # keep leading sign
+                # Find first occurrence after the sign char.
+                idx = after.find(sep, 1)
+                if idx > 0:
+                    after = after[:idx]
+                    break
+        return float(after)
     except Exception:
         return None
 
@@ -233,6 +246,93 @@ def main() -> int:
         bar = "#" * min(v, 50)
         print(f"  {k:>20s}  {v:3d}  {bar}")
 
+    # -----------------------------------------------------------------
+    # AMC vs BMO entry-fill classification (to prove P0-1 engaged).
+    # For each entry fill at session D on symbol S, look up the earnings
+    # calendar: an AMC announcement on D-1 or a BMO announcement on D.
+    # Matches the two-anchor mask in PEADStrategy._yesterday_announcements.
+    # -----------------------------------------------------------------
+    cal_start = cfg.start - timedelta(days=5)
+    cal_end = cfg.end + timedelta(days=2)
+    # FMP /stable/earnings-calendar silently returns empty for wide windows,
+    # so fetch in ~10-day chunks and concatenate. This preserves the
+    # ``announcement_when`` column the Wave 1 fix populates.
+    chunks: list[pd.DataFrame] = []
+    chunk_span = timedelta(days=10)
+    cur = cal_start
+    while cur <= cal_end:
+        nxt = min(cur + chunk_span, cal_end)
+        try:
+            piece = earnings.calendar(cur, nxt, symbols=syms)
+        except Exception as exc:
+            print(f"WARN: calendar chunk {cur}→{nxt} failed: {exc}")
+            piece = pd.DataFrame()
+        if piece is not None and not piece.empty:
+            chunks.append(piece)
+        cur = nxt + timedelta(days=1)
+    if chunks:
+        full_cal = pd.concat(chunks, ignore_index=True).drop_duplicates(
+            subset=["symbol", "date"], keep="last"
+        )
+    else:
+        full_cal = pd.DataFrame(columns=["symbol", "date", "announcement_when"])
+    print(f"Calendar rows fetched: {len(full_cal)}")
+    if not full_cal.empty and "announcement_when" in full_cal.columns:
+        print(f"  when-value counts: {full_cal['announcement_when'].value_counts(dropna=False).to_dict()}")
+
+    amc_fills = 0
+    bmo_fills = 0
+    unknown_when_fills = 0
+    nomatch_fills = 0
+    if not full_cal.empty and "announcement_when" in full_cal.columns:
+        cal_idx: dict[tuple[str, date], str] = {}
+        for row in full_cal[["symbol", "date", "announcement_when"]].itertuples(index=False):
+            sym_r = str(row.symbol).upper()
+            d_r = row.date
+            if isinstance(d_r, pd.Timestamp):
+                d_r = d_r.date()
+            when_r = str(row.announcement_when).lower() if row.announcement_when is not None else ""
+            cal_idx[(sym_r, d_r)] = when_r
+
+        for f in entry_fills:
+            sym_f = str(f.symbol).upper()
+            ts_f = f.ts
+            if isinstance(ts_f, pd.Timestamp):
+                d_fill = ts_f.date()
+            else:
+                d_fill = getattr(ts_f, "date", lambda: ts_f)()
+            d_prev = d_fill - timedelta(days=1)
+            # Walk back weekdays up to 4 days to find a trading-day candidate.
+            prev_candidates = []
+            probe = d_prev
+            for _ in range(5):
+                if probe.weekday() < 5:
+                    prev_candidates.append(probe)
+                probe -= timedelta(days=1)
+            # BMO match: same-day announcement.
+            when_bmo = cal_idx.get((sym_f, d_fill))
+            when_amc = None
+            for cand in prev_candidates:
+                w = cal_idx.get((sym_f, cand))
+                if w is not None:
+                    when_amc = w
+                    break
+            if when_bmo == "bmo":
+                bmo_fills += 1
+            elif when_amc == "amc":
+                amc_fills += 1
+            elif when_bmo or when_amc:
+                unknown_when_fills += 1
+            else:
+                nomatch_fills += 1
+
+    print()
+    print("Entry-fill AMC/BMO classification:")
+    print(f"  AMC fills:          {amc_fills}")
+    print(f"  BMO fills:          {bmo_fills}")
+    print(f"  Unknown/when empty: {unknown_when_fills}")
+    print(f"  No calendar match:  {nomatch_fills}")
+
     out = {
         "strategy": "pead",
         "start": str(cfg.start),
@@ -249,16 +349,32 @@ def main() -> int:
             float(res.equity_curve["equity"].iloc[-1])
             if not res.equity_curve.empty else None
         ),
+        "oos_entry_fill_classification": {
+            "amc": amc_fills,
+            "bmo": bmo_fills,
+            "unknown_when": unknown_when_fills,
+            "no_calendar_match": nomatch_fills,
+            "total_entry_fills": len(entry_fills),
+        },
         "sue_histogram": sue_hist,
         "hit_rate_by_sue_bucket": hit_rates,
         "n_round_trips_by_sue_bucket": {k: v["n"] for k, v in bucket_stats.items()},
         "target_sharpe": 0.50,
         "achieved_sharpe": float(metrics.get("sharpe", 0.0)),
+        "universe_has_survivorship_bias": bool(
+            getattr(_pead_cfg, "UNIVERSE_HAS_SURVIVORSHIP_BIAS", False)
+        ),
     }
     out_path = _ROOT / "audit-reports" / "phase1-pead-oos.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     print(f"\nDumped OOS eval to {out_path}")
+
+    # Mirror to the canonical backend/data/oos/ artefact path.
+    mirror_path = _ROOT / "backend" / "data" / "oos" / "phase1-pead-oos.json"
+    mirror_path.parent.mkdir(parents=True, exist_ok=True)
+    mirror_path.write_text(json.dumps(out, indent=2, default=str))
+    print(f"Mirrored to {mirror_path}")
     return 0
 
 

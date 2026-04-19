@@ -77,6 +77,14 @@ class StrategyPerformance(BaseModel):
     active_positions_count: int
     equity_curve: list[dict[str, Any]]  # [{date, value}]
     last_trade_date: str
+    # Wave 4 — live-trading routing flags. ``live_disabled`` names the
+    # strategy as structurally unfit for live capital until the P0 defects
+    # from its expert audit land; ``paper_only`` names it as
+    # implementation-complete but statistically thin. Both surface a
+    # NOT-READY badge on the frontend; backend rejects 422 on live.
+    # See audit-reports/00-strategy-experts-consolidation.md §4.
+    live_disabled: bool = False
+    paper_only: bool = False
 
 
 class StrategySummary(BaseModel):
@@ -90,6 +98,10 @@ class StrategySummary(BaseModel):
     win_rate: float
     active_positions_count: int
     sparkline: list[float] = []
+    # Wave 4 — mirror the flags on the list endpoint so the strategies grid
+    # can render NOT-READY badges without a per-strategy follow-up fetch.
+    live_disabled: bool = False
+    paper_only: bool = False
 
 
 class ToggleResponse(BaseModel):
@@ -445,6 +457,22 @@ _REGISTRY_TO_ROUTE: dict[str, str] = {
     "vwap": "vwap-strategy",
 }
 _ROUTE_TO_REGISTRY: dict[str, str] = {v: k for k, v in _REGISTRY_TO_ROUTE.items()}
+
+
+def _live_flags_for(route_id: str) -> tuple[bool, bool]:
+    """Return ``(live_disabled, paper_only)`` for a hyphen route id.
+
+    Wave 4 — the live-trading allowlist lives in ``core.config`` keyed on
+    the canonical underscore registry name. ``_ROUTE_TO_REGISTRY`` maps the
+    hyphen-id form. Strategies not listed in either set return
+    ``(False, False)`` — the default for a PASS strategy.
+    """
+    from core.config import STRATEGY_LIVE_DISABLED, STRATEGY_PAPER_ONLY
+    canonical = _ROUTE_TO_REGISTRY.get(route_id, route_id)
+    return (
+        canonical in STRATEGY_LIVE_DISABLED,
+        canonical in STRATEGY_PAPER_ONLY,
+    )
 
 # Static fallback registry metadata -- used when the registry hasn't been
 # imported yet (e.g. during partial test collection).  Mirrors the
@@ -1162,6 +1190,7 @@ async def list_strategies() -> list[StrategySummary]:
             curve = _generate_equity_curve(sid, max(invested, 1), total_return)
             sparkline_data = [p["value"] for p in curve[-20:]] if curve else []
 
+        live_disabled, paper_only = _live_flags_for(sid)
         summaries.append(StrategySummary(
             id=sid,
             name=d["name"],
@@ -1173,6 +1202,8 @@ async def list_strategies() -> list[StrategySummary]:
             win_rate=win_rate,
             active_positions_count=active_count,
             sparkline=sparkline_data,
+            live_disabled=live_disabled,
+            paper_only=paper_only,
         ))
     return summaries
 
@@ -1415,6 +1446,7 @@ async def get_strategy_performance(
     oos_cagr = oos_source.get("cagr")
     oos_profit_factor = oos_source.get("profit_factor")
 
+    live_disabled, paper_only = _live_flags_for(_canonical_id(strategy_id))
     return StrategyPerformance(
         name=data["name"],
         description=data["description"],
@@ -1433,6 +1465,8 @@ async def get_strategy_performance(
         active_positions_count=active_count,
         equity_curve=equity_curve,
         last_trade_date=last_trade,
+        live_disabled=live_disabled,
+        paper_only=paper_only,
     )
 
 

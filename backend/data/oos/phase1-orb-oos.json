@@ -1,54 +1,70 @@
 {
+  "source": "defaults_post_wave2",
+  "note": "Regenerated after Wave 2 config fixes (all_leveraged narrowed to SPY/QQQ; max_notional_pct 0.20 -> 1.0; volume_confirm_min floor 1.0, default 1.2).\n\nCANONICAL NUMBER (this file): Wave 2 DEFAULTS, no tuning. Sharpe = 4.7762 (95% CI Lo [-0.020, 9.573]), MDD = -0.0122, Sortino = 6.3462, Entries = 258. Down from pre-fix 8.3369, consistent with the expert audit's assessment that leverage+clip+disabled-volume-gate produced the bulk of the spurious alpha.\n\nSEPARATE FINDING NOT ADDRESSED BY WAVE 2: scripts/tune_orb.py optimises Sharpe directly on the 2023-24 OOS window (_objective_factory uses _run_oos on TEST_START/TEST_END). A fresh 25-trial re-tune under the narrowed Wave 2 search space still produces a best OOS Sharpe of 9.9565 (winner: spy_qqq + allow_shorts + volume=1.15 + or=15min + entry_cutoff=12h). This is OOS peeking and is a structural tuner-harness issue, not a strategy-config issue. See sibling audit-reports/phase1-orb-oos-retuned.json. A proper fix requires tuning on the 2022 IS window (which the script's TRAIN_START/END constants already define but the objective ignores).",
   "params": {
-    "or_minutes": 15,
+    "or_minutes": 5,
     "entry_cutoff_hour_et": 14,
     "stop_method": "or_bound",
-    "volume_confirm_min": 0.8621861504605776,
-    "universe_profile": "all_leveraged",
+    "volume_confirm_min": 1.2,
+    "universe_profile": "qqq_tqqq",
     "allow_shorts": false,
-    "tp1_fib": 1.3315247065476081,
-    "tp2_fib": 2.2064001915361944,
-    "risk_per_trade": 0.013581007063173878
+    "tp1_fib": 1.272,
+    "tp2_fib": 1.618,
+    "risk_per_trade": 0.01,
+    "session_end_hour_et": 15,
+    "session_end_minute_et": 55,
+    "commission_bps": 0.5,
+    "slippage_bps": 2.0,
+    "max_notional_pct": 1.0,
+    "tp_scale_fraction": 0.3333333333333333
   },
   "start": "2023-01-01",
   "end": "2024-12-31",
   "metrics": {
-    "sharpe": 8.336941623197418,
-    "sortino": 44.47633290263651,
-    "max_drawdown": -0.004479412609676103,
-    "cagr": 0.5979017434782519,
-    "hit_rate": 0.5482233502538071,
-    "profit_factor": 22.25141175491373,
+    "sharpe": 4.776204060939045,
+    "sortino": 6.34622966521494,
+    "max_drawdown": -0.012218172910534175,
+    "cagr": 0.12572623330789878,
+    "hit_rate": 0.5813953488372093,
+    "profit_factor": 3.9390409949008016,
     "n_days": 522,
-    "n_active_days": 394,
-    "total_return": 1.640215838170905
+    "n_active_days": 258,
+    "total_return": 0.27802498437782197
   },
-  "entries": 1337,
+  "sharpe_ci95_low": -0.020446429989097403,
+  "sharpe_ci95_high": 9.572854551867188,
+  "sharpe_se_lo_approx": 2.4472706586368074,
+  "entries": 258,
   "equity_start": 100000.0,
-  "equity_end": 264021.5838170905,
+  "equity_end": 127802.4984377822,
   "direction_counts": {
-    "long": 1337
+    "long": 258
   },
   "exit_reason_counts": {
-    "stop": 676,
-    "eod_flat": 661
+    "stop": 114,
+    "eod_flat": 144
   },
   "by_year": [
     {
       "year": 2023,
-      "equity_end": 176849.43600389204,
+      "equity_end": 117952.6958874665,
       "equity_start": 100000.0,
       "trading_days": 260,
-      "active_days": 202,
-      "year_return": 0.7684943600389234
+      "active_days": 131,
+      "year_return": 0.17952695887466819
     },
     {
       "year": 2024,
-      "equity_end": 264021.5838170905,
-      "equity_start": 176849.43600389204,
+      "equity_end": 127802.4984377822,
+      "equity_start": 117952.6958874665,
       "trading_days": 262,
-      "active_days": 192,
-      "year_return": 0.4929173074166866
+      "active_days": 127,
+      "year_return": 0.08350637919893722
     }
-  ]
+  ],
+  "comparison": {
+    "prefix_sharpe_stale_tune": 8.336941623197418,
+    "defaults_sharpe_post_wave2": 4.776204060939045,
+    "retuned_sharpe_post_wave2_peeking": 9.956470995516149
+  }
 }

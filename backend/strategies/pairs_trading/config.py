@@ -42,6 +42,12 @@ DEFAULTS: dict[str, Any] = {
     # Kalman noise parameters (fixed; Chan 2013 defaults)
     "kalman_delta": 1e-5,
     "kalman_r": 1e-3,
+    # Whether OLS beta and the spread / z-score are computed on
+    # log-prices. Default True per spec §3.3 (Engle-Granger path) and
+    # audit P0-4 (raw-price spreads produce level-dependent
+    # heteroskedasticity in the "stationary" residual). Flip to False
+    # only for diagnostic comparisons.
+    "prices_in_log_space": True,
 }
 
 

@@ -30,8 +30,11 @@ def test_calendar_returns_rows(earnings):
     cols = {
         "symbol", "date", "eps_actual", "eps_estimated",
         "revenue_actual", "revenue_estimated", "last_updated",
+        "announcement_when",
     }
     assert cols == set(df.columns)
+    # announcement_when should carry 'amc' / 'bmo' / 'unknown' only.
+    assert set(df["announcement_when"].unique()) <= {"amc", "bmo", "unknown"}
     # At least some large-caps should have both actual and estimated EPS
     has_both = df[df["eps_actual"].notna() & df["eps_estimated"].notna()]
     assert len(has_both) > 0

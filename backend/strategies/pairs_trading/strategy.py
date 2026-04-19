@@ -212,6 +212,14 @@ class PairsTradingStrategy:
         merged["hedge_method"] = str(merged["hedge_method"]).lower()
         if merged["hedge_method"] not in ("ols", "kalman"):
             merged["hedge_method"] = "ols"
+        # Audit P0-4: the spec §3.3 calls for log-prices on the
+        # Engle-Granger path. ``prices_in_log_space`` defaults to True
+        # in config.DEFAULTS; coerce from tuner-supplied strings.
+        log_flag = merged.get("prices_in_log_space", True)
+        if isinstance(log_flag, str):
+            merged["prices_in_log_space"] = log_flag.strip().lower() in ("true", "1", "yes")
+        else:
+            merged["prices_in_log_space"] = bool(log_flag)
         self.params = merged
 
     @classmethod
@@ -318,6 +326,29 @@ class PairsTradingStrategy:
             return None
         return s
 
+    def _price_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply the configured price transform (log or identity).
+
+        Audit P0-4 / spec §3.3: the Engle-Granger OLS, Kalman hedge,
+        spread and z-score must all operate on the SAME price space;
+        otherwise the "stationary" residual carries level-dependent
+        heteroskedasticity. We transform here, once, and every downstream
+        call site (``engle_granger_adf``, ``kalman_hedge_ratio``, the
+        spread subtraction in ``_spread_and_z``) sees the same space.
+
+        Positive closes are expected (equity prices); guard against
+        non-positive values by dropping those rows before log.
+        """
+
+        if not bool(self.params.get("prices_in_log_space", True)):
+            return df
+        # Drop rows with non-positive closes (defensive — should never
+        # happen for the equity universe but np.log would produce -inf).
+        safe = df[(df > 0).all(axis=1)]
+        if safe.empty:
+            return safe
+        return np.log(safe)
+
     # ------------------------------------------------------------------ #
     # Pair screen
     # ------------------------------------------------------------------ #
@@ -346,7 +377,13 @@ class PairsTradingStrategy:
             if len(df) < _MIN_BARS_FOR_SCREEN:
                 continue
             df = df.tail(formation_days)
-            # Engle-Granger.
+            # Apply price transform (log-prices by default; audit P0-4).
+            df = self._price_transform(df)
+            if len(df) < _MIN_BARS_FOR_SCREEN:
+                continue
+            # Engle-Granger on the transformed series (so ``beta`` is the
+            # log-space hedge ratio that matches the spread computed in
+            # ``_spread_and_z``).
             try:
                 pvalue, _adf, beta, residuals = engle_granger_adf(df["y"], df["x"])
             except Exception:
@@ -411,6 +448,12 @@ class PairsTradingStrategy:
                 df = pd.concat(
                     [y_ser.rename("y"), x_ser.rename("x")], axis=1
                 ).dropna().tail(formation_days)
+                # Kalman must run in the same price space as OLS beta / the
+                # spread subtraction downstream (audit P0-4).
+                df = self._price_transform(df)
+                if df.empty:
+                    pair.kalman_betas = None
+                    continue
                 try:
                     pair.kalman_betas = kalman_hedge_ratio(
                         df["y"], df["x"],
@@ -484,6 +527,13 @@ class PairsTradingStrategy:
             if len(df) < _MIN_BARS_FOR_SCREEN:
                 failed.add(pair.pair_id)
                 continue
+            # Watchdog re-runs E-G on the SAME price space as the original
+            # screen; otherwise the p-value test compares two different
+            # residual distributions (audit P0-4).
+            df = self._price_transform(df)
+            if len(df) < _MIN_BARS_FOR_SCREEN:
+                failed.add(pair.pair_id)
+                continue
             try:
                 pvalue, _adf, _beta, _res = engle_granger_adf(df["y"], df["x"])
             except Exception:
@@ -530,8 +580,18 @@ class PairsTradingStrategy:
         need = z_window + 5
         df_trim = df.tail(need)
 
+        # Audit P0-4: all hedge-ratio estimation and spread / z-score
+        # arithmetic runs on the configured price space (log by default;
+        # spec §3.3). ``df_trim`` keeps the raw-price last-row for the
+        # returned ``price_y`` / ``price_x`` (used only for positivity
+        # guards downstream); ``df_trim_est`` is the series fed into the
+        # Kalman fit and the spread subtraction.
+        df_trim_est = self._price_transform(df_trim)
+        if df_trim_est.empty or len(df_trim_est) < z_window + 2:
+            return None
+
         if method == "kalman" and pair.kalman_betas is not None:
-            betas = pair.kalman_betas.reindex(df_trim.index).ffill()
+            betas = pair.kalman_betas.reindex(df_trim_est.index).ffill()
             # Fall back to the screen beta where Kalman hasn't updated yet.
             betas = betas.fillna(pair.beta)
             last = betas.dropna()
@@ -539,9 +599,10 @@ class PairsTradingStrategy:
         elif method == "kalman":
             # Rescreen hasn't populated kalman_betas — run a one-shot
             # fit on the trimmed window so we can still trade. Much cheaper
-            # than fitting on the full formation window every bar.
+            # than fitting on the full formation window every bar. Runs
+            # on the log-space series so it matches the OLS beta.
             beta_series = kalman_hedge_ratio(
-                df_trim["y"], df_trim["x"],
+                df_trim_est["y"], df_trim_est["x"],
                 delta=float(p["kalman_delta"]),
                 r=float(p["kalman_r"]),
             )
@@ -550,15 +611,20 @@ class PairsTradingStrategy:
             betas = beta_series.ffill().fillna(pair.beta)
         else:
             beta_today = pair.beta
-            betas = pd.Series(pair.beta, index=df_trim.index)
+            betas = pd.Series(pair.beta, index=df_trim_est.index)
 
-        spread = df_trim["y"] - betas * df_trim["x"]
+        # Spread = log(y) - beta * log(x) when prices_in_log_space=True
+        # (default); else raw-price spread. beta is consistent with the
+        # space because ``_rescreen`` / watchdog / Kalman all estimated
+        # it on the same transform.
+        spread = df_trim_est["y"] - betas * df_trim_est["x"]
         # Rolling mean / std on [t-N, t-1] — strict no look-ahead.
         mean = spread.shift(1).rolling(window=z_window, min_periods=z_window).mean()
         std = spread.shift(1).rolling(window=z_window, min_periods=z_window).std(ddof=1)
         z = (spread - mean) / std.replace(0.0, np.nan)
         z_today = float(z.iloc[-1]) if len(z) else float("nan")
         spread_today = float(spread.iloc[-1])
+        # Return raw prices for the positivity / sizing guards downstream.
         price_y = float(df_trim["y"].iloc[-1])
         price_x = float(df_trim["x"].iloc[-1])
         if not np.isfinite(z_today):

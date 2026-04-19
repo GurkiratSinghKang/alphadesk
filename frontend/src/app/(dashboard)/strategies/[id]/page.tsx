@@ -34,6 +34,7 @@ import EquityPanel, {
 import SignalSection from "./_strategy/SignalSection";
 import PositionsSection from "./_strategy/PositionsSection";
 import LimitationsSection from "./_strategy/LimitationsSection";
+import StrategyDisclosure from "@/components/strategies/StrategyDisclosure";
 
 // ─── Slug alias (canonical strategy ids) ────────────────────────
 
@@ -586,6 +587,18 @@ export default function StrategyDetailPage() {
         name={meta.name}
         description={perf?.description ?? null}
         cells={cells}
+      />
+
+      {/* Wave 4 — consolidation-report disclosure banner. Renders verbatim
+          copy for the 5 strategies in audit-reports/00-strategy-experts-
+          consolidation.md §4 and a NOT-READY-FOR-LIVE pill when the
+          backend's live_disabled / paper_only flag is set. Returns null
+          (renders nothing) for PASS strategies — the 7 non-disclosed pages
+          remain unchanged. */}
+      <StrategyDisclosure
+        strategyId={strategyId}
+        liveDisabled={perf?.live_disabled ?? false}
+        paperOnly={perf?.paper_only ?? false}
       />
 
       {/* Wave 26 — honesty caveat for implausibly high OOS Sharpe (e.g. ORB's

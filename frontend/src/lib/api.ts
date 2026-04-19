@@ -296,6 +296,18 @@ export interface StrategyPerformance {
    * there are no losing trades in the sample or the backtest wasn't run.
    */
   profit_factor?: number | null;
+  /**
+   * Wave 4 — routing flags surfaced by the backend strategy catalog.
+   *
+   * `live_disabled` is true when the strategy is on the live-trading
+   * denylist (e.g. `orb`). `paper_only` is true when the strategy is
+   * implementation-complete but statistically thin (e.g. `kama_breakout`).
+   * Both default to false. Renders a NOT-READY FOR LIVE pill on the
+   * disclosure banner when either is set. Defaults for back-compat with
+   * older backends that don't emit the fields.
+   */
+  live_disabled?: boolean;
+  paper_only?: boolean;
 }
 
 export function getStrategyPerformance(strategyId: string) {

@@ -324,9 +324,16 @@ def has_overlapping_earnings(
     symbol: str,
     entry_day: date,
     horizon_days: int,
+    calendar_provider: Any = None,
 ) -> bool:
-    """True iff ``symbol`` has another earnings announcement in
-    ``(entry_day, entry_day + horizon_days]``.
+    """True iff ``symbol`` has another earnings announcement in the
+    ``horizon_days`` trading sessions strictly after ``entry_day``.
+
+    When ``calendar_provider`` is supplied and exposes ``sessions(start,
+    end)``, the exclusion window uses exact session math (NYSE holidays
+    respected). Otherwise we fall back to a business-day cushion that
+    overshoots slightly — preserved for callers that don't have a
+    calendar provider wired.
     """
 
     if calendar is None or calendar.empty:
@@ -335,10 +342,16 @@ def has_overlapping_earnings(
     sub = calendar[calendar["symbol"] == sym]
     if sub.empty:
         return False
-    # Convert to trading-day horizon via a business-day cushion. We overshoot
-    # slightly (trading days × ~7/5 = calendar days) to be conservative.
-    cushion = int(round(horizon_days * 7.0 / 5.0)) + 2
-    upper = entry_day + timedelta(days=cushion)
+
+    upper = _session_offset(
+        entry_day, int(horizon_days), calendar_provider
+    )
+    if upper is None:
+        # Conservative fallback (overshoots by ~2 sessions on a holiday-
+        # heavy horizon, but always closes the overlap gap).
+        cushion = int(round(horizon_days * 7.0 / 5.0)) + 2
+        upper = entry_day + timedelta(days=cushion)
+
     for d in sub["date"]:
         d_val = _coerce_date(d)
         if d_val is None:
@@ -348,9 +361,17 @@ def has_overlapping_earnings(
     return False
 
 
-def trading_days_between(start: Optional[date | datetime], end: date) -> int:
-    """Business-day count between two dates (exclusive of the start).
-    Approximates trading days; good enough for a 40-day window.
+def trading_days_between(
+    start: Optional[date | datetime],
+    end: date,
+    calendar_provider: Any = None,
+) -> int:
+    """Session count between ``start`` and ``end`` (exclusive of the start).
+
+    Uses ``calendar_provider.sessions(start, end)`` when available so
+    NYSE holidays (MLK, Presidents' Day, Good Friday, Juneteenth, …) are
+    honoured. Falls back to :func:`pandas.bdate_range` when no provider
+    is supplied.
     """
 
     if start is None:
@@ -358,7 +379,57 @@ def trading_days_between(start: Optional[date | datetime], end: date) -> int:
     s = start.date() if isinstance(start, datetime) else start
     if s > end:
         return 0
+
+    if calendar_provider is not None and hasattr(calendar_provider, "sessions"):
+        try:
+            sess = list(calendar_provider.sessions(s, end))
+        except Exception:
+            sess = None
+        if sess is not None:
+            parsed = sorted(
+                {
+                    (d if isinstance(d, date) else pd.Timestamp(d).date())
+                    for d in sess
+                }
+            )
+            if parsed:
+                # Exclude the start session, matching the prior contract.
+                return max(0, len([d for d in parsed if d > s]))
+
     return int(len(pd.bdate_range(start=s, end=end))) - 1
+
+
+def _session_offset(
+    entry_day: date,
+    horizon_sessions: int,
+    calendar_provider: Any,
+) -> Optional[date]:
+    """Return the session that is ``horizon_sessions`` trading days after
+    ``entry_day`` per ``calendar_provider``. ``None`` if no provider."""
+
+    if calendar_provider is None or not hasattr(calendar_provider, "sessions"):
+        return None
+    try:
+        # Pull ~double the horizon in calendar days to absorb weekends +
+        # holidays without running off the end of the provider's window.
+        end_cal = entry_day + timedelta(days=max(7, horizon_sessions * 2 + 14))
+        sess = list(calendar_provider.sessions(entry_day, end_cal))
+    except Exception:
+        return None
+    parsed = sorted(
+        {
+            (d if isinstance(d, date) else pd.Timestamp(d).date())
+            for d in sess
+            if d is not None
+        }
+    )
+    after = [d for d in parsed if d > entry_day]
+    if not after:
+        return None
+    if horizon_sessions <= 0:
+        return entry_day
+    idx = min(horizon_sessions, len(after)) - 1
+    return after[idx]
 
 
 # --------------------------------------------------------------------------- #

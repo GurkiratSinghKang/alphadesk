@@ -53,8 +53,16 @@ def fetch_close_panel(
     symbols: list[str],
     start: date,
     end: date,
+    asof: Optional[date] = None,
 ) -> Optional[pd.DataFrame]:
-    """Return a wide DataFrame of close prices, index = UTC session ts."""
+    """Return a wide DataFrame of close prices, index = UTC session ts.
+
+    ``asof`` — if supplied, the halt-detection slice uses only bars on or
+    before ``asof``. The returned panel itself is NOT truncated (callers
+    still do their own ``panel.index <= asof`` slice for signal math); we
+    only need ``asof`` to prevent halt classification from peeking at
+    bars past the rebalance date. See :func:`_drop_halted_symbols`.
+    """
 
     provider = getattr(ctx, "bar_provider", None)
     if provider is None:
@@ -91,7 +99,7 @@ def fetch_close_panel(
         .sort_index()
     )
     wide = wide.ffill()
-    return _drop_halted_symbols(wide)
+    return _drop_halted_symbols(wide, asof=asof)
 
 
 # --------------------------------------------------------------------------- #
@@ -104,7 +112,10 @@ def fetch_close_panel(
 HALT_THRESHOLD_BARS = 5
 
 
-def _drop_halted_symbols(wide: pd.DataFrame) -> pd.DataFrame:
+def _drop_halted_symbols(
+    wide: pd.DataFrame,
+    asof: Optional[date] = None,
+) -> pd.DataFrame:
     """Drop symbols whose trailing closes are flat for >= HALT_THRESHOLD_BARS.
 
     After ``ffill()`` a halted symbol presents as a long run of identical
@@ -113,14 +124,51 @@ def _drop_halted_symbols(wide: pd.DataFrame) -> pd.DataFrame:
     sizing formulas can blow up on. Audit P0 #10 (cross-cutting):
     explicitly drop halted symbols from the panel and warn so operators
     notice. Halts that resolve will reappear once real prints arrive.
+
+    Look-ahead fix (P0-8): ``fetch_close_panel`` extends ~400 calendar
+    days past ``asof`` so the cached panel can serve later rebalances
+    without a re-fetch. If we take the tail of the FULL panel, halt
+    classification for a 2023-01-31 rebalance uses bars near 2024-03-06
+    -- a silent look-ahead. When ``asof`` is supplied, the halt scan
+    uses only bars on or before ``asof``; the returned panel itself
+    still spans the full fetched window so the cache can serve later
+    rebalances. The panel index is tz-aware UTC (normalised in
+    :func:`fetch_close_panel`); we promote ``asof`` to a tz-aware
+    Timestamp and, if the index is tz-naive (e.g. a synthetic test
+    provider), strip tz from the key before slicing.
     """
 
     if wide is None or wide.empty:
         return wide
-    n = len(wide.index)
+
+    # Build the window used for halt classification. When ``asof`` is
+    # supplied, bound it so we cannot peek at bars beyond the rebalance
+    # date. We return the original (wider) panel so the cache keeps its
+    # forward-looking bars for subsequent rebalances -- the only effect
+    # is narrowing the halt-detection window.
+    if asof is not None:
+        key = pd.Timestamp(asof)
+        idx_tz = getattr(wide.index, "tz", None)
+        if idx_tz is not None:
+            # Panel index is tz-aware (normal path). Promote ``asof`` to
+            # that tz; guard against already-tz-aware Timestamps.
+            if key.tzinfo is None:
+                key = key.tz_localize(idx_tz)
+            else:
+                key = key.tz_convert(idx_tz)
+        else:
+            # Panel index is tz-naive (tests / non-UTC providers). Drop
+            # tz from ``asof`` so the comparison doesn't raise.
+            if key.tzinfo is not None:
+                key = key.tz_convert("UTC").tz_localize(None)
+        scan = wide.loc[:key]
+    else:
+        scan = wide
+
+    n = len(scan.index)
     if n < HALT_THRESHOLD_BARS + 1:
         return wide
-    tail = wide.tail(HALT_THRESHOLD_BARS + 1)
+    tail = scan.tail(HALT_THRESHOLD_BARS + 1)
     flat: list[str] = []
     for col in wide.columns:
         vals = tail[col].dropna().values

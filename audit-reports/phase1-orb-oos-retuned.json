@@ -1,0 +1,60 @@
+{
+  "source": "retuned_post_wave2",
+  "note": "Wave-2 re-tuned winner. NOTE: scripts/tune_orb.py objective optimises Sharpe directly on the 2023-24 OOS window, so this Sharpe 9.9565 reflects OOS peeking and is NOT a clean generalisation metric. Preserved here for transparency; the canonical artefact is phase1-orb-oos.json (defaults variant).",
+  "params": {
+    "or_minutes": 15,
+    "entry_cutoff_hour_et": 12,
+    "stop_method": "or_bound",
+    "volume_confirm_min": 1.150368254975618,
+    "universe_profile": "spy_qqq",
+    "allow_shorts": true,
+    "tp1_fib": 1.113922884494434,
+    "tp2_fib": 1.976871616058709,
+    "risk_per_trade": 0.008127953688118777
+  },
+  "start": "2023-01-01",
+  "end": "2024-12-31",
+  "metrics": {
+    "sharpe": 9.956470995516149,
+    "sortino": 30.918742851541616,
+    "max_drawdown": -0.008962681157600016,
+    "cagr": 0.877000496998223,
+    "hit_rate": 0.6673511293634496,
+    "profit_factor": 11.53399991219454,
+    "n_days": 522,
+    "n_active_days": 487,
+    "total_return": 2.6852074951000557
+  },
+  "sharpe_ci95_low": 0.27260170356313296,
+  "sharpe_ci95_high": 19.640340287469165,
+  "sharpe_se_lo_approx": 4.940749638751539,
+  "entries": 897,
+  "equity_start": 100000.0,
+  "equity_end": 368520.7495100056,
+  "direction_counts": {
+    "short": 437,
+    "long": 460
+  },
+  "exit_reason_counts": {
+    "eod_flat": 467,
+    "stop": 430
+  },
+  "by_year": [
+    {
+      "year": 2023,
+      "equity_end": 209600.80833864404,
+      "equity_start": 100000.0,
+      "trading_days": 260,
+      "active_days": 243,
+      "year_return": 1.0960080833864403
+    },
+    {
+      "year": 2024,
+      "equity_end": 368520.7495100056,
+      "equity_start": 209600.80833864404,
+      "trading_days": 262,
+      "active_days": 244,
+      "year_return": 0.7582029021309904
+    }
+  ]
+}

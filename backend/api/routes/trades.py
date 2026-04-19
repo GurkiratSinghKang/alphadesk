@@ -310,6 +310,105 @@ def _alpaca_keys_empty() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Live-trading strategy routing (Wave 4 — see
+# audit-reports/00-strategy-experts-consolidation.md §4).
+# ---------------------------------------------------------------------------
+# The frontend speaks hyphenated ids ("vrp-harvesting"); the registry uses
+# underscore canonical names ("vrp_harvest"). ``STRATEGY_LIVE_DISABLED`` /
+# ``STRATEGY_PAPER_ONLY`` in ``core.config`` are keyed on the canonical name,
+# so we normalise the incoming ``payload.strategy`` via this mapping before
+# checking membership.
+_STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
+    "momentum-quality": "momentum_quality",
+    "pead": "pead",
+    "vrp-harvesting": "vrp_harvest",
+    "earnings-vol-premium": "earnings_vol",
+    "regime-adaptive": "regime_adaptive",
+    "ts-momentum": "ts_momentum",
+    "rsi2-reversal": "rsi2_reversal",
+    "dual-momentum": "dual_momentum",
+    "pairs-trading": "pairs_trading",
+    "pairs-stat-arb": "pairs_trading",
+    "kama-breakout": "kama_breakout",
+    "orb": "orb",
+    "vwap-strategy": "vwap",
+}
+
+
+def _canonical_strategy_name(name: str | None) -> str | None:
+    """Map any incoming strategy identifier to its canonical registry name.
+
+    Accepts ``None`` (manual orders carry no strategy), the hyphen-id the
+    frontend speaks, or the underscore canonical name the registry uses.
+    Returns ``None`` when the input is blank or not recognisable — callers
+    should treat ``None`` as "not a routed strategy order" and skip the
+    live-disabled / paper-only gates.
+    """
+    if not name:
+        return None
+    key = name.strip().lower().replace(" ", "-")
+    if not key:
+        return None
+    if key in _STRATEGY_ID_TO_CANONICAL:
+        return _STRATEGY_ID_TO_CANONICAL[key]
+    # Already-canonical (underscore form) passes through. We accept any
+    # underscore-cased token so strategies not listed in the route-id map
+    # are still checkable (e.g. future additions to STRATEGY_PAPER_ONLY).
+    if "-" not in key:
+        return key
+    return None
+
+
+def _reject_if_live_forbidden(strategy: str | None) -> None:
+    """Reject the order when the strategy is live-disabled or paper-only
+    AND the configured Alpaca base URL points at the live endpoint.
+
+    Wave 4 implementation of the live-trading allowlist/denylist flagged in
+    audit-reports/00-strategy-experts-consolidation.md §4:
+      * ``orb`` — structurally unfit for live capital until 3 structural
+        defects land (see P0-5..7). 422 on live; still runnable in paper.
+      * ``kama_breakout`` — paper-only until a longer walk-forward lands a
+        statistically meaningful trade count. 422 on live; paper allowed.
+
+    Both gates no-op on the paper server (we WANT paper runs to exercise
+    these strategies) and on manual orders that don't carry a strategy tag.
+    """
+    canonical = _canonical_strategy_name(strategy)
+    if canonical is None:
+        return
+
+    from core.config import (
+        STRATEGY_LIVE_DISABLED,
+        STRATEGY_PAPER_ONLY,
+        is_live_alpaca_base_url,
+    )
+
+    if not is_live_alpaca_base_url():
+        return
+
+    if canonical in STRATEGY_LIVE_DISABLED:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Strategy '{canonical}' is on the live-trading denylist "
+                "(NOT-READY for live capital — see "
+                "audit-reports/00-strategy-experts-consolidation.md §4). "
+                "Route this order to the Alpaca paper endpoint instead."
+            ),
+        )
+    if canonical in STRATEGY_PAPER_ONLY:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Strategy '{canonical}' is paper-only until a longer OOS "
+                "window confirms statistical significance (see "
+                "audit-reports/00-strategy-experts-consolidation.md §4). "
+                "Route this order to the Alpaca paper endpoint instead."
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -450,6 +549,14 @@ async def create_order(
 
     from core.config import settings
     from core.redis import publish
+
+    # Wave 4 — live-trading strategy gate. Rejects ``orb`` (live-disabled)
+    # and ``kama_breakout`` (paper-only) before we touch the risk layer, so
+    # the error message names the root cause ("NOT-READY for live capital")
+    # instead of a downstream risk rejection. Runs BEFORE the aggregate risk
+    # check because it's strictly cheaper and a definitive 422 for these two
+    # strategies on live configs (paper URL passes through untouched).
+    _reject_if_live_forbidden(payload.strategy)
 
     # persona-16 P0-4: aggregate portfolio-level checks FIRST (gross notional,
     # position count, sector concentration) — the per-order cap alone let

@@ -11,11 +11,17 @@ Test window : 2023-01-01 to 2024-12-31.
 
 The objective maximised is:
 
-    score = oos_sharpe - 0.5 * max(0, mdd - 0.30) - 0.25 * max(0, -pnl_train)
+    score = train_sharpe
+          - 0.5  * max(0, train_mdd - 0.30)
+          - 0.25 * max(0, -train_return_pct)
 
-The Sharpe is computed over the *test* window only; the drawdown
-penalty is capped at 30 % and the train-profitability penalty discourages
-parameter sets that were net-negative in-sample.
+Sharpe, drawdown and profitability are all computed on the TRAIN leg
+(2022 / early-2023) so that Optuna never sees the 2023-07 -> 2024-12
+test window as a fitness signal. The test window is still backtested
+each trial and its metrics are recorded as trial ``user_attrs`` for
+post-hoc inspection, but they do not influence the score. An
+authoritative single OOS evaluation against the winning parameters is
+the caller's responsibility.
 
 Runtime note: each trial loads cached Polygon chain data per session.
 We cache the options provider across trials via a module-level provider
@@ -163,6 +169,19 @@ def _objective_factory(
     starting_cash: float,
 ):
     def _obj(trial: optuna.trial.Trial) -> float:
+        # SELECTION-ON-TEST FIX: the prior implementation read
+        # ``test_sum["sharpe"]`` as the fitness signal, which ran the
+        # 2023-07 -> 2024-12 OOS leg every trial and handed Optuna OOS
+        # Sharpe as the objective. That is structural
+        # selection-on-test; the reported OOS Sharpe becomes a max-of-N
+        # order statistic on the window that's supposed to be held out.
+        #
+        # We now score trials on TRAIN Sharpe only. The OOS window is
+        # still evaluated once per trial so the per-trial artefact can
+        # report the honest out-of-sample number (separately from the
+        # fitness), but it does NOT influence the score. A single
+        # authoritative OOS re-run against the winning params remains
+        # the responsibility of a downstream evaluator.
         params = _suggest_params(trial)
         try:
             _, train_sum = _run_window(params, train_start, train_end, starting_cash)
@@ -171,21 +190,29 @@ def _objective_factory(
             logging.exception("trial failed; returning -inf")
             return -math.inf
 
+        train_sharpe = float(train_sum["sharpe"])
         oos_sharpe = float(test_sum["sharpe"])
         oos_mdd = abs(float(test_sum["max_drawdown"]))
         train_return = float(train_sum["total_return_pct"])
+        train_mdd = abs(float(train_sum["max_drawdown"]))
 
-        if not math.isfinite(oos_sharpe):
+        if not math.isfinite(train_sharpe):
             return -math.inf
 
-        # Composite: OOS Sharpe minus penalties.
-        score = oos_sharpe
-        score -= 0.5 * max(0.0, oos_mdd - 0.30)
+        # Composite: TRAIN Sharpe minus penalties derived from the train
+        # leg only. OOS drawdown is no longer an input to the score —
+        # using it would leak OOS information into selection.
+        score = train_sharpe
+        score -= 0.5 * max(0.0, train_mdd - 0.30)
         score -= 0.25 * max(0.0, -train_return)
 
+        trial.set_user_attr("train_sharpe", train_sharpe)
+        trial.set_user_attr("train_mdd", train_mdd)
+        trial.set_user_attr("train_return_pct", train_return)
+        # Reported for post-hoc diagnostic inspection only; never fed
+        # back into the objective.
         trial.set_user_attr("oos_sharpe", oos_sharpe)
         trial.set_user_attr("oos_mdd", oos_mdd)
-        trial.set_user_attr("train_return_pct", train_return)
         trial.set_user_attr("oos_return_pct", float(test_sum["total_return_pct"]))
 
         return score
@@ -257,9 +284,11 @@ def main() -> int:
             {
                 "trial": t.number,
                 "score": float(t.value),
+                "train_sharpe": float(t.user_attrs.get("train_sharpe", 0.0)),
+                "train_mdd": float(t.user_attrs.get("train_mdd", 0.0)),
+                "train_return_pct": float(t.user_attrs.get("train_return_pct", 0.0)),
                 "oos_sharpe": float(t.user_attrs.get("oos_sharpe", 0.0)),
                 "oos_mdd": float(t.user_attrs.get("oos_mdd", 0.0)),
-                "train_return_pct": float(t.user_attrs.get("train_return_pct", 0.0)),
                 "oos_return_pct": float(t.user_attrs.get("oos_return_pct", 0.0)),
                 "params": t.params,
             }
@@ -272,6 +301,13 @@ def main() -> int:
         "trials_run": len(study.trials),
         "best_score": float(study.best_value),
         "best_params": study.best_params,
+        "best_train_sharpe": float(
+            study.best_trial.user_attrs.get("train_sharpe", 0.0)
+        ),
+        "best_train_mdd": float(
+            study.best_trial.user_attrs.get("train_mdd", 0.0)
+        ),
+        # Reported for diagnostic inspection; NOT the fitness signal.
         "best_oos_sharpe": float(study.best_trial.user_attrs.get("oos_sharpe", 0.0)),
         "best_oos_mdd": float(study.best_trial.user_attrs.get("oos_mdd", 0.0)),
         "leaderboard": leaderboard,

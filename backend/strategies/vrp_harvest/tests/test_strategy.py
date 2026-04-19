@@ -249,7 +249,13 @@ def test_pick_leg_by_delta_targets_16d():
 # Test (c): Single Signal with multiple legs                                  #
 # --------------------------------------------------------------------------- #
 def test_entry_emits_single_multileg_signal():
-    """One short strangle = one Signal with both legs."""
+    """The short strangle Signal carries both call + put legs.
+
+    Audit P0-10 pinned ``tail_hedge_ratio >= 5``; the strangle signal is
+    therefore always accompanied by a tail-hedge signal. We assert the
+    strangle signal's structure (two sold legs, short-premium quantity
+    sign) and ignore any additional tailhedge signal.
+    """
 
     asof = date(2024, 6, 3)
     closes = [500.0] * 60
@@ -259,7 +265,7 @@ def test_entry_emits_single_multileg_signal():
 
     strat = _configured_strat(
         vrp_entry_threshold=0.05,
-        tail_hedge_ratio=0,  # no hedge = one signal only
+        tail_hedge_ratio=5,
     )
     ctx = _make_ctx(
         asof=asof,
@@ -268,8 +274,12 @@ def test_entry_emits_single_multileg_signal():
         equity=100_000.0,
     )
     sigs = list(strat.generate_signals(asof, ctx))
-    assert len(sigs) == 1, f"expected 1 signal got {len(sigs)}"
-    s = sigs[0]
+    assert len(sigs) >= 1, f"expected at least 1 signal got {len(sigs)}"
+    strangle_sigs = [s for s in sigs if "tailhedge" not in (s.tag or "")]
+    assert len(strangle_sigs) == 1, (
+        f"expected exactly one strangle signal got {len(strangle_sigs)}"
+    )
+    s = strangle_sigs[0]
     # Two legs: short call + short put.
     assert len(s.legs) == 2
     sides = sorted(leg.side.value for leg in s.legs)
@@ -315,9 +325,11 @@ def _open_a_strangle(asof: date, *, iv_entry: float = 0.30, equity: float = 100_
     closes = [500.0] * 60
     bars = _build_bar_df("SPY", closes, start=asof - timedelta(days=90))
     chain = _make_chain(spot=500.0, asof=asof, front_iv=iv_entry, back_iv=iv_entry + 0.01)
+    # Audit P0-10: tail_hedge_ratio pinned >= 5. Tests that previously
+    # used 0 to get a single signal now tolerate the second hedge leg.
     strat = _configured_strat(
         vrp_entry_threshold=0.05,
-        tail_hedge_ratio=0,
+        tail_hedge_ratio=5,
     )
     ctx = _make_ctx(
         asof=asof,
@@ -326,7 +338,7 @@ def _open_a_strangle(asof: date, *, iv_entry: float = 0.30, equity: float = 100_
         equity=equity,
     )
     sigs = list(strat.generate_signals(asof, ctx))
-    assert len(sigs) == 1
+    assert len(sigs) >= 1
     return strat, ctx
 
 
@@ -345,7 +357,7 @@ def test_tp_exit_fires_at_profit_target():
         front_dte=45, back_dte=75,
     )
     strat = _configured_strat(
-        vrp_entry_threshold=0.05, tail_hedge_ratio=0, target_dte=45,
+        vrp_entry_threshold=0.05, tail_hedge_ratio=5, target_dte=45,
     )
     ctx = _make_ctx(
         asof=asof,
@@ -354,7 +366,7 @@ def test_tp_exit_fires_at_profit_target():
         equity=100_000.0,
     )
     sigs = list(strat.generate_signals(asof, ctx))
-    assert len(sigs) == 1
+    assert len(sigs) >= 1
 
     # Advance a few days (still well above exit DTE) with IV crushed.
     asof2 = asof + timedelta(days=3)
@@ -526,7 +538,7 @@ def test_term_structure_gate_blocks_backwardation():
         vrp_entry_threshold=0.05,
         term_structure_gate=False,
         vix_kill_switch=0.50,
-        tail_hedge_ratio=0,
+        tail_hedge_ratio=5,
     )
     ctx2 = _make_ctx(
         asof=asof,
@@ -536,6 +548,28 @@ def test_term_structure_gate_blocks_backwardation():
     )
     sigs2 = list(strat2.generate_signals(asof, ctx2))
     assert len(sigs2) >= 1
+
+
+# --------------------------------------------------------------------------- #
+# Audit P0-10: tail-hedge invariant                                           #
+# --------------------------------------------------------------------------- #
+def test_tail_hedge_invariant_rejects_zero_at_configure_time():
+    """Configure must raise ValueError when tail_hedge_ratio < 5.
+
+    The gate must fire before any trade is planned (before
+    ``generate_signals`` is called) — the XIV-February-2018 blow-up
+    profile is not deployable.
+    """
+
+    import pytest
+
+    strat = VRPHarvestStrategy()
+    params = dict(DEFAULTS)
+    params["tail_hedge_ratio"] = 0
+    with pytest.raises(ValueError, match="tail_hedge_ratio"):
+        strat.configure(params)
+    with pytest.raises(ValueError, match="XIV"):
+        VRPHarvestStrategy().configure({**DEFAULTS, "tail_hedge_ratio": 4})
 
 
 # --------------------------------------------------------------------------- #

@@ -102,6 +102,36 @@ _MIN_TRADING_BARS = 30
 _TRADING_DAYS_YEAR = 252.0
 _CALENDAR_DAYS_YEAR = 365.0
 
+# Minimum permitted tail_hedge_ratio (audit P0-10). Below this value the
+# strategy is economically equivalent to the XIV template that blew up on
+# 5 Feb 2018 (volmageddon). Enforced at construction / reconfigure so the
+# gate fires before any trade is planned.
+_MIN_TAIL_HEDGE_RATIO = 5
+
+
+def _assert_tail_hedge_invariant(ratio: int) -> None:
+    """Raise ValueError if tail_hedge_ratio is below the safety floor.
+
+    This invariant exists because ``tail_hedge_ratio = 0`` is the
+    unhedged short-vol template that produced the 5 February 2018 XIV
+    termination event (-96% overnight when VIX roughly doubled). The
+    spec flags the risk (spec.md §5 "Crisis overrides") but the
+    Optuna search space previously permitted 0. This gate is the
+    last-line defence and fires at configure-time so it cannot be
+    bypassed by a later trade-plan path.
+    """
+
+    if int(ratio) < _MIN_TAIL_HEDGE_RATIO:
+        raise ValueError(
+            f"vrp_harvest: tail_hedge_ratio={ratio} violates the "
+            f">= {_MIN_TAIL_HEDGE_RATIO} safety invariant. Running "
+            "VRP harvest without a tail hedge recreates the XIV "
+            "February 2018 blow-up profile (-96% overnight when "
+            "short-vol inventory was flushed as the VIX roughly "
+            "doubled). Pin tail_hedge_ratio >= 5 in DEFAULTS and in "
+            "the tuner search space before deployment."
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Position / leg dataclasses                                                  #
@@ -175,6 +205,10 @@ class VRPHarvestStrategy:
     # Lifecycle
     # ------------------------------------------------------------------ #
     def __init__(self) -> None:
+        # Audit P0-10: enforce the tail-hedge invariant at construction so
+        # any path that instantiates the strategy with defaults is gated
+        # before a trade can be planned.
+        _assert_tail_hedge_invariant(int(DEFAULTS["tail_hedge_ratio"]))
         self.params: dict[str, Any] = dict(DEFAULTS)
 
     def configure(self, params: Mapping[str, Any]) -> None:
@@ -210,6 +244,9 @@ class VRPHarvestStrategy:
             merged[k] = int(merged[k])
         merged["term_structure_gate"] = bool(merged["term_structure_gate"])
         merged["underlying"] = str(merged.get("underlying", UNDERLYING)).upper()
+        # Audit P0-10: validate AFTER coercion so tuner-string values
+        # (e.g. "0") are caught. Raises before any trade-plan call.
+        _assert_tail_hedge_invariant(int(merged["tail_hedge_ratio"]))
         self.params = merged
 
     @classmethod

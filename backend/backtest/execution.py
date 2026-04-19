@@ -54,6 +54,55 @@ def _d(x) -> Decimal:
     return Decimal(str(x))
 
 
+_EVSPREAD_TOKEN = "evspread"
+
+
+def _parse_event_spread(tag: Optional[str]) -> Optional[Decimal]:
+    """Extract an event-conditional half-spread from an order/signal tag.
+
+    Strategies that need a fill-specific half-spread (e.g. PEAD wants a
+    wider half-spread on bars immediately after a big earnings surprise)
+    encode it into :attr:`Signal.tag` as ``...-evspread<float>`` alongside
+    their normal diagnostic suffix. ``_build_fill`` reads the value back
+    out so the surcharge is applied to that fill only; absent the token
+    the caller falls back to the default / passed-in spread.
+
+    Returns ``None`` when the tag does not carry a parseable event
+    spread. Non-finite or negative values are clamped out.
+    """
+
+    if not tag:
+        return None
+    idx = tag.find(_EVSPREAD_TOKEN)
+    if idx < 0:
+        return None
+    # Pull everything after the token up to the next '-' or end-of-string.
+    # Tolerates 'evspread0.002', 'evspread=0.002', and trailing tokens
+    # such as '-evspread0.002-more'. Event spreads are unsigned
+    # (clamped to non-negative below) so we do not accept a leading
+    # '-', which would be ambiguous with the '-' separator.
+    raw = tag[idx + len(_EVSPREAD_TOKEN):]
+    if raw.startswith("="):
+        raw = raw[1:]
+    # Only accept digits and '.' (plain decimal; scientific notation not
+    # supported — strategies that need it can pre-format as a plain decimal).
+    end = 0
+    for ch in raw:
+        if ch.isdigit() or ch == ".":
+            end += 1
+        else:
+            break
+    if end == 0:
+        return None
+    try:
+        val = float(raw[:end])
+    except (TypeError, ValueError):
+        return None
+    if not (val == val) or val < 0:  # NaN check or negative → reject
+        return None
+    return Decimal(str(val))
+
+
 @dataclass
 class PendingOrder:
     """An order queued by the strategy, awaiting its eligible execution bar."""
@@ -636,11 +685,21 @@ class ExecutionSimulator:
             order.side,
             legs=order.legs,
         )
-        slip_spread = (
-            _d(spread_pct)
-            if spread_pct is not None
-            else self.default_spread_pct
-        )
+        # Per-order event-conditional spread override. Strategies can
+        # stamp an "evspread<float>" token into ``Signal.tag`` to request a
+        # fill-specific half-spread that supersedes both the caller-supplied
+        # ``spread_pct`` and the simulator default. Used by PEAD on
+        # post-announcement MOO fills where the realised gap-open spread is
+        # 3-8x the default 5 bps.
+        event_spread = _parse_event_spread(order.tag)
+        if event_spread is not None:
+            slip_spread: Optional[Decimal] = event_spread
+        else:
+            slip_spread = (
+                _d(spread_pct)
+                if spread_pct is not None
+                else self.default_spread_pct
+            )
         slippage = self.cost_model.slippage(
             order.symbol,
             order.quantity,

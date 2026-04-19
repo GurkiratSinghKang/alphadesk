@@ -20,10 +20,17 @@ from tuner.search import Categorical, FloatRange, IntRange
 # The ORB "universe" is a small, curated ETF basket. The canonical Zarattini
 # result lives on TQQQ; the design spec's default includes QQQ so we don't
 # tune on a single instrument.
+#
+# NOTE (audit P0-5, 2026-04): TQQQ / SPXL (3x leveraged ETFs) were removed
+# from ``all_leveraged`` and the profile narrowed to SPY+QQQ. A long-only
+# ORB on leveraged ETFs in a 2023-24 bull window captured compounded 3x
+# beta, not opening-range-breakout edge, and was the single largest
+# contributor to the spurious 8.34 Sharpe. This change is permanent and
+# NOT tuner-reachable.
 UNIVERSE_PROFILES: dict[str, tuple[str, ...]] = {
     "spy_qqq": ("SPY", "QQQ"),
-    "qqq_tqqq": ("QQQ", "TQQQ"),
-    "all_leveraged": ("SPY", "QQQ", "TQQQ", "SPXL"),
+    "qqq_tqqq": ("QQQ",),
+    "all_leveraged": ("SPY", "QQQ"),
 }
 
 
@@ -37,8 +44,11 @@ DEFAULTS: dict[str, Any] = {
     "entry_cutoff_hour_et": 14,
     # "or_bound" = hard stop at OR-low/high; "or_midpoint_trail" adds a trail
     "stop_method": "or_bound",
-    # Entry volume ≥ multiplier * mean(OR-bar volume); ≤1.0 disables the filter
-    "volume_confirm_min": 1.0,
+    # Entry volume ≥ multiplier * mean(OR-bar volume); ≤1.0 disables the
+    # filter. NOTE (audit P0-7, 2026-04): default bumped 1.0 -> 1.2 so the
+    # gate actually fires; the tuner previously landed at 0.8622, which
+    # turned the noise guard off on every breakout.
+    "volume_confirm_min": 1.2,
     # Universe profile key; see UNIVERSE_PROFILES above
     "universe_profile": "qqq_tqqq",
     # Whether to take shorts on OR-low breaks
@@ -55,8 +65,12 @@ DEFAULTS: dict[str, Any] = {
     # Cost model: charged on every entry and every exit
     "commission_bps": 0.5,
     "slippage_bps": 2.0,
-    # Notional cap to prevent runaway TQQQ-on-TQQQ sizing
-    "max_notional_pct": 0.20,
+    # Notional cap. NOTE (audit P0-6, 2026-04): raised from 0.20 -> 1.00
+    # because a per-symbol notional clip tighter than risk-per-trade sizing
+    # compresses daily-return σ harder than μ (classic Sharpe-inflation
+    # lever). At 1.00 the clip is effectively inert for SPY/QQQ given
+    # typical OR widths, so σ and μ are clipped identically.
+    "max_notional_pct": 1.00,
     # Fraction of the position taken off at each TP (the remainder rides to EOD)
     "tp_scale_fraction": 1.0 / 3.0,
 }
@@ -72,7 +86,10 @@ def search_space() -> dict[str, Any]:
         "or_minutes": Categorical([5, 15, 30]),
         "entry_cutoff_hour_et": IntRange(11, 15),
         "stop_method": Categorical(["or_bound", "or_midpoint_trail"]),
-        "volume_confirm_min": FloatRange(0.8, 1.5),
+        # Lower bound pinned at 1.0 per audit P0-7 — values below 1.0
+        # disable the filter entirely (spec §5); previously the tuner
+        # could land on 0.8622 which turned off the noise guard.
+        "volume_confirm_min": FloatRange(1.0, 1.5),
         "universe_profile": Categorical(
             ["spy_qqq", "qqq_tqqq", "all_leveraged"]
         ),

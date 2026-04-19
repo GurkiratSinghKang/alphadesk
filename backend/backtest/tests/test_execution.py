@@ -589,5 +589,71 @@ def test_multileg_fill_respects_limit_price():
     assert fills[0].price == Decimal("5")
 
 
+# ---------------------------------------------------------------------------
+# Event-conditional slippage (PEAD)
+# ---------------------------------------------------------------------------
+
+
+def test_event_spread_token_in_tag_overrides_default():
+    """An ``evspread<float>`` token in Signal.tag forces ``fill_bar`` to use
+    that half-spread for the fill instead of the default / passed-in value.
+    """
+
+    cost = DefaultCostModel(default_spread_pct=Decimal("0.0005"))  # 5 bps
+    sim = ExecutionSimulator(cost, default_spread_pct=Decimal("0.0005"))
+    bar_t = _bar("AAPL", "100", "105", "99", "104", ts=datetime(2024, 1, 2))
+    bar_t1 = _bar("AAPL", "100", "101", "99", "100", ts=datetime(2024, 1, 3))
+    # Stamp event_spread_pct = 0.002 (20 bps) into the tag — 4× the default.
+    sig = Signal(
+        symbol="AAPL", quantity=1000, order_type=OrderType.MOO,
+        time_in_force=TimeInForce.GTC,
+        tag="pead-entry-long-sue+3.20-evspread0.0020",
+    )
+    sim.queue(sig, staged_on=bar_t.ts, side=Side.BUY, quantity=1000)
+    assert sim.fill_bar(bar_t) == []
+    fills = sim.fill_bar(bar_t1)
+    assert len(fills) == 1
+    # half_spread = 0.5 * 0.0020 = 0.0010 ; notional = 100 * 1000 = 100_000
+    # slippage = 100_000 * 0.001 = 100.00 ; fill_price = 100 + 100/1000 = 100.10
+    assert fills[0].slippage == Decimal("100.00")
+    assert fills[0].price == Decimal("100.10")
+
+
+def test_event_spread_absent_falls_back_to_default():
+    """Signals without the ``evspread`` tag use the default / passed-in
+    spread — preserves pre-existing behaviour for every other strategy."""
+
+    cost = DefaultCostModel(default_spread_pct=Decimal("0.0005"))  # 5 bps
+    sim = ExecutionSimulator(cost, default_spread_pct=Decimal("0.0005"))
+    bar_t = _bar("AAPL", "100", "105", "99", "104", ts=datetime(2024, 1, 2))
+    bar_t1 = _bar("AAPL", "100", "101", "99", "100", ts=datetime(2024, 1, 3))
+    sig = Signal(
+        symbol="AAPL", quantity=1000, order_type=OrderType.MOO,
+        time_in_force=TimeInForce.GTC,
+        tag="pead-entry-long-sue+1.85",  # no evspread token
+    )
+    sim.queue(sig, staged_on=bar_t.ts, side=Side.BUY, quantity=1000)
+    assert sim.fill_bar(bar_t) == []
+    fills = sim.fill_bar(bar_t1)
+    assert len(fills) == 1
+    # half_spread = 0.5 * 0.0005 = 0.00025 ; slippage = 100_000 * 0.00025 = 25.00
+    assert fills[0].slippage == Decimal("25.00")
+    # fill_price = 100 + 25/1000 = 100.025
+    assert fills[0].price == Decimal("100.025")
+
+
+def test_event_spread_parser_tolerates_trailing_tokens():
+    """Parser handles trailing dashes / extra tokens after the evspread value."""
+
+    from backtest.execution import _parse_event_spread
+
+    # Decimal("0.002") == Decimal("0.0020") numerically, so these compare equal.
+    assert _parse_event_spread("pead-entry-long-sue+3.20-evspread0.002") == Decimal("0.002")
+    assert _parse_event_spread("pead-entry-long-evspread0.0020-extra") == Decimal("0.002")
+    assert _parse_event_spread("pead-entry-long") is None
+    assert _parse_event_spread("") is None
+    assert _parse_event_spread(None) is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

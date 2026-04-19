@@ -1,0 +1,35 @@
+{
+  "strategy": "dual_momentum",
+  "params": {
+    "lookback_days": 252,
+    "bond_fallback": "AGG",
+    "excess_return_floor": 0.0,
+    "rebalance_freq": "monthly",
+    "composite_lookback": "single_252",
+    "relative_universe": [
+      "VOO",
+      "VEU"
+    ],
+    "risk_free_symbol": "BIL"
+  },
+  "start": "2023-01-02",
+  "end": "2024-12-30",
+  "metrics": {
+    "sharpe": 1.2574576213743736,
+    "sortino": 1.8380629605724752,
+    "calmar": 1.3676986323516473,
+    "max_drawdown": 0.10326883141759058,
+    "cagr": 0.14124063949439147,
+    "tail_ratio": 0.9686112252502203,
+    "hit_rate": 0.3333333333333333,
+    "profit_factor": 1.0340535799103991,
+    "turnover": 6.288537071957012,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "round_trip_trades": 3,
+  "fills": 7,
+  "equity_start": 100000.0,
+  "equity_end": 131409.00985,
+  "total_return": 0.3140900984999999
+}

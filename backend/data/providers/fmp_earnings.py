@@ -14,6 +14,7 @@ from data.providers.cache import TTL_DAILY, cached
 _CALENDAR_COLS = [
     "symbol", "date", "eps_actual", "eps_estimated",
     "revenue_actual", "revenue_estimated", "last_updated",
+    "announcement_when",
 ]
 _SURPRISE_COLS = [
     "symbol", "date", "eps_actual", "eps_estimated",
@@ -63,6 +64,7 @@ class FMPEarningsProvider:
                 "revenue_actual": item.get("revenueActual"),
                 "revenue_estimated": item.get("revenueEstimated"),
                 "last_updated": _to_date(item.get("lastUpdated")),
+                "announcement_when": _normalise_when(item.get("time")),
             }
             for item in data
         ]
@@ -164,3 +166,20 @@ def _to_date_str(s: Any) -> str:
     if d is None:
         raise ValueError(f"cannot parse date: {s!r}")
     return d.isoformat()
+
+
+def _normalise_when(v: Any) -> str:
+    """Normalise FMP's ``time`` field into ``"amc" | "bmo" | "unknown"``.
+
+    FMP returns ``"amc"`` (after-market close), ``"bmo"`` (before-market
+    open), or an empty string. We emit ``"unknown"`` for anything we
+    cannot classify so downstream consumers can distinguish a missing
+    value from a genuine classification.
+    """
+
+    if v is None:
+        return "unknown"
+    s = str(v).strip().lower()
+    if s in ("amc", "bmo"):
+        return s
+    return "unknown"

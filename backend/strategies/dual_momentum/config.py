@@ -47,10 +47,43 @@ BOND_CHOICES: tuple[str, ...] = ("AGG", "IEF", "TLT", "BIL")
 
 # Relative-universe choices. The first pair is Antonacci's original
 # VOO/VEU pair; the others let the tuner explore region slicings.
+#
+# DIAGNOSTIC-ONLY (not production-tunable): the ``(SPY, EFA, EEM)`` entry
+# is a 3-asset relative-momentum variant that is NOT Antonacci's GEM — it
+# more closely resembles Faber's IVY / Antonacci's GBM. The expert audit
+# (``audit-reports/expert-dual-momentum.md`` §Findings P1) flags this as
+# curve-fit-adjacent; the reference production config MUST use
+# ``("VOO", "VEU")``. We keep it in the list so diagnostic tooling can
+# still sweep it, but ``PRODUCTION_RELATIVE_UNIVERSE_CHOICES`` below is
+# what the tuner search space is built from.
 RELATIVE_UNIVERSE_CHOICES: tuple[tuple[str, ...], ...] = (
     ("VOO", "VEU"),
     ("VOO", "VEU", "EFA"),
-    ("SPY", "EFA", "EEM"),
+    ("SPY", "EFA", "EEM"),   # diagnostic-only, see comment above
+)
+
+# Production-safe subset. The tuner's search space reads from this list,
+# not ``RELATIVE_UNIVERSE_CHOICES``. Keeps the canonical GEM invariant.
+PRODUCTION_RELATIVE_UNIVERSE_CHOICES: tuple[tuple[str, ...], ...] = (
+    ("VOO", "VEU"),
+    ("VOO", "VEU", "EFA"),
+)
+
+# ``composite_lookback`` choices. The ``blend_126_252`` variant exists
+# because spec §5 wanted to empirically *measure* the fragility of blends
+# that Antonacci argued against — not because we believe the blend is
+# alpha. It is DIAGNOSTIC-ONLY and excluded from the production tuner
+# search space below.
+COMPOSITE_LOOKBACK_CHOICES: tuple[str, ...] = (
+    "single_126",
+    "single_189",
+    "single_252",
+    "blend_126_252",          # diagnostic-only
+)
+PRODUCTION_COMPOSITE_LOOKBACK_CHOICES: tuple[str, ...] = (
+    "single_126",
+    "single_189",
+    "single_252",
 )
 
 
@@ -220,13 +253,21 @@ def build_search_space() -> dict[str, Any]:
     return {
         "lookback_days": Categorical([126, 189, 252]),
         "bond_fallback": Categorical(list(BOND_CHOICES)),
-        "excess_return_floor": FloatRange(-0.01, 0.02, step=0.005),
+        # P1 fix: restricted to [0.0, 0.02] (was [-0.01, 0.02]). Allowing
+        # a negative floor lets the tuner *weaken* Antonacci's absolute-
+        # momentum gate — the opposite of the paper's intent. See
+        # ``audit-reports/expert-dual-momentum.md`` §Findings P1.
+        "excess_return_floor": FloatRange(0.0, 0.02, step=0.005),
         "rebalance_freq": Categorical(["monthly", "bimonthly"]),
+        # Excludes ``blend_126_252`` (diagnostic-only; curve-fit per spec §5).
         "composite_lookback": Categorical(
-            ["single_126", "single_189", "single_252", "blend_126_252"]
+            list(PRODUCTION_COMPOSITE_LOOKBACK_CHOICES)
         ),
         # Categorical of tuples -- optuna wants each choice hashable.
-        "relative_universe": Categorical(list(RELATIVE_UNIVERSE_CHOICES)),
+        # Excludes ``(SPY, EFA, EEM)`` (diagnostic-only; non-GEM variant).
+        "relative_universe": Categorical(
+            list(PRODUCTION_RELATIVE_UNIVERSE_CHOICES)
+        ),
     }
 
 
@@ -238,6 +279,9 @@ __all__ = [
     "DEFAULT_RISK_FREE",
     "BOND_CHOICES",
     "RELATIVE_UNIVERSE_CHOICES",
+    "PRODUCTION_RELATIVE_UNIVERSE_CHOICES",
+    "COMPOSITE_LOOKBACK_CHOICES",
+    "PRODUCTION_COMPOSITE_LOOKBACK_CHOICES",
     "DualMomentumConfig",
     "build_search_space",
 ]

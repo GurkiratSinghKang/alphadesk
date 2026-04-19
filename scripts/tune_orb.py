@@ -73,7 +73,32 @@ TEST_START = date(2023, 1, 1)
 TEST_END = date(2024, 12, 31)
 
 
+def _run_train(strat: ORBStrategy, bar_provider) -> dict:
+    """Run the strategy across the TRAIN window (2022-01-01 -> 2022-12-31).
+
+    This is the fitness signal consumed by the Optuna objective: tuning on
+    the training window is the only defensible protocol. The post-tune
+    block in :func:`main` performs a single authoritative OOS evaluation
+    on 2023-01-01 -> 2024-12-31 using the winning parameter set.
+    """
+
+    return run_orb_backtest(
+        strat,
+        bar_provider,
+        start=TRAIN_START,
+        end=TRAIN_END,
+        starting_cash=100_000.0,
+    )
+
+
 def _run_oos(strat: ORBStrategy, bar_provider) -> dict:
+    """Run the strategy across the OOS window.
+
+    ONLY used for the single post-tune authoritative evaluation. Never
+    call this from inside the Optuna objective — doing so is
+    selection-on-test.
+    """
+
     return run_orb_backtest(
         strat,
         bar_provider,
@@ -87,7 +112,13 @@ def _objective_factory(bar_provider):
     def objective(params: dict) -> float:
         strat = ORBStrategy()
         strat.configure(params)
-        result = _run_oos(strat, bar_provider)
+        # Tune on TRAIN (selection-on-test fix): the previous
+        # implementation scored each trial against the 2023-24 OOS
+        # window, which made the reported "OOS Sharpe" a max-of-N order
+        # statistic on the very window held out. Score trials on the
+        # TRAIN window; a single honest OOS evaluation happens post-tune
+        # in ``main``.
+        result = _run_train(strat, bar_provider)
         metrics = result["metrics"]
         sharpe = metrics.get("sharpe", float("-inf"))
         n_active = metrics.get("n_active_days", 0)
@@ -146,10 +177,10 @@ def main() -> int:
         return 1
 
     print("\nBest params:", json.dumps(best, indent=2, default=str))
-    print(f"Best OOS Sharpe: {study.best_value:.4f}")
+    print(f"Best TRAIN Sharpe (fitness): {study.best_value:.4f}")
 
     # Emit a JSON report. The OOS evaluator will do the one authoritative
-    # re-run against these params.
+    # re-run against these params on the 2023-24 window.
     report = {
         "n_trials": n_trials,
         "train_start": TRAIN_START.isoformat(),
@@ -157,7 +188,7 @@ def main() -> int:
         "test_start": TEST_START.isoformat(),
         "test_end": TEST_END.isoformat(),
         "best_params": best,
-        "best_value_sharpe": float(study.best_value),
+        "best_train_sharpe": float(study.best_value),
         "top_trials": [
             {
                 "number": t.number,
