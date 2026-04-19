@@ -23,10 +23,16 @@ export function TickerTape() {
       .filter(Boolean) as { symbol: string; price: number; change: number; changePct: number }[];
   }, [watchlist, quotes]);
 
-  if (items.length === 0) return null;
-
-  // Triple for seamless loop
+  // Rules-of-hooks: both useMemos must be called unconditionally on every
+  // render. An earlier version bailed with `if (items.length === 0) return null;`
+  // BETWEEN the two useMemos — when the ticker was empty on one render and
+  // populated on the next, React counted fewer hooks the first time and
+  // threw error #310 ("Rendered more hooks than during the previous render")
+  // across the whole dashboard layout. That was the root cause of the
+  // strategy-detail harness regression post-R7.
   const tripled = useMemo(() => [...items, ...items, ...items], [items]);
+
+  if (items.length === 0) return null;
 
   return (
     <div

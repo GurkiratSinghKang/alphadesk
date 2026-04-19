@@ -471,11 +471,9 @@ export default function StrategyDetailPage() {
   // STRATEGY_META but the backend hasn't produced data yet (freshly seeded
   // strategy, OOS file missing) — that should not 404, it should explain why
   // the page is empty and offer a retry.
-  // TEMPORARY: disabling notFound() call — Wave 35 addition triggered
-  // React #310 on strategy detail. Debugging…
-  // if (!isKnownStrategy && perfNotFound) {
-  //   notFound();
-  // }
+  if (!isKnownStrategy && perfNotFound) {
+    notFound();
+  }
 
   if (!isKnownStrategy && !perf) {
     // Frontend doesn't know the slug AND the perf request didn't actually
