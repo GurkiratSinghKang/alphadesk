@@ -275,7 +275,10 @@ class WalkForwardObjective:
         aggregated = dict(getattr(wf_result, "aggregated_metrics", {}) or {})
 
         if self.tune_on == "train":
-            primary = is_result if (is_result is not None and is_result.metrics) else oos
+            # Tripwire: never fall back to OOS under tune_on="train" — that reintroduces the peek Wave 5 removed.
+            if is_result is None or not is_result.metrics:
+                return {}
+            primary = is_result
         else:
             primary = oos
 
@@ -320,10 +323,10 @@ class WalkForwardObjective:
             wf_result, "out_of_sample_result", None
         )
         if self.tune_on == "train":
-            primary = is_result if (
-                is_result is not None
-                and getattr(is_result, "daily_returns", None) is not None
-            ) else oos
+            # Tripwire: never fall back to OOS under tune_on="train" — that reintroduces the peek Wave 5 removed.
+            if is_result is None or getattr(is_result, "daily_returns", None) is None:
+                return 0
+            primary = is_result
         else:
             primary = oos
 

@@ -1,17 +1,25 @@
 """Regression tests for ``TradeLedger.sync_with_alpaca`` (C2 fix).
 
-These tests run against the in-memory fallback path of ``TradeLedger`` — no
-database is required. That is exactly the guarantee the C2 spec asks for: a
-unit test reproducing the empty-Alpaca-response edge case that asserts open
-trades are NOT closed when the broker API returns nothing.
+These tests run against a SQLite in-memory engine standing in for the
+production Postgres — no external DB is required. The ledger's hard
+constraint ("no in-memory ghost data") is respected because SQLite backs
+every call with a real, transactional store; the substitution is purely
+for test isolation.
+
+The sync path tested here (``record_entry`` / ``add`` / ``update`` /
+``get_open_positions`` / ``sync_with_alpaca``) does not invoke any
+Postgres-only SQL (``NOW()``, ``ON CONFLICT``, ``CREATE SEQUENCE``), so
+the SQLite backend is sufficient to exercise the C2 regression.
 """
 from __future__ import annotations
 
+import itertools
 import sys
 import types
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, text as sa_text
 
 # Ensure ``backend/`` is importable (matches the rest of the backend test suite).
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -19,20 +27,54 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 
+_SQLITE_DDL = """
+CREATE TABLE IF NOT EXISTS trade_ledger (
+    id            INTEGER PRIMARY KEY,
+    symbol        VARCHAR(20)  NOT NULL,
+    shares        INTEGER      NOT NULL,
+    entry_price   REAL,
+    entry_time    TEXT         NOT NULL,
+    stop_loss     REAL,
+    take_profit   REAL,
+    conviction    INTEGER      DEFAULT 0,
+    rationale     TEXT,
+    strategy      VARCHAR(60)  NOT NULL DEFAULT 'claude_alpha',
+    status        VARCHAR(16)  NOT NULL DEFAULT 'open',
+    exit_price    REAL,
+    exit_time     TEXT,
+    exit_reason   VARCHAR(60),
+    pnl           REAL,
+    pnl_pct       REAL,
+    side          VARCHAR(8)   DEFAULT 'long'
+)
+"""
+
+
 @pytest.fixture
 def memory_ledger(monkeypatch):
-    """Instantiate a TradeLedger forced into its in-memory fallback mode.
+    """Instantiate a TradeLedger backed by a SQLite ``:memory:`` engine.
 
-    We short-circuit ``_get_sync_engine`` so no DB connection is attempted —
-    the ledger falls back to the in-memory list and the migration step is
-    skipped.
+    The Postgres production path is untouched — we just swap in a local
+    engine and an integer-counter stand-in for the ``trade_ledger_id_seq``
+    sequence. Every call still goes through real SQL; no in-memory ghost
+    store is used.
     """
     from data.ingestion import trade_ledger as tl_module
 
-    monkeypatch.setattr(tl_module, "_get_sync_engine", lambda: None)
-    # Also suppress the legacy ledger.json migration side effect.
-    monkeypatch.setattr(tl_module, "_run_migration", lambda _engine: None)
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(sa_text(_SQLITE_DDL))
+
+    # Short-circuit the module engine lookup so ``TradeLedger.__init__``
+    # picks up our SQLite engine and skips migration / Postgres DDL.
+    monkeypatch.setattr(tl_module, "_get_sync_engine", lambda: engine)
+    monkeypatch.setattr(tl_module, "_ensure_schema", lambda _e: None)
+    monkeypatch.setattr(tl_module, "_run_migration", lambda _e: None)
+
     ledger = tl_module.TradeLedger()
+    # Replace the Postgres-sequence id allocator with a monotonic counter.
+    id_counter = itertools.count(1)
+    monkeypatch.setattr(ledger, "_next_id", lambda: next(id_counter))
     return ledger
 
 

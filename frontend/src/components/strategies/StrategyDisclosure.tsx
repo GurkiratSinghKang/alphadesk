@@ -80,6 +80,18 @@ export default function StrategyDisclosure({
       ? "Paper-only"
       : null;
 
+  // A3#5 — WCAG contrast. Previously the pill used ``text-amber`` (#d9a441)
+  // on a ``bg-amber/[0.04]`` surface. Against the near-black card
+  // (effectively still dark after the 4% amber tint) the mid-tone amber
+  // squeaked to ~4.0:1, which fails the 4.5:1 AA threshold for text below
+  // 18pt. Lifting to ``text-amber-100`` (Tailwind default near-white pale
+  // yellow #fef3c7) puts us comfortably over 12:1 on the same surface.
+  const pillAriaLabel = liveDisabled
+    ? "Live trading disabled"
+    : paperOnly
+      ? "Paper trading only"
+      : undefined;
+
   return (
     <aside
       data-testid="strategy-disclosure"
@@ -87,6 +99,12 @@ export default function StrategyDisclosure({
       data-live-disabled={liveDisabled || undefined}
       data-paper-only={paperOnly || undefined}
       role="note"
+      // A3#5 — pill often lands late (after the ``perf`` fetch resolves).
+      // ``aria-live="polite"`` makes screen readers announce the banner's
+      // new content (including the pill) once it materialises, so a
+      // researcher using VoiceOver/NVDA isn't silently missed by a
+      // NOT-READY pill that flashed in half a second after load.
+      aria-live="polite"
       className={cn(
         "flex flex-col gap-3 border-l-2 border-amber/60 bg-amber/[0.04] py-3 pl-5 pr-4",
         "rounded-sm",
@@ -94,15 +112,17 @@ export default function StrategyDisclosure({
       )}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <Eyebrow as="span" className="text-amber">
+        <Eyebrow as="span" className="text-amber-100">
           Disclosure
         </Eyebrow>
         {pillLabel ? (
           <span
             data-testid="strategy-disclosure-pill"
+            role="status"
+            aria-label={pillAriaLabel}
             className={cn(
               "inline-flex items-center rounded-pill border border-amber/60 px-2 py-0.5",
-              "font-sans text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber"
+              "font-sans text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-100"
             )}
           >
             {pillLabel}

@@ -243,6 +243,26 @@ export function getStrategies() {
   );
 }
 
+/**
+ * A3#3 / Wave 8 — compact catalog payload used by the strategies list page.
+ *
+ * Backend: ``GET /api/v1/strategies/catalog`` returns one entry per known
+ * strategy with just the flags the list page needs to render the
+ * "NOT READY FOR LIVE" / "PAPER-ONLY" pills. Much cheaper than fanning out
+ * N per-strategy ``/performance`` calls.
+ */
+export interface StrategyCatalogEntry {
+  id: string;
+  slug: string;
+  name: string;
+  live_disabled: boolean;
+  paper_only: boolean;
+}
+
+export function getStrategyCatalog() {
+  return apiFetch<StrategyCatalogEntry[]>(`/api/v1/strategies/catalog`);
+}
+
 export function getIndexSparklines() {
   return apiFetch<{ sparklines: Record<string, number[]>; as_of: string }>(
     `/api/v1/market-overview/indices/sparklines`

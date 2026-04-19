@@ -8,9 +8,19 @@ from __future__ import annotations
 
 import pytest
 
+from core.config import settings
 from data.providers.alpaca import AlpacaBarProvider
 
-pytestmark = pytest.mark.integration
+_alpaca_key = settings.ALPACA_API_KEY.get_secret_value()
+_alpaca_secret = settings.ALPACA_SECRET_KEY.get_secret_value()
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not (_alpaca_key and _alpaca_secret),
+        reason="ALPACA_API_KEY / ALPACA_SECRET_KEY not set; skipping live API tests",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

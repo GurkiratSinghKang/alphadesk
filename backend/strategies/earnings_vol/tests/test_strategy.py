@@ -233,13 +233,18 @@ def test_leg_strike_selection_atm_and_wings():
 def test_historical_move_computation_from_fake_bars():
     """Build a bar series with 4 known earnings gaps of 2%, 3%, 4%, 5%.
     Median should be 3.5%.
+
+    The strategy classifies forward AMC events as ``after_close`` and
+    measures each historical move as close_{D+1} / close_D - 1 (gap from
+    the release-day close to the next session's close). We therefore seed
+    each event with a (D, D+1) close pair rather than (D-1, D).
     """
     strat = EarningsVolStrategy()
     strat.configure({"historical_moves_lookback_quarters": 4,
                      "min_historical_events": 3})
 
-    # Build bars: for each earnings date D we need close(D-1) and close(D).
-    # We use gaps (post/pre - 1) of 0.02, 0.03, 0.04, 0.05.
+    # Build bars: for each earnings date D we need close(D) and close(D+1).
+    # We use gaps (next/curr - 1) of 0.02, 0.03, 0.04, 0.05.
     asof = date(2024, 5, 1)
     bars_days: list[date] = []
     bars_closes: list[float] = []
@@ -250,15 +255,15 @@ def test_historical_move_computation_from_fake_bars():
         (date(2023, 11, 2), 0.04),
         (date(2024, 2, 1), 0.05),
     ]
-    # Fill bars around each event.
+    # Fill bars around each event: close_D and close_{D+1}.
     for ev_d, gap in earnings_events:
-        pre = ev_d - timedelta(days=1)
-        while pre.weekday() >= 5:
-            pre -= timedelta(days=1)
-        post = ev_d
-        while post.weekday() >= 5:
-            post += timedelta(days=1)
-        bars_days.extend([pre, post])
+        curr = ev_d
+        while curr.weekday() >= 5:
+            curr += timedelta(days=1)
+        nxt = curr + timedelta(days=1)
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
+        bars_days.extend([curr, nxt])
         bars_closes.extend([100.0, 100.0 * (1 + gap)])
 
     bars_df = _mk_daily_bars("AAPL", bars_days, bars_closes)

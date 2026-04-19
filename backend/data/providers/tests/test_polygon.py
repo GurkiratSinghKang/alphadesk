@@ -6,9 +6,18 @@ from datetime import date
 
 import pytest
 
+from core.config import settings
 from data.providers.polygon import PolygonOptionsProvider
 
-pytestmark = pytest.mark.integration
+_polygon_key = settings.POLYGON_API_KEY.get_secret_value()
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _polygon_key,
+        reason="POLYGON_API_KEY not set; skipping live API tests",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

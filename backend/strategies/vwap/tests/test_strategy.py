@@ -445,6 +445,11 @@ class TestManageEOD:
     """Rule (c): manage() emits an MOC exit for every held position."""
 
     def test_manage_emits_moc_for_all_positions(self):
+        # ``manage()`` deliberately only flattens positions vwap actually
+        # owns (multi-strategy safety — audit P0 #5). A vwap-owned position
+        # is one whose engine-side ``Position.tag`` starts with ``vwap-`` OR
+        # whose symbol is present in the strategy's ``entries`` cache. We
+        # exercise both paths here.
         cls = get_strategy("vwap")
         s = cls()
         s.configure({})
@@ -452,19 +457,29 @@ class TestManageEOD:
         ctx = _MockContext(
             asof=asof,
             positions=[
-                _MockPosition(symbol="AAPL", quantity=100),
+                # Tag route: engine stamped this Position with vwap's tag.
+                _MockPosition(symbol="AAPL", quantity=100, tag="vwap-entry"),
+                # Cache route: symbol tracked in the entries cache below.
                 _MockPosition(symbol="MSFT", quantity=50),
-                _MockPosition(symbol="NVDA", quantity=0),  # flat — no exit
+                # Flat position — no exit regardless of ownership.
+                _MockPosition(symbol="NVDA", quantity=0, tag="vwap-entry"),
+                # Non-vwap position — must not be flattened by this strategy.
+                _MockPosition(symbol="TSLA", quantity=10, tag="dual_momentum"),
             ],
         )
+        ctx.state.setdefault("vwap.entries", {})["MSFT"] = {
+            "entry_price": 100.0
+        }
+
         out = list(s.manage(asof, ctx))
-        # Two exits (NVDA is flat, skipped).
+        # Two exits (NVDA is flat; TSLA is owned by another strategy).
         assert len(out) == 2
+        emitted = {sig.symbol for sig in out}
+        assert emitted == {"AAPL", "MSFT"}
         for sig in out:
             assert sig.order_type == OrderType.MOC
             assert sig.target_weight == 0.0
             assert sig.tag == "vwap-exit-eod"
-            assert sig.symbol in ("AAPL", "MSFT")
 
 
 class TestStopAndTakeProfit:

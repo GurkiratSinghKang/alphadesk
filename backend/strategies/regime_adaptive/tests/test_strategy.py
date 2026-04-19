@@ -283,13 +283,14 @@ class TestRegimeClassification:
     def test_meanrevert_as_default(self):
         """SPY above SMA_200 but implied VIX between thresholds → MeanRevert."""
 
-        # sigma=0.016, drift=0.0015, seed=5 produces implied VIX ≈ 22
-        # at b-idx 279 with SPY > SMA_200 and SMA_50 > SMA_200. That
-        # means: TrendUp's `vix<low` gate fails (22>20), HighVol's
+        # sigma=0.013, drift=0.0015, seed=5 produces implied VIX ≈ 22
+        # at b-idx 279 (realized-vol × 1.15 VRP multiplier; see
+        # strategy._vix_level) with SPY > SMA_200 and SMA_50 > SMA_200.
+        # That means: TrendUp's `vix<low` gate fails (22>20), HighVol's
         # `vix>high` gate fails (22<25), Crisis' `spy<slow` fails
         # (SPY above 200-SMA) → MeanRevert.
         prices = synthetic_spy_path(
-            n_days=500, mu=0.0015, sigma_daily=0.016, seed=5,
+            n_days=500, mu=0.0015, sigma_daily=0.013, seed=5,
         )
 
         def spy_fn(i):

@@ -111,6 +111,24 @@ class ToggleResponse(BaseModel):
     new_status: StrategyStatus
 
 
+class StrategyCatalogEntry(BaseModel):
+    """A3#3 — compact catalogue row consumed by the strategies list page.
+
+    The list page needs the ``live_disabled`` / ``paper_only`` flags for every
+    strategy so the "NOT READY FOR LIVE" / "PAPER-ONLY" pills render on the
+    cards *before* the user drills into a detail page. The full
+    ``/performance`` endpoint carries these flags too, but fanning out a
+    per-strategy fetch just to read two booleans is wasteful. The catalog
+    endpoint answers the whole question in a single round-trip with no DB
+    touches — flags are static config.
+    """
+    id: str
+    slug: str
+    name: str
+    live_disabled: bool
+    paper_only: bool
+
+
 class StreakInfo(BaseModel):
     type: str  # "win" or "loss"
     count: int
@@ -457,6 +475,13 @@ _REGISTRY_TO_ROUTE: dict[str, str] = {
     "vwap": "vwap-strategy",
 }
 _ROUTE_TO_REGISTRY: dict[str, str] = {v: k for k, v in _REGISTRY_TO_ROUTE.items()}
+# A1#7 — ``pairs-stat-arb`` is a legacy catalogue alias for the same Python
+# package (``pairs_trading``). Both hyphen route ids must resolve to the same
+# registry name so ``_live_flags_for`` and other helpers return consistent
+# flags regardless of which form the caller hands us. The forward map keeps
+# ``pairs_trading -> pairs-trading`` as the canonical pair, but the reverse
+# map gets an extra entry so ``pairs-stat-arb`` also looks up ``pairs_trading``.
+_ROUTE_TO_REGISTRY["pairs-stat-arb"] = "pairs_trading"
 
 
 def _live_flags_for(route_id: str) -> tuple[bool, bool]:
@@ -1083,6 +1108,40 @@ async def _require_strategy(strategy_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/catalog", response_model=list[StrategyCatalogEntry])
+async def strategy_catalog() -> list[StrategyCatalogEntry]:
+    """A3#3 — compact catalogue for the strategies list page.
+
+    Returns ``[{id, slug, name, live_disabled, paper_only}, ...]`` for every
+    strategy known to the rail. No DB calls — everything is read from the
+    static ``_STRATEGIES`` dict and the live-flag config maps. Auth is
+    enforced at the router level (``Depends(require_auth)`` in ``main.py``).
+
+    The list page calls this once on mount and uses the flags to render a
+    "NOT READY FOR LIVE" / "PAPER-ONLY" pill on each card, so users see the
+    warning without clicking through to the detail page. Declared BEFORE the
+    ``/{strategy_id}`` variadic routes so FastAPI matches it as a literal path
+    instead of treating "catalog" as a strategy id.
+
+    ``id`` and ``slug`` are the same hyphen-id today (duplicated so future
+    renames can diverge without breaking clients); ``name`` is the
+    human-readable display name straight from the catalogue entry.
+    """
+    entries: list[StrategyCatalogEntry] = []
+    for sid, data in _STRATEGIES.items():
+        live_disabled, paper_only = _live_flags_for(sid)
+        entries.append(
+            StrategyCatalogEntry(
+                id=sid,
+                slug=sid,
+                name=data["name"],
+                live_disabled=live_disabled,
+                paper_only=paper_only,
+            )
+        )
+    return entries
+
 
 @router.get("/", response_model=list[StrategySummary])
 async def list_strategies() -> list[StrategySummary]:

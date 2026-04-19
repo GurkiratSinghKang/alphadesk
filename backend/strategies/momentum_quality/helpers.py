@@ -54,6 +54,7 @@ def fetch_close_panel(
     start: date,
     end: date,
     asof: Optional[date] = None,
+    drop_halted: bool = True,
 ) -> Optional[pd.DataFrame]:
     """Return a wide DataFrame of close prices, index = UTC session ts.
 
@@ -62,6 +63,13 @@ def fetch_close_panel(
     still do their own ``panel.index <= asof`` slice for signal math); we
     only need ``asof`` to prevent halt classification from peeking at
     bars past the rebalance date. See :func:`_drop_halted_symbols`.
+
+    ``drop_halted`` — when False, returns the raw ffilled panel without
+    the halt filter. Callers that cache the panel across multiple
+    rebalances (see :meth:`MomentumQualityStrategy._get_close_panel`)
+    pass False so they can re-apply halt classification fresh per-call
+    against the current ``asof`` — otherwise a symbol halted in month 1
+    and resumed by month 6 stays dropped for the entire cache window.
     """
 
     provider = getattr(ctx, "bar_provider", None)
@@ -99,6 +107,8 @@ def fetch_close_panel(
         .sort_index()
     )
     wide = wide.ffill()
+    if not drop_halted:
+        return wide
     return _drop_halted_symbols(wide, asof=asof)
 
 
@@ -310,6 +320,7 @@ def rank_01(values: np.ndarray) -> np.ndarray:
 __all__ = [
     "is_last_trading_day_of_month",
     "fetch_close_panel",
+    "_drop_halted_symbols",
     "fscore_bucket",
     "get_fscores",
     "earnings_blocked",

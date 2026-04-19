@@ -123,17 +123,30 @@ class _FakeSeries:
 
 @dataclass
 class _FakeWF:
-    """Minimal stand-in for :class:`WalkForwardResult`."""
+    """Minimal stand-in for :class:`WalkForwardResult`.
 
-    oos_metrics: dict
+    Wave 5/7 made the objective read in-sample metrics by default
+    (tune_on="train"). Tests populate ``is_metrics`` (the scoring leg); the
+    OOS leg is kept as an empty-metrics placeholder so we catch any
+    regression that reintroduces the OOS peek.
+    """
+
+    is_metrics: dict
     folds: list = field(default_factory=list)
     n_days: int = 252
 
     @property
+    def in_sample_result(self):
+        return _FakeResult(
+            metrics=self.is_metrics,
+            daily_returns=_FakeSeries(n=self.n_days),
+        )
+
+    @property
     def out_of_sample_result(self):
         return _FakeResult(
-            metrics=self.oos_metrics,
-            daily_returns=_FakeSeries(n=self.n_days),
+            metrics={},
+            daily_returns=_FakeSeries(n=0),
         )
 
     @property
@@ -179,7 +192,7 @@ class TestObjectiveScoring:
 
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.10},
+            is_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.10},
             n_days=252,
         )
         score = obj._score_from_result(wf)
@@ -190,7 +203,7 @@ class TestObjectiveScoring:
 
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": 1.0, "turnover": 8.0, "max_drawdown": 0.10},
+            is_metrics={"sharpe": 1.0, "turnover": 8.0, "max_drawdown": 0.10},
             n_days=252,
         )
         score = obj._score_from_result(wf)
@@ -201,7 +214,7 @@ class TestObjectiveScoring:
 
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.40},
+            is_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.40},
             n_days=252,
         )
         score = obj._score_from_result(wf)
@@ -212,7 +225,7 @@ class TestObjectiveScoring:
 
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": 0.8, "turnover": 10.0, "max_drawdown": 0.50},
+            is_metrics={"sharpe": 0.8, "turnover": 10.0, "max_drawdown": 0.50},
             n_days=252,
         )
         score = obj._score_from_result(wf)
@@ -222,7 +235,7 @@ class TestObjectiveScoring:
     def test_sharpe_mode_ignores_penalties(self):
         obj = _obj(scoring="sharpe")
         wf = _FakeWF(
-            oos_metrics={"sharpe": 2.0, "turnover": 20.0, "max_drawdown": 0.80},
+            is_metrics={"sharpe": 2.0, "turnover": 20.0, "max_drawdown": 0.80},
             n_days=252,
         )
         assert obj._score_from_result(wf) == pytest.approx(2.0)
@@ -230,7 +243,7 @@ class TestObjectiveScoring:
     def test_nan_sharpe_returns_neg_inf(self):
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": float("nan")},
+            is_metrics={"sharpe": float("nan")},
             n_days=252,
         )
         assert obj._score_from_result(wf) == -math.inf
@@ -240,7 +253,7 @@ class TestObjectiveScoring:
 
         obj = _obj()
         wf = _FakeWF(
-            oos_metrics={"sharpe": 1.0, "turnover": 3.0, "max_drawdown": 0.05},
+            is_metrics={"sharpe": 1.0, "turnover": 3.0, "max_drawdown": 0.05},
             n_days=126,  # half a trading year
         )
         # turnover_yr = 3.0 * 252/126 = 6.0 -> penalty = 0.05 * (6-5) = 0.05

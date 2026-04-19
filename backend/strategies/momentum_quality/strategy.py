@@ -46,6 +46,7 @@ from .config import (
     search_space,
 )
 from .helpers import (
+    _drop_halted_symbols,
     earnings_blocked,
     fetch_close_panel,
     get_fscores,
@@ -302,6 +303,17 @@ class MomentumQualityStrategy:
         symbols: list[str],
         asof: date,
     ) -> Optional[pd.DataFrame]:
+        """Return a halt-filtered close panel for ``asof``.
+
+        Cache structure: we stash the UNFILTERED (raw-ffill) panel keyed by
+        ``(symbols, end)`` and re-run halt detection on every call against
+        the caller's ``asof``. Previously the cache held a halt-filtered
+        panel classified at the FIRST asof it was fetched for; subsequent
+        rebalances inside the cache window (``end`` ~400 cal days past
+        the original asof) served the same dropped-columns set even if
+        a symbol had since resumed trading. See P2 in the Wave-9 notes.
+        """
+
         cache = cache_of(ctx)
         meta = cache.get(f"{_NS}.close_panel")
         symbols_tuple = tuple(sorted(symbols))
@@ -316,15 +328,17 @@ class MomentumQualityStrategy:
             start = asof - timedelta(days=warmup)
             end = asof + timedelta(days=400)
             try:
-                # Pass ``asof`` so halt-detection uses bars <= asof only
-                # (P0-8: the ffill window extends 400 cal days past asof,
-                # and tailing the full window was a silent look-ahead).
+                # Fetch without halt filtering (``asof=None`` sentinel
+                # skips the P0-8 bounded tail check too; we redo that
+                # below against every call's asof so halt classification
+                # is always current AND strictly no-look-ahead).
                 panel = fetch_close_panel(
                     ctx,
                     list(symbols_tuple),
                     start,
                     end,
-                    asof=asof,
+                    asof=None,
+                    drop_halted=False,
                 )
             except Exception as exc:
                 log.warning("mq: close-panel fetch failed: %s", exc)
@@ -336,7 +350,14 @@ class MomentumQualityStrategy:
             }
             meta = cache[f"{_NS}.close_panel"]
 
-        return meta.get("data")
+        raw = meta.get("data")
+        if raw is None or raw.empty:
+            return raw
+        # Apply halt detection fresh against the current ``asof`` so a
+        # symbol halted in month 1 and resumed by month 6 is no longer
+        # dropped once real prints reappear, even though the underlying
+        # panel was fetched once up-front.
+        return _drop_halted_symbols(raw, asof=asof)
 
     # ------------------------------------------------------------------ #
     # Rebalance calendar

@@ -335,14 +335,21 @@ class PEADStrategy:
                 continue
 
             weight = direction * alloc
-            # Event-conditional half-spread: base 5 bps (default) + 15 bps
-            # premium on |SUE|>=3 reporters. Stamped into the tag as
-            # ``evspread<float>`` so the execution simulator applies it to
-            # this MOO fill only — MOO after a big surprise is the bar
-            # with the widest realised gap-open spread on the tape, and a
-            # flat 5 bps understates real post-announcement cost by 10-30
-            # bps per round-trip.
-            event_spread = 0.0005 + 0.0015 * (1.0 if abs(sue) >= 3.0 else 0.0)
+            # Event-conditional FULL spread: base 10 bps + 20 bps premium on
+            # |SUE|>=3 reporters (i.e. 10 bps or 30 bps full spread). The
+            # execution simulator/cost-model halves this internally
+            # (``half_spread = 0.5 * spread_pct`` in Costs.slippage), so the
+            # effective half-spread applied to the fill is 5 bps or 15 bps.
+            # Stamped into the tag as ``evspread<float>`` so the execution
+            # simulator applies it to this MOO fill only — MOO after a big
+            # surprise is the bar with the widest realised gap-open spread
+            # on the tape, and a flat 5 bps understates real post-announcement
+            # cost by 10-30 bps per round-trip.
+            # NOTE (audit A2#1, 2026-04): value doubled from {0.0005, 0.0020}
+            # to {0.0010, 0.0030} so that the cost model's internal 0.5 factor
+            # produces the intended half-spreads; the previous stamp was
+            # half-applied and yielded 2.5/10 bps instead of 5/15 bps.
+            event_spread = 0.0010 + 0.0030 * (1.0 if abs(sue) >= 3.0 else 0.0)
             tag = (
                 f"pead-entry-{'long' if direction > 0 else 'short'}"
                 f"-sue{sue:+.2f}-evspread{event_spread:.4f}"

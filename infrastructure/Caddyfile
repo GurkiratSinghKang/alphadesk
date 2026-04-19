@@ -86,6 +86,22 @@
     handle /ws {
         reverse_proxy backend:8000
     }
+    # Health endpoints — A3#1 fix. The backend exposes /livez (liveness),
+    # /readyz (readiness), and /health (legacy compose alias for /livez)
+    # at the root path in backend/main.py. Without these handle blocks the
+    # default `handle { reverse_proxy frontend:3000 }` below swallows them,
+    # the frontend returns a 404, and uptime checks erroneously flip the
+    # service to "down" while the backend is healthy. Uptime probes can now
+    # hit tradingalpha.net/livez (etc.) and get a real backend JSON 200.
+    handle /livez {
+        reverse_proxy backend:8000
+    }
+    handle /readyz {
+        reverse_proxy backend:8000
+    }
+    handle /health {
+        reverse_proxy backend:8000
+    }
     # /status/* handler removed 2026-04-18 — it pointed at uptime-kuma:3001,
     # which was deleted from docker-compose.prod.yml on 2026-04-17. Caddy was
     # returning 502s (with a basic-auth prompt first, which made it look like

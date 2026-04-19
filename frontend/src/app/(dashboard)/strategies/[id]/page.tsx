@@ -37,13 +37,51 @@ import LimitationsSection from "./_strategy/LimitationsSection";
 import StrategyDisclosure from "@/components/strategies/StrategyDisclosure";
 
 // ─── Slug alias (canonical strategy ids) ────────────────────────
-
+// A1#6 — the previous map only rewrote one legacy slug. Any researcher who
+// typed an underscore form in the URL bar (`/strategies/earnings_vol`,
+// `/strategies/kama_breakout`, etc.) landed on a 404. We now alias every
+// canonical strategy's `{strategy}_{name}` underscore form to its
+// hyphen-delimited canonical id, plus keep the existing `earnings-vol`
+// short-form alias for backwards compatibility with any shared links.
 const SLUG_TO_ID: Record<string, string> = {
+  // Legacy short-form alias (kept for any bookmarks).
   "earnings-vol": "earnings-vol-premium",
+  // Underscore fallbacks — one per canonical strategy id.
+  momentum_quality: "momentum-quality",
+  vrp_harvesting: "vrp-harvesting",
+  earnings_vol_premium: "earnings-vol-premium",
+  earnings_vol: "earnings-vol-premium",
+  regime_adaptive: "regime-adaptive",
+  ts_momentum: "ts-momentum",
+  rsi2_reversal: "rsi2-reversal",
+  dual_momentum: "dual-momentum",
+  pairs_trading: "pairs-trading",
+  pairs_stat_arb: "pairs-stat-arb",
+  kama_breakout: "kama-breakout",
+  vwap_strategy: "vwap-strategy",
+  claude_alpha: "claude-alpha",
+  dividend_capture: "dividend-capture",
+  sector_rotation: "sector-rotation",
+  mean_reversion: "mean-reversion",
+  vcp_breakout: "vcp-breakout",
+  gap_fill: "gap-fill",
+  manual_discretionary: "manual-discretionary",
 };
 function resolveStrategyId(slug: string): string {
   return SLUG_TO_ID[slug] ?? slug;
 }
+
+// ─── Wave 8 — static routing-flag manifest ──────────────────────
+// A3#6 — the "NOT READY FOR LIVE" pill must appear on first paint for
+// strategies like `orb` (live-denied) and `kama-breakout` (paper-only)
+// because users shouldn't see a headline "OOS Sharpe 8.34" without the
+// caveat, even for the ~500ms that `perf` is loading. Mirror the backend's
+// `STRATEGY_LIVE_DISABLED` / `STRATEGY_PAPER_ONLY` sets (see
+// `backend/core/config.py`); the server flag still wins after it arrives
+// via `perf` (see `StrategyDisclosure` props below). When the backend flips
+// a new strategy into either set, this manifest has to be updated.
+const STATIC_LIVE_DISABLED: ReadonlySet<string> = new Set(["orb"]);
+const STATIC_PAPER_ONLY: ReadonlySet<string> = new Set(["kama-breakout"]);
 
 // ─── Category label from STRATEGY_META.group ───────────────────
 
@@ -286,7 +324,18 @@ export default function StrategyDetailPage() {
   // object. We render a "not found" state at the bottom of the page for
   // unknown slugs instead of silently rendering a blank hero with the slug as
   // the title (Persona 1 audit found this reads as broken).
+  //
+  // A3#8 (Wave 8) — call ``notFound()`` unconditionally for unknown slugs
+  // instead of waiting for the backend to confirm with a 404 response.
+  // Previously the page would spin indefinitely while the perf request
+  // queued/timed-out for a typo'd URL; now we short-circuit as soon as the
+  // frontend manifest says the id is unknown. `resolveStrategyId` covers
+  // the common underscore-form typos (see ``SLUG_TO_ID`` above), so the
+  // remaining cases really are garbage paths that should 404.
   const isKnownStrategy = strategyId in STRATEGY_META;
+  if (!isKnownStrategy) {
+    notFound();
+  }
 
   const [perf, setPerf] = useState<StrategyPerformance | null>(null);
   const [trades, setTrades] = useState<StrategyTrade[]>([]);
@@ -295,12 +344,11 @@ export default function StrategyDetailPage() {
   const [range, setRange] = useState<EquityRange>("3M");
   const [toggling, setToggling] = useState(false);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
-  // persona-9 #7 — track whether the perf fetch came back as a 404 from the
-  // backend, distinct from a generic network failure. We only call Next's
-  // ``notFound()`` when both signals agree the slug is unknown (frontend
-  // ``STRATEGY_META`` doesn't list it AND the backend says 404). A
-  // transient network error on a known-good slug must NOT trigger notFound.
-  const [perfNotFound, setPerfNotFound] = useState(false);
+  // Wave 8 (A3#8) — the ``perfNotFound`` flag used to guard the editorial
+  // "Strategy not available" fallback branch. That branch is gone (unknown
+  // slugs now short-circuit to ``notFound()`` at the top of the component,
+  // see the ``if (!isKnownStrategy) notFound()`` block), so the 404-sniff
+  // state was dead and removed alongside it.
 
   const meta = STRATEGY_META[strategyId] || {
     name: strategyId,
@@ -312,7 +360,6 @@ export default function StrategyDetailPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setPerfNotFound(false);
     const [p, t, pos] = await Promise.allSettled([
       getStrategyPerformance(strategyId),
       getStrategyTrades(strategyId),
@@ -320,16 +367,11 @@ export default function StrategyDetailPage() {
     ]);
     if (p.status === "fulfilled") {
       setPerf(p.value);
-    } else {
-      // ``apiFetch`` throws ``Error("API 404: …")`` on 404 — sniff for that
-      // shape so we can later trigger ``notFound()`` instead of rendering
-      // the editorial copy. Any other failure (network, 5xx) leaves
-      // ``perfNotFound`` false so the retry button still shows.
-      const reason = p.reason instanceof Error ? p.reason.message : "";
-      if (reason.includes("API 404")) {
-        setPerfNotFound(true);
-      }
     }
+    // A3#8 — backend 404s are no longer sniffed here. Unknown slugs were
+    // already handled by ``notFound()`` at the top of the component; a
+    // rejection on a known slug is treated as a transient failure and the
+    // retry block at the bottom of the page surfaces it to the user.
     if (t.status === "fulfilled") setTrades(t.value);
     if (pos.status === "fulfilled") setPositions(pos.value);
     setLoading(false);
@@ -454,75 +496,13 @@ export default function StrategyDetailPage() {
     );
   }
 
-  // persona-9 #7 — Wave 35: real HTTP 404 for unknown slugs.
-  //
-  // Previously this branch rendered editorial "Strategy not found" copy in a
-  // 200 response. That hurt SEO (search engines indexed the placeholder),
-  // muddled browser-history hygiene (Back from a 404 went to the placeholder
-  // page instead of the previous real page), and broke crawl-budget heuristics
-  // because every typo in the URL bar produced a unique 200.
-  //
-  // Now: if the slug is NOT in STRATEGY_META AND the backend confirmed the
-  // strategy is unknown (perf fetch returned 404), call Next's ``notFound()``
-  // to throw the framework's HTTP-404 fallback. The not-found boundary
-  // (`app/not-found.tsx` or the dashboard's nearest ancestor) renders the
-  // user-visible 404 page and Next sets the response status to 404.
-  //
-  // Editorial copy is still preserved for the legitimate case: a slug IS in
-  // STRATEGY_META but the backend hasn't produced data yet (freshly seeded
-  // strategy, OOS file missing) — that should not 404, it should explain why
-  // the page is empty and offer a retry.
-  if (!isKnownStrategy && perfNotFound) {
-    notFound();
-  }
-
-  if (!isKnownStrategy && !perf) {
-    // Frontend doesn't know the slug AND the perf request didn't actually
-    // 404 (likely a network failure). Render the editorial copy + retry so a
-    // transient outage on a deep-link doesn't 404 the user. Once the network
-    // recovers, ``fetchData`` will either succeed or set ``perfNotFound`` and
-    // the branch above will fire.
-    return (
-      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-6 py-10">
-        <nav
-          className="flex items-center gap-2 font-sans text-[12px] text-fg-muted"
-          aria-label="Breadcrumb"
-        >
-          <Link href="/" className="transition-colors hover:text-fg">
-            Dashboard
-          </Link>
-          <span aria-hidden>/</span>
-          <span className="text-fg">Strategy not available</span>
-        </nav>
-        <div className="flex flex-col gap-3 rounded-lg border border-border-hair bg-bg-elev-1 px-6 py-8">
-          <Eyebrow as="div">STRATEGY</Eyebrow>
-          <Display size="md" as="h1">
-            Strategy data unavailable
-          </Display>
-          <p className="max-w-[520px] font-display italic text-[15px] leading-relaxed text-fg-muted">
-            Could not load <Mono className="text-[13px] text-fg">{rawSlug}</Mono>.
-            The backend may be temporarily unreachable.
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={fetchData}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3 py-1.5 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
-            >
-              Retry
-            </button>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
-            >
-              Back to dashboard
-              <ArrowRight className="h-3 w-3" aria-hidden />
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // A3#8 (Wave 8) — unknown-slug handling moved to the top of the component
+  // (see the ``if (!isKnownStrategy) notFound()`` block). An unknown slug now
+  // short-circuits before the loading spinner mounts, so the deferred-404 and
+  // "strategy not available" retry branches that used to live here are no
+  // longer reachable. If the user sees a spinner past this point, the slug
+  // is known — any backend failure on a known slug is handled by the retry
+  // block at the bottom of the page (``{!perf ? retryBlock}``).
 
   const totalReturnPct = perf?.total_return_pct ?? 0;
   // Wave 26 — the summary row previously showed `TOTAL RETURN +0.00%` for
@@ -594,11 +574,24 @@ export default function StrategyDetailPage() {
           consolidation.md §4 and a NOT-READY-FOR-LIVE pill when the
           backend's live_disabled / paper_only flag is set. Returns null
           (renders nothing) for PASS strategies — the 7 non-disclosed pages
-          remain unchanged. */}
+          remain unchanged.
+
+          A3#6 (Wave 8) — the pill now pre-seeds from the static client-side
+          manifest (``STATIC_LIVE_DISABLED`` / ``STATIC_PAPER_ONLY``) so it
+          appears on first paint. Without this, researchers saw a headline
+          "OOS Sharpe 8.34" banner for ~500ms with no "NOT READY FOR LIVE"
+          pill while ``perf`` was loading — a dangerous gap for ``orb`` and
+          ``kama-breakout``. Once ``perf`` arrives, the backend flag can
+          still widen the set (``||``), so the server remains the source of
+          truth but the client never shows the banner without the caveat. */}
       <StrategyDisclosure
         strategyId={strategyId}
-        liveDisabled={perf?.live_disabled ?? false}
-        paperOnly={perf?.paper_only ?? false}
+        liveDisabled={
+          STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false)
+        }
+        paperOnly={
+          STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false)
+        }
       />
 
       {/* Wave 26 — honesty caveat for implausibly high OOS Sharpe (e.g. ORB's

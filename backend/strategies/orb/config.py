@@ -27,10 +27,14 @@ from tuner.search import Categorical, FloatRange, IntRange
 # beta, not opening-range-breakout edge, and was the single largest
 # contributor to the spurious 8.34 Sharpe. This change is permanent and
 # NOT tuner-reachable.
+# NOTE (audit A1#2, 2026-04): ``all_leveraged`` was removed entirely —
+# after the P0-5 narrowing it was a duplicate of ``spy_qqq`` (both
+# mapped to SPY+QQQ), so Optuna wasted ~1/3 of trials re-sampling the
+# same universe under a different name. ``spy_qqq`` is the canonical
+# key; ``qqq_tqqq`` is retained as a historical alias for QQQ-only.
 UNIVERSE_PROFILES: dict[str, tuple[str, ...]] = {
     "spy_qqq": ("SPY", "QQQ"),
     "qqq_tqqq": ("QQQ",),
-    "all_leveraged": ("SPY", "QQQ"),
 }
 
 
@@ -91,7 +95,7 @@ def search_space() -> dict[str, Any]:
         # could land on 0.8622 which turned off the noise guard.
         "volume_confirm_min": FloatRange(1.0, 1.5),
         "universe_profile": Categorical(
-            ["spy_qqq", "qqq_tqqq", "all_leveraged"]
+            ["spy_qqq", "qqq_tqqq"]
         ),
         "allow_shorts": Categorical([True, False]),
         "tp1_fib": FloatRange(1.0, 1.5),

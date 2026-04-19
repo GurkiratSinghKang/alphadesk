@@ -335,28 +335,38 @@ _STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
 }
 
 
+#: Canonical underscore names that are legitimate strategy identifiers.
+#: Derived once from the hyphen-id map so both forms stay in lock-step.
+_STRATEGY_CANONICAL_NAMES: frozenset[str] = frozenset(
+    _STRATEGY_ID_TO_CANONICAL.values()
+)
+
+
 def _canonical_strategy_name(name: str | None) -> str | None:
     """Map any incoming strategy identifier to its canonical registry name.
 
-    Accepts ``None`` (manual orders carry no strategy), the hyphen-id the
-    frontend speaks, or the underscore canonical name the registry uses.
-    Returns ``None`` when the input is blank or not recognisable — callers
-    should treat ``None`` as "not a routed strategy order" and skip the
-    live-disabled / paper-only gates.
+    This is an **allowlist** (Wave 6 / A1#3 fix). Previously the function
+    silently passed through any hyphen-free token, letting a caller spoof
+    ``payload.strategy="orbx"`` past the live-trading deny-list. The new
+    semantics:
+
+    * ``None`` / blank → ``None`` (manual/discretionary order — callers
+      decide how to treat it; the live-gate intentionally skips ``None``).
+    * Hyphen-id in ``_STRATEGY_ID_TO_CANONICAL`` → mapped canonical name.
+    * Canonical underscore name already in ``_STRATEGY_CANONICAL_NAMES``
+      → returned unchanged.
+    * Anything else → ``ValueError`` (translated to 400 at the edge).
     """
-    if not name:
+    if name is None:
         return None
     key = name.strip().lower().replace(" ", "-")
     if not key:
         return None
     if key in _STRATEGY_ID_TO_CANONICAL:
         return _STRATEGY_ID_TO_CANONICAL[key]
-    # Already-canonical (underscore form) passes through. We accept any
-    # underscore-cased token so strategies not listed in the route-id map
-    # are still checkable (e.g. future additions to STRATEGY_PAPER_ONLY).
-    if "-" not in key:
+    if key in _STRATEGY_CANONICAL_NAMES:
         return key
-    return None
+    raise ValueError(f"unknown strategy: {key}")
 
 
 def _reject_if_live_forbidden(strategy: str | None) -> None:
@@ -370,11 +380,25 @@ def _reject_if_live_forbidden(strategy: str | None) -> None:
       * ``kama_breakout`` — paper-only until a longer walk-forward lands a
         statistically meaningful trade count. 422 on live; paper allowed.
 
-    Both gates no-op on the paper server (we WANT paper runs to exercise
-    these strategies) and on manual orders that don't carry a strategy tag.
+    Wave 6 / A1#3 + A1#11 hardening:
+      * Unknown strategy strings now raise 400 (fail-closed) rather than
+        silently bypassing the deny-list.
+      * ``strategy=None`` is still accepted as a manual/discretionary order
+        and bypasses the gate, but we log an INFO line so the audit trail
+        captures the skip.
     """
-    canonical = _canonical_strategy_name(strategy)
+    try:
+        canonical = _canonical_strategy_name(strategy)
+    except ValueError as exc:
+        # Fail-closed: any non-None value we can't canonicalize is rejected
+        # rather than passed through to the broker.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if canonical is None:
+        logger.info(
+            "live-gate: skipping strategy allowlist check (strategy=None, "
+            "manual/discretionary order)"
+        )
         return
 
     from core.config import (

@@ -98,7 +98,7 @@ def _parse_event_spread(tag: Optional[str]) -> Optional[Decimal]:
         val = float(raw[:end])
     except (TypeError, ValueError):
         return None
-    if not (val == val) or val < 0:  # NaN check or negative → reject
+    if not (val == val) or val <= 0:  # NaN, zero, or negative → reject
         return None
     return Decimal(str(val))
 
@@ -687,10 +687,16 @@ class ExecutionSimulator:
         )
         # Per-order event-conditional spread override. Strategies can
         # stamp an "evspread<float>" token into ``Signal.tag`` to request a
-        # fill-specific half-spread that supersedes both the caller-supplied
+        # fill-specific spread that supersedes both the caller-supplied
         # ``spread_pct`` and the simulator default. Used by PEAD on
         # post-announcement MOO fills where the realised gap-open spread is
         # 3-8x the default 5 bps.
+        #
+        # NOTE: the parsed value is a FULL spread (bid/ask width), NOT a
+        # half-spread. ``Costs.slippage`` internally applies
+        # ``half_spread = 0.5 * spread_pct``, so the effective half-spread
+        # charged to the fill is 0.5 * evspread. Strategies MUST stamp the
+        # full spread into the tag for the intended half-spread to apply.
         event_spread = _parse_event_spread(order.tag)
         if event_spread is not None:
             slip_spread: Optional[Decimal] = event_spread

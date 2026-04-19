@@ -15,7 +15,9 @@ import type {
 } from "@/components/primitives/RegimePill";
 import {
   getStrategies,
+  getStrategyCatalog,
   getStrategyPerformance,
+  type StrategyCatalogEntry,
   type StrategyPerformance,
 } from "@/lib/api";
 import {
@@ -58,9 +60,25 @@ interface ListingStrategy {
   sharpe: number | null;
   cagr: number | null; // fraction (0.362 → 36.2%)
   maxDD: number | null; // fraction; sign varies per backend
+  // A3#2 (Wave 8) — routing flags driving the card pill. Sourced from the
+  // ``/api/v1/strategies/catalog`` endpoint once it resolves; pre-seeded
+  // from the static client-side manifest below so the pill appears on
+  // first paint for ``orb`` (live-denied) and ``kama-breakout`` (paper-only).
+  liveDisabled: boolean;
+  paperOnly: boolean;
 }
 
 type Bucket = "active" | "paused" | "coming_soon";
+
+// ─── A3#2 — static routing-flag manifest ─────────────────────
+// Mirrors ``backend/core/config.py``'s ``STRATEGY_LIVE_DISABLED`` /
+// ``STRATEGY_PAPER_ONLY`` sets so the list-page card pills appear
+// immediately, before the catalog endpoint round-trips. The backend
+// catalog response is still the source of truth — it unions with this
+// manifest, so a flag flipped server-side but not yet mirrored here still
+// lights the pill. Update whenever the backend sets change.
+const LIVE_DISABLED: ReadonlySet<string> = new Set(["orb"]);
+const PAPER_ONLY: ReadonlySet<string> = new Set(["kama-breakout"]);
 
 // ─── Formatters ──────────────────────────────────────────────
 
@@ -126,6 +144,22 @@ function StrategyCatalogCard({
   if (s.sharpe != null) labelParts.push(`OOS Sharpe ${signedNumber(s.sharpe)}`);
   if (s.cagr != null) labelParts.push(`CAGR ${fractionToPct(s.cagr, 1)}`);
 
+  // A3#2 (Wave 8) — routing-flag pill. Shows "NOT READY FOR LIVE" for
+  // live-denied strategies (e.g. ``orb``) and "PAPER-ONLY" for thin-OOS
+  // strategies (e.g. ``kama-breakout``). ``aria-label`` keeps the text
+  // screen-reader-friendly; ``text-amber-100`` mirrors the
+  // StrategyDisclosure component's WCAG contrast fix (A3#5).
+  const pillLabel = s.liveDisabled
+    ? "Not ready for live"
+    : s.paperOnly
+      ? "Paper-only"
+      : null;
+  const pillAriaLabel = s.liveDisabled
+    ? "Live trading disabled"
+    : s.paperOnly
+      ? "Paper trading only"
+      : undefined;
+
   const bodyContent = (
     <>
       <header className="flex items-start justify-between gap-3">
@@ -139,6 +173,19 @@ function StrategyCatalogCard({
           <div className="font-sans text-[11.5px] leading-[1.4] text-fg-muted">
             {s.subtitle}
           </div>
+          {pillLabel ? (
+            <span
+              data-testid="strategy-card-pill"
+              role="status"
+              aria-label={pillAriaLabel}
+              className={cn(
+                "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
+                "font-sans text-[9.5px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+              )}
+            >
+              {pillLabel}
+            </span>
+          ) : null}
         </div>
         <RegimePill
           regime={regime.regime}
@@ -297,6 +344,12 @@ export default function StrategiesListingPage() {
   >(null);
   const [perf, setPerf] = useState<Record<string, StrategyPerformance>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  // A3#2 (Wave 8) — routing-flag catalog. ``null`` during first paint;
+  // replaced by the server payload once ``/api/v1/strategies/catalog``
+  // resolves. The per-card pill falls back to ``LIVE_DISABLED`` /
+  // ``PAPER_ONLY`` until this lands, so the pill is never absent for the
+  // strategies those static sets cover.
+  const [catalog, setCatalog] = useState<StrategyCatalogEntry[] | null>(null);
 
   // Initial summaries — fills investedAmount / status / positions for every
   // strategy in one call.
@@ -309,6 +362,24 @@ export default function StrategiesListingPage() {
       .catch((err) => {
         if (!cancelled)
           setLoadError(err?.message ?? "Failed to load strategies");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A3#2 (Wave 8) — catalog fetch (cheap, no DB). Failure is non-fatal:
+  // the static manifest still lights the pill for ``orb`` and
+  // ``kama-breakout``, which are the cases that actually matter.
+  useEffect(() => {
+    let cancelled = false;
+    getStrategyCatalog()
+      .then((rows) => {
+        if (!cancelled) setCatalog(rows);
+      })
+      .catch(() => {
+        // Silent — static manifest covers the visible strategies; no need
+        // to show a toast or block the page on a catalog miss.
       });
     return () => {
       cancelled = true;
@@ -349,6 +420,12 @@ export default function StrategiesListingPage() {
     const apiById = new Map(
       (summaries ?? []).map((s) => [s.id, s] as const)
     );
+    // A3#2 (Wave 8) — lookup from the catalog endpoint, keyed by strategy id.
+    // The static manifest below acts as a fallback until this arrives (and
+    // also hardens us against a catalog miss in the field).
+    const catalogById = new Map(
+      (catalog ?? []).map((c) => [c.id, c] as const)
+    );
     // Every id in STRATEGY_META is a candidate. We prefer STRATEGY_ORDER for
     // stable sequencing; any id not listed there falls back to alphabetical.
     const orderedIds = [
@@ -361,6 +438,7 @@ export default function StrategiesListingPage() {
       const meta = STRATEGY_META[id];
       const api = apiById.get(id);
       const p = perf[id];
+      const c = catalogById.get(id);
       const stage = metaStage(id);
       const rawStatus = (api?.status ?? "").toLowerCase();
       const apiStatus: ListingStrategy["apiStatus"] =
@@ -371,6 +449,10 @@ export default function StrategiesListingPage() {
             : rawStatus === "backtest"
               ? "backtest"
               : "unknown";
+      // Union the static manifest with the server catalog: static set lights
+      // the pill immediately on first paint, server can only ever widen it.
+      const liveDisabled = LIVE_DISABLED.has(id) || (c?.live_disabled ?? false);
+      const paperOnly = PAPER_ONLY.has(id) || (c?.paper_only ?? false);
       return {
         id,
         displayName: meta.name,
@@ -383,9 +465,11 @@ export default function StrategiesListingPage() {
         sharpe: p?.sharpe_ratio ?? null,
         cagr: p?.cagr ?? null,
         maxDD: p?.max_drawdown ?? null,
+        liveDisabled,
+        paperOnly,
       } satisfies ListingStrategy;
     });
-  }, [summaries, perf]);
+  }, [summaries, perf, catalog]);
 
   const grouped = useMemo(() => {
     const g: Record<Bucket, ListingStrategy[]> = {

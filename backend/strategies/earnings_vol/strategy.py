@@ -786,10 +786,12 @@ class EarningsVolStrategy:
                 idx = _find_nearest_session_idx(dt_arr, d)
             except ValueError:
                 continue
-            if idx is None or idx <= 0 or idx >= len(closes):
+            if idx is None or idx >= len(closes):
                 continue
             if is_bmo:
-                # BMO: gap from close_{D-1} to open_D.
+                # BMO: gap from close_{D-1} to open_D. Need a prior bar.
+                if idx <= 0:
+                    continue
                 prev_close = closes[idx - 1]
                 open_d = (
                     opens[idx] if opens is not None and not pd.isna(opens[idx])

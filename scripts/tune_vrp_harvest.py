@@ -155,7 +155,7 @@ def _suggest_params(trial: optuna.trial.Trial) -> dict[str, Any]:
         "sl_pct": trial.suggest_float("sl_pct", 1.5, 3.0),
         "exit_dte": trial.suggest_categorical("exit_dte", [14, 21, 30]),
         "vix_kill_switch": trial.suggest_float("vix_kill_switch", 0.25, 0.40),
-        "tail_hedge_ratio": trial.suggest_categorical("tail_hedge_ratio", [0, 5, 10]),
+        "tail_hedge_ratio": trial.suggest_categorical("tail_hedge_ratio", [5, 10]),
         "tail_hedge_delta": trial.suggest_categorical("tail_hedge_delta", [0.03, 0.05, 0.10]),
         "term_structure_gate": trial.suggest_categorical("term_structure_gate", [True, False]),
     }

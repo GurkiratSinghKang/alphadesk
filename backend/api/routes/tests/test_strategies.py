@@ -132,8 +132,9 @@ class TestOOSMetricsPopulated:
         assert d["sharpe_ratio"] > 1.0
 
     def test_missing_oos_returns_null_not_zero(self) -> None:
-        # Neither dual_momentum nor kama_breakout ships an OOS JSON yet.
-        for route_id in ("dual-momentum", "kama-breakout"):
+        # kama_breakout is the sole Phase-1 strategy with no OOS JSON on
+        # disk. Missing metrics must surface as None, never a fake zero.
+        for route_id in ("kama-breakout",):
             d = strat_mod._STRATEGIES[route_id]
             assert d["sharpe_ratio"] is None, route_id
             assert d["max_drawdown"] is None, route_id

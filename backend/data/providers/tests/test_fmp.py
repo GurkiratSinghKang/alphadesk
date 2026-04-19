@@ -7,9 +7,18 @@ from datetime import date
 
 import pytest
 
+from core.config import settings
 from data.providers.fmp import FMPEarningsProvider, FMPFundamentalsProvider
 
-pytestmark = pytest.mark.integration
+_fmp_key = settings.FMP_API_KEY.get_secret_value()
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _fmp_key,
+        reason="FMP_API_KEY not set; skipping live API tests",
+    ),
+]
 
 
 @pytest.fixture(scope="module")
