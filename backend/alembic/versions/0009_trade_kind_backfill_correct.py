@@ -1,7 +1,7 @@
 """trade_kind backfill correctness fix — closed rows → *_close
 
 Revision ID: 0009_trade_kind_backfill_correct
-Revises: 0007_halt_state_and_trade_kind
+Revises: 0008_trade_ledger_perf_indexes
 Create Date: 2026-04-19
 
 Wave 6β Fix 3 (from Round-5 deferred + persona 106).
@@ -68,10 +68,10 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0009_trade_kind_backfill_correct"
-# Chain off the current head (0007).  When the Wave 6α 0008 migration
-# lands, this revision's down_revision will be updated in that wave to
-# point at 0008 instead — standard Alembic merge protocol.
-down_revision: Union[str, None] = "0007_halt_state_and_trade_kind"
+# Chain off 0008 (Wave 6α perf indexes) — both 0008 and 0009 originally
+# branched from 0007 in parallel waves; resolved by re-chaining 0009
+# onto 0008 (neither migration depends on the other's content).
+down_revision: Union[str, None] = "0008_trade_ledger_perf_indexes"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
