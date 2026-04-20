@@ -1217,7 +1217,16 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     is_demo?: boolean;
     source?: string;
   }
-  const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`);
+  // 2026-04-20 — bumped per-call timeout to 30s (was default 15s). Cold-start
+  // on this endpoint can exceed 15s because the backend fans out to the
+  // Alpaca account+positions+trade-ledger queries sequentially on the first
+  // request, and container restarts empty the in-proc caches. Direct curl
+  // settled in <1s after warm-up, so this is a first-hit tail, not a real
+  // failure — a longer timeout prevents the dashboard from briefly showing
+  // em-dashes for equity/P&L.
+  const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`, {
+    timeoutMs: 30_000,
+  });
   // Use backend-provided day P&L if available; fall back to realized-only to avoid
   // double-counting accumulated unrealized P&L from positions held across days.
   const rawAny = raw as unknown as Record<string, unknown>;
