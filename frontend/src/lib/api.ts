@@ -229,42 +229,53 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 
   if (res.status === 401 && typeof window !== "undefined") {
     if (window.location.pathname !== "/login") {
-      // persona-10 #5 — UX hint before silent redirect. We stash a flag
-      // in sessionStorage so /login can render a "Your session expired"
-      // banner. sessionStorage is per-tab, so the banner only appears in
-      // the tab whose request actually 401'd; other tabs find out via
-      // the cross-tab logout broadcast (see `broadcastLogout` below).
-      try {
-        sessionStorage.setItem("alphadesk.session_expired", "1");
-      } catch {
-        // private mode / quota: redirect still happens, just no banner
+      // Single-flight guard: a dashboard page typically has 5-10 React
+      // Query widgets polling in parallel. On access-token expiry they
+      // all 401 at nearly the same instant and every one of them used to
+      // race into this branch — POSTing /auth/logout 10x, dispatching 10
+      // broadcast events, and assigning window.location.href 10 times.
+      // The extra logout POSTs can trip the server's rate-limiter and
+      // leave the session in a half-revoked state. We gate the whole
+      // teardown behind a module-level flag and run it exactly once.
+      if (!sessionExpiredHandled) {
+        sessionExpiredHandled = true;
+        // persona-10 #5 — UX hint before silent redirect. We stash a flag
+        // in sessionStorage so /login can render a "Your session expired"
+        // banner. sessionStorage is per-tab, so the banner only appears in
+        // the tab whose request actually 401'd; other tabs find out via
+        // the cross-tab logout broadcast (see `broadcastLogout` below).
+        try {
+          sessionStorage.setItem("alphadesk.session_expired", "1");
+        } catch {
+          // private mode / quota: redirect still happens, just no banner
+        }
+        // Drop the in-memory + sessionStorage refresh token so the
+        // scheduler stops trying to refresh against a dead cookie.
+        clearRefreshToken();
+        // Ask the backend to revoke the access token and clear its HttpOnly
+        // cookies. `await` before navigating so the POST actually completes —
+        // a fire-and-forget fetch is cancelled by `window.location.href =`
+        // immediately after. We still redirect on logout failure (rate-limit,
+        // Redis blip, network blip) so the user doesn't end up stuck on a
+        // broken page.
+        try {
+          await fetch(`${base}/api/v1/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+          });
+        } catch {
+          // swallow: redirect happens regardless
+        }
+        // Broadcast to other tabs so they don't keep polling / showing
+        // stale state. They will land on /login the same way this tab did.
+        try {
+          window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
+        } catch {
+          // event dispatch failure is non-fatal
+        }
+        broadcastLogout();
+        window.location.href = "/login";
       }
-      // Drop the in-memory + sessionStorage refresh token so the
-      // scheduler stops trying to refresh against a dead cookie.
-      clearRefreshToken();
-      // Ask the backend to revoke the access token and clear its HttpOnly
-      // cookies. `await` before navigating so the POST actually completes —
-      // a fire-and-forget fetch is cancelled by `window.location.href =`
-      // immediately after. We still redirect on logout failure (rate-limit,
-      // Redis blip, network blip) so the user doesn't end up stuck on a
-      // broken page.
-      try {
-        await fetch(`${base}/api/v1/auth/logout`, {
-          method: "POST",
-          credentials: "include",
-        });
-      } catch {
-        // swallow: redirect happens regardless
-      }
-      // Broadcast to other tabs so they don't keep polling / showing
-      // stale state. They will land on /login the same way this tab did.
-      try {
-        window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
-      } catch {
-        // event dispatch failure is non-fatal
-      }
-      broadcastLogout();
-      window.location.href = "/login";
     }
     throw new Error("Session expired");
   }
@@ -674,6 +685,16 @@ const SESSION_STORAGE_RT_KEY = "alphadesk.rt";
 const LOGOUT_BROADCAST_KEY = "alphadesk.logout_broadcast";
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 60 * 60 * 1000; // 7 hours (buffer before 8-hr expiry)
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
+// Single-flight guards, consumed from apiFetch.
+// * sessionExpiredHandled: on a 401 fan-out (dashboard with N parallel
+//   widgets), make sure we POST /auth/logout, broadcast, and hard-redirect
+//   exactly once instead of N times.
+// * refreshInFlight: coalesce concurrent refreshAccessToken() calls so
+//   two scheduler ticks / multi-tab timers sharing one HttpOnly refresh
+//   cookie don't race and mint two token pairs where only the second one
+//   sticks in the browser (orphaning the first pair's refresh token).
+let sessionExpiredHandled = false;
+let refreshInFlight: Promise<boolean> | null = null;
 // Module-local refresh token, mirroring sessionStorage so we don't pay the
 // storage round-trip on every tick. Initialised on module load from
 // sessionStorage so a page reload doesn't kick a logged-in user out.
@@ -830,6 +851,15 @@ if (typeof window !== "undefined") {
 
 export async function refreshAccessToken(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  // Coalesce concurrent callers onto a single in-flight POST. Without
+  // this, two simultaneous refresh requests share the one HttpOnly
+  // refresh cookie; the backend revokes + rotates for both in parallel
+  // and sends two different Set-Cookie headers. The browser keeps
+  // whichever arrived last and the losing refresh token is orphaned —
+  // still valid (server-side) but unknown to any client, with a 30-day
+  // TTL. Realistic trigger: two tabs each running the 7-hour scheduler
+  // that fire within the same millisecond.
+  if (refreshInFlight !== null) return refreshInFlight;
   // BUG-044: the backend no longer echoes the refresh token in the login
   // body for browser clients — the HttpOnly ``refresh_token`` cookie
   // (path=/api/v1/auth) is now the authoritative source. We still accept
@@ -839,23 +869,31 @@ export async function refreshAccessToken(): Promise<boolean> {
   // ``apiFetch``. That also shrinks the XSS blast radius: a malicious
   // script can no longer scrape the refresh token out of storage.
   const legacyToken = readRefreshToken();
-  try {
-    type RefreshResponse = { access_token?: string; refresh_token?: string };
-    const resp = await apiFetch<RefreshResponse>("/api/v1/auth/refresh", {
-      method: "POST",
-      body: legacyToken
-        ? JSON.stringify({ refresh_token: legacyToken })
-        : JSON.stringify({}),
-      // Don't redirect on 401 — the scheduler manages that UX itself.
-    });
-    if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
-      // Backend is still in CLI mode (shouldn't happen for browsers post
-      // BUG-044, but keep the path alive for completeness).
-      captureRefreshToken(resp.refresh_token);
+  const work = (async () => {
+    try {
+      type RefreshResponse = { access_token?: string; refresh_token?: string };
+      const resp = await apiFetch<RefreshResponse>("/api/v1/auth/refresh", {
+        method: "POST",
+        body: legacyToken
+          ? JSON.stringify({ refresh_token: legacyToken })
+          : JSON.stringify({}),
+        // Don't redirect on 401 — the scheduler manages that UX itself.
+      });
+      if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
+        // Backend is still in CLI mode (shouldn't happen for browsers post
+        // BUG-044, but keep the path alive for completeness).
+        captureRefreshToken(resp.refresh_token);
+      }
+      return true;
+    } catch {
+      return false;
     }
-    return true;
-  } catch {
-    return false;
+  })();
+  refreshInFlight = work;
+  try {
+    return await work;
+  } finally {
+    refreshInFlight = null;
   }
 }
 
