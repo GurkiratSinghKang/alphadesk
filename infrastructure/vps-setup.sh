@@ -58,8 +58,17 @@ systemctl enable fail2ban
 echo "Fail2ban installed"
 
 # Data directories
-mkdir -p /var/lib/alphadesk/{timescaledb,redis,uptime-kuma}
+mkdir -p /var/lib/alphadesk/{timescaledb,redis,uptime-kuma,pipeline_logs}
 chown -R deploy:deploy /var/lib/alphadesk
+# pipeline_logs is bind-mounted into the backend container which runs as
+# uid 10001 (the ``alphadesk`` user in the image). The container needs to
+# write daily JSON logs here, and Python's ``path.write_text`` truncates
+# in place rather than unlink-then-create, so the files AND directory
+# must be owned by 10001. Without this, the pipeline crashes with
+# ``PermissionError: [Errno 13] Permission denied: '/app/data/pipeline_logs/YYYY-MM-DD.json'``
+# on the second run of any given day and every strategy evaluation
+# silently stops. See Wave 6γ post-deploy incident notes.
+chown -R 10001:10001 /var/lib/alphadesk/pipeline_logs
 
 # App directory
 mkdir -p /opt/alphadesk
