@@ -279,6 +279,16 @@ async def _run_stream() -> None:
     global _should_stop, _current_symbols
     backoff = 5  # initial backoff seconds
 
+    # Startup grace period. Paper accounts cap concurrent WS sessions at 1,
+    # and when a container is restarted Alpaca's server-side session tracker
+    # can take up to ~60s to reap the prior container's connection. Without
+    # this pause the new container races the dead session, gets 406
+    # "connection limit exceeded", fails back through exponential backoff,
+    # and the stream stays wedged for many minutes. 30s is a safe midpoint:
+    # long enough for the previous container to actually be reaped, short
+    # enough that a fresh cold-start still gets live quotes within a minute.
+    await asyncio.sleep(30)
+
     while not _should_stop:
         # Don't spam reconnects outside market hours
         if not _is_market_hours():
@@ -431,7 +441,13 @@ async def _run_stream() -> None:
                 backoff,
                 exc_info=True,
             )
-            await asyncio.sleep(backoff)
+            # Exponential backoff with full jitter (AWS architecture blog
+            # style). Without jitter, if two containers ever reconnect at
+            # once (e.g. a brief docker-compose flap) they'd sync up and
+            # hammer Alpaca in lockstep, wasting connection-limit budget.
+            import random as _random
+            jittered = _random.uniform(0, backoff)
+            await asyncio.sleep(jittered)
             backoff = min(backoff * 2, 300)  # exponential backoff, max 5 minutes
         finally:
             if refresh_task and not refresh_task.done():
