@@ -783,10 +783,18 @@ async def get_greeks(
         intrinsic = max(strike - spot, 0)
 
     gamma = float(norm.pdf(d1) / (spot * sigma * np.sqrt(T)))
-    theta = float(
-        -(spot * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
-        - risk_free_rate * strike * np.exp(-risk_free_rate * T) * norm.cdf(d2 if option_type == OptionType.CALL else -d2)
-    ) / 365
+    # Black-Scholes-Merton theta. The r*K*e^(-rT) term is subtracted for a
+    # call (dividend of time value as T→0 reduces the call) and ADDED for
+    # a put (the discounted strike component is a credit on the put side).
+    # The prior code used the same minus sign for both by flipping the
+    # norm.cdf argument, which produced the wrong magnitude and a wrong
+    # sign on puts.
+    common_theta = -(spot * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
+    discount_term = risk_free_rate * strike * np.exp(-risk_free_rate * T)
+    if option_type == OptionType.CALL:
+        theta = float(common_theta - discount_term * norm.cdf(d2)) / 365
+    else:
+        theta = float(common_theta + discount_term * norm.cdf(-d2)) / 365
     vega = float(spot * norm.pdf(d1) * np.sqrt(T) / 100)
 
     return Greeks(
