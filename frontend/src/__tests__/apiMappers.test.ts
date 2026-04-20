@@ -1373,29 +1373,16 @@ describe('getAnalysis', () => {
 // ─── triggerPipeline ─────────────────────────────────────────────────────────
 
 describe('triggerPipeline', () => {
-  it('calls POST and maps result via mapPipelineRun', async () => {
-    const payload = {
-      ok: true,
-      result: {
-        date: '2026-04-10',
-        timestamp: '2026-04-10T18:00:00Z',
-        screened: [{ symbol: 'NVDA', name: 'NVIDIA', price: 820, composite_score: 0.9, sector: 'Tech', change_pct: 2 }],
-        analyzed: [],
-        signals: [],
-        orders_placed: [{ symbol: 'NVDA', side: 'buy', qty: 5, price: 820, order_id: 'ord-99', status: 'filled', timestamp: '2026-04-10T18:01:00Z' }],
-        orders_closed: [],
-        portfolio_snapshot: { equity: 115000, cash: 78000, positions: 3 },
-        errors: [],
-      },
-    };
+  it('calls POST and returns the async run acknowledgement', async () => {
+    // Persona-7 #2 P0: POST /pipeline/run is 202 Accepted with
+    // ``{run_id, status}`` — the old synchronous ``{ok, result}`` shape
+    // was removed from the backend.
+    const payload = { run_id: 'run-2026-04-10-xyz', status: 'started' as const };
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await triggerPipeline();
-    expect(result.ok).toBe(true);
-    expect(result.result.date).toBe('2026-04-10');
-    expect(result.result.screened[0].compositeScore).toBe(0.9);
-    expect(result.result.ordersPlaced[0].orderId).toBe('ord-99');
-    expect(result.result.portfolioSnapshot.equity).toBe(115000);
+    expect(result.run_id).toBe('run-2026-04-10-xyz');
+    expect(result.status).toBe('started');
 
     const [calledUrl, init] = mockFetch.mock.calls[0];
     expect(calledUrl).toContain('/pipeline/run');

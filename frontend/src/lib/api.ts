@@ -1663,9 +1663,22 @@ export function getPipelineStatus() {
   return apiFetch<PipelineStatus>('/api/v1/pipeline/status');
 }
 
-export async function triggerPipeline(): Promise<{ ok: boolean; result: PipelineRun }> {
-  const raw = await apiFetch<{ ok: boolean; result: Record<string, unknown> }>('/api/v1/pipeline/run', { method: 'POST' });
-  return { ok: raw.ok, result: mapPipelineRun(raw.result) };
+/**
+ * Kick off a pipeline run.
+ *
+ * Persona-7 #2 P0 (backend): POST /pipeline/run is now ASYNC — it returns
+ * 202 Accepted with `{run_id, status: "started"}` and the caller polls
+ * GET /pipeline/status until completion. The old synchronous
+ * `{ok, result: PipelineRun}` shape the FE previously typed for no
+ * longer exists on the wire; any caller still destructuring `result`
+ * would have crashed or rendered em-dashes. Lives alongside
+ * `pipeline-api.ts::startPipelineRun` which is the newer, idiomatic API.
+ */
+export async function triggerPipeline(): Promise<{ run_id: string; status: "started" }> {
+  return apiFetch<{ run_id: string; status: "started" }>(
+    '/api/v1/pipeline/run',
+    { method: 'POST' },
+  );
 }
 
 export async function getPipelineHistory(): Promise<Record<string, any>[]> {
