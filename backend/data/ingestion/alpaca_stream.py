@@ -92,7 +92,16 @@ DEFAULT_WATCHLIST = [
 # Always include core index ETFs for market context
 CORE_INDICES = {"SPY", "QQQ", "DIA", "IWM", "VIXY"}
 
-ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v2/sip"
+# Feed selection: SIP requires Alpaca Algo Trader Plus (paid) — paper accounts
+# without it get HTTP 406 "connection limit exceeded" on subscribe (the SIP
+# entitlement check). IEX is the free-tier feed and works on every account.
+# Override via ALPACA_STREAM_FEED env var (values: "iex" | "sip"). Defaults
+# to IEX so a fresh paper account streams cleanly out of the box.
+import os as _os_for_feed
+_ALPACA_STREAM_FEED = _os_for_feed.environ.get("ALPACA_STREAM_FEED", "iex").lower()
+if _ALPACA_STREAM_FEED not in ("iex", "sip"):
+    _ALPACA_STREAM_FEED = "iex"
+ALPACA_WS_URL = f"wss://stream.data.alpaca.markets/v2/{_ALPACA_STREAM_FEED}"
 
 
 async def get_dynamic_watchlist() -> list[str]:
