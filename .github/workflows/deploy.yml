@@ -230,15 +230,47 @@ jobs:
       # image pull. Host's /opt/alphadesk config files were drifting from
       # the repo in prior deploys — e.g. port bindings in docker-compose.yml
       # never took effect because the VPS had stale copies.
+      #
+      # 2026-04-20 — switched from appleboy/scp-action to native rsync with a
+      # post-sync checksum verify. drone-scp (the tool behind scp-action v1)
+      # repeatedly reported "Successfully executed transfer" while leaving
+      # existing files untouched on the remote, because its tar-based
+      # overwrite flag did not fire for files with identical size. The
+      # symptom was a green deploy that booted containers on the OLD image
+      # under the NEW SHA tag (compose fell back to the ``build:`` directive
+      # in docker-compose.yml against stale local source). Native rsync
+      # force-writes on checksum diff and we checksum-verify before moving on.
       - name: Sync config to VPS
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: deploy
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "docker-compose.yml,infrastructure/*"
-          target: "/opt/alphadesk/"
-          overwrite: true
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -az --checksum --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            docker-compose.yml \
+            "deploy@${VPS_HOST}:/opt/alphadesk/docker-compose.yml"
+          rsync -az --checksum --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            infrastructure/ \
+            "deploy@${VPS_HOST}:/opt/alphadesk/infrastructure/"
+          # Verify the sync actually landed — compare local vs remote sha256
+          # for the two files that drove the 2026-04-20 incident.
+          local_compose=$(sha256sum docker-compose.yml | awk '{print $1}')
+          local_prod=$(sha256sum infrastructure/docker-compose.prod.yml | awk '{print $1}')
+          remote_compose=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "deploy@${VPS_HOST}" 'sha256sum /opt/alphadesk/docker-compose.yml' | awk '{print $1}')
+          remote_prod=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "deploy@${VPS_HOST}" 'sha256sum /opt/alphadesk/infrastructure/docker-compose.prod.yml' | awk '{print $1}')
+          if [ "$local_compose" != "$remote_compose" ] || [ "$local_prod" != "$remote_prod" ]; then
+            echo "FATAL: compose sync verification failed" >&2
+            echo "  docker-compose.yml:                  local=$local_compose remote=$remote_compose" >&2
+            echo "  infrastructure/docker-compose.prod.yml: local=$local_prod remote=$remote_prod" >&2
+            exit 1
+          fi
+          echo "Compose sync verified (docker-compose.yml + prod override)"
 
       - name: Resolve deploy SHA
         id: deploy_sha
@@ -292,10 +324,23 @@ jobs:
             # the rollback playbook (docs/ROLLBACK.md) covers.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
             curl -sf http://localhost:8000/readyz || (echo "Readiness check failed!" && exit 1)
-            # Tidy up old images without touching anything younger than 24h.
-            # Rollback scenarios rely on prior SHAs still being pullable from
-            # GHCR (we never delete remote tags), so the host cleanup here
-            # only affects what's cached locally.
-            docker system prune -f --filter "until=24h"
+            # Tidy up old images. 2026-04-20: the prior prune
+            # (``system prune -f --filter until=24h``) did NOT touch TAGGED
+            # images — it only removes dangling images by default. With each
+            # backend image weighing ~4 GB and a deploy every few hours,
+            # the VPS filled to 100% in two days, which deadlocked Timescale
+            # ("No space left on device" on postmaster.pid) and forced a
+            # manual cleanup. Keep only the three most recent SHA tags per
+            # image repo (current + 2-deep rollback buffer). Rollback
+            # beyond that pulls from GHCR (we never prune remote tags).
+            for repo in ghcr.io/${{ steps.repo.outputs.name }}-backend ghcr.io/${{ steps.repo.outputs.name }}-frontend; do
+              docker images --format '{{.Repository}}:{{.Tag}} {{.CreatedAt}}' \
+                | awk -v r="$repo:" '$1 ~ ("^" r) { print }' \
+                | sort -k2,3 -r \
+                | awk 'NR>3 {print $1}' \
+                | xargs -r -I{} docker rmi {} || true
+            done
+            docker image prune -f
+            docker builder prune -af --keep-storage 2GB || true
             docker logout ghcr.io
             echo "Deploy successful: ${FRONTEND_IMAGE} + ${BACKEND_IMAGE}"
