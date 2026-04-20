@@ -289,6 +289,19 @@ async def _run_stream() -> None:
         refresh_task = None
         try:
             async with websockets.connect(ALPACA_WS_URL) as ws:
+                # Alpaca sends a [{"T":"success","msg":"connected"}] welcome
+                # frame on connect, BEFORE responding to our auth. Old code
+                # treated the first `recv()` as the auth response and missed
+                # the real {"T":"error","code":406,"msg":"connection limit
+                # exceeded"} payload — the loop would continue to subscribe
+                # against an already-closed socket and die with
+                # ConnectionClosedError in the `async for raw in ws` loop,
+                # which the outer handler logged as a generic stream error.
+                # Consume the welcome explicitly so the next recv() is
+                # unambiguously the auth verdict.
+                welcome = await ws.recv()
+                logger.info("Alpaca stream welcome: %s", str(welcome)[:100])
+
                 # Authenticate
                 await ws.send(json.dumps({
                     "action": "auth",
@@ -296,9 +309,12 @@ async def _run_stream() -> None:
                     "secret": settings.ALPACA_SECRET_KEY.get_secret_value(),
                 }))
                 auth_resp = await ws.recv()
-                logger.info("Alpaca SIP stream auth: %s", str(auth_resp)[:100])
+                logger.info("Alpaca stream auth: %s", str(auth_resp)[:100])
 
-                # Check for auth errors
+                # Check for auth errors. Connection-limit (406) happens when
+                # a prior session hasn't expired server-side yet; sleeping
+                # 60s gives Alpaca's session tracker time to reap the old
+                # one before the next connect attempt.
                 try:
                     auth_msgs = json.loads(auth_resp)
                     for m in (auth_msgs if isinstance(auth_msgs, list) else [auth_msgs]):
@@ -323,7 +339,8 @@ async def _run_stream() -> None:
                 _current_symbols = set()  # reset so _update_subscriptions subscribes all
                 await _update_subscriptions(ws, set(watchlist))
                 logger.info(
-                    "Alpaca SIP stream: subscribed to %d symbols (quotes+trades+bars)",
+                    "Alpaca %s stream: subscribed to %d symbols (quotes+trades+bars)",
+                    _ALPACA_STREAM_FEED.upper(),
                     len(watchlist),
                 )
                 backoff = 5  # reset backoff on successful connection
@@ -409,7 +426,10 @@ async def _run_stream() -> None:
             if _should_stop:
                 break
             logger.error(
-                "Alpaca SIP stream error (reconnecting in %ds)", backoff, exc_info=True,
+                "Alpaca %s stream error (reconnecting in %ds)",
+                _ALPACA_STREAM_FEED.upper(),
+                backoff,
+                exc_info=True,
             )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 300)  # exponential backoff, max 5 minutes
@@ -426,7 +446,7 @@ async def _run_stream() -> None:
                         exc_info=True,
                     )
 
-    logger.info("Alpaca SIP stream loop exited")
+    logger.info("Alpaca %s stream loop exited", _ALPACA_STREAM_FEED.upper())
 
 
 async def _supervised_run() -> None:
@@ -773,7 +793,7 @@ async def start_alpaca_stream() -> None:
     # exception — it will always attempt to reconnect until _should_stop.
     _stream_task = asyncio.create_task(_supervised_run())
     watchlist = await get_dynamic_watchlist()
-    logger.info("Alpaca SIP stream started for %d symbols", len(watchlist))
+    logger.info("Alpaca %s stream started for %d symbols", _ALPACA_STREAM_FEED.upper(), len(watchlist))
 
     # Trade updates stream — feature-flagged. Default ON.
     trade_updates_enabled = bool(
