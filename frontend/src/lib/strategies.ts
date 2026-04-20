@@ -139,14 +139,10 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     regimeNote: "Market-neutral, all regimes",
     group: "technical",
   },
-  "pairs-stat-arb": {
-    name: "Statistical Arbitrage Pairs",
-    shortName: "Pairs Stat Arb",
-    icon: GitMerge,
-    regimeNote: "Market-neutral cointegration",
-    group: "technical",
-    stage: "planned",
-  },
+  // 2026-04-20 — removed duplicate "pairs-stat-arb" entry. Backend's
+  // _ROUTE_TO_REGISTRY aliases it to the same pairs_trading package, and
+  // keeping both in STRATEGY_META rendered the same strategy twice on
+  // /strategies — once as Active, once as Coming Soon.
   "kama-breakout": {
     name: "KAMA + ATR Breakout",
     shortName: "KAMA Breakout",
@@ -234,7 +230,6 @@ export const STRATEGY_ORDER: string[] = [
   "rsi2-reversal",
   "dual-momentum",
   "pairs-trading",
-  "pairs-stat-arb",
   "kama-breakout",
   "orb",
   "vwap-strategy",

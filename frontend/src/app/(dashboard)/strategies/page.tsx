@@ -432,28 +432,31 @@ export default function StrategiesListingPage() {
   // Fan out per-strategy performance calls so OOS metrics (Sharpe, CAGR,
   // MaxDD) render on each card. Fetched only for live strategies — ghosts
   // don't have backend data and "other" (manual) doesn't run a backtest.
+  //
+  // 2026-04-20 — progressive per-id resolve (was Promise.all). A single slow
+  // /performance endpoint used to block every card's metrics until the
+  // slowest request returned, which manifested as em-dashes on Active cards
+  // during cold-start windows. We now `setPerf(prev => ({...prev, [id]: p}))`
+  // as each request settles, so fast cards paint numbers immediately while
+  // stragglers fill in.
   useEffect(() => {
     if (!summaries) return;
     let cancelled = false;
     const ids = summaries
       .map((r) => r.id)
       .filter((id) => metaStage(id) === "live");
-    (async () => {
-      const entries = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const p = await getStrategyPerformance(id);
-            return [id, p] as const;
-          } catch {
-            return null;
-          }
-        })
-      );
-      if (cancelled) return;
-      const next: Record<string, StrategyPerformance> = {};
-      for (const e of entries) if (e) next[e[0]] = e[1];
-      setPerf(next);
-    })();
+    for (const id of ids) {
+      (async () => {
+        try {
+          const p = await getStrategyPerformance(id);
+          if (cancelled) return;
+          setPerf((prev) => ({ ...prev, [id]: p }));
+        } catch {
+          // Silent — leave the card showing em-dashes instead of toasting
+          // per-strategy failures. Overall page stays usable.
+        }
+      })();
+    }
     return () => {
       cancelled = true;
     };
