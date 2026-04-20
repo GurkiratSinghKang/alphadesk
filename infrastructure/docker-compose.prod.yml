@@ -41,6 +41,14 @@ services:
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/OWNER/alphadesk-frontend:latest}
+    # Force compose to pull the tagged image from GHCR every deploy instead
+    # of falling back to the ``build:`` directive in the base compose file.
+    # Without this, on the VPS a stale /opt/alphadesk/frontend source tree
+    # (scp only syncs compose + infrastructure/) gets rebuilt and tagged with
+    # the new SHA, overwriting the freshly-pushed GHCR image. The container
+    # then boots with old code under a new tag — exactly what happened on
+    # 2026-04-20 when the /pairs-stat-arb duplicate fix did not land.
+    pull_policy: always
     restart: unless-stopped
     volumes: []
     networks:
@@ -59,6 +67,10 @@ services:
 
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/OWNER/alphadesk-backend:latest}
+    # See frontend.pull_policy — same fix for the same reason. Without it,
+    # docker compose will silently fall back to ``build: ./backend`` on the
+    # VPS and tag the local stale build as the new SHA.
+    pull_policy: always
     restart: unless-stopped
     env_file: .env.prod
     environment:
