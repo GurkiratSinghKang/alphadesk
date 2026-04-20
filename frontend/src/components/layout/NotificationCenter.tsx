@@ -105,6 +105,16 @@ export function NotificationCenter() {
   const clearAll = useNotificationsStore((s) => s.clearAll);
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
 
+  // Relative-time labels ("just now", "2m ago") are pure functions of
+  // Date.now(), so without a ticker a 10-minute-old notification sticks
+  // on "just now" forever. Force a re-render every 30s so the strings
+  // roll forward while the component is mounted; clear on unmount.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const filtered = useMemo(
