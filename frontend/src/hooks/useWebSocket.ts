@@ -235,12 +235,15 @@ export function useWebSocket(): UseWebSocketReturn {
           wsRef.current = null;
         }
 
-        // Exponential backoff reconnect
+        // Exponential backoff reconnect with jitter (full jitter) so
+        // multi-tab / cross-client reconnects don't synchronise into a
+        // thundering herd when the backend recovers.
         if (retriesRef.current < MAX_RETRIES) {
-          const delay = Math.min(
+          const capped = Math.min(
             BASE_DELAY * Math.pow(2, retriesRef.current),
             MAX_DELAY
           );
+          const delay = Math.floor(Math.random() * capped);
           retriesRef.current++;
           prevStatusRef.current = "reconnecting";
           setWsStatus("reconnecting");
@@ -259,12 +262,13 @@ export function useWebSocket(): UseWebSocketReturn {
         }
       };
     } catch {
-      // Schedule retry
+      // Schedule retry (same jittered backoff as onclose)
       if (retriesRef.current < MAX_RETRIES) {
-        const delay = Math.min(
+        const capped = Math.min(
           BASE_DELAY * Math.pow(2, retriesRef.current),
           MAX_DELAY
         );
+        const delay = Math.floor(Math.random() * capped);
         retriesRef.current++;
         prevStatusRef.current = "reconnecting";
         setWsStatus("reconnecting");

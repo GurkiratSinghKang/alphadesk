@@ -41,12 +41,14 @@ export function formatCurrency(value: number, compact = false): string {
 }
 
 export function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return "0.00%";
   if (Math.abs(value) < 0.005) return "0.00%";
   return percentFmt.format(value / 100);
 }
 
 export function formatNumber(value: number, compact = false): string {
-  return compact ? numberCompactFmt.format(value) : numberFmt.format(value);
+  const v = Number.isFinite(value) ? value : 0;
+  return compact ? numberCompactFmt.format(v) : numberFmt.format(v);
 }
 
 /**
@@ -76,8 +78,10 @@ export function getChangeTextClass(value: number): string {
 }
 
 export function formatTimestamp(ts: number): string {
+  if (!Number.isFinite(ts)) return "--:--:--";
   const d = new Date(ts);
   return d.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -86,7 +90,9 @@ export function formatTimestamp(ts: number): string {
 }
 
 export function formatDate(ts: number): string {
+  if (!Number.isFinite(ts)) return "—";
   return new Date(ts).toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
     month: "short",
     day: "numeric",
     year: "numeric",

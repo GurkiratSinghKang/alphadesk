@@ -19,15 +19,16 @@ interface AnimatedNumberProps {
  * a proportional sans in AlphaDesk.
  */
 export function AnimatedNumber({ value, format, className = "", duration = 300 }: AnimatedNumberProps) {
-  const [display, setDisplay] = useState(value);
-  const prevRef = useRef(value);
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const [display, setDisplay] = useState(safeValue);
+  const prevRef = useRef(safeValue);
   const rafRef = useRef<number>(0);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
 
   useEffect(() => {
     const from = prevRef.current;
-    const to = value;
-    prevRef.current = value;
+    const to = safeValue;
+    prevRef.current = safeValue;
 
     if (from === to) return;
 
@@ -59,7 +60,7 @@ export function AnimatedNumber({ value, format, className = "", duration = 300 }
       cancelAnimationFrame(rafRef.current);
       clearTimeout(flashTimer);
     };
-  }, [value, duration]);
+  }, [safeValue, duration]);
 
   return (
     <span

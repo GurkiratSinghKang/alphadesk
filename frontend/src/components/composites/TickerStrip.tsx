@@ -31,13 +31,13 @@ export default function TickerStrip({
   durationSec = 60,
   className,
 }: TickerStripProps) {
-  if (tickers.length === 0) return null;
-
   // Duplicate the content once so the -50% translate loops seamlessly.
   const doubled = React.useMemo(
     () => [...tickers, ...tickers].map((t, i) => ({ ...t, _k: i })),
     [tickers]
   );
+
+  if (tickers.length === 0) return null;
 
   return (
     <div

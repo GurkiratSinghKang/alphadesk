@@ -66,9 +66,10 @@ export default function PnLNumber({
   className,
   ...rest
 }: PnLNumberProps) {
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const sign = safeValue > 0 ? "+" : safeValue < 0 ? "-" : "";
   const resolvedTone =
-    tone ?? (value > 0 ? "profit" : value < 0 ? "loss" : "neutral");
+    tone ?? (safeValue > 0 ? "profit" : safeValue < 0 ? "loss" : "neutral");
   const toneCls =
     resolvedTone === "profit"
       ? "text-profit"
@@ -76,7 +77,7 @@ export default function PnLNumber({
         ? "text-loss"
         : "text-fg-muted";
 
-  const body = formatValue(value, format, abbreviate);
+  const body = formatValue(safeValue, format, abbreviate);
   const prefix = showSign ? sign : "";
 
   return (

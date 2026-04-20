@@ -17,22 +17,26 @@ export function Sparkline({
   height?: number;
   className?: string;
 }) {
+  const gradId = `spark-${useId().replace(/:/g, "")}`;
   if (data.length < 2) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  // Filter non-finite values (NaN / Infinity) — a single NaN would
+  // poison Math.min/max and the polyline would silently vanish.
+  const clean = data.filter(Number.isFinite);
+  if (clean.length < 2) return null;
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   // Flat data — return nothing; the strategy card already shows the return text
   if (min === max) return null;
   const range = max - min;
-  const points = data
+  const points = clean
     .map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
+      const x = (i / (clean.length - 1)) * width;
       const y = height - ((v - min) / range) * (height - 4) - 2;
       return `${x},${y}`;
     })
     .join(" ");
 
   const areaPoints = `0,${height} ${points} ${width},${height}`;
-  const gradId = `spark-${useId().replace(/:/g, "")}`;
 
   return (
     <svg width={width} height={height} className={className ?? "shrink-0"}>
