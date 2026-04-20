@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_sha:
+        description: >-
+          Optional git SHA of a prior build to roll back to. When empty, the
+          workflow deploys the HEAD of the triggering ref (normal forward
+          deploy). When set, the VPS pulls the frontend/backend images tagged
+          with that SHA instead. See docs/ROLLBACK.md for the full runbook.
+        required: false
+        default: ""
 
 jobs:
   test:
@@ -75,13 +84,26 @@ jobs:
           target: "/opt/alphadesk/"
           overwrite: true
 
+      - name: Resolve deploy SHA
+        id: deploy_sha
+        # When this workflow is triggered manually with an `image_sha` input
+        # (rollback), use that SHA. Otherwise fall back to the commit SHA of
+        # the triggering push — the normal forward-deploy path. Empty inputs
+        # resolve cleanly because ${{ github.event.inputs.image_sha || github.sha }}
+        # picks github.sha when the input is "" (falsy).
+        run: |
+          SHA="${{ github.event.inputs.image_sha }}"
+          if [ -z "$SHA" ]; then SHA="${{ github.sha }}"; fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved deploy SHA: $SHA"
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
-          FRONTEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-frontend:${{ github.sha }}
-          BACKEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
+          FRONTEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-frontend:${{ steps.deploy_sha.outputs.sha }}
+          BACKEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ steps.deploy_sha.outputs.sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: deploy
@@ -103,9 +125,21 @@ jobs:
             # (e.g. uptime-kuma). --force-recreate picks up config-only
             # changes (e.g. port rebinds) that don't change the image hash.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --remove-orphans --force-recreate
+            # Wait for the backend container to come up healthy before
+            # applying schema changes. 15s matches the previous sleep and
+            # also matches the backend healthcheck start_period.
             sleep 15
-            curl -sf http://localhost:8000/health || (echo "Health check failed!" && exit 1)
+            # Run DB migrations against the freshly-booted backend. alembic
+            # is idempotent (upgrade head is a no-op when already current),
+            # so rollbacks to a prior image_sha don't downgrade schemas —
+            # schema changes require an explicit `alembic downgrade`, which
+            # the rollback playbook (docs/ROLLBACK.md) covers.
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
+            curl -sf http://localhost:8000/readyz || (echo "Readiness check failed!" && exit 1)
             # Tidy up old images without touching anything younger than 24h.
+            # Rollback scenarios rely on prior SHAs still being pullable from
+            # GHCR (we never delete remote tags), so the host cleanup here
+            # only affects what's cached locally.
             docker system prune -f --filter "until=24h"
             docker logout ghcr.io
             echo "Deploy successful: ${FRONTEND_IMAGE} + ${BACKEND_IMAGE}"

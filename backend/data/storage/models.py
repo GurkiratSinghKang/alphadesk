@@ -22,6 +22,7 @@ def _define_models() -> dict[str, Any]:
         DateTime,
         Float,
         Integer,
+        Numeric,
         String,
         Text,
         UniqueConstraint,
@@ -111,6 +112,38 @@ def _define_models() -> dict[str, Any]:
         # TODO: generate an alembic migration to add this column to production:
         #   alembic revision --autogenerate -m "add side to trades"
         side = Column(String(10), nullable=True, index=True)
+
+        # Wave B (persona-72 P0 fill-reconciliation gap).  The broker
+        # ``trade_updates`` WebSocket publishes fill / partial_fill / canceled
+        # / rejected / expired events to Redis; the DB consumer
+        # (``data.ingestion.fill_reconciler``) uses these columns to stamp the
+        # authoritative fill state onto the local Trade row.  Schema shape:
+        #
+        # * ``broker_order_id``   – Alpaca's ``order.id`` (UUID string, 36 chars
+        #   but widened to 64 to allow for prefixing / future brokers). UNIQUE
+        #   so a double-posted fill event is a DB constraint violation rather
+        #   than a silent duplicate.
+        # * ``client_order_id``   – the correlation id we sent to the broker on
+        #   submit (``manual_<user>_<hex>`` or ``{strategy}_{symbol}_{ts}``).
+        #   UNIQUE. Previously we encoded this inside the legs JSON; that
+        #   still works for legacy rows but new inserts populate both.
+        # * ``filled_at``         – millisecond-precision UTC timestamp of the
+        #   broker fill (FINRA 4590 retention). TIMESTAMP(6) WITH TIME ZONE
+        #   in Postgres.
+        # * ``filled_avg_price``  – NUMERIC(20, 6): six decimal places matches
+        #   Alpaca's ``filled_avg_price`` field and avoids binary-float drift
+        #   on downstream P&L.
+        # * ``account_env``       – 'paper' | 'live' | 'backtest'. NOT NULL
+        #   with a default of 'paper' so that existing rows are safe; new
+        #   inserts MUST populate it from ``settings.LIVE_TRADING_ENABLED``
+        #   (or the Alpaca base-URL helper while Wave A is in flight).
+        broker_order_id = Column(String(64), nullable=True, unique=True)
+        client_order_id = Column(String(128), nullable=True, unique=True)
+        filled_at = Column(DateTime(timezone=True), nullable=True)
+        filled_avg_price = Column(Numeric(20, 6), nullable=True)
+        account_env = Column(
+            String(16), nullable=False, server_default="paper", default="paper", index=True,
+        )
 
         __table_args__ = (
             Index("ix_trades_strategy_status", "strategy", "status"),

@@ -996,7 +996,20 @@ export interface PlaceOrderPayload {
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
 }
 
-export function placeOrder(payload: PlaceOrderPayload) {
+export interface PlaceOrderOptions {
+  /**
+   * Caller-supplied Idempotency-Key override.  Use this ONLY when retrying
+   * a specific previously-submitted request that the user needs the
+   * server to deduplicate — e.g. the UI offers a "retry" button after a
+   * network timeout and wants the retry to collapse onto the same
+   * server-side response.  A fresh user action (new order click) should
+   * omit this and let ``placeOrder`` mint a new uuid so the two orders
+   * are recognised as distinct.
+   */
+  idempotencyKey?: string;
+}
+
+export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
   // Transform frontend payload to backend CreateOrderRequest format
   const isTrailing = payload.type === "trailing_stop";
   const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => ({
@@ -1010,8 +1023,32 @@ export function placeOrder(payload: PlaceOrderPayload) {
     trail_price: isTrailing && payload.trail_price ? payload.trail_price : undefined,
     trail_percent: isTrailing && payload.trail_percent ? payload.trail_percent : undefined,
   }));
+
+  // Wave B / persona-72 P0: every POST /trades/orders MUST carry an
+  // Idempotency-Key so a mid-POST network blip that triggers a client
+  // retry doesn't submit the same order twice.  The backend caches the
+  // response JSON keyed on (Idempotency-Key, username) for 10 minutes
+  // and returns the original response verbatim on a retry.
+  //
+  // Default: mint a fresh uuid per call so two clicks on the place-order
+  // button produce two distinct orders (the clicks are distinct user
+  // intents).  Caller can opt into deduplication by passing
+  // options.idempotencyKey — typically wired from the "retry this order"
+  // flow, where the UI remembers the key of the original attempt and
+  // replays it.
+  //
+  // crypto.randomUUID is available in all modern browsers and Node >=
+  // 19; we still guard against its absence for exotic test runners.
+  const idempKey = options?.idempotencyKey
+    ?? (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`);
+
   return apiFetch<Order>(`/api/v1/trades/orders`, {
     method: "POST",
+    headers: {
+      "Idempotency-Key": idempKey,
+    },
     body: JSON.stringify({ legs, time_in_force: "day" }),
   });
 }

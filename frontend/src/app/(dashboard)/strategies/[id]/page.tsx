@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { Pause, Play, ArrowRight } from "lucide-react";
@@ -344,6 +344,16 @@ export default function StrategyDetailPage() {
   const [range, setRange] = useState<EquityRange>("3M");
   const [toggling, setToggling] = useState(false);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
+  // Persona 71-8 — on navigation from ``/strategies → /strategies/[id]``
+  // we move keyboard / AT focus to the banner (when it renders) or the
+  // hero wrapper. The ``tabIndex={-1}`` makes the element
+  // programmatically focusable without inserting it into the Tab order;
+  // the effect below only fires on ``strategyId`` change so repeated
+  // in-page interactions don't re-steal focus.
+  const focusTargetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    focusTargetRef.current?.focus();
+  }, [strategyId]);
   // Wave 8 (A3#8) — the ``perfNotFound`` flag used to guard the editorial
   // "Strategy not available" fallback branch. That branch is gone (unknown
   // slugs now short-circuit to ``notFound()`` at the top of the component,
@@ -561,6 +571,24 @@ export default function StrategyDetailPage() {
         <span className="text-fg">{meta.name}</span>
       </nav>
 
+      {/* Focus wrapper for persona 71-8 — receives programmatic focus on
+          slug change so navigation from the catalogue lands the user on
+          the hero (or the disclosure banner when it renders underneath).
+          ``outline-none`` because the visible focus ring on a page
+          heading reads as a bug to sighted users; AT users still get
+          the announcement. */}
+      <div
+        ref={focusTargetRef}
+        tabIndex={-1}
+        aria-label={
+          (STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false))
+            ? `${meta.name} — not ready for live`
+            : (STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false))
+              ? `${meta.name} — paper-only`
+              : meta.name
+        }
+        className="outline-none flex flex-col gap-10"
+      >
       {/* Hero */}
       <StrategyHero
         categoryLabel={categoryLabel.toUpperCase()}
@@ -593,6 +621,7 @@ export default function StrategyDetailPage() {
           STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false)
         }
       />
+      </div>
 
       {/* Wave 26 — honesty caveat for implausibly high OOS Sharpe (e.g. ORB's
           8.34). Instead of hiding the number we attach a small italic
@@ -750,6 +779,27 @@ export default function StrategyDetailPage() {
           </button>
         </div>
       ) : null}
+
+      {/* Persona 67-10 — visually-subdued past-performance footer. The
+          disclosure banner above covers strategy-specific caveats; this
+          footer is the blanket "backtests are backtests" disclaimer
+          that applies to every strategy page regardless of stage. Uses
+          ``text-fg-hint`` so it does not compete with the editorial
+          sections above. */}
+      <footer className="border-t border-border-hair pt-6">
+        <p className="font-sans text-[11.5px] leading-relaxed text-fg-hint">
+          Past performance does not guarantee future results. Backtest
+          metrics are derived from historical data; live results may
+          differ materially. See the{" "}
+          <Link
+            href="/risk"
+            className="underline underline-offset-2 hover:text-fg-muted"
+          >
+            Risk Disclosure
+          </Link>{" "}
+          at /risk.
+        </p>
+      </footer>
     </div>
   );
 }

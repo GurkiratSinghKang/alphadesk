@@ -59,27 +59,34 @@ export default function PositionsSection({
       )}
     >
       <table className="w-full table-fixed border-collapse">
+        {/* Persona 71-5 — visually-hidden caption gives screen readers a
+            recognisable table title so AT navigation ("read tables" / "go
+            to next table") announces the section. `sr-only` keeps the
+            text out of the sighted layout. */}
+        <caption className="sr-only">
+          Open positions for {strategyLabel}
+        </caption>
         <thead>
           <tr className="border-b border-border-hair text-left">
-            <th className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Symbol
             </th>
-            <th className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Side
             </th>
-            <th className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Qty
             </th>
-            <th className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Entry
             </th>
-            <th className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               P&amp;L
             </th>
-            <th className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Exit Triggers
             </th>
-            <th className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
               Strategy
             </th>
           </tr>

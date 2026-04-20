@@ -202,124 +202,168 @@ export default function PositionsList({
           </p>
         </div>
       ) : activeTab === "positions" ? (
-        <ul role="list" className="flex flex-col">
-          {positions.map((p) => {
-            const isLoss = p.pnl < 0;
-            const pct = Math.min(100, Math.max(0, Math.abs(p.progress) * 100));
-            return (
-              <li
-                key={p.id}
-                className="grid grid-cols-[60px_1fr_auto] gap-2.5 items-center px-[18px] py-2.5 border-b border-border-hair"
-              >
-                <button
-                  type="button"
-                  onClick={() => onRowClick?.(p.id)}
-                  className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
-                  style={{ letterSpacing: "0.02em" }}
+        // Persona 71-6 — the prior markup was a div/grid masquerading as a
+        // table. Converted to a real <table> so AT announces column
+        // semantics. Visually-hidden <caption>/<thead> preserve the
+        // existing design (no on-screen column labels) while exposing
+        // column roles to screen readers. Rows keep their 3-column
+        // layout via `table-fixed` + `w-[60px]/w-auto/w-auto` <td> sizing.
+        <table
+          role="table"
+          className="w-full border-collapse table-fixed"
+        >
+          <caption className="sr-only">Open positions</caption>
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">Symbol and quantity</th>
+              <th scope="col">Strategy and progress</th>
+              <th scope="col">Profit and loss</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((p) => {
+              const isLoss = p.pnl < 0;
+              const pct = Math.min(100, Math.max(0, Math.abs(p.progress) * 100));
+              return (
+                <tr
+                  key={p.id}
+                  className="border-b border-border-hair"
                 >
-                  {p.symbol}
-                  <span
-                    className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
-                    style={{ letterSpacing: "0.02em" }}
-                  >
-                    {p.quantity} @ {p.entryPrice.toFixed(2)}
-                  </span>
-                </button>
-
-                <div className="flex flex-col gap-[2px]">
-                  <span className="font-display italic text-[11.5px] text-fg-dim">
-                    {p.strategyName}
-                  </span>
-                  <div
-                    className={cn("h-[3px] bg-border rounded-xs overflow-hidden mt-1")}
-                    aria-hidden
-                  >
-                    <span
-                      className={cn("block h-full", isLoss ? "bg-down-500" : "bg-up-500")}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="text-right flex flex-col">
-                  <PnLNumber value={p.pnl} format="currency" className="text-[13px] font-medium" />
-                  <PnLNumber
-                    value={p.pnlPct}
-                    format="percent"
-                    className="text-[10px] font-normal mt-[1px]"
-                    tone={isLoss ? "loss" : undefined}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      ) : activeTab === "orders" ? (
-        <ul role="list" className="flex flex-col">
-          {orders.map((o) => {
-            const priceLabel = orderPriceLabel(o);
-            const cancellable = o.status === "pending" || o.status === "partial";
-            return (
-              <li
-                key={o.id}
-                className="grid grid-cols-[60px_1fr_auto] gap-2.5 items-center px-[18px] py-2.5 border-b border-border-hair"
-              >
-                <button
-                  type="button"
-                  onClick={() => onRowClick?.(o.symbol)}
-                  className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
-                  style={{ letterSpacing: "0.02em" }}
-                >
-                  {o.symbol}
-                  <span
-                    className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
-                    style={{ letterSpacing: "0.02em" }}
-                  >
-                    {o.side.toUpperCase()} {o.quantity} · {orderTypeLabel(o.type)}
-                  </span>
-                </button>
-
-                <div className="flex flex-col gap-[2px] min-w-0">
-                  <span className="font-mono text-[11px] text-fg-dim truncate">
-                    {priceLabel}
-                  </span>
-                  {o.rejectReason && (
-                    <span
-                      className="font-sans text-[10px] text-down-500 truncate"
-                      title={o.rejectReason}
-                    >
-                      {o.rejectReason}
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-right flex flex-col items-end gap-1">
-                  <span
-                    className={cn(
-                      "font-sans font-semibold text-[9.5px] uppercase px-1.5 py-0.5 rounded-xs",
-                      STATUS_CHIP[o.status] ?? "bg-bg-elev-1 text-fg-muted"
-                    )}
-                    style={{ letterSpacing: "0.14em" }}
-                  >
-                    {o.status}
-                  </span>
-                  {cancellable && onCancelOrder && (
+                  <td className="w-[60px] align-middle px-[18px] py-2.5">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCancelOrder(o.id);
-                      }}
-                      className="font-sans text-[10px] text-fg-muted hover:text-down-500 underline underline-offset-2"
+                      onClick={() => onRowClick?.(p.id)}
+                      className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                      style={{ letterSpacing: "0.02em" }}
                     >
-                      Cancel
+                      {p.symbol}
+                      <span
+                        className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
+                        style={{ letterSpacing: "0.02em" }}
+                      >
+                        {p.quantity} @ {p.entryPrice.toFixed(2)}
+                      </span>
                     </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                  </td>
+
+                  <td className="align-middle py-2.5 pr-2.5">
+                    <div className="flex flex-col gap-[2px]">
+                      <span className="font-display italic text-[11.5px] text-fg-dim">
+                        {p.strategyName}
+                      </span>
+                      <div
+                        className={cn("h-[3px] bg-border rounded-xs overflow-hidden mt-1")}
+                        aria-hidden
+                      >
+                        <span
+                          className={cn("block h-full", isLoss ? "bg-down-500" : "bg-up-500")}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="align-middle text-right py-2.5 pr-[18px]">
+                    <div className="text-right flex flex-col">
+                      <PnLNumber value={p.pnl} format="currency" className="text-[13px] font-medium" />
+                      <PnLNumber
+                        value={p.pnlPct}
+                        format="percent"
+                        className="text-[10px] font-normal mt-[1px]"
+                        tone={isLoss ? "loss" : undefined}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : activeTab === "orders" ? (
+        <table
+          role="table"
+          className="w-full border-collapse table-fixed"
+        >
+          <caption className="sr-only">Working orders</caption>
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">Symbol and side</th>
+              <th scope="col">Price details</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((o) => {
+              const priceLabel = orderPriceLabel(o);
+              const cancellable = o.status === "pending" || o.status === "partial";
+              return (
+                <tr
+                  key={o.id}
+                  className="border-b border-border-hair"
+                >
+                  <td className="w-[60px] align-middle px-[18px] py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => onRowClick?.(o.symbol)}
+                      className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                      style={{ letterSpacing: "0.02em" }}
+                    >
+                      {o.symbol}
+                      <span
+                        className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
+                        style={{ letterSpacing: "0.02em" }}
+                      >
+                        {o.side.toUpperCase()} {o.quantity} · {orderTypeLabel(o.type)}
+                      </span>
+                    </button>
+                  </td>
+
+                  <td className="align-middle py-2.5 pr-2.5">
+                    <div className="flex flex-col gap-[2px] min-w-0">
+                      <span className="font-mono text-[11px] text-fg-dim truncate block">
+                        {priceLabel}
+                      </span>
+                      {o.rejectReason && (
+                        <span
+                          className="font-sans text-[10px] text-down-500 truncate block"
+                          title={o.rejectReason}
+                        >
+                          {o.rejectReason}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="align-middle text-right py-2.5 pr-[18px]">
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <span
+                        className={cn(
+                          "font-sans font-semibold text-[9.5px] uppercase px-1.5 py-0.5 rounded-xs",
+                          STATUS_CHIP[o.status] ?? "bg-bg-elev-1 text-fg-muted"
+                        )}
+                        style={{ letterSpacing: "0.14em" }}
+                      >
+                        {o.status}
+                      </span>
+                      {cancellable && onCancelOrder && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCancelOrder(o.id);
+                          }}
+                          className="font-sans text-[10px] text-fg-muted hover:text-down-500 underline underline-offset-2"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       ) : null}
     </div>
   );

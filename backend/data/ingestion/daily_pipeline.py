@@ -142,24 +142,46 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
 
 _HALT_REDIS_KEY = "trading:halted"
 
+# Wave C (persona 74 P0 #3): bound the Redis halt-check so a wedged Redis
+# connection can't stall the order path indefinitely. 0.5s is generous for
+# a local Redis (typical round-trip is <5ms) but short enough that an
+# operator pressing the panic button during a Redis incident still gets a
+# fail-closed response within sub-second latency.
+_HALT_CHECK_TIMEOUT_SECONDS = 0.5
+
 
 async def _is_trading_halted() -> bool:
     """Return True if the admin halt flag is set.
 
-    Mirrors ``trades._is_trading_halted`` but kept local to avoid a circular
-    import (trades -> master_agent -> daily_pipeline loop). Fails *closed* —
-    if Redis is unreachable we treat the system as halted so an outage
-    doesn't silently enable trading during a crisis.
+    Canonical implementation — ``backend/api/routes/trades.py`` imports this
+    rather than keep a duplicate copy (Wave C dedup). Previously there were
+    two near-identical copies in ``trades.py`` and here with subtly
+    different error-message wording; the trades copy was dropped in favour
+    of this one so a fix here applies everywhere.
+
+    Fails *closed* — if Redis is unreachable OR the call times out, we
+    treat the system as halted so an outage doesn't silently enable trading
+    during a crisis. The 0.5s ``asyncio.wait_for`` wrapper ensures a wedged
+    Redis connection cannot delay order submission indefinitely.
     """
     try:
         from core.redis import cache_get
-        result = await cache_get(_HALT_REDIS_KEY)
+        result = await asyncio.wait_for(
+            cache_get(_HALT_REDIS_KEY),
+            timeout=_HALT_CHECK_TIMEOUT_SECONDS,
+        )
         if result is not None and isinstance(result, dict):
             return bool(result.get("halted", False))
         return False
+    except asyncio.TimeoutError:
+        logger.error(
+            "Halt-flag check timed out after %.2fs; treating as HALTED for safety",
+            _HALT_CHECK_TIMEOUT_SECONDS,
+        )
+        return True
     except Exception:
         logger.warning(
-            "Pipeline halt-flag check failed; treating as HALTED for safety",
+            "Halt-flag check failed; treating as HALTED for safety",
             exc_info=True,
         )
         return True
@@ -278,11 +300,26 @@ def _alpaca_headers() -> dict[str, str]:
 
 
 def _base_url() -> str:
+    """Return the broker base URL.
+
+    Wave-A bypass-fix: the previous ``"paper" not in url`` substring check
+    was both brittle (path-only match could be tricked) and over-blocking
+    (refused live even when intended). The new policy:
+
+    * Reject only when the URL points at the live broker (canonical host
+      ``api.alpaca.markets``) AND the operator has NOT opted in via
+      ``LIVE_TRADING_ENABLED=True``.
+    * Per-strategy live-deny enforcement is layered on top in
+      ``_place_order`` / ``_place_bracket_order`` via
+      ``core.trading_gate.reject_if_live_forbidden``.
+    """
+    from core.config import is_live_alpaca_base_url
     url = settings.ALPACA_BASE_URL
-    if "paper" not in url:
+    if is_live_alpaca_base_url(url) and not getattr(settings, "LIVE_TRADING_ENABLED", False):
         raise RuntimeError(
-            f"SAFETY: ALPACA_BASE_URL ({url}) does not contain 'paper'. "
-            "Refusing to trade on a live account."
+            f"SAFETY: ALPACA_BASE_URL ({url}) points at the live broker but "
+            "LIVE_TRADING_ENABLED is False. Refusing to trade on a live account "
+            "without explicit operator opt-in."
         )
     return url.rstrip("/")
 
@@ -325,8 +362,24 @@ async def _place_order(
     """Place a market order on Alpaca paper.
 
     Includes a client_order_id encoding the strategy name for traceability.
+
+    Wave-A bypass-fix: enforces ``core.trading_gate.reject_if_live_forbidden``
+    so denylisted strategies (orb / kama_breakout) cannot reach live capital
+    via this pipeline path. Persona-66 flagged this as one of the most
+    exploited bypasses (the daily pipeline POSTs hundreds of orders per
+    session with no per-strategy gate).
     """
     from datetime import datetime, timezone
+    from core.trading_gate import reject_if_live_forbidden
+    # Pipeline strategy names are already canonical underscore form (the
+    # registry uses them as-is); pass an empty/None strategy as None so the
+    # gate logs an INFO line instead of trying to canonicalise "unknown".
+    _gate_strategy = strategy if strategy and strategy != "unknown" else None
+    reject_if_live_forbidden(
+        _gate_strategy,
+        caller="daily_pipeline._place_order",
+        http_context=False,
+    )
     ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     client_order_id = f"{strategy}_{symbol}_{ts}"
 
@@ -372,8 +425,18 @@ async def _place_bracket_order(
     documented bracket requirements.)
 
     See concurrency-audit-r4 P0 #4 / code-patterns-audit-r4 P0 #2.
+
+    Wave-A bypass-fix: live-trading deny-gate now enforced here too — the
+    bracket path was a sibling bypass of ``_place_order``.
     """
     from datetime import datetime, timezone
+    from core.trading_gate import reject_if_live_forbidden
+    _gate_strategy = strategy if strategy and strategy != "unknown" else None
+    reject_if_live_forbidden(
+        _gate_strategy,
+        caller="daily_pipeline._place_bracket_order",
+        http_context=False,
+    )
     ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     client_order_id = f"{strategy}_{symbol}_{ts}_b"
 

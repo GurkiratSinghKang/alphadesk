@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "@/env";
+import { fetchPortfolioData } from "@/hooks/useDataPipeline";
 
 type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars" | "trade_updates";
+
+// Wave C (persona 74 P0 #1): channels that the backend backs with a Redis
+// Stream. For these, we track the ``last_id`` we've seen in memory and
+// send it on re-subscribe after a reconnect so the server can replay any
+// events we missed while disconnected. No persistence across reloads —
+// treat a page refresh as a fresh session (``last_id=$`` live-only).
+const STREAM_BACKED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
+  "trade_updates",
+  "portfolio",
+]);
 
 // long-session-audit-r4 P1 #9 (defence-in-depth): hard allow-list of
 // channel names. Any dispatch to a channel outside this set is rejected.
@@ -68,12 +79,32 @@ export function useWebSocket(): UseWebSocketReturn {
   // `InvalidStateError` in ws.send.
   const subscribeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscribedChannels = useRef<Set<WsChannel>>(new Set());
+  // Wave C: per-channel resume cursor. Updated as we receive messages
+  // carrying an `_id` field. On reconnect we send this in the subscribe
+  // frame so the backend replays anything we missed.
+  const lastIdsRef = useRef<Map<WsChannel, string>>(new Map());
+  // Wave C: track whether we've ever been "open" so we can distinguish
+  // reconnecting -> open (needs portfolio re-fetch) from first-ever
+  // connect (the initial fetch lives in useDataPipeline).
+  const hasBeenOpenRef = useRef(false);
+  // Wave C: remember the last `wsStatus` we emitted so the reconnect
+  // re-fetch only fires exactly once per reconnecting -> open transition,
+  // not on every successful connect.
+  const prevStatusRef = useRef<WsStatus>("connecting");
 
   const [isConnected, setIsConnected] = useState(false);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
 
   // Channel-based callback system: dispatches to subscribers without triggering React re-renders
   const channelCallbacksRef = useRef<Map<WsChannel, Set<(data: WsMessage) => void>>>(new Map());
+
+  // Wave C: network-recovery listener state — declared up-front so the
+  // connect callback can reference registerNetworkRecoveryRef without a
+  // temporal-dead-zone concern. The ref is populated below after connect
+  // is defined.
+  const recoveryInstalledRef = useRef(false);
+  const recoveryCleanupRef = useRef<(() => void) | null>(null);
+  const registerNetworkRecoveryRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     // Cancel any pending reconnect
@@ -120,6 +151,22 @@ export function useWebSocket(): UseWebSocketReturn {
         // `ws.cookies.get("access_token")` on connect and responds with
         // `{"type": "authenticated"}`. No client-side auth frame needed.
         setIsConnected(true);
+        // Wave C (persona 74 P0 #2): a reconnecting -> open transition
+        // means the UI may have stale portfolio data (positions/orders).
+        // Trigger a one-shot re-fetch. Fire BEFORE we flip wsStatus so
+        // the refetch is causally associated with this reconnect.
+        const wasReconnecting = prevStatusRef.current === "reconnecting";
+        if (wasReconnecting && hasBeenOpenRef.current) {
+          try {
+            fetchPortfolioData();
+          } catch {
+            // fetchPortfolioData swallows its own errors internally; the
+            // try is just defensive so a hypothetical top-level throw
+            // can't derail the rest of onopen.
+          }
+        }
+        prevStatusRef.current = "open";
+        hasBeenOpenRef.current = true;
         setWsStatus("open");
         retriesRef.current = 0;
 
@@ -134,14 +181,22 @@ export function useWebSocket(): UseWebSocketReturn {
           subscribeTimeoutRef.current = null;
           if (ws.readyState !== WebSocket.OPEN) return;
           subscribedChannels.current.forEach((channel) => {
-            ws.send(JSON.stringify({ action: "subscribe", channel }));
+            // Wave C: for stream-backed channels, include last_id so the
+            // backend replays anything we missed during the disconnect.
+            // Fresh subscribers (no prior cursor) get live-only ("$"),
+            // which matches the pre-Wave-C behaviour.
+            const payload: Record<string, unknown> = { action: "subscribe", channel };
+            if (STREAM_BACKED_CHANNELS.has(channel)) {
+              payload.last_id = lastIdsRef.current.get(channel) ?? "$";
+            }
+            ws.send(JSON.stringify(payload));
           });
         }, 100);
       };
 
       ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(event.data) as WsMessage;
+          const msg = JSON.parse(event.data) as WsMessage & { _id?: string; data?: { _id?: string } };
           // Dispatch to channel-specific callbacks (no React re-render).
           // The previous `setLastMessage(msg)` call was removed in Wave 14
           // because it re-rendered every component consuming `useWs()` on
@@ -149,6 +204,16 @@ export function useWebSocket(): UseWebSocketReturn {
           // the only supported consumption path.
           const channel = msg.channel ?? (msg as unknown as Record<string, unknown>).type as WsChannel | undefined;
           if (channel) {
+            // Wave C: capture the stream ID cursor for stream-backed
+            // channels so we can resume on reconnect. The backend writes
+            // `_id` either on the top-level message envelope (broadcast
+            // path) or inside `data` (replay path).
+            if (STREAM_BACKED_CHANNELS.has(channel)) {
+              const id = msg._id ?? msg.data?._id;
+              if (typeof id === "string" && id.length) {
+                lastIdsRef.current.set(channel, id);
+              }
+            }
             const callbacks = channelCallbacksRef.current.get(channel);
             if (callbacks) {
               callbacks.forEach(cb => cb(msg));
@@ -177,10 +242,20 @@ export function useWebSocket(): UseWebSocketReturn {
             MAX_DELAY
           );
           retriesRef.current++;
+          prevStatusRef.current = "reconnecting";
           setWsStatus("reconnecting");
           reconnectTimerRef.current = setTimeout(connect, delay);
         } else {
+          prevStatusRef.current = "failed";
           setWsStatus("failed");
+          // Wave C: MAX_RETRIES exhausted. Register a one-shot `online`
+          // listener so that when the user's network transport comes
+          // back (e.g. after a WiFi drop) we retry immediately instead
+          // of sitting in "failed" forever. Also listen for
+          // navigator.connection 'change' events (4G -> WiFi transitions
+          // don't always fire `online`). Both handlers are attached via
+          // registerNetworkRecovery so they can share the reset logic.
+          registerNetworkRecoveryRef.current();
         }
       };
     } catch {
@@ -191,12 +266,78 @@ export function useWebSocket(): UseWebSocketReturn {
           MAX_DELAY
         );
         retriesRef.current++;
+        prevStatusRef.current = "reconnecting";
         setWsStatus("reconnecting");
         reconnectTimerRef.current = setTimeout(connect, delay);
       } else {
+        prevStatusRef.current = "failed";
         setWsStatus("failed");
+        registerNetworkRecoveryRef.current();
       }
     }
+  }, []);
+
+  // Wave C: one-shot network-recovery handler. We install listeners for
+  // `online` and (where supported) `navigator.connection.change` and use
+  // the first one to fire to reset retries and reconnect. Guard flags
+  // are declared at the top of the hook so the connect callback can
+  // reach them without a TDZ.
+  useEffect(() => {
+    registerNetworkRecoveryRef.current = () => {
+      if (typeof window === "undefined") return;
+      if (recoveryInstalledRef.current) return;
+      recoveryInstalledRef.current = true;
+
+      const recover = () => {
+        // Exit if the listeners fired but the socket already recovered
+        // via a visibility-change path (reconnect is idempotent but we
+        // still guard to avoid double-connect churn).
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+        retriesRef.current = 0;
+        prevStatusRef.current = "connecting";
+        setWsStatus("connecting");
+        // Tear down the listeners so we don't retry repeatedly on every
+        // network-type flicker while connected.
+        if (recoveryCleanupRef.current) {
+          recoveryCleanupRef.current();
+          recoveryCleanupRef.current = null;
+        }
+        recoveryInstalledRef.current = false;
+        connect();
+      };
+
+      window.addEventListener("online", recover);
+      // `navigator.connection` is non-standard but widely supported
+      // outside Safari. Use feature-detection; treat as best-effort.
+      // The Network Information API's `change` event fires on
+      // transitions like 4G -> WiFi even when `online` doesn't.
+      const nav = navigator as Navigator & {
+        connection?: { addEventListener?: (t: string, h: EventListener) => void; removeEventListener?: (t: string, h: EventListener) => void };
+      };
+      const conn = nav.connection;
+      if (conn && typeof conn.addEventListener === "function") {
+        conn.addEventListener("change", recover);
+      }
+
+      recoveryCleanupRef.current = () => {
+        window.removeEventListener("online", recover);
+        if (conn && typeof conn.removeEventListener === "function") {
+          conn.removeEventListener("change", recover);
+        }
+      };
+    };
+  }, [connect]);
+
+  // Wave C: cleanup recovery listeners on unmount so dev hot-reload and
+  // logout teardown don't leak handlers across provider remounts.
+  useEffect(() => {
+    return () => {
+      if (recoveryCleanupRef.current) {
+        recoveryCleanupRef.current();
+        recoveryCleanupRef.current = null;
+      }
+      recoveryInstalledRef.current = false;
+    };
   }, []);
 
   useEffect(() => {

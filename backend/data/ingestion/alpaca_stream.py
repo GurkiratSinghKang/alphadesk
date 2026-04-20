@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 import websockets
 
 from core.config import settings
-from core.redis import cache_get, publish
+from core.redis import cache_get, publish, redis_xadd_trade_update
 from data.calendar import USMarketCalendar
 
 logger = logging.getLogger(__name__)
@@ -618,8 +618,43 @@ async def _run_trade_updates_stream() -> None:
                         "timestamp": data.get("timestamp") or order.get("updated_at"),
                         "raw": data,
                     }
+                    # Wave C (persona 74 P0 #1): switch trade_updates from
+                    # fire-and-forget pub/sub to a durable Redis stream so
+                    # clients that drop during a fill can replay on reconnect.
+                    # We keep the pub/sub publish() in parallel for backwards
+                    # compatibility with existing UI toast consumers until the
+                    # frontend is migrated to the stream-based subscription.
+                    # Account-scoping: Alpaca's broker WS is single-tenant per
+                    # API key, so every fill on this stream belongs to the
+                    # same user. We use the account_id from the raw payload
+                    # when present, else fall back to a tenant-wide "default"
+                    # stream (the overwhelming majority of deployments).
+                    user_id = (
+                        order.get("account_id")
+                        or data.get("account_id")
+                        or "default"
+                    )
+                    stream_id: str | None = None
                     try:
-                        await publish("trade_updates", payload)
+                        stream_id = await redis_xadd_trade_update(user_id, payload)
+                    except Exception:
+                        # Stream outage should not crash the stream — log and
+                        # keep listening. Pub/sub below will still notify
+                        # connected clients even if durable storage fails.
+                        logger.warning(
+                            "trade_updates: xadd failed for %s",
+                            payload.get("order_id"),
+                            exc_info=True,
+                        )
+                    # Mirror the stream ID onto the pub/sub payload so
+                    # connected clients can record the cursor without having
+                    # to round-trip an XREAD. Clients that reconnect then
+                    # replay starting at this ID.
+                    try:
+                        live_payload = {**payload, "_user_id": user_id}
+                        if stream_id is not None:
+                            live_payload["_id"] = stream_id
+                        await publish("trade_updates", live_payload)
                     except Exception:
                         # Redis outages should not crash the stream — log and
                         # keep listening so we don't lose the next fill.

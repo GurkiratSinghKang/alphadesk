@@ -24,18 +24,25 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Emergency halt state (persisted in Redis)
 # ---------------------------------------------------------------------------
+#
+# Wave C dedup (persona 74 P0 #3): the canonical ``_is_trading_halted``
+# lives in ``data.ingestion.daily_pipeline`` and carries the 0.5s timeout
+# + fail-closed semantics. The duplicate copy that used to live here had
+# slightly different log wording and no timeout — a wedged Redis would
+# stall POST /api/v1/trades/. We keep the local name for backwards
+# compatibility with the existing callsites (search: ``_is_trading_halted``).
+
 
 async def _is_trading_halted() -> bool:
-    """Check if trading is halted. FAILS CLOSED — blocks trading if Redis unavailable."""
-    try:
-        from core.redis import cache_get
-        result = await cache_get("trading:halted")
-        if result is not None:
-            return result.get("halted", False)
-        return False  # Key doesn't exist = not halted
-    except Exception:
-        logger.warning("Redis unavailable — trading halted as safety precaution")
-        return True  # FAIL CLOSED: block trading when we can't check
+    """Return True if the admin halt flag is set.
+
+    Thin wrapper around the canonical
+    ``data.ingestion.daily_pipeline._is_trading_halted`` implementation.
+    Lazy-import because of the ``trades -> master_agent -> daily_pipeline``
+    circular loop (trades imports this at call time, not at module load).
+    """
+    from data.ingestion.daily_pipeline import _is_trading_halted as _canonical
+    return await _canonical()
 
 
 async def _set_trading_halted(halted: bool) -> None:
@@ -313,123 +320,35 @@ def _alpaca_keys_empty() -> bool:
 # Live-trading strategy routing (Wave 4 — see
 # audit-reports/00-strategy-experts-consolidation.md §4).
 # ---------------------------------------------------------------------------
-# The frontend speaks hyphenated ids ("vrp-harvesting"); the registry uses
-# underscore canonical names ("vrp_harvest"). ``STRATEGY_LIVE_DISABLED`` /
-# ``STRATEGY_PAPER_ONLY`` in ``core.config`` are keyed on the canonical name,
-# so we normalise the incoming ``payload.strategy`` via this mapping before
-# checking membership.
-_STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
-    "momentum-quality": "momentum_quality",
-    "pead": "pead",
-    "vrp-harvesting": "vrp_harvest",
-    "earnings-vol-premium": "earnings_vol",
-    "regime-adaptive": "regime_adaptive",
-    "ts-momentum": "ts_momentum",
-    "rsi2-reversal": "rsi2_reversal",
-    "dual-momentum": "dual_momentum",
-    "pairs-trading": "pairs_trading",
-    "pairs-stat-arb": "pairs_trading",
-    "kama-breakout": "kama_breakout",
-    "orb": "orb",
-    "vwap-strategy": "vwap",
-}
-
-
-#: Canonical underscore names that are legitimate strategy identifiers.
-#: Derived once from the hyphen-id map so both forms stay in lock-step.
-_STRATEGY_CANONICAL_NAMES: frozenset[str] = frozenset(
-    _STRATEGY_ID_TO_CANONICAL.values()
+# Wave-A bypass-path fix: the strategy canonicalisation + live-gate enforcement
+# now live in ``core.trading_gate`` so EVERY order-submission path (HTTP,
+# pipeline, scanner, MCP, webhook, agent) shares a single implementation.
+# Personas 66/67/69 converged on the finding that maintaining the gate inline
+# in trades.py only protected ``POST /api/v1/trades/orders`` while five other
+# paths bypassed it entirely.
+#
+# The local names are kept as aliases so the existing tests
+# (``test_trades_live_gate.py``) continue to import them.
+from core.trading_gate import (
+    _STRATEGY_ID_TO_CANONICAL,
+    canonical_strategy_name as _canonical_strategy_name,
+    reject_if_live_forbidden,
 )
 
 
-def _canonical_strategy_name(name: str | None) -> str | None:
-    """Map any incoming strategy identifier to its canonical registry name.
+def _reject_if_live_forbidden(strategy: str | None, *, username: str | None = None) -> None:
+    """Thin wrapper that forwards to the centralized gate with the caller tag.
 
-    This is an **allowlist** (Wave 6 / A1#3 fix). Previously the function
-    silently passed through any hyphen-free token, letting a caller spoof
-    ``payload.strategy="orbx"`` past the live-trading deny-list. The new
-    semantics:
-
-    * ``None`` / blank → ``None`` (manual/discretionary order — callers
-      decide how to treat it; the live-gate intentionally skips ``None``).
-    * Hyphen-id in ``_STRATEGY_ID_TO_CANONICAL`` → mapped canonical name.
-    * Canonical underscore name already in ``_STRATEGY_CANONICAL_NAMES``
-      → returned unchanged.
-    * Anything else → ``ValueError`` (translated to 400 at the edge).
+    Kept under the underscore-prefixed name so the existing test module
+    ``test_trades_live_gate.py`` (which exercises ``trades_mod._reject_if_live_forbidden``)
+    keeps working without import churn.
     """
-    if name is None:
-        return None
-    key = name.strip().lower().replace(" ", "-")
-    if not key:
-        return None
-    if key in _STRATEGY_ID_TO_CANONICAL:
-        return _STRATEGY_ID_TO_CANONICAL[key]
-    if key in _STRATEGY_CANONICAL_NAMES:
-        return key
-    raise ValueError(f"unknown strategy: {key}")
-
-
-def _reject_if_live_forbidden(strategy: str | None) -> None:
-    """Reject the order when the strategy is live-disabled or paper-only
-    AND the configured Alpaca base URL points at the live endpoint.
-
-    Wave 4 implementation of the live-trading allowlist/denylist flagged in
-    audit-reports/00-strategy-experts-consolidation.md §4:
-      * ``orb`` — structurally unfit for live capital until 3 structural
-        defects land (see P0-5..7). 422 on live; still runnable in paper.
-      * ``kama_breakout`` — paper-only until a longer walk-forward lands a
-        statistically meaningful trade count. 422 on live; paper allowed.
-
-    Wave 6 / A1#3 + A1#11 hardening:
-      * Unknown strategy strings now raise 400 (fail-closed) rather than
-        silently bypassing the deny-list.
-      * ``strategy=None`` is still accepted as a manual/discretionary order
-        and bypasses the gate, but we log an INFO line so the audit trail
-        captures the skip.
-    """
-    try:
-        canonical = _canonical_strategy_name(strategy)
-    except ValueError as exc:
-        # Fail-closed: any non-None value we can't canonicalize is rejected
-        # rather than passed through to the broker.
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if canonical is None:
-        logger.info(
-            "live-gate: skipping strategy allowlist check (strategy=None, "
-            "manual/discretionary order)"
-        )
-        return
-
-    from core.config import (
-        STRATEGY_LIVE_DISABLED,
-        STRATEGY_PAPER_ONLY,
-        is_live_alpaca_base_url,
+    reject_if_live_forbidden(
+        strategy,
+        caller="trades.create_order",
+        username=username,
+        http_context=True,
     )
-
-    if not is_live_alpaca_base_url():
-        return
-
-    if canonical in STRATEGY_LIVE_DISABLED:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Strategy '{canonical}' is on the live-trading denylist "
-                "(NOT-READY for live capital — see "
-                "audit-reports/00-strategy-experts-consolidation.md §4). "
-                "Route this order to the Alpaca paper endpoint instead."
-            ),
-        )
-    if canonical in STRATEGY_PAPER_ONLY:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Strategy '{canonical}' is paper-only until a longer OOS "
-                "window confirms statistical significance (see "
-                "audit-reports/00-strategy-experts-consolidation.md §4). "
-                "Route this order to the Alpaca paper endpoint instead."
-            ),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -489,13 +408,28 @@ async def create_order(
             detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
         )
 
-    # persona-40 F2 / persona-65 F1: Idempotency-Key support.
-    # Cache policy — Redis SET NX EX 600 with key scoped to the caller's
-    # username so a stolen key from one user cannot mask a different user's
-    # legitimate order; a second call with the same key returns the cached
-    # response verbatim; if Redis is down we fall through to the payload-hash
+    # persona-40 F2 / persona-65 F1 / Wave-A bypass-fix: Idempotency-Key
+    # support with race-safe ordering.
+    #
+    # Old ordering had a critical race window:
+    #   1. GET cache (miss) → 2. POST broker → 3. SET NX cache
+    # Two parallel requests with the same Idempotency-Key both saw the cache
+    # miss in step 1 and both reached the broker before either wrote the
+    # cache. New ordering (Wave A):
+    #   1. GET cache → if hit return; if "PENDING" return 429 in-flight.
+    #   2. SET NX EX 600 = "PENDING" sentinel.
+    #   3. If SET NX failed (race lost) → re-GET; another worker beat us.
+    #   4. POST broker.
+    #   5. On success → SET (no NX) the actual response, overwriting "PENDING".
+    #   6. On broker error → DEL the key so a retry can proceed.
+    #
+    # Cache key is scoped to the caller's username so a stolen key from one
+    # user cannot mask a different user's legitimate order. If Redis is down
+    # the whole block is skipped and we fall through to the payload-hash
     # dedup path below (legacy behaviour preserved).
+    _PENDING_SENTINEL = "__PENDING__"
     idem_cache_key: str | None = None
+    idem_key_short: str | None = None
     if idempotency_key:
         # Bound the key length so a pathological client can't DOS Redis
         # with a 1MB header value; 128 chars is far more than a uuid4().
@@ -505,21 +439,68 @@ async def create_order(
         # header can't land in our Redis key namespace unescaped.
         _key_clean = _sanitize_user_text(idempotency_key) or idempotency_key
         idem_cache_key = f"idem:orders:{_key_clean}:{username}"
+        # Short slug used as part of the Alpaca client_order_id below.
+        # Alpaca caps client_order_id at 128 chars; we use the last 24 of
+        # the idempotency key to stay well under the cap and still preserve
+        # collision resistance (uuid4 is 32 hex chars; the tail 24 hex still
+        # gives us 96 bits of entropy which is more than enough).
+        idem_key_short = _key_clean[-24:]
         try:
             from core.redis import get_redis
             redis = await get_redis()
             if redis is not None:
+                # Step 1: GET — return cached response or in-flight marker.
                 cached = await redis.get(idem_cache_key)
                 if cached:
+                    raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+                    if raw == _PENDING_SENTINEL:
+                        raise HTTPException(
+                            status_code=429,
+                            detail=(
+                                "Idempotent request already in flight. Retry "
+                                "after the original completes."
+                            ),
+                        )
                     try:
-                        raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
                         data = json.loads(raw)
                         return OrderResponse(**data)
+                    except HTTPException:
+                        raise
                     except Exception:
                         logger.warning(
                             "Idempotency-Key cache entry malformed — falling through to re-submit",
                             exc_info=True,
                         )
+
+                # Step 2: SET NX = PENDING sentinel atomically. If we lose
+                # the race, re-GET and treat the winner's value as authoritative.
+                claimed = await redis.set(
+                    idem_cache_key, _PENDING_SENTINEL, nx=True, ex=600,
+                )
+                if not claimed:
+                    cached = await redis.get(idem_cache_key)
+                    if cached:
+                        raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+                        if raw == _PENDING_SENTINEL:
+                            raise HTTPException(
+                                status_code=429,
+                                detail=(
+                                    "Idempotent request already in flight. Retry "
+                                    "after the original completes."
+                                ),
+                            )
+                        try:
+                            data = json.loads(raw)
+                            return OrderResponse(**data)
+                        except HTTPException:
+                            raise
+                        except Exception:
+                            logger.warning(
+                                "Idempotency-Key cache entry malformed after race — re-submitting",
+                                exc_info=True,
+                            )
+        except HTTPException:
+            raise
         except Exception:
             logger.debug("Redis unavailable for Idempotency-Key lookup", exc_info=True)
 
@@ -580,7 +561,8 @@ async def create_order(
     # instead of a downstream risk rejection. Runs BEFORE the aggregate risk
     # check because it's strictly cheaper and a definitive 422 for these two
     # strategies on live configs (paper URL passes through untouched).
-    _reject_if_live_forbidden(payload.strategy)
+    # Wave-A: ``username`` is forwarded into the centralized gate's audit log.
+    _reject_if_live_forbidden(payload.strategy, username=username)
 
     # persona-16 P0-4: aggregate portfolio-level checks FIRST (gross notional,
     # position count, sector concentration) — the per-order cap alone let
@@ -598,21 +580,42 @@ async def create_order(
     # Duplicate order check (persona-40: now covers notes + strategy + canonical floats)
     await _check_duplicate_order(payload)
 
-    # persona-56 / persona-65 F1: client_order_id correlation key so a
+    # persona-56 / persona-65 F1 / Wave-A: client_order_id correlation key so a
     # mid-POST disconnect, retry, or reconciliation pass can match the
-    # broker row against the local ledger row. Format: ``manual_<user>_<12hex>``.
-    # We keep the prefix explicit ("manual_") so the reconciliation endpoint
-    # can filter these out from pipeline-originated orders
-    # (``daily_pipeline._place_order`` uses ``{strategy}_{symbol}_{ts}``).
-    # Alpaca caps client_order_id at 128 chars; username is already size-bounded
-    # by the LoginRequest schema.
+    # broker row against the local ledger row. Format: ``{user}_{idem_short}``
+    # when the caller supplied an Idempotency-Key (so Alpaca dedupes broker-
+    # side too — Alpaca refuses duplicate ``client_order_id`` within ~24h),
+    # otherwise ``manual_{user}_{12hex}`` to preserve back-compat for callers
+    # that don't pass an Idempotency-Key.
     # Sanitize username → a filesystem-safe-ish slug so an unusual character
     # doesn't land in the Alpaca ID.
     _user_slug = re.sub(r"[^A-Za-z0-9_\-]", "", username)[:32] or "u"
-    client_order_id = f"manual_{_user_slug}_{_uuid.uuid4().hex[:12]}"
+    if idem_key_short:
+        # Strip non-alnum from the idem tail so Alpaca accepts it.
+        _idem_clean = re.sub(r"[^A-Za-z0-9_\-]", "", idem_key_short)
+        client_order_id = f"{_user_slug}_{_idem_clean}"[:128]
+    else:
+        client_order_id = f"manual_{_user_slug}_{_uuid.uuid4().hex[:12]}"
 
-    # Submit to broker (pass client_order_id down)
-    order_id = await _submit_to_broker(payload, settings, client_order_id=client_order_id)
+    # Submit to broker (pass client_order_id down). On broker failure the
+    # PENDING sentinel must be cleared so a retry can proceed — without this,
+    # a transient broker error would lock the user out of resubmitting until
+    # the 600s TTL expired.
+    try:
+        order_id = await _submit_to_broker(payload, settings, client_order_id=client_order_id)
+    except Exception:
+        if idem_cache_key is not None:
+            try:
+                from core.redis import get_redis
+                _r = await get_redis()
+                if _r is not None:
+                    await _r.delete(idem_cache_key)
+            except Exception:
+                logger.debug(
+                    "Failed to clear PENDING idem sentinel after broker error",
+                    exc_info=True,
+                )
+        raise
 
     # Observability: log every submitted order with the acting user
     logger.info(
@@ -649,6 +652,24 @@ async def create_order(
                 ld["client_order_id"] = client_order_id
                 legs_payload.append(ld)
 
+            # Wave B / persona-72 F5: stamp ``account_env`` on every insert
+            # so downstream consumers can distinguish paper vs live vs
+            # backtest rows without having to cross-reference
+            # ``settings.ALPACA_BASE_URL`` at query time.  Coordinates with
+            # Wave A's centralised ``settings.LIVE_TRADING_ENABLED`` — we
+            # honour it when present and fall back to the existing
+            # ``is_live_alpaca_base_url()`` helper until Wave A lands so
+            # this wave is deployable independently.
+            _live_flag = getattr(_s, "LIVE_TRADING_ENABLED", None)
+            if isinstance(_live_flag, bool):
+                _env = "live" if _live_flag else "paper"
+            else:
+                try:
+                    from core.config import is_live_alpaca_base_url
+                    _env = "live" if is_live_alpaca_base_url() else "paper"
+                except Exception:
+                    _env = "paper"
+
             factory = _get_session_factory()
             async with factory() as db:
                 trade = Trade(
@@ -659,6 +680,8 @@ async def create_order(
                     status="submitted",
                     notes=payload.notes,
                     side=persisted_side,
+                    client_order_id=client_order_id,
+                    account_env=_env,
                 )
                 db.add(trade)
                 await db.flush()
@@ -676,8 +699,12 @@ async def create_order(
         notes=payload.notes,
     )
 
-    # persona-40 F2: cache the response under the Idempotency-Key so a
-    # retry within 10 minutes returns the same response verbatim.
+    # persona-40 F2 / Wave-A: cache the response under the Idempotency-Key so
+    # a retry within 10 minutes returns the same response verbatim. NOTE: this
+    # SET is intentionally NOT ``nx=True`` — we want to OVERWRITE the PENDING
+    # sentinel that the request placed earlier in the race window. Using NX
+    # here would have silently dropped the response and left PENDING in place
+    # for the rest of the TTL, returning 429 to the original caller's retry.
     if idem_cache_key is not None:
         try:
             from core.redis import get_redis
@@ -687,7 +714,6 @@ async def create_order(
                     idem_cache_key,
                     json.dumps(response.model_dump(mode="json")),
                     ex=600,
-                    nx=True,
                 )
         except Exception:
             logger.warning("Failed to persist Idempotency-Key response cache", exc_info=True)
@@ -1712,12 +1738,25 @@ async def _submit_to_broker(
     ``client_order_id`` field so a mid-POST disconnect has a stable
     correlation key to match the broker row against the local ledger row.
     """
-    # Safety: reject live trading from the manual endpoint
-    base_url = settings.ALPACA_BASE_URL
-    if "paper" not in base_url.lower():
+    # Safety: reject live trading unless the operator has explicitly opted in.
+    # Wave-A bypass-path fix: the previous ``"paper" not in url.lower()`` check
+    # was both brittle (substring match — bypassable with crafted URL) and
+    # over-blocking (refused live even when intended). The new policy requires
+    # BOTH ``LIVE_TRADING_ENABLED=True`` AND a canonical-host match against the
+    # Alpaca live endpoint via ``is_live_alpaca_base_url``. Per-strategy deny-
+    # list enforcement happens upstream in ``_reject_if_live_forbidden``;
+    # ``_submit_to_broker`` is the last-line URL/intent check.
+    from core.config import is_live_alpaca_base_url as _is_live_url
+    if _is_live_url(settings.ALPACA_BASE_URL) and not getattr(
+        settings, "LIVE_TRADING_ENABLED", False
+    ):
         raise HTTPException(
             status_code=403,
-            detail="Live trading is not enabled. Manual orders are restricted to paper trading.",
+            detail=(
+                "Live trading is not enabled. Set LIVE_TRADING_ENABLED=true "
+                "AND keep ALPACA_BASE_URL=https://api.alpaca.markets to opt in, "
+                "or switch the URL back to https://paper-api.alpaca.markets for paper."
+            ),
         )
 
     import httpx
@@ -1804,7 +1843,7 @@ async def _submit_to_broker(
 # ---------------------------------------------------------------------------
 
 
-async def _reconcile_last_24h() -> dict[str, int]:
+async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
     """Core reconciliation logic. Shared by POST /trades/reconcile and the
     boot-time lifespan hook so both see the same semantics.
 
@@ -1812,10 +1851,17 @@ async def _reconcile_last_24h() -> dict[str, int]:
 
     * ``backfilled`` — Alpaca rows for which no local Trade existed: inserted
       as ``status="reconciled"`` so they count toward P&L / position tracking.
-    * ``orphaned`` — local Trades in ``submitted`` status from the last 24h
+    * ``orphaned`` — local Trades in ``submitted`` status from the window
       whose ``client_order_id`` is not present on the Alpaca side: marked
       ``status="orphaned"`` so they stop inflating position counts.
     * ``matched`` — rows where both sides agree (informational only).
+
+    ``since`` parameter (Wave B / persona-72 F4): explicit lower-bound for
+    the reconcile window.  Defaults to 24h ago (the historical behaviour
+    preserved for the admin-invoked ``POST /trades/reconcile``).  The
+    boot-time hook overrides this from Redis-persisted state so a
+    network partition longer than 24h doesn't cause the reconciler to
+    miss fills that accumulated during the outage.
     """
     result = {"backfilled": 0, "orphaned": 0, "matched": 0}
 
@@ -1824,8 +1870,11 @@ async def _reconcile_last_24h() -> dict[str, int]:
 
     from core.config import settings
 
-    # Fetch the last 24h of Alpaca orders.
-    since_iso = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    # Reconcile window — parameterised so the boot hook can widen it to
+    # match ``reconcile:last_success_ts`` in Redis (F4).  Defaults to
+    # 24h which is what the admin route always wanted.
+    since_dt = since or (datetime.now(timezone.utc) - timedelta(hours=24))
+    since_iso = since_dt.isoformat()
     headers = {
         "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
@@ -1877,8 +1926,10 @@ async def _reconcile_last_24h() -> dict[str, int]:
     factory = _get_session_factory()
     try:
         async with factory() as db:
-            # Pull local Trades created in the last 24h.
-            since_dt = datetime.now(timezone.utc) - timedelta(hours=24)
+            # Pull local Trades created within the reconcile window.
+            # Uses the same ``since_dt`` computed above so a widened boot
+            # window (F4 — Redis-persisted last-success ts) also widens
+            # the local query instead of silently capping at 24h.
             q = (
                 select(Trade)
                 .where(Trade.entry_time >= since_dt)
@@ -1925,6 +1976,19 @@ async def _reconcile_last_24h() -> dict[str, int]:
                     except Exception:
                         entry_time = datetime.now(timezone.utc)
 
+                    # Wave B / persona-72 F5: stamp account_env on every
+                    # reconciled-backfill insert as well.  Use the same
+                    # resolution rule as create_order so dashboards group
+                    # consistently.
+                    _live_flag = getattr(settings, "LIVE_TRADING_ENABLED", None)
+                    if isinstance(_live_flag, bool):
+                        _env = "live" if _live_flag else "paper"
+                    else:
+                        try:
+                            from core.config import is_live_alpaca_base_url
+                            _env = "live" if is_live_alpaca_base_url() else "paper"
+                        except Exception:
+                            _env = "paper"
                     trade = Trade(
                         symbol=symbol,
                         strategy=None,
@@ -1942,6 +2006,9 @@ async def _reconcile_last_24h() -> dict[str, int]:
                         status="reconciled",
                         notes=f"Reconciled from broker (alpaca_id={o.get('id')})",
                         side=persisted_side,
+                        client_order_id=coid,
+                        broker_order_id=o.get("id"),
+                        account_env=_env,
                     )
                     db.add(trade)
                     await db.flush()
@@ -2007,19 +2074,96 @@ async def reconcile_orders(username: str = Depends(require_auth)) -> dict[str, A
 
 
 async def reconcile_on_boot() -> None:
-    """Boot-time reconciliation hook (persona-65 F9).
+    """Boot-time reconciliation hook (persona-65 F9, widened under
+    persona-72 Wave B F4).
 
     Called from ``main.py`` lifespan so a broker-accepted / DB-silent
     split (persona-65 F2) surfaces immediately after a restart instead
     of accumulating. Best-effort — logged but does not block startup.
+
+    Window policy (Wave B F4): the original implementation hard-coded a
+    24h window which was silently truncated by any outage longer than
+    24h — the most dangerous case, because those are exactly the
+    scenarios where fills pile up unreconciled.  The window is now
+    driven by a Redis cursor (``reconcile:last_success_ts``) that is
+    written after every successful reconcile.  On first boot after a
+    fresh deploy the key is absent and we fall back to a 7-day window
+    which covers typical release cadences with headroom.
     """
+    now = datetime.now(timezone.utc)
+    default_since = now - timedelta(days=7)
+    since_dt = default_since
+
+    # Read the persisted cursor.  Best-effort — Redis being down is
+    # non-fatal (we just fall back to the 7d default), but it IS worth
+    # logging because the cursor is how we detect long outages.
     try:
-        counts = await _reconcile_last_24h()
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is not None:
+            raw = await redis.get("reconcile:last_success_ts")
+            if raw:
+                try:
+                    if isinstance(raw, (bytes, bytearray)):
+                        raw = raw.decode()
+                    since_dt = datetime.fromisoformat(str(raw))
+                    # Ensure timezone-aware so comparisons and isoformat
+                    # output both use UTC consistently.
+                    if since_dt.tzinfo is None:
+                        since_dt = since_dt.replace(tzinfo=timezone.utc)
+                except Exception:
+                    logger.warning(
+                        "reconcile: malformed reconcile:last_success_ts=%r — "
+                        "falling back to 7d window",
+                        raw,
+                    )
+                    since_dt = default_since
+    except Exception:
+        logger.debug(
+            "reconcile: Redis unreachable for last_success_ts lookup — "
+            "using 7d default",
+            exc_info=True,
+        )
+        since_dt = default_since
+
+    # Guardrail: never widen past 30 days so a stale cursor from a long
+    # prior outage doesn't blow up the first reconcile with 10k+ orders.
+    # Oncall can still fetch older rows via POST /trades/reconcile once
+    # the boot cycle is stable.
+    max_lookback = now - timedelta(days=30)
+    if since_dt < max_lookback:
+        logger.warning(
+            "reconcile: cursor is older than 30d (%s) — capping window at 30d",
+            since_dt.isoformat(),
+        )
+        since_dt = max_lookback
+
+    try:
+        counts = await _reconcile_last_24h(since=since_dt)
         logger.info(
-            "Boot reconcile — backfilled=%d, orphaned=%d, matched=%d",
+            "Boot reconcile — since=%s backfilled=%d, orphaned=%d, matched=%d",
+            since_dt.isoformat(),
             counts.get("backfilled", 0),
             counts.get("orphaned", 0),
             counts.get("matched", 0),
         )
     except Exception:
         logger.warning("Boot reconcile failed (non-fatal)", exc_info=True)
+        return
+
+    # Persist the success cursor so the next boot picks up from here.
+    # We write ``now`` rather than ``since_dt`` so reconciles always
+    # advance forward; we never re-process already-reconciled windows.
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is not None:
+            await redis.set(
+                "reconcile:last_success_ts",
+                now.isoformat(),
+            )
+    except Exception:
+        logger.debug(
+            "reconcile: failed to persist last_success_ts (non-fatal)",
+            exc_info=True,
+        )

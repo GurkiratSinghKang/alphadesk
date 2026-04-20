@@ -81,6 +81,13 @@
     encode zstd gzip
 
     handle /api/* {
+        # Propagate / mint a request id at the edge so Caddy's JSON access log
+        # and the backend logs can be joined on the same uuid when debugging a
+        # user-reported issue. If a client already set X-Request-ID, Caddy's
+        # {http.request.uuid} placeholder still yields a fresh value — the
+        # backend middleware in backend/main.py honours the inbound header
+        # first, so an existing id survives end-to-end.
+        request_header X-Request-ID {http.request.uuid}
         reverse_proxy backend:8000
     }
     handle /ws {

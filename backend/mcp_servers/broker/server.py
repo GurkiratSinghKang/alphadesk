@@ -70,6 +70,16 @@ class BrokerServer(BaseMCPServer):
             "order_type": {"type": "string", "description": "market, limit, stop, stop_limit"},
             "limit_price": {"type": "number", "description": "Limit price (required for limit orders)", "optional": True},
             "time_in_force": {"type": "string", "description": "day, gtc, ioc, fok"},
+            # Wave-A bypass-fix: ``strategy`` is now a first-class parameter so
+            # the live-trading deny-gate can refuse denylisted strategies. MCP
+            # tool schema treats it as optional for back-compat with callers
+            # that don't pass one (manual / discretionary orders pass through
+            # the gate as ``None``, same as the HTTP endpoint).
+            "strategy": {
+                "type": "string",
+                "description": "Originating strategy name (gates live submissions)",
+                "optional": True,
+            },
         },
     )
     async def submit_order(
@@ -80,7 +90,30 @@ class BrokerServer(BaseMCPServer):
         order_type: str = "market",
         limit_price: float | None = None,
         time_in_force: str = "day",
+        strategy: str | None = None,
     ) -> dict[str, Any]:
+        # Wave-A bypass-fix: the MCP broker tool previously had ZERO live-
+        # trading gates — an LLM agent invoking this tool could submit any
+        # strategy to live capital. Personas 66/67/69 converged on this as the
+        # most under-protected path. Enforce the centralized gate here.
+        from core.trading_gate import reject_if_live_forbidden
+        try:
+            reject_if_live_forbidden(
+                strategy,
+                caller="mcp.broker.submit_order",
+                http_context=False,
+            )
+        except RuntimeError as exc:
+            return {
+                "error": str(exc),
+                "order_id": None,
+                "status": "rejected_by_gate",
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": order_type,
+            }
+
         body: dict[str, Any] = {
             "symbol": symbol,
             "qty": str(qty),

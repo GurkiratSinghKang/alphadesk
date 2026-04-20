@@ -81,13 +81,16 @@ def test_canonical_name_accepts_canonical_underscore_form() -> None:
 
 @pytest.fixture
 def force_live_alpaca(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin ``is_live_alpaca_base_url`` to True so the gate actually evaluates
-    membership in STRATEGY_LIVE_DISABLED / STRATEGY_PAPER_ONLY. We patch the
-    original symbol in ``core.config`` because ``_reject_if_live_forbidden``
-    imports it lazily inside the function body."""
+    """Pin both gate inputs so the deny-list actually evaluates: the URL check
+    must report "live" AND the operator-intent flag ``LIVE_TRADING_ENABLED``
+    must be True. Wave-A bypass-fix: the gate now requires BOTH to fire so a
+    misconfigured deploy can't accidentally route to live capital. We patch
+    the original symbols in ``core.config`` because the centralized gate
+    imports them lazily inside the function body."""
     from core import config as core_config
 
     monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: True)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", True, raising=False)
 
 
 def test_live_gate_rejects_orb_with_422(force_live_alpaca: None) -> None:
@@ -132,8 +135,81 @@ def test_live_gate_logs_skip_for_manual_orders(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Wave 6 requirement: manual-order skips must be captured in the audit log.
+    # Wave-A: log line is now emitted by the centralized gate
+    # (``core.trading_gate``); the message format is preserved.
     import logging
 
-    with caplog.at_level(logging.INFO, logger=trades_mod.logger.name):
+    with caplog.at_level(logging.INFO, logger="core.trading_gate"):
         trades_mod._reject_if_live_forbidden(None)
     assert any("strategy=None" in rec.message for rec in caplog.records)
+
+
+# --------------------------------------------------------------------------- #
+# Wave-A: LIVE_TRADING_ENABLED gating semantics                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_live_gate_passes_when_env_disabled_url_paper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # LIVE_TRADING_ENABLED=False + URL=paper → unconditionally allow.
+    from core import config as core_config
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: False)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", False, raising=False)
+    # Even denylisted strategies must pass on paper.
+    trades_mod._reject_if_live_forbidden("orb")
+    trades_mod._reject_if_live_forbidden("kama_breakout")
+
+
+def test_live_gate_passes_when_env_disabled_url_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # LIVE_TRADING_ENABLED=False + URL=live → operator hasn't opted in to
+    # live, so the per-strategy gate doesn't fire. (``_submit_to_broker`` and
+    # ``assert_live_enabled_or_paper`` will catch the misconfig elsewhere.)
+    from core import config as core_config
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: True)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", False, raising=False)
+    trades_mod._reject_if_live_forbidden("orb")
+    trades_mod._reject_if_live_forbidden("kama_breakout")
+
+
+def test_live_gate_fires_only_when_env_and_url_both_say_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # LIVE_TRADING_ENABLED=True + URL=live + denylisted strategy → 422.
+    from core import config as core_config
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: True)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", True, raising=False)
+    with pytest.raises(HTTPException) as excinfo:
+        trades_mod._reject_if_live_forbidden("orb")
+    assert excinfo.value.status_code == 422
+
+
+def test_assert_live_enabled_or_paper_raises_on_misconfig_env_no_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # LIVE_TRADING_ENABLED=True but URL is paper → boot-time misconfig.
+    from core import config as core_config
+    from core.trading_gate import assert_live_enabled_or_paper
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: False)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", True, raising=False)
+    with pytest.raises(RuntimeError, match="Misconfig"):
+        assert_live_enabled_or_paper()
+
+
+def test_assert_live_enabled_or_paper_raises_on_misconfig_url_no_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # URL is live but LIVE_TRADING_ENABLED=False → boot-time misconfig.
+    from core import config as core_config
+    from core.trading_gate import assert_live_enabled_or_paper
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: True)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", False, raising=False)
+    with pytest.raises(RuntimeError, match="Misconfig"):
+        assert_live_enabled_or_paper()

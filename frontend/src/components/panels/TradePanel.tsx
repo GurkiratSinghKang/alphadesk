@@ -603,7 +603,12 @@ function PositionsTab() {
           `Close ALL ${positions.length} position(s)? This will sell all holdings.`
         );
         if (confirmed) {
-          // Place market sell orders for each position
+          // Place market sell orders for each position.
+          // Persona 74-5/74-10 — each ``placeOrder`` is awaited by the
+          // outer ``Promise.all`` but the old code swallowed its own
+          // rejection with ``.catch(() => null)``, so the user saw the
+          // optimistic "Closing …" success toast even when every
+          // request failed. Surface individual failures via a toast.
           Promise.all(
             positions.map((p) =>
               placeOrder({
@@ -611,7 +616,14 @@ function PositionsTab() {
                 side: p.side === "short" ? "buy" : "sell",
                 type: "market",
                 quantity: p.quantity,
-              }).catch(() => null)
+              }).catch((e: unknown) => {
+                const msg = e instanceof Error ? e.message : "Unknown error";
+                toast({
+                  type: "error",
+                  message: `Action failed: ${p.symbol} — ${msg}`,
+                });
+                return null;
+              })
             )
           ).then(() => {
             toast({ type: "success", message: `Closing ${positions.length} position(s)...` });
@@ -626,6 +638,9 @@ function PositionsTab() {
           `Flatten portfolio? This will close all ${positions.length} position(s) at market price.`
         );
         if (confirmed) {
+          // Persona 74-5/74-10 — same fix as "close-all" above: surface
+          // per-position failures instead of swallowing them with
+          // ``.catch(() => null)``.
           Promise.all(
             positions.map((p) =>
               placeOrder({
@@ -633,7 +648,14 @@ function PositionsTab() {
                 side: p.side === "short" ? "buy" : "sell",
                 type: "market",
                 quantity: p.quantity,
-              }).catch(() => null)
+              }).catch((e: unknown) => {
+                const msg = e instanceof Error ? e.message : "Unknown error";
+                toast({
+                  type: "error",
+                  message: `Action failed: ${p.symbol} — ${msg}`,
+                });
+                return null;
+              })
             )
           ).then(() => {
             toast({ type: "success", message: "Portfolio flatten orders submitted." });
@@ -785,8 +807,11 @@ function PositionsTab() {
                     toast({ type: "success", message: `Stop loss set at $${price.toFixed(2)} for ${stopLossSymbol}` });
                     setStopLossOpen(false);
                   })
-                  .catch((err: any) => {
-                    toast({ type: "error", message: "Failed: " + (err?.message || "Unknown error") });
+                  .catch((err: unknown) => {
+                    // Wave C (persona 74-5): consistent "Action failed:" wording
+                    // across all three placeOrder callsites in this file.
+                    const msg = err instanceof Error ? err.message : "Unknown error";
+                    toast({ type: "error", message: `Action failed: ${msg}` });
                   });
               }}
               disabled={!stopLossPrice || parseFloat(stopLossPrice) <= 0}

@@ -218,9 +218,15 @@ Output JSON with: success (bool), order_id (str or null), details (dict), warnin
         * Redis dedup — SET NX EX 30 under ``order_dedup:{hash}``.
         * Client order id — stable correlation key forwarded to Alpaca.
         * Best-effort Trade row insert for ledger parity.
+
+        Wave-A bypass-fix: also enforces the live-trading deny-list via
+        ``core.trading_gate.reject_if_live_forbidden``. Persona-67 flagged
+        this path as a silent live bypass — the agent could submit ``orb``
+        orders to live capital with zero gate.
         """
         from core.redis import cache_get
         from core.config import settings
+        from core.trading_gate import reject_if_live_forbidden
         import httpx
         import uuid
 
@@ -231,6 +237,20 @@ Output JSON with: success (bool), order_id (str or null), details (dict), warnin
                 "success": False,
                 "error": "Trading is halted. Admin must /trades/resume first.",
             }
+
+        # Wave-A bypass-fix: live-trading strategy gate. Refuses denylisted
+        # strategies (orb / kama_breakout) when both ``LIVE_TRADING_ENABLED``
+        # and the URL point at the live broker. Returns ``success=False`` so
+        # the agent supervisor sees a normal failure instead of an exception.
+        try:
+            reject_if_live_forbidden(
+                structure.get("strategy"),
+                caller="agents.execution.execute_trade",
+                username=structure.get("user"),
+                http_context=False,
+            )
+        except RuntimeError as exc:
+            return {"success": False, "error": str(exc)}
 
         # Get current market data
         quote = await cache_get(f"quote:{symbol}")

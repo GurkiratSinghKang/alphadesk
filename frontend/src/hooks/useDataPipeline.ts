@@ -13,8 +13,14 @@ import type { Quote, Alert } from "@/types";
  * Module-level so the initial-fetch effect and the polling effect
  * share one definition. Pure side-effect; nothing React-specific to
  * close over.
+ *
+ * Exported for Wave C (persona 74 P0 #2) so ``useWebSocket`` can call
+ * this directly on a reconnecting -> open transition without needing a
+ * React Query cache key. The four REST endpoints below are the only
+ * portfolio state that the WS stream does not itself refresh (quotes
+ * arrive over WS; positions/orders/summary/greeks don't).
  */
-function fetchPortfolioData() {
+export function fetchPortfolioData() {
   getPositions()
     .then((positions) => {
       usePortfolioStore.getState().setPositions(positions);

@@ -31,7 +31,8 @@ describe("PositionsList", () => {
       <PositionsList positions={rows} activeTab="positions" />,
     );
     expect(container.querySelector('[data-slot="positions-list"]')).not.toBeNull();
-    const items = container.querySelectorAll("li");
+    // Wave E refactored the list to a real <table>; count body rows.
+    const items = container.querySelectorAll("tbody tr");
     expect(items.length).toBe(2);
     expect(container.textContent).toContain("NVDA");
     expect(container.textContent).toContain("UNH");

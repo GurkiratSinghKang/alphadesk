@@ -154,6 +154,14 @@ function StrategyCatalogCard({
     : s.paperOnly
       ? "Paper-only"
       : null;
+  // Persona 71-7 — the card ``aria-label`` previously read as
+  // "Orb, active, OOS Sharpe +4.78" and omitted the warning pill.
+  // A screen-reader user browsing the listing would not hear
+  // "NOT READY FOR LIVE" / "PAPER-ONLY" until they opened the card.
+  // Append the pill copy (lowercased so the whole label reads as a
+  // single natural sentence fragment) so the warning travels with the
+  // name.
+  if (pillLabel) labelParts.push(pillLabel.toLowerCase());
   const pillAriaLabel = s.liveDisabled
     ? "Live trading disabled"
     : s.paperOnly
@@ -562,6 +570,26 @@ export default function StrategiesListingPage() {
             )}
           </>
         )}
+
+        {/* Persona 67-10 — blanket past-performance disclosure mirrored
+            from the strategy detail page. Researchers arriving at the
+            catalogue before drilling into a strategy should see the
+            caveat once, up-front. Styled with ``text-fg-hint`` so it
+            doesn't compete with the card sections above. */}
+        <footer className="border-t border-border-hair pt-6">
+          <p className="font-sans text-[11.5px] leading-relaxed text-fg-hint">
+            Past performance does not guarantee future results. Backtest
+            metrics are derived from historical data; live results may
+            differ materially. See the{" "}
+            <Link
+              href="/risk"
+              className="underline underline-offset-2 hover:text-fg-muted"
+            >
+              Risk Disclosure
+            </Link>{" "}
+            at /risk.
+          </p>
+        </footer>
       </main>
     </DashboardPageLayout>
   );

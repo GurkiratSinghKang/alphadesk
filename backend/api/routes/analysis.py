@@ -42,6 +42,12 @@ class AgentResult(BaseModel):
     timestamp: datetime
 
 
+_ADVISORY_DISCLAIMER = (
+    "Not investment advice. Educational use only. "
+    "Past performance does not guarantee future results."
+)
+
+
 class AnalysisResponse(BaseModel):
     symbol: str
     composite_score: float
@@ -51,6 +57,28 @@ class AnalysisResponse(BaseModel):
     trade_ideas: list[dict[str, Any]] = Field(default_factory=list)
     analyzed_at: datetime
     is_demo: bool = False
+    # Persona 67-5 — every response that surfaces a ``recommendation`` must
+    # also carry an advisory disclaimer so downstream consumers cannot
+    # reproduce the recommendation without the caveat. This field is
+    # populated by default so any code path that constructs the response
+    # (real analysis, Claude pipeline, demo fallback) inherits it without
+    # needing to remember.
+    advisory_disclaimer: str = Field(
+        default=_ADVISORY_DISCLAIMER,
+        description="Regulatory/educational disclaimer — must travel with every recommendation.",
+    )
+    # Persona 67-5 / Wave E — when the symbol's strategy is on the
+    # backend's STRATEGY_LIVE_DISABLED or STRATEGY_PAPER_ONLY set the
+    # response surfaces that routing restriction so a client app can
+    # render the appropriate warning next to the recommendation. Absent
+    # when the symbol is unrestricted.
+    strategy_live_status: str | None = Field(
+        default=None,
+        description=(
+            "One of 'live_disabled' or 'paper_only' when the symbol maps "
+            "to a strategy with a live-routing restriction; omitted otherwise."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +519,8 @@ async def _real_analysis(symbol: str, request: AnalysisRequest) -> AnalysisRespo
     logger.info("Real analysis completed for %s: composite_score=%.2f, agents=%d",
                 s, composite_score, len(agent_results))
 
+    strategy_live_status = await _strategy_live_status_for_symbol(s)
+
     return AnalysisResponse(
         symbol=s,
         composite_score=composite_score,
@@ -500,12 +530,63 @@ async def _real_analysis(symbol: str, request: AnalysisRequest) -> AnalysisRespo
         trade_ideas=trade_ideas,
         analyzed_at=now,
         is_demo=False,
+        strategy_live_status=strategy_live_status,
     )
 
 
 # ---------------------------------------------------------------------------
 # Demo fallback (last resort)
 # ---------------------------------------------------------------------------
+
+async def _strategy_live_status_for_symbol(symbol: str) -> str | None:
+    """Return ``"live_disabled"`` / ``"paper_only"`` when ``symbol`` is tied
+    to a strategy with a routing restriction; ``None`` otherwise.
+
+    Persona 67-5 / Wave E — scans recent open trades for ``symbol`` and
+    checks the canonical strategy name against the
+    ``STRATEGY_LIVE_DISABLED`` / ``STRATEGY_PAPER_ONLY`` sets in
+    ``core.config``. When the symbol is held by multiple strategies the
+    most restrictive flag wins (``live_disabled`` > ``paper_only``).
+    Falls back to ``None`` if the database probe fails — the analysis
+    response still carries the default ``advisory_disclaimer`` so
+    callers aren't left without a caveat.
+    """
+    try:
+        from core.config import STRATEGY_LIVE_DISABLED, STRATEGY_PAPER_ONLY, settings
+    except Exception:
+        return None
+    if getattr(settings, "SKIP_DB_INIT", False):
+        return None
+    try:
+        from sqlalchemy import select
+        from data.storage.models import Trade  # type: ignore
+        from core.database import _get_session_factory
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            result = await db.execute(
+                select(Trade.strategy)
+                .where(Trade.symbol == symbol)
+                .where(Trade.status == "open")
+            )
+            names = {r for (r,) in result.all() if r}
+    except Exception:
+        logger.debug(
+            "strategy_live_status lookup failed for %s", symbol, exc_info=True
+        )
+        return None
+    if not names:
+        return None
+    # Normalise — ``Trade.strategy`` rows may be written as hyphenated
+    # route ids or canonical underscore names depending on the caller.
+    # Compare against both forms so either wins.
+    canonical = {n.replace("-", "_") for n in names} | set(names)
+    if canonical & STRATEGY_LIVE_DISABLED:
+        return "live_disabled"
+    if canonical & STRATEGY_PAPER_ONLY:
+        return "paper_only"
+    return None
+
 
 _DEMO_BASE_PRICES: dict[str, float] = {
     "AAPL": 230.0, "NVDA": 140.0, "TSLA": 275.0, "MSFT": 430.0,
@@ -647,6 +728,7 @@ async def trigger_analysis(
             avg_conviction = sum(convictions.get(r.conviction, 1) for r in agent_results) / max(len(agent_results), 1)
             composite_conviction = "high" if avg_conviction >= 2.5 else "medium" if avg_conviction >= 1.5 else "low"
 
+            strategy_live_status = await _strategy_live_status_for_symbol(symbol)
             response = AnalysisResponse(
                 symbol=symbol,
                 composite_score=round(composite_score, 2),
@@ -655,6 +737,7 @@ async def trigger_analysis(
                 agent_results=agent_results,
                 trade_ideas=[],
                 analyzed_at=datetime.now(timezone.utc),
+                strategy_live_status=strategy_live_status,
             )
             await cache_set(f"analysis:{symbol}", response.model_dump(mode="json"), ttl_seconds=ANALYSIS_CACHE_TTL)
             background_tasks.add_task(_persist_analysis, symbol, agent_results)
@@ -720,6 +803,7 @@ async def get_analysis(
                 scores = [r.score for r in agent_results]
                 composite_score = sum(scores) / len(scores)
 
+                strategy_live_status = await _strategy_live_status_for_symbol(symbol)
                 return AnalysisResponse(
                     symbol=symbol,
                     composite_score=round(composite_score, 2),
@@ -728,6 +812,7 @@ async def get_analysis(
                     agent_results=agent_results,
                     trade_ideas=[],
                     analyzed_at=rows[0].timestamp,
+                    strategy_live_status=strategy_live_status,
                 )
         except Exception:
             logger.warning("Failed to retrieve analysis for %s from DB", symbol, exc_info=True)

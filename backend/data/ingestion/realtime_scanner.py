@@ -353,7 +353,16 @@ async def _check_pairs_zscore() -> None:
 
 
 async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
-    """Execute a triggered setup by placing a trade through the pipeline."""
+    """Execute a triggered setup by placing a trade through the pipeline.
+
+    Wave-A bypass-fix: live-trading deny-gate enforced here so a denylisted
+    strategy that fires from the real-time scanner can't reach live capital.
+    Persona-69 flagged this path because the scanner produces several orders
+    per minute during high-volatility windows — exactly the wrong place to
+    bypass per-strategy gates.
+    """
+    from core.trading_gate import reject_if_live_forbidden
+
     try:
         from data.ingestion.trade_ledger import TradeLedger
         from data.ingestion.master_agent import MasterAgent
@@ -369,6 +378,23 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
 
         if shares < 1 or price <= 0:
             logger.warning("Skipping setup with invalid shares=%d or price=%.2f", shares, price)
+            return
+
+        # Live-trading strategy gate. Refuse before publishing alerts or
+        # touching the broker — a bypassed live order is far worse than a
+        # missing alert, so we fail-closed here.
+        _gate_strategy = strategy if strategy and strategy != "unknown" else None
+        try:
+            reject_if_live_forbidden(
+                _gate_strategy,
+                caller="realtime_scanner._execute_triggered_setup",
+                http_context=False,
+            )
+        except RuntimeError as exc:
+            logger.warning(
+                "Realtime setup refused by live gate: strategy=%s symbol=%s err=%s",
+                strategy, symbol, exc,
+            )
             return
 
         logger.info(

@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     # events to Redis channel ``trade_updates``. Safe kill-switch if the
     # broker side misbehaves without redeploying (persona-r P27/P43).
     ALPACA_TRADE_UPDATES_ENABLED: bool = True
+    # Wave-A bypass-path fix: LIVE_TRADING_ENABLED is the operator's *intent*
+    # signal. The trading-gate (``core.trading_gate.reject_if_live_forbidden``)
+    # only fires when ``LIVE_TRADING_ENABLED`` is True AND the base URL points
+    # at the live broker. Defaults False so an operator who forgets to flip the
+    # env var on a deploy never accidentally routes denylisted strategies to
+    # live capital. ``assert_live_enabled_or_paper()`` is called at startup to
+    # catch the inverse misconfig (URL says live but env says paper, or vice
+    # versa).
+    LIVE_TRADING_ENABLED: bool = False
 
     # --- Broker: Interactive Brokers ---
     IB_HOST: str = "127.0.0.1"
@@ -148,15 +157,36 @@ def is_live_alpaca_base_url(url: str | None = None) -> bool:
     """Return True when ``url`` (or ``settings.ALPACA_BASE_URL`` if unset)
     resolves to Alpaca's live endpoint.
 
-    Alpaca's paper URL contains the literal ``paper`` token (e.g.
-    ``https://paper-api.alpaca.markets``); the live endpoint is
-    ``https://api.alpaca.markets``. We treat "no 'paper' substring" as live
-    — the same convention ``daily_pipeline._base_url`` already enforces,
-    and the same safety posture ``_submit_to_broker`` uses for the manual
-    order endpoint. Empty / missing URL is treated as NOT-live so a misconfig
-    doesn't accidentally block paper traffic.
+    Wave-A bypass fix: replaced the previous ``"paper" not in url.lower()``
+    substring check with an EXACT host match. Personas 66/67/69 flagged the
+    substring approach as both fragile and over-blocking:
+
+    * Fragile — an attacker who can write to ``ALPACA_BASE_URL`` (env injection,
+      compromised .env) could point at e.g.
+      ``https://api.alpaca.markets/?route=paper`` and bypass the gate because
+      the substring matched. We now match the *netloc* (host) only and ignore
+      path / query.
+    * Over-blocking — any private staging mirror whose host happens to omit
+      the ``paper`` substring (``alpaca-broker-mock.internal``) was treated as
+      live and refused. The exact-host match defaults *unknown* hosts to
+      not-live, which is the correct safety posture: only the canonical live
+      hostname triggers the gate.
+
+    The canonical live hostname is ``api.alpaca.markets``; ``paper-api.alpaca.markets``
+    is the paper endpoint; anything else is treated as not-live (mock /
+    staging / sandbox / typo-on-deploy).
+
+    Empty / missing URL is treated as NOT-live so a misconfig doesn't
+    accidentally block paper traffic.
     """
+    from urllib.parse import urlparse
+
     base = (url if url is not None else settings.ALPACA_BASE_URL) or ""
     if not base:
         return False
-    return "paper" not in base.lower()
+    try:
+        parsed = urlparse(base if "://" in base else f"https://{base}")
+    except Exception:
+        return False
+    netloc = (parsed.netloc or "").lower().split(":", 1)[0]
+    return netloc == "api.alpaca.markets"

@@ -301,8 +301,14 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
+  // WCAG / persona 71-4 — render a real <label> wrapping both caption and
+  // input so voice control ("select Strategy") and screen readers can bind
+  // the visible caption to the associated form control. Previously the
+  // caption rendered as a <span> and the input carried only an
+  // `aria-label`, which some AT announced correctly but desktop voice-
+  // control drivers did not associate with the field.
   return (
-    <div className="flex flex-col gap-1 min-w-0">
+    <label className="flex flex-col gap-1 min-w-0">
       <span
         className="font-sans font-semibold text-[9.5px] uppercase text-fg-muted"
         style={{ letterSpacing: "0.14em" }}
@@ -310,6 +316,6 @@ function Field({
         {label}
       </span>
       {children}
-    </div>
+    </label>
   );
 }

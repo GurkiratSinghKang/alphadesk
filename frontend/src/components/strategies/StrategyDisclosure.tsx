@@ -99,12 +99,16 @@ export default function StrategyDisclosure({
       data-live-disabled={liveDisabled || undefined}
       data-paper-only={paperOnly || undefined}
       role="note"
-      // A3#5 — pill often lands late (after the ``perf`` fetch resolves).
-      // ``aria-live="polite"`` makes screen readers announce the banner's
-      // new content (including the pill) once it materialises, so a
-      // researcher using VoiceOver/NVDA isn't silently missed by a
-      // NOT-READY pill that flashed in half a second after load.
-      aria-live="polite"
+      // Persona 71-1 — the outer ``aria-live="polite"`` caused a double
+      // announce on mount: VoiceOver/NVDA read the whole aside (Eyebrow +
+      // pill + copy), then also announced the inner ``role="status"``
+      // pill. Removed the outer live region so the pill's ``role=status``
+      // is the sole late-arriving signal. The disclosure copy is static
+      // content once the component mounts, so it does not need to be a
+      // live region — a researcher navigating the page with AT will still
+      // encounter the banner as a plain ``role=note`` landmark. This also
+      // addresses persona 71-2 (every ``perf`` tick was re-announcing the
+      // full copy while the polite region remained mounted).
       className={cn(
         "flex flex-col gap-3 border-l-2 border-amber/60 bg-amber/[0.04] py-3 pl-5 pr-4",
         "rounded-sm",

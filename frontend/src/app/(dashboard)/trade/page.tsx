@@ -210,14 +210,20 @@ export default function TradePage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
+              {/* Persona 71-5 — sr-only caption + scope="col" on every th
+                  so AT can announce the table structure. The on-screen
+                  "Recent orders" heading above supplies the visible
+                  context; this caption duplicates it for screen readers
+                  that only read the table landmark. */}
+              <caption className="sr-only">Recent orders</caption>
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
-                  <th className="py-2 px-2 font-medium">Time</th>
-                  <th className="py-2 px-2 font-medium">Symbol</th>
-                  <th className="py-2 px-2 font-medium">Side</th>
-                  <th className="py-2 px-2 font-medium">Qty</th>
-                  <th className="py-2 px-2 font-medium">Type</th>
-                  <th className="py-2 px-2 font-medium">Status</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Time</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Symbol</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Side</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Qty</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Type</th>
+                  <th scope="col" className="py-2 px-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>

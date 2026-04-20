@@ -22,6 +22,7 @@ from api.routes import symbols, strategies, market_overview, risk, pipeline, new
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
+from data.ingestion.fill_reconciler import start_fill_reconciler, stop_fill_reconciler
 from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeline_scheduler
 from data.ingestion.continuous_monitor import start_continuous_monitor, stop_continuous_monitor
 from data.ingestion.realtime_scanner import start_realtime_scanner, stop_realtime_scanner
@@ -68,6 +69,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Alpaca stream failed to start", exc_info=True)
 
+    # Wave B / persona-72 P0: subscribe the DB consumer to Alpaca's
+    # trade_updates pub/sub channel so every fill / partial_fill /
+    # canceled / rejected / expired event transitions the Trade row out
+    # of ``status="submitted"`` and stamps broker_order_id, filled_at,
+    # filled_avg_price, account_env. MUST be started AFTER
+    # ``start_alpaca_stream`` so the publisher is up first — otherwise
+    # the first few events could land on an empty channel with no
+    # subscribers (Redis pub/sub has no replay).
+    try:
+        await start_fill_reconciler()
+    except Exception:
+        logger.warning("Fill reconciler failed to start", exc_info=True)
+
     # Start automated trading pipeline scheduler
     try:
         await start_pipeline_scheduler()
@@ -98,6 +112,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Boot reconcile raised", exc_info=True)
 
+    # Replay any bracket orders that got queued to the outbox when Alpaca
+    # rejected (or timed out) the bracket leg during the last run. Without
+    # this a crash between entry-fill and bracket-submit leaves an open
+    # position with no stop / target until the next scheduled pipeline
+    # window. daily_pipeline.replay_pending_brackets() is idempotent and
+    # drains Redis-persisted state.
+    try:
+        from data.ingestion.daily_pipeline import replay_pending_brackets
+        await replay_pending_brackets()
+    except Exception:
+        logger.warning("Boot bracket-outbox replay raised", exc_info=True)
+
     yield
 
     # Stop real-time scanner
@@ -117,6 +143,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await stop_pipeline_scheduler()
     except Exception:
         logger.warning("shutdown: stop_pipeline_scheduler raised", exc_info=True)
+
+    # Stop the fill reconciler before the Alpaca stream so we don't try
+    # to consume a channel the publisher has already closed.
+    try:
+        await stop_fill_reconciler()
+    except Exception:
+        logger.warning("shutdown: stop_fill_reconciler raised", exc_info=True)
 
     # Stop Alpaca stream
     try:

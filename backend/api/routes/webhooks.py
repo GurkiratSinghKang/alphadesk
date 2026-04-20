@@ -133,8 +133,34 @@ async def receive_tradingview_webhook(
 # ---------------------------------------------------------------------------
 
 async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
-    """Convert a buy/sell alert into an order via the execution pipeline."""
+    """Convert a buy/sell alert into an order via the execution pipeline.
+
+    Wave-A bypass-fix: the live-trading deny-gate is enforced HERE, before
+    the agent is invoked. Persona-66/67/69 flagged this path because a
+    TradingView webhook with ``strategy=orb`` previously routed straight
+    through to ``execution_agent.run`` with no gate at all. Refusing at the
+    webhook boundary also avoids burning an LLM call on an order that
+    cannot legally execute.
+    """
     from agents import get_agent
+    from core.trading_gate import reject_if_live_forbidden
+
+    # Live-trading strategy gate — refuse before invoking the agent. We
+    # convert ``RuntimeError`` to a structured failure so the webhook still
+    # returns 200 (TradingView retries on 5xx, and we don't want it to
+    # repeatedly hit a denylisted strategy).
+    try:
+        reject_if_live_forbidden(
+            alert.strategy,
+            caller="webhooks._handle_trade_signal",
+            http_context=False,
+        )
+    except RuntimeError as exc:
+        logger.warning(
+            "TradingView signal refused by live gate: ticker=%s strategy=%s err=%s",
+            alert.ticker, alert.strategy, exc,
+        )
+        return {"action": "rejected_by_gate", "detail": str(exc)}
 
     execution_agent = get_agent("execution")
     if execution_agent is None:
