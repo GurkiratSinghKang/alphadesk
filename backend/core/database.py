@@ -37,7 +37,20 @@ def _get_base() -> Any:
 
 
 def _get_engine() -> Any:
-    """Return the async engine, creating it on first call."""
+    """Return the async engine, creating it on first call.
+
+    Persona-79 Race 8 (DB pool starvation under retry storm). The previous
+    ``pool_size=5, max_overflow=5`` cap (10 concurrent ops total) made every
+    endpoint starve under a parallel Idempotency-Key retry storm — a single
+    flapping client could exhaust the pool and trigger 30 s checkout hangs
+    across the whole API. We bump to 20 + 10 (30 total), enforce a per-
+    statement timeout via ``connect_args`` so a stuck query can't hold a
+    connection forever, and shorten ``pool_timeout`` so checkout exhaustion
+    fails the request fast (5 s) instead of hanging the worker. asyncpg
+    accepts ``server_settings`` for session-level GUCs; ``statement_timeout``
+    is the standard Postgres knob and applies to every statement on the
+    connection.
+    """
     global _engine
     if _engine is None:
         from sqlalchemy.ext.asyncio import create_async_engine
@@ -45,10 +58,19 @@ def _get_engine() -> Any:
         _engine = create_async_engine(
             settings.DATABASE_URL,
             echo=settings.DEBUG,
-            pool_size=5,
-            max_overflow=5,
+            pool_size=20,
+            max_overflow=10,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_timeout=5.0,
+            connect_args={
+                # asyncpg uses ``server_settings`` to pass through Postgres
+                # session GUCs; statement_timeout is in milliseconds. 5 s is
+                # well above the slowest p99 we see for legit queries (~120
+                # ms) and short enough to stop a runaway query from holding a
+                # pooled connection past the checkout timeout.
+                "server_settings": {"statement_timeout": "5000"},
+            },
         )
     return _engine
 

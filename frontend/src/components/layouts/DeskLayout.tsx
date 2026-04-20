@@ -47,7 +47,9 @@ export default function DeskLayout({
     <div
       data-slot="desk-layout"
       className={cn(
-        "min-h-screen md:h-screen w-full overflow-x-hidden md:overflow-hidden bg-bg",
+        // iOS: 100dvh > 100vh — URL bar collapses dynamically and vh freezes
+        // to the larger layout viewport, clipping the bottom row on scroll.
+        "min-h-dvh md:h-dvh w-full overflow-x-hidden md:overflow-hidden bg-bg",
         "grid grid-rows-[48px_38px_1fr_22px]",
         className
       )}

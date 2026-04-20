@@ -69,6 +69,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Alpaca stream failed to start", exc_info=True)
 
+    # Wave 41: reconcile any trades submitted to Alpaca that didn't make it
+    # into the local ledger (power-loss mid-POST, container kill mid-submit).
+    # Backfills missing Trade rows and flags orphaned local pending rows.
+    #
+    # Wave 2G / persona-79 Race 2: this MUST run BEFORE
+    # ``start_fill_reconciler()`` so the boot reconciliation sees a stable
+    # snapshot of the ledger. If the live pub/sub consumer were already
+    # processing fills concurrently, both code paths could materialise the
+    # same Trade row and race on the status / fill-column writes. With
+    # boot reconcile completed first, the live reconciler picks up only
+    # the truly fresh events. Optimistic locking on the ``version`` column
+    # is the second line of defence if we ever have to overlap them again.
+    try:
+        from api.routes.trades import reconcile_on_boot
+        await reconcile_on_boot()
+    except Exception:
+        logger.warning("Boot reconcile raised", exc_info=True)
+
     # Wave B / persona-72 P0: subscribe the DB consumer to Alpaca's
     # trade_updates pub/sub channel so every fill / partial_fill /
     # canceled / rejected / expired event transitions the Trade row out
@@ -76,7 +94,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # filled_avg_price, account_env. MUST be started AFTER
     # ``start_alpaca_stream`` so the publisher is up first — otherwise
     # the first few events could land on an empty channel with no
-    # subscribers (Redis pub/sub has no replay).
+    # subscribers (Redis pub/sub has no replay) — AND after
+    # ``reconcile_on_boot`` so the two paths can't race on the same row
+    # (Wave 2G / persona-79 Race 2).
     try:
         await start_fill_reconciler()
     except Exception:
@@ -102,15 +122,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Continuous market monitor started")
     except Exception:
         logger.warning("Continuous monitor failed to start", exc_info=True)
-
-    # Wave 41: reconcile any trades submitted to Alpaca that didn't make it
-    # into the local ledger (power-loss mid-POST, container kill mid-submit).
-    # Backfills missing Trade rows and flags orphaned local pending rows.
-    try:
-        from api.routes.trades import reconcile_on_boot
-        await reconcile_on_boot()
-    except Exception:
-        logger.warning("Boot reconcile raised", exc_info=True)
 
     # Replay any bracket orders that got queued to the outbox when Alpaca
     # rejected (or timed out) the bracket leg during the last run. Without

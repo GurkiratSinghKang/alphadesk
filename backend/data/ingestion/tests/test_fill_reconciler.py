@@ -63,6 +63,18 @@ def _make_trade_row(
         filled_at=None,
         filled_avg_price=None,
         account_env="paper",
+        # Wave 2G — execution-quality columns added by migration 0004.
+        # Default to None (column nullable) so the assertions can verify
+        # the reconciler stamps them only when the payload provides data.
+        execution_venue=None,
+        nbbo_bid_at_fill=None,
+        nbbo_ask_at_fill=None,
+        price_improvement_cents=None,
+        # Optimistic-locking version. The fake row doesn't run through
+        # SQLAlchemy's UPDATE machinery so we don't bump it, but the
+        # column must exist on the namespace for the production code
+        # path's hasattr-style checks to remain consistent.
+        version=0,
         legs=[{"client_order_id": client_order_id, "symbol": "AAPL", "qty": 10}],
     )
 
@@ -235,7 +247,120 @@ async def test_fill_event_transitions_trade_to_filled(db_patches) -> None:
     assert trade_row.entry_price == pytest.approx(182.3425)
     # account_env should be a valid enum value; we forced the paper URL.
     assert trade_row.account_env == "paper"
+    # Wave 2G — execution-quality columns: this payload has no venue +
+    # no NBBO cache hit, so all four stay None. The dedicated
+    # ``test_fill_event_stamps_execution_quality_columns`` test below
+    # exercises the populated path.
+    assert trade_row.execution_venue is None
+    assert trade_row.nbbo_bid_at_fill is None
+    assert trade_row.nbbo_ask_at_fill is None
+    assert trade_row.price_improvement_cents is None
     assert db_patches["commits"] == 1, "expected exactly one commit"
+
+
+@pytest.mark.asyncio
+async def test_fill_event_stamps_execution_quality_columns(
+    db_patches, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``fill`` payload with venue + NBBO populates the Wave 2G columns.
+
+    Wave 2G / persona-85 gaps 1, 2, 10:
+      * ``execution_venue`` comes from the Alpaca payload (``order.venue``).
+      * ``nbbo_bid_at_fill`` / ``nbbo_ask_at_fill`` come from the
+        ``nbbo:{symbol}`` Redis hash (Wave C producer).
+      * ``price_improvement_cents`` is the signed difference between the
+        NBBO mid and the fill price, in cents per share, with a buy
+        below the mid reporting positive improvement.
+    """
+    from data.ingestion import fill_reconciler as fr
+
+    trade_row = _make_trade_row(status="submitted")
+    db_patches["trade_row"] = trade_row
+
+    # Stub the Redis call inside _apply_event. The reconciler does
+    # ``await redis.hgetall(f"nbbo:{symbol}")`` — we hand back a dict
+    # with the bid/ask at the moment of the fill so the price-improvement
+    # math is deterministic.
+    class _FakeRedis:
+        async def hgetall(self, key):
+            assert key == "nbbo:AAPL", key
+            return {"bid": "182.30", "ask": "182.40"}
+
+    async def _fake_get_redis():
+        return _FakeRedis()
+
+    import core.redis as _core_redis
+    monkeypatch.setattr(_core_redis, "get_redis", _fake_get_redis)
+
+    event = {
+        "event": "fill",
+        "symbol": "AAPL",
+        "side": "buy",
+        "fill_price": 182.32,  # 3 cents below the $182.35 mid
+        "order_id": "alp_venue_abc",
+        "status": "filled",
+        "timestamp": "2026-04-19T13:30:00.125Z",
+        "raw": {
+            "order": {
+                "id": "alp_venue_abc",
+                "client_order_id": trade_row.client_order_id,
+                "symbol": "AAPL",
+                "filled_avg_price": "182.32",
+                "filled_at": "2026-04-19T13:30:00.125Z",
+                "venue": "EDGX",
+                "side": "buy",
+            },
+        },
+    }
+
+    await fr._apply_event(event)
+
+    # Status + venue + NBBO + improvement all stamped.
+    assert trade_row.status == "filled"
+    assert trade_row.execution_venue == "EDGX"
+    assert trade_row.nbbo_bid_at_fill == Decimal("182.30")
+    assert trade_row.nbbo_ask_at_fill == Decimal("182.40")
+    # mid = (182.30 + 182.40) / 2 = 182.35 ; fill = 182.32 ; buy below
+    # mid -> positive improvement of 3 cents.
+    assert trade_row.price_improvement_cents == Decimal("3.00")
+
+
+@pytest.mark.asyncio
+async def test_fill_event_without_timestamp_does_not_fabricate_filled_at(
+    db_patches,
+) -> None:
+    """Wave 2G: a payload without any timestamp leaves filled_at = None.
+
+    Previously the reconciler defaulted to ``datetime.now()`` when
+    Alpaca's payload lacked a ``timestamp`` / ``filled_at`` /
+    ``updated_at`` field, which silently fabricated audit data. The new
+    contract: if the broker doesn't tell us when the fill happened, we
+    leave the column NULL rather than lying to the auditor.
+    """
+    from data.ingestion import fill_reconciler as fr
+
+    trade_row = _make_trade_row(status="submitted")
+    db_patches["trade_row"] = trade_row
+
+    await fr._apply_event({
+        "event": "fill",
+        "order_id": "alp_no_ts",
+        "fill_price": 50.0,
+        # No "timestamp" field. No filled_at / updated_at on the order
+        # subobject either.
+        "raw": {
+            "order": {
+                "id": "alp_no_ts",
+                "client_order_id": trade_row.client_order_id,
+                "filled_avg_price": "50.0",
+            },
+        },
+    })
+
+    assert trade_row.status == "filled"
+    assert trade_row.filled_avg_price == Decimal("50.0")
+    # The critical assertion: no fabricated wall-clock timestamp.
+    assert trade_row.filled_at is None
 
 
 @pytest.mark.asyncio

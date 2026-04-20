@@ -145,6 +145,34 @@ def _define_models() -> dict[str, Any]:
             String(16), nullable=False, server_default="paper", default="paper", index=True,
         )
 
+        # Wave 2G — execution quality columns (persona-85 gaps 1, 2, 10).
+        # Captured by the fill_reconciler when Alpaca's trade_updates payload
+        # carries the venue routing string and an NBBO tick is available
+        # from the quote-stream Redis cache. NULL is a legitimate value for
+        # any of these — older fills (pre-Wave 2G) have no execution-quality
+        # records, and not every fill exposes a venue (e.g. retail-router
+        # internalised flow). ``price_improvement_cents`` is computed by
+        # the reconciler from (NBBO mid - fill_price) * sign(side) * 100.
+        execution_venue = Column(String(16), nullable=True)
+        nbbo_bid_at_fill = Column(Numeric(20, 6), nullable=True)
+        nbbo_ask_at_fill = Column(Numeric(20, 6), nullable=True)
+        price_improvement_cents = Column(Numeric(10, 4), nullable=True)
+
+        # Wave 2G — optimistic concurrency control (persona-79 Race 2).
+        # The fill_reconciler and reconcile_on_boot can race on the same
+        # Trade row when boot fires while the live pub/sub channel is
+        # already replaying queued events. With ``__mapper_args__ =
+        # {"version_id_col": Trade.version}`` SQLAlchemy automatically
+        # bumps this column on UPDATE and adds it to the WHERE clause; a
+        # concurrent transition that writes first wins, the loser raises
+        # ``StaleDataError`` and retries against the fresh row. Default 0
+        # so existing rows pre-migration validate cleanly.
+        version = Column(Integer, nullable=False, server_default="0", default=0)
+
+        __mapper_args__ = {
+            "version_id_col": version,
+        }
+
         __table_args__ = (
             Index("ix_trades_strategy_status", "strategy", "status"),
             # Composite index for the most common filter shape on this table:

@@ -142,7 +142,11 @@ export default function OrderBar({
           disabled={noStrategies}
           className={cn(
             "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
-            "font-mono text-[13px] text-ink-1000 outline-none",
+            // iOS Safari auto-zooms on tap of any <input>/<select> with an
+            // effective font-size < 16px. text-base (16px) on mobile keeps
+            // the viewport stable; md+ keeps the dense 13px we use at desk
+            // resolutions where tap-zoom isn't a concern.
+            "font-mono text-base md:text-[13px] text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: outline-none + 1px brand border
             // change was not a visible focus cue. Add a ring so keyboard
             // users can see which select is focused.
@@ -220,7 +224,8 @@ export default function OrderBar({
           onChange={(e) => setType(e.target.value as OrderTypeOption)}
           className={cn(
             "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
-            "font-mono text-[13px] text-ink-1000 outline-none",
+            // iOS autozoom guard — see Strategy select above.
+            "font-mono text-base md:text-[13px] text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: matching visible focus ring on the
             // Type select (same treatment as the Strategy select above).
             "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"

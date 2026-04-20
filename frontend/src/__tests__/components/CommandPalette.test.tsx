@@ -1,5 +1,5 @@
 import '../setup-mocks';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { useUIStore } from '@/stores/ui';
 import { useMarketStore } from '@/stores/market';

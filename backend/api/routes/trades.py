@@ -206,6 +206,16 @@ class CreateOrderRequest(BaseModel):
     time_in_force: TimeInForce = TimeInForce.DAY
     strategy: str | None = Field(None, description="Originating strategy name")
     notes: str | None = Field(None, max_length=1000)
+    # Wave 2H (persona-76 P76-3): closing-auction throttle escape hatch.
+    # Strategies that intentionally size for the MOC/MOL auction set this
+    # True so ``_aggregate_risk_check`` doesn't enforce the post-15:45 ET
+    # rolling-notional cap against them. Defaults False — the common case
+    # is NOT a closing-auction strategy, and misconfigured strategies
+    # should trip the cap rather than silently blow through it.
+    allow_closing_auction: bool = Field(
+        False,
+        description="True when the originating strategy is sized for the MOC/MOL auction.",
+    )
 
     @field_validator("notes")
     @classmethod
@@ -568,9 +578,19 @@ async def create_order(
     # position count, sector concentration) — the per-order cap alone let
     # 5 × $16k orders through in < 1s. Aggregate check runs before the
     # per-order check so a portfolio already at the ceiling rejects cleanly.
-    agg_ok, agg_msg = await _aggregate_risk_check(payload)
+    # Wave 2H (persona-76): aggregate check is also the host for the
+    # restricted-symbol, wash-trade, closing-auction, and cancel-rate
+    # surveillance gates; ``username`` is required so those gates can
+    # scope their state per-user.
+    agg_ok, agg_msg = await _aggregate_risk_check(payload, username=username)
     if not agg_ok:
         raise HTTPException(status_code=422, detail=f"Risk check failed: {agg_msg}")
+
+    # Wave 2H P76-2: track the submit in the per-minute cancel-rate
+    # counter so a future high-cancel-rate evaluation has a meaningful
+    # denominator. Recorded AFTER the aggregate gate passes so trivially-
+    # rejected payloads don't inflate the submit side of the ratio.
+    await _record_submit_for_cancel_rate(username)
 
     # Per-order notional cap (single-order ceiling).
     risk_ok, risk_msg = await _risk_check(payload)
@@ -627,6 +647,33 @@ async def create_order(
         username,
         client_order_id,
     )
+
+    # Wave 2H P76-1: record this order's side+price for wash-trade
+    # detection against future opposite-side orders. Uses the limit price
+    # when available, otherwise the live quote; market orders without a
+    # quote fall through silently — they cannot be wash-detected but they
+    # also cannot form a sub-bps opposite-side pair by definition.
+    try:
+        for leg in payload.legs:
+            if leg.limit_price:
+                price_for_wash = float(leg.limit_price)
+            else:
+                price_for_wash = await _get_current_price(leg.symbol)
+            if price_for_wash > 0:
+                await _record_fill_for_wash_detection(
+                    username, leg.symbol, leg.side.value, price_for_wash,
+                )
+    except Exception:
+        logger.debug("Wash-detection post-submit recording failed", exc_info=True)
+
+    # Wave 2H P76-3: once the order lands, add its notional to the
+    # rolling 15-min closing-auction counter so subsequent orders in the
+    # same window see an accurate tally.
+    try:
+        submitted_notional = await _compute_order_notional(payload)
+        await _record_closing_auction_notional(submitted_notional)
+    except Exception:
+        logger.debug("Closing-auction post-submit recording failed", exc_info=True)
 
     # Persist trade record (best-effort).
     # persona-65 F1/F2: we persist the client_order_id inside each leg's JSON
@@ -873,7 +920,10 @@ async def list_orders(
 
 
 @router.delete("/orders/{order_id}", status_code=204, response_model=None)
-async def cancel_order(order_id: str) -> None:
+async def cancel_order(
+    order_id: str,
+    username: str = Depends(require_auth),
+) -> None:
     """Cancel a pending order by ID.
 
     persona-9 #9: cancel is now distinguishably idempotent. Previously every
@@ -885,6 +935,13 @@ async def cancel_order(order_id: str) -> None:
         * Already terminal (cancelled/filled/rejected/expired) → 404
           ``Order already terminal`` so the client refreshes the order list.
         * Live order accepted by broker → 204 (unchanged).
+
+    Wave 2H (persona-76 P76-2): each successful cancel bumps a per-user
+    minute-bucket Redis counter so ``_evaluate_cancel_rate`` can surface a
+    warning when the rolling 5-min cancel ratio exceeds 70%. Unauthenticated
+    callers (previously allowed) now go through ``require_auth`` because
+    the counter has to be scoped to the user; an anonymous cancel lane
+    would be a trivial bypass.
     """
     if _alpaca_keys_empty():
         raise HTTPException(
@@ -932,6 +989,13 @@ async def cancel_order(order_id: str) -> None:
             raise HTTPException(status_code=404, detail="Order already terminal")
         if resp.status_code not in (200, 204):
             raise HTTPException(status_code=resp.status_code, detail="Failed to cancel order")
+
+    # Wave 2H P76-2: record the cancel AFTER the broker confirmed it so
+    # terminal / 404 paths do not artificially inflate the cancel
+    # numerator. Redis failures log-and-swallow: the cancel itself
+    # already succeeded and a missed counter is a monitoring miss, not a
+    # correctness miss.
+    await _record_cancel_for_rate(username)
 
 
 @router.get("/positions", response_model=list[PositionResponse])
@@ -1270,6 +1334,289 @@ MAX_OPEN_POSITIONS = _env_int("TRADES_MAX_OPEN_POSITIONS", 50)
 SECTOR_CONCENTRATION_LIMIT = _env_float("TRADES_SECTOR_CONCENTRATION_LIMIT", 0.30)
 
 
+# ---------------------------------------------------------------------------
+# Market-surveillance helpers (Wave 2H — persona-76)
+# ---------------------------------------------------------------------------
+
+# Dedicated audit logger — mirrors ``api.routes.auth`` so wash-trade /
+# cancel-rate / closing-auction events land in the same structured stream
+# the rest of the compliance signals use.
+_SURVEILLANCE_AUDIT = logging.getLogger("alphadesk.audit")
+
+# P76-1: wash-trade detection window. Any opposite-side order against the
+# same symbol within this many seconds at a near-identical price is a
+# self-cross pattern — reject it.
+WASH_TRADE_WINDOW_SECONDS = _env_int("TRADES_WASH_TRADE_WINDOW_SECONDS", 60)
+# Price proximity cap — 10 basis points. A new order that lands within
+# 10bps of the prior opposite-side fill price is close enough that the
+# pair could be read as a wash sale by a regulator.
+WASH_TRADE_PRICE_BPS = _env_float("TRADES_WASH_TRADE_PRICE_BPS", 10.0)
+
+# P76-2: cancel-rate watch window — 5 one-minute Redis buckets, 5 min total.
+CANCEL_RATE_BUCKET_COUNT = 5
+CANCEL_RATE_BUCKET_TTL_SECONDS = 300
+CANCEL_RATE_THRESHOLD = _env_float("TRADES_CANCEL_RATE_THRESHOLD", 0.70)
+
+# P76-3: closing-auction throttle. After 15:45 ET the rolling-15-min
+# notional across non-auction strategies cannot exceed 10% of the
+# configured daily-gross cap. Implemented as a Redis counter so horizontal
+# instances share state.
+CLOSING_AUCTION_CUTOFF_ET = (15, 45)  # hour, minute — 15:45 ET
+CLOSING_AUCTION_THROTTLE_FRACTION = _env_float(
+    "TRADES_CLOSING_AUCTION_THROTTLE_FRACTION", 0.10,
+)
+CLOSING_AUCTION_WINDOW_SECONDS = 15 * 60  # 15 min
+
+
+def _cancel_rate_bucket_key(username: str, *, now: datetime | None = None) -> str:
+    """Return the Redis key for the CURRENT minute bucket."""
+    ts = now or datetime.now(timezone.utc)
+    return f"cancel_rate:{username}:{ts.strftime('%Y-%m-%d-%H-%M')}"
+
+
+def _submit_rate_bucket_key(username: str, *, now: datetime | None = None) -> str:
+    """Twin counter for submits so the cancel-RATIO is meaningful."""
+    ts = now or datetime.now(timezone.utc)
+    return f"submit_rate:{username}:{ts.strftime('%Y-%m-%d-%H-%M')}"
+
+
+async def _record_submit_for_cancel_rate(username: str) -> None:
+    """Increment the per-user submit counter for the current minute bucket."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return
+        key = _submit_rate_bucket_key(username)
+        await redis.incr(key)
+        await redis.expire(key, CANCEL_RATE_BUCKET_TTL_SECONDS)
+    except Exception:
+        logger.debug("Redis submit-rate increment failed", exc_info=True)
+
+
+async def _record_cancel_for_rate(username: str) -> None:
+    """Increment the per-user cancel counter for the current minute bucket."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return
+        key = _cancel_rate_bucket_key(username)
+        await redis.incr(key)
+        await redis.expire(key, CANCEL_RATE_BUCKET_TTL_SECONDS)
+    except Exception:
+        logger.debug("Redis cancel-rate increment failed", exc_info=True)
+
+
+async def _evaluate_cancel_rate(username: str) -> tuple[float, int, int]:
+    """Return (ratio, cancels, submits) across the last 5 minute buckets.
+
+    "Ratio" is defined as ``cancels / (cancels + submits)``. Redis miss /
+    empty buckets report zero so an entire day with no submits maps to
+    ratio=0, NOT NaN.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return 0.0, 0, 0
+        now = datetime.now(timezone.utc)
+        cancels = 0
+        submits = 0
+        for offset in range(CANCEL_RATE_BUCKET_COUNT):
+            bucket_ts = now - timedelta(minutes=offset)
+            ck = _cancel_rate_bucket_key(username, now=bucket_ts)
+            sk = _submit_rate_bucket_key(username, now=bucket_ts)
+            c = await redis.get(ck)
+            s = await redis.get(sk)
+            try:
+                cancels += int(c) if c is not None else 0
+            except (TypeError, ValueError):
+                pass
+            try:
+                submits += int(s) if s is not None else 0
+            except (TypeError, ValueError):
+                pass
+        denom = cancels + submits
+        if denom == 0:
+            return 0.0, 0, 0
+        return cancels / denom, cancels, submits
+    except Exception:
+        logger.debug("Cancel-rate evaluation failed", exc_info=True)
+        return 0.0, 0, 0
+
+
+async def _record_fill_for_wash_detection(
+    username: str, symbol: str, side: str, price: float,
+) -> None:
+    """Persist this order's side+price so a subsequent opposite-side order
+    within the window can be detected.
+
+    Stored as a short-TTL Redis list per (username, symbol). The list is
+    trimmed to the last 16 entries so a hot symbol cannot grow unbounded;
+    16 is far more than we need for a 60-second window.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return
+        key = f"wash_trace:{username}:{symbol.upper()}"
+        payload = json.dumps({
+            "side": side.lower(),
+            "price": float(price),
+            "ts": datetime.now(timezone.utc).timestamp(),
+        })
+        # Prepend so the newest entry is at index 0 — reads below check
+        # the newest match first.
+        await redis.lpush(key, payload)
+        await redis.ltrim(key, 0, 15)
+        await redis.expire(key, max(WASH_TRADE_WINDOW_SECONDS * 2, 120))
+    except Exception:
+        logger.debug("Wash-detection recording failed", exc_info=True)
+
+
+async def _check_wash_trade(
+    username: str, request: CreateOrderRequest,
+) -> tuple[bool, str]:
+    """Return (ok, reason). Rejects when a recent opposite-side order on
+    the same symbol landed within WASH_TRADE_WINDOW_SECONDS at a price
+    within WASH_TRADE_PRICE_BPS bps of this order's price.
+
+    Checks every leg. A single hit is enough to refuse the order because a
+    multi-leg order with one wash-trade leg is still a wash-trade order.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+    except Exception:
+        return True, "skip"
+    if not redis:
+        return True, "skip"
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    for leg in request.legs:
+        # Price resolution: use limit_price if supplied, else live quote.
+        # Market orders without a prior quote fall back to 0 which makes
+        # the bps check meaningless — in that case skip THIS leg (we can't
+        # meaningfully compare) rather than false-positive.
+        if leg.limit_price:
+            incoming_price = float(leg.limit_price)
+        else:
+            try:
+                incoming_price = await _get_current_price(leg.symbol)
+            except Exception:
+                incoming_price = 0.0
+        if incoming_price <= 0:
+            continue
+
+        key = f"wash_trace:{username}:{leg.symbol.upper()}"
+        try:
+            entries = await redis.lrange(key, 0, 15)
+        except Exception:
+            continue
+        if not entries:
+            continue
+        for raw in entries:
+            try:
+                txt = raw.decode() if isinstance(raw, (bytes, bytearray)) else raw
+                rec = json.loads(txt)
+            except Exception:
+                continue
+            age = now_ts - float(rec.get("ts") or 0)
+            if age > WASH_TRADE_WINDOW_SECONDS or age < 0:
+                continue
+            prev_side = (rec.get("side") or "").lower()
+            if prev_side == leg.side.value.lower():
+                continue  # same-side order — not a wash pattern
+            prev_price = float(rec.get("price") or 0)
+            if prev_price <= 0:
+                continue
+            bps = abs(incoming_price - prev_price) / prev_price * 10_000.0
+            if bps <= WASH_TRADE_PRICE_BPS:
+                reason = (
+                    f"wash-trading pattern detected: opposite-side order on "
+                    f"{leg.symbol} within {WASH_TRADE_WINDOW_SECONDS}s"
+                )
+                _SURVEILLANCE_AUDIT.warning(
+                    "wash_trade_rejected user=%s symbol=%s side=%s prev_side=%s "
+                    "prev_price=%.4f incoming_price=%.4f bps=%.2f",
+                    username, leg.symbol, leg.side.value, prev_side,
+                    prev_price, incoming_price, bps,
+                    extra={
+                        "event": "wash_trade_rejected",
+                        "user": username,
+                        "symbol": leg.symbol,
+                        "side": leg.side.value,
+                        "prev_side": prev_side,
+                        "prev_price": prev_price,
+                        "incoming_price": incoming_price,
+                        "bps": bps,
+                    },
+                )
+                return False, reason
+    return True, "passed"
+
+
+async def _record_closing_auction_notional(notional: float) -> None:
+    """Accumulate the last-15-min notional in a Redis counter.
+
+    Implemented as per-minute buckets (same cadence as cancel-rate) so the
+    rolling window is a simple sum across 15 keys. Counters expire after
+    20 min so stale data cannot survive into tomorrow's session.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return
+        now_utc = datetime.now(timezone.utc)
+        key = f"closing_auction_notional:{now_utc.strftime('%Y-%m-%d-%H-%M')}"
+        # Store notional at cent granularity so we don't lose precision
+        # when stringifying ints. Redis INCRBYFLOAT is fine here — we
+        # only read with plain GETs below.
+        await redis.incrbyfloat(key, float(notional))
+        await redis.expire(key, CLOSING_AUCTION_WINDOW_SECONDS + 5 * 60)
+    except Exception:
+        logger.debug("Closing-auction notional record failed", exc_info=True)
+
+
+async def _sum_closing_auction_notional() -> float:
+    """Sum the non-auction notional submitted in the last 15 minutes."""
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if not redis:
+            return 0.0
+        total = 0.0
+        now_utc = datetime.now(timezone.utc)
+        for offset in range(15):
+            bucket_ts = now_utc - timedelta(minutes=offset)
+            key = f"closing_auction_notional:{bucket_ts.strftime('%Y-%m-%d-%H-%M')}"
+            try:
+                val = await redis.get(key)
+                if val is None:
+                    continue
+                txt = val.decode() if isinstance(val, (bytes, bytearray)) else val
+                total += float(txt or 0)
+            except (TypeError, ValueError):
+                continue
+        return total
+    except Exception:
+        logger.debug("Closing-auction notional aggregation failed", exc_info=True)
+        return 0.0
+
+
+def _is_after_closing_auction_cutoff(now_utc: datetime | None = None) -> bool:
+    """True when the current ET wall-clock is at/after 15:45 ET and before 16:00 ET."""
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    cutoff_hr, cutoff_min = CLOSING_AUCTION_CUTOFF_ET
+    minutes_now = now.hour * 60 + now.minute
+    minutes_cutoff = cutoff_hr * 60 + cutoff_min
+    minutes_close = 16 * 60  # 16:00 ET
+    return minutes_cutoff <= minutes_now < minutes_close
+
+
 async def _compute_order_notional(request: CreateOrderRequest) -> float:
     """Resolve the dollar notional of the incoming order across all legs.
 
@@ -1423,17 +1770,53 @@ async def _get_open_position_count_and_sector_exposure() -> tuple[int, dict[str,
     return len(positions), sector_exposure, equity
 
 
-async def _aggregate_risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
-    """Aggregate / portfolio-level risk gates (persona-16 P0-4).
+async def _aggregate_risk_check(
+    request: CreateOrderRequest,
+    username: str | None = None,
+) -> tuple[bool, str]:
+    """Aggregate / portfolio-level risk gates (persona-16 P0-4, persona-76 P76).
 
     Runs BEFORE the per-order cap in ``_risk_check``:
 
+      * Wave 2H (persona-76 P76-7): restricted-symbol deny-list — refuse
+        any leg whose symbol is on ``core.compliance.RESTRICTED_SYMBOLS``.
+      * Wave 2H (persona-76 P76-1): wash-trade detection — refuse opposite-
+        side orders within 60s at ≤10bps of the prior fill.
+      * Wave 2H (persona-76 P76-3): closing-auction throttle — after
+        15:45 ET, non-auction-flagged orders share a rolling 10%-of-daily-
+        cap ceiling on notional submitted in the last 15 minutes.
       * Today's gross notional across ledger + broker-pending + this order
         must stay below ``DAILY_GROSS_NOTIONAL_CAP`` ($200k by default).
       * Open-position count must stay at or below ``MAX_OPEN_POSITIONS`` (50).
       * Post-order sector exposure must stay below
         ``SECTOR_CONCENTRATION_LIMIT`` (30% of equity).
+      * Wave 2H (persona-76 P76-2): cancel-rate observation — logs a
+        warning when the 5-min rolling cancel/(cancel+submit) exceeds 70%.
+        Does NOT reject; this is purely a surfacing signal for now.
     """
+    # Wave 2H P76-7: restricted-symbol check (fast-fail, cheapest gate).
+    try:
+        from core.compliance import assert_not_restricted
+        for leg in request.legs:
+            assert_not_restricted(leg.symbol)
+    except ValueError as exc:
+        _SURVEILLANCE_AUDIT.warning(
+            "restricted_symbol_rejected user=%s err=%s",
+            username, exc,
+            extra={
+                "event": "restricted_symbol_rejected",
+                "user": username,
+                "error": str(exc),
+            },
+        )
+        return False, str(exc)
+
+    # Wave 2H P76-1: wash-trade detection.
+    if username:
+        wash_ok, wash_reason = await _check_wash_trade(username, request)
+        if not wash_ok:
+            return False, wash_reason
+
     # Today's gross notional
     incoming = await _compute_order_notional(request)
     todays_gross = await _get_todays_gross_notional()
@@ -1443,6 +1826,35 @@ async def _aggregate_risk_check(request: CreateOrderRequest) -> tuple[bool, str]
             f"(cap ${DAILY_GROSS_NOTIONAL_CAP:,.0f}). Today already deployed "
             f"${todays_gross:,.0f}."
         )
+
+    # Wave 2H P76-3: closing-auction throttle. After 15:45 ET, non-auction
+    # strategies share a 10%-of-daily-cap ceiling on rolling 15-min
+    # notional. Explicit auction-flagged orders (``allow_closing_auction``)
+    # bypass the cap but we STILL log them so an auditor can review what
+    # got through.
+    if _is_after_closing_auction_cutoff():
+        auction_cap = DAILY_GROSS_NOTIONAL_CAP * CLOSING_AUCTION_THROTTLE_FRACTION
+        if request.allow_closing_auction:
+            _SURVEILLANCE_AUDIT.info(
+                "closing_auction_allowed user=%s strategy=%s notional=%.2f",
+                username, request.strategy, incoming,
+                extra={
+                    "event": "closing_auction_allowed",
+                    "user": username,
+                    "strategy": request.strategy,
+                    "notional": incoming,
+                },
+            )
+        else:
+            recent = await _sum_closing_auction_notional()
+            if (recent + incoming) > auction_cap:
+                return False, (
+                    f"Closing-auction throttle: last 15m notional "
+                    f"${recent + incoming:,.0f} would exceed cap "
+                    f"${auction_cap:,.0f} after 15:45 ET. Strategies that "
+                    f"target the MOC/MOL auction must set "
+                    f"``allow_closing_auction=True``."
+                )
 
     # Position count + sector concentration
     pos_count, sector_exposure, equity = await _get_open_position_count_and_sector_exposure()
@@ -1471,6 +1883,22 @@ async def _aggregate_risk_check(request: CreateOrderRequest) -> tuple[bool, str]
                 f"{projected / equity * 100:.1f}% of equity "
                 f"(cap {SECTOR_CONCENTRATION_LIMIT * 100:.0f}%). "
                 f"Diversify or trim existing {sector} positions first."
+            )
+
+    # Wave 2H P76-2: cancel-rate monitoring — surface only, no reject.
+    if username:
+        ratio, cancels, submits = await _evaluate_cancel_rate(username)
+        if ratio > CANCEL_RATE_THRESHOLD:
+            _SURVEILLANCE_AUDIT.warning(
+                "high_cancel_rate user=%s ratio=%.3f cancels=%d submits=%d",
+                username, ratio, cancels, submits,
+                extra={
+                    "event": "high_cancel_rate",
+                    "user": username,
+                    "ratio": ratio,
+                    "cancels": cancels,
+                    "submits": submits,
+                },
             )
 
     return True, "passed"

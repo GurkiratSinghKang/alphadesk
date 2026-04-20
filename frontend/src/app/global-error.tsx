@@ -42,7 +42,9 @@ export default function GlobalError({
       <body
         style={{
           margin: 0,
-          minHeight: "100vh",
+          // iOS: 100dvh (dynamic viewport height) accounts for the URL bar
+          // collapsing on scroll; 100vh undercuts the visible area.
+          minHeight: "100dvh",
           backgroundColor: "#0b0a09",
           color: "#ece6d2",
           fontFamily:
@@ -56,7 +58,7 @@ export default function GlobalError({
         <main
           style={{
             display: "flex",
-            minHeight: "100vh",
+            minHeight: "100dvh",
             alignItems: "center",
             justifyContent: "center",
             padding: "48px 24px",

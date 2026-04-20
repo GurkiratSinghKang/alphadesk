@@ -34,6 +34,7 @@ import {
   cn,
 } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
+import { safeSetItem } from "@/lib/storage";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
 import { PayoffDiagram, type OptionLeg } from "@/components/panels/PayoffDiagram";
 import {
@@ -1014,7 +1015,7 @@ function loadJournalTags(): Record<string, JournalTag[]> {
 }
 
 function saveJournalTags(tags: Record<string, JournalTag[]>) {
-  localStorage.setItem(JOURNAL_TAGS_KEY, JSON.stringify(tags));
+  safeSetItem(JOURNAL_TAGS_KEY, JSON.stringify(tags));
 }
 
 function JournalStats({ entries, tagMap }: { entries: JournalEntry[]; tagMap: Record<string, JournalTag[]> }) {

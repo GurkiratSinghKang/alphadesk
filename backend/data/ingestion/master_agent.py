@@ -338,14 +338,25 @@ class MasterAgent:
             self._state_loaded = True
 
     async def _persist_peak(self, strategy: str, peak: float) -> None:
-        """Persist a single strategy's peak to the Redis hash + refresh TTL."""
+        """Persist a single strategy's peak to the Redis hash + refresh TTL.
+
+        Wave 2G / persona-79 Race 6: ``HSET`` followed by a separate
+        ``EXPIRE`` is two round-trips and not atomic — if the process dies
+        between them the hash exists without a TTL and ``master:strategy_peaks``
+        leaks forever. We pipeline both commands so they ship as one atomic
+        burst over the wire (redis-py async pipelines are not transactional
+        by default but the two writes hit the same key and Redis is
+        single-threaded, so observers either see both or neither).
+        """
         try:
             from core.redis import get_redis
             redis = await get_redis()
             if redis is None:
                 return
-            await redis.hset(self._REDIS_PEAKS_KEY, strategy, str(peak))
-            await redis.expire(self._REDIS_PEAKS_KEY, self._STATE_TTL_SECONDS)
+            async with redis.pipeline() as p:
+                p.hset(self._REDIS_PEAKS_KEY, strategy, str(peak))
+                p.expire(self._REDIS_PEAKS_KEY, self._STATE_TTL_SECONDS)
+                await p.execute()
         except Exception:
             logger.warning(
                 "Failed to persist strategy_peak for %s to Redis",
@@ -353,14 +364,21 @@ class MasterAgent:
             )
 
     async def _persist_halt_add(self, strategy: str) -> None:
-        """Add a strategy to the Redis halted-strategies set + refresh TTL."""
+        """Add a strategy to the Redis halted-strategies set + refresh TTL.
+
+        Wave 2G / persona-79 Race 6: ``SADD`` + ``EXPIRE`` pipelined
+        atomically so a crash between the two cannot leave the halted-set
+        without its 30-day TTL. Same rationale as ``_persist_peak``.
+        """
         try:
             from core.redis import get_redis
             redis = await get_redis()
             if redis is None:
                 return
-            await redis.sadd(self._REDIS_HALTED_KEY, strategy)
-            await redis.expire(self._REDIS_HALTED_KEY, self._STATE_TTL_SECONDS)
+            async with redis.pipeline() as p:
+                p.sadd(self._REDIS_HALTED_KEY, strategy)
+                p.expire(self._REDIS_HALTED_KEY, self._STATE_TTL_SECONDS)
+                await p.execute()
         except Exception:
             logger.warning(
                 "Failed to persist halt(%s) to Redis", strategy, exc_info=True,
@@ -379,26 +397,23 @@ class MasterAgent:
                 "Failed to remove halt(%s) from Redis", strategy, exc_info=True,
             )
 
-    def halt_strategy(self, strategy: str) -> None:
+    async def halt_strategy(self, strategy: str) -> None:
         """Manually halt a strategy (e.g. from an admin endpoint).
 
-        Updates in-memory state immediately and schedules a Redis persist
-        if an event loop is available. Callers that need hard persistence
-        guarantees should use :meth:`async_halt_strategy`.
-        """
-        if strategy in self.halted_strategies:
-            return
-        self.halted_strategies.add(strategy)
-        logger.warning("MANUAL HALT: strategy '%s'", strategy)
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self._persist_halt_add(strategy))
-        except RuntimeError:
-            pass
+        Wave 2G / persona-79 Race 4: this used to schedule the Redis
+        persist via ``loop.create_task`` and return synchronously. If the
+        process died before the background task ran, the in-memory halt
+        existed but Redis didn't — so the next pipeline run on a fresh
+        MasterAgent didn't know the strategy was halted. We make this
+        async-only and ``await`` the persist so the caller can't see
+        ``halt_strategy`` return successfully without the durable write
+        having completed (or having failed loudly via the inner WARN log).
 
-    async def async_halt_strategy(self, strategy: str) -> None:
-        """Async variant of :meth:`halt_strategy` that awaits the Redis write."""
+        The previous synchronous variant has been removed; every caller
+        must now ``await`` this method. ``async_halt_strategy`` was
+        consolidated into this single entry point — no deprecation alias
+        is shipped because there are no external in-tree callers.
+        """
         if strategy not in self.halted_strategies:
             self.halted_strategies.add(strategy)
             logger.warning("MANUAL HALT: strategy '%s'", strategy)
@@ -1034,6 +1049,21 @@ class MasterAgent:
         (persona-63 P0-1 / P0-2 / P0-5).
         """
         async with self._trade_lock:
+            # Wave 2H (persona-76 P76-7): restricted-symbol deny-list
+            # enforced at the routing layer so EVERY strategy path (not
+            # just the HTTP order endpoint) refuses a banned ticker. Runs
+            # BEFORE the rules-based gate so the reason string is the
+            # most informative failure reported back to the caller.
+            try:
+                from core.compliance import assert_not_restricted
+                assert_not_restricted(symbol)
+            except ValueError as exc:
+                self.rejections.append({
+                    "strategy": strategy, "symbol": symbol,
+                    "reason": str(exc),
+                })
+                return {"approved": False, "reason": f"restricted symbol: {symbol}"}
+
             # First run rules-based checks
             result = self.request_trade(
                 strategy, symbol, side, notional, conviction, rationale,
@@ -1076,9 +1106,36 @@ class MasterAgent:
     # ------------------------------------------------------------------
 
     def get_summary(self) -> dict[str, Any]:
-        """Return allocation summary per strategy."""
+        """Return allocation summary per strategy.
+
+        Wave 2G / persona-79 Race 5: ``self._trade_lock`` only wraps WRITES
+        in :meth:`request_trade_smart`; reads (this method, the rest UI / API
+        callers) used to iterate ``self.existing_positions`` and
+        ``self.pending_orders`` directly while a concurrent writer mutated
+        them. Iterating a dict that's being mutated raises
+        ``RuntimeError: dictionary changed size during iteration`` and
+        crashes the request.
+
+        We snapshot via ``dict()`` / ``list()`` at the top of the method.
+        Both copy operations are atomic in CPython under the GIL — they
+        release a consistent point-in-time view even if a writer is
+        racing — and downstream reads use only the snapshot. Sector +
+        VaR helpers continue to read from ``self.existing_positions``
+        directly because they're called inside the lock by
+        ``request_trade``; here we substitute the snapshot for the public
+        read path.
+        """
+        # Atomic copy — no locks needed, no inconsistency risk to the
+        # downstream iteration. dict() over a live dict is one CPython
+        # bytecode instruction (BUILD_MAP_UNPACK_WITH_CALL eq) and runs
+        # under the GIL.
+        positions_snapshot = dict(self.existing_positions)
+        pending_snapshot = list(self.pending_orders)
+        rejections_snapshot = list(self.rejections)
+        halted_snapshot = list(self.halted_strategies)
+
         by_strategy: dict[str, dict[str, Any]] = {}
-        for sym, pos in self.existing_positions.items():
+        for sym, pos in positions_snapshot.items():
             strat = pos.get("strategy", "unknown")
             if strat not in by_strategy:
                 by_strategy[strat] = {"deployed": 0.0, "positions": 0, "symbols": []}
@@ -1087,22 +1144,43 @@ class MasterAgent:
             by_strategy[strat]["symbols"].append(sym)
 
         total_deployed = sum(s["deployed"] for s in by_strategy.values())
+
+        # Compute sector exposure + portfolio VaR off the snapshot so the
+        # numbers are internally consistent with by_strategy. We inline
+        # the helper logic because the existing helpers read from
+        # ``self.existing_positions``.
+        sector_totals: dict[str, float] = {}
+        sector_total_notional = sum(p.get("notional", 0) for p in positions_snapshot.values())
+        for sym, pos in positions_snapshot.items():
+            sector = pos.get("sector", "Unknown")
+            sector_totals[sector] = sector_totals.get(sector, 0) + pos.get("notional", 0)
+        sector_exposure = (
+            {s: v / sector_total_notional for s, v in sector_totals.items()}
+            if sector_total_notional > 0 else {}
+        )
+
+        individual_vars = [
+            self._estimate_position_var(sym, pos.get("notional", 0))
+            for sym, pos in positions_snapshot.items()
+        ]
+        portfolio_var = sum(individual_vars) * 0.7 if individual_vars else 0
+
         return {
             "equity": self.equity,
             "cash": self.cash,
             "total_deployed": total_deployed,
             "deployed_pct": round(total_deployed / self.equity * 100, 1) if self.equity else 0,
-            "total_positions": len(self.existing_positions),
-            "pending_orders": len(self.pending_orders),
-            "rejections_count": len(self.rejections),
-            "rejections": self.rejections,
+            "total_positions": len(positions_snapshot),
+            "pending_orders": len(pending_snapshot),
+            "rejections_count": len(rejections_snapshot),
+            "rejections": rejections_snapshot,
             "by_strategy": by_strategy,
             # P1-P4 additions
             "regime": self.regime,
             "vix_level": self.vix_level,
             "max_deployment_pct": round(self.max_deployment * 100, 1),
-            "halted_strategies": list(self.halted_strategies),
-            "sector_exposure": self._get_sector_exposure(),
-            "portfolio_var": round(self._portfolio_var(), 2),
-            "portfolio_var_pct": round(self._portfolio_var() / self.equity * 100, 2) if self.equity else 0,
+            "halted_strategies": halted_snapshot,
+            "sector_exposure": sector_exposure,
+            "portfolio_var": round(portfolio_var, 2),
+            "portfolio_var_pct": round(portfolio_var / self.equity * 100, 2) if self.equity else 0,
         }

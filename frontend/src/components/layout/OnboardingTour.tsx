@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui";
+import { safeSetItem } from "@/lib/storage";
 
 // ─── Tour Step Definitions ──────────────────────────────────
 
@@ -139,8 +140,8 @@ export function OnboardingTour() {
   }, [active, currentStep]);
 
   const completeTour = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, "1");
-    localStorage.setItem(DISMISSED_KEY, "true");
+    safeSetItem(STORAGE_KEY, "1");
+    safeSetItem(DISMISSED_KEY, "true");
     setActive(false);
     setCommandPaletteOpen(false);
   }, [setCommandPaletteOpen]);

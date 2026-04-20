@@ -77,7 +77,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (isDeskRoute) {
       return (
         <div
-          className="h-screen w-full bg-bg"
+          className="h-dvh w-full bg-bg"
           style={{
             display: "grid",
             gridTemplateRows: "48px 38px 1fr 22px",

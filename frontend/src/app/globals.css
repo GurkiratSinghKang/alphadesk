@@ -172,12 +172,29 @@
   }
   html {
     background-color: var(--bg);
-    overscroll-behavior: none;
+    /* iOS Safari: suppress the grey flash on tap. Keyboard :focus-visible
+       ring above still works — this only kills the touch-tap highlight. */
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Overscroll fix — previously `overscroll-behavior: none` on html alone
+     didn't consistently clamp rubber-banding on iOS. Contain on both html
+     and body, Y-axis only (X-axis contain would kill legitimate horizontal
+     panels like the ticker tape marquee). */
+  html, body {
+    overscroll-behavior-y: contain;
   }
   body {
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-ui);
+    /* iOS safe-area padding — applies to the whole document body so any
+       fixed overlays (AICopilot drawer, command palette) inherit a sane
+       floor. Layout-level sticky/fixed chrome is padded by the component
+       utilities below. */
+    padding-top: env(safe-area-inset-top, 0);
+    padding-right: env(safe-area-inset-right, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-left: env(safe-area-inset-left, 0);
   }
 }
 
@@ -188,10 +205,51 @@ html, body {
   font-family: var(--font-ui);
 }
 
-/* Top bar glass effect */
+/* Top bar glass effect + safe-area. Sticky/fixed chrome (TopBar, StatusStrip,
+   AICopilot drawer, DeskLayout) must paint under the notch but pad their
+   content so it's readable. Applied via element selectors so components
+   opt-in without extra classes. */
 header {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  /* Let top nav bleed into the notch area but push inner content down. */
+  padding-top: max(0px, env(safe-area-inset-top, 0));
+  padding-left: max(0px, env(safe-area-inset-left, 0));
+  padding-right: max(0px, env(safe-area-inset-right, 0));
+}
+
+/* Sticky top bars (TopBar, StatusStrip, ContextBar) */
+[data-slot="desk-top-bar"],
+[data-slot="desk-context-bar"] {
+  padding-left: max(0px, env(safe-area-inset-left, 0));
+  padding-right: max(0px, env(safe-area-inset-right, 0));
+}
+
+/* Sticky bottom chrome (StatusBar / status strip) */
+[data-slot="desk-status-bar"],
+[data-slot="status-strip"] {
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0));
+  padding-left: max(0px, env(safe-area-inset-left, 0));
+  padding-right: max(0px, env(safe-area-inset-right, 0));
+}
+
+/* Fixed right-side AI copilot drawer */
+[data-slot="ai-copilot-drawer"] {
+  padding-top: max(0px, env(safe-area-inset-top, 0));
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0));
+  padding-right: max(0px, env(safe-area-inset-right, 0));
+}
+
+/* Inner scrollable panels — `overscroll-behavior: contain` on panels that
+   scroll internally (positions list, strategy rail, copilot chat) stops
+   the document-body chain-scroll from firing. Tailwind's `overflow-y-auto`
+   is the common hook, plus the `.scrollbar-thin` / `.scrollbar-none`
+   custom utilities we use on rails and drawers. */
+.overflow-y-auto,
+.overflow-auto,
+.scrollbar-thin,
+.scrollbar-none {
+  overscroll-behavior: contain;
 }
 
 /* ─── Utilities ────────────────────────────────────────────────── */

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
+import { safeSetItem } from "@/lib/storage";
 
 // ─── Workspace Types ────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ export function useWorkspace() {
 
   const setWorkspace = useCallback((ws: WorkspaceId) => {
     setWorkspaceState(ws);
-    localStorage.setItem(STORAGE_KEY, ws);
+    safeSetItem(STORAGE_KEY, ws);
     // Dispatch event so other components can react
     window.dispatchEvent(new CustomEvent("alphadesk:workspace-change", { detail: { workspace: ws } }));
   }, []);

@@ -595,6 +595,16 @@ async def _poll_fill_price(
 _OUTBOX_PREFIX = "outbox:pending:"
 _OUTBOX_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days — plenty for recovery, bounds growth
 
+# Wave 2G / persona-79 Race 7: ownership lock prefix. ``replay_pending_brackets``
+# can race with the normal flow inside ``_execute_approved_orders`` if a boot
+# happens while a pipeline run is mid-flight; both code paths can scan the same
+# outbox row and submit duplicate stop orders. Before acting on a row we now
+# attempt a SET-NX on this lock key; only the claimer proceeds, and the lock
+# auto-expires after 60 s in case the holder crashes mid-action so the row can
+# be reclaimed on the next replay tick.
+_OUTBOX_LOCK_PREFIX = "lock:outbox:"
+_OUTBOX_LOCK_TTL_SECONDS = 60
+
 
 async def _outbox_create(
     outbox_id: str, plan: dict[str, Any],
@@ -653,6 +663,67 @@ async def _outbox_delete(outbox_id: str) -> None:
         logger.warning("Bracket outbox delete failed (id=%s)", outbox_id, exc_info=True)
 
 
+async def _outbox_try_claim(outbox_id: str) -> bool:
+    """Wave 2G / persona-79 Race 7 — atomic ownership claim on an outbox row.
+
+    Returns True iff this caller acquired the lock, False if another
+    worker / boot-replay already owns it. Implemented as a single
+    ``SET NX EX 60`` so the claim is atomic at the Redis layer; the TTL
+    means a holder that crashes mid-action leaves the row reclaimable
+    after a minute rather than orphaning it.
+
+    Used inside ``replay_pending_brackets`` so the boot-replay path and
+    the live ``_execute_approved_orders`` path can never both submit a
+    duplicate stop for the same row.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            # No Redis = no cross-process synchronisation possible. We
+            # still proceed (boot replay is a recovery path, dropping it
+            # would be worse than the rare double-submit window) but log
+            # so this is auditable.
+            logger.warning(
+                "outbox_try_claim(%s): Redis unavailable — proceeding "
+                "without ownership lock", outbox_id,
+            )
+            return True
+        key = _OUTBOX_LOCK_PREFIX + outbox_id
+        # SET NX EX is the canonical atomic distributed-lock primitive.
+        # redis-py async returns True / None depending on whether the
+        # SET happened.
+        ok = await redis.set(key, "1", nx=True, ex=_OUTBOX_LOCK_TTL_SECONDS)
+        return bool(ok)
+    except Exception:
+        logger.warning(
+            "outbox_try_claim(%s) failed — proceeding unlocked",
+            outbox_id, exc_info=True,
+        )
+        return True
+
+
+async def _outbox_release(outbox_id: str) -> None:
+    """Release the ownership lock taken by :func:`_outbox_try_claim`.
+
+    Best-effort: a stale lock auto-expires after ``_OUTBOX_LOCK_TTL_SECONDS``
+    so a missed release just means the row sits locked for at most one
+    minute. We don't bother with a Lua-script value-check here because
+    the row is single-purpose and we hold it only briefly.
+    """
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return
+        await redis.delete(_OUTBOX_LOCK_PREFIX + outbox_id)
+    except Exception:
+        logger.debug(
+            "outbox_release(%s) failed — TTL will reclaim",
+            outbox_id, exc_info=True,
+        )
+
+
 async def replay_pending_brackets() -> list[dict[str, Any]]:
     """Replay any outbox rows left over from a previous (crashed) run.
 
@@ -675,6 +746,16 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
         if redis is None:
             return actions
         async for key in redis.scan_iter(match=_OUTBOX_PREFIX + "*"):
+            outbox_id = key.split(":", 2)[-1]
+            # Wave 2G / persona-79 Race 7: atomic ownership claim. If the
+            # live ``_execute_approved_orders`` path is concurrently
+            # processing this row, only the first claimer wins and the
+            # other path skips. The lock auto-expires after 60 s so a
+            # crashed claimer doesn't permanently strand the row.
+            if not await _outbox_try_claim(outbox_id):
+                actions.append({"id": outbox_id, "action": "skip_locked"})
+                continue
+            claimed = True
             try:
                 raw = await redis.hget(key, "plan")
                 if not raw:
@@ -686,7 +767,6 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                 qty = int(plan.get("qty", 0))
                 stop = plan.get("stop")
                 entry_order_id = plan.get("entry_order_id")
-                outbox_id = key.split(":", 2)[-1]
                 if not sym or qty <= 0:
                     await redis.delete(key)
                     actions.append({"id": outbox_id, "action": "discard_invalid"})
@@ -763,6 +843,13 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                     "Bracket replay: row processing failed (key=%s)", key,
                     exc_info=True,
                 )
+            finally:
+                # Wave 2G / persona-79 Race 7: always release the lock so
+                # subsequent passes (or the live executor) can pick the row
+                # back up if we left work undone. The TTL on the lock key is
+                # the safety net — even a missed release reclaims after 60 s.
+                if claimed:
+                    await _outbox_release(outbox_id)
     except Exception:
         logger.error("Bracket replay walk failed", exc_info=True)
     return actions

@@ -1,5 +1,6 @@
 import { render, type RenderOptions } from '@testing-library/react';
 import type { ReactElement } from 'react';
+import { vi } from 'vitest';
 
 // Mock next/navigation
 vi.mock('next/navigation', () => ({

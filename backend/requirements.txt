@@ -13,6 +13,9 @@ orjson>=3.10.0
 PyJWT>=2.8.0
 bcrypt>=4.0.0
 passlib[bcrypt]>=1.7.4
+# TOTP / 2FA skeleton — Wave 2I Fix 2 (P81-1). ``pyotp`` is small (~30KB) and
+# has zero runtime deps beyond the stdlib; no hidden bloat.
+pyotp>=2.9.0
 
 # Database
 sqlalchemy[asyncio]>=2.0.36

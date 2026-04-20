@@ -1,0 +1,189 @@
+"""Live-gate coverage for the broker MCP tool.
+
+Wave 2F / persona-78 gap #1 sub-item: ``mcp_servers.broker.server.submit_order``
+is one of the six bypass paths Wave A wired into
+``core.trading_gate.reject_if_live_forbidden``. Before Wave A this tool
+had ZERO gates — an LLM agent could call it with ``strategy="orb"`` on
+a live account and the order would route to live capital.
+
+These tests prove the gate fires from the MCP tool path and never
+reaches the Alpaca POST. Unlike the HTTP path (which raises
+``HTTPException``) and the pipeline path (which re-raises
+``RuntimeError``), the MCP path is designed to RETURN a structured
+rejection dict — agents cannot handle raised exceptions cleanly in a
+tool-call response. We assert the rejection shape here.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+
+@pytest.fixture
+def live_armed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """URL=live + LIVE_TRADING_ENABLED=True so the gate is active."""
+    from core import config as core_config
+
+    monkeypatch.setattr(core_config, "is_live_alpaca_base_url", lambda url=None: True)
+    monkeypatch.setattr(core_config.settings, "LIVE_TRADING_ENABLED", True, raising=False)
+
+
+@pytest.fixture
+def broker_server() -> Any:
+    """Instantiate the broker MCP server.
+
+    ``BrokerServer()`` registers its tools globally via the MCP registry
+    — that's fine for a test since the registry is idempotent and the
+    functions we care about are methods on the instance anyway.
+    """
+    from mcp_servers.broker.server import BrokerServer
+
+    return BrokerServer()
+
+
+@pytest.fixture
+def trap_httpx(monkeypatch: pytest.MonkeyPatch) -> dict[str, bool]:
+    """Replace ``httpx.AsyncClient`` with a trap that fails the test loudly
+    if any HTTP request is made. If the gate passes through, this probe
+    catches it — the broker MCP tool must NOT reach ``/v2/orders`` for a
+    denylisted strategy on a live config.
+    """
+    probes = {"http_called": False}
+
+    class _TrapClient:
+        async def __aenter__(self) -> Any:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+            probes["http_called"] = True
+            raise AssertionError(
+                "SECURITY: MCP broker submit_order POSTed to Alpaca "
+                "despite the live-gate — bypass regression."
+            )
+
+        async def get(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+            probes["http_called"] = True
+            raise AssertionError("unexpected HTTP GET in gated path")
+
+    # The server module binds ``httpx`` at module scope; patch there.
+    import mcp_servers.broker.server as broker_mod
+
+    class _NSHttpx:
+        AsyncClient = _TrapClient
+
+    monkeypatch.setattr(broker_mod, "httpx", _NSHttpx)
+    return probes
+
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_orb_on_live(
+    live_armed: None, broker_server: Any, trap_httpx: dict[str, bool],
+) -> None:
+    """ORB strategy on live must return a ``rejected_by_gate`` dict — NOT
+    raise, NOT reach httpx.
+
+    Contract: the tool returns a normal-shaped dict so the LLM agent sees
+    a tool-call result; the ``status`` field carries the sentinel
+    ``"rejected_by_gate"`` so downstream planners can treat it distinctly
+    from a broker-side rejection.
+    """
+    result = await broker_server.submit_order(
+        symbol="AAPL", qty=10, side="buy", strategy="orb",
+    )
+    assert result["status"] == "rejected_by_gate"
+    assert result["order_id"] is None
+    assert "denylist" in result["error"]
+    assert trap_httpx["http_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_kama_breakout_on_live(
+    live_armed: None, broker_server: Any, trap_httpx: dict[str, bool],
+) -> None:
+    """``kama_breakout`` is paper-only; rejected with the paper-only reason."""
+    result = await broker_server.submit_order(
+        symbol="AAPL", qty=10, side="buy", strategy="kama_breakout",
+    )
+    assert result["status"] == "rejected_by_gate"
+    assert "paper-only" in result["error"]
+    assert trap_httpx["http_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_unknown_strategy_on_live(
+    live_armed: None, broker_server: Any, trap_httpx: dict[str, bool],
+) -> None:
+    """Spoofed strategy names are rejected too — persona-66 parity."""
+    result = await broker_server.submit_order(
+        symbol="AAPL", qty=10, side="buy", strategy="orbx",
+    )
+    assert result["status"] == "rejected_by_gate"
+    assert "unknown strategy" in result["error"]
+    assert trap_httpx["http_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_submit_order_allows_manual_none_strategy_on_live(
+    live_armed: None, broker_server: Any, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual orders (strategy=None) pass the gate even when live is armed.
+
+    The MCP tool should reach the broker POST in that case. We replace
+    httpx with a happy-path stub that returns a 201-ish order dict so
+    the test can assert the ``order_id`` round-trips cleanly.
+    """
+    class _OKResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "id": "broker-1",
+                "status": "accepted",
+                "symbol": "AAPL",
+                "qty": "10",
+                "side": "buy",
+                "type": "market",
+            }
+
+    class _OKClient:
+        async def __aenter__(self) -> Any:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> _OKResponse:
+            return _OKResponse()
+
+    import mcp_servers.broker.server as broker_mod
+
+    class _NSHttpx:
+        AsyncClient = _OKClient
+
+    monkeypatch.setattr(broker_mod, "httpx", _NSHttpx)
+
+    # Need broker keys so the ``_headers`` helper returns something valid.
+    from core import config as core_config
+
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_API_KEY,
+        "get_secret_value",
+        lambda: "TEST_KEY",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_SECRET_KEY,
+        "get_secret_value",
+        lambda: "TEST_SECRET",
+        raising=False,
+    )
+
+    # Manual / discretionary order — no strategy passed.
+    result = await broker_server.submit_order(symbol="AAPL", qty=10, side="buy")
+    assert result["order_id"] == "broker-1"
+    assert result["status"] == "accepted"

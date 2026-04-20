@@ -6,6 +6,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { useMorningBrief } from "@/hooks/useQueries";
 import type { MorningBriefData } from "@/lib/api";
 import { getMarketSession } from "@/lib/marketHours";
+import { safeSetItem } from "@/lib/storage";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ export function MorningBrief() {
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem(getDismissKey(), "1");
+    safeSetItem(getDismissKey(), "1");
     setDismissed(true);
   };
 

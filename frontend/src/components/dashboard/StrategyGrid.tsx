@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { STRATEGY_META, STRATEGY_ORDER, type StrategyGroup } from "@/lib/strategies";
+import { safeSetItem } from "@/lib/storage";
 
 export { STRATEGY_META, STRATEGY_ORDER };
 
@@ -199,7 +200,8 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
 
   const toggleView = (mode: ViewMode) => {
     setViewMode(mode);
-    localStorage.setItem(VIEW_MODE_KEY, mode);
+    // Safari Private Mode / iOS quota-exceeded throws here; don't crash the tree.
+    safeSetItem(VIEW_MODE_KEY, mode);
   };
 
   return (

@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 import time
 from datetime import datetime
 from typing import Any
@@ -55,6 +56,115 @@ def _is_trading_session_now() -> bool:
 
 _scanner_task: asyncio.Task | None = None
 _should_stop = False
+
+# ─── Liquidity filters (Wave 2H — persona-76 P76-5) ──────────
+# The scanner previously fired on ANY symbol that had a quote subscription,
+# which trivially included penny stocks and thin micro-caps — the exact
+# population that pumps-and-dumps and market-manipulation studies flag
+# first. Each numeric below is enforced in ``_liquidity_filters_ok`` and
+# can be overridden via env for regression workflows.
+LIQUIDITY_MIN_PRICE_USD = float(os.getenv("SCANNER_MIN_PRICE", "5.0"))
+LIQUIDITY_MIN_MARKET_CAP_USD = float(os.getenv("SCANNER_MIN_MARKET_CAP", "300000000"))
+LIQUIDITY_MIN_AVG_DOLLAR_VOLUME_USD = float(os.getenv("SCANNER_MIN_AVG_DOLLAR_VOL", "5000000"))
+# How many trading days to average for the dollar-volume floor. 30d is
+# the standard "liquid name" window used across most of buy-side equity
+# research and matches what the persona asked for.
+LIQUIDITY_AVG_VOL_WINDOW_DAYS = 30
+# Cached lookups — these providers rate-limit and market cap doesn't move
+# meaningfully intra-day, so a 6h TTL is plenty for a safety gate.
+_LIQUIDITY_CACHE_TTL = 6 * 60 * 60
+_liquidity_cache: dict[str, tuple[float, dict[str, float]]] = {}
+
+
+async def _fetch_liquidity_metrics(symbol: str) -> dict[str, float]:
+    """Return ``{"market_cap": float, "avg_dollar_volume_30d": float}``.
+
+    Cached per-symbol for 6h. Queries FMP's profile endpoint for market
+    cap and Polygon's daily bars for the rolling 30-day average dollar
+    volume. Returns zeros for any field we cannot resolve — the caller
+    treats 0 as "fail the floor" (fail-closed) so a broken provider
+    doesn't silently unblock dangerous names.
+    """
+    now = time.monotonic()
+    cached = _liquidity_cache.get(symbol)
+    if cached and (now - cached[0]) < _LIQUIDITY_CACHE_TTL:
+        return cached[1]
+
+    metrics: dict[str, float] = {"market_cap": 0.0, "avg_dollar_volume_30d": 0.0}
+
+    # --- Market cap via FMP profile ---
+    try:
+        from data.providers.fmp_fundamentals import FMPFundamentalsProvider
+        with FMPFundamentalsProvider() as fmp:
+            df = fmp._profile_cached(symbol)
+            if df is not None and len(df):
+                row = df.iloc[0]
+                # FMP's /stable/profile returns ``mktCap``; older callers
+                # saw ``marketCap``. Check both to survive field renames.
+                for key in ("mktCap", "marketCap", "market_cap", "marketCapitalization"):
+                    if key in row and row[key] is not None:
+                        try:
+                            metrics["market_cap"] = float(row[key])
+                            break
+                        except (TypeError, ValueError):
+                            continue
+    except Exception:
+        logger.debug("FMP profile lookup failed for %s", symbol, exc_info=True)
+
+    # --- Average dollar volume from Polygon daily bars ---
+    try:
+        from datetime import date, timedelta
+        from data.providers.polygon_bars import PolygonStockBarProvider
+
+        end = date.today()
+        # Over-fetch 45 calendar days to guarantee ~30 trading days of rows.
+        start = end - timedelta(days=45)
+        with PolygonStockBarProvider() as poly:
+            bars = poly.bars([symbol], start, end, tf="1D")
+            if bars is not None and len(bars):
+                # Tail the last 30 bars (most recent trading days).
+                tail = bars.tail(LIQUIDITY_AVG_VOL_WINDOW_DAYS)
+                # Dollar volume ≈ close × volume (vwap preferred when
+                # available because it reflects where the prints actually
+                # happened; falls back to close).
+                prices = tail["vwap"].fillna(tail["close"])
+                vols = tail["volume"].fillna(0)
+                dollar_vols = (prices * vols).astype(float)
+                if len(dollar_vols):
+                    metrics["avg_dollar_volume_30d"] = float(dollar_vols.mean())
+    except Exception:
+        logger.debug("Polygon bars lookup failed for %s", symbol, exc_info=True)
+
+    _liquidity_cache[symbol] = (now, metrics)
+    return metrics
+
+
+async def _liquidity_filters_ok(symbol: str, price: float) -> tuple[bool, str]:
+    """Return (passed, reason_if_failed).
+
+    Fails closed on every missing data point — a quiet provider outage
+    must not be indistinguishable from "passes the gate". Ordering runs
+    the cheap price check first so a sub-$5 name never triggers FMP or
+    Polygon calls.
+    """
+    if price < LIQUIDITY_MIN_PRICE_USD:
+        return False, (
+            f"price ${price:.2f} below floor ${LIQUIDITY_MIN_PRICE_USD:.2f}"
+        )
+    metrics = await _fetch_liquidity_metrics(symbol)
+    mcap = metrics.get("market_cap", 0.0)
+    if mcap < LIQUIDITY_MIN_MARKET_CAP_USD:
+        return False, (
+            f"market cap ${mcap:,.0f} below floor "
+            f"${LIQUIDITY_MIN_MARKET_CAP_USD:,.0f}"
+        )
+    adv = metrics.get("avg_dollar_volume_30d", 0.0)
+    if adv < LIQUIDITY_MIN_AVG_DOLLAR_VOLUME_USD:
+        return False, (
+            f"avg 30d $-volume ${adv:,.0f} below floor "
+            f"${LIQUIDITY_MIN_AVG_DOLLAR_VOLUME_USD:,.0f}"
+        )
+    return True, "passed"
 
 # ─── Pending Setups ──────────────────────────────────────────
 # Populated by daily/window scans, consumed by the real-time scanner.
@@ -378,6 +488,32 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
 
         if shares < 1 or price <= 0:
             logger.warning("Skipping setup with invalid shares=%d or price=%.2f", shares, price)
+            return
+
+        # Wave 2H (persona-76 P76-5): liquidity floor. Refuse before we
+        # publish alerts or touch the broker so a penny-stock / micro-cap
+        # setup never reaches the fan-out. Ordering puts this BEFORE the
+        # restricted-symbol and live-gate checks so an illiquid name is
+        # rejected for the most informative reason.
+        liquid_ok, liquid_reason = await _liquidity_filters_ok(symbol, float(price))
+        if not liquid_ok:
+            logger.warning(
+                "Realtime setup refused by liquidity filter: symbol=%s reason=%s",
+                symbol, liquid_reason,
+            )
+            return
+
+        # Wave 2H (persona-76 P76-7): restricted-symbol deny-list. Scanner
+        # rejections are a defense-in-depth layer alongside the
+        # order-entry and master-agent checks.
+        try:
+            from core.compliance import assert_not_restricted
+            assert_not_restricted(symbol)
+        except ValueError as exc:
+            logger.warning(
+                "Realtime setup refused by compliance: symbol=%s err=%s",
+                symbol, exc,
+            )
             return
 
         # Live-trading strategy gate. Refuse before publishing alerts or

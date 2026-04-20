@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     # --- Production ---
     PRODUCTION_ORIGIN: str = ""  # e.g. "https://alphadesk.example.com"
 
+    # --- Compliance (Wave 2H — persona 76 P76-7) ---
+    # Operator-owned deny-list. Populated either inline (comma-separated) or
+    # via a file path. Both sources union together at ``core.compliance``
+    # import and the resulting frozenset gates every order path (HTTP,
+    # master_agent routing, realtime scanner). Empty default so the gate
+    # only fires when the operator opts in.
+    RESTRICTED_SYMBOLS: str = ""  # e.g. "GME,AMC,BBBY"
+    RESTRICTED_SYMBOLS_FILE: str = ""  # path to YAML/JSON list (optional)
+
     # --- Derived helpers ---
     @property
     def is_production(self) -> bool:

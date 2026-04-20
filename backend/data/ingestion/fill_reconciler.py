@@ -154,7 +154,31 @@ async def _apply_event(event: dict[str, Any]) -> None:
     client_order_id = order.get("client_order_id") or event.get("client_order_id")
     broker_order_id = event.get("order_id") or order.get("id")
     fill_price = event.get("fill_price") or order.get("filled_avg_price")
+    # Wave 2G — persona-79 / persona-85 gap 1: do NOT fall back to
+    # ``datetime.now()`` (or any client clock) when Alpaca's payload lacks
+    # a fill timestamp. The local Trade row keeps ``filled_at = None``
+    # rather than a fabricated value the auditor can't trust. Only the
+    # genuine broker-supplied timestamp populates the column.
     fill_ts = event.get("timestamp") or order.get("filled_at") or order.get("updated_at")
+
+    # Wave 2G / persona-85 gap 2: capture the execution venue from the
+    # Alpaca payload when present. The field has lived in a few places
+    # across the broker's API generations (top-level, on the order
+    # subobject, or nested inside an execution sub-record), so we probe
+    # them in order of specificity. Truncate to the column width (16
+    # chars — matches typical NYSE / ARCA / EDGX / CITADEL_INT
+    # identifiers).
+    execution_obj = order.get("execution") if isinstance(order.get("execution"), dict) else None
+    execution_venue = (
+        event.get("execution_venue")
+        or order.get("execution_venue")
+        or order.get("venue")
+        or (execution_obj.get("venue") if execution_obj else None)
+    )
+    if isinstance(execution_venue, str):
+        execution_venue = execution_venue.strip()[:16] or None
+    else:
+        execution_venue = None
 
     if not client_order_id and not broker_order_id:
         logger.warning(
@@ -176,6 +200,52 @@ async def _apply_event(event: dict[str, Any]) -> None:
         filled_avg_price = None
 
     account_env = _resolve_account_env()
+
+    # Wave 2G / persona-85 gap 10: NBBO snapshot at fill time. Wave C is
+    # the producer side (writes the latest tick to a Redis hash keyed by
+    # symbol). If that key is present we read bid/ask and compute the
+    # signed price-improvement against the mid. If the cache hasn't
+    # shipped yet (or is empty for this symbol), all three NBBO columns
+    # stay None — better than persisting a stale or fabricated quote.
+    # TODO(persona-85 gap 10): wire up the dedicated NBBO Redis cache
+    # once Wave C ships ``CHANNEL_NBBO_TICKS`` + the corresponding
+    # subscriber. Until then this block is intentionally a no-op.
+    nbbo_bid: Decimal | None = None
+    nbbo_ask: Decimal | None = None
+    price_improvement_cents: Decimal | None = None
+    side = (event.get("side") or order.get("side") or "").lower()
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        symbol_for_quote = event.get("symbol") or order.get("symbol")
+        if redis is not None and symbol_for_quote:
+            quote = await redis.hgetall(f"nbbo:{symbol_for_quote}")
+            if quote:
+                bid_raw = quote.get("bid") if isinstance(quote, dict) else None
+                ask_raw = quote.get("ask") if isinstance(quote, dict) else None
+                if bid_raw is not None:
+                    nbbo_bid = Decimal(str(bid_raw))
+                if ask_raw is not None:
+                    nbbo_ask = Decimal(str(ask_raw))
+                if (nbbo_bid is not None
+                        and nbbo_ask is not None
+                        and filled_avg_price is not None
+                        and side in ("buy", "sell")):
+                    mid = (nbbo_bid + nbbo_ask) / Decimal(2)
+                    # Sign so that a buy filled BELOW the mid + a sell
+                    # filled ABOVE the mid both report POSITIVE
+                    # improvement (cents). Multiply by 100 to convert
+                    # dollars-per-share to cents-per-share.
+                    sign = Decimal(1) if side == "buy" else Decimal(-1)
+                    price_improvement_cents = (
+                        (mid - filled_avg_price) * sign * Decimal(100)
+                    )
+    except Exception:
+        # NBBO enrichment is best-effort; never block the fill update.
+        logger.debug(
+            "fill_reconciler: NBBO enrichment skipped (event=%s)",
+            event_name, exc_info=True,
+        )
 
     # Retry on DB error with exponential backoff.  Cap at 60s so a long
     # outage doesn't pin a task in a tight retry loop; if we can't write
@@ -242,7 +312,8 @@ async def _apply_event(event: dict[str, Any]) -> None:
                     return
 
                 # Apply the state transition + fill metadata.  These
-                # columns are the Wave B additions (migration 0003).
+                # columns are the Wave B additions (migration 0003) plus
+                # the Wave 2G execution-quality additions (migration 0004).
                 trade.status = new_status
                 if broker_order_id and not trade.broker_order_id:
                     trade.broker_order_id = broker_order_id
@@ -265,6 +336,27 @@ async def _apply_event(event: dict[str, Any]) -> None:
                 if not trade.account_env or trade.account_env == "paper":
                     trade.account_env = account_env
 
+                # Wave 2G — persona-85 gaps 1, 2, 10: stamp the
+                # execution-quality columns. Each is independently nullable
+                # and we only write when we have a real value, so a payload
+                # missing the venue or NBBO doesn't clobber a previously-
+                # stamped value with NULL.
+                if execution_venue and not trade.execution_venue:
+                    trade.execution_venue = execution_venue
+                if nbbo_bid is not None and trade.nbbo_bid_at_fill is None:
+                    trade.nbbo_bid_at_fill = nbbo_bid
+                if nbbo_ask is not None and trade.nbbo_ask_at_fill is None:
+                    trade.nbbo_ask_at_fill = nbbo_ask
+                if price_improvement_cents is not None and trade.price_improvement_cents is None:
+                    trade.price_improvement_cents = price_improvement_cents
+
+                # The session.commit() invokes SQLAlchemy's optimistic-
+                # locking machinery: the UPDATE WHERE includes
+                # ``version = :old_version`` and the column is
+                # auto-bumped on each successful write. A concurrent
+                # transition to the same row will raise StaleDataError
+                # on commit; the outer retry loop will catch that and
+                # re-fetch on the next attempt.
                 await db.commit()
             logger.info(
                 "fill_reconciler: %s → status=%s client_order_id=%s broker_order_id=%s "

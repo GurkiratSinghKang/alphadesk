@@ -36,6 +36,19 @@ _STREAM_REPLAY_BLOCK_MS = 50
 # disconnect window, 500 is a comfortable upper bound.
 _STREAM_REPLAY_COUNT = 500
 
+# Wave 2I Fix 6 (P83-5): initial auth handshake timeout. Tor / VPN RTT can
+# push the first message past 5s on a cold circuit; a 20s budget gives the
+# client time to complete the JSON exchange without breaking fast paths
+# (under normal conditions the auth message arrives in a few hundred ms).
+_WS_AUTH_TIMEOUT_SECONDS = 20.0
+
+# Wave 2I Fix 8 (P81-5): how often to re-validate the JWT while the
+# WebSocket is open. 5 minutes balances closing stale sessions promptly
+# against the Redis load of revalidating every single live client on every
+# message. With ACCESS_TOKEN_EXPIRE_MINUTES=480 (8 hours) a session
+# survives roughly 96 revalidations before naturally expiring.
+_WS_JWT_REVALIDATE_INTERVAL_SECONDS = 300
+
 # Module-level singleton for the Redis listener task (BUG-036)
 _listener_task: asyncio.Task | None = None
 _listener_lock = asyncio.Lock()
@@ -336,6 +349,90 @@ async def _maybe_stop_listener() -> None:
             logger.info("Redis listener task stopped (no clients)")
 
 
+async def _revalidate_jwt_loop(
+    ws: WebSocket,
+    token: str,
+    username: str,
+) -> None:
+    """Periodically re-validate the stored JWT for ``ws``.
+
+    Wave 2I Fix 8 (P81-5). Without this, a WebSocket opened at 09:00 with an
+    access token that expires at 17:00 would keep receiving data through the
+    next day because the token is only checked on the initial handshake.
+    Here we re-decode every ``_WS_JWT_REVALIDATE_INTERVAL_SECONDS`` and:
+
+      * Close with 4001 if the token is now expired.
+      * Close with 4001 if the token was revoked (operator logged-out / the
+        refresh-rotate step revoked the jti).
+      * Close with 4001 if password_version or session_epoch moved past the
+        snapshotted values (covers change-password / logout-all).
+
+    Running as its own task so the message loop stays unblocked. Cancelled
+    when the WebSocket disconnects via ``finally: task.cancel()`` below.
+    """
+    from core.auth import (
+        decode_token,
+        get_password_version,
+        get_session_epoch,
+        is_token_revoked,
+    )
+
+    try:
+        while True:
+            await asyncio.sleep(_WS_JWT_REVALIDATE_INTERVAL_SECONDS)
+
+            # Re-decode. decode_token raises HTTPException on expiry /
+            # signature failure; we catch that and close rather than
+            # propagate (HTTPException is an ASGI concept, doesn't belong
+            # in the WS lifecycle).
+            try:
+                payload = decode_token(token, expected_type="access")
+            except Exception:
+                logger.info("WS revalidation: token expired/invalid, closing")
+                try:
+                    await ws.close(code=4001, reason="Token expired")
+                except Exception:
+                    pass
+                return
+
+            jti = payload.get("jti")
+            if jti and await is_token_revoked(jti):
+                logger.info("WS revalidation: token revoked, closing")
+                try:
+                    await ws.close(code=4001, reason="Token revoked")
+                except Exception:
+                    pass
+                return
+
+            # Password-version / session-epoch checks mirror ``require_auth``.
+            try:
+                token_pv = int(payload.get("pv", 1))
+                token_epoch = int(payload.get("epoch", 1))
+                current_pv = await get_password_version(username)
+                current_epoch = await get_session_epoch(username)
+            except Exception:
+                # Redis down — fail closed as elsewhere.
+                logger.warning("WS revalidation: auth counter read failed, closing", exc_info=True)
+                try:
+                    await ws.close(code=4001, reason="Auth unavailable")
+                except Exception:
+                    pass
+                return
+
+            if token_pv < current_pv or token_epoch < current_epoch:
+                logger.info(
+                    "WS revalidation: stale pv/epoch (pv=%d<%d, epoch=%d<%d), closing",
+                    token_pv, current_pv, token_epoch, current_epoch,
+                )
+                try:
+                    await ws.close(code=4001, reason="Session invalidated")
+                except Exception:
+                    pass
+                return
+    except asyncio.CancelledError:
+        return
+
+
 async def websocket_endpoint(ws: WebSocket) -> None:
     """Main WebSocket endpoint handler.
 
@@ -350,8 +447,14 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     """
     await ws.accept()
 
+    # Token retained across the lifetime of the connection so the background
+    # revalidator can re-decode it every _WS_JWT_REVALIDATE_INTERVAL_SECONDS
+    # (Wave 2I Fix 8).
+    retained_token: str | None = None
+    revalidate_task: asyncio.Task | None = None
+
     try:
-        # Require auth as first message within 5 seconds
+        # Require auth as first message within _WS_AUTH_TIMEOUT_SECONDS
         from core.auth import decode_token, is_token_revoked
 
         resolved_user_id = "default"
@@ -366,10 +469,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     return
                 # Capture username/sub for per-user stream scoping (Wave C).
                 resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                retained_token = cookie_token
                 await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
             else:
-                # Fall back to message-based auth
-                raw = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
+                # Fall back to message-based auth. Timeout extended in Wave 2I
+                # Fix 6 (P83-5) for Tor / VPN RTT — see _WS_AUTH_TIMEOUT_SECONDS.
+                raw = await asyncio.wait_for(ws.receive_text(), timeout=_WS_AUTH_TIMEOUT_SECONDS)
                 msg = orjson.loads(raw)
                 if msg.get("action") != "auth" or not msg.get("token"):
                     await ws.send_text(orjson.dumps({"error": "First message must be auth"}).decode())
@@ -381,6 +486,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await ws.close(code=1008, reason="Token revoked")
                     return
                 resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                retained_token = msg["token"]
                 await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
         except asyncio.TimeoutError:
             await ws.close(code=4001, reason="Auth timeout")
@@ -395,6 +501,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         await manager.register(ws, user_id=resolved_user_id)
 
         await _ensure_listener_started()
+
+        # Kick off the periodic revalidator. Runs concurrently with the
+        # receive loop; cancelled in the finally block below.
+        if retained_token is not None:
+            revalidate_task = asyncio.create_task(
+                _revalidate_jwt_loop(ws, retained_token, resolved_user_id)
+            )
 
         while True:
             raw = await ws.receive_text()
@@ -431,5 +544,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     except Exception:
         logger.error("WebSocket error", exc_info=True)
     finally:
+        if revalidate_task is not None and not revalidate_task.done():
+            revalidate_task.cancel()
+            try:
+                await revalidate_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.debug("revalidate task raised on cleanup", exc_info=True)
         await manager.disconnect(ws)
         await _maybe_stop_listener()

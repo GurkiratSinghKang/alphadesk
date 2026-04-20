@@ -192,6 +192,31 @@ export const RISK_CLAUSES: StaticClause[] = [
       </EditorialP>
     ),
   },
+  // P85-3 — PFOF disclosure. Required by SEC Rule 606 transparency expectations
+  // that introducing brokers disclose PFOF practices of their executing broker.
+  // AlphaDesk itself does not receive PFOF; Alpaca may.
+  {
+    index: "08a",
+    title: "How your orders are executed",
+    body: (
+      <EditorialP>
+        Alpaca Securities LLC is our executing broker. Alpaca may receive
+        payment for order flow (PFOF) from market makers. This is a common
+        U.S. industry practice permitted by the SEC. Alpaca publishes a
+        quarterly SEC Rule 606 report at{" "}
+        <a
+          href="https://alpaca.markets/disclosures"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 decoration-dotted hover:text-brand"
+        >
+          alpaca.markets/disclosures
+        </a>
+        . AlphaDesk does not negotiate for, request, or receive PFOF. Past
+        execution quality does not guarantee future execution quality.
+      </EditorialP>
+    ),
+  },
   {
     index: "09",
     title: "Counterparty risk",
