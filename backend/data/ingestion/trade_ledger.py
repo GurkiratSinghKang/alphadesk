@@ -93,6 +93,21 @@ def _get_sync_engine() -> Any | None:
     than silently fall back to an in-memory list — the old behaviour caused
     per-worker divergence where some workers saw real trades and others saw
     a ghost memory-only copy (P0 #5).
+
+    Wave 6α Fix 5 (persona-124 P1): pool dimensions now mirror the main
+    async engine (``pool_size=20, max_overflow=10``) instead of the old
+    starvation-prone ``pool_size=3, max_overflow=2``. Under the old 3+2
+    cap a burst of in-process sync ledger calls on a single worker could
+    serialise against the pool and hold the event loop (sync calls invoked
+    from an async context block the loop thread). The async route paths
+    in ``portfolio.py``, ``trades.py`` and ``strategies.py`` no longer hit
+    the sync engine directly (they use ``core.database._get_session_factory``
+    async sessions); the remaining sync callers are the pipeline / strategy
+    runners, which run outside the request path.
+
+    For async callers that *do* still need the legacy sync API we expose
+    ``TradeLedger.async_*`` wrappers below that route through
+    ``asyncio.to_thread``, so a sync DB trip never blocks the event loop.
     """
     global _sync_engine, _sync_engine_failed
     if _sync_engine is not None:
@@ -105,8 +120,13 @@ def _get_sync_engine() -> Any | None:
         _sync_engine = create_engine(
             _sync_database_url(),
             pool_pre_ping=True,
-            pool_size=3,
-            max_overflow=2,
+            # Mirror the async engine's dimensions (core.database._get_engine)
+            # so a burst of sync ledger calls can't starve while the async
+            # side is still under-utilised.
+            pool_size=20,
+            max_overflow=10,
+            pool_recycle=300,
+            pool_timeout=5.0,
         )
         # Touch the connection to fail fast if DB unreachable.
         with _sync_engine.connect() as conn:
@@ -672,6 +692,88 @@ class TradeLedger:
             logger.error("TradeLedger.get: %s", exc)
             return None
 
+    def list_paginated(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "entry_time",
+        descending: bool = True,
+        **filters: Any,
+    ) -> list[dict[str, Any]]:
+        """Return a page of trades with LIMIT/OFFSET/ORDER BY pushed into SQL.
+
+        Wave 6α Fix 2 (persona-124 P0): callers that just want a paginated
+        slice previously routed through ``_data["trades"]`` (→ ``_list_all``
+        → SELECT \\*) and then applied the sort + window in Python. At 50M
+        rows that blew the event loop. This method keeps the page-cost
+        independent of total-row-count.
+
+        Parameters
+        ----------
+        limit, offset:
+            Window size + skip count. Bounded by the caller — the route
+            layer already validates these via Pydantic ``Query`` constraints.
+        order_by:
+            Column name to sort on. Validated against the same column
+            allowlist as ``list()`` to prevent injection.
+        descending:
+            ``True`` for DESC (newest first — the dashboard default),
+            ``False`` for ASC.
+        filters:
+            Equality predicates applied as an ``AND``-chain on the WHERE
+            clause. Column names validated against the allowlist.
+        """
+        allowed = {
+            "id", "symbol", "shares", "entry_price", "entry_time", "stop_loss",
+            "take_profit", "conviction", "rationale", "strategy", "status",
+            "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
+            "side",
+        }
+        if order_by not in allowed:
+            raise ValueError(
+                f"TradeLedger.list_paginated: unknown order_by column "
+                f"{order_by!r}; allowed: {sorted(allowed)}"
+            )
+        bad = [k for k in filters if k not in allowed]
+        if bad:
+            raise ValueError(
+                f"TradeLedger.list_paginated: unknown filter column(s) "
+                f"{bad!r}; allowed: {sorted(allowed)}"
+            )
+        # Bound defensively — route layer already validates but this is
+        # the public API, callable from anywhere.
+        try:
+            lim = max(1, min(int(limit), 10_000))
+            off = max(0, int(offset))
+        except (TypeError, ValueError):
+            raise ValueError("limit/offset must be integers")
+
+        if self._engine is None:
+            logger.error(
+                "TradeLedger.list_paginated: DB unavailable — returning empty page"
+            )
+            return []
+
+        direction = "DESC" if descending else "ASC"
+        where_sql = ""
+        if filters:
+            where_sql = "WHERE " + " AND ".join(
+                f"{k} = :{k}" for k in filters
+            )
+        sql = (
+            f"SELECT * FROM trade_ledger {where_sql} "
+            f"ORDER BY {order_by} {direction} NULLS LAST, id {direction} "
+            f"LIMIT :_limit OFFSET :_offset"
+        )
+        params: dict[str, Any] = {**filters, "_limit": lim, "_offset": off}
+        try:
+            with self._engine.connect() as conn:
+                rows = conn.execute(_text(sql), params).all()
+            return [_row_to_dict(r) for r in rows]
+        except Exception as exc:
+            logger.error("TradeLedger.list_paginated: %s", exc)
+            return []
+
     # ------------------------------------------------------------------
     # Queries (legacy API, preserved verbatim)
     # ------------------------------------------------------------------
@@ -1048,3 +1150,61 @@ class TradeLedger:
             else:
                 p["return_pct"] = 0.0
         return perf
+
+    # ------------------------------------------------------------------
+    # Async wrappers — preserve the sync API (every existing caller keeps
+    # working) while letting async code invoke ledger operations without
+    # blocking the event loop.
+    #
+    # Wave 6α Fix 5 (persona-124 P1): the sync API fires sync DB I/O via
+    # SQLAlchemy's sync engine. When invoked from an async handler
+    # (FastAPI request path, background task on the asyncio loop), that
+    # blocks the loop thread for the duration of the round-trip. Wrapping
+    # in ``asyncio.to_thread`` dispatches the sync call onto the default
+    # threadpool executor so the loop stays responsive.
+    #
+    # Only a minimal set of hot methods is wrapped here — callers that
+    # need something else should either move to direct async SQL (see
+    # ``list_paginated`` + the ``_get_session_factory`` pattern in the
+    # routes) or add an async wrapper mirroring the shape below.
+    # ------------------------------------------------------------------
+
+    async def async_list_paginated(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "entry_time",
+        descending: bool = True,
+        **filters: Any,
+    ) -> list[dict[str, Any]]:
+        """Async counterpart to :meth:`list_paginated` — non-blocking."""
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.list_paginated,
+            limit=limit,
+            offset=offset,
+            order_by=order_by,
+            descending=descending,
+            **filters,
+        )
+
+    async def async_get_open_positions(self) -> list[dict[str, Any]]:
+        """Async counterpart to :meth:`get_open_positions`."""
+        import asyncio
+
+        return await asyncio.to_thread(self.get_open_positions)
+
+    async def async_get_closed_trades(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Async counterpart to :meth:`get_closed_trades`."""
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.get_closed_trades,
+            start_date=start_date,
+            end_date=end_date,
+        )

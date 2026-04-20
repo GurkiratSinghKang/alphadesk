@@ -160,6 +160,22 @@ async def sweep_once() -> dict[str, int]:
         # Default tier — everything we didn't list explicitly.  The NOT
         # IN clause mirrors RETENTION_DAYS_BY_EVENT.keys() so the set is
         # stable against future policy edits.
+        #
+        # Wave 6α Fix 4 (persona-124 P1): the ``(event, ts DESC)`` index
+        # CANNOT serve ``event NOT IN (...)`` — Postgres has to seq-scan
+        # the whole ``audit_log`` table to eliminate rows by anti-match.
+        # Alembic migration ``0008_trade_ledger_perf_indexes`` adds a
+        # partial index scoped to the exact predicate used here:
+        #
+        #     CREATE INDEX ix_audit_log_default_cleanup
+        #         ON audit_log (ts)
+        #         WHERE retained_for_compliance IS FALSE
+        #
+        # That turns the default-tier DELETE into a bounded index range
+        # scan over ``ts < cutoff``.  We also rely on the explicit
+        # per-event tiers above having already pruned the known events
+        # within their own (event, ts) index, so the default scan only
+        # touches rows the planner deems relevant.
         known_events = list(RETENTION_DAYS_BY_EVENT.keys())
         cutoff = now - timedelta(days=DEFAULT_RETENTION_DAYS)
         stmt = sa_delete(AuditLog).where(

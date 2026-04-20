@@ -42,6 +42,11 @@ MODEL_HAIKU = "haiku"
 # 4. IPv4 / IPv6 addresses — occasionally sneaked into logs via
 #    ``request.client.host``.  Replaced with ``<IP>``.
 # 5. Email addresses — RFC-5322-lite pattern, replaced with ``<EMAIL>``.
+# 6. Bearer tokens — ``Bearer <token>`` strings leaking from Authorization
+#    headers or agent context dumps. Replaced with ``Bearer <TOKEN>``.
+# 7. JWTs — ``eyJ...``-prefix three-segment tokens. Replaced with ``<JWT>``.
+# 8. Alpaca API keys — ``PK...`` (key id) and ``SK...`` (secret) prefix
+#    tokens. Replaced with ``<ALPACA_KEY>`` / ``<ALPACA_SECRET>``.
 #
 # What we DON'T scrub
 # -------------------
@@ -80,6 +85,29 @@ _IPV6_RE = re.compile(r"\b[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){2,7}\b")
 # Email — practical, not RFC-strict.
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 
+# Wave 6γ (persona-108 + Round 5 deferred) — additional secret/credential
+# patterns. These must scrub BEFORE the generic UUID/ID patterns where the
+# surface syntax could otherwise be ambiguous.
+#
+# JWT: three base64url segments separated by dots, starting with ``eyJ``
+# (the base64 encoding of ``{"`` which prefixes every JWT header).
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+
+# Bearer token: ``Bearer `` followed by an opaque token. Case-sensitive on
+# the scheme name to avoid chewing up unrelated prose that mentions
+# "bearer" as a word. Redacts BOTH the scheme and the token so partial
+# tokens can't survive.
+_BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9_.\-]+")
+
+# Alpaca key id: ``PK`` prefix + ≥16 upper-alnum chars (the shortest live
+# id observed in practice is 20 chars; 16 is a conservative minimum that
+# still doesn't chew up protein ticker "PKX" or similar).
+_ALPACA_KEY_RE = re.compile(r"\bPK[A-Z0-9]{16,}\b")
+
+# Alpaca secret: ``SK`` prefix + ≥16 upper-alnum chars.  Mirrors the
+# format and length of the key id; same conservative floor.
+_ALPACA_SECRET_RE = re.compile(r"\bSK[A-Z0-9]{16,}\b")
+
 
 def _scrub_pii(text: str) -> str:
     """Redact personally-identifiable fields from ``text``.
@@ -103,6 +131,15 @@ def _scrub_pii(text: str) -> str:
         # Length gate avoids pathological cases where ADMIN_USERNAME is a
         # common English word ("a", "me") that would chew the prompt.
         text = re.sub(rf"\b{re.escape(admin_username)}\b", "<USER>", text)
+
+    # Credentials FIRST — a JWT containing '-' / '_' base64url chars must
+    # not be partially chewed by a later, narrower pattern. Same rationale
+    # for Bearer / Alpaca keys: strip the whole token before anything else
+    # tries to interpret its sub-structure.
+    text = _JWT_RE.sub("<JWT>", text)
+    text = _BEARER_RE.sub("Bearer <TOKEN>", text)
+    text = _ALPACA_KEY_RE.sub("<ALPACA_KEY>", text)
+    text = _ALPACA_SECRET_RE.sub("<ALPACA_SECRET>", text)
 
     # Broker order id (UUID) — scrub BEFORE the order-id shapes, so a
     # stray UUID doesn't get mis-tagged as <ORDER_ID>.

@@ -445,13 +445,20 @@ export default function SettingsPage() {
                 lightweight-charts, the marquee, the pulse dots, etc. The
                 rest of the app honours `prefers-reduced-motion` instead.
                 Honest move: don't ship a setting we can't back. */}
+            {/* Wave 6γ (persona-112 + Round 5 deferred): "Light" removed
+                from the theme picker. The ``.light {}`` CSS tokens were
+                never fleshed out, so toggling the radio produced no visible
+                change — a promise the app couldn't keep. Until the light
+                palette is tuned, only System and Dark are offered, and
+                ``ThemeController`` treats a persisted "light" preference as
+                "dark" so users who flipped the radio pre-fix land on a
+                theme that actually renders. */}
             <div className="flex items-center justify-between gap-4 py-1.5">
               <div>
                 <p className="text-xs font-medium text-foreground">Theme</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Dark is fully tuned. Light mode is Phase 2 — switching gives
-                  you agency today even while light surfaces are still being
-                  polished.
+                  Dark mode is fully tuned today. Light mode is coming in a
+                  future release.
                 </p>
               </div>
               <div
@@ -459,7 +466,7 @@ export default function SettingsPage() {
                 aria-label="Theme preference"
                 className="flex rounded-md border border-border overflow-hidden"
               >
-                {(["system", "dark", "light"] as const).map((opt) => (
+                {(["system", "dark"] as const).map((opt) => (
                   <button
                     key={opt}
                     type="button"

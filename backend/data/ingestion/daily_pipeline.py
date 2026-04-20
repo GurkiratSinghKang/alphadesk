@@ -239,6 +239,16 @@ async def _is_trading_halted() -> bool:
     # falls through to False — otherwise a test / fresh-install
     # environment with no halt ever set would permanently appear
     # halted.
+    #
+    # Wave 6β Fix 7 (from Round-5 deferred) — when BOTH Postgres and
+    # Redis are effectively unreachable (pg_ok=False AND Redis key
+    # absent / Redis down), we MUST fail-closed in production.  The
+    # pre-Wave-4P "missing key = not halted" semantics are preserved
+    # only when ``SKIP_DB_INIT=True`` (the test / offline dev loop).
+    # In production, ``pg_ok=False`` implies an actual DB outage —
+    # returning False in that state means trading proceeds against
+    # an unknown halt status, which is the exact scenario the
+    # kill-switch exists to prevent.
     try:
         from core.redis import cache_get
         result = await asyncio.wait_for(
@@ -247,10 +257,22 @@ async def _is_trading_halted() -> bool:
         )
         if result is not None and isinstance(result, dict):
             return bool(result.get("halted", False))
-        # Key absent in Redis.  Preserves the pre-Wave-4P semantics
-        # (missing key = not halted) so test / first-boot environments
-        # without Postgres keep working.
-        return False
+        # Key absent in Redis.
+        if skip_db:
+            # Test / SKIP_DB_INIT loop — no DB ever, absent key ==
+            # "no halt was ever set".  Preserves pre-Wave-4P semantics.
+            return False
+        # Production branch.  Postgres read FAILED above (pg_ok=False)
+        # AND Redis has no cache entry.  Both stores are unusable for a
+        # positive "not halted" answer — fail CLOSED.  Logged at ERROR
+        # so oncall is paged by the log pipeline.
+        logger.error(
+            "Halt-flag check: both Postgres read AND Redis cache lookup "
+            "are unusable (pg_ok=%s, redis_key_absent=True); "
+            "treating as HALTED for safety",
+            pg_ok,
+        )
+        return True
     except asyncio.TimeoutError:
         logger.error(
             "Halt-flag check timed out after %.2fs; treating as HALTED for safety",

@@ -60,18 +60,38 @@ async def receive_tradingview_webhook(
     request: Request,
     x_tv_secret: str | None = Header(None, alias="X-TV-Secret"),
     x_tv_timestamp: str | None = Header(None, alias="X-TV-Timestamp"),
+    x_tv_signature: str | None = Header(None, alias="X-TV-Signature"),
 ) -> WebhookResponse:
     """Receive and process TradingView webhook alerts.
 
-    Validates the webhook secret, parses the alert, and routes it to the
+    Validates the webhook signature, parses the alert, and routes it to the
     appropriate handler (direct trade execution, agent analysis, or
     notification).
 
-    TradingView alert message should be JSON with the TradingViewAlert schema.
-    Include the TRADINGVIEW_WEBHOOK_SECRET as an X-TV-Secret header or in the
-    JSON body as 'secret'. An ``X-TV-Timestamp`` header (unix seconds) is
-    required and must be within ``TV_REPLAY_WINDOW_SECONDS`` of server time;
-    this prevents replay of captured webhook payloads.
+    Authentication model (Wave 6γ hardening — persona 123 P1):
+    -----------------------------------------------------------
+    Prior revisions accepted an ``X-TV-Secret`` header (or ``secret`` in body)
+    and compared it, constant-time, against the server-side
+    ``TRADINGVIEW_WEBHOOK_SECRET``. That scheme is vulnerable to replay of a
+    captured payload with a fresh timestamp — the body is unsigned, so an
+    attacker who ever captures a legitimate request (network MITM before the
+    Caddy TLS terminator, intermediate logging, etc.) can forward the static
+    secret with any body they like.
+
+    The correct scheme, enforced here, is HMAC-SHA256 over the concatenation
+    ``<X-TV-Timestamp>:<raw request body>`` keyed on the shared secret. The
+    attacker would now need the secret itself to forge a signature for any
+    new body. Configure TradingView to send ``X-TV-Signature`` computed as::
+
+        hex(HMAC_SHA256(secret, f"{timestamp}:{body}"))
+
+    Legacy ``X-TV-Secret`` / ``secret`` in body are accepted only for backward
+    compatibility during rollout and are deprecated; operators should migrate
+    their TradingView alerts to send the signature header.
+
+    An ``X-TV-Timestamp`` header (unix seconds) is required and must be within
+    ``TV_REPLAY_WINDOW_SECONDS`` of server time; this prevents replay of
+    captured webhook payloads even for the legacy secret path.
     """
     import uuid
 
@@ -150,9 +170,20 @@ async def receive_tradingview_webhook(
             detail=f"X-TV-Timestamp outside ±{TV_REPLAY_WINDOW_SECONDS}s window",
         )
 
+    # Read the raw body bytes BEFORE parsing — the HMAC signature is
+    # computed over the exact bytes the client sent, not over a re-serialised
+    # dict (whitespace / key ordering would differ and every signature would
+    # mismatch). ``request.body()`` is cached; ``request.json()`` below
+    # consumes the same bytes.
+    try:
+        body_bytes = await request.body()
+    except Exception as e:  # pragma: no cover - defensive
+        raise HTTPException(status_code=400, detail=f"Could not read request body: {e}")
+    body_raw = body_bytes.decode("utf-8", errors="replace")
+
     # Parse JSON body with error handling (BUG-034)
     try:
-        body = await request.json()
+        body = json.loads(body_raw) if body_raw else {}
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid JSON payload: {e}")
 
@@ -173,22 +204,52 @@ async def receive_tradingview_webhook(
     if not secret:
         raise HTTPException(status_code=503, detail="Webhook secret not configured")
 
-    # Security audit R6: coerce provided_secret to ``str`` defensively. If the
-    # JSON body carries ``{"secret": 123}`` (integer) then
-    # ``hmac.compare_digest`` raises TypeError ("comparing str with int") and
-    # surfaces as a 500 that leaks the stack. Empty string on non-str keeps
-    # compare_digest well-defined and constant-time against the real secret.
-    body_secret = body.get("secret", "")
-    if not isinstance(body_secret, str):
-        body_secret = ""
-    if x_tv_secret is not None and not isinstance(x_tv_secret, str):
-        x_tv_secret = ""
-    provided_secret = x_tv_secret or body_secret
-    if not isinstance(provided_secret, str):
-        provided_secret = ""
-    if not hmac.compare_digest(provided_secret, secret):
-        logger.warning("Invalid TradingView webhook secret from %s", client_ip)
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    # ------------------------------------------------------------------
+    # Wave 6γ (persona 123 P1): HMAC over timestamp+body, not static secret.
+    # ------------------------------------------------------------------
+    # Preferred path — caller supplied ``X-TV-Signature`` computed over
+    # ``f"{timestamp}:{body_raw}"``. Compare constant-time against our
+    # recomputation; if it matches, we know the caller holds the secret AND
+    # signed THIS body at THIS timestamp. Replay of a captured request into
+    # a fresh timestamp window doesn't help because the body-timestamp
+    # combination was signed, not just the secret.
+    signed_message = f"{x_tv_timestamp}:{body_raw}".encode("utf-8")
+    expected_sig = hmac.new(secret.encode("utf-8"), signed_message, hashlib.sha256).hexdigest()
+
+    provided_sig: str | None = x_tv_signature
+    if provided_sig is not None and not isinstance(provided_sig, str):
+        provided_sig = None
+
+    if provided_sig:
+        if not hmac.compare_digest(provided_sig, expected_sig):
+            logger.warning("Invalid TradingView webhook signature from %s", client_ip)
+            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+    else:
+        # Backward-compat path — legacy callers that pre-date the signature
+        # scheme may still send a bare secret via header or body. This path
+        # is DEPRECATED and documented as such in the docstring above; we
+        # keep it to avoid breaking an operator mid-migration. The timestamp
+        # replay window (already enforced above) is the only defence for
+        # this path, which is why we prefer the signature scheme.
+        body_secret = body.get("secret", "")
+        if not isinstance(body_secret, str):
+            body_secret = ""
+        legacy_secret = x_tv_secret if isinstance(x_tv_secret, str) else ""
+        provided_secret = legacy_secret or body_secret
+        if not isinstance(provided_secret, str) or not provided_secret:
+            logger.warning(
+                "TradingView webhook missing both X-TV-Signature and legacy secret from %s",
+                client_ip,
+            )
+            raise HTTPException(status_code=403, detail="Missing webhook signature")
+        if not hmac.compare_digest(provided_secret, secret):
+            logger.warning("Invalid TradingView webhook secret from %s", client_ip)
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+        logger.info(
+            "TradingView webhook accepted via legacy secret header from %s; "
+            "migrate alert to X-TV-Signature",
+            client_ip,
+        )
 
     # Remove secret from body before processing
     body.pop("secret", None)

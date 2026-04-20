@@ -56,8 +56,32 @@ ET = ZoneInfo("America/New_York")
 # Pre-market analysis (6:00 AM) — scan overnight events
 PREMARKET_STRATEGIES = ["pead", "regime_adaptive"]
 
-# Market open (9:35 AM) — execute pre-market signals
+# ─── Wave 6α Fix 7 (persona-124 P1): 09:30 MOO window for PEAD ───
+# Bernard & Thomas (1989) specifies PEAD T+1 entries at the OPEN price,
+# which in a US-equity market means an MOO order filled at the official
+# opening auction. Alpaca accepts MOO orders submitted up to 09:28 ET;
+# the order then executes in the 09:30:00 opening cross.
+#
+# The old ``open`` window fired at 09:35 ET — five minutes into the
+# session. PEAD MOO orders submitted at that time are REJECTED by the
+# exchange (OPEN state already cleared) and would typically get rewritten
+# to plain market orders, which fill at the *current* quote, not the
+# opening print. The result: every PEAD entry slipped by a few tens of
+# basis points, which systematically blunts the edge the academic paper
+# depends on.
+#
+# Split the windows:
+#   - ``open`` (09:30): PEAD fires here — so the scheduler has submitted
+#     the MOO by ~09:30:00, well under Alpaca's 09:28 cutoff when the
+#     window hits (the scheduler polls every 30 s, so the first tick
+#     after 09:28 catches it; PEAD pre-computes in the 06:00 premarket
+#     window, so the only action at 09:30 is fire the MOO).
+#   - ``open_plus_5m`` (09:35): reserved for strategies that *want* to
+#     wait until the first 5 minutes of price action have cleared (e.g.
+#     news-reactive ORB-lite strategies added in future waves). Empty
+#     for now to preserve existing behaviour.
 OPEN_STRATEGIES = ["pead"]
+OPEN_PLUS_5M_STRATEGIES: list[str] = []
 
 # Post-opening range (10:05 AM) — intraday breakout strategies
 POST_OR_STRATEGIES = ["orb", "vwap"]
@@ -86,12 +110,17 @@ WEEKLY_STRATEGIES = ["regime_adaptive", "pairs_trading"]
 # ─── Schedule Windows ───────────────────────────────────────
 
 WINDOWS = {
-    "premarket":  dt_time(6, 0),
-    "open":       dt_time(9, 35),
-    "post_or":    dt_time(10, 5),
-    "midday":     dt_time(12, 0),
-    "close":      dt_time(15, 30),
-    "monthly":    dt_time(15, 55),
+    "premarket":     dt_time(6, 0),
+    # Wave 6α Fix 7: 09:30 is the true open; MOO strategies fire here so
+    # the submission lands before Alpaca's 09:28 ET cutoff. The
+    # ``_in_window`` helper already has a 5-minute tolerance, so the
+    # scheduler's 30 s poll reliably hits this window.
+    "open":          dt_time(9, 30),
+    "open_plus_5m":  dt_time(9, 35),
+    "post_or":       dt_time(10, 5),
+    "midday":        dt_time(12, 0),
+    "close":         dt_time(15, 30),
+    "monthly":       dt_time(15, 55),
 }
 
 _scheduler_task: asyncio.Task | None = None
@@ -333,7 +362,8 @@ async def _scheduler_loop() -> None:
     logger.info(
         "Pipeline scheduler started (multi-window mode)\n"
         "  6:00 AM  — Pre-market: PEAD, Regime\n"
-        "  9:35 AM  — Open: PEAD T+1 executions\n"
+        "  9:30 AM  — Open: PEAD T+1 MOO executions (Wave 6α Fix 7)\n"
+        "  9:35 AM  — Open +5m: (reserved — currently empty)\n"
         " 10:05 AM  — Post-OR: ORB, VWAP\n"
         " 12:00 PM  — Midday: Pairs, KAMA\n"
         "  3:30 PM  — Close: RSI-2 (MOC), Mean Rev, VRP, Earnings Vol\n"
@@ -355,9 +385,24 @@ async def _scheduler_loop() -> None:
             if _in_window(WINDOWS["premarket"]):
                 await _run_window("premarket", PREMARKET_STRATEGIES, state, cache_set)
 
-            # ── Market open (9:35 AM) ──
+            # ── Market open (9:30 AM) — MOO strategies fire here so the
+            #    submission lands before Alpaca's 09:28 ET cutoff (Wave 6α
+            #    Fix 7). Previously this window was 09:35, causing PEAD's
+            #    T+1 MOO orders to miss the opening cross by five minutes
+            #    and slip into regular market orders five minutes into the
+            #    session.
             if _in_window(WINDOWS["open"]):
                 await _run_window("open", OPEN_STRATEGIES, state, cache_set)
+
+            # ── Open +5m (9:35 AM) — reserved for strategies that want
+            #    the first 5 minutes of price action to have cleared.
+            #    OPEN_PLUS_5M_STRATEGIES is currently empty but the window
+            #    is wired so future strategies can opt in without another
+            #    scheduler edit.
+            if OPEN_PLUS_5M_STRATEGIES and _in_window(WINDOWS["open_plus_5m"]):
+                await _run_window(
+                    "open_plus_5m", OPEN_PLUS_5M_STRATEGIES, state, cache_set,
+                )
 
             # ── Post-opening range (10:05 AM) ──
             if _in_window(WINDOWS["post_or"]):

@@ -134,9 +134,56 @@ jobs:
       - name: Audit frontend npm dependencies
         run: cd frontend && npm audit --audit-level=high
 
-  build-and-deploy:
+  # Wave 6γ (persona-114 + Round 5 deferred) — container image CVE gate.
+  # ``pip-audit`` + ``npm audit`` (the ``security-audit`` job above) only
+  # cover Python and Node dependency trees. The actual deployed artefact is
+  # the Docker image, which pulls in OS packages (OpenSSL, libc, curl, etc.)
+  # and the TA-Lib build. CVEs in that layer do not surface in dep audits.
+  # Trivy scans the full filesystem of the built image and fails on
+  # HIGH/CRITICAL findings — the same severity gate we use for pip-audit.
+  image-scan:
     runs-on: ubuntu-latest
     needs: [test, backend-test, security-audit]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase repo name for Docker tags
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build the backend image once here; build-and-deploy re-uses the
+      # published tag, so we don't double-build. ``load: true`` keeps it
+      # locally available for Trivy without publishing to GHCR until the
+      # scan passes.
+      - name: Build backend image for scan
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: [test, backend-test, security-audit, image-scan]
     permissions:
       contents: read
       packages: write

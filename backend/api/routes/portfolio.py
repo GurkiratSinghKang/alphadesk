@@ -509,27 +509,52 @@ async def get_portfolio_summary() -> PortfolioSummary:
         unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis > 0 else 0
 
         # Compute realized_pnl_today DIRECTLY from the trade ledger: sum of
-        # pnl on trades whose exit_time falls on today's date. The old
-        # formulation ``day_pnl - unrealized_pnl`` subtracted all-time
-        # unrealized P&L from today's equity delta, which produced arbitrary
-        # numbers that flipped sign when long-held positions swung even when
-        # nothing closed today.
+        # pnl on trades whose exit_time falls on today's date.
+        #
+        # Wave 6α Fix 1 (persona-124 P0): the previous implementation
+        # instantiated a ``TradeLedger`` and iterated Python-side over every
+        # closed trade returned by ``get_closed_trades(start_date=today_str)``.
+        # That path routes through ``list({"status": "closed"})`` which issues
+        # ``SELECT * FROM trade_ledger WHERE status='closed'`` — a full scan
+        # of every closed row ever written (≥50M at target scale) followed by
+        # a Python-side date filter. The dashboard polls this endpoint on a
+        # 60s interval, so the scan re-runs continuously.
+        #
+        # The new path pushes the aggregate into Postgres: a single scalar
+        # query computing ``SUM(pnl) WHERE status='closed' AND exit_time ≥
+        # start_of_today_et``. The supporting index
+        # ``ix_trade_ledger_status_exit_time`` (alembic 0008) turns this into
+        # an index range scan — bounded by "rows closed today" rather than
+        # "rows ever closed".
         realized_pnl_today = 0.0
-        try:
-            from data.ingestion.trade_ledger import TradeLedger
-            ledger_for_today = TradeLedger()
-            today_str = date.today().isoformat()
-            for t in ledger_for_today.get_closed_trades(start_date=today_str):
-                exit_time = t.get("exit_time") or ""
-                if exit_time[:10] == today_str and t.get("pnl") is not None:
-                    realized_pnl_today += float(t["pnl"])
-            realized_pnl_today = round(realized_pnl_today, 2)
-        except Exception:
-            logger.warning(
-                "Failed to compute realized_pnl_today from ledger; defaulting to 0",
-                exc_info=True,
-            )
-            realized_pnl_today = 0.0
+        if not settings.SKIP_DB_INIT:
+            try:
+                from sqlalchemy import text
+                from core.database import _get_session_factory
+
+                factory = _get_session_factory()
+                async with factory() as session:
+                    result = await session.execute(
+                        text(
+                            """
+                            SELECT COALESCE(SUM(pnl), 0) AS total
+                              FROM trade_ledger
+                             WHERE status = 'closed'
+                               AND exit_time >= date_trunc(
+                                     'day', NOW() AT TIME ZONE 'America/New_York'
+                                   )
+                            """
+                        )
+                    )
+                    total = result.scalar()
+                realized_pnl_today = round(float(total or 0), 2)
+            except Exception:
+                logger.warning(
+                    "Failed to compute realized_pnl_today from SQL aggregate; "
+                    "defaulting to 0",
+                    exc_info=True,
+                )
+                realized_pnl_today = 0.0
 
         return PortfolioSummary(
             equity=equity,

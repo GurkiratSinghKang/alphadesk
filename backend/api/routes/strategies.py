@@ -57,6 +57,14 @@ class StrategyStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     BACKTEST = "backtest"
+    # Wave 6γ (persona-109 P2): catalogue entries that are advertised but
+    # have no backend implementation yet. Prior revisions marked these as
+    # ``ACTIVE`` which misrepresented operational state on the UI — a user
+    # could click through expecting to pause or allocate into a strategy
+    # that wasn't running. ``PLANNED`` signals "coming soon" and is the
+    # value the frontend already surfaces via ``implementation_stage()``
+    # for ``PLANNED_STRATEGY_ROUTE_IDS`` entries.
+    PLANNED = "planned"
 
 
 class StrategyPerformance(BaseModel):
@@ -249,7 +257,12 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "regime-adaptive": {
         "name": "Regime Adaptive",
-        "description": "ML-based regime detection (bull/bear/sideways) combined with strategy rotation. Shifts between momentum, mean-reversion, and defensive allocations.",
+        # Wave 6γ (persona-109 copy fix): the prior blurb claimed "ML-based
+        # regime detection", which oversold the implementation. The backend
+        # classifier is a simple rules engine — SPY trend direction combined
+        # with a VIX threshold — not a learned model. Updated to match the
+        # code in ``backend/strategies/regime_adaptive/``.
+        "description": "Rule-based regime classification (SPY trend + VIX threshold) combined with strategy rotation. Shifts between momentum, mean-reversion, and defensive allocations.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -263,7 +276,11 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     "claude-alpha": {
         "name": "Claude Alpha",
         "description": "AI-driven opportunistic stock picking powered by Claude. Analyzes top screener picks with a general swing-trade prompt, combining technical and fundamental factors with news sentiment.",
-        "status": StrategyStatus.ACTIVE,
+        # Wave 6γ (persona-109 P2): listed in ``PLANNED_STRATEGY_ROUTE_IDS``
+        # (see ``backend/strategies/registry.py``) — no backend package yet.
+        # Surfacing ``ACTIVE`` misrepresented state; ``PLANNED`` is the
+        # honest signal and matches ``implementation_stage()``.
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -276,7 +293,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     "mean-reversion": {
         "name": "Mean Reversion",
         "description": "Buy oversold quality stocks with strong fundamentals (F-Score >= 5) and sell on reversion to mean. Uses wider stops and targets.",
-        "status": StrategyStatus.ACTIVE,
+        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -289,7 +307,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     "vcp-breakout": {
         "name": "VCP Breakout",
         "description": "Volatility Contraction Pattern breakout — enters when Stage 2 uptrend stocks form tight bases (Minervini SEPA methodology). Tight 3% stops, 10% targets.",
-        "status": StrategyStatus.ACTIVE,
+        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -1298,19 +1317,194 @@ async def list_strategies() -> list[StrategySummary]:
     return summaries
 
 
+async def _leaderboard_open_positions_by_strategy() -> dict[str, list[str]]:
+    """Map ``strategy_name -> [symbols]`` for currently-open ledger rows.
+
+    Used to attribute Alpaca's per-position ``unrealized_pl`` back to a
+    strategy without iterating the full ``trade_ledger`` Python-side. The
+    result set is bounded by the number of *open* positions (dozens, not
+    millions).
+    """
+    from core.config import settings
+    if settings.SKIP_DB_INIT:
+        return {}
+    try:
+        from sqlalchemy import text
+        from core.database import _get_session_factory
+
+        factory = _get_session_factory()
+        async with factory() as session:
+            rows = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT symbol, strategy
+                          FROM trade_ledger
+                         WHERE status = 'open'
+                        """
+                    )
+                )
+            ).all()
+        out: dict[str, list[str]] = {}
+        for sym, strat in rows:
+            out.setdefault(strat or "", []).append(sym or "")
+        return out
+    except Exception:
+        logger.warning(
+            "leaderboard: open-position strategy lookup failed", exc_info=True,
+        )
+        return {}
+
+
+async def _leaderboard_aggregate_closed() -> list[dict[str, Any]]:
+    """Run the GROUP BY SQL aggregate and return per-strategy rows.
+
+    Wave 6α Fix 3 (persona-124 P1): this replaces the old
+    O(strategies × trades) nested-Python loop. The query computes every
+    per-strategy statistic the route needs — total P&L, trade count,
+    gross deployed, and the mean / stdev of per-trade returns required
+    for the Sharpe calculation — in ONE aggregate scan.
+
+    Sharpe must honour trade ``side``: for shorts, the return is
+    ``(entry - exit) / entry`` rather than ``(exit - entry) / entry``.
+    We flip the sign with ``CASE WHEN side IN ('short','sell','s') …`` so
+    the mean and stddev are computed on the correctly-signed series.
+
+    Average hold-days is computed via
+    ``EXTRACT(EPOCH FROM (exit_time - entry_time)) / 86400`` and floored
+    at 1 day (a fraction-of-a-day hold shouldn't amplify Sharpe).
+    """
+    from core.config import settings
+    if settings.SKIP_DB_INIT:
+        return []
+    try:
+        from sqlalchemy import text
+        from core.database import _get_session_factory
+
+        sql = text(
+            """
+            WITH closed AS (
+                SELECT
+                    strategy,
+                    pnl,
+                    entry_price,
+                    exit_price,
+                    shares,
+                    entry_time,
+                    exit_time,
+                    CASE WHEN LOWER(COALESCE(side, 'long'))
+                              IN ('short', 'sell', 's')
+                         THEN 'short' ELSE 'long' END AS normalized_side
+                FROM trade_ledger
+                WHERE status = 'closed'
+                  AND entry_price IS NOT NULL
+                  AND exit_price IS NOT NULL
+                  AND entry_price <> 0
+            ),
+            with_returns AS (
+                SELECT
+                    strategy,
+                    pnl,
+                    entry_price,
+                    exit_price,
+                    shares,
+                    CASE
+                        WHEN normalized_side = 'short'
+                            THEN (entry_price - exit_price) / entry_price
+                        ELSE (exit_price - entry_price) / entry_price
+                    END AS per_trade_return,
+                    GREATEST(
+                        EXTRACT(
+                            EPOCH FROM (exit_time - entry_time)
+                        ) / 86400.0,
+                        1.0
+                    ) AS hold_days
+                FROM closed
+            )
+            SELECT
+                strategy,
+                COUNT(*)                               AS trades,
+                COALESCE(SUM(pnl), 0)                  AS realized_pnl,
+                COALESCE(SUM(entry_price * shares), 0) AS gross_deployed,
+                AVG(per_trade_return)                  AS mean_return,
+                STDDEV_SAMP(per_trade_return)          AS stdev_return,
+                AVG(hold_days)                         AS avg_hold_days
+              FROM with_returns
+             GROUP BY strategy
+            """
+        )
+        factory = _get_session_factory()
+        async with factory() as session:
+            rows = (await session.execute(sql)).all()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            m = r._mapping if hasattr(r, "_mapping") else r
+            out.append({
+                "strategy": m["strategy"],
+                "trades": int(m["trades"] or 0),
+                "realized_pnl": float(m["realized_pnl"] or 0),
+                "gross_deployed": float(m["gross_deployed"] or 0),
+                "mean_return": float(m["mean_return"] or 0) if m["mean_return"] is not None else 0.0,
+                "stdev_return": float(m["stdev_return"] or 0) if m["stdev_return"] is not None else 0.0,
+                "avg_hold_days": float(m["avg_hold_days"] or 0) if m["avg_hold_days"] is not None else 0.0,
+            })
+        return out
+    except Exception:
+        logger.warning(
+            "leaderboard: GROUP BY aggregate failed", exc_info=True,
+        )
+        return []
+
+
 @router.get("/leaderboard")
 async def strategy_leaderboard() -> dict[str, Any]:
     """Return strategies ranked by total return with Sharpe ratios.
 
-    Computes realised + unrealised P&L from the trade ledger (synced
-    with Alpaca) and ranks strategies from best to worst performer.
-    """
-    import hashlib
-    import httpx
-    from core.config import settings
-    from data.ingestion.trade_ledger import TradeLedger
+    Wave 6α Fix 3 (persona-124 P1): previously this handler ran an
+    O(strategies × trades) nested-loop in Python (iterating the *full*
+    ledger once per strategy). The aggregate now runs as a single
+    ``GROUP BY strategy`` SQL query; the result is cached in Redis for
+    60 s so the dashboard — which polls this endpoint — does not
+    recompute on every tick.
 
-    # Fetch live Alpaca positions for unrealised P&L
+    Computes realised + unrealised P&L and ranks strategies from best
+    to worst performer.
+    """
+    import json
+    import httpx
+    from datetime import date as _date
+    from core.config import settings
+    from core.redis import get_redis
+
+    # ----------------------------------------------------------------------
+    # Redis cache lookup — the leaderboard payload is completely
+    # determined by the (date, current-closed-trades, current-open-
+    # positions) tuple. A 60s TTL keyed on today's date means:
+    #   * a single full recompute per minute per process
+    #   * day rollover invalidates naturally (new key)
+    # ----------------------------------------------------------------------
+    today_key = _date.today().isoformat()
+    cache_key = f"leaderboard:{today_key}"
+    try:
+        redis = await get_redis()
+        cached = await redis.get(cache_key)
+        if cached:
+            try:
+                return json.loads(cached)
+            except Exception:
+                # Poisoned value — ignore and recompute.
+                logger.warning(
+                    "leaderboard: cached value at %s was not valid JSON — recomputing",
+                    cache_key,
+                )
+    except Exception:
+        logger.debug("leaderboard: redis unavailable, skipping cache read",
+                     exc_info=True)
+        redis = None
+
+    # ----------------------------------------------------------------------
+    # Fetch live Alpaca positions for unrealised P&L.
+    # ----------------------------------------------------------------------
     alpaca_positions: list[dict] = []
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1324,99 +1518,68 @@ async def strategy_leaderboard() -> dict[str, Any]:
             if resp.status_code == 200:
                 alpaca_positions = resp.json()
     except Exception:
-        logger.warning("Failed to fetch Alpaca positions for leaderboard", exc_info=True)
+        logger.warning("Failed to fetch Alpaca positions for leaderboard",
+                       exc_info=True)
 
-    # Read-only: sync_with_alpaca removed from GET per C2.
-    ledger = TradeLedger()
+    # ----------------------------------------------------------------------
+    # Attribute Alpaca's unrealised P&L to the strategy that owns each
+    # symbol (via a single bounded SQL lookup over open positions — not a
+    # full-table scan).
+    # ----------------------------------------------------------------------
+    open_strategy_by_symbol: dict[str, str] = {}
+    for strat_name, symbols in (await _leaderboard_open_positions_by_strategy()).items():
+        for sym in symbols:
+            open_strategy_by_symbol[sym] = strat_name
 
-    real_perf = _get_real_strategy_performance(ledger)
-
-    # Map Alpaca positions to strategies for unrealised P&L
     unrealized_by_id: dict[str, float] = {}
     for pos in alpaca_positions:
         sym = pos.get("symbol", "")
-        strat_id = "manual-discretionary"
-        for t in ledger._data.get("trades", []):
-            if t["symbol"] == sym and t["status"] == "open":
-                strat_id = _STRATEGY_NAME_TO_ID.get(t.get("strategy", "manual"), "manual-discretionary")
-                break
-        unrealized_by_id[strat_id] = unrealized_by_id.get(strat_id, 0) + float(pos.get("unrealized_pl", 0))
+        strat_name = open_strategy_by_symbol.get(sym, "manual")
+        strat_id = _STRATEGY_NAME_TO_ID.get(strat_name, "manual-discretionary")
+        unrealized_by_id[strat_id] = (
+            unrealized_by_id.get(strat_id, 0) + float(pos.get("unrealized_pl", 0))
+        )
+
+    # ----------------------------------------------------------------------
+    # Single GROUP BY SQL aggregate — replaces the O(strategies × trades)
+    # nested Python loop.
+    # ----------------------------------------------------------------------
+    agg_rows = await _leaderboard_aggregate_closed()
+    agg_by_name: dict[str, dict[str, Any]] = {r["strategy"]: r for r in agg_rows}
 
     entries: list[dict[str, Any]] = []
     for sid, sdata in _STRATEGIES.items():
-        invested = 0.0
-        gross_deployed = 0.0
         pnl_dollars = 0.0
+        gross_deployed = 0.0
         sharpe = 0.0
-        # Per-trade returns AND their holding periods (in days). We can't
-        # honestly annualise per-trade returns by sqrt(252) without knowing
-        # the average hold period — that inflates Sharpe by sqrt(avg_hold_days).
-        # For a PEAD strategy that holds 30-60 days the inflation factor is
-        # 5-8×; for a monthly rebalance ~4.6×. We correct by scaling sqrt by
-        # (252 / avg_hold_days).
-        per_trade_returns: list[float] = []
-        hold_days_list: list[float] = []
-
-        for strat_name, strat_id in _STRATEGY_NAME_TO_ID.items():
-            if strat_id != sid or strat_name not in real_perf:
-                continue
-            rp = real_perf[strat_name]
-            if rp["trades"] > 0:
-                pnl_dollars = rp["pnl"] + unrealized_by_id.get(sid, 0)
-                invested = rp.get("invested", 0.0)
-                gross_deployed = rp.get("gross_deployed", invested)
-
-                # Build per-trade returns from closed trades for Sharpe,
-                # respecting side ("short" flips the sign of (exit-entry)/entry).
-                for t in ledger._data.get("trades", []):
-                    if t.get("strategy") != strat_name or t.get("status") != "closed":
-                        continue
-                    entry_p = t.get("entry_price", 0)
-                    exit_p = t.get("exit_price", 0)
-                    if not (entry_p and exit_p):
-                        continue
-                    raw_side = str(t.get("side") or "long").lower()
-                    if raw_side in {"short", "sell", "s"}:
-                        ret = (entry_p - exit_p) / entry_p
-                    else:
-                        ret = (exit_p - entry_p) / entry_p
-                    per_trade_returns.append(ret)
-                    # Hold period in days (inclusive of partial days => min 1)
-                    entry_time = t.get("entry_time")
-                    exit_time = t.get("exit_time")
-                    try:
-                        if entry_time and exit_time:
-                            e_dt = datetime.fromisoformat(entry_time[:19])
-                            x_dt = datetime.fromisoformat(exit_time[:19])
-                            hold = max((x_dt - e_dt).total_seconds() / 86400.0, 1.0)
-                            hold_days_list.append(hold)
-                    except (ValueError, TypeError):
-                        pass
-            break
-
-        # BUG-004: divide by all-time gross deployed (not current cost
-        # basis) so the return percentage stays stable after positions exit.
-        return_pct = round(pnl_dollars / gross_deployed * 100, 1) if gross_deployed > 0 else 0.0
-
-        # Compute Sharpe using per-trade returns, annualised by
-        # sqrt(252 / avg_hold_days) so multi-day holds don't get inflated.
-        avg_hold_days = (
-            sum(hold_days_list) / len(hold_days_list) if hold_days_list else 1.0
+        # Find the ledger-name for this route-id (the route-id → ledger-name
+        # relationship is 1:1 per strategy via _STRATEGY_NAME_TO_ID).
+        ledger_name = next(
+            (name for name, route_id in _STRATEGY_NAME_TO_ID.items() if route_id == sid),
+            None,
         )
-        # Guard: avg_hold_days must be positive finite.
-        if not math.isfinite(avg_hold_days) or avg_hold_days <= 0:
-            avg_hold_days = 1.0
-        ann_factor = math.sqrt(252 / avg_hold_days)
-        if len(per_trade_returns) > 1:
-            mean_r = statistics.mean(per_trade_returns)
-            std_r = statistics.stdev(per_trade_returns)
-            sharpe = round(mean_r / std_r * ann_factor, 2) if std_r > 0 else 0.0
-        # A Sharpe ratio requires at least two observations to define a
-        # standard deviation — a single-trade "Sharpe" is mathematically
-        # undefined. The previous branch returned ``return × ann_factor``,
-        # which is an annualised return masquerading as a Sharpe and
-        # misleadingly poisoned the leaderboard for any strategy with one
-        # closed trade. Leave the initial ``sharpe = 0.0`` in place.
+        agg = agg_by_name.get(ledger_name) if ledger_name else None
+        if agg and agg["trades"] > 0:
+            pnl_dollars = agg["realized_pnl"] + unrealized_by_id.get(sid, 0)
+            gross_deployed = agg["gross_deployed"]
+
+            # Compute Sharpe identically to the prior Python implementation —
+            # mean/stdev of per-trade returns come from the SQL aggregate.
+            avg_hold_days = agg["avg_hold_days"] or 1.0
+            if not math.isfinite(avg_hold_days) or avg_hold_days <= 0:
+                avg_hold_days = 1.0
+            ann_factor = math.sqrt(252 / avg_hold_days)
+            if agg["trades"] > 1 and agg["stdev_return"] > 0:
+                sharpe = round(
+                    agg["mean_return"] / agg["stdev_return"] * ann_factor, 2
+                )
+            # Single-trade "Sharpe" is mathematically undefined; leave at 0.
+
+        # BUG-004 (preserved): divide by gross deployed, not cost basis.
+        return_pct = (
+            round(pnl_dollars / gross_deployed * 100, 1)
+            if gross_deployed > 0 else 0.0
+        )
 
         entries.append({
             "id": sid,
@@ -1433,11 +1596,21 @@ async def strategy_leaderboard() -> dict[str, Any]:
     worst_performer = entries[-1]["id"] if entries else None
     best_sharpe_entry = max(entries, key=lambda e: e["sharpe"]) if entries else None
 
-    return {
+    payload = {
         "leaderboard": entries,
         "worst_performer": worst_performer,
         "best_sharpe": best_sharpe_entry["id"] if best_sharpe_entry else None,
     }
+
+    # Write to cache (60s TTL — matches the dashboard poll cadence so we
+    # recompute at most once per minute per process).
+    if redis is not None:
+        try:
+            await redis.set(cache_key, json.dumps(payload), ex=60)
+        except Exception:
+            logger.debug("leaderboard: redis cache write failed", exc_info=True)
+
+    return payload
 
 
 @router.get("/{strategy_id}/performance", response_model=StrategyPerformance)

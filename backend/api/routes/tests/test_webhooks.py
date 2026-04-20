@@ -216,3 +216,223 @@ async def test_rate_limit_429_still_raised_on_healthy_redis(
         )
 
     assert exc_info.value.status_code == 429
+
+
+# --------------------------------------------------------------------------- #
+# Wave 6γ — HMAC-over-timestamp+body signature coverage (persona 123 P1).   #
+# --------------------------------------------------------------------------- #
+# Static-secret compare was vulnerable to replay of a captured payload with
+# a fresh timestamp (the body itself was unsigned). The signature scheme
+# binds secret + timestamp + body together; an attacker without the secret
+# cannot forge a signature for any new body regardless of the timestamp
+# window. These tests drive the route handler through both the preferred
+# signature path and the deprecated legacy-secret fallback.
+
+
+def _healthy_redis_monkeypatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wire a healthy Redis mock so the rate-limit path returns count=1."""
+    from api.routes import webhooks as webhooks_mod
+
+    class _HealthyRedis:
+        async def incr(self, key: str) -> int:
+            return 1
+
+        async def expire(self, key: str, ttl: int) -> bool:
+            return True
+
+    async def _fake_get_redis() -> Any:
+        return _HealthyRedis()
+
+    monkeypatch.setattr(webhooks_mod, "get_redis", _fake_get_redis)
+
+
+def _request_with_body(body_bytes: bytes, client_ip: str = "198.51.100.7") -> Any:
+    client = MagicMock()
+    client.host = client_ip
+
+    request = MagicMock()
+    request.client = client
+
+    async def _body() -> bytes:
+        return body_bytes
+
+    async def _json() -> Any:  # pragma: no cover — handler uses body() + json.loads
+        import json as _json_mod
+        return _json_mod.loads(body_bytes.decode("utf-8") or "{}")
+
+    request.body = _body
+    request.json = _json
+    return request
+
+
+@pytest.mark.asyncio
+async def test_signature_success_accepts_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Correct HMAC over timestamp+body authenticates the caller.
+
+    This is the preferred authentication path. An attacker who captured a
+    legitimate payload cannot reuse its signature with a different body
+    because the body is part of the signed message.
+    """
+    import hashlib
+    import hmac
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    _healthy_redis_monkeypatch(monkeypatch)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "test-secret-123",
+    )
+    # Stub out the downstream actions — we only care the handler reaches them
+    # after authenticating. ``publish`` is async, so swap it for a no-op.
+    async def _noop_publish(*a: Any, **kw: Any) -> None:
+        return None
+
+    monkeypatch.setattr(webhooks_mod, "publish", _noop_publish)
+
+    async def _handle_info(alert: Any) -> dict[str, Any]:
+        return {"action": "notification_sent", "ticker": alert.ticker}
+
+    monkeypatch.setattr(webhooks_mod, "_handle_info_alert", _handle_info)
+
+    ts = str(int(time.time()))
+    body = b'{"ticker":"SPY","action":"alert","message":"test"}'
+    signed = f"{ts}:{body.decode()}".encode()
+    sig = hmac.new(b"test-secret-123", signed, hashlib.sha256).hexdigest()
+
+    request = _request_with_body(body)
+    resp = await webhooks_mod.receive_tradingview_webhook(
+        request=request,
+        x_tv_secret=None,
+        x_tv_timestamp=ts,
+        x_tv_signature=sig,
+    )
+    assert resp.status == "processed"
+
+
+@pytest.mark.asyncio
+async def test_signature_mismatch_rejected_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bad signature yields 403 — not 500, and not silently passed.
+
+    Regression guard for a tampered body or a signature computed with the
+    wrong key.
+    """
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    _healthy_redis_monkeypatch(monkeypatch)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "real-secret",
+    )
+
+    ts = str(int(time.time()))
+    body = b'{"ticker":"SPY","action":"alert"}'
+    request = _request_with_body(body)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await webhooks_mod.receive_tradingview_webhook(
+            request=request,
+            x_tv_secret=None,
+            x_tv_timestamp=ts,
+            x_tv_signature="deadbeef" * 8,  # wrong sig, right length
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "signature" in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_replay_attack_with_different_body_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Signature bound to body A must NOT authenticate body B.
+
+    This is the core property the signature scheme buys us versus the
+    static-secret compare. An attacker who captures a legitimate
+    ``{action:alert}`` payload must not be able to swap in
+    ``{action:buy, ticker:XYZ}`` and have it execute.
+    """
+    import hashlib
+    import hmac
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    _healthy_redis_monkeypatch(monkeypatch)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "shared-secret",
+    )
+
+    ts = str(int(time.time()))
+    legit_body = b'{"ticker":"SPY","action":"alert"}'
+    attack_body = b'{"ticker":"XYZ","action":"buy","price":1}'
+    # Signature is over the LEGITIMATE body.
+    signed = f"{ts}:{legit_body.decode()}".encode()
+    sig = hmac.new(b"shared-secret", signed, hashlib.sha256).hexdigest()
+
+    # Attacker forwards the signature with a DIFFERENT body, same timestamp.
+    request = _request_with_body(attack_body)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await webhooks_mod.receive_tradingview_webhook(
+            request=request,
+            x_tv_secret=None,
+            x_tv_timestamp=ts,
+            x_tv_signature=sig,
+        )
+
+    assert exc_info.value.status_code == 403, (
+        "SECURITY: replaying a captured signature against a different body "
+        "must be rejected. The signature binds the body; swapping the body "
+        "invalidates the HMAC."
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_signature_and_secret_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No signature AND no legacy secret → 403.
+
+    The handler must not fall through to order-handling paths when the
+    caller supplied neither authentication mechanism.
+    """
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    _healthy_redis_monkeypatch(monkeypatch)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "real-secret",
+    )
+
+    ts = str(int(time.time()))
+    body = b'{"ticker":"SPY","action":"alert"}'
+    request = _request_with_body(body)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await webhooks_mod.receive_tradingview_webhook(
+            request=request,
+            x_tv_secret=None,
+            x_tv_timestamp=ts,
+            x_tv_signature=None,
+        )
+
+    assert exc_info.value.status_code == 403

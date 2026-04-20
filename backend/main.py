@@ -38,6 +38,10 @@ from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
 from data.ingestion.fill_reconciler import start_fill_reconciler, stop_fill_reconciler
+from data.ingestion.periodic_reconciler import (
+    start_periodic_reconciler,
+    stop_periodic_reconciler,
+)
 from data.ingestion.pipeline_runner import start_pipeline_scheduler, stop_pipeline_scheduler
 from data.ingestion.continuous_monitor import start_continuous_monitor, stop_continuous_monitor
 from data.ingestion.realtime_scanner import start_realtime_scanner, stop_realtime_scanner
@@ -116,6 +120,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await start_fill_reconciler()
     except Exception:
         logger.warning("Fill reconciler failed to start", exc_info=True)
+
+    # Wave 6β Fix 1 (persona 117 P0) + Fix 2 (Round-5 deferred / P106):
+    # start the periodic broker-vs-ledger reconciler.  Closes the
+    # kill-9-between-Alpaca-accept-and-DB-commit split window that used
+    # to survive until the next restart.  Runs every 5 min, Redis-locked
+    # for multi-worker safety.  Also drives the pending_flatten drain
+    # so a halt-while-market-closed queue fires at the next open.
+    #
+    # MUST be started AFTER reconcile_on_boot + start_fill_reconciler
+    # so the first live tick doesn't race the boot reconcile against
+    # the same Alpaca /v2/orders window.
+    try:
+        await start_periodic_reconciler()
+    except Exception:
+        logger.warning(
+            "Periodic reconciler failed to start", exc_info=True,
+        )
 
     # Wave 4R Fix 3: reconcile the Redis halt set with the durable halt
     # record so any drift (Redis-only ghosts, Postgres-only orphans) is
@@ -201,6 +222,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await stop_pipeline_scheduler()
     except Exception:
         logger.warning("shutdown: stop_pipeline_scheduler raised", exc_info=True)
+
+    # Wave 6β — stop the periodic reconciler before the fill
+    # reconciler.  Ordering doesn't strictly matter (both are
+    # independent) but doing it first means we don't take a
+    # half-drained tick to completion after the fill reconciler
+    # has already torn down its subscription.
+    try:
+        await stop_periodic_reconciler()
+    except Exception:
+        logger.warning(
+            "shutdown: stop_periodic_reconciler raised", exc_info=True,
+        )
 
     # Stop the fill reconciler before the Alpaca stream so we don't try
     # to consume a channel the publisher has already closed.

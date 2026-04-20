@@ -749,6 +749,32 @@ async def create_order(
     # user cannot mask a different user's legitimate order. If Redis is down
     # the whole block is skipped and we fall through to the payload-hash
     # dedup path below (legacy behaviour preserved).
+    #
+    # Wave 6β Fix 5 (persona 117) — idempotency cache durability note:
+    #
+    # Redis in ``infrastructure/docker-compose.prod.yml`` runs with
+    # ``--appendonly yes --appendfsync everysec`` (implicit default), so a
+    # power-loss or hard OOM kill within the last ~1s of writes can lose
+    # idem cache entries.  We intentionally do NOT flip Redis to
+    # ``appendfsync always`` — that would serialize every cache write and
+    # tank request latency for what is fundamentally a defense-in-depth
+    # cache.  Instead we rely on BROKER-SIDE dedup as the authoritative
+    # source of truth:
+    #
+    #   * Every order below stamps ``client_order_id`` (derived from the
+    #     caller's Idempotency-Key tail, scoped by username) onto the
+    #     Alpaca submit.
+    #   * Alpaca refuses duplicate ``client_order_id`` within ~24h with
+    #     a 422 ``client_order_id must be unique``.
+    #   * So even if the local Redis cache vanished between two retries
+    #     of the same Idempotency-Key, the broker would reject the second
+    #     submit and we surface that as a 422 to the caller — never a
+    #     duplicate fill.
+    #
+    # A PG-backed idem table with TTL was considered (see audit
+    # persona-117 P0) but deferred: the broker dedup already closes the
+    # correctness gap, and a PG write on every order path would slow the
+    # critical trade latency budget we're already tight on.
     _PENDING_SENTINEL = "__PENDING__"
     idem_cache_key: str | None = None
     idem_key_short: str | None = None
@@ -928,6 +954,62 @@ async def create_order(
         client_order_id = f"{_user_slug}_{_idem_clean}"[:128]
     else:
         client_order_id = f"manual_{_user_slug}_{_uuid.uuid4().hex[:12]}"
+
+    # Wave 6β Fix 6 (persona 123 P1) — halt TOCTOU re-check.
+    #
+    # The halt gate at the top of this endpoint (line ~703) runs BEFORE
+    # risk checks, broker-key checks, Idempotency-Key handling, the
+    # aggregate + per-order risk checks, duplicate-order detection,
+    # market-hour checks, and strategy gate validation.  On a slow
+    # request (slow Redis, slow Alpaca quote fetch for the wash-detect
+    # path, slow DB for the aggregate risk check), many AWAIT hops happen
+    # between the top-of-endpoint halt check and the broker submit below.
+    # An admin pressing the panic button during that window used to see
+    # the halt persist but the in-flight order still leak through to
+    # Alpaca because the halt check had already passed.
+    #
+    # Re-check RIGHT BEFORE the broker call.  We intentionally re-use
+    # the same ``_is_trading_halted`` helper so:
+    #   * Postgres-first → Redis-cache fallback applies uniformly.
+    #   * Fail-closed semantics (both stores unreachable → treat as
+    #     halted) kick in at the last moment a halt can still prevent a
+    #     real trade.
+    # If this second check trips, we DO NOT call the broker and we DO
+    # clear any PENDING idempotency sentinel so the caller can retry
+    # cleanly after resume.
+    if await _is_trading_halted():
+        logger.warning(
+            "halt_intercepted_post_check",
+            extra={
+                "event": "halt_intercepted_post_check",
+                "user": username,
+                "symbol": payload.legs[0].symbol if payload.legs else None,
+                "strategy": payload.strategy,
+                "client_order_id": client_order_id,
+            },
+        )
+        if idem_cache_key is not None:
+            try:
+                from core.redis import get_redis
+                _r = await get_redis()
+                if _r is not None:
+                    await _r.delete(idem_cache_key)
+            except Exception:
+                logger.debug(
+                    "halt_intercepted_post_check: failed to clear PENDING idem sentinel",
+                    exc_info=True,
+                )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "trading_halted",
+                "reason": (
+                    "Emergency halt activated mid-request. Order was not "
+                    "submitted. Use POST /api/v1/trades/resume to resume."
+                ),
+                "halted_until": None,
+            },
+        )
 
     # Submit to broker (pass client_order_id down). On broker failure the
     # PENDING sentinel must be cleared so a retry can proceed — without this,
@@ -1436,25 +1518,30 @@ async def get_trade_history(
         "gap-fill": "gap_fill",
     }
 
-    # Try trade ledger first (this is where pipeline trades live)
+    # Try trade ledger first (this is where pipeline trades live).
+    #
+    # Wave 6α Fix 2 (persona-124 P0): use ``list_paginated`` so the SQL
+    # pushes LIMIT/OFFSET/ORDER BY/WHERE into Postgres. The previous code
+    # read the *entire* trade ledger via ``ledger._data["trades"]``, sorted
+    # in Python, then sliced — at 50M rows the dashboard's "View trades"
+    # tab was unusable.
     try:
         from data.ingestion.trade_ledger import TradeLedger
         ledger = TradeLedger()
-        all_trades = ledger._data.get("trades", [])
 
-        # Filter by strategy if provided (map route ID to ledger name)
+        filters: dict[str, Any] = {}
         if strategy:
-            ledger_name = _ID_TO_LEDGER_NAME.get(strategy, strategy)
-            all_trades = [t for t in all_trades if t.get("strategy") == ledger_name]
-
-        # Filter by symbol if provided
+            filters["strategy"] = _ID_TO_LEDGER_NAME.get(strategy, strategy)
         if symbol:
-            sym_upper = symbol.upper()
-            all_trades = [t for t in all_trades if t.get("symbol") == sym_upper]
+            filters["symbol"] = symbol.upper()
 
-        # Sort by entry_time descending, then apply offset + limit window.
-        all_trades = sorted(all_trades, key=lambda t: t.get("entry_time", ""), reverse=True)
-        all_trades = all_trades[offset : offset + limit]
+        all_trades = ledger.list_paginated(
+            limit=limit,
+            offset=offset,
+            order_by="entry_time",
+            descending=True,
+            **filters,
+        )
 
         if all_trades:
             results: list[TradeHistoryEntry] = []

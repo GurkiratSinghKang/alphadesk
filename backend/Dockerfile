@@ -31,6 +31,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Wave 6γ (persona-114 + Round 5 deferred) — drop root. The original image
+# ran as root, so any RCE in FastAPI (or any of its ~200 transitive Python
+# deps) landed at UID 0 inside the container. A compromised-root escape via
+# a kernel CVE would reach the host as root. Running as an unprivileged user
+# limits the blast radius: even with full container compromise the attacker
+# lands as ``alphadesk`` (uid 10001), and any host mount that wasn't
+# explicitly chowned stays read-only to them.
+#
+# UID 10001 is above the Debian reserved range (< 1000 are system accounts;
+# 1000-10000 are common defaults) which lowers the odds of uid collision
+# with a host user on bind-mounted volumes. ``chown -R`` on ``/app``
+# ensures the app code and the lifespan bg services' write targets
+# (``/app/data/pipeline_logs`` in particular) are writable by the new user.
+# Operators bind-mounting a host directory over that path must ``chown
+# 10001:10001`` on the host side or pass ``--user`` to match.
+RUN useradd -m -u 10001 alphadesk \
+    && chown -R alphadesk:alphadesk /app
+USER alphadesk
+
 EXPOSE 8000
 
 # Wave 3L Fix 7 (persona-86/90): drop gunicorn workers from 3 to 1. On a

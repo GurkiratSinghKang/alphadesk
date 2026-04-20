@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useWs } from "@/lib/providers";
 import { useToast } from "@/hooks/useToast";
 import { useNotificationsStore, type NotificationCategory } from "@/stores/notifications";
@@ -81,6 +82,17 @@ export function useNotifications() {
   const { subscribe, onMessage } = useWs();
   const addNotification = useNotificationsStore((s) => s.addNotification);
   const { toast } = useToast();
+  // Wave 6α Fix 8 (persona-124 P2): broker trade_updates (fill /
+  // partial_fill / canceled) were previously surfaced as toasts only —
+  // the underlying React Query caches (portfolioSummary, positions,
+  // orders) waited out their 60-second poll before reflecting the new
+  // reality. That fill-to-UI gap made the dashboard feel stale on every
+  // trade. We now invalidate the three caches on every lifecycle event
+  // so they refetch instantly while the WS notification is still on
+  // screen.
+  const queryClient = useQueryClient();
+  const queryClientRef = useRef(queryClient);
+  queryClientRef.current = queryClient;
 
   // Keep a ref so listeners capture the latest pusher without re-subscribing
   const pushRef = useRef(addNotification);
@@ -128,6 +140,17 @@ export function useNotifications() {
         event === "order-filled" ||
         data.status === "filled"
       ) {
+        // Wave 6α Fix 8: invalidate portfolio/positions/orders caches on
+        // legacy ``portfolio`` fill events too. The trade_updates
+        // handler below covers the Alpaca-native event stream, but some
+        // backend paths still fan out via the older ``portfolio``
+        // channel — miss invalidating here and the dashboard stays
+        // stale for up to a minute on those paths.
+        const qc = queryClientRef.current;
+        qc.invalidateQueries({ queryKey: ["portfolioSummary"] });
+        qc.invalidateQueries({ queryKey: ["positions"] });
+        qc.invalidateQueries({ queryKey: ["orders"] });
+
         const qty = data.quantity ?? data.qty ?? 0;
         const price = data.fill_price ?? data.price;
         const sym = safeSymbol(data) || "—";
@@ -141,6 +164,10 @@ export function useNotifications() {
           "check"
         );
       } else if (event === "order_rejected" || data.status === "rejected") {
+        // Rejection also invalidates — the order's status transition
+        // must be reflected in the desk's Orders tab.
+        const qc = queryClientRef.current;
+        qc.invalidateQueries({ queryKey: ["orders"] });
         const sym = safeSymbol(data) || "—";
         maybePush(
           "trades",
@@ -191,6 +218,34 @@ export function useNotifications() {
       const data = (msg.data ?? {}) as TradeUpdatePayload;
       const event = (data.event ?? topEvent ?? "").toLowerCase();
       if (!event) return;
+
+      // Wave 6α Fix 8: invalidate the three React Query caches that
+      // reflect broker-side state on EVERY lifecycle event we surface.
+      // The broker just told us something material changed — waiting
+      // for the 60s poll tick to catch up is unacceptable given the
+      // notification is already on screen. Scope to the events that
+      // truly alter portfolio state (fill / partial_fill / canceled /
+      // rejected); ignore lifecycle noise like ``new`` / ``replaced``.
+      const INVALIDATE_EVENTS = new Set([
+        "fill",
+        "partial_fill",
+        "partially_filled",
+        "canceled",
+        "cancelled",
+        "rejected",
+      ]);
+      const isInvalidating =
+        INVALIDATE_EVENTS.has(event) ||
+        data.status === "filled" ||
+        data.status === "canceled" ||
+        data.status === "rejected";
+      if (isInvalidating) {
+        const qc = queryClientRef.current;
+        // queryKey shapes match useQueries.ts — don't drift.
+        qc.invalidateQueries({ queryKey: ["portfolioSummary"] });
+        qc.invalidateQueries({ queryKey: ["positions"] });
+        qc.invalidateQueries({ queryKey: ["orders"] });
+      }
 
       const sym = (data.symbol ?? "").toUpperCase() || "—";
       const side = (data.side ?? "").toUpperCase();

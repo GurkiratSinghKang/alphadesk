@@ -28,6 +28,13 @@ import {
   type StagedOrder,
 } from "@/components/composites";
 import { DeskLayout } from "@/components/layouts";
+// Wave 6α Fix 6 (persona-124 P0): MorningBrief was previously dead code —
+// the component + its `useMorningBrief` query existed but nothing rendered
+// it. Mount in the right-hand column above the Positions list, where the
+// user's "what happened overnight" context naturally lives next to their
+// book. Self-dismissing per-day (see MorningBrief.getDismissKey) so a
+// trader who closes it doesn't see it resurrected on every nav.
+import { MorningBrief } from "@/components/dashboard/MorningBrief";
 import {
   cancelOrder,
   getBars,
@@ -578,6 +585,11 @@ export default function DeskPage() {
       }
       right={
         <>
+          {/* Wave 6α Fix 6: morning brief mount. Self-hides when the
+              data query returns empty / errored (see MorningBrief.tsx),
+              and supports per-day dismiss via localStorage, so the
+              component stays out of the way once the user has seen it. */}
+          <MorningBrief />
           <div className="flex-1 min-h-0 overflow-auto">
             <PositionsList
               positions={positionRows}
