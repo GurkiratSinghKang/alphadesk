@@ -4,10 +4,15 @@ import { render, screen } from '@testing-library/react';
 import { StatusStrip } from '@/components/layout/StatusStrip';
 import { usePortfolioStore } from '@/stores/portfolio';
 
-// Mock React Query-based useRegime hook
+// Mock React Query-based hooks used by StatusStrip
 vi.mock('@/hooks/useQueries', () => ({
   useRegime: () => ({
     data: { regime: { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16.5, description: 'test' } },
+    isLoading: false,
+    error: null,
+  }),
+  usePortfolioSummary: () => ({
+    data: { is_demo: false, status: 'live', cash: 95000, equity: 100000, buying_power: 200000, positions_count: 1 },
     isLoading: false,
     error: null,
   }),
