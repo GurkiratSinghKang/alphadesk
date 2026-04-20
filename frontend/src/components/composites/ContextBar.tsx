@@ -43,12 +43,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
               !isLast && "border-r border-border-hair"
             )}
           >
-            <span
-              className={cn(
-                "font-sans font-semibold text-[8.5px] uppercase text-fg-hint"
-              )}
-              style={{ letterSpacing: "0.18em", lineHeight: 1 }}
-            >
+            <span className="t-label text-fg-hint">
               {cell.label}
             </span>
             <div className="flex gap-2 items-baseline">
@@ -56,14 +51,14 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
                 className={cn(
                   "font-mono tabular-nums font-medium",
                   cell.emphasis
-                    ? "text-gold-300 text-[14px]"
+                    ? "text-gold-300 text-[20px]"
                     : cell.valueTone === "profit"
-                      ? "text-up-500 text-[13px]"
+                      ? "text-up-500 text-base"
                       : cell.valueTone === "loss"
-                        ? "text-down-500 text-[13px]"
+                        ? "text-down-500 text-base"
                         : cell.valueTone === "muted"
-                          ? "text-fg-muted text-[13px]"
-                          : "text-ink-1000 text-[13px]"
+                          ? "text-fg-muted text-base"
+                          : "text-ink-1000 text-base"
                 )}
                 style={{ letterSpacing: "-0.005em" }}
               >
@@ -72,7 +67,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
               {cell.delta ? (
                 <span
                   className={cn(
-                    "font-mono tabular-nums text-[10.5px]",
+                    "font-mono tabular-nums text-[13px]",
                     cell.deltaTone === "profit"
                       ? "text-up-500"
                       : cell.deltaTone === "loss"

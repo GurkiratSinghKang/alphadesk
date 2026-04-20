@@ -155,17 +155,14 @@ function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit
   const isDash = value === "\u2014" || value === "—";
   return (
     <div className="flex flex-col">
-      <span
-        className="font-sans font-semibold text-[9.5px] uppercase text-fg-hint mb-0.5"
-        style={{ letterSpacing: "0.14em" }}
-      >{k}</span>
+      <span className="t-label text-fg-hint mb-0.5">{k}</span>
       {isDash ? (
         <span className="font-display italic text-[13px] text-fg-hint">{value}</span>
       ) : (
         <Mono
           size="body"
           className={cn(
-            "font-medium",
+            "text-base font-medium",
             tone === "profit" ? "text-up-500" : tone === "loss" ? "text-down-500" : "text-fg"
           )}
         >{value}</Mono>
@@ -253,18 +250,18 @@ export default function PriceChartPanel({
           >{symbol.name}</div>
           <div
             className="font-sans font-semibold text-[13px] text-fg-muted mt-1 uppercase"
-            style={{ letterSpacing: "0.16em" }}
+            style={{ letterSpacing: "0.12em" }}
           >{symbol.ticker} · {symbol.venue}</div>
         </div>
 
         <div>
           <div
-            className="font-mono tabular-nums text-[22px] sm:text-[28px] md:text-[36px] font-light text-ink-1000"
+            className="font-mono tabular-nums text-[22px] sm:text-[28px] md:text-[48px] font-light text-ink-1000"
             style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
           >
             {last == null ? <DashSpan size={36} /> : last.toFixed(2)}
           </div>
-          <div className={cn("font-mono tabular-nums text-[13px] mt-1", change == null ? "text-fg-hint" : deltaTone)}>
+          <div className={cn("font-mono tabular-nums text-base mt-1", change == null ? "text-fg-hint" : deltaTone)}>
             {change == null || changePct == null ? (
               <DashSpan size={13} />
             ) : (
@@ -275,7 +272,7 @@ export default function PriceChartPanel({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-x-3 gap-y-2 md:gap-[18px] ml-auto font-mono text-[11px] text-fg-muted">
+        <div className="flex flex-wrap gap-x-3 gap-y-2 md:gap-[18px] ml-auto font-mono text-base text-fg-muted">
           <MetaCell k="Vol" value={meta.volume} />
           <MetaCell k="Avg Vol" value={meta.avgVolume} />
           <MetaCell k="Range" value={meta.range} />
@@ -304,15 +301,15 @@ export default function PriceChartPanel({
                 // BUG-024 — WCAG 2.5.5 (target size): pills were 31×23 on
                 // mobile, below the 44×44 minimum. Enforce 44×44 until md,
                 // then relax to the dense desktop sizing.
-                "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[28px] md:min-w-0",
-                "font-mono text-[10.5px] px-2.5 py-1 rounded-xs transition-colors",
+                "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px] md:px-3",
+                "font-mono text-[13px] px-2.5 py-1 rounded-xs transition-colors",
                 r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
               )}
               style={{ letterSpacing: "0.02em" }}
             >{r}</button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 md:gap-[14px] font-mono text-[10.5px] text-fg-muted">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 md:gap-[14px] font-mono text-[13px] text-fg-muted">
           <LegendChip swatchColor="var(--gold-300)" label="Price" />
           <LegendChip swatchColor="var(--up-500)" dashed label="20-SMA" />
           <LegendChip swatchColor="rgba(141,179,196,0.25)" block label="Regime bands" />
@@ -335,8 +332,7 @@ export default function PriceChartPanel({
               <button
                 type="button"
                 onClick={onRetry}
-                className="font-sans font-semibold text-[10px] uppercase text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
-                style={{ letterSpacing: "0.14em" }}
+                className="font-sans font-semibold text-xs uppercase tracking-[0.12em] text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
               >
                 Retry
               </button>
@@ -355,7 +351,7 @@ export default function PriceChartPanel({
             >
               Not enough price data.
             </span>
-            <span className="font-sans text-[10.5px] text-fg-hint">
+            <span className="font-sans text-[13px] text-fg-hint">
               Try a wider range or check back once bars arrive.
             </span>
           </div>

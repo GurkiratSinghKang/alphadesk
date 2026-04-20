@@ -56,24 +56,17 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
     >
       <header className="flex items-center gap-2 mb-2.5">
         <StatusDot tone="brand" pulse size={8} />
-        <span
-          className="font-sans font-semibold text-[9.5px] uppercase text-brand"
-          style={{ letterSpacing: "0.2em" }}
-        >
+        <span className="t-label text-brand">
           Claude · Pre-trade memo
         </span>
-        <span
-          className="ml-auto font-mono text-[9.5px] text-fg-hint"
-          style={{ letterSpacing: "0.06em" }}
-        >
+        <span className="ml-auto t-meta text-fg-hint">
           {memo?.timestamp}
         </span>
       </header>
 
       <p
         data-slot="ai-memo-body"
-        className="font-display italic text-[15px] text-ink-900 leading-[1.4]"
-        style={{ letterSpacing: "-0.005em" }}
+        className="t-display-section text-ink-900 leading-[1.4]"
       >
         {memo?.text}
       </p>
@@ -84,10 +77,9 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
             <span
               key={c.label + i}
               className={cn(
-                "font-sans font-semibold text-[9px] uppercase px-[7px] py-[3px] rounded-xs border",
+                "t-label px-[7px] py-[3px] rounded-xs border",
                 chipClass[c.tone]
               )}
-              style={{ letterSpacing: "0.14em" }}
             >
               {c.label}
             </span>
@@ -96,7 +88,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
       ) : null}
 
       {showFooter ? (
-        <footer className="flex flex-wrap justify-between gap-x-2 gap-y-1 mt-3 font-mono text-[10px] text-fg-muted">
+        <footer className="flex flex-wrap justify-between gap-x-2 gap-y-1 mt-3 t-meta">
           <span className="shrink-0">Confidence {confidence!.toFixed(2)}</span>
           <span className="truncate max-w-[60%] text-right">
             {memo!.model} · {latencyMs} ms

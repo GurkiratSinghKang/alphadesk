@@ -225,7 +225,7 @@ export default function OrderBar({
           onChange={(e) => setStrategyId(e.target.value)}
           disabled={noStrategies}
           className={cn(
-            "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
+            "h-11 md:h-10 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             // iOS Safari auto-zooms on tap of any <input>/<select> with an
             // effective font-size < 16px. text-base (16px) on mobile keeps
             // the viewport stable; md+ keeps the dense 13px we use at desk
@@ -274,7 +274,7 @@ export default function OrderBar({
             aria-pressed={side === "buy"}
             onClick={() => handleSideClick("buy")}
             className={cn(
-              "min-h-11 min-w-11 md:min-h-9 md:min-w-0 w-full md:w-auto md:flex-initial",
+              "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
               // Desktop falls back to the tinted variant look so we keep
               // the editorial workstation palette at the desk resolutions.
               "md:!bg-up-500/10 md:!text-up-500 md:!border-up-500/30",
@@ -292,7 +292,7 @@ export default function OrderBar({
             aria-pressed={side === "sell"}
             onClick={() => handleSideClick("sell")}
             className={cn(
-              "min-h-11 min-w-11 md:min-h-9 md:min-w-0 w-full md:w-auto md:flex-initial",
+              "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
               "md:!bg-down-500/10 md:!text-down-500 md:!border-down-500/30",
               side !== "sell" && !sellArming && "opacity-70"
             )}
@@ -312,7 +312,7 @@ export default function OrderBar({
           inputMode="text"
           autoCapitalize="characters"
           spellCheck={false}
-          className="min-w-[90px] w-full h-11 md:h-9"
+          className="min-w-[90px] w-full h-11 md:h-10"
         />
       </Field>
 
@@ -336,7 +336,7 @@ export default function OrderBar({
           pattern="[0-9]*"
           aria-invalid={qtyInvalid || undefined}
           aria-describedby={qtyLocalError ? "order-bar-qty-error" : undefined}
-          className="min-w-[90px] w-full h-11 md:h-9"
+          className="min-w-[90px] w-full h-11 md:h-10"
         />
       </Field>
 
@@ -346,7 +346,7 @@ export default function OrderBar({
           value={type}
           onChange={(e) => setType(e.target.value as OrderTypeOption)}
           className={cn(
-            "h-11 md:h-9 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
+            "h-11 md:h-10 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             // iOS autozoom guard — see Strategy select above.
             "font-mono text-base md:text-[13px] text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: matching visible focus ring on the
@@ -371,7 +371,7 @@ export default function OrderBar({
           placeholder={priceRequired ? undefined : "—"}
           disabled={!priceRequired}
           className={cn(
-            "min-w-[90px] w-full h-11 md:h-9",
+            "min-w-[90px] w-full h-11 md:h-10",
             !priceRequired && "opacity-50 cursor-not-allowed"
           )}
         />
@@ -386,7 +386,7 @@ export default function OrderBar({
           placeholder={stopRequired ? undefined : "—"}
           disabled={!stopRequired}
           className={cn(
-            "min-w-[90px] w-full h-11 md:h-9 text-down-500",
+            "min-w-[90px] w-full h-11 md:h-10 text-down-500",
             !stopRequired && "opacity-50 cursor-not-allowed"
           )}
         />
@@ -417,7 +417,7 @@ export default function OrderBar({
         </Button>
         <span
           data-slot="order-destination"
-          className="font-mono text-[9.5px] text-fg-hint text-center md:text-right"
+          className="font-mono text-[13px] text-fg-hint text-center md:text-right"
           style={{ letterSpacing: "0.05em" }}
         >
           {submitDestination}
@@ -431,7 +431,7 @@ export default function OrderBar({
             id={qtyLocalError ? "order-bar-qty-error" : undefined}
             role="alert"
             data-testid="order-bar-error"
-            className="font-sans text-[11px] text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
+            className="font-sans text-[13px] text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
           >
             {qtyLocalError ?? errorMessage}
           </p>
@@ -456,10 +456,7 @@ function Field({
   // control drivers did not associate with the field.
   return (
     <label className="flex flex-col gap-1 min-w-0">
-      <span
-        className="font-sans font-semibold text-[9.5px] uppercase text-fg-muted"
-        style={{ letterSpacing: "0.14em" }}
-      >
+      <span className="t-label">
         {label}
       </span>
       {children}

@@ -116,10 +116,7 @@ export default function PositionsList({
       className={cn("flex flex-col", className)}
     >
       <header className="flex justify-between items-baseline px-[18px] pt-3.5 pb-2.5 border-b border-border-hair">
-        <span
-          className="font-display italic text-[15px] text-ink-1000"
-          style={{ letterSpacing: "-0.01em" }}
-        >
+        <span className="t-display-section text-ink-1000">
           Book
         </span>
         <div
@@ -154,7 +151,7 @@ export default function PositionsList({
                   // kept the tighter `md:h-auto md:px-2.5 md:py-1` on
                   // desktop where a pointer is available.
                   "font-sans font-semibold uppercase rounded-xs transition-colors",
-                  "h-8 px-3 text-[11px] md:h-auto md:px-2.5 md:py-1 md:text-[10px]",
+                  "h-8 px-3 text-[11px] md:h-9 md:px-2.5 md:py-1 md:text-xs",
                   "flex items-center gap-1.5",
                   active
                     ? "text-ink-1000 bg-bg-elev-1"
@@ -162,13 +159,13 @@ export default function PositionsList({
                       ? "text-fg-hint opacity-60 cursor-not-allowed"
                       : "text-fg-muted hover:text-fg"
                 )}
-                style={{ letterSpacing: "0.14em" }}
+                style={{ letterSpacing: "0.12em" }}
                 title={disabled ? "Coming soon" : undefined}
               >
                 <span>{TAB_LABEL[t]}</span>
                 {tabCount > 0 && !disabled && (
                   <span
-                    className="font-mono text-[9px] text-fg-muted"
+                    className="font-mono text-[13px] text-fg-muted"
                     aria-hidden
                   >
                     {tabCount}
@@ -179,7 +176,7 @@ export default function PositionsList({
           })}
         </div>
         {isEmpty ? null : (
-          <span className="font-mono text-[10px] text-fg-muted">{count}</span>
+          <span className="font-mono text-[13px] text-fg-muted">{count}</span>
         )}
       </header>
 
@@ -209,7 +206,7 @@ export default function PositionsList({
           >
             {empty.title}
           </p>
-          <p className="font-sans text-[11px] text-fg-muted max-w-[220px]">
+          <p className="font-sans text-[13px] text-fg-muted max-w-[220px]">
             {empty.hint}
           </p>
         </div>
@@ -249,10 +246,7 @@ export default function PositionsList({
                       style={{ letterSpacing: "0.02em" }}
                     >
                       {p.symbol}
-                      <span
-                        className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
-                        style={{ letterSpacing: "0.02em" }}
-                      >
+                      <span className="block t-meta mt-[1px]">
                         {p.quantity} @ {p.entryPrice.toFixed(2)}
                       </span>
                     </button>
@@ -277,11 +271,11 @@ export default function PositionsList({
 
                   <td className="align-middle text-right py-2.5 pr-[18px]">
                     <div className="text-right flex flex-col">
-                      <PnLNumber value={p.pnl} format="currency" className="text-[13px] font-medium" />
+                      <PnLNumber value={p.pnl} format="currency" className="text-[20px] font-medium" />
                       <PnLNumber
                         value={p.pnlPct}
                         format="percent"
-                        className="text-[10px] font-normal mt-[1px]"
+                        className="text-base font-medium mt-[1px]"
                         tone={isLoss ? "loss" : undefined}
                       />
                     </div>
@@ -321,10 +315,7 @@ export default function PositionsList({
                       style={{ letterSpacing: "0.02em" }}
                     >
                       {o.symbol}
-                      <span
-                        className="block font-mono text-[9.5px] text-fg-hint mt-[1px]"
-                        style={{ letterSpacing: "0.02em" }}
-                      >
+                      <span className="block t-meta mt-[1px]">
                         {o.side.toUpperCase()} {o.quantity} · {orderTypeLabel(o.type)}
                       </span>
                     </button>
@@ -332,12 +323,12 @@ export default function PositionsList({
 
                   <td className="align-middle py-2.5 pr-2.5">
                     <div className="flex flex-col gap-[2px] min-w-0">
-                      <span className="font-mono text-[11px] text-fg-dim truncate block">
+                      <span className="font-mono text-[13px] text-fg-dim truncate block">
                         {priceLabel}
                       </span>
                       {o.rejectReason && (
                         <span
-                          className="font-sans text-[10px] text-down-500 truncate block"
+                          className="font-sans text-[13px] text-down-500 truncate block"
                           title={o.rejectReason}
                         >
                           {o.rejectReason}
@@ -350,10 +341,9 @@ export default function PositionsList({
                     <div className="text-right flex flex-col items-end gap-1">
                       <span
                         className={cn(
-                          "font-sans font-semibold text-[9.5px] uppercase px-1.5 py-0.5 rounded-xs",
+                          "t-label px-1.5 py-0.5 rounded-xs",
                           STATUS_CHIP[o.status] ?? "bg-bg-elev-1 text-fg-muted"
                         )}
-                        style={{ letterSpacing: "0.14em" }}
                       >
                         {o.status}
                       </span>
@@ -364,7 +354,7 @@ export default function PositionsList({
                             e.stopPropagation();
                             onCancelOrder(o.id);
                           }}
-                          className="font-sans text-[10px] text-fg-muted hover:text-down-500 underline underline-offset-2"
+                          className="font-sans text-[13px] text-fg-muted hover:text-down-500 underline underline-offset-2"
                         >
                           Cancel
                         </button>

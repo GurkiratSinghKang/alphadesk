@@ -151,14 +151,14 @@ function MorningBriefContent({
             <div>
               <div className="flex items-center gap-2">
                 <GreetingIcon className="h-3.5 w-3.5 text-amber" />
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3 className="text-[17px] font-medium text-foreground">
                   {greeting.text}
                 </h3>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-muted-foreground">{data.date}</span>
-                <span className="text-[10px] text-muted-foreground/60">|</span>
-                <span className={cn("text-xs font-medium", market.color)}>
+                <span className="text-[13px] text-muted-foreground">{data.date}</span>
+                <span className="text-[13px] text-muted-foreground/60">|</span>
+                <span className={cn("text-[13px] font-medium", market.color)}>
                   {market.label}
                 </span>
               </div>
@@ -184,14 +184,14 @@ function MorningBriefContent({
               ) : (
                 <TrendingDown className="h-3.5 w-3.5 text-loss" />
               )}
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Overnight
               </span>
             </div>
             <div className="flex items-baseline gap-2">
               <span
                 className={cn(
-                  "text-lg font-bold tabular-nums",
+                  "text-[28px] font-mono tabular-nums font-normal tracking-[-0.015em]",
                   isUp ? "text-profit" : "text-loss"
                 )}
               >
@@ -200,7 +200,7 @@ function MorningBriefContent({
               </span>
               <span
                 className={cn(
-                  "text-xs font-medium tabular-nums",
+                  "text-base font-mono font-medium tabular-nums",
                   isUp ? "text-profit/70" : "text-loss/70"
                 )}
               >
@@ -208,7 +208,7 @@ function MorningBriefContent({
                 {(data.portfolio.overnight_change_pct ?? 0).toFixed(2)}%)
               </span>
             </div>
-            <div className="text-[11px] text-muted-foreground mt-1">
+            <div className="text-[13px] font-mono tabular-nums text-muted-foreground mt-1">
               Equity {formatCurrency(data.portfolio.equity)}
             </div>
           </div>
@@ -217,25 +217,25 @@ function MorningBriefContent({
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <BarChart3 className="h-3.5 w-3.5 text-ice" />
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Top Movers
               </span>
             </div>
             <div className="space-y-1.5">
               {data.top_movers.length === 0 && (
-                <span className="text-xs text-muted-foreground">No positions</span>
+                <span className="text-[13px] text-muted-foreground">No positions</span>
               )}
               {data.top_movers.slice(0, 3).map((m) => {
                 const mUp = m.change_pct >= 0;
                 return (
                   <div key={m.symbol} className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-medium text-foreground">
+                    <span className="text-[13px] font-mono font-medium text-foreground">
                       {m.symbol}
                     </span>
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "text-[11px] font-medium tabular-nums",
+                          "text-base font-mono font-medium tabular-nums",
                           mUp ? "text-profit" : "text-loss"
                         )}
                       >
@@ -244,7 +244,7 @@ function MorningBriefContent({
                       </span>
                       <span
                         className={cn(
-                          "text-[11px] tabular-nums",
+                          "text-base font-mono tabular-nums",
                           m.impact >= 0
                             ? "text-profit/70"
                             : "text-loss/70"
@@ -263,28 +263,28 @@ function MorningBriefContent({
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <Zap className="h-3.5 w-3.5 text-amber" />
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Market
               </span>
             </div>
             <div className="space-y-1.5">
               {/* Regime badge */}
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Regime
                 </span>
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tracking-[0.12em] uppercase text-primary">
                   {data.market.regime}
                 </span>
               </div>
               {/* VIX */}
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">VIX</span>
-                <span className="text-xs font-medium tabular-nums text-foreground">
+                <span className="text-[13px] text-muted-foreground">VIX</span>
+                <span className="text-base font-mono font-medium tabular-nums text-foreground">
                   {(data.market.vix ?? 0).toFixed(1)}
                   <span
                     className={cn(
-                      "ml-1 text-[11px]",
+                      "ml-1 text-[13px] font-mono tabular-nums",
                       (data.market.vix_change ?? 0) >= 0
                         ? "text-loss/70"
                         : "text-profit/70"
@@ -297,10 +297,10 @@ function MorningBriefContent({
               </div>
               {/* SPY */}
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">S&P 500</span>
+                <span className="text-[13px] text-muted-foreground">S&P 500</span>
                 <span
                   className={cn(
-                    "text-xs font-medium tabular-nums",
+                    "text-base font-mono font-medium tabular-nums",
                     data.market.spy_change_pct >= 0
                       ? "text-profit"
                       : "text-loss"
@@ -318,7 +318,7 @@ function MorningBriefContent({
         <div className="rounded-lg bg-muted/30 border border-border/30 px-4 py-3 mb-3">
           <div className="flex items-start gap-2">
             <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-            <p className="text-xs leading-relaxed text-foreground/80">
+            <p className="text-[13px] leading-relaxed text-foreground/80">
               {data.ai_summary}
             </p>
           </div>
@@ -327,13 +327,13 @@ function MorningBriefContent({
         {/* Catalysts */}
         {data.catalysts.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Upcoming
             </span>
             {data.catalysts.map((c) => (
               <span
                 key={c}
-                className="inline-flex items-center rounded-full border border-border/50 bg-[var(--surface)] px-2 py-0.5 text-[11px] text-muted-foreground"
+                className="inline-flex items-center rounded-full border border-border/50 bg-[var(--surface)] px-2 py-0.5 text-[13px] text-muted-foreground"
               >
                 {c}
               </span>

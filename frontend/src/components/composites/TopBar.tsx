@@ -173,8 +173,8 @@ export default function TopBar({
                 // fine at desk resolutions but the top-nav is visible at
                 // sm-md breakpoints on landscape phones where the
                 // hamburger hides. Enforce 44px tap targets below md.
-                "inline-flex items-center min-h-[44px] md:min-h-[32px]",
-                "font-sans text-[12px] px-3 py-1.5 rounded-xs no-underline transition-colors",
+                "inline-flex items-center min-h-[44px] md:min-h-[36px]",
+                "font-sans text-[13px] px-3 py-1.5 rounded-xs no-underline transition-colors",
                 active
                   ? "text-ink-1000 bg-bg-elev-1"
                   : "text-fg-muted hover:text-fg",
@@ -213,7 +213,7 @@ export default function TopBar({
           <span>Search</span>
           <kbd
             aria-hidden="true"
-            className="ml-1 rounded-sm border border-border bg-bg px-1 font-mono text-[10px] leading-none text-fg-muted"
+            className="ml-1 rounded-sm border border-border bg-bg px-1 font-mono text-[13px] leading-none text-fg-muted"
           >
             ⌘K
           </kbd>
