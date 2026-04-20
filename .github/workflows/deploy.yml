@@ -309,13 +309,21 @@ jobs:
             . ./.env.prod
             set +a
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml pull frontend backend
-            # --remove-orphans tears down services deleted from the compose
-            # (e.g. uptime-kuma). --force-recreate picks up config-only
-            # changes (e.g. port rebinds) that don't change the image hash.
-            # --pull always is belt-and-suspenders on top of pull_policy:
-            # always in the prod override (both are honoured, compose picks
-            # the strictest).
-            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --remove-orphans --force-recreate --pull always
+            # 2026-04-20 — final fix for the "Recreated-but-not-actually" ghost.
+            # Even with build: removed from base compose, --pull always in the
+            # up command, AND pull_policy: always in the prod override, the
+            # SAME bug persisted: compose emitted "Container X Recreated" +
+            # "Healthy" + "Deploy successful" but docker inspect showed the
+            # container's Image was still the PRIOR SHA, and the new SHA
+            # wasn't among `docker images` minutes later. The in-place
+            # --force-recreate code path seems to be the problem.
+            #
+            # Solution: explicitly tear down with `down`, then bring up with
+            # `up -d --pull never` (pull already happened above). This
+            # produces a fresh container from scratch — no in-place recreate
+            # state machine quirks. Downtime: ~6-8s during the swap.
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml down --remove-orphans
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --pull never
             # Wait for the backend container to come up healthy before
             # applying schema changes. 15s matches the previous sleep and
             # also matches the backend healthcheck start_period.
