@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { searchSymbols } from "@/lib/api";
 import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
 import { useToast } from "@/hooks/useToast";
@@ -88,6 +89,9 @@ export function CommandPalette() {
   const [searchResults, setSearchResults] = useState<SymbolResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // BUG-039: confirmation modal for live-trading flip. paper→live must
+  // never be one keystroke away; live→paper is always safe (no gate).
+  const [confirmLiveOpen, setConfirmLiveOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
 
@@ -181,16 +185,31 @@ export function CommandPalette() {
     router.push("/analytics");
   }
 
-  // Switch trading mode — live requires explicit action, paper is always safe
+  // Switch trading mode — live requires explicit action, paper is always safe.
+  // BUG-039: flipping paper→live is destructive (real money!) — gate it
+  // behind a confirmation modal with explicit risk copy. Going live→paper
+  // remains a single keystroke since it only reduces risk.
   function handleSwitchLive() {
-    setCommandPaletteOpen(false);
     if (useUIStore.getState().tradingMode === "live") {
       // Switching back to paper is always safe
+      setCommandPaletteOpen(false);
       setTradingMode("paper");
+      toast({ type: "info", message: "Switched to paper trading" });
     } else {
-      // Switch to live — the StatusStrip mode badge turns red as visual confirmation
-      setTradingMode("live");
+      // Close the palette and open the confirmation modal; the flip
+      // itself only happens once the user hits "Enable live trading".
+      setCommandPaletteOpen(false);
+      setConfirmLiveOpen(true);
     }
+  }
+
+  function handleConfirmLive() {
+    setTradingMode("live");
+    setConfirmLiveOpen(false);
+    toast({
+      type: "info",
+      message: "Live trading enabled — orders will use real capital",
+    });
   }
 
   // Focus chart panel — scroll the desk chart into view
@@ -222,6 +241,7 @@ export function CommandPalette() {
   }
 
   return (
+    <>
     <Dialog open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen}>
       <DialogContent
         data-testid="command-palette"
@@ -466,5 +486,50 @@ export function CommandPalette() {
         </Command>
       </DialogContent>
     </Dialog>
+
+    {/* BUG-039: paper → live confirmation modal. Explicit risk copy + a
+        destructive-styled confirm button so the operator can't drift into
+        real capital via one keystroke. Escape / clicking outside cancels. */}
+    <Dialog open={confirmLiveOpen} onOpenChange={setConfirmLiveOpen}>
+      <DialogContent
+        data-testid="confirm-live-modal"
+        className="max-w-md bg-[var(--surface)] border-border"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-foreground">
+            Enable live trading?
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Orders will route to the live broker and use real capital.
+            Strategy signals, risk monitors and manual orders will all
+            execute against your funded account.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="list-disc space-y-1 pl-5 text-[12px] text-muted-foreground">
+          <li>Paper-mode safeties no longer apply.</li>
+          <li>Live fills may deviate from backtest P&L.</li>
+          <li>You can switch back to paper from this palette at any time.</li>
+        </ul>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmLiveOpen(false)}
+            data-testid="confirm-live-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleConfirmLive}
+            data-testid="confirm-live-confirm"
+          >
+            Enable live trading
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

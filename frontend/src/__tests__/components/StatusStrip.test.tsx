@@ -40,9 +40,11 @@ describe('StatusStrip', () => {
     expect(screen.getByText('VIX')).toBeDefined();
   });
 
-  it('renders LIVE indicator when connected', () => {
+  it('renders STREAMING indicator when connected', () => {
+    // BUG-007: pill was renamed from "LIVE" to "STREAMING" so it can't be
+    // mistaken for real-money live-trading mode.
     render(<StatusStrip />);
-    expect(screen.getByText('LIVE')).toBeDefined();
+    expect(screen.getByText('STREAMING')).toBeDefined();
   });
 
   it('renders Alpaca Paper label', () => {

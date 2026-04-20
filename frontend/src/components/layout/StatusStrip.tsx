@@ -34,11 +34,11 @@ export function StatusStrip() {
     (portfolioResp as { is_demo?: boolean } | undefined)?.is_demo === true;
 
   if (!mounted) {
-    return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-[11px]" />;
+    return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-[12px]" />;
   }
 
   return (
-    <div role="status" className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[11px] overflow-x-auto scrollbar-none whitespace-nowrap">
+    <div role="status" className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[12px] overflow-x-auto scrollbar-none whitespace-nowrap">
       <div className="flex items-center gap-1.5 pr-4 border-r border-border/50">
         <span className="text-fg-muted font-medium">P&L</span>
         {hasPnl ? (
@@ -63,25 +63,41 @@ export function StatusStrip() {
           {regime?.vix_level ? regime.vix_level.toFixed(1) : "--.-"}
         </span>
       </div>
+      {/* BUG-007: the green-dot indicator marks websocket stream health,
+          not real-money live trading. Reserve "LIVE" for the real live-
+          trading mode (see Alpaca (Paper|Live) cell to the right) and
+          label this pill STREAMING / OFFLINE so it can't be mistaken. */}
       <span role="status" aria-live="polite" className="flex items-center gap-1.5 px-4 border-r border-border/50">
         {isConnected ? (
           <>
-            <span className="relative flex h-1.5 w-1.5" aria-label="Live data connected">
+            <span className="relative flex h-1.5 w-1.5" aria-label="Streaming data connected">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--profit)] opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
             </span>
-            <span className="text-[var(--profit)] font-medium">LIVE</span>
+            <span className="text-[var(--profit)] font-medium">STREAMING</span>
           </>
         ) : (
           <>
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" aria-label="Live data disconnected" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" aria-label="Streaming data disconnected" />
             <span className="text-[var(--loss)] font-medium">OFFLINE</span>
           </>
         )}
       </span>
-      <div className="flex items-center gap-2 px-4">
+      {/* BUG-043 — the PAPER badge's uppercase tracking crept close to
+          the Trade nav-tab highlight on narrow viewports. Add a small
+          inline-flex gap + relative/isolate so the badge's border-box
+          can never overlap a sibling component's hover outline, and
+          reserve a hair of right padding against the strip edge so the
+          letter spacing doesn't push the last glyph into the overflow
+          scroll track. */}
+      <div className="relative isolate flex items-center gap-2 px-4 pr-5">
         <span className="text-foreground font-medium">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
-        <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)]" : "bg-[var(--loss)]/15 text-[var(--loss)]")}>
+        <span className={cn(
+          "inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider leading-none",
+          tradingMode === "paper"
+            ? "bg-[var(--profit)]/15 text-[var(--profit)]"
+            : "bg-[var(--loss)]/15 text-[var(--loss)]"
+        )}>
           {tradingMode}
         </span>
       </div>

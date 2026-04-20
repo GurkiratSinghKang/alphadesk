@@ -79,7 +79,19 @@ const StrategyCard = React.memo(function StrategyCard({
 
         <div className="mt-3 space-y-1">
           <div className="flex items-center gap-3">
-            {strategy.returnPct === 0 && strategy.positions === 0 ? (
+            {/* BUG-028 — manual/discretionary isn't a backtested strategy,
+                it's the ledger-backed bucket for user-initiated trades.
+                Render an explicit "No backtest — discretionary bucket"
+                label so users don't read "—" as "we're still computing"
+                next to a 7-position / $57.1K invested book. */}
+            {strategy.id === "manual-discretionary" ? (
+              <span
+                className="text-xs italic text-muted-foreground"
+                title="Manual trades are executed at the broker. Return/Sharpe/win-rate are computed from the trade ledger, not a simulated backtest."
+              >
+                No backtest &mdash; discretionary bucket
+              </span>
+            ) : strategy.returnPct === 0 && strategy.positions === 0 ? (
               <>
                 <span className="text-sm text-muted-foreground">&mdash;</span>
                 <span className="text-xs text-muted-foreground">No positions</span>

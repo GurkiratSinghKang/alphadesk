@@ -156,6 +156,16 @@ async def receive_tradingview_webhook(
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid JSON payload: {e}")
 
+    # Security audit R6: TradingView can POST a JSON array / string / number
+    # just as legally as an object. Downstream code calls ``body.get(...)``
+    # and ``TradingViewAlert(**body)`` — both raise AttributeError /
+    # TypeError on non-dict bodies which surface as an uncaught 500 and leak
+    # stack details. Reject non-object bodies with 422 BEFORE the HMAC
+    # check so an attacker can't use the crash path for reconnaissance or
+    # bypass the secret gate via a type-confusion timing oracle.
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Webhook body must be a JSON object")
+
     alert_id = str(uuid.uuid4())
 
     # Validate secret (BUG-035: reject ALL requests when secret is not configured)
@@ -163,7 +173,19 @@ async def receive_tradingview_webhook(
     if not secret:
         raise HTTPException(status_code=503, detail="Webhook secret not configured")
 
-    provided_secret = x_tv_secret or body.get("secret", "")
+    # Security audit R6: coerce provided_secret to ``str`` defensively. If the
+    # JSON body carries ``{"secret": 123}`` (integer) then
+    # ``hmac.compare_digest`` raises TypeError ("comparing str with int") and
+    # surfaces as a 500 that leaks the stack. Empty string on non-str keeps
+    # compare_digest well-defined and constant-time against the real secret.
+    body_secret = body.get("secret", "")
+    if not isinstance(body_secret, str):
+        body_secret = ""
+    if x_tv_secret is not None and not isinstance(x_tv_secret, str):
+        x_tv_secret = ""
+    provided_secret = x_tv_secret or body_secret
+    if not isinstance(provided_secret, str):
+        provided_secret = ""
     if not hmac.compare_digest(provided_secret, secret):
         logger.warning("Invalid TradingView webhook secret from %s", client_ip)
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
@@ -291,10 +313,19 @@ async def _send_notification(message: str) -> None:
     """Send notification via Telegram and/or Discord."""
     import httpx
 
+    # Security audit R6: explicit 5s total timeout on BOTH notification calls.
+    # Previously httpx.AsyncClient() was called without a timeout kwarg;
+    # httpx's default (5s) is per-phase not total, and an upstream that
+    # accepts the TCP connection then stalls on response writes could pin
+    # the calling webhook request for minutes. On the webhook hot path this
+    # is worker-starvation primitive: floods of valid webhooks would each
+    # sit waiting on Telegram.
+    _NOTIFY_TIMEOUT = 5.0
+
     # Telegram
     if settings.TELEGRAM_BOT_TOKEN.get_secret_value() and settings.TELEGRAM_CHAT_ID:
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=_NOTIFY_TIMEOUT) as client:
                 await client.post(
                     f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN.get_secret_value()}/sendMessage",
                     json={
@@ -309,7 +340,7 @@ async def _send_notification(message: str) -> None:
     # Discord
     if settings.DISCORD_WEBHOOK_URL.get_secret_value():
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=_NOTIFY_TIMEOUT) as client:
                 await client.post(
                     settings.DISCORD_WEBHOOK_URL.get_secret_value(),
                     json={"content": f"**[AlphaDesk]** {message}"},

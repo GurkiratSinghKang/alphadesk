@@ -450,13 +450,26 @@ async def get_portfolio_summary() -> PortfolioSummary:
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"{settings.ALPACA_BASE_URL}/v2/account",
                 headers=headers,
             )
             if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=f"Alpaca API error: {resp.text[:200]}")
+                # Security audit R6: do NOT echo the upstream response body to
+                # the client. Alpaca's error payloads have historically included
+                # internal request IDs and account fragments; a compromised
+                # session or an unauth probe triggering a 4xx would get a free
+                # reconnaissance surface. Log server-side for ops, return a
+                # generic upstream-error shape to the caller.
+                logger.warning(
+                    "Alpaca /v2/account upstream error: status=%s body=%s",
+                    resp.status_code, resp.text[:500],
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Broker service unavailable, please retry",
+                )
             try:
                 data = resp.json()
             except Exception:

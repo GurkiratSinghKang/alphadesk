@@ -34,7 +34,7 @@
  * in active use across PnlCalendar, DashboardError, LoginForm, etc.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWs } from "@/lib/providers";
 import { usePortfolioStore } from "@/stores/portfolio";
 
@@ -46,10 +46,49 @@ import { usePortfolioStore } from "@/stores/portfolio";
  */
 const BROKER_DEGRADED_TTL_MS = 60_000;
 
+/**
+ * BUG-027: a client-side nav (prefetch, route change) briefly flickers the
+ * WS through `connecting` → `open` before the shared provider reconnects.
+ * Users saw a red OFFLINE flash for ~3s on every internal navigation. We
+ * debounce the transition into the user-visible "failed" / loss-tone
+ * banner so a short connect blip never promotes to a scary state.
+ *
+ * 4s is tuned to: (a) swallow the 1s "connecting" handshake on a warm
+ * WebSocket, (b) swallow the ~2-3s reconnect that follows a `close` event
+ * on fast nav, (c) still show the banner promptly when the user is
+ * genuinely offline (disconnected laptop). Tune here, not at a call site.
+ */
+const FAILED_BANNER_GRACE_MS = 4_000;
+
 export function WsStatusBanner() {
   const { wsStatus } = useWs();
   const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const setBrokerDegraded = usePortfolioStore((s) => s.setBrokerDegraded);
+  // BUG-027: gate the "failed" banner on a grace window so a transient
+  // reconnect doesn't flash OFFLINE on every internal navigation.
+  const [failedArmed, setFailedArmed] = useState(false);
+  const failedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Always clear any pending arm when the status changes — if the WS
+    // recovers we don't want a late timer to flip the banner on.
+    if (failedTimerRef.current) {
+      clearTimeout(failedTimerRef.current);
+      failedTimerRef.current = null;
+    }
+    if (wsStatus === "failed") {
+      failedTimerRef.current = setTimeout(() => {
+        setFailedArmed(true);
+      }, FAILED_BANNER_GRACE_MS);
+    } else {
+      setFailedArmed(false);
+    }
+    return () => {
+      if (failedTimerRef.current) {
+        clearTimeout(failedTimerRef.current);
+        failedTimerRef.current = null;
+      }
+    };
+  }, [wsStatus]);
   // Store a timer id so we clear it on unmount / on a newer event.
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,7 +119,11 @@ export function WsStatusBanner() {
 
   if (wsStatus === "open" && !brokerDegraded) return null;
 
-  if (wsStatus === "failed") {
+  // BUG-027: swallow the WS blip on client-side navigation. During the
+  // grace window we fall through to the quieter "Connecting…" branch
+  // below so the user sees a calm status line instead of a red OFFLINE
+  // flash that self-heals 3s later.
+  if (wsStatus === "failed" && failedArmed) {
     return (
       <div
         role="alert"

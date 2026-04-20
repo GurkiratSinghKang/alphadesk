@@ -58,6 +58,76 @@ export class RateLimitError extends Error {
 }
 
 /**
+ * Error thrown from `apiFetch` on any non-2xx / non-429 response. Carries
+ * the HTTP status and the parsed `detail` from a FastAPI error body so UI
+ * code can surface a precise toast instead of rendering the raw
+ * "API 422: Unprocessable Entity – {...}" string from the base Error.
+ *
+ * The `detail` field is normalised:
+ *   · string  → used verbatim
+ *   · array   → joined with "; "  (FastAPI validation errors)
+ *   · object  → best-effort string extract
+ *   · null    → undefined
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string | undefined;
+  readonly path: string;
+  readonly body: string;
+  constructor(path: string, status: number, body: string, detail?: string) {
+    super(detail ?? `API ${status}: ${body || "Request failed"}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+    this.path = path;
+    this.body = body;
+  }
+}
+
+/**
+ * Extract a human-readable error message from a FastAPI error body. FastAPI
+ * returns a JSON object with a `detail` field that can be:
+ *   · a string (most common — raised via HTTPException(detail="..."))
+ *   · an array of Pydantic validation errors: `[{ loc, msg, type }, …]`
+ *   · a bare object
+ *
+ * Returns undefined when the body isn't JSON or has no detail — callers
+ * fall back to a generic message in that case.
+ */
+export function parseApiErrorBody(body: string): string | undefined {
+  if (!body) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const detail = (parsed as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs: string[] = [];
+    for (const item of detail) {
+      if (typeof item === "string") { msgs.push(item); continue; }
+      if (item && typeof item === "object") {
+        const msg = (item as { msg?: unknown }).msg;
+        const loc = (item as { loc?: unknown }).loc;
+        if (typeof msg === "string") {
+          const locStr = Array.isArray(loc) ? loc.filter((p) => typeof p === "string" || typeof p === "number").join(".") : "";
+          msgs.push(locStr ? `${locStr}: ${msg}` : msg);
+        }
+      }
+    }
+    if (msgs.length) return msgs.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const msg = (detail as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  return undefined;
+}
+
+/**
  * Parse the Retry-After HTTP header. Per RFC 7231 the value may be either
  * delta-seconds (integer) or an HTTP-date; both are handled. Returns the
  * seconds remaining as a non-negative integer, or null when the header is
@@ -217,13 +287,18 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
       }
       throw new RateLimitError(path, retryAfter, msg);
     }
+    // Try to extract a FastAPI `detail` so the toast carries the precise
+    // reason (e.g. "qty must be > 0") rather than "API 422: Unprocessable
+    // Entity – {…}". Fall back to the raw status line when no detail.
+    const parsedDetail = parseApiErrorBody(body);
+    const friendly = parsedDetail ?? `API ${res.status}: ${res.statusText}`;
     // Dispatch error event for toast system to catch
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
-        detail: { status: res.status, message: `API ${res.status}: ${res.statusText}`, path },
+        detail: { status: res.status, message: friendly, path },
       }));
     }
-    throw new Error(`API ${res.status}: ${res.statusText} – ${body}`);
+    throw new ApiError(path, res.status, body, parsedDetail);
   }
 
   // 204 No Content (e.g. DELETE /orders/:id) and any other empty-bodied
@@ -238,7 +313,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 // ─── Strategies ─────────────────────────────────────────────
 
 export function getStrategies() {
-  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; total_return_pct: number; win_rate: number; active_positions_count: number; sparkline: number[] }[]>(
+  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; invested_amount_precise?: number; total_return_pct: number; win_rate: number; active_positions_count: number; sparkline: number[] }[]>(
     `/api/v1/strategies/`
   );
 }
@@ -755,23 +830,27 @@ if (typeof window !== "undefined") {
 
 export async function refreshAccessToken(): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  // Re-read from sessionStorage on every invocation so a token captured by
-  // another tab (or cleared via logout) takes effect immediately rather
-  // than the next time the module reinits.
-  const token = readRefreshToken();
-  if (token === null) return false;
+  // BUG-044: the backend no longer echoes the refresh token in the login
+  // body for browser clients — the HttpOnly ``refresh_token`` cookie
+  // (path=/api/v1/auth) is now the authoritative source. We still accept
+  // a legacy sessionStorage copy for in-flight sessions that logged in
+  // before this change, but new sessions rely solely on the cookie which
+  // is automatically attached by ``credentials: "include"`` inside
+  // ``apiFetch``. That also shrinks the XSS blast radius: a malicious
+  // script can no longer scrape the refresh token out of storage.
+  const legacyToken = readRefreshToken();
   try {
-    // The backend's /auth/refresh handler returns `{access_token, refresh_token, ...}`
-    // on success. Some backends rotate the refresh_token on every call
-    // (recommended); capture the new one if provided.
     type RefreshResponse = { access_token?: string; refresh_token?: string };
     const resp = await apiFetch<RefreshResponse>("/api/v1/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refresh_token: token }),
+      body: legacyToken
+        ? JSON.stringify({ refresh_token: legacyToken })
+        : JSON.stringify({}),
       // Don't redirect on 401 — the scheduler manages that UX itself.
     });
     if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
-      // Persist the rotated token back to sessionStorage too.
+      // Backend is still in CLI mode (shouldn't happen for browsers post
+      // BUG-044, but keep the path alive for completeness).
       captureRefreshToken(resp.refresh_token);
     }
     return true;
@@ -797,17 +876,12 @@ export async function refreshAccessToken(): Promise<boolean> {
 export function ensureTokenRefreshScheduled(): void {
   if (typeof window === "undefined") return;
   if (tokenRefreshTimer !== null) return;
-  if (readRefreshToken() === null) return;
+  // BUG-044: previously we required a sessionStorage refresh token to arm
+  // the scheduler. With the HttpOnly cookie path we no longer see the
+  // token from JS — so we arm the scheduler unconditionally and let the
+  // backend decide whether the cookie is valid. On a logged-out tab the
+  // first tick will 401 and the scheduler unsubscribes.
   tokenRefreshTimer = setInterval(() => {
-    // Re-read each tick — handles the cross-tab logout case where another
-    // tab cleared the token while this scheduler was idle.
-    if (readRefreshToken() === null) {
-      if (tokenRefreshTimer !== null) {
-        clearInterval(tokenRefreshTimer);
-        tokenRefreshTimer = null;
-      }
-      return;
-    }
     refreshAccessToken().then((ok) => {
       if (!ok && tokenRefreshTimer !== null) {
         // Refresh failed — stop the scheduler so we don't keep hitting

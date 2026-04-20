@@ -301,6 +301,10 @@ export default function PriceChartPanel({
               onClick={() => onRangeChange(r)}
               data-active={r === activeRange || undefined}
               className={cn(
+                // BUG-024 — WCAG 2.5.5 (target size): pills were 31×23 on
+                // mobile, below the 44×44 minimum. Enforce 44×44 until md,
+                // then relax to the dense desktop sizing.
+                "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[28px] md:min-w-0",
                 "font-mono text-[10.5px] px-2.5 py-1 rounded-xs transition-colors",
                 r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
               )}

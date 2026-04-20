@@ -23,6 +23,7 @@ import {
   type StagedOrder,
 } from "@/components/composites";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
+import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import type { Order } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -100,26 +101,33 @@ export default function TradePage() {
   /* ─── Submit handler ───────────────────────────────────── */
   const [submitting, setSubmitting] = useState(false);
   const [resetTick, setResetTick] = useState(0);
+  // BUG-002 — inline-error mirror of the toast. See desk `page.tsx`.
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   async function handleSubmit(order: StagedOrder) {
     if (submitting) return;
+    setOrderError(null);
     const sym = (order.symbol || "").trim().toUpperCase();
     const qty = Number(order.quantity);
+    const fail = (msg: string) => {
+      toast({ type: "error", message: msg });
+      setOrderError(msg);
+    };
     if (!sym || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) {
-      toast({ type: "error", message: "Enter a valid symbol (1–10 letters/digits)" });
+      fail("Enter a valid symbol (1–10 letters/digits)");
       return;
     }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast({ type: "error", message: "Quantity must be a positive number" });
+    if (!isValidOrderQty(qty)) {
+      fail("Quantity must be a whole number between 1 and 999,999,999");
       return;
     }
     if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
-      toast({ type: "error", message: "Limit orders require a price" });
+      fail("Limit orders require a price");
       return;
     }
     const stopNum = order.stop ? Number(order.stop) : undefined;
     if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
-      toast({ type: "error", message: "Stop orders require a stop price" });
+      fail("Stop orders require a stop price");
       return;
     }
     setSubmitting(true);
@@ -146,6 +154,7 @@ export default function TradePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order submission failed";
       toast({ type: "error", message });
+      setOrderError(message);
     } finally {
       setSubmitting(false);
     }
@@ -192,11 +201,13 @@ export default function TradePage() {
           strategies={strategyOptions}
           onSubmit={handleSubmit}
           submitting={submitting}
+          errorMessage={orderError}
+          // BUG-006 — single shared defaults source; was previously
+          // { quantity: 100, type: "limit" } which disagreed with the
+          // desk (`/`) defaults and confused users.
           defaults={{
+            ...ORDER_BAR_DEFAULTS,
             strategyId: rail[0]?.id ?? "",
-            side: "buy",
-            quantity: 100,
-            type: "limit",
           }}
         />
       </section>
@@ -218,6 +229,10 @@ export default function TradePage() {
               <caption className="sr-only">Recent orders</caption>
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
+                  {/* BUG-041: Date column added alongside Time so a
+                      multi-day list (pre-market orders, pending orders
+                      that fill tomorrow) is disambiguated at a glance. */}
+                  <th scope="col" className="py-2 px-2 font-medium">Date</th>
                   <th scope="col" className="py-2 px-2 font-medium">Time</th>
                   <th scope="col" className="py-2 px-2 font-medium">Symbol</th>
                   <th scope="col" className="py-2 px-2 font-medium">Side</th>
@@ -229,6 +244,15 @@ export default function TradePage() {
               <tbody>
                 {recentOrders.map((o) => (
                   <tr key={o.id} className="border-b border-border/40">
+                    <td className="py-2 px-2 text-muted-foreground tabular-nums">
+                      {o.createdAt
+                        ? new Date(o.createdAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "2-digit",
+                          })
+                        : "—"}
+                    </td>
                     <td className="py-2 px-2 text-muted-foreground tabular-nums">
                       {o.createdAt ? new Date(o.createdAt).toLocaleTimeString() : "—"}
                     </td>

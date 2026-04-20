@@ -309,9 +309,20 @@ export function useKeyboardShortcuts() {
 
       const bindings = bindingsRef.current;
       const now = Date.now();
+      // NEW-BUG fix: Shift-prefix must NOT be applied when the shifted
+      // keystroke already produced a symbol character (e.g. `?`, `!`,
+      // `:`, `>`). On a US keyboard, Shift+/ produces `e.key === "?"`,
+      // so forcing `Shift+?` prevented the `"?"` binding ("show
+      // keyboard shortcuts") from ever firing — the overlay was silently
+      // unreachable from the default binding set. Only synthesise a
+      // Shift+X string for alphabetic letters where the shifted key is
+      // also a valid character without the modifier (Shift+A differs
+      // from a because it's a semantic uppercase, but `?` has no
+      // un-shifted form to disambiguate from).
+      const isAlpha = e.key.length === 1 && /^[a-zA-Z]$/.test(e.key);
       const keyStr = e.ctrlKey || e.metaKey
         ? `Ctrl+${e.key.toLowerCase()}`
-        : e.shiftKey && e.key.length === 1
+        : e.shiftKey && isAlpha
           ? `Shift+${e.key.toUpperCase()}`
           : e.key;
 

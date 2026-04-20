@@ -312,6 +312,9 @@ export function AICopilot() {
                 }
               }}
               placeholder="Ask anything..."
+              /* BUG-023 — WCAG 4.1.2: placeholder is not an accessible name.
+                 Explicit aria-label so screen readers announce the field. */
+              aria-label="Ask Claude a question"
               disabled={loading}
               className="min-w-0 flex-1 bg-transparent text-base sm:text-xs text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />

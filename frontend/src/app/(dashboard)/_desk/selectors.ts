@@ -283,7 +283,11 @@ export function toContextCells(
             : "muted",
     },
     {
-      label: "Positions · Orders",
+      // BUG-008: the right-panel Book tabs also show an "Orders" count, but
+      // that set is "orders today (all statuses)" — while this top-bar cell
+      // shows "open orders only" (pending + open). Distinct labels so users
+      // don't read them as the same number with two values.
+      label: "Positions · Open Orders",
       value: `${positions.length} · ${orderCount}`,
     },
   ];
@@ -339,16 +343,37 @@ export function compactNumber(n: number | undefined): string {
   return n.toFixed(0);
 }
 
-export function toMetaCells(q: MarketQuote | undefined): MetaCells {
+export function toMetaCells(
+  q: MarketQuote | undefined,
+  // BUG-032: when the market is closed, unpopulated cells should read
+  // "unavailable" instead of a silent em-dash that users interpret as
+  // "we're still loading". Defaults true so existing callers keep their
+  // prior "em-dash means missing" behaviour at the composite level.
+  opts?: { marketOpen?: boolean },
+): MetaCells {
+  const marketOpen = opts?.marketOpen ?? true;
+  // Copy used when the source endpoint simply doesn't expose the field
+  // yet (avg volume, IV) OR when the market is closed and intraday
+  // numbers don't exist yet for the session. "unavailable" is short
+  // enough to fit the meta cell typography but explicit enough that the
+  // user knows this isn't a loading state.
+  const unavailable = marketOpen ? "—" : "unavailable";
   return {
-    volume: compactNumber(q?.volume),
-    avgVolume: "—", // backend quote snapshot doesn't expose avg volume yet
+    volume: q?.volume != null ? compactNumber(q.volume) : unavailable,
+    // backend quote snapshot doesn't expose avg volume yet — always
+    // unavailable, upgraded to a clearer label when market is closed
+    avgVolume: unavailable,
     range:
       q && Number.isFinite(q.low) && Number.isFinite(q.high) && (q.low || q.high)
         ? `${q.low.toFixed(2)} — ${q.high.toFixed(2)}`
-        : "—",
-    iv: "—", // IV lives in a separate endpoint (useIVData); not wired here
-    regimeFit: 0, // exposed for future — composite renders gracefully at 0
+        : unavailable,
+    // IV lives in a separate endpoint (useIVData); not wired here — and
+    // for most closed-market sessions there won't be a live IV either.
+    iv: unavailable,
+    // regime-fit is a number (composite tone-codes 0 as "no data") — we
+    // leave the numeric zero as the sentinel and let the composite pick
+    // the copy at render time.
+    regimeFit: 0,
   };
 }
 
@@ -422,12 +447,21 @@ export function toStatusPills(opts: {
     tone: opts.claudeHealthy ? "profit" : "muted",
   });
   // Always emit the 4th pill so the StatusBar has a stable shape even
-  // before the first tick arrives. Render "—" when we have no data.
+  // before the first tick arrives.
+  //
+  // BUG-031: "Last tick —" is ambiguous when the market is closed — it
+  // reads like the feed is broken. Swap to "Feed idle · market closed"
+  // so the user knows the em-dash reflects the session calendar, not a
+  // stale socket. Keep "Last tick X.XXs" when we have a fresh tick and
+  // "Last tick —" only when the market is open but we haven't seen one
+  // yet (startup / broker hiccup).
   pills.push({
     label:
       opts.lastTickSec != null
         ? `Last tick ${opts.lastTickSec.toFixed(2)}s`
-        : "Last tick —",
+        : opts.marketOpen
+          ? "Last tick —"
+          : "Feed idle · market closed",
     tone: "muted",
   });
   return pills;

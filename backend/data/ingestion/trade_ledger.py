@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Iterable
 
@@ -322,14 +322,40 @@ class TradeLedger:
         """
         engine = self._require_engine()
         side_norm = "short" if str(side).lower() in {"short", "sell", "s"} else "long"
+
+        # BUG-003 fix: enforce a default protective stop whenever a signal
+        # doesn't specify one. A naked long gets a -5% stop from entry; a
+        # naked short gets a +5% stop. Take-profit gets a 2:1 R:R default
+        # so every position has at least a notional target to close against.
+        # Strategy-provided levels always win.
+        raw_stop = signal.get("stop_loss")
+        raw_tp = signal.get("take_profit")
+        entry_price = float(price)
+        if raw_stop in (None, 0, 0.0) and entry_price > 0:
+            raw_stop = round(
+                entry_price * (0.95 if side_norm == "long" else 1.05), 2
+            )
+            logger.info(
+                "TradeLedger: applied default %s stop for %s: entry=%.2f stop=%.2f",
+                "-5%" if side_norm == "long" else "+5%", symbol, entry_price, raw_stop,
+            )
+        if raw_tp in (None, 0, 0.0) and entry_price > 0 and raw_stop:
+            risk = abs(entry_price - float(raw_stop))
+            if risk > 0:
+                raw_tp = round(
+                    entry_price + 2 * risk if side_norm == "long"
+                    else entry_price - 2 * risk,
+                    2,
+                )
+
         trade = {
             "id": self._next_id(),
             "symbol": symbol,
             "shares": int(shares),
-            "entry_price": float(price),
+            "entry_price": entry_price,
             "entry_time": datetime.now(timezone.utc).isoformat(),
-            "stop_loss": signal.get("stop_loss"),
-            "take_profit": signal.get("take_profit"),
+            "stop_loss": raw_stop,
+            "take_profit": raw_tp,
             "conviction": signal.get("conviction", 0),
             "rationale": rationale,
             "strategy": strategy,
@@ -836,6 +862,19 @@ class TradeLedger:
                     "Ledger sync: closed %s (absent from Alpaca response)", sym,
                 )
 
+        # BUG-018: deterministic microsecond offsets so a batch of trades
+        # auto-created in the same ``sync_with_alpaca`` call don't all share
+        # an identical ``entry_time`` down to the second. Using the symbol
+        # itself as the offset key keeps the ordering stable across re-syncs
+        # and makes the timestamps visibly different when the UI truncates to
+        # the minute or second. The offset is bounded to <1s so it never
+        # lands before an upstream event that genuinely happened earlier.
+        sync_now = datetime.now(timezone.utc)
+        sorted_new_syms = sorted(
+            sym for sym in alpaca_by_sym
+            if sym not in zeroed_syms and sym not in open_syms_in_ledger
+        )
+
         for sym, pos in alpaca_by_sym.items():
             if sym in zeroed_syms:
                 continue
@@ -848,10 +887,21 @@ class TradeLedger:
                 if qty <= 0:
                     continue
                 matched_strategy = self._match_strategy_for_symbol(sym)
+                # Per-symbol ms offset: deterministic, bounded <1s. Each symbol
+                # in this sync gets its index × 100ms added so 7 positions
+                # created together appear at 01:42:00.000, 01:42:00.100, …
+                try:
+                    sym_idx = sorted_new_syms.index(sym)
+                except ValueError:
+                    sym_idx = 0
+                entry_ts = (
+                    sync_now + timedelta(milliseconds=(sym_idx % 10) * 100)
+                ).isoformat()
                 self.add({
                     "symbol": sym,
                     "shares": qty,
                     "entry_price": avg_price,
+                    "entry_time": entry_ts,
                     "stop_loss": None,
                     "take_profit": None,
                     "conviction": 0,

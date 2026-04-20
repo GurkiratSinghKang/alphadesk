@@ -2,4 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://tradingalpha.net/</loc></url>
   <url><loc>https://tradingalpha.net/login</loc></url>
+  <url><loc>https://tradingalpha.net/about</loc></url>
+  <url><loc>https://tradingalpha.net/contact</loc></url>
+  <url><loc>https://tradingalpha.net/docs</loc></url>
+  <url><loc>https://tradingalpha.net/request-access</loc></url>
+  <url><loc>https://tradingalpha.net/privacy</loc></url>
+  <url><loc>https://tradingalpha.net/terms</loc></url>
+  <url><loc>https://tradingalpha.net/risk</loc></url>
 </urlset>

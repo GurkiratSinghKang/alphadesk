@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 
+import { formatDate, formatTime } from "@/lib/formatDate";
+
 /**
  * useDeskClock
  * ────────────
  * 1s-interval ET clock formatter for the top-bar right side. Avoids
  * hydration churn by initialising to an empty string and mounting
  * client-side.
+ *
+ * BUG-012: now formats through the shared `formatDate` / `formatTime`
+ * helpers (both pinned to `America/New_York`) so login, desk header, and
+ * any other surface showing a date read the same wall clock.
  */
 export function useDeskClock(): string {
   const [label, setLabel] = useState<string>("");
@@ -15,20 +21,7 @@ export function useDeskClock(): string {
   useEffect(() => {
     function tick() {
       const now = new Date();
-      // Render in the user's locale but label it ET — matches the kit
-      // and the broker is US-centric; full TZ formatter lands in F4.
-      const time = now.toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-      const date = now.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-      setLabel(`${time} ET · ${date}`);
+      setLabel(`${formatTime(now)} ET · ${formatDate(now, "long")}`);
     }
     tick();
     const id = setInterval(tick, 1000);

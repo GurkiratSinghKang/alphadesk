@@ -56,20 +56,26 @@ export function ExportButton() {
         t.status,
       ]);
 
+      // CSV-injection hardening: Excel/Sheets treat any cell starting
+      // with `=`, `+`, `-`, `@`, TAB or CR as a formula. Symbol names or
+      // strategy identifiers from upstream data (or a negative P&L like
+      // `-12.34`) would then execute on open. Prefix the sentinel `'`
+      // per OWASP so such cells render verbatim.
+      const CSV_INJECTION_PREFIXES = ["=", "+", "-", "@", "\t", "\r"];
+      const escapeCell = (cell: unknown): string => {
+        let str = String(cell ?? "");
+        if (str.length > 0 && CSV_INJECTION_PREFIXES.includes(str[0])) {
+          str = `'${str}`;
+        }
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
       const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row
-            .map((cell) => {
-              const str = String(cell);
-              // Escape fields that contain commas or quotes
-              if (str.includes(",") || str.includes('"')) {
-                return `"${str.replace(/"/g, '""')}"`;
-              }
-              return str;
-            })
-            .join(",")
-        ),
+        headers.map(escapeCell).join(","),
+        ...rows.map((row) => row.map(escapeCell).join(",")),
       ].join("\n");
 
       // Download

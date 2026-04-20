@@ -76,7 +76,12 @@ function computeRollingSharpe(dailyReturns: { date: string; ret: number }[], win
   for (let i = window - 1; i < dailyReturns.length; i++) {
     const slice = dailyReturns.slice(i - window + 1, i + 1).map((d) => d.ret);
     const mean = slice.reduce((s, v) => s + v, 0) / slice.length;
-    const variance = slice.reduce((s, v) => s + (v - mean) ** 2, 0) / slice.length;
+    // Sample (Bessel-corrected) variance — divide by N-1, not N. Using
+    // the biased MLE systematically inflates Sharpe on short windows
+    // (~3% overstatement at window=30) because the denominator is too
+    // small. Matches the backend `sharpe()` helper in backtest/metrics.py
+    // which also uses ddof=1.
+    const variance = slice.reduce((s, v) => s + (v - mean) ** 2, 0) / (slice.length - 1);
     const std = Math.sqrt(variance);
     const sharpe = std > 0 ? (mean / std) * Math.sqrt(252) : 0;
     results.push({ date: dailyReturns[i].date, sharpe });
@@ -145,8 +150,10 @@ function computeTradeStats(trades: TradeHistoryEntry[]) {
   );
   if (closed.length === 0) {
     return {
-      totalTrades: 0, wins: 0, losses: 0, scratches: 0, winRate: 0, profitFactor: 0,
-      avgWin: 0, avgLoss: 0, largestWin: 0, largestLoss: 0,
+      totalTrades: 0, wins: 0, losses: 0, scratches: 0,
+      winRate: null, profitFactor: null,
+      avgWin: null, avgLoss: null,
+      largestWin: 0, largestLoss: 0,
       avgHoldMs: 0, maxHoldMs: 0, maxConsecWins: 0, maxConsecLosses: 0,
     };
   }
@@ -181,10 +188,22 @@ function computeTradeStats(trades: TradeHistoryEntry[]) {
     wins: wins.length,
     losses: losses.length,
     scratches: scratches.length,
-    winRate: decidedCount > 0 ? (wins.length / decidedCount) * 100 : 0,
-    profitFactor: totalLoss > 0 ? totalWin / totalLoss : totalWin > 0 ? Infinity : 0,
-    avgWin: wins.length > 0 ? totalWin / wins.length : 0,
-    avgLoss: losses.length > 0 ? totalLoss / losses.length : 0,
+    // BUG-034 — when the denominator is zero (0 decided trades, just a
+    // scratch) win-rate should surface as null ("n/a"), not a false 0 %.
+    winRate: decidedCount > 0 ? (wins.length / decidedCount) * 100 : null,
+    // BUG-034 — profit factor = wins / losses. With 0 losses and 0 wins
+    // the ratio is undefined; emit `null` (rendered as "n/a") rather than
+    // the misleading `0.00`. Infinite is still correct when wins>0 and
+    // losses=0 (all winners, no drawdown).
+    profitFactor: totalLoss > 0
+      ? totalWin / totalLoss
+      : totalWin > 0
+        ? Infinity
+        : null,
+    // BUG-034 — avg win/loss must be null (→ "n/a") when the bucket is
+    // empty, so we don't print "-$0.00" for a zero-denominator average.
+    avgWin: wins.length > 0 ? totalWin / wins.length : null,
+    avgLoss: losses.length > 0 ? totalLoss / losses.length : null,
     largestWin: pnls.length > 0 ? Math.max(...pnls) : 0,
     largestLoss: pnls.length > 0 ? Math.min(...pnls) : 0,
     avgHoldMs: holdTimes.length > 0 ? holdTimes.reduce((s, v) => s + v, 0) / holdTimes.length : 0,
@@ -458,19 +477,39 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: Rea
 // ─── Trade Stats Table ──────────────────────────────────────
 
 function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats> }) {
-  // Surface scratches alongside win-rate so traders can see when the
-  // denominator is smaller than totalTrades — e.g. "54% (3 scratches)".
+  // BUG-034 — "1 scratch" trade used to show
+  //   Win Rate 0.0% · Profit Factor 0.00 · Avg Loss -$0.00
+  // all three are wrong:
+  //   · 0 decided trades → win-rate denominator is 0, not a 0 %.
+  //   · Profit factor 0/0 is undefined, not 0.
+  //   · There was no losing trade, so "-$0.00" puts a negative sign on a
+  //     zero average that doesn't exist.
+  // Render "n/a" in all three cases; keep the scratch count as context.
   const winRateLabel =
-    stats.scratches > 0
-      ? `${(stats.winRate ?? 0).toFixed(1)}% (${stats.scratches} scratch${stats.scratches === 1 ? "" : "es"})`
-      : `${(stats.winRate ?? 0).toFixed(1)}%`;
+    stats.winRate == null
+      ? stats.scratches > 0
+        ? `n/a (${stats.scratches} scratch${stats.scratches === 1 ? "" : "es"})`
+        : "n/a"
+      : stats.scratches > 0
+        ? `${stats.winRate.toFixed(1)}% (${stats.scratches} scratch${stats.scratches === 1 ? "" : "es"})`
+        : `${stats.winRate.toFixed(1)}%`;
+
+  const profitFactorLabel =
+    stats.profitFactor == null
+      ? "n/a"
+      : stats.profitFactor === Infinity
+        ? "Inf"
+        : stats.profitFactor.toFixed(2);
+
+  const avgWinLabel = stats.avgWin == null ? "n/a" : `$${stats.avgWin.toFixed(2)}`;
+  const avgLossLabel = stats.avgLoss == null ? "n/a" : `-$${stats.avgLoss.toFixed(2)}`;
 
   const rows: [string, string][] = [
     ["Total Trades", String(stats.totalTrades)],
     ["Win Rate", winRateLabel],
-    ["Profit Factor", stats.profitFactor === Infinity ? "Inf" : (stats.profitFactor ?? 0).toFixed(2)],
-    ["Avg Win", `$${(stats.avgWin ?? 0).toFixed(2)}`],
-    ["Avg Loss", `-$${(stats.avgLoss ?? 0).toFixed(2)}`],
+    ["Profit Factor", profitFactorLabel],
+    ["Avg Win", avgWinLabel],
+    ["Avg Loss", avgLossLabel],
     ["Largest Win", `$${(stats.largestWin ?? 0).toFixed(2)}`],
     ["Largest Loss", `$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`],
     ["Avg Hold Time", formatDuration(stats.avgHoldMs)],

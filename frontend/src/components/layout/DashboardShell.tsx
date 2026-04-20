@@ -17,9 +17,11 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
+      {/* BUG-053 — WCAG 2.4.1: skip link needs explicit dimensions on focus
+          so it doesn't stay 1×1px. Min 44px touch target + padding. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
       >
         Skip to content
       </a>

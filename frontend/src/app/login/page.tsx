@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import EditorialNameplate from "@/components/composites/EditorialNameplate";
 import Display from "@/components/typography/Display";
 import SectionRule from "@/components/typography/SectionRule";
+import { formatDate } from "@/lib/formatDate";
 import LoginForm from "./_login/LoginForm";
 
 export const metadata: Metadata = {
@@ -23,7 +24,9 @@ export const metadata: Metadata = {
  * unchanged; this is a visual reskin.
  */
 export default function LoginPage() {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // BUG-012: use the shared ET formatter — `toISOString()` returns UTC,
+  // which drifts a day ahead of the desk header after 20:00 ET.
+  const todayIso = formatDate(new Date(), "iso");
   return (
     <div className="mx-auto grid min-h-screen max-w-[1440px] grid-cols-1 gap-8 sm:gap-12 lg:gap-16 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
       <section className="flex flex-col gap-6 sm:gap-8 lg:gap-10">

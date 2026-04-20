@@ -166,6 +166,27 @@
   * {
     border-color: var(--border);
   }
+  /* BUG-025 — WCAG 2.4.7: some utility classes and third-party styles
+     zero out the outline (`focus:outline-none`) without restoring a
+     :focus-visible ring. Provide a global fallback outline on all
+     focusable elements so keyboard users always see a focus cue.
+     Component-level `focus-visible:ring-*` utilities still win visually
+     because they repaint on top — this is only a safety net. */
+  *:focus-visible {
+    outline: 2px solid var(--ring, #60a5fa);
+    outline-offset: 2px;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  [role="radio"]:focus-visible,
+  [role="tab"]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--ring, #60a5fa);
+    outline-offset: 2px;
+  }
   :focus-visible {
     outline: 2px solid var(--brand);
     outline-offset: 2px;

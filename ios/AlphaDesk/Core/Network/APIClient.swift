@@ -410,6 +410,10 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // BUG-044: identify as a non-browser client so the backend returns
+        // the JWT pair in the login/refresh JSON body. Browser requests omit
+        // this header and rely on HttpOnly cookies for session continuity.
+        request.setValue("ios", forHTTPHeaderField: "X-Client")
 
         // Attach JWT unless skipped or public endpoint.
         if !skipAuth && !endpoint.isPublic {

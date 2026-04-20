@@ -28,8 +28,24 @@ export interface StrategyCardProps {
   winRatePct: number;
   /** Already formatted, e.g. "$18.2K". */
   invested: string;
+  /**
+   * BUG-055 — precise dollar value (e.g. "$4,923.17") rendered as a `title`
+   * tooltip on the Invested cell. Optional; falls back to the abbreviated
+   * ``invested`` string so the tooltip is always non-empty.
+   */
+  investedPrecise?: string;
   sparkline: number[];
   href: string;
+  /**
+   * BUG-028 — strategies without a backtest (Manual / Discretionary is
+   * the canonical case: it's a ledger-backed bucket for user-initiated
+   * trades, not a simulated strategy) should not render `—` for return /
+   * win-rate, which reads like "no data yet" and hides the fact that
+   * these metrics are *not applicable*. When true, the card renders an
+   * explicit "No backtest — discretionary bucket" line instead of the
+   * misleading return / win-rate row.
+   */
+  noBacktest?: boolean;
   className?: string;
 }
 
@@ -41,13 +57,31 @@ export default function StrategyCard({
   positions,
   winRatePct,
   invested,
+  investedPrecise,
   sparkline,
   href,
+  noBacktest = false,
   className,
 }: StrategyCardProps) {
-  const sign = returnPct >= 0 ? "+" : "−";
+  // Display at 2dp rounds `-0.003` → `0.00`; combined with the raw sign
+  // of `returnPct` that rendered as "−0.00%", which is both visually
+  // wrong (negative zero) and semantically wrong (a near-flat return
+  // shouldn't read as a loss). Decide the sign from the *displayed*
+  // magnitude so anything that rounds to 0.00 is formatted "+0.00%".
+  const roundedAbs = Math.abs(returnPct);
+  const roundedStr = roundedAbs.toFixed(2);
+  const isDisplayedNegative = returnPct < 0 && parseFloat(roundedStr) !== 0;
+  const sign = isDisplayedNegative ? "−" : "+";
   const toneClass = isLoss ? "text-down-500" : "text-up-500";
   const accentClass = isLoss ? "before:bg-down-500" : "before:bg-brand";
+  // BUG-055 — positions-aware guard. An "Invested $4.9K · 0 positions" card
+  // is a data contradiction: once all positions exit, cost basis has to be
+  // $0. Force both the display and the precise tooltip to "$0" so the card
+  // never contradicts itself even if the caller forgot to zero the prop.
+  const displayInvested = positions === 0 ? "$0" : invested;
+  const investedTooltip = positions === 0
+    ? "$0.00"
+    : (investedPrecise ?? invested);
 
   return (
     <a
@@ -81,32 +115,53 @@ export default function StrategyCard({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "font-mono tabular-nums text-[30px] font-light leading-none",
-          toneClass
-        )}
-        style={{ letterSpacing: "-0.02em" }}
-      >
-        {sign}
-        {Math.abs(returnPct).toFixed(2)}%
-      </div>
+      {noBacktest ? (
+        <div
+          className="font-display italic text-[16px] leading-tight text-fg-muted"
+          style={{ letterSpacing: "-0.005em" }}
+        >
+          No backtest
+          <span className="block font-sans not-italic text-[10.5px] mt-0.5 text-fg-hint">
+            Discretionary bucket — P&amp;L tracked from trade ledger.
+          </span>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "font-mono tabular-nums text-[30px] font-light leading-none",
+            toneClass
+          )}
+          style={{ letterSpacing: "-0.02em" }}
+        >
+          {sign}
+          {roundedStr}%
+        </div>
+      )}
 
-      <Sparkline
-        data={sparkline}
-        tone={isLoss ? "loss" : "profit"}
-        width={200}
-        height={28}
-        className="h-7"
-      />
+      {!noBacktest && (
+        <Sparkline
+          data={sparkline}
+          tone={isLoss ? "loss" : "profit"}
+          width={200}
+          height={28}
+          className="h-7"
+        />
+      )}
 
       <div className="flex justify-between font-mono text-[10.5px] text-fg-muted">
         <span>{positions} positions</span>
-        <span>
-          Win <b className="text-fg font-medium">{winRatePct}%</b>
-        </span>
-        <span>
-          Invested <b className="text-fg font-medium">{invested}</b>
+        {noBacktest ? (
+          <span className="italic text-fg-hint">Manual trades</span>
+        ) : (
+          <span>
+            Win <b className="text-fg font-medium">{winRatePct}%</b>
+          </span>
+        )}
+        <span
+          title={investedTooltip}
+          aria-label={`Invested ${investedTooltip}`}
+        >
+          Invested <b className="text-fg font-medium">{displayInvested}</b>
         </span>
       </div>
 

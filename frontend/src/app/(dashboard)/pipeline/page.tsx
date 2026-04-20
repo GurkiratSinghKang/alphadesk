@@ -21,6 +21,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -52,6 +60,7 @@ import {
   type PipelineStatus,
   type SchedulerState,
 } from "@/lib/pipeline-api";
+import { usePortfolioStore } from "@/stores/portfolio";
 
 // ─── Next-session helper ────────────────────────────────────
 // The scheduler uses `USMarketCalendar` on the backend now, so the UI
@@ -171,7 +180,7 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
 
 // ─── Risk Monitor Toggle ───────────────────────────────────
 
-function RiskMonitorToggle() {
+function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null }) {
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
 
@@ -196,6 +205,24 @@ function RiskMonitorToggle() {
 
   if (loading) return null;
 
+  // BUG-003(b): don't claim "ON" until we have evidence the monitor has
+  // actually fired at least once. No heartbeat means the monitor is either
+  // cold (pre-first-run today) or the scheduler is asleep — either way we
+  // surface "Idle" with the next-run label instead of a green confident ON.
+  const hasHeartbeat = !!lastHeartbeat;
+  const showIdle = enabled && !hasHeartbeat;
+  const label = !enabled
+    ? "Risk Monitor: OFF"
+    : showIdle
+    ? `Idle — next run ${nextTradingSessionLabel()}`
+    : "Risk Monitor: ON";
+  const tone = !enabled
+    ? "border-loss/30 bg-loss-tint text-loss hover:bg-loss/15"
+    : showIdle
+    ? "border-amber/30 bg-amber/10 text-amber hover:bg-amber/15"
+    : "border-profit/30 bg-profit-tint text-profit hover:bg-profit/15";
+  const dot = !enabled ? "bg-loss" : showIdle ? "bg-amber" : "bg-profit";
+
   return (
     <button
       type="button"
@@ -204,14 +231,18 @@ function RiskMonitorToggle() {
       aria-label={`Risk Monitor ${enabled ? "enabled" : "disabled"} — click to toggle`}
       className={cn(
         "flex items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
-        enabled
-          ? "border-profit/30 bg-profit-tint text-profit hover:bg-profit/15"
-          : "border-loss/30 bg-loss-tint text-loss hover:bg-loss/15"
+        tone,
       )}
-      title={enabled ? "Risk monitor is ON — click to disable" : "Risk monitor is OFF — click to enable"}
+      title={
+        !enabled
+          ? "Risk monitor is OFF — click to enable"
+          : showIdle
+          ? "Risk monitor enabled but no heartbeat yet — click to disable"
+          : "Risk monitor is ON — click to disable"
+      }
     >
-      <span className={cn("h-2 w-2 rounded-full", enabled ? "bg-profit" : "bg-loss")} />
-      Risk Monitor: {enabled ? "ON" : "OFF"}
+      <span className={cn("h-2 w-2 rounded-full", dot)} />
+      {label}
     </button>
   );
 }
@@ -243,6 +274,10 @@ export default function PipelinePage() {
     {}
   );
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  // BUG-011 — confirmation modal before firing the (cost-bearing)
+  // pipeline. Set true when the user clicks Run Now; cleared on confirm
+  // or cancel.
+  const [runConfirmOpen, setRunConfirmOpen] = useState(false);
   // Poll handle — kept in a ref so the effect can clear it without
   // re-running on every status change.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -288,8 +323,14 @@ export default function PipelinePage() {
           setPositions(Array.isArray(val) ? val : []);
         }
       }
-      // Map broker positions as fallback when pipeline positions are empty
+      // Map broker positions as fallback when pipeline positions are empty.
+      // BUG-001 / BUG-015: also push the broker positions into the shared
+      // `usePortfolioStore` so the Desk + Reports pages see the same snapshot
+      // we just paid for here. Previously each page refetched positions
+      // independently and got a slightly different current_price per
+      // request → AVGO +$275 / +$375 / +$284 across tabs.
       if (bp.status === "fulfilled") {
+        usePortfolioStore.getState().setPositions(bp.value);
         setBrokerPositions(bp.value.map(pos => ({
           symbol: pos.symbol,
           shares: pos.quantity,
@@ -419,7 +460,15 @@ export default function PipelinePage() {
   // The flow is now fire-and-forget: POST /run returns 202 with a run_id,
   // the page flips into "running" state via the live status poll, and the
   // operator watches stage/progress in the running card.
-  const handleRunNow = async () => {
+  //
+  // BUG-011 — the top-level click opens the confirmation modal; the
+  // modal's confirm button calls `confirmAndRunPipeline` below.
+  const handleRunNow = () => {
+    setRunConfirmOpen(true);
+  };
+
+  const confirmAndRunPipeline = async () => {
+    setRunConfirmOpen(false);
     setSubmitting(true);
     setRetryAfter(null);
     try {
@@ -568,7 +617,7 @@ export default function PipelinePage() {
         <Sparkles className="h-3 w-3" />
         Templates
       </Button>
-      <RiskMonitorToggle />
+      <RiskMonitorToggle lastHeartbeat={scheduler?.last_heartbeat} />
       <Button
         size="sm"
         onClick={handleRunNow}
@@ -700,8 +749,19 @@ export default function PipelinePage() {
                       <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-fg-muted">Next scheduled run:</span>
                       <Mono className="text-foreground">
+                        {/* BUG-013: the header elsewhere on this page calls
+                            the next run "09:30 ET" (market open). The
+                            scheduler timestamp — formatted via `toLocaleString`
+                            — rendered as "9:35:00 AM" in the user's local
+                            locale, contradicting the header. Normalise to
+                            "YYYY-MM-DD 09:30 ET" so both readings agree. */}
                         {scheduler.next_scheduled_run
-                          ? new Date(scheduler.next_scheduled_run).toLocaleString()
+                          ? `${new Intl.DateTimeFormat("en-CA", {
+                              timeZone: "America/New_York",
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                            }).format(new Date(scheduler.next_scheduled_run))} 09:30 ET`
                           : "Unknown"}
                       </Mono>
                     </div>
@@ -1231,6 +1291,65 @@ export default function PipelinePage() {
           </>
         )}
       <StrategyTemplates open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
+
+      {/* BUG-011 — confirmation modal before triggering a pipeline run.
+          The pipeline places real orders and burns API budget, so an
+          accidental click must not fire. When the market is closed we
+          additionally warn the operator (orders will not fill; results
+          only land at next open). */}
+      <Dialog open={runConfirmOpen} onOpenChange={setRunConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run the pipeline now?</DialogTitle>
+            <DialogDescription>
+              This triggers a full screener → analyzer → signal → order
+              pass and can place real orders through the broker.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const session = getMarketSession();
+            const marketClosed = session === "closed" || session === "post" || session === "pre";
+            if (!marketClosed) return null;
+            const label =
+              session === "closed"
+                ? "Market is closed"
+                : session === "pre"
+                ? "Market is in pre-open"
+                : "Market has closed for the day";
+            return (
+              <div
+                role="alert"
+                className="rounded-md border border-amber/30 bg-amber/10 p-3 text-[12px] text-amber"
+              >
+                <p className="font-semibold mb-1">Warning: {label}.</p>
+                <p className="text-[11px] text-amber/90">
+                  Any orders the pipeline generates will be queued until
+                  the next regular session open and may not fill at the
+                  prices the analyzer saw. Consider waiting until 09:30 ET.
+                </p>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setRunConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={confirmAndRunPipeline}
+              disabled={submitting}
+              data-testid="pipeline-run-confirm"
+            >
+              {submitting ? "Starting..." : "Run pipeline"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardPageLayout>
   );
 }

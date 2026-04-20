@@ -161,30 +161,38 @@ async def _generate_risk_dashboard() -> RiskDashboard:
     except Exception:
         logger.warning("Failed to fetch account/positions from Alpaca for risk dashboard", exc_info=True)
 
-    # Compute drawdown from trade ledger P&L history
+    # Compute drawdown from trade ledger P&L history, walking the full
+    # equity curve (base_equity + cumulative_pnl) rather than just cumulative
+    # P&L. Initialising ``peak`` to a strictly-positive base equity ensures
+    # a losing streak starting from the first trade is correctly reported
+    # as a drawdown instead of hidden behind ``peak > 0`` guards.
     current_dd = 0.0
     max_dd = 0.0
+    base_equity_for_dd = last_equity if last_equity > 0 else (equity if equity > 0 else 100_000.0)
     try:
         from data.ingestion.trade_ledger import TradeLedger
         ledger = TradeLedger()
         closed = ledger.get_closed_trades()
         if closed:
             cumulative = 0.0
-            peak = 0.0
+            peak_equity = base_equity_for_dd
             for t in sorted(closed, key=lambda x: x.get("exit_time", "")):
                 cumulative += t.get("pnl", 0) or 0
-                if cumulative > peak:
-                    peak = cumulative
-                dd = cumulative - peak
+                equity_i = base_equity_for_dd + cumulative
+                if equity_i > peak_equity:
+                    peak_equity = equity_i
+                dd = equity_i - peak_equity
                 if dd < max_dd:
                     max_dd = dd
-            current_dd = cumulative - peak if peak > 0 else 0.0
+            current_dd = (base_equity_for_dd + cumulative) - peak_equity
     except Exception:
         logger.warning("Failed to compute drawdown from trade ledger", exc_info=True)
 
     invested = last_equity if last_equity > 0 else equity
-    current_dd_pct = round((current_dd / invested) * 100, 2) if invested > 0 and current_dd < 0 else 0.0
-    max_dd_pct = round((max_dd / invested) * 100, 2) if invested > 0 and max_dd < 0 else 0.0
+    # Percentages are relative to peak equity (base + cumulative), which
+    # for the scale of max_dd is well-approximated by base_equity itself.
+    current_dd_pct = round((current_dd / base_equity_for_dd) * 100, 2) if base_equity_for_dd > 0 and current_dd < 0 else 0.0
+    max_dd_pct = round((max_dd / base_equity_for_dd) * 100, 2) if base_equity_for_dd > 0 and max_dd < 0 else 0.0
 
     return RiskDashboard(
         portfolio_beta=None,
@@ -348,8 +356,15 @@ async def _generate_var() -> VaRResponse:
                         if len(bars) >= 5:
                             closes = [b["c"] for b in bars]
                             returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes)) if closes[i - 1] > 0]
-                            if returns:
-                                vol = (sum((r - sum(returns) / len(returns)) ** 2 for r in returns) / len(returns)) ** 0.5
+                            # Sample standard deviation (Bessel-corrected, ÷ N-1).
+                            # The previous divisor ÷ N was the biased MLE, which
+                            # systematically understated volatility — and
+                            # therefore VaR — especially on small samples (a
+                            # 30-bar sample understates vol by ~3% just from
+                            # the wrong divisor). Need at least 2 observations.
+                            if len(returns) >= 2:
+                                mean_r = sum(returns) / len(returns)
+                                vol = (sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5
                                 position_vols[sym] = vol
                 except Exception:
                     logger.debug("VaR: bars fetch failed for %s", sym, exc_info=True)
@@ -428,8 +443,37 @@ def _empty_var(note: str) -> VaRResponse:
 
 
 async def _generate_drawdown() -> DrawdownResponse:
-    """Compute real drawdown from the trade ledger's closed trades."""
+    """Compute real drawdown from the trade ledger's closed trades.
+
+    Drawdown is computed on the **equity curve** (``base_equity +
+    cumulative_pnl``) divided by the **running peak equity** — not on
+    cumulative P&L divided by peak P&L. The old formulation produced
+    nonsensical percentages (a $100 drawdown after $500 of profit showed
+    as -20% even if equity was $100k) and silently reported 0.0% drawdown
+    whenever ``peak_pnl <= 0`` (i.e. during any losing streak starting
+    from day one).
+    """
+    import httpx
     from data.ingestion.trade_ledger import TradeLedger
+
+    # Fetch base equity from the broker so drawdown is scaled to account
+    # size, not to peak profits. Fall back to $100k only when the broker
+    # is unreachable — this matches the default used elsewhere in the
+    # portfolio metrics layer.
+    base_equity = 100_000.0
+    try:
+        headers = await _alpaca_headers()
+        base_url = await _alpaca_base_url()
+        async with httpx.AsyncClient(timeout=5) as client:
+            acct = await client.get(f"{base_url}/v2/account", headers=headers)
+            if acct.status_code == 200:
+                a = acct.json()
+                # Use last_equity (start-of-day) if available; else equity.
+                raw = float(a.get("last_equity") or a.get("equity") or 0)
+                if raw > 0:
+                    base_equity = raw
+    except Exception:
+        logger.debug("drawdown: falling back to $100k base equity", exc_info=True)
 
     try:
         ledger = TradeLedger()
@@ -448,7 +492,10 @@ async def _generate_drawdown() -> DrawdownResponse:
         closed_sorted = sorted(closed, key=lambda t: t.get("exit_time", ""))
 
         cumulative_pnl = 0.0
-        peak_pnl = 0.0
+        # Initialise peak to the account's base equity, so a losing streak
+        # from the first trade is correctly reported as a drawdown rather
+        # than hidden behind ``peak_pnl <= 0``.
+        peak_equity = base_equity
         max_dd = 0.0
         max_dd_date = ""
         series: list[DrawdownPoint] = []
@@ -458,14 +505,18 @@ async def _generate_drawdown() -> DrawdownResponse:
         for trade in closed_sorted:
             pnl = trade.get("pnl", 0) or 0
             cumulative_pnl += pnl
+            equity_i = base_equity + cumulative_pnl
             exit_time = trade.get("exit_time", "")
             trade_date = exit_time[:10] if exit_time else date.today().isoformat()
 
-            if cumulative_pnl > peak_pnl:
-                peak_pnl = cumulative_pnl
+            if equity_i > peak_equity:
+                peak_equity = equity_i
                 peak_date = trade_date
 
-            dd_pct = round(((cumulative_pnl - peak_pnl) / peak_pnl) * 100, 2) if peak_pnl > 0 else 0.0
+            # Drawdown as a percentage of peak equity (the industry-standard
+            # definition). peak_equity starts at base_equity (>0 by
+            # construction) so division is always safe.
+            dd_pct = round(((equity_i - peak_equity) / peak_equity) * 100, 2) if peak_equity > 0 else 0.0
 
             if dd_pct < max_dd:
                 max_dd = dd_pct
@@ -474,11 +525,12 @@ async def _generate_drawdown() -> DrawdownResponse:
             series.append(DrawdownPoint(
                 date=trade_date,
                 drawdown_pct=dd_pct,
-                portfolio_value=round(cumulative_pnl, 2),
-                peak_value=round(peak_pnl, 2),
+                portfolio_value=round(equity_i, 2),
+                peak_value=round(peak_equity, 2),
             ))
 
-        current_dd = round(((cumulative_pnl - peak_pnl) / peak_pnl) * 100, 2) if peak_pnl > 0 else 0.0
+        final_equity = base_equity + cumulative_pnl
+        current_dd = round(((final_equity - peak_equity) / peak_equity) * 100, 2) if peak_equity > 0 else 0.0
 
         # Check if recovered from max drawdown
         if current_dd >= 0.0 and max_dd < 0.0 and max_dd_date and peak_date:

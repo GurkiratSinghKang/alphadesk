@@ -12,6 +12,7 @@ import {
   getStrategies,
   type TradeHistoryEntry,
 } from "@/lib/api";
+import { usePortfolioStore } from "@/stores/portfolio";
 import type { Position, PortfolioSummary } from "@/types";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -49,8 +50,20 @@ function downloadCsv(filename: string, csvContent: string) {
   URL.revokeObjectURL(url);
 }
 
+// CSV-injection hardening: Excel/Sheets/Numbers interpret any cell whose
+// first character is `=`, `+`, `-`, `@`, TAB (0x09) or CR (0x0D) as a
+// formula. A strategy name or symbol originating from user/ticker data
+// (e.g. `=cmd|'/c calc'!A1`) would then execute on open. Prefix such
+// values with a single-quote sentinel per OWASP guidance so the cell is
+// rendered verbatim. Do this before the quote-wrapping step so the
+// sentinel lives inside the quoted payload when wrapping is needed.
+const CSV_INJECTION_PREFIXES = ["=", "+", "-", "@", "\t", "\r"];
+
 function escapeCsv(val: unknown): string {
-  const str = String(val ?? "");
+  let str = String(val ?? "");
+  if (str.length > 0 && CSV_INJECTION_PREFIXES.includes(str[0])) {
+    str = `'${str}`;
+  }
   if (str.includes(",") || str.includes('"') || str.includes("\n")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -63,6 +76,17 @@ function arrayToCsv(headers: string[], rows: (string | number | null | undefined
     lines.push(row.map(escapeCsv).join(","));
   }
   return lines.join("\n");
+}
+
+/**
+ * Format a two-scalar "label,value" CSV row. Runs both sides through
+ * `escapeCsv` so negative numbers (`-5.23`), user-supplied strategy
+ * names, and any other field that could be parsed as a formula are
+ * neutralised. Replaces ad-hoc `csv += "Label,${x}\n"` lines which
+ * previously bypassed escaping entirely.
+ */
+function csvRow(label: string, value: unknown): string {
+  return `${escapeCsv(label)},${escapeCsv(value)}\n`;
 }
 
 // ─── Section Card ──────────────────────────────────────────
@@ -113,17 +137,20 @@ function PortfolioStatement({
   const totalPnl = totalRealizedPnl + totalUnrealizedPnl;
 
   const handleDownload = () => {
-    // Account summary section
+    // Account summary section — all scalar emissions routed through
+    // csvRow() so negative numbers can't trigger Excel formula parsing.
     let csv = "PORTFOLIO STATEMENT\n";
-    csv += `Generated,${new Date().toISOString()}\n\n`;
+    csv += csvRow("Generated", new Date().toISOString());
+    csv += "\n";
     csv += "ACCOUNT SUMMARY\n";
-    csv += `Equity,${(summary.equity ?? 0).toFixed(2)}\n`;
-    csv += `Cash,${(summary.cash ?? 0).toFixed(2)}\n`;
-    csv += `Buying Power,${(summary.buyingPower ?? 0).toFixed(2)}\n`;
-    csv += `Positions Count,${summary.positionsCount}\n`;
-    csv += `Total Unrealized P&L,${(totalUnrealizedPnl ?? 0).toFixed(2)}\n`;
-    csv += `Total Realized P&L,${(totalRealizedPnl ?? 0).toFixed(2)}\n`;
-    csv += `Total P&L,${(totalPnl ?? 0).toFixed(2)}\n\n`;
+    csv += csvRow("Equity", (summary.equity ?? 0).toFixed(2));
+    csv += csvRow("Cash", (summary.cash ?? 0).toFixed(2));
+    csv += csvRow("Buying Power", (summary.buyingPower ?? 0).toFixed(2));
+    csv += csvRow("Positions Count", summary.positionsCount);
+    csv += csvRow("Total Unrealized P&L", (totalUnrealizedPnl ?? 0).toFixed(2));
+    csv += csvRow("Total Realized P&L", (totalRealizedPnl ?? 0).toFixed(2));
+    csv += csvRow("Total P&L", (totalPnl ?? 0).toFixed(2));
+    csv += "\n";
 
     // Current positions
     csv += "CURRENT POSITIONS\n";
@@ -251,8 +278,12 @@ function PortfolioStatement({
           Closed Trades{closedTrades.length > 0 ? ` (${closedTrades.length} total)` : ""}
         </p>
         {closedTrades.length === 0 ? (
+          // BUG-040 — empty-state voice aligned with analytics / alerts:
+          // italic-serif full-sentence headline, always ending with a
+          // period. Points at the range selector so the user has a
+          // concrete next action.
           <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
-            No closed trades in this period.
+            No trades closed in this period &mdash; adjust the range above to broaden the search.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
@@ -465,20 +496,54 @@ function StrategyPerformanceReport({
 
 // ─── Tax Report ────────────────────────────────────────────
 
+// Extract the civil Y/M/D components of an ISO timestamp *in ET*.
+// Tax-year bucketing and holding-period classification must use the
+// market's calendar — a sell ticket that prints at 23:30 ET on Dec 31
+// is a December trade even though it's already January 1 in UTC, and
+// the browser's local `getFullYear()` would mis-bucket it for any user
+// outside America/New_York.
+function etDateParts(iso: string): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(iso));
+  let y = 0, m = 0, d = 0;
+  for (const p of parts) {
+    if (p.type === "year") y = parseInt(p.value, 10);
+    else if (p.type === "month") m = parseInt(p.value, 10);
+    else if (p.type === "day") d = parseInt(p.value, 10);
+  }
+  return { y, m, d };
+}
+
 function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: number }) {
   const taxTrades = useMemo(() => {
     return trades.filter(t => {
       if (!t.exit_time || t.pnl === null) return false;
-      const exitYear = new Date(t.exit_time).getFullYear();
-      return exitYear === taxYear;
+      return etDateParts(t.exit_time).y === taxYear;
     });
   }, [trades, taxYear]);
 
   const classified = useMemo(() => {
     return taxTrades.map(t => {
-      const entryDate = new Date(t.entry_time);
-      const exitDate = new Date(t.exit_time!);
-      const holdingDays = Math.floor((exitDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+      // Holding days must be counted in CIVIL days, not elapsed hours
+      // divided by 24. The old `(exit - entry) / 86_400_000` math can
+      // return 364 for a position held exactly 365 calendar days when a
+      // spring-forward DST transition falls inside the window (one of
+      // the 24-hour windows is actually 23 hours), silently flipping a
+      // long-term trade to short-term — and with it the tax rate.
+      // Compare ET-anchored date parts via UTC epoch of midnight.
+      const e = etDateParts(t.entry_time);
+      const x = etDateParts(t.exit_time!);
+      const entryMid = Date.UTC(e.y, e.m - 1, e.d);
+      const exitMid = Date.UTC(x.y, x.m - 1, x.d);
+      const holdingDays = Math.round((exitMid - entryMid) / 86_400_000);
+      // IRS: "held more than one year" = long-term. Leap-year safe: a
+      // position entered Feb 29 2024 and sold Feb 28 2025 is 365 days
+      // and still short-term; > 365 covers the common 366+ case without
+      // a leap-year lookup.
       const isLongTerm = holdingDays > 365;
       return { ...t, holdingDays, isLongTerm, classification: isLongTerm ? "Long-Term" : "Short-Term" };
     });
@@ -494,16 +559,26 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
   const totalRealized = classified.reduce((s, t) => s + (t.pnl ?? 0), 0);
 
   const handleDownload = () => {
-    let csv = `TAX REPORT - ${taxYear}\n`;
-    csv += `Generated,${new Date().toISOString()}\n\n`;
+    // BUG-029: the CSV must carry the same compliance disclaimer the UI
+    // shows next to the download button. Anyone handing this file to an
+    // accountant needs to see "not tax advice" in the file itself.
+    let csv = `"Informational only — not tax advice. Consult a qualified professional."\n`;
+    csv += `TAX REPORT - ${taxYear}\n`;
+    csv += csvRow("Generated", new Date().toISOString());
+    csv += "\n";
     csv += "SUMMARY\n";
-    csv += `Short-Term Gains,${(shortTermGains ?? 0).toFixed(2)}\n`;
-    csv += `Short-Term Losses,${(shortTermLosses ?? 0).toFixed(2)}\n`;
-    csv += `Short-Term Net,${(shortTermGains + shortTermLosses).toFixed(2)}\n`;
-    csv += `Long-Term Gains,${(longTermGains ?? 0).toFixed(2)}\n`;
-    csv += `Long-Term Losses,${(longTermLosses ?? 0).toFixed(2)}\n`;
-    csv += `Long-Term Net,${(longTermGains + longTermLosses).toFixed(2)}\n`;
-    csv += `Total Realized,${(totalRealized ?? 0).toFixed(2)}\n\n`;
+    // Losses are negative so the prior direct template-literal emit made
+    // them a CSV-injection vector (Excel happily parses `=-523.45` as a
+    // formula). csvRow() runs every scalar through escapeCsv which
+    // prefixes the sentinel `'` when needed.
+    csv += csvRow("Short-Term Gains", (shortTermGains ?? 0).toFixed(2));
+    csv += csvRow("Short-Term Losses", (shortTermLosses ?? 0).toFixed(2));
+    csv += csvRow("Short-Term Net", (shortTermGains + shortTermLosses).toFixed(2));
+    csv += csvRow("Long-Term Gains", (longTermGains ?? 0).toFixed(2));
+    csv += csvRow("Long-Term Losses", (longTermLosses ?? 0).toFixed(2));
+    csv += csvRow("Long-Term Net", (longTermGains + longTermLosses).toFixed(2));
+    csv += csvRow("Total Realized", (totalRealized ?? 0).toFixed(2));
+    csv += "\n";
     csv += "ALL REALIZED TRADES\n";
     csv += arrayToCsv(
       ["Symbol", "Side", "Quantity", "Entry Price", "Exit Price", "P&L", "Entry Date", "Exit Date", "Holding Days", "Classification", "Strategy"],
@@ -626,8 +701,20 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       )}
 
       {classified.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center py-6">No realized trades found for {taxYear}.</p>
+        <p className="font-display italic text-[13.5px] text-fg-muted text-center py-6">No realized trades found for {taxYear} &mdash; this tax year has nothing to report.</p>
       )}
+
+      {/* BUG-029 compliance disclaimer — the tax report is a convenience
+          export built from trade-ledger data; it is not filing-ready and
+          is not authored by a tax professional. Copy lives right above
+          the download button so it travels with the action. */}
+      <p
+        role="note"
+        data-testid="tax-report-disclaimer"
+        className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-[11px] leading-snug text-amber-100"
+      >
+        Informational only — not tax advice. Consult a qualified professional.
+      </p>
 
       <Button onClick={handleDownload} size="sm" className="gap-1.5">
         <Download className="h-3 w-3" />
@@ -650,6 +737,14 @@ export default function ReportsPage() {
   // now literally means "in the selected period" rather than "ever".
   const [range, setRange] = useState<ReportsRange>("1M");
 
+  // BUG-001 / BUG-015: subscribe to the shared portfolio store so Reports
+  // shows exactly the same positions + summary numbers as Desk / Pipeline.
+  // `useDataPipeline` (mounted in the dashboard layout) keeps the store
+  // fresh. We still kick off a one-time fetch below so the page works
+  // even if the user lands on /reports first.
+  const storeSummary = usePortfolioStore((s) => s.summary);
+  const storePositions = usePortfolioStore((s) => s.positions);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -661,8 +756,15 @@ export default function ReportsPage() {
           getStrategies(),
         ]);
         if (cancelled) return;
-        if (summaryRes.status === "fulfilled") setSummary(summaryRes.value);
-        if (positionsRes.status === "fulfilled") setPositions(positionsRes.value);
+        if (summaryRes.status === "fulfilled") {
+          setSummary(summaryRes.value);
+          // Fan into the shared store so Desk/Pipeline see the same snapshot.
+          usePortfolioStore.getState().setSummary(summaryRes.value);
+        }
+        if (positionsRes.status === "fulfilled") {
+          setPositions(positionsRes.value);
+          usePortfolioStore.getState().setPositions(positionsRes.value);
+        }
         if (tradesRes.status === "fulfilled") setTrades(tradesRes.value);
         if (strategiesRes.status === "fulfilled") setStrategies(strategiesRes.value as StrategyInfo[]);
       } catch {
@@ -674,6 +776,15 @@ export default function ReportsPage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // Mirror store updates into local state so WS ticks / sibling-page
+  // refreshes keep the report numbers in sync without a round-trip.
+  useEffect(() => {
+    if (storePositions.length > 0) setPositions(storePositions);
+  }, [storePositions]);
+  useEffect(() => {
+    if (storeSummary && storeSummary.equity > 0) setSummary(storeSummary);
+  }, [storeSummary]);
 
   // Filter trades by selected period. We bucket by exit_time for closed
   // trades (the audit-relevant "closed in this period" semantics); open
@@ -763,9 +874,24 @@ export default function ReportsPage() {
               onChange={(e) => setTaxYear(parseInt(e.target.value))}
               className="ml-2 h-7 rounded border border-border bg-background px-2 text-xs text-foreground"
             >
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
+              {/* BUG-038: dropdown reported as "only 2026 visible" —
+                  guard explicitly so the current year AND the prior year
+                  are always emitted (the prior year is the one people
+                  actually file against in Q1–Q2). Using a deduped Set
+                  makes the list deterministic even on year-boundary
+                  renders where `getFullYear()` could race a state
+                  re-read. */}
+              {Array.from(
+                new Set<number>([
+                  new Date().getFullYear(),
+                  new Date().getFullYear() - 1,
+                  ...Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i),
+                ]),
+              )
+                .sort((a, b) => b - a)
+                .map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
             </select>
           </div>
           <TaxReport trades={trades} taxYear={taxYear} />

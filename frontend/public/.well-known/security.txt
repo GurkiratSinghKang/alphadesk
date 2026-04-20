@@ -1,5 +1,5 @@
-Contact: security@tradingalpha.net
-Expires: 2027-01-01T00:00:00Z
+Contact: mailto:security@tradingalpha.net
+Expires: 2027-04-20T00:00:00.000Z
 Preferred-Languages: en
 Canonical: https://tradingalpha.net/.well-known/security.txt
 Policy: https://tradingalpha.net/security

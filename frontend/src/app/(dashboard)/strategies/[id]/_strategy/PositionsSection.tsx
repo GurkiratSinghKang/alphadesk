@@ -18,7 +18,22 @@ function formatEntryDate(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+  // BUG-018 — when the API emits a full ISO timestamp (with `T`), surface
+  // the HH:MM and short TZ abbreviation alongside the date so two positions
+  // opened seconds apart don't render as a single homogenised "Apr 18, 2026"
+  // row. Date-only strings keep the old compact format.
+  const hasTime = iso.includes("T");
+  if (!hasTime) {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+  }
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 }
 
 /**

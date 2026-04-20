@@ -33,17 +33,37 @@ export const useNotificationsStore = create<NotificationsState>()(
       notifications: [],
 
       addNotification: (n) =>
-        set((state) => ({
-          notifications: [
-            {
-              ...n,
-              id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              timestamp: Date.now(),
-              read: false,
-            },
-            ...state.notifications,
-          ].slice(0, 200), // keep last 200
-        })),
+        set((state) => {
+          // BUG-033: the bell count drifted +1 between /alerts and
+          // /pipeline because the same lifecycle event can arrive on
+          // multiple channels (portfolio + trade_updates both fan fills)
+          // and push twice. De-dupe against the most recent notification
+          // on a {category, title, detail} tuple within a 2s window —
+          // short enough that a legitimate re-trigger (user manually
+          // replaying a fill) still lands, long enough to absorb the
+          // multi-channel race that causes the drift.
+          const head = state.notifications[0];
+          if (
+            head &&
+            head.category === n.category &&
+            head.title === n.title &&
+            head.detail === n.detail &&
+            Date.now() - head.timestamp < 2_000
+          ) {
+            return {} as Partial<NotificationsState>;
+          }
+          return {
+            notifications: [
+              {
+                ...n,
+                id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                timestamp: Date.now(),
+                read: false,
+              },
+              ...state.notifications,
+            ].slice(0, 200), // keep last 200
+          };
+        }),
 
       markAsRead: (id) =>
         set((state) => ({

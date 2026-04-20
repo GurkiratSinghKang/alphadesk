@@ -63,7 +63,14 @@
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Frame-Options "DENY"
         X-Content-Type-Options "nosniff"
-        X-XSS-Protection "1; mode=block"
+        # BUG-045: X-XSS-Protection is deprecated. The legacy XSS auditor it
+        # activated has been removed from every modern browser (Chrome 78+,
+        # Edge 17+, Firefox never shipped it, Safari removed it). Leaving it
+        # set to "1; mode=block" is worse than nothing on older browsers
+        # because the auditor itself introduced XSS primitives. Explicitly
+        # disable it so any intermediate proxy that might re-enable a default
+        # gets overridden. See OWASP Secure Headers Project, RFC-ietf-httpbis.
+        X-XSS-Protection "0"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         # CSP — Wave 3M / persona-91 fix. The authoritative CSP is now emitted
@@ -84,6 +91,11 @@
         ?Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'"
         -Server
         -X-Powered-By
+        # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the
+        # proxy software + version in every response narrows the attacker's
+        # reconnaissance window (version-specific CVEs, handler quirks). The
+        # header has no end-user value on a single-hop architecture.
+        -Via
     }
 
     # Compression

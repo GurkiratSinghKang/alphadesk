@@ -27,6 +27,32 @@ def _client_ip(req: Request) -> str:
     return req.client.host if req.client else "unknown"
 
 
+def _is_browser_client(req: Request) -> bool:
+    """Heuristic: should this request be treated as a browser?
+
+    BUG-044: the ``/login`` response previously leaked the JWT pair in the
+    JSON body alongside the HttpOnly Set-Cookie. That body is readable by
+    any script on the page (XSS, browser extensions, etc.), which defeats
+    the HttpOnly protection for browser sessions.
+
+    Browser clients are identified as those that do NOT explicitly announce
+    themselves as a scripted/mobile caller via the ``X-Client`` header.
+    Known non-browser values: ``cli``, ``ios``, ``android``. When a request
+    has an ``Origin`` header (always set on cross-origin fetch) or a
+    ``User-Agent`` that looks like a browser AND no ``X-Client`` override,
+    we treat it as a browser and suppress the tokens in the body.
+
+    Returning ``True`` means: return ``{"ok": true, "expires_in": N}`` and
+    rely on the HttpOnly cookies for session continuity.
+    """
+    x_client = (req.headers.get("x-client") or "").strip().lower()
+    if x_client in {"cli", "ios", "android", "mobile", "api"}:
+        return False
+    # Default: treat anything without an explicit non-browser X-Client as
+    # a browser. Safer default — legit CLI integrations must opt in.
+    return True
+
+
 async def _audit(
     event: str,
     *,
@@ -413,7 +439,12 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # BUG-044: made optional so browser clients can rely on the HttpOnly
+    # ``refresh_token`` cookie (path=/api/v1/auth) instead of receiving the
+    # token in the login JSON body. CLI / iOS callers that send
+    # ``X-Client: cli`` (or ``ios``) still get the token in the body and can
+    # continue to POST it explicitly.
+    refresh_token: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -571,23 +602,44 @@ async def login(request: LoginRequest, req: Request):
     # Audit the successful login. Do NOT log the tokens or password hash.
     await _audit("login", user=submitted_username, ip=client_ip, result="success", req=req)
 
-    # Return tokens in body (for backward compat) AND set HttpOnly cookies
-    response = JSONResponse(content={
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": expires_in,
-    })
+    # BUG-044: do not leak the JWT pair in the JSON body for browser clients.
+    # Browsers rely on the HttpOnly ``access_token`` / ``refresh_token``
+    # cookies set below — the body echo was a defence-in-depth regression
+    # since any script on the page could read it. Explicit non-browser
+    # clients (CLI / iOS / Android) opt in via ``X-Client:`` and still
+    # receive the tokens so they can persist them in Keychain etc.
+    if _is_browser_client(req):
+        body_payload: dict[str, object] = {
+            "ok": True,
+            "expires_in": expires_in,
+        }
+    else:
+        body_payload = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": expires_in,
+        }
+    response = JSONResponse(content=body_payload)
     _set_token_cookies(response, access_token, refresh_token, expires_in)
     return response
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
+@router.post("/refresh")
+async def refresh(request: RefreshRequest, req: Request):
     client_ip = _client_ip(req)
 
+    # BUG-044: browser clients no longer receive the refresh token in the
+    # login JSON body, so the refresh handler must fall back to reading it
+    # from the HttpOnly ``refresh_token`` cookie (path=/api/v1/auth). CLI /
+    # iOS callers continue to POST the token in the body as before.
+    submitted_token = request.refresh_token or req.cookies.get("refresh_token") or ""
+    if not submitted_token:
+        await _audit("refresh", user="-", ip=client_ip, result="failure", reason="no_token", req=req)
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
     try:
-        payload = decode_token(request.refresh_token, expected_type="refresh")
+        payload = decode_token(submitted_token, expected_type="refresh")
     except Exception:
         # Bad / expired / tampered token. Audit the attempt (no username yet
         # since we couldn't decode) and re-raise so decode_token's HTTPException
@@ -624,7 +676,7 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
     # be replayed if we've already handed out a new pair.
     from core.auth import revoke_token
     try:
-        await revoke_token(request.refresh_token)
+        await revoke_token(submitted_token)
     except Exception:
         logger.warning("refresh: failed to revoke old token — aborting", exc_info=True)
         await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_failed", req=req)
@@ -637,15 +689,27 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
         await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_not_persisted", req=req)
         raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
 
-    new_tokens = TokenResponse(
-        access_token=create_access_token(username, password_version=current_pv, session_epoch=current_epoch),
-        refresh_token=create_refresh_token(username, password_version=current_pv, session_epoch=current_epoch),
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
+    new_access = create_access_token(username, password_version=current_pv, session_epoch=current_epoch)
+    new_refresh = create_refresh_token(username, password_version=current_pv, session_epoch=current_epoch)
+    expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
     await _audit("refresh", user=username, ip=client_ip, result="success", req=req)
 
-    return new_tokens
+    # BUG-044: mirror the login behaviour — browser clients get a body
+    # without the JWT material (the HttpOnly cookies below carry the
+    # session). CLI / iOS clients keep receiving the full token pair.
+    if _is_browser_client(req):
+        body_payload: dict[str, object] = {"ok": True, "expires_in": expires_in}
+    else:
+        body_payload = {
+            "access_token": new_access,
+            "refresh_token": new_refresh,
+            "token_type": "bearer",
+            "expires_in": expires_in,
+        }
+    response = JSONResponse(content=body_payload)
+    _set_token_cookies(response, new_access, new_refresh, expires_in)
+    return response
 
 
 @router.post("/logout")
@@ -845,14 +909,23 @@ async def logout_all(
         req=req,
     )
 
-    response = JSONResponse(content={
-        "ok": True,
-        "session_epoch": new_epoch,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": expires_in,
-    })
+    # BUG-044: scrub the JWT pair from the response body for browser clients.
+    if _is_browser_client(req):
+        body_payload: dict[str, object] = {
+            "ok": True,
+            "session_epoch": new_epoch,
+            "expires_in": expires_in,
+        }
+    else:
+        body_payload = {
+            "ok": True,
+            "session_epoch": new_epoch,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": expires_in,
+        }
+    response = JSONResponse(content=body_payload)
     _set_token_cookies(response, access_token, refresh_token, expires_in)
     return response
 

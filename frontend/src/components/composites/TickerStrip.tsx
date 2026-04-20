@@ -51,7 +51,12 @@ export default function TickerStrip({
       aria-live="off"
       data-paused={paused || undefined}
       className={cn(
-        "overflow-hidden whitespace-nowrap py-6 border-b border-border",
+        // BUG-052 — `overflow-hidden` lets the marquee's transform paint
+        // over the border in Safari's compositor. `overflow: clip` (via
+        // the `overflow-clip` Tailwind util) hard-clips the animated
+        // track to the element's padding-box, eliminating the 1px
+        // bleed-through on the bottom border at hi-dpi.
+        "overflow-clip whitespace-nowrap py-6 border-b border-border",
         "group/ticker",
         className
       )}
@@ -79,11 +84,22 @@ export default function TickerStrip({
             animation-play-state: paused !important;
           }
         }
+        /* BUG-052 pause marquee on touch devices where :hover never fires */
+        @media (hover: none), (pointer: coarse) {
+          [data-slot="ticker-strip"] > .ad-marquee-track {
+            animation-play-state: paused !important;
+          }
+        }
       `}</style>
 
       <div className="ad-marquee-track">
         {doubled.map((t) => {
-          const isDown = t.deltaPct < 0;
+          // Sign the formatted magnitude, not the raw delta, so a value
+          // like -0.004 (which rounds to "0.00") doesn't ticker as
+          // "−0.00%". Preserves the down-colour only when the displayed
+          // digits are actually non-zero.
+          const absStr = Math.abs(t.deltaPct).toFixed(2);
+          const isDown = t.deltaPct < 0 && parseFloat(absStr) !== 0;
           const sign = isDown ? "−" : "+";
           return (
             <span
@@ -95,7 +111,7 @@ export default function TickerStrip({
               <b className="text-fg font-medium">{t.price}</b>
               <span className={isDown ? "text-down-500" : "text-up-500"}>
                 {sign}
-                {Math.abs(t.deltaPct).toFixed(2)}%
+                {absStr}%
               </span>
             </span>
           );

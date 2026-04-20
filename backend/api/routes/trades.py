@@ -609,6 +609,65 @@ def _reject_if_live_forbidden(strategy: str | None, *, username: str | None = No
 
 
 # ---------------------------------------------------------------------------
+# Per-user order-submission rate limit (security audit, Round 6).
+# ---------------------------------------------------------------------------
+# POST /api/v1/trades/orders previously had only the Idempotency-Key dedup
+# and the payload-hash dedup (both narrow, correctness-only guards). A
+# stolen access token (or a runaway automation) could still spray the broker
+# with unique orders at whatever rate the event loop can handle. That is a
+# money-loss primitive on a live account. Apply a per-user sliding window:
+# 60 submissions per 60 seconds is well above a reasonable manual trader's
+# top speed (~1/sec burst) and still bounds a compromised-session blast
+# radius before halt/kill-switch can land.
+#
+# Fail-closed on Redis unavailability — order submission is a money-path; a
+# transient cache outage must not silently remove the limiter. Clients see
+# 503 and retry, not an open window for unbounded order spam.
+_ORDER_RATE_WINDOW = 60
+_ORDER_RATE_MAX = 60
+
+
+async def _enforce_order_rate_limit(username: str) -> None:
+    """Raise 429 if ``username`` has submitted > _ORDER_RATE_MAX orders in the
+    last _ORDER_RATE_WINDOW seconds. 503 if Redis is unavailable."""
+    key = f"order_submit:{username}"
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        # Set TTL only on fresh key so the sliding window slides off as
+        # designed (matches auth.py _incr_one pattern).
+        pipe.expire(key, _ORDER_RATE_WINDOW, nx=True)
+        pipe.ttl(key)
+        results = await pipe.execute()
+        count = int(results[0])
+        ttl = int(results[2])
+    except Exception:
+        logger.warning("order rate-limit: Redis unavailable", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "rate_limiter_unavailable", "retry": True},
+        )
+
+    if count > _ORDER_RATE_MAX:
+        retry_after = max(1, ttl if ttl > 0 else _ORDER_RATE_WINDOW)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limited",
+                "message": (
+                    f"Order submission limit exceeded "
+                    f"({_ORDER_RATE_MAX} orders per {_ORDER_RATE_WINDOW}s). "
+                    "If this is unexpected, hit the halt button immediately."
+                ),
+                "retry_after": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -630,6 +689,12 @@ async def create_order(
     Missing / empty header falls back to the payload-hash dedup (30 s
     window) for legacy clients.
     """
+    # Security audit R6: per-user order-submission rate limit. Caps a
+    # compromised-session blast radius BEFORE we touch halt / broker / risk.
+    # Applied first so a token-spray attack gets a 429 instead of burning
+    # CPU on every downstream check.
+    await _enforce_order_rate_limit(username)
+
     # persona-16 P0-1: halt MUST gate every single manual order before any
     # side-effecting check (risk, dedup, broker POST). Previously the halt
     # check was here but the halt gate is now also the first thing that runs

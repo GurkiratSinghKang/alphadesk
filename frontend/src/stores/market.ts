@@ -6,6 +6,19 @@ import type { Quote } from "@/types";
 
 const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
 
+// TODO(BUG-016): the dashboard currently observes ~295 GETs/min across
+// portfolio/orders/quotes because most surfaces poll on their own
+// intervals. The proper fix is a unified WebSocket stream for quotes +
+// portfolio + orders so pages subscribe once and receive push updates
+// (the `portfolio` WS channel already exists — see useDataPipeline — but
+// the REST poll in parallel defeats its purpose). Until that lands:
+//   • `useDataPipeline` defaults portfolio polling to 30s and gates it
+//     on market hours when the user hasn't overridden the interval.
+//   • React Query hooks (regime=5m, indices=1m, strategies=1m) remain
+//     coarse-grained; see hooks/useQueries.ts.
+// Follow-up owner: next WS wave (consolidate portfolio + quotes into one
+// subscription, drop redundant REST polls).
+
 interface MarketState {
   quotes: Record<string, Quote>;
   watchlist: string[];

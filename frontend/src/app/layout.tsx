@@ -113,6 +113,23 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>
+        {/* BUG-048 — LCP / CLS were not observable on this build because
+            no web-vitals listener was attached. Install a lightweight
+            PerformanceObserver directly (no extra npm dep) that emits
+            each candidate LCP and the final CLS to the console under a
+            stable `[webvitals]` prefix; we already proxy console logs
+            to the server via the `alphadesk:client-log` channel so this
+            surfaces in our Hetzner log pipeline without extra wiring.
+            The inline script is intentionally tiny — no async imports,
+            no React — so it runs before hydration and captures the
+            *real* first paint. */}
+        <script
+          // This runs once, pre-hydration; no state to leak. `dangerouslySet`
+          // is safe because the payload is a static literal.
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(typeof PerformanceObserver!=="function")return;var po=new PerformanceObserver(function(list){try{var es=list.getEntries();for(var i=0;i<es.length;i++){var e=es[i];console.info("[webvitals] lcp",Math.round(e.startTime),e.element&&e.element.tagName);}}catch(err){}});po.observe({type:"largest-contentful-paint",buffered:true});var cls=0;var cpo=new PerformanceObserver(function(list){try{var es=list.getEntries();for(var i=0;i<es.length;i++){var e=es[i];if(!e.hadRecentInput){cls+=e.value;}}}catch(err){}});cpo.observe({type:"layout-shift",buffered:true});var report=function(){try{console.info("[webvitals] cls",cls.toFixed(4));}catch(err){}};addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")report();});addEventListener("pagehide",report);}catch(err){}})();`,
+          }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

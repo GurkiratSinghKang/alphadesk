@@ -50,13 +50,18 @@ export default function StatusBar({
         // under `md:overflow-hidden` on the parent. Allow horizontal scroll
         // on mobile (shrink-0 on children so nothing squishes illegibly),
         // then revert to the natural desk layout at md+.
+        // BUG-035: status-bar text was 10-11px which falls below a
+        // comfortable readable floor on high-DPI screens (iOS Safari
+        // anti-aliases strokes at 11px and lower so digits blur into
+        // the ink-050 rail). Floor at 12px — same height still fits the
+        // 22px row because font-mono line-height is 1.0 here.
         "flex items-center h-[22px] px-5 gap-[18px]",
         "overflow-x-auto md:overflow-visible whitespace-nowrap",
         "border-t border-border bg-ink-050",
-        "font-mono text-[10px] text-fg-muted",
+        "font-mono text-[12px] text-fg-muted",
         className
       )}
-      style={{ letterSpacing: "0.02em" }}
+      style={{ letterSpacing: "0.02em", lineHeight: 1 }}
     >
       {pills.map((p, i) => (
         <span
@@ -73,7 +78,7 @@ export default function StatusBar({
           {p.href ? (
             <Link
               href={p.href}
-              className="font-mono text-[10px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+              className="font-mono text-[12px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
             >
               {p.hrefLabel ?? "Fix"}
             </Link>
@@ -86,7 +91,7 @@ export default function StatusBar({
         {/* ⌘K hint is keyboard-only affordance — hide on touch. */}
         <kbd
           className={cn(
-            "hidden md:inline-block font-mono text-[10px] text-fg bg-bg-elev-1 border border-border",
+            "hidden md:inline-block font-mono text-[12px] text-fg bg-bg-elev-1 border border-border",
             "px-1.5 py-[1px] rounded-xs"
           )}
           style={{ letterSpacing: "0.04em" }}

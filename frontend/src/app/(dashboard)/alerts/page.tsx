@@ -40,19 +40,53 @@ function formatDate(iso: string | null): string {
 
 // ─── Create Alert Form ──────────────────────────────────────
 
+// BUG-042 — alerts validation. Symbol must be 1-6 uppercase letters or
+// dots (e.g. AAPL, BRK.B); price must be a finite positive number.
+// Weakly-typed validation previously accepted `<script>alert(1)</script>`
+// as a "symbol" because it was non-empty, and a negative `-50` price
+// fell through to a backend 4xx with a generic "Failed to create" toast.
+const ALERT_SYMBOL_REGEX = /^[A-Z.]{1,6}$/;
+const ALERT_PRICE_MAX = 1_000_000;
+
 function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
   const { toast } = useToast();
   const [symbol, setSymbol] = useState("");
   const [price, setPrice] = useState("");
   const [condition, setCondition] = useState<"above" | "below">("above");
   const [submitting, setSubmitting] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sym = symbol.trim().toUpperCase();
+    setFieldError(null);
+    const rawSym = symbol.trim();
+    const sym = rawSym.toUpperCase();
     const p = parseFloat(price);
-    if (!sym || isNaN(p) || p <= 0) {
-      toast({ type: "error", message: "Enter a valid symbol and price" });
+
+    // Specific, field-pointing error messages — "required" when the
+    // field is empty, otherwise a format hint. Matches audit BUG-042.
+    const fail = (msg: string) => {
+      toast({ type: "error", message: msg });
+      setFieldError(msg);
+    };
+    if (!rawSym) {
+      fail("Symbol is required");
+      return;
+    }
+    if (!ALERT_SYMBOL_REGEX.test(sym)) {
+      fail("Symbol must be 1–6 letters (e.g. AAPL, BRK.B)");
+      return;
+    }
+    if (!price.trim()) {
+      fail("Price is required");
+      return;
+    }
+    if (!Number.isFinite(p) || p <= 0) {
+      fail("Price must be greater than 0");
+      return;
+    }
+    if (p > ALERT_PRICE_MAX) {
+      fail(`Price must be ≤ ${ALERT_PRICE_MAX.toLocaleString()}`);
       return;
     }
     setSubmitting(true);
@@ -63,7 +97,9 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
       setPrice("");
       onCreated();
     } catch (err: any) {
-      toast({ type: "error", message: err?.message ?? "Failed to create alert" });
+      const msg = err?.message ?? "Failed to create alert";
+      toast({ type: "error", message: msg });
+      setFieldError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -86,6 +122,15 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             placeholder="AAPL"
+            // BUG-042 — cap symbol length + hint the pattern so browsers
+            // with pattern-validation UI can preempt bogus input (XSS
+            // payloads etc). Runtime regex in handleSubmit is still the
+            // source of truth; this is just a UI assist.
+            maxLength={6}
+            pattern="[A-Za-z.]{1,6}"
+            autoCapitalize="characters"
+            spellCheck={false}
+            aria-invalid={fieldError != null || undefined}
             // Wave 29 mobile a11y: `text-sm` on a native input < 16px
             // triggers iOS Safari's auto-zoom on focus. Use text-base on
             // mobile and drop back to text-sm at md+ where the desk lives.
@@ -143,7 +188,11 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             onChange={(e) => setPrice(e.target.value)}
             placeholder="150.00"
             step={0.01}
-            min={0}
+            // BUG-042 — `min={0}` allowed 0; require strictly positive.
+            // `0.01` is the smallest meaningful price on US equities.
+            min={0.01}
+            max={ALERT_PRICE_MAX}
+            aria-invalid={fieldError != null || undefined}
             // Wave 29 mobile a11y: see symbol input above — text-base on
             // mobile prevents iOS focus-zoom; h-10 keeps the 40px tap target.
             className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
@@ -163,6 +212,17 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
           </Button>
         </div>
       </div>
+      {/* BUG-042 — inline error under the form so the validation reason
+          stays visible even after the toast animates out. */}
+      {fieldError && (
+        <p
+          role="alert"
+          data-testid="alert-form-error"
+          className="mt-2 text-[11px] text-[var(--loss)]"
+        >
+          {fieldError}
+        </p>
+      )}
     </form>
   );
 }
@@ -451,13 +511,16 @@ export default function AlertsPage() {
 
           <ScrollArea className="max-h-[400px]">
             {activeAlerts.length === 0 ? (
+              // BUG-040 — empty-state voice aligned with analytics /
+              // reports: italic-serif sentence headline, sans
+              // sentence-case follow-up. Full sentences, full stops.
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <AlertTriangle className="h-6 w-6 text-muted-foreground/30 mb-2" />
                 <p className="font-display italic text-[15px] text-fg">
-                  No active alerts
+                  You haven&rsquo;t set up any alerts yet.
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  Create one above to get started.
+                  Create one above to start watching a symbol or condition.
                 </p>
               </div>
             ) : (

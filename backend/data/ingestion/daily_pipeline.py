@@ -1681,11 +1681,28 @@ async def _run_pipeline_inner(
         # Safety: paper-only check
         _base_url()
 
-        # Safety: trading window check
+        # Safety: trading window check. Previously this only appended an
+        # error and continued — the pipeline would still call the screener,
+        # run agents, and submit orders against a closed book (Alpaca
+        # rejects MOC after the bell, but market orders queued pre-open
+        # can still fill at unfavourable auction prints). A "Run Now"
+        # click outside the session must be a no-op, not a silent queue.
         if not _is_within_trading_window():
             now = _now_et()
-            logger.warning("Outside trading window (%s ET)", now.strftime("%H:%M"))
-            errors.append(f"Outside trading window ({now.strftime('%H:%M')} ET)")
+            logger.warning(
+                "Pipeline aborted — outside trading window (%s ET)",
+                now.strftime("%H:%M"),
+            )
+            _pipeline_status["last_result"] = "skipped_market_closed"
+            return {
+                "skipped": True,
+                "reason": "market_closed",
+                "message": (
+                    f"Market closed at {now.strftime('%H:%M')} ET; "
+                    "pipeline did not run. Orders are not queued."
+                ),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
         # Persona-65 P65: reconcile any bracket outbox rows left over from
         # a previous crashed run BEFORE we start a new one. Any row whose

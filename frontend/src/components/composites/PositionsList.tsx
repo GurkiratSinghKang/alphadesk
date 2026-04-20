@@ -68,9 +68,13 @@ const TABS: PositionTab[] = ["positions", "orders", "journal"];
 // Tab labels (pluralised + title-cased for display). Kept separate from
 // the `PositionTab` id strings so we can show "Positions · 3" without
 // mutating the underlying state key.
+// BUG-008: the top-bar ContextBar cell shows "Open Orders" (pending + open
+// only), so the Book Orders tab is renamed "Orders today" to make it clear
+// this list is the broader set (all statuses from today, including filled /
+// cancelled / rejected). Distinct labels prevent the 10 vs 50 confusion.
 const TAB_LABEL: Record<PositionTab, string> = {
   positions: "Positions",
-  orders: "Orders",
+  orders: "Orders today",
   journal: "Journal",
 };
 

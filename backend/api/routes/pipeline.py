@@ -447,42 +447,90 @@ async def pipeline_history_date(date: str) -> dict[str, Any]:
 
 @router.get("/positions")
 async def pipeline_positions() -> dict[str, Any]:
-    """Return all open AI-managed positions with stop/target levels."""
+    """Return all open AI-managed positions with stop/target levels.
+
+    BUG-001 / BUG-015 fix: previously this endpoint enriched positions by
+    hitting ``/v2/stocks/{symbol}/trades/latest`` per symbol, while the
+    Desk/Reports pages read from ``/v2/positions`` (Alpaca's own
+    ``current_price`` on the position record). The two feeds drift by a
+    few cents within a tick, producing the "+$275 vs +$375 vs +$284"
+    spread between Desk / Pipeline / Reports for the same AVGO position.
+
+    Unified pricing: fetch ``/v2/positions`` once and use those
+    ``current_price`` values as the source of truth. Fall back to
+    ``/trades/latest`` only for symbols the broker doesn't report
+    (paper-broker race, or ledger-only synthetic positions).
+    """
     from data.ingestion.trade_ledger import TradeLedger
 
     ledger = TradeLedger()
     open_positions = ledger.get_open_positions()
     performance = ledger.get_performance_summary()
 
-    # Enrich open positions with live market prices
+    # Enrich open positions with live market prices — SAME source as
+    # /trades/positions so every page shows the identical current_price.
     if open_positions:
         import httpx
         from core.config import settings
 
+        broker_prices: dict[str, float] = {}
+        alpaca_headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
+                # Single /v2/positions fetch — same feed as Desk/Reports.
+                try:
+                    pos_resp = await client.get(
+                        f"{settings.ALPACA_BASE_URL}/v2/positions",
+                        headers=alpaca_headers,
+                    )
+                    if pos_resp.status_code == 200:
+                        for bp in pos_resp.json():
+                            sym = bp.get("symbol", "")
+                            if sym:
+                                try:
+                                    broker_prices[sym] = float(bp.get("current_price", 0))
+                                except (TypeError, ValueError):
+                                    pass
+                except Exception:
+                    logger.debug("Broker /v2/positions fetch failed", exc_info=True)
+
                 for pos in open_positions:
                     symbol = pos.get("symbol", "")
                     if not symbol:
                         continue
-                    try:
-                        resp = await client.get(
-                            f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
-                            headers={
-                                "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-                                "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-                            },
-                        )
-                        if resp.status_code == 200:
-                            current_price = resp.json().get("trade", {}).get("p", 0)
-                            pos["current_price"] = current_price
-                            entry = pos.get("entry_price", 0)
-                            shares = pos.get("shares", 0)
-                            if entry and shares:
+                    current_price = broker_prices.get(symbol, 0) or 0
+                    if not current_price:
+                        # Fallback for ledger-only symbols not held at broker.
+                        try:
+                            resp = await client.get(
+                                f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
+                                headers=alpaca_headers,
+                            )
+                            if resp.status_code == 200:
+                                current_price = resp.json().get("trade", {}).get("p", 0)
+                        except Exception:
+                            logger.debug("Failed to fetch live price for %s", symbol)
+                    if current_price:
+                        pos["current_price"] = current_price
+                        entry = pos.get("entry_price", 0)
+                        shares = pos.get("shares", 0)
+                        # Honour position side — short P&L inverts sign.
+                        # Previously this unconditionally used (current-entry),
+                        # so a short that dropped 5% showed as a LOSS in
+                        # /pipeline/positions while /trades/positions showed
+                        # it as a profit. Ledger stores side per row.
+                        side = str(pos.get("side") or "long").lower()
+                        if entry and shares:
+                            if side == "short":
+                                pos["pnl"] = round((entry - current_price) * shares, 2)
+                                pos["pnl_pct"] = round(((entry - current_price) / entry) * 100, 2)
+                            else:
                                 pos["pnl"] = round((current_price - entry) * shares, 2)
                                 pos["pnl_pct"] = round(((current_price - entry) / entry) * 100, 2)
-                    except Exception:
-                        logger.debug("Failed to fetch live price for %s", symbol)
         except Exception:
             logger.warning("Failed to enrich pipeline positions with live data")
 

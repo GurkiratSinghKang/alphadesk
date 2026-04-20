@@ -7,6 +7,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { useAlertsStore } from "@/stores/alerts";
 import { usePreferencesStore } from "@/stores/preferences";
 import { getSnapshot, getPositions, getOrders, getPortfolioSummary, getPortfolioGreeks } from "@/lib/api";
+import { isMarketOpen } from "@/lib/marketHours";
 import type { Quote, Alert } from "@/types";
 
 /**
@@ -141,19 +142,56 @@ export function useDataPipeline(enabled: boolean = true) {
   // Periodic portfolio refresh — interval driven by user pref
   // (Settings → Data Refresh). Re-arms when the pref changes so a slider
   // tweak takes effect on the next tick instead of the next reload.
+  //
+  // BUG-016: when the market is closed the broker's portfolio values
+  // cannot change (no prints → no unrealized P&L drift), so polling adds
+  // load without surfacing new information. We therefore back off to 5×
+  // the normal cadence when the session is closed; an open session stays
+  // at the user-configured rate. Real fix (consolidated WS portfolio
+  // stream) is tracked in stores/market.ts BUG-016 TODO.
   useEffect(() => {
     if (!enabled) return;
-    // The store clamps to [10, 300] s, but be defensive — if anything
-    // upstream slips an out-of-range value through we still cap at 30s.
-    const seconds = Number.isFinite(refreshIntervalSec) && refreshIntervalSec >= 10
-      ? Math.min(refreshIntervalSec, 300)
-      : 30;
-    const intervalMs = seconds * 1000;
-    const portfolioInterval = setInterval(fetchPortfolioData, intervalMs);
-    return () => clearInterval(portfolioInterval);
+    const tick = () => {
+      // Re-evaluate market state on every tick so we can't get stuck in
+      // a closed-cadence after the 09:30 ET open.
+      const baseSec = Number.isFinite(refreshIntervalSec) && refreshIntervalSec >= 10
+        ? Math.min(refreshIntervalSec, 300)
+        : 30;
+      // Closed-session back-off clamped at 5 minutes — the Settings
+      // slider's hard ceiling — so nobody waits 25m for an off-hours
+      // summary refresh after opening the app on a Sunday.
+      const seconds = isMarketOpen() ? baseSec : Math.min(baseSec * 5, 300);
+      return seconds * 1000;
+    };
+
+    let cancelled = false;
+    let handle: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      if (cancelled) return;
+      handle = setTimeout(() => {
+        fetchPortfolioData();
+        arm();
+      }, tick());
+    };
+    arm();
+    return () => {
+      cancelled = true;
+      if (handle) clearTimeout(handle);
+    };
   }, [enabled, refreshIntervalSec]);
 
   // Route WS messages to stores via channel callbacks (no React re-renders)
+  //
+  // NEW-BUG fix: `enabled` MUST be in the dep array. Store hydration is
+  // async (`DataPipelineBridge` flips `enabled` false → true after the
+  // persist rehydrate resolves), so the very first invocation early-returns
+  // and — prior to this fix — never re-ran because the deps list only
+  // mentioned `onMessage`. The result was that quotes/portfolio/alerts/bars
+  // WS channels were silently un-routed for the rest of the session, and
+  // the dashboard appeared to be getting real-time data (the snapshot REST
+  // calls succeed) while actually only refreshing on the 30s portfolio
+  // poll. Adding `enabled` ensures the effect re-registers once the stores
+  // are hydrated.
   useEffect(() => {
     if (!enabled) return;
     const unsubs: (() => void)[] = [];
@@ -252,5 +290,5 @@ export function useDataPipeline(enabled: boolean = true) {
     unsubs.push(onMessage("agents", () => {}));
 
     return () => unsubs.forEach(fn => fn());
-  }, [onMessage]);
+  }, [onMessage, enabled]);
 }

@@ -69,11 +69,14 @@ export default function RequestAccessPage() {
         <div className="mt-10 sm:mt-16 border-t border-border pt-6">
           <p className="font-display italic text-[15px] text-fg-muted">
             Send the request to{" "}
+            {/* BUG-014: onboarding goes to support, not legal — `/docs` already
+                directs new users to support@tradingalpha.net, so this page
+                matches it. Legal continues to live on privacy/terms/risk. */}
             <a
-              href="mailto:legal@tradingalpha.net?subject=AlphaDesk%20access%20request"
+              href="mailto:support@tradingalpha.net?subject=AlphaDesk%20access%20request"
               className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
             >
-              legal@tradingalpha.net
+              support@tradingalpha.net
             </a>
             .
           </p>

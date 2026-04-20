@@ -37,15 +37,17 @@ import {
   placeOrder,
 } from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
+import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
+import { computeStrategyCounts } from "@/lib/strategiesSummary";
 import {
   useIndices,
-  usePortfolioSummary,
   useRegime,
   useStrategies,
 } from "@/hooks/useQueries";
 import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import { useMarketStore, useQuote, getFreshestQuoteTimestamp } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
+import { useUIStore } from "@/stores/ui";
 import { useToast } from "@/hooks/useToast";
 import type { Position, Order } from "@/types";
 
@@ -63,12 +65,18 @@ import {
 } from "./_desk/selectors";
 import { useDeskClock } from "./_desk/useDeskClock";
 
+// BUG-005: unify desk nav with the (dashboard)/layout TopBar nav so docs
+// references to "Dashboard" and "Trade" always resolve. The desk keeps its
+// serif "αAlphaDesk" wordmark (rendered in the composites/TopBar), but the
+// nav link set matches layout/TopBar.tsx exactly.
 const NAV_ROUTES = [
-  { label: "Desk", href: "/", active: true },
-  { label: "Strategies", href: "/strategies/momentum-quality" },
+  { label: "Dashboard", href: "/", active: true },
+  { label: "Strategies", href: "/strategies" },
+  { label: "Trade", href: "/trade" },
   { label: "Analytics", href: "/analytics" },
-  { label: "Pipeline", href: "/pipeline" },
   { label: "Alerts", href: "/alerts" },
+  { label: "Pipeline", href: "/pipeline" },
+  { label: "Reports", href: "/reports" },
 ];
 
 const BUILD_VERSION =
@@ -126,20 +134,23 @@ export default function DeskPage() {
   }, [ordersFromStore]);
 
   /* ─── Live market + portfolio data via React Query ─────── */
+  // BUG-017: `usePortfolioSummary` was firing a second /portfolio/summary
+  // GET on every mount alongside the one `useDataPipeline` already issues
+  // via `fetchPortfolioData()`. The store is the single source of truth
+  // here — the pipeline effect keeps it fresh on its own interval.
   const { data: regimeResp } = useRegime();
   useIndices(); // warms the indices cache so the context bar stays fresh
   const { data: strategiesResp } = useStrategies();
-  const { data: portfolioResp } = usePortfolioSummary();
-
-  useEffect(() => {
-    if (portfolioResp) {
-      usePortfolioStore.getState().setSummary(portfolioResp);
-    }
-  }, [portfolioResp]);
 
   /* ─── Selected strategy for rail highlight + order bar ── */
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
   const strategyOptions = useMemo(() => toStrategyOptions(rail), [rail]);
+  // BUG-009: shared aggregator so desk rail "N / M" agrees with the
+  // /strategies and /reports pages.
+  const counts = useMemo(
+    () => computeStrategyCounts(strategiesResp ?? []),
+    [strategiesResp]
+  );
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>(
     () => rail[0]?.id ?? ""
   );
@@ -217,31 +228,24 @@ export default function DeskPage() {
     let hasWarned = false;
 
     async function fetchCounts() {
-      // Helper: fetch a status, return `null` on error so we can
-      // distinguish "no orders" (0) from "request failed" (null).
-      // Previously `.catch(() => [])` rendered a 5xx as "no open orders"
-      // silently — user believes their order book is clean when it
-      // really can't be retrieved.
-      async function safeFetch(status: string): Promise<unknown[] | null> {
-        try {
-          return await getOrders(status);
-        } catch (err) {
-          // Only log the first failure per session to avoid console spam.
-          if (!hasWarned) {
-            console.error(`[desk] getOrders(${status}) failed:`, err);
-          }
-          return null;
+      // BUG-017: previously this fired TWO GETs every 30s —
+      // `/trades/orders?status=pending` and `/trades/orders?status=open`.
+      // We now fetch the full order list ONCE and bucket client-side.
+      // That cuts the desk page's per-minute order-endpoint footprint in
+      // half and lets us use the freshly-fetched list to update the store
+      // too (so the OrderBar's Orders tab doesn't need its own poll).
+      let orders: Array<{ status?: string }> | null;
+      try {
+        orders = (await getOrders()) as Array<{ status?: string }>;
+      } catch (err) {
+        if (!hasWarned) {
+          console.error(`[desk] getOrders() failed:`, err);
         }
+        orders = null;
       }
-
-      const [pending, open] = await Promise.all([
-        safeFetch("pending"),
-        safeFetch("open"),
-      ]);
       if (cancelled) return;
 
-      const anyError = pending === null || open === null;
-      if (anyError) {
+      if (orders === null) {
         // Dispatch a one-time system notification so the user sees that
         // the order count is stale. Keep the last-known count rather
         // than zeroing it — "No open orders" on a 5xx is misleading.
@@ -253,7 +257,7 @@ export default function DeskPage() {
                 kind: "error",
                 title: "Order list unavailable",
                 message:
-                  "Couldn't fetch pending/open orders — showing last-known count. Retrying in 30s.",
+                  "Couldn't fetch working orders — showing last-known count. Retrying in 30s.",
               },
             })
           );
@@ -263,7 +267,13 @@ export default function DeskPage() {
       }
 
       hasWarned = false;
-      setOrderCount((pending?.length ?? 0) + (open?.length ?? 0));
+      const working = orders.filter(
+        (o) =>
+          o.status === "pending" ||
+          o.status === "open" ||
+          o.status === "partial",
+      );
+      setOrderCount(working.length);
     }
     fetchCounts();
     const id = setInterval(fetchCounts, 30_000);
@@ -276,7 +286,11 @@ export default function DeskPage() {
   /* ─── Shaped props for the composites ──────────────────── */
   const regime = toRegime(regimeResp?.regime);
   const quote = toQuote(selectedQuote ?? undefined);
-  const meta = toMetaCells(selectedQuote ?? undefined);
+  // BUG-032: pass marketOpen so `toMetaCells` can render "unavailable"
+  // instead of "—" when the session is closed and the cells will never
+  // populate for this tape.
+  const marketOpen = isMarketOpen();
+  const meta = toMetaCells(selectedQuote ?? undefined, { marketOpen });
   const symbol = toMarketSymbol(selectedSymbol);
   const contextCells = toContextCells(portfolioSummary, positions as Position[], orderCount);
   const positionRows = toPositionRows(positions as Position[]);
@@ -307,7 +321,7 @@ export default function DeskPage() {
 
   const statusPills = toStatusPills({
     brokerConnected: !portfolioSummary.is_demo,
-    marketOpen: isMarketOpen(),
+    marketOpen,
     claudeHealthy: true,
     // Always pass a tick value so the StatusBar renders 4 pills — even
     // when we have no data yet, show "Last tick —" rather than omit.
@@ -333,6 +347,10 @@ export default function DeskPage() {
 
   const [orderBarResetTick, setOrderBarResetTick] = useState(0);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  // BUG-002 — inline-error state for the OrderBar. Parent owns this so a
+  // 422/4xx from the backend renders both a toast AND a persistent red
+  // message under the Place button. Cleared on every new submit attempt.
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   /**
    * Refresh positions / orders / summary from the REST API.
@@ -376,26 +394,32 @@ export default function DeskPage() {
     // push the returned order into the local store, clear the OrderBar,
     // and toast. On failure, keep the form state and toast the error.
     if (submittingOrder) return;
+    // Reset any previous inline error on a fresh submit attempt.
+    setOrderError(null);
     // Basic client-side validation — the OrderBar's inputs should already
     // have enforced most of this, but a last-line-of-defense guard keeps
     // us from firing a 422 at the backend.
     const symbol = (order.symbol || "").trim().toUpperCase();
     const qty = Number(order.quantity);
+    const fail = (msg: string) => {
+      toast({ type: "error", message: msg });
+      setOrderError(msg);
+    };
     if (!symbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol)) {
-      toast({ type: "error", message: "Enter a valid symbol (1–10 letters/digits)" });
+      fail("Enter a valid symbol (1–10 letters/digits)");
       return;
     }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast({ type: "error", message: "Quantity must be a positive number" });
+    if (!isValidOrderQty(qty)) {
+      fail("Quantity must be a whole number between 1 and 999,999,999");
       return;
     }
     if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
-      toast({ type: "error", message: "Limit orders require a price" });
+      fail("Limit orders require a price");
       return;
     }
     const stopNum = order.stop ? Number(order.stop) : undefined;
     if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
-      toast({ type: "error", message: "Stop orders require a stop price" });
+      fail("Stop orders require a stop price");
       return;
     }
 
@@ -435,6 +459,10 @@ export default function DeskPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order submission failed";
       toast({ type: "error", message });
+      // BUG-002 — mirror the toast as an inline error on the OrderBar so
+      // the user sees *why* their click did nothing even if the toast
+      // stack was missed (timing, cursor off-screen, etc.).
+      setOrderError(message);
       // Keep the OrderBar populated so the user can correct + retry.
     } finally {
       setSubmittingOrder(false);
@@ -479,12 +507,19 @@ export default function DeskPage() {
             }
           }}
         >
+          {/* BUG-022 — WCAG 2.4.6/1.3.1: desk page previously had no <h1>.
+              Visually-hidden heading provides a landmark for AT and
+              document-outline tooling without altering the visual design. */}
+          <h1 className="sr-only">Trading desk</h1>
           <TopBar
             currentRoute="/"
             routes={NAV_ROUTES}
             regime={regime}
             clockEt={clock}
             avatarInitial="α"
+            // BUG-054 — surface the palette as a visible "Search ⌘K"
+            // chip so users discover it without memorising the shortcut.
+            onOpenSearch={() => useUIStore.getState().setCommandPaletteOpen(true)}
           />
         </div>
       }
@@ -494,6 +529,13 @@ export default function DeskPage() {
           items={rail}
           selectedId={selectedStrategyId}
           onSelect={handleSelectStrategy}
+          // BUG-009: desk rail previously showed "12/13" (active over rail
+          // items), but `/strategies` header showed "20 total" (includes
+          // planned). Feed both from the shared aggregator so the numbers
+          // always agree.
+          countLabel={`${String(counts.active).padStart(2, "0")} / ${String(
+            counts.total
+          ).padStart(2, "0")}`}
         />
       }
       center={
@@ -516,14 +558,14 @@ export default function DeskPage() {
             strategies={strategyOptions}
             onSubmit={handleStageOrder}
             submitting={submittingOrder}
-            // Honest-default set (persona-3 P0 #7):
-            //   qty = 1 (not 100) — accidental over-submission is worse
-            //   type = market — first click doesn't error asking for a price
+            errorMessage={orderError}
+            // BUG-006 — defaults unified across `/` and `/trade` via
+            // `ORDER_BAR_DEFAULTS` so a user bouncing between the two
+            // pages sees the same pre-filled qty / type. Keep the
+            // per-page `strategyId` wiring because that's data-derived.
             defaults={{
+              ...ORDER_BAR_DEFAULTS,
               strategyId: selectedStrategyId,
-              side: "buy",
-              quantity: 1,
-              type: "market",
             }}
             // The Alpaca base URL is always the paper endpoint in this
             // deployment (see backend config), so the button label is

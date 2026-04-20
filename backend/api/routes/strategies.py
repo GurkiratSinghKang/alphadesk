@@ -93,6 +93,9 @@ class StrategySummary(BaseModel):
     description: str
     status: StrategyStatus
     invested_amount: float
+    # BUG-055 — precise dollar figure (no rounding to $K) for the tooltip
+    # shown on hover over the abbreviated "Invested $4.9K" cell.
+    invested_amount_precise: float = 0.0
     total_return_pct: float
     sharpe_ratio: float | None = None
     win_rate: float
@@ -916,18 +919,34 @@ def _get_real_strategy_performance(ledger_instance: Any | None = None) -> dict[s
             if strat not in perf:
                 perf[strat] = {
                     "trades": 0, "pnl": 0.0, "wins": 0, "losses": 0, "scratches": 0, "open": 0,
-                    "invested": 0.0, "last_trade_date": "", "first_trade_date": "",
+                    # BUG-004: ``invested`` = cost basis of OPEN positions only
+                    # (Σ shares × entry_price for status=='open'). Previously
+                    # summed over ALL trades including closed, which produced
+                    # nonsensical "Invested $4.9K · 0 positions" on the PEAD
+                    # card. ``gross_deployed`` retains the historical gross
+                    # capital deployed in case a caller still wants it.
+                    "invested": 0.0, "gross_deployed": 0.0,
+                    "last_trade_date": "", "first_trade_date": "",
                     "best_trade": None, "worst_trade": None,
                 }
             perf[strat]["trades"] += 1
             entry_price = trade.get("entry_price", 0)
             shares = trade.get("shares", 0)
-            perf[strat]["invested"] += entry_price * shares
-            trade_date = trade.get("entry_time", "")
-            if trade_date and trade_date > perf[strat]["last_trade_date"]:
-                perf[strat]["last_trade_date"] = trade_date[:10] if len(trade_date) >= 10 else trade_date
-            if trade_date and (not perf[strat]["first_trade_date"] or trade_date < perf[strat]["first_trade_date"]):
-                perf[strat]["first_trade_date"] = trade_date[:10] if len(trade_date) >= 10 else trade_date
+            perf[strat]["gross_deployed"] += entry_price * shares
+            if trade.get("status") == "open":
+                perf[strat]["invested"] += entry_price * shares
+            entry_t = trade.get("entry_time", "")
+            exit_t = trade.get("exit_time", "") or ""
+            # BUG-030: last_trade_date must be ≥ most-recent entry AND
+            # most-recent exit. The previous implementation only tracked
+            # entry timestamps, so a manual/discretionary strategy whose
+            # most recent action was opening a position still displayed the
+            # older exit date.
+            latest_activity = max(entry_t or "", exit_t or "")
+            if latest_activity and latest_activity > perf[strat]["last_trade_date"]:
+                perf[strat]["last_trade_date"] = latest_activity[:10] if len(latest_activity) >= 10 else latest_activity
+            if entry_t and (not perf[strat]["first_trade_date"] or entry_t < perf[strat]["first_trade_date"]):
+                perf[strat]["first_trade_date"] = entry_t[:10] if len(entry_t) >= 10 else entry_t
             if trade.get("status") == "open":
                 perf[strat]["open"] += 1
             if trade.get("status") == "closed" and entry_price:
@@ -1222,7 +1241,8 @@ async def list_strategies() -> list[StrategySummary]:
         # Start with sentinel values -- only real ledger data populates these
         win_rate = -1.0  # -1 = no closed trades (frontend shows "N/A")
         total_return = 0.0
-        invested = 0.0
+        invested = 0.0  # current open-position cost basis
+        gross_deployed = 0.0  # cumulative deployed (used as return-% denominator)
         pnl_dollars = 0.0
 
         # Active count from Alpaca positions (ground truth)
@@ -1234,19 +1254,29 @@ async def list_strategies() -> list[StrategySummary]:
                 if rp["trades"] > 0:
                     pnl_dollars = rp["pnl"] + unrealized_by_strat_id.get(sid, 0)
                     invested = rp.get("invested", 0.0)
+                    gross_deployed = rp.get("gross_deployed", invested)
                     # Decided = wins + losses (scratch trades excluded per
                     # audit: pnl == 0 is neither a win nor a loss).
                     decided = rp.get("wins", 0) + rp.get("losses", 0)
                     if decided > 0:
                         win_rate = round(rp["wins"] / decided * 100, 1)
-                    if invested > 0:
-                        total_return = round(pnl_dollars / invested * 100, 1)
+                    # BUG-004: return % is computed against gross capital
+                    # deployed, not currently-invested cost basis (which
+                    # collapses to 0 once all positions exit).
+                    if gross_deployed > 0:
+                        total_return = round(pnl_dollars / gross_deployed * 100, 1)
                 break
+
+        # BUG-004: force invested to 0 when there are no live positions. The
+        # card displays "N positions · Invested $X" — when N=0 the Invested
+        # figure must also be 0 (a closed strategy has no capital deployed).
+        if active_count == 0:
+            invested = 0.0
 
         # Build compact sparkline (last 20 equity curve points)
         sparkline_data: list[float] = []
-        if invested > 0:
-            curve = _generate_equity_curve(sid, max(invested, 1), total_return)
+        if gross_deployed > 0:
+            curve = _generate_equity_curve(sid, max(gross_deployed, 1), total_return)
             sparkline_data = [p["value"] for p in curve[-20:]] if curve else []
 
         live_disabled, paper_only = _live_flags_for(sid)
@@ -1256,6 +1286,7 @@ async def list_strategies() -> list[StrategySummary]:
             description=d["description"],
             status=d["status"],
             invested_amount=round(invested, 2),
+            invested_amount_precise=round(invested, 2),
             total_return_pct=total_return,
             sharpe_ratio=0,
             win_rate=win_rate,
@@ -1314,6 +1345,7 @@ async def strategy_leaderboard() -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     for sid, sdata in _STRATEGIES.items():
         invested = 0.0
+        gross_deployed = 0.0
         pnl_dollars = 0.0
         sharpe = 0.0
         # Per-trade returns AND their holding periods (in days). We can't
@@ -1332,6 +1364,7 @@ async def strategy_leaderboard() -> dict[str, Any]:
             if rp["trades"] > 0:
                 pnl_dollars = rp["pnl"] + unrealized_by_id.get(sid, 0)
                 invested = rp.get("invested", 0.0)
+                gross_deployed = rp.get("gross_deployed", invested)
 
                 # Build per-trade returns from closed trades for Sharpe,
                 # respecting side ("short" flips the sign of (exit-entry)/entry).
@@ -1361,7 +1394,9 @@ async def strategy_leaderboard() -> dict[str, Any]:
                         pass
             break
 
-        return_pct = round(pnl_dollars / invested * 100, 1) if invested > 0 else 0.0
+        # BUG-004: divide by all-time gross deployed (not current cost
+        # basis) so the return percentage stays stable after positions exit.
+        return_pct = round(pnl_dollars / gross_deployed * 100, 1) if gross_deployed > 0 else 0.0
 
         # Compute Sharpe using per-trade returns, annualised by
         # sqrt(252 / avg_hold_days) so multi-day holds don't get inflated.
@@ -1376,8 +1411,12 @@ async def strategy_leaderboard() -> dict[str, Any]:
             mean_r = statistics.mean(per_trade_returns)
             std_r = statistics.stdev(per_trade_returns)
             sharpe = round(mean_r / std_r * ann_factor, 2) if std_r > 0 else 0.0
-        elif len(per_trade_returns) == 1:
-            sharpe = round(per_trade_returns[0] * ann_factor, 2)
+        # A Sharpe ratio requires at least two observations to define a
+        # standard deviation — a single-trade "Sharpe" is mathematically
+        # undefined. The previous branch returned ``return × ann_factor``,
+        # which is an annualised return masquerading as a Sharpe and
+        # misleadingly poisoned the leaderboard for any strategy with one
+        # closed trade. Leave the initial ``sharpe = 0.0`` in place.
 
         entries.append({
             "id": sid,
@@ -1462,7 +1501,8 @@ async def get_strategy_performance(
     # ------------------------------------------------------------------
     # Compute performance from ledger
     # ------------------------------------------------------------------
-    invested = 0.0
+    invested = 0.0  # cost basis of CURRENTLY-OPEN positions
+    gross_deployed = 0.0  # all-time Σ shares × entry_price (return-% denominator)
     return_pct = 0.0
     win_rate = -1.0
     pnl_dollars = 0.0
@@ -1477,20 +1517,31 @@ async def get_strategy_performance(
             if rp["trades"] > 0:
                 pnl_dollars = rp["pnl"] + unrealized
                 invested = rp.get("invested", 0.0)
+                gross_deployed = rp.get("gross_deployed", invested)
                 last_trade = rp.get("last_trade_date", "")
                 first_trade = rp.get("first_trade_date", "")
                 # Scratch trades (pnl == 0) excluded from win_rate denominator.
                 decided = rp.get("wins", 0) + rp.get("losses", 0)
                 if decided > 0:
                     win_rate = round(rp["wins"] / decided * 100, 1)
-                if invested > 0:
-                    return_pct = round(pnl_dollars / invested * 100, 1)
+                # BUG-004: divide by gross deployed, not currently-invested
+                # (which is 0 once all positions are closed).
+                if gross_deployed > 0:
+                    return_pct = round(pnl_dollars / gross_deployed * 100, 1)
             break
+
+    # BUG-004: zero the Invested figure when no positions are live. The
+    # detail page shows "0 positions" and "Invested $X" — those two
+    # numbers must be consistent. ``gross_deployed`` is preserved as the
+    # return-% denominator (see above) and ``return_dollars`` still
+    # reflects realised + unrealised P&L.
+    if active_count == 0:
+        invested = 0.0
 
     current_value = round(invested + pnl_dollars, 2)
     return_dollars = round(pnl_dollars, 2)
 
-    equity_curve = _generate_equity_curve(strategy_id, max(invested, 1), return_pct) if invested > 0 else []
+    equity_curve = _generate_equity_curve(strategy_id, max(gross_deployed, 1), return_pct) if gross_deployed > 0 else []
 
     # Re-read OOS metrics from the canonical _STRATEGIES entry. _reload_oos_metrics()
     # merges real Sharpe / max-drawdown / hit-rate / CAGR / profit-factor from the
@@ -1996,9 +2047,15 @@ async def get_strategy_positions(
         unrealized_pnl = float(alpaca_pos.get("unrealized_pl", 0))
         unrealized_pnl_pct = float(alpaca_pos.get("unrealized_plpc", 0)) * 100
 
-        entry_date_str = t.get("entry_time", "")[:10]
+        # BUG-018 — emit the full ISO timestamp (with TZ) rather than a
+        # truncated YYYY-MM-DD. The frontend now renders the HH:MM + TZ when
+        # a ``T`` is present so 7 positions opened seconds apart are visibly
+        # distinct.
+        entry_ts_raw = t.get("entry_time", "") or ""
+        entry_date_str = entry_ts_raw or ""
+        date_prefix = entry_ts_raw[:10]
         try:
-            entry_d = date.fromisoformat(entry_date_str)
+            entry_d = date.fromisoformat(date_prefix)
             days_held = (today - entry_d).days
         except (ValueError, TypeError):
             days_held = 0

@@ -304,7 +304,16 @@ function EmptySection({ title, reason }: { title: string; reason: string }) {
 
 // ─── Regime signal from status ────────────────────────────────
 
-function statusRegime(status: string | undefined): { regime: Regime; vol?: RegimeVol; label: string } {
+function statusRegime(
+  status: string | undefined,
+  opts: { liveDisabled?: boolean; paperOnly?: boolean } = {},
+): { regime: Regime; vol?: RegimeVol; label: string } {
+  // BUG-010: ACTIVE and NOT-READY-FOR-LIVE must not both appear on the same
+  // strategy. If the backend (or static manifest) flags the strategy as
+  // live-disabled, demote the pill to "paper only" regardless of the
+  // backend's generic status string. Same for thin-OOS paper-only strategies.
+  if (opts.liveDisabled) return { regime: "neutral", vol: "elevated", label: "paper only" };
+  if (opts.paperOnly) return { regime: "neutral", vol: "elevated", label: "paper only" };
   if (status === "active") return { regime: "bull", vol: "low", label: "active" };
   if (status === "paused") return { regime: "neutral", vol: "elevated", label: "paused" };
   if (status === "halted") return { regime: "crisis", vol: "high", label: "halted" };
@@ -445,19 +454,38 @@ export default function StrategyDetailPage() {
     return benchmark.filter((b) => b.date >= start);
   }, [benchmark, equityData]);
 
-  const status = statusRegime(perf?.status);
+  const status = statusRegime(perf?.status, {
+    liveDisabled:
+      STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false),
+    paperOnly:
+      STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false),
+  });
 
   // Wave 26 — hero metrics now prefer OOS backtest values. `cagr` and
   // `hit_rate` are published by the backend (fractions) alongside the live
   // `annualized_return_pct`/derived hitRate, which are almost always 0 / null
   // for strategies that haven't traded yet. Fall back to the live number only
   // when the OOS one is missing.
-  const cagrValue = perf?.cagr ?? perf?.annualized_return_pct ?? null;
+  //
+  // BUG-019 — discretionary strategies have no backtest at all. When NONE of
+  // Sharpe / MaxDD / HitRate / CAGR come back from the API, surface all four
+  // as em-dashes with a single explanatory footnote instead of computing a
+  // live-derived CAGR on its own (which produced a confusing "CAGR +x% ·
+  // Sharpe — · MaxDD — · HitRate —" row).
+  const hasAnyBacktestMetric =
+    perf?.sharpe_ratio != null ||
+    perf?.max_drawdown != null ||
+    perf?.hit_rate != null ||
+    perf?.cagr != null;
+  const cagrValue = hasAnyBacktestMetric
+    ? (perf?.cagr ?? perf?.annualized_return_pct ?? null)
+    : null;
   // `hit_rate` from the backend is a fraction (0..1). Convert to whole-percent
   // for display, then fall back to the live-derived hit rate (already in
   // percent) when the backend didn't return it.
   const hitRateBackend = perf?.hit_rate != null ? perf.hit_rate * 100 : null;
-  const hitRateDisplay = hitRateBackend ?? hitRate;
+  const hitRateDisplay = hasAnyBacktestMetric ? (hitRateBackend ?? hitRate) : null;
+  const showNoBacktestNote = perf != null && !hasAnyBacktestMetric;
   // Suspicious-Sharpe caveat threshold. ORB publishes 8.34 in the live API;
   // the editorial caveat ("Live deployment may diverge") renders next to the
   // OOS SHARPE cell when the value exceeds this threshold.
@@ -562,10 +590,12 @@ export default function StrategyDetailPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-10 px-6 py-8">
-      {/* Breadcrumb */}
+      {/* Breadcrumb — BUG-020: previously said "Dashboard / <name>" even
+          though this page lives under /strategies. Anchor to the strategies
+          catalogue so the trail mirrors the URL path. */}
       <nav className="flex items-center gap-2 font-sans text-[12px] text-fg-muted" aria-label="Breadcrumb">
-        <Link href="/" className="transition-colors hover:text-fg">
-          Dashboard
+        <Link href="/strategies" className="transition-colors hover:text-fg">
+          Strategies
         </Link>
         <span aria-hidden>/</span>
         <span className="text-fg">{meta.name}</span>
@@ -596,6 +626,20 @@ export default function StrategyDetailPage() {
         description={perf?.description ?? null}
         cells={cells}
       />
+
+      {/* BUG-019 — single footnote under the hero grid when the strategy
+          has no backtest (discretionary). Renders only when ALL four
+          backtest cells collapse to em-dash; prevents the misleading
+          "partial metrics" look where one metric was real and the others
+          were dashes. */}
+      {showNoBacktestNote ? (
+        <p
+          data-testid="no-backtest-note"
+          className="-mt-6 font-display italic text-[12.5px] leading-snug text-fg-muted"
+        >
+          No backtest (discretionary) — Sharpe, MaxDD, CAGR and Hit Rate are not shown for manually-traded positions.
+        </p>
+      ) : null}
 
       {/* Wave 4 — consolidation-report disclosure banner. Renders verbatim
           copy for the 5 strategies in audit-reports/00-strategy-experts-

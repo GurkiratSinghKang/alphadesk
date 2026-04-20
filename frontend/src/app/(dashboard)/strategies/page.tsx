@@ -26,6 +26,7 @@ import {
   metaStage,
   type StrategyStage,
 } from "@/lib/strategies";
+import { computeStrategyCounts } from "@/lib/strategiesSummary";
 import { cn } from "@/lib/utils";
 
 /**
@@ -105,15 +106,27 @@ function drawdownToPct(n: number | null): string {
 
 // ─── Status regime mapping (mirror of detail page) ───────────
 
-function statusRegime(bucket: Bucket): {
+function statusRegime(
+  bucket: Bucket,
+  strategy?: ListingStrategy,
+): {
   regime: Regime;
   vol?: RegimeVol;
   label: string;
 } {
   if (bucket === "active")
     return { regime: "bull", vol: "low", label: "active" };
-  if (bucket === "paused")
+  if (bucket === "paused") {
+    // BUG-010: if the strategy is demoted to "paused" because live trading
+    // is denied, label the pill "paper only" so the card reads coherently
+    // next to the "Not ready for live" warning pill, instead of the generic
+    // "paused" which hides the real reason.
+    if (strategy?.liveDisabled)
+      return { regime: "neutral", vol: "elevated", label: "paper only" };
+    if (strategy?.paperOnly)
+      return { regime: "neutral", vol: "elevated", label: "paper only" };
     return { regime: "neutral", vol: "elevated", label: "paused" };
+  }
   return { regime: "neutral", label: "coming soon" };
 }
 
@@ -121,6 +134,11 @@ function statusRegime(bucket: Bucket): {
 
 function bucketFor(s: ListingStrategy): Bucket {
   if (s.stage === "planned") return "coming_soon";
+  // BUG-010: "ACTIVE" and "NOT READY FOR LIVE" must be mutually exclusive.
+  // A strategy the backend flags as live-disabled cannot also carry the
+  // green ACTIVE pill even if its apiStatus string is "active" — demote
+  // it to paused so the RegimePill reads "PAUSED" alongside the warning.
+  if (s.liveDisabled) return "paused";
   // Live or "other" (manual): fall through to API status. Anything the API
   // returns as "active" is bucketed active; "paused"/"backtest"/"unknown"
   // are paused (keeps the listing honest).
@@ -138,7 +156,7 @@ function StrategyCatalogCard({
   bucket: Bucket;
 }) {
   const comingSoon = bucket === "coming_soon";
-  const regime = statusRegime(bucket);
+  const regime = statusRegime(bucket, s);
 
   const labelParts: string[] = [s.displayName, regime.label];
   if (s.sharpe != null) labelParts.push(`OOS Sharpe ${signedNumber(s.sharpe)}`);
@@ -217,7 +235,10 @@ function StrategyCatalogCard({
             />
             <span>{s.activePositions} positions</span>
           </span>
-          <span>
+          <span
+            title={formatUsdPrecise(s.investedAmount)}
+            aria-label={`Invested ${formatUsdPrecise(s.investedAmount)}`}
+          >
             Invested{" "}
             <b className="font-medium text-fg">
               {formatUsd(s.investedAmount)}
@@ -300,6 +321,20 @@ function formatUsd(n: number): string {
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
   return `$${n.toFixed(0)}`;
+}
+
+// BUG-055 — precise dollar figure surfaced in the `title` tooltip (and the
+// aria-label) alongside the abbreviated "$4.9K" cell. "$4.9K" could represent
+// anything from $4,851 to $4,949; the tooltip settles the ambiguity without
+// adding visual weight to the card.
+function formatUsdPrecise(n: number): string {
+  if (!Number.isFinite(n)) return "$0.00";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
 // ─── Section block ───────────────────────────────────────────
@@ -489,11 +524,17 @@ export default function StrategiesListingPage() {
     return g;
   }, [strategies]);
 
+  // BUG-009: route all three places that display strategy counts (desk
+  // rail, this page, /reports) through one aggregator. The old
+  // `grouped.active.length / grouped.paused.length / …` calculation still
+  // works for splitting cards across buckets, but the header text reads
+  // the single-source numbers so the three displays never drift apart.
+  const sharedCounts = computeStrategyCounts(summaries);
   const counts = {
-    active: grouped.active.length,
-    paused: grouped.paused.length,
-    coming_soon: grouped.coming_soon.length,
-    total: strategies.length,
+    active: sharedCounts.active,
+    paused: sharedCounts.paused,
+    coming_soon: sharedCounts.comingSoon,
+    total: sharedCounts.catalogueTotal,
   };
 
   const loading = summaries == null && !loadError;

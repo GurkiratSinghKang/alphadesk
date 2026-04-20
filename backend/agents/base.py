@@ -301,11 +301,14 @@ class BaseAgent(ABC):
         """Fallback: run via Anthropic API."""
         import anthropic
 
-        # Map CLI model aliases to API model IDs
+        # Map CLI model aliases to CURRENT API model IDs. Previous values
+        # (``claude-opus-4-20250514`` etc.) were retired in 2025 and now 404
+        # at the API — every API-fallback call silently failed. Updated to
+        # the Opus 4.7 family (current as of 2026).
         model_map = {
-            "opus": "claude-opus-4-20250514",
-            "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-haiku-4-5-20251001",
+            "opus": "claude-opus-4-7",
+            "sonnet": "claude-sonnet-4-7",
+            "haiku": "claude-haiku-4-7",
         }
         model_id = model_map.get(self.model, self.model)
 
@@ -346,10 +349,11 @@ class BaseAgent(ABC):
         self, prompt: str, tools: list[dict[str, Any]], max_iterations: int
     ) -> dict[str, Any]:
         """API tool loop fallback."""
+        # Current model IDs (Opus 4.7 family, 2026). Prior IDs were retired.
         model_map = {
-            "opus": "claude-opus-4-20250514",
-            "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-haiku-4-5-20251001",
+            "opus": "claude-opus-4-7",
+            "sonnet": "claude-sonnet-4-7",
+            "haiku": "claude-haiku-4-7",
         }
         model_id = model_map.get(self.model, self.model)
         messages = [{"role": "user", "content": prompt}]

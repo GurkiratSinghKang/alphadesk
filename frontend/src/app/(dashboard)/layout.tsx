@@ -106,9 +106,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {/* a11y audit r3 — WCAG 2.4.1: skip link must be emitted on the desk
             route too (previously only the non-desk branch had it). DeskLayout
             now exposes <main id="main-content"> so this anchor resolves. */}
+        {/* BUG-053 — WCAG 2.4.1: `sr-only` + `focus:not-sr-only` was not
+            enough on its own; some browsers kept the 1×1px clip until the
+            link hit the layout engine again. Explicit focus dimensions
+            (`focus:w-auto focus:h-auto`) and padding guarantee a tappable,
+            legible "Skip to content" affordance on Tab. */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-[60] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
         >
           Skip to content
         </a>
@@ -132,9 +137,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* a11y audit r3 — WCAG 1.4.3: previous focus:text-white on gold bg
           was 2.4:1 (fails AA). Use focus:text-primary-foreground (near-black
           on gold ≈ 8:1). */}
+      {/* BUG-053 — see desk-branch comment above: force explicit dimensions
+          on focus so the link is a visible, tappable target. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-br-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
       >
         Skip to content
       </a>
@@ -147,8 +154,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
         {children}
       </main>
+      {/* BUG-037: use the shared build version env so this footer and the
+          desk StatusBar quote the same stamp. Without this, non-desk pages
+          showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
+          (e.g. "2025.10.18-a1b2c3d"). */}
       <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center">
-        AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
+        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />
