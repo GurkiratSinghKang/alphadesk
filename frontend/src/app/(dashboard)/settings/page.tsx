@@ -212,13 +212,10 @@ export default function SettingsPage() {
     try {
       const trades = await getTradeHistory(1000);
       if (!trades || trades.length === 0) {
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("alphadesk:api-error", {
-              detail: { status: 0, message: "No trade history to export" },
-            })
-          );
-        }
+        toast({
+          type: "info",
+          message: "No trade history to export",
+        });
         return;
       }
 

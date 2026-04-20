@@ -383,7 +383,12 @@ export default function DeskPage() {
     }
     if (results[1].status === "fulfilled") {
       usePortfolioStore.getState().setOrders(results[1].value);
-      setOrderCount(results[1].value.filter((o) => o.status === "pending" || o.status === "partial").length);
+      const workingStatuses = new Set(["pending", "open", "partial"]);
+      setOrderCount(
+        (results[1].value as Array<{ status?: string }>).filter(
+          (o) => o.status != null && workingStatuses.has(o.status),
+        ).length,
+      );
     }
     if (results[2].status === "fulfilled") {
       usePortfolioStore.getState().setSummary(results[2].value);
