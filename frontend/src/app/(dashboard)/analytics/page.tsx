@@ -113,21 +113,32 @@ function normalPDF(x: number, mean: number, std: number): number {
 }
 
 function computeMonthlyReturns(curve: EquityPoint[], baseEquity: number): Map<string, number> {
-  // Group by month, compute return for each month
+  // Group by month, compute return for each month. Base each month's
+  // return on the PRIOR month's final equity (not the first data-point
+  // inside the current month) so the gap between month-end close and
+  // next-month open isn't dropped. For the first month in the dataset
+  // there's no prior close — fall back to the month's first point to
+  // avoid a divide-by-zero.
   const monthly = new Map<string, { first: number; last: number }>();
+  const order: string[] = [];
   for (const pt of curve) {
     const key = pt.date.slice(0, 7); // YYYY-MM
     const entry = monthly.get(key);
     const equity = equityAtPoint(pt, baseEquity);
     if (!entry) {
       monthly.set(key, { first: equity, last: equity });
+      order.push(key);
     } else {
       entry.last = equity;
     }
   }
   const returns = new Map<string, number>();
-  for (const [key, val] of monthly) {
-    returns.set(key, val.first > 0 ? ((val.last - val.first) / val.first) * 100 : 0);
+  let prevLast: number | null = null;
+  for (const key of order) {
+    const val = monthly.get(key)!;
+    const base = prevLast ?? val.first;
+    returns.set(key, base > 0 ? ((val.last - base) / base) * 100 : 0);
+    prevLast = val.last;
   }
   return returns;
 }
