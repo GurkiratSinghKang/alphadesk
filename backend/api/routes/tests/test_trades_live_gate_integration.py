@@ -98,11 +98,18 @@ def app_with_trades(
         probes["per_called"] = True
         return True, "ok"
 
+    async def _fake_rate_limit(username: str) -> None:
+        # No-op rate limiter for the integration test. The real one
+        # opens a Redis pipeline, which fails 503 in this harness; the
+        # gate semantics being tested live elsewhere.
+        return None
+
     monkeypatch.setattr(trades_mod, "_submit_to_broker", _fake_submit)
     monkeypatch.setattr(trades_mod, "_is_trading_halted", _fake_is_halted)
     monkeypatch.setattr(trades_mod, "_check_duplicate_order", _fake_dup)
     monkeypatch.setattr(trades_mod, "_aggregate_risk_check", _fake_agg)
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
+    monkeypatch.setattr(trades_mod, "_enforce_order_rate_limit", _fake_rate_limit)
 
     # Also skip DB persistence and the final Redis ``publish`` — neither
     # is relevant to the gate semantics and both try to open real sockets
