@@ -1338,7 +1338,7 @@ async def list_orders(
                 status=mapped_status,
                 legs=[leg],
                 time_in_force=TimeInForce(o.get("time_in_force", "day")),
-                submitted_at=o.get("submitted_at", datetime.now(timezone.utc).isoformat()),
+                submitted_at=o.get("submitted_at") or datetime.now(timezone.utc).isoformat(),
                 filled_at=o.get("filled_at"),
                 avg_fill_price=float(o["filled_avg_price"]) if o.get("filled_avg_price") else None,
                 reject_reason=reject_reason if mapped_status == OrderStatus.REJECTED else None,
@@ -2794,11 +2794,13 @@ async def halt_trading(
     )
 
     msg = "All trading halted. All open orders cancelled."
-    if flatten and market_open:
+    if flatten and market_open and flatten_summary is not None:
         msg += (
             f" Flatten: {flatten_summary['flatten_successes']}/"
             f"{flatten_summary['flatten_attempts']} positions closed."
         )
+    elif flatten and market_open:
+        msg += " Flatten attempt failed — see logs; manual action may be required."
     elif queued_for_next_open:
         msg += " Flatten intent queued — will fire at next market open."
 

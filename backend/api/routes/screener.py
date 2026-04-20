@@ -741,6 +741,7 @@ async def create_preset(
             db.add(preset)
             await db.flush()
             await db.refresh(preset)
+            await db.commit()
             return PresetResponse(
                 id=preset.id,
                 name=preset.name,
