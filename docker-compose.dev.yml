@@ -1,0 +1,29 @@
+# Local development override.
+#
+# Usage:
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Rationale: the base ``docker-compose.yml`` intentionally does NOT carry a
+# ``build:`` directive for backend/frontend so that prod (which overlays
+# ``infrastructure/docker-compose.prod.yml``) has zero silent fallback to a
+# local build — every prod image MUST come from GHCR. Local dev needs a
+# build path, so we add it back here.
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Override the :latest tag from the base file with a local-only tag so
+    # ``docker compose pull`` in dev doesn't try to fetch a non-existent
+    # public image.
+    image: alphadesk-backend:local
+    # Bind-mount the source for live reload via uvicorn --reload. Omit in
+    # prod (prod uses the baked image as-is).
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: alphadesk-frontend:local

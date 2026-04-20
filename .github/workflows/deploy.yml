@@ -312,11 +312,30 @@ jobs:
             # --remove-orphans tears down services deleted from the compose
             # (e.g. uptime-kuma). --force-recreate picks up config-only
             # changes (e.g. port rebinds) that don't change the image hash.
-            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --remove-orphans --force-recreate
+            # --pull always is belt-and-suspenders on top of pull_policy:
+            # always in the prod override (both are honoured, compose picks
+            # the strictest).
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --remove-orphans --force-recreate --pull always
             # Wait for the backend container to come up healthy before
             # applying schema changes. 15s matches the previous sleep and
             # also matches the backend healthcheck start_period.
             sleep 15
+            # Verify the running container is actually on the SHA we just
+            # pushed. Two prior "successful" deploys on 2026-04-20 reported
+            # "Recreated/Healthy" but left containers on the prior SHA —
+            # compose silently fell back to the ``build:`` directive in the
+            # base compose file against stale /opt/alphadesk local source.
+            # The base file's ``build:`` has since moved to a dev-only
+            # override, BUT this assertion prevents any future drift from
+            # slipping through.
+            running_backend=$(docker inspect alphadesk-backend --format '{{.Config.Image}}')
+            running_frontend=$(docker inspect alphadesk-frontend --format '{{.Config.Image}}')
+            if [ "$running_backend" != "$BACKEND_IMAGE" ] || [ "$running_frontend" != "$FRONTEND_IMAGE" ]; then
+              echo "FATAL: container image mismatch after --force-recreate" >&2
+              echo "  backend:  running=$running_backend expected=$BACKEND_IMAGE" >&2
+              echo "  frontend: running=$running_frontend expected=$FRONTEND_IMAGE" >&2
+              exit 1
+            fi
             # Run DB migrations against the freshly-booted backend. alembic
             # is idempotent (upgrade head is a no-op when already current),
             # so rollbacks to a prior image_sha don't downgrade schemas —

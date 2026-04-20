@@ -36,10 +36,18 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # backend/frontend images: dev uses ``docker-compose.dev.yml`` override
+  # (which adds ``build:`` from local source). Prod override
+  # (``infrastructure/docker-compose.prod.yml``) supplies the tagged image
+  # from GHCR. Keeping ``build:`` OUT of this base file prevents compose
+  # from silently falling back to a stale /opt/alphadesk/backend local
+  # build when a pull hiccups — that fallback had caused multiple green
+  # deploys on 2026-04-20 that never actually swapped containers to the
+  # freshly-pushed SHA.
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # Default image tag: :latest. The dev override points at a local
+    # build; the prod override interpolates BACKEND_IMAGE=<sha-tagged-registry-image>.
+    image: alphadesk-backend:latest
     container_name: alphadesk-backend
     ports:
       # Loopback-only — Caddy proxies to backend:8000 on the internal
@@ -58,9 +66,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: alphadesk-frontend:latest
     container_name: alphadesk-frontend
     ports:
       # Loopback-only — Caddy proxies to frontend:3000 on the internal network.
