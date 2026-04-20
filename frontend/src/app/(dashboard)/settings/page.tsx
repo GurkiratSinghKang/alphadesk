@@ -247,19 +247,28 @@ export default function SettingsPage() {
         t.status,
       ]);
 
+      // CSV-injection hardening: Excel/Sheets/Numbers interpret any cell
+      // whose first character is `=`, `+`, `-`, `@`, TAB (0x09) or CR
+      // (0x0D) as a formula. A user-supplied symbol or strategy name like
+      // `=cmd|'/c calc'!A1` would then execute on open. Prefix such values
+      // with a single-quote sentinel per OWASP before quote-wrapping so
+      // the sentinel lives inside the quoted payload. Mirrors the helper
+      // in `reports/page.tsx`.
+      const CSV_INJECTION_PREFIXES = ["=", "+", "-", "@", "\t", "\r"];
+      const escapeCsv = (val: unknown): string => {
+        let str = String(val ?? "");
+        if (str.length > 0 && CSV_INJECTION_PREFIXES.includes(str[0])) {
+          str = `'${str}`;
+        }
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
       const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row
-            .map((cell) => {
-              const str = String(cell);
-              if (str.includes(",") || str.includes('"')) {
-                return `"${str.replace(/"/g, '""')}"`;
-              }
-              return str;
-            })
-            .join(",")
-        ),
+        headers.map(escapeCsv).join(","),
+        ...rows.map((row) => row.map(escapeCsv).join(",")),
       ].join("\n");
 
       const blob = new Blob([csvContent], {
