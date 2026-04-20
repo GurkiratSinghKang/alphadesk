@@ -2220,6 +2220,28 @@ async def get_strategy_positions(
         unrealized_pnl = float(alpaca_pos.get("unrealized_pl", 0))
         unrealized_pnl_pct = float(alpaca_pos.get("unrealized_plpc", 0)) * 100
 
+        # qa2-team-B: market_value previously always computed as
+        # ``current_price * shares`` with a POSITIVE ``shares`` regardless of
+        # whether the row was a short. A short position should report a
+        # negative market_value (short equity is a liability, not an asset);
+        # the old calc flipped the sign on every short and inflated gross
+        # exposure numbers that aggregate on market_value. Prefer Alpaca's
+        # already-signed ``market_value`` field when available and fall back
+        # to side-aware local math.
+        row_side = str(t.get("side") or "long").lower()
+        try:
+            broker_mv_raw = alpaca_pos.get("market_value")
+            broker_mv = (
+                float(broker_mv_raw) if broker_mv_raw not in (None, "") else None
+            )
+        except (TypeError, ValueError):
+            broker_mv = None
+        if broker_mv is not None:
+            market_value = broker_mv
+        else:
+            signed_qty = -abs(shares) if row_side == "short" else shares
+            market_value = current_price * signed_qty
+
         # BUG-018 — emit the full ISO timestamp (with TZ) rather than a
         # truncated YYYY-MM-DD. The frontend now renders the HH:MM + TZ when
         # a ``T`` is present so 7 positions opened seconds apart are visibly
@@ -2238,7 +2260,7 @@ async def get_strategy_positions(
             shares=shares,
             entry_price=round(entry_price, 2),
             current_price=round(current_price, 2),
-            market_value=round(current_price * shares, 2),
+            market_value=round(market_value, 2),
             unrealized_pnl=round(unrealized_pnl, 2),
             unrealized_pnl_pct=round(unrealized_pnl_pct, 2),
             entry_date=entry_date_str,

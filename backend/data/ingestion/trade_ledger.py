@@ -786,11 +786,24 @@ class TradeLedger:
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> list[dict[str, Any]]:
+        # qa2-team-B: ``exit_time`` is an ISO-8601 timestamp string of the
+        # form ``YYYY-MM-DDTHH:MM:SS+00:00``. A caller passing a bare date
+        # (``"2026-04-30"``) previously lost every trade from that day on
+        # the end-date side: ``"2026-04-30T14:30:00" <= "2026-04-30"`` is
+        # False in lexicographic compare because ``T`` sorts AFTER the empty
+        # string. Extend a bare end-date to end-of-day so the comparison
+        # covers the full calendar day the caller asked for.
+        def _normalise_end(d: str) -> str:
+            # Accept both ``YYYY-MM-DD`` and full ISO; only extend the date-
+            # only form to the day's upper bound.
+            return d if "T" in d else f"{d}T23:59:59.999999+00:00"
+
         closed = self.list({"status": "closed"})
         if start_date:
             closed = [t for t in closed if t.get("exit_time") and t["exit_time"] >= start_date]
         if end_date:
-            closed = [t for t in closed if t.get("exit_time") and t["exit_time"] <= end_date]
+            end_norm = _normalise_end(end_date)
+            closed = [t for t in closed if t.get("exit_time") and t["exit_time"] <= end_norm]
         return closed
 
     def get_performance_summary(self) -> dict[str, Any]:

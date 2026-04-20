@@ -25,6 +25,12 @@ class PortfolioSummary(BaseModel):
     unrealized_pnl: float
     unrealized_pnl_pct: float
     realized_pnl_today: float
+    # Day's total P&L (current equity minus previous-day equity). Backend
+    # already computed this locally but never surfaced it, so the frontend
+    # (``frontend/src/lib/api.ts:getPortfolioSummary``) fell back through
+    # ``?? realized_pnl_today`` — which double-counts on positions held
+    # across days. Surface it here so the fallback is never hit.
+    day_pnl: float = 0.0
     positions_count: int
     last_updated: datetime
     is_demo: bool = False
@@ -564,6 +570,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
             unrealized_pnl=unrealized_pnl,
             unrealized_pnl_pct=unrealized_pnl_pct,
             realized_pnl_today=realized_pnl_today,
+            day_pnl=round(day_pnl, 2),
             positions_count=positions_count_from_api or int(data.get("position_count", 0)),
             last_updated=datetime.now(timezone.utc),
         )
@@ -687,14 +694,22 @@ async def get_performance(
                 gross_losses = abs(float(np.sum(losses))) if len(losses) else 1
                 profit_factor = gross_wins / gross_losses if gross_losses > 0 else None
 
-                # Build equity curve with date and cumulative_pnl
+                # Build equity curve with date and cumulative_pnl.
+                # qa2-team-B: previously each trade's cumulative P&L was
+                # labelled with a synthetic date derived from its POSITION in
+                # the list (``today - (n_points - 1 - i) days``) rather than
+                # the trade's actual exit_time. That projected every closed
+                # trade onto the last N consecutive calendar days ending
+                # today, silently misdating the entire equity curve whenever
+                # there were gaps between trades. Use the trade's real
+                # exit_time (fall back to entry_time) so the x-axis reflects
+                # when P&L actually landed.
                 today_d = date.today()
-                n_points = len(cumulative)
                 equity_curve_data = []
                 trade_dates: list[str] = []
-                for i, c in enumerate(cumulative):
-                    d = today_d - timedelta(days=(n_points - 1 - i))
-                    d_str = d.isoformat()
+                for c, t in zip(cumulative, trades):
+                    dt_obj = t.exit_time or t.entry_time
+                    d_str = dt_obj.date().isoformat() if dt_obj else today_d.isoformat()
                     trade_dates.append(d_str)
                     equity_curve_data.append({
                         "date": d_str,
