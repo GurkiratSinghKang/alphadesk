@@ -646,6 +646,25 @@ async def _run_trade_updates_stream() -> None:
                             payload.get("order_id"),
                             exc_info=True,
                         )
+                    else:
+                        # Wave 3K Fix 5 (persona-87 P2): emit a
+                        # structured success record so the forensic
+                        # timeline shows every fill that landed in the
+                        # durable stream (not just failures). Lets oncall
+                        # grep for ``event=trade_update_xadd`` and
+                        # reconstruct the replay cursor without tailing
+                        # Redis directly.
+                        logger.info(
+                            "trade_update_xadd",
+                            extra={
+                                "event": "trade_update_xadd",
+                                "stream_id": stream_id,
+                                "order_id": payload.get("order_id"),
+                                "alpaca_event": payload.get("event"),
+                                "user_id": user_id,
+                                "symbol": payload.get("symbol"),
+                            },
+                        )
                     # Mirror the stream ID onto the pub/sub payload so
                     # connected clients can record the cursor without having
                     # to round-trip an XREAD. Clients that reconnect then

@@ -637,15 +637,41 @@ async def create_order(
                 )
         raise
 
-    # Observability: log every submitted order with the acting user
+    # Observability: log every submitted order with the acting user.
+    #
+    # Wave 3K Fix 4 (persona-87 P2 gap): the previous log line carried
+    # the acting context in the formatted message only, which meant
+    # Loki / Datadog queries had to regex it back out. Adding an
+    # ``extra=`` block promotes user / strategy / symbol / side /
+    # client_order_id / order_id to first-class JSON fields so the
+    # aggregator can filter and facet on them natively.
+    _first_leg = payload.legs[0]
     logger.info(
         "Order submitted: %s %s %s @ %s (user: %s, client_order_id: %s)",
-        payload.legs[0].side,
-        payload.legs[0].qty,
-        payload.legs[0].symbol,
-        "market" if payload.legs[0].order_type == OrderType.MARKET else f"${payload.legs[0].limit_price}",
+        _first_leg.side,
+        _first_leg.qty,
+        _first_leg.symbol,
+        "market" if _first_leg.order_type == OrderType.MARKET else f"${_first_leg.limit_price}",
         username,
         client_order_id,
+        extra={
+            "event": "order_submitted",
+            "user": username,
+            "strategy": payload.strategy,
+            "symbol": _first_leg.symbol,
+            "side": _first_leg.side.value if hasattr(_first_leg.side, "value") else str(_first_leg.side),
+            "qty": float(_first_leg.qty) if _first_leg.qty is not None else None,
+            "order_type": (
+                _first_leg.order_type.value
+                if hasattr(_first_leg.order_type, "value")
+                else str(_first_leg.order_type)
+            ),
+            "limit_price": (
+                float(_first_leg.limit_price) if _first_leg.limit_price else None
+            ),
+            "client_order_id": client_order_id,
+            "broker_order_id": order_id,
+        },
     )
 
     # Wave 2H P76-1: record this order's side+price for wash-trade
@@ -1343,6 +1369,25 @@ SECTOR_CONCENTRATION_LIMIT = _env_float("TRADES_SECTOR_CONCENTRATION_LIMIT", 0.3
 # the rest of the compliance signals use.
 _SURVEILLANCE_AUDIT = logging.getLogger("alphadesk.audit")
 
+
+def _client_ip_for_audit(req: Request) -> str | None:
+    """Best-effort caller IP for the ``audit_log`` ``ip`` (INET) column.
+
+    Mirrors the ``auth.py::_client_ip`` helper but returns ``None``
+    (rather than the string ``"unknown"``) when no address is
+    resolvable — the INET column prefers a NULL to a bogus sentinel.
+    Trusts ``X-Forwarded-For`` per the ProxyHeadersMiddleware
+    ``trusted_hosts`` policy in ``main.py``.
+    """
+    xff = req.headers.get("x-forwarded-for", "") if req is not None else ""
+    if xff:
+        candidate = xff.split(",")[0].strip()
+        if candidate:
+            return candidate
+    if req is not None and req.client:
+        return req.client.host
+    return None
+
 # P76-1: wash-trade detection window. Any opposite-side order against the
 # same symbol within this many seconds at a near-identical price is a
 # self-cross pattern — reject it.
@@ -1554,6 +1599,31 @@ async def _check_wash_trade(
                         "bps": bps,
                     },
                 )
+                # Wave 3K (persona-87 P1 #1): persist to audit_log so a
+                # regulator can reconstruct the rejection long after the
+                # container has rotated.
+                try:
+                    from core.audit import write_audit
+                    from core.logging import REQUEST_ID
+
+                    rid = REQUEST_ID.get()
+                    await write_audit(
+                        "wash_trade_rejected",
+                        username=username,
+                        ip=None,
+                        request_id=rid if rid and rid != "-" else None,
+                        details={
+                            "symbol": leg.symbol,
+                            "side": leg.side.value,
+                            "prev_side": prev_side,
+                            "prev_price": prev_price,
+                            "incoming_price": incoming_price,
+                            "bps": bps,
+                            "window_seconds": WASH_TRADE_WINDOW_SECONDS,
+                        },
+                    )
+                except Exception:
+                    logger.debug("wash_trade audit persistence failed", exc_info=True)
                 return False, reason
     return True, "passed"
 
@@ -1809,6 +1879,25 @@ async def _aggregate_risk_check(
                 "error": str(exc),
             },
         )
+        # Wave 3K (persona-87 P1 #1): also persist to audit_log so the
+        # compliance trail survives container rotation.
+        try:
+            from core.audit import write_audit
+            from core.logging import REQUEST_ID
+
+            rid = REQUEST_ID.get()
+            await write_audit(
+                "restricted_symbol_rejected",
+                username=username,
+                ip=None,
+                request_id=rid if rid and rid != "-" else None,
+                details={
+                    "error": str(exc),
+                    "symbols": [leg.symbol for leg in request.legs],
+                },
+            )
+        except Exception:
+            logger.debug("restricted_symbol audit persistence failed", exc_info=True)
         return False, str(exc)
 
     # Wave 2H P76-1: wash-trade detection.
@@ -1918,10 +2007,26 @@ async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
 
 
 @router.post("/halt")
-async def halt_trading(username: str = Depends(require_auth)):
-    """Emergency halt — prevents all new orders."""
+async def halt_trading(
+    req: Request,
+    username: str = Depends(require_auth),
+):
+    """Emergency halt — prevents all new orders.
+
+    Wave 3K (persona-87 P1 #1 gap 3): halt / resume were previously
+    not audited at all — operators could flip the killswitch from the
+    admin UI and leave no trail behind. Now every transition is
+    persisted to ``audit_log`` via ``core.audit.write_audit``.
+    """
+    from core.audit import write_audit
+
+    request_id = getattr(req.state, "request_id", None)
+    client_ip = _client_ip_for_audit(req)
+
     await _set_trading_halted(True)
     # Cancel all open orders on Alpaca
+    cancel_ok = True
+    cancel_err: str | None = None
     try:
         from core.config import settings
         headers = {
@@ -1930,14 +2035,42 @@ async def halt_trading(username: str = Depends(require_auth)):
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.delete(f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers)
-    except Exception:
+    except Exception as exc:
+        cancel_ok = False
+        cancel_err = repr(exc)
         logger.error("Failed to cancel orders during halt", exc_info=True)
+
+    await write_audit(
+        "halt_trading",
+        username=username,
+        ip=client_ip,
+        request_id=request_id,
+        details={
+            "result": "success",
+            "cancel_open_orders_ok": cancel_ok,
+            "cancel_error": cancel_err,
+        },
+    )
     return {"halted": True, "message": "All trading halted. All open orders cancelled."}
 
 
 @router.post("/resume")
-async def resume_trading(username: str = Depends(require_auth)):
-    """Resume trading after emergency halt."""
+async def resume_trading(
+    req: Request,
+    username: str = Depends(require_auth),
+):
+    """Resume trading after emergency halt.
+
+    Wave 3K (persona-87 P1 #1 gap 3): see ``halt_trading`` — both
+    transitions are now persisted to the compliance ``audit_log`` so a
+    regulator can reconstruct when the killswitch was flipped and by
+    whom.
+    """
+    from core.audit import write_audit
+
+    request_id = getattr(req.state, "request_id", None)
+    client_ip = _client_ip_for_audit(req)
+
     try:
         await _set_trading_halted(False)
         # Verify the halt key was actually removed
@@ -1946,17 +2079,39 @@ async def resume_trading(username: str = Depends(require_auth)):
         if redis:
             still_halted = await redis.get("trading:halted")
             if still_halted:
+                await write_audit(
+                    "resume_trading",
+                    username=username,
+                    ip=client_ip,
+                    request_id=request_id,
+                    details={"result": "failure", "reason": "halt_key_still_present"},
+                )
                 raise HTTPException(
                     status_code=503,
                     detail="Failed to resume trading — halt state could not be cleared.",
                 )
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        await write_audit(
+            "resume_trading",
+            username=username,
+            ip=client_ip,
+            request_id=request_id,
+            details={"result": "failure", "error": repr(exc)},
+        )
         raise HTTPException(
             status_code=503,
             detail="Failed to resume trading — could not verify halt state was cleared.",
         )
+
+    await write_audit(
+        "resume_trading",
+        username=username,
+        ip=client_ip,
+        request_id=request_id,
+        details={"result": "success"},
+    )
     return {"halted": False, "message": "Trading resumed."}
 
 

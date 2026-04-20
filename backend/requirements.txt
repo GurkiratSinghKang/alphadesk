@@ -8,6 +8,9 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 python-dotenv>=1.0.0
 orjson>=3.10.0
+# Wave 3L Fix 5 (persona-86/90): drop-in asyncio replacement, 2–4× faster
+# on high-frequency async I/O. Installed at the top of main.py.
+uvloop>=0.19.0
 
 # Auth
 PyJWT>=2.8.0

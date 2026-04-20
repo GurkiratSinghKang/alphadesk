@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+# Wave 3L Fix 5 (persona-86/90): swap the default asyncio event loop for
+# uvloop. 2–4× lower overhead on high-frequency async I/O (WS fan-out,
+# Redis pub/sub) at zero code cost. Must be installed BEFORE the first
+# ``asyncio.get_event_loop()`` call, hence the very-top import. Gracefully
+# degraded to the stdlib loop when the wheel isn't available (e.g. on
+# Windows or in bare venvs used by some CI sandboxes).
+try:
+    import uvloop
+
+    uvloop.install()
+except ImportError:
+    pass
+
 import asyncio
 import logging
 import uuid
@@ -8,7 +21,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, ORJSONResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.auth import require_auth
 from api.routes import auth as auth_routes
@@ -185,6 +198,12 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
+    # Wave 3L Fix 4 (persona-86/90): orjson is 2–3× faster than the stdlib
+    # ``json`` module used by the default ``JSONResponse``. Setting it as
+    # the default response class flips every route (that returns a dict /
+    # pydantic model without an explicit ``response_class``) onto the
+    # faster serializer. ``orjson`` is already a declared dependency.
+    default_response_class=ORJSONResponse,
 )
 
 cors_origins = [
@@ -223,6 +242,43 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
 # clients can detect the degraded mode rather than interpreting empty
 # responses as genuinely empty datasets.
 app.add_middleware(SkipDbInitWarningMiddleware)
+
+
+# Wave 3K Fix 2 (persona-87 P1) — global unhandled-exception handler.
+#
+# Registered BEFORE ``app.include_router(...)`` so FastAPI picks it up
+# during the route-compilation phase. Any route that raises a non-HTTP
+# exception (a KeyError inside a handler, a sqlalchemy OperationalError
+# that escapes a retry loop, …) lands here instead of Starlette's default
+# handler which emits a generic 500 with zero structured context.
+#
+# Behaviour:
+#   * ``logger.exception`` captures the full traceback to the JSON log
+#     stream with ``event=unhandled_exception`` so it is trivially
+#     filterable.
+#   * The response body echoes the request_id so a user reporting a 500
+#     gives the oncall something to grep for without shelling into the
+#     container.
+#   * ``HTTPException`` is NOT intercepted here — Starlette routes those
+#     through its own exception handler, which is the correct shape
+#     (carries the user-facing ``detail`` string).
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception(
+        "unhandled_exception",
+        extra={
+            "event": "unhandled_exception",
+            "path": request.url.path,
+            "method": request.method,
+            "request_id": request_id,
+        },
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "request_id": request_id},
+    )
+
 
 # --- Routers ---
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])

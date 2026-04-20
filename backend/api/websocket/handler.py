@@ -200,6 +200,13 @@ class ConnectionManager:
         from exactly this entry. Per-user filtering applies to
         ``trade_updates``: the ``_user_id`` hint on the payload must match
         the client's authenticated user.
+
+        Wave 3L Fix 3 (persona-86/90): serialize once and fan out via
+        ``asyncio.gather`` instead of the prior per-client
+        ``orjson.dumps`` + sequential ``asyncio.wait_for`` loop. At 100
+        subscribers the old path's worst case was serial-sum of per-
+        client 2 s timeouts (~200 s); with gather all sends race in
+        parallel under the same 2 s budget.
         """
         # Extract the routing hints up-front so we only peel them off the
         # payload once, not per-client.
@@ -208,7 +215,6 @@ class ConnectionManager:
             data.get("_user_id") if isinstance(data, dict) and channel == CHANNEL_TRADE_UPDATES else None
         )
 
-        dead: list[WebSocket] = []
         async with self._lock:
             targets = [
                 (ws, self._user_ids.get(ws, "default"))
@@ -216,29 +222,41 @@ class ConnectionManager:
                 if channel in channels
             ]
 
-        for ws, user_id in targets:
-            # Per-user filter on trade_updates so one tenant never sees
-            # another tenant's fills. Skip if the payload is scoped and this
-            # client is the wrong user.
-            if payload_user is not None and payload_user != user_id:
-                continue
-            try:
-                await asyncio.wait_for(
-                    self._send(ws, {"channel": channel, "data": data}),
-                    timeout=2.0,
-                )
-                if stream_id and channel in _STREAM_BACKED_CHANNELS:
-                    # Track the last delivered ID per-client so reconnect
-                    # replay starts from exactly here. Set without holding
-                    # the connections lock (different lock) — cursor dict is
-                    # accessed only from this coroutine-sequential path.
-                    self.set_cursor(ws, channel, stream_id)
-            except Exception:
+        # Apply the per-user filter for trade_updates so one tenant never
+        # sees another tenant's fills.
+        if payload_user is not None:
+            targets = [t for t in targets if t[1] == payload_user]
+
+        if not targets:
+            return
+
+        # Serialize the envelope ONCE instead of N times. orjson.dumps on
+        # a typical bar/trade payload is ~10 µs but still adds up with a
+        # few hundred clients and high-rate ticks.
+        payload_bytes = orjson.dumps({"channel": channel, "data": data})
+
+        # Fan out in parallel. return_exceptions=True so a single bad
+        # socket can't take down the whole broadcast. Per-send timeout
+        # stays at 2 s, applied to every task concurrently.
+        send_tasks = [
+            asyncio.wait_for(self._send_bytes(ws, payload_bytes), timeout=2.0)
+            for ws, _ in targets
+        ]
+        results = await asyncio.gather(*send_tasks, return_exceptions=True)
+
+        dead: list[WebSocket] = []
+        for (ws, _), result in zip(targets, results):
+            if isinstance(result, BaseException):
                 logger.debug(
                     "broadcast: dropped client on channel %s (will reap)",
-                    channel, exc_info=True,
+                    channel, exc_info=result,
                 )
                 dead.append(ws)
+                continue
+            if stream_id and channel in _STREAM_BACKED_CHANNELS:
+                # Track the last delivered ID per-client so reconnect
+                # replay starts from exactly here.
+                self.set_cursor(ws, channel, stream_id)
 
         if dead:
             async with self._lock:
@@ -250,6 +268,21 @@ class ConnectionManager:
     async def _send(self, ws: WebSocket, data: dict[str, Any]) -> None:
         try:
             await ws.send_text(orjson.dumps(data).decode())
+        except RuntimeError:
+            # WebSocket already closed — silently ignore
+            pass
+
+    async def _send_bytes(self, ws: WebSocket, payload: bytes) -> None:
+        """Send a pre-serialized payload — used by the fan-out broadcast path.
+
+        Wave 3L Fix 3: by passing an already-orjson-encoded envelope we
+        avoid re-serializing per target. The frontend client uses
+        ``JSON.parse(event.data)`` on a text frame, so we decode the bytes
+        once and call ``send_text``. (Going to ``send_bytes`` would hand
+        the client a Blob / ArrayBuffer and break the JSON.parse contract.)
+        """
+        try:
+            await ws.send_text(payload.decode())
         except RuntimeError:
             # WebSocket already closed — silently ignore
             pass

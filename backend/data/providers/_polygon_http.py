@@ -6,6 +6,7 @@ share a single connection-pooled ``httpx.Client`` with unified backoff.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Iterable
 
@@ -86,6 +87,25 @@ class PolygonHTTP:
 
 
 def _sleep(seconds: float) -> None:
+    """Sync backoff sleep.
+
+    Retained for the sync ``get()`` / ``paginate()`` call path, invoked
+    from strategy code via ``asyncio.to_thread`` (the event loop runs on
+    a different thread so ``time.sleep`` blocks only the thread-pool
+    worker, not the loop). Direct async call sites should await
+    :func:`_asleep` instead.
+    """
     import time as _time
 
     _time.sleep(seconds)
+
+
+async def _asleep(seconds: float) -> None:
+    """Async backoff sleep — non-blocking on the event loop.
+
+    Wave 3L Fix 2 (persona-86/90): the task flagged ``time.sleep`` at
+    the original retry site as blocking the event loop. This coroutine
+    variant lets async call sites yield control via ``asyncio.sleep``
+    instead. Tests can patch this symbol to short-circuit the backoff.
+    """
+    await asyncio.sleep(seconds)

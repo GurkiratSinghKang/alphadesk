@@ -156,6 +156,16 @@ export interface AIMemo {
 export interface StatusPill {
   label: string;
   tone: "profit" | "amber" | "muted";
+  /** Optional remediation link — rendered as an inline "→ Configure"
+   *  anchor after the label. Used by the broker-offline pill (persona-94
+   *  #1) so a first-time user sees a fix path, not a dead state. */
+  href?: string;
+  /** Optional short call-to-action label for the `href`. Defaults to
+   *  "Fix". Kept terse so the 22px status rail doesn't blow its height. */
+  hrefLabel?: string;
+  /** Optional native-tooltip text surfaced via `title`. Useful when the
+   *  label itself is already terse but readers need more detail on hover. */
+  title?: string;
 }
 
 /* ─── Ticker strip ─────────────────────────────────────────── */

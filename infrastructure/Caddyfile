@@ -66,13 +66,22 @@
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        # CSP: 'unsafe-inline' kept for script-src because Next.js inlines its
-        # JSON hydration state in a <script> tag. It's kept for style-src
-        # because Next/Tailwind also emit inline style attributes.
-        # 'unsafe-eval' REMOVED — Next.js production builds do not need it.
-        # fonts.googleapis.com and fonts.gstatic.com whitelisted so the
-        # Google-hosted font stylesheet and font binaries load.
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost} ws://{$DOMAIN:localhost}; frame-ancestors 'none'"
+        # CSP — Wave 3M / persona-91 fix. The authoritative CSP is now emitted
+        # per-request by the Next.js Proxy (frontend/src/proxy.ts), which
+        # mints a fresh nonce for every dashboard response. Caddy still emits
+        # a *fallback* CSP for paths that never hit the proxy (API JSON
+        # responses, static assets served by the frontend runtime under
+        # /_next/static, health probes). This fallback drops 'unsafe-inline'
+        # entirely — JSON responses and bundled JS files don't need it — and
+        # drops ws:// from connect-src so production only tolerates wss://.
+        #
+        # `?Content-Security-Policy` uses Caddy's "default" prefix: the
+        # header is set ONLY if the upstream response didn't already set
+        # it. That lets Next's proxy-emitted nonce-based CSP pass through
+        # unchanged for HTML responses while we still cover the non-HTML
+        # paths (API JSON, /livez, /_next/static) with this fallback.
+        # See: https://caddyserver.com/docs/caddyfile/directives/header
+        ?Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'"
         -Server
         -X-Powered-By
     }

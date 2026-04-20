@@ -9,6 +9,12 @@ Covered:
   ``_evaluate_cancel_rate`` (P76-2).
 * Closing-auction throttle after 15:45 ET; ``allow_closing_auction=True``
   bypass (P76-3).
+* Wave 3K (persona-87 P1 #1): every rejection + halt / resume transition
+  now also lands an ``audit_log`` row via ``core.audit.write_audit``.
+  These tests run under SKIP_DB_INIT=True so the DB row write is
+  short-circuited — we assert against the structured ``alphadesk.audit``
+  log record the helper always emits (the DB path is covered by
+  ``backend/data/storage/tests/test_audit_log.py``).
 
 Redis is always mocked — these are pure unit tests around the surveillance
 helpers. ``create_order`` is not exercised here; the entrypoint is in a
@@ -19,6 +25,7 @@ build surfaces on the single offending function.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -33,6 +40,38 @@ from api.routes.trades import (
     OrderSide,
     OrderType,
 )
+
+
+# --------------------------------------------------------------------------- #
+# Capture helper for the ``alphadesk.audit`` logger (Wave 3K)                #
+# --------------------------------------------------------------------------- #
+
+
+class _AuditCapture(logging.Handler):
+    """Collect log records emitted on the audit logger during a test."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover — trivial
+        self.records.append(record)
+
+
+@pytest.fixture
+def audit_capture() -> _AuditCapture:
+    """Attach a capture handler to ``alphadesk.audit`` for the test body."""
+    logger = logging.getLogger("alphadesk.audit")
+    handler = _AuditCapture()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    prev_level = logger.level
+    logger.setLevel(logging.DEBUG)
+    try:
+        yield handler
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(prev_level)
 
 
 # --------------------------------------------------------------------------- #
@@ -70,6 +109,18 @@ class FakeRedis:
         # TTL is irrelevant for unit tests — we simulate a fast-forward by
         # clearing keys directly in tests that need it.
         return True
+
+    async def delete(self, *keys: str) -> int:
+        """Drop one or more keys. Used by ``_set_trading_halted(False)``."""
+        count = 0
+        for key in keys:
+            if key in self._strings:
+                del self._strings[key]
+                count += 1
+            if key in self._lists:
+                del self._lists[key]
+                count += 1
+        return count
 
     async def lpush(self, key: str, value: str) -> int:
         self._lists.setdefault(key, []).insert(0, value)
@@ -496,6 +547,168 @@ async def test_closing_auction_throttle_bypass_with_allow_flag(
     )
     ok, _ = await trades_mod._aggregate_risk_check(order, username="alice")
     assert ok is True
+
+
+# --------------------------------------------------------------------------- #
+# Wave 3K — audit-log wiring on rejections + halt/resume                     #
+# --------------------------------------------------------------------------- #
+
+
+def _find_audit_event(capture: _AuditCapture, event_name: str) -> logging.LogRecord | None:
+    """Return the first log record on the audit logger with ``event=name``.
+
+    Skips records without a ``username`` attribute — those are the
+    pre-existing surveillance-audit warnings that still use the legacy
+    ``user=`` key. The Wave 3K ``write_audit`` helper always sets
+    ``username`` so ``_find_audit_event`` lets us uniquely pick the
+    durable-audit record rather than the older breadcrumb.
+    """
+    for record in capture.records:
+        if getattr(record, "event", None) != event_name:
+            continue
+        if not hasattr(record, "username"):
+            continue
+        return record
+    return None
+
+
+@pytest.mark.asyncio
+async def test_wash_trade_reject_writes_audit_log(
+    fake_redis: FakeRedis,
+    audit_capture: _AuditCapture,
+) -> None:
+    """A wash-trade rejection must emit an ``event=wash_trade_rejected`` audit record.
+
+    SKIP_DB_INIT=True in this test environment short-circuits the DB
+    write, but ``core.audit.write_audit`` always emits the structured
+    log record first — that record is what downstream aggregators
+    consume today, and what regulators grep for during an audit.
+    """
+    prev = {
+        "side": "buy",
+        "price": 100.0,
+        "ts": (datetime.now(timezone.utc).timestamp() - 5),
+    }
+    fake_redis._lists["wash_trace:alice:AAPL"] = [json.dumps(prev)]
+
+    order = _minimal_order(symbol="AAPL", side=OrderSide.SELL)
+    order.legs[0].limit_price = 100.05
+
+    ok, _reason = await trades_mod._check_wash_trade("alice", order)
+    assert ok is False
+
+    rec = _find_audit_event(audit_capture, "wash_trade_rejected")
+    assert rec is not None, "write_audit must emit an event=wash_trade_rejected record"
+    assert getattr(rec, "username", None) == "alice"
+    # Details fields are promoted to top-level LogRecord attrs by
+    # core.audit.write_audit so the aggregator can query them natively.
+    assert getattr(rec, "symbol", None) == "AAPL"
+    assert getattr(rec, "side", None) == "sell"
+
+
+@pytest.mark.asyncio
+async def test_restricted_symbol_reject_writes_audit_log(
+    fake_redis: FakeRedis,
+    monkeypatch: pytest.MonkeyPatch,
+    audit_capture: _AuditCapture,
+) -> None:
+    """A restricted-symbol rejection must emit ``event=restricted_symbol_rejected``."""
+    from core import compliance
+    monkeypatch.setattr(compliance, "RESTRICTED_SYMBOLS", frozenset({"GME"}))
+
+    order = _minimal_order(symbol="GME")
+    ok, _reason = await trades_mod._aggregate_risk_check(order, username="alice")
+    assert ok is False
+
+    rec = _find_audit_event(audit_capture, "restricted_symbol_rejected")
+    assert rec is not None
+    assert getattr(rec, "username", None) == "alice"
+    # The details payload records every symbol the order tried to place
+    # — useful when a multi-leg order hits the gate on leg 2+.
+    symbols = getattr(rec, "symbols", None)
+    assert symbols == ["GME"]
+
+
+@pytest.mark.asyncio
+async def test_halt_trading_writes_audit_log(
+    fake_redis: FakeRedis,
+    monkeypatch: pytest.MonkeyPatch,
+    audit_capture: _AuditCapture,
+) -> None:
+    """/trades/halt must emit ``event=halt_trading`` with the acting user.
+
+    Persona-87 P1 gap 3: the halt / resume endpoints were entirely
+    unaudited before this wave.  We exercise the handler directly
+    (bypassing FastAPI routing) since the goal is to confirm the
+    ``write_audit`` wiring, not the request pipeline.
+    """
+    # Short-circuit the Alpaca cancel-all-orders call — the handler
+    # swallows HTTP errors internally so this would otherwise reach out
+    # to the live URL during the test.
+    import httpx
+
+    class _StubClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> Any:
+            return self
+
+        async def __aexit__(self, *a: Any, **kw: Any) -> None:
+            return None
+
+        async def delete(self, *a: Any, **kw: Any) -> Any:
+            class _Resp:
+                status_code = 200
+
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _StubClient)
+
+    # Build a minimal Request-shaped object the handler expects.
+    class _FakeState:
+        request_id = "req-halt-123"
+
+    class _FakeRequest:
+        headers: dict[str, str] = {}
+        client = None
+        state = _FakeState()
+
+    resp = await trades_mod.halt_trading(req=_FakeRequest(), username="admin")
+    assert resp["halted"] is True
+
+    rec = _find_audit_event(audit_capture, "halt_trading")
+    assert rec is not None
+    assert getattr(rec, "username", None) == "admin"
+    assert getattr(rec, "audit_request_id", None) == "req-halt-123"
+    assert getattr(rec, "result", None) == "success"
+
+
+@pytest.mark.asyncio
+async def test_resume_trading_writes_audit_log(
+    fake_redis: FakeRedis,
+    audit_capture: _AuditCapture,
+) -> None:
+    """/trades/resume must emit ``event=resume_trading`` with the acting user."""
+    # Seed the halt key so resume has real work to do.
+    fake_redis._strings["trading:halted"] = json.dumps({"halted": True})
+
+    class _FakeState:
+        request_id = "req-resume-456"
+
+    class _FakeRequest:
+        headers: dict[str, str] = {}
+        client = None
+        state = _FakeState()
+
+    resp = await trades_mod.resume_trading(req=_FakeRequest(), username="admin")
+    assert resp["halted"] is False
+
+    rec = _find_audit_event(audit_capture, "resume_trading")
+    assert rec is not None
+    assert getattr(rec, "username", None) == "admin"
+    assert getattr(rec, "audit_request_id", None) == "req-resume-456"
+    assert getattr(rec, "result", None) == "success"
 
 
 @pytest.mark.asyncio

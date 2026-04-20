@@ -386,11 +386,23 @@ export function toStatusPills(opts: {
   lastTickSec?: number;
 }): StatusPill[] {
   const pills: StatusPill[] = [];
+  // Wave 3N persona-94 #1: a first-time user with no Alpaca creds sees
+  // the offline pill with no remediation. Distinguish "not linked yet"
+  // from the old "offline" state and surface a one-click fix link into
+  // /settings. When `brokerConnected === false` we intentionally read it
+  // as "broker not linked" since the backend's `is_demo` flag is the
+  // signal — a configured key that's temporarily unreachable would not
+  // flip `is_demo` back on.
   pills.push({
     label: opts.brokerConnected
       ? "Alpaca paper · connected"
-      : "Alpaca paper · offline",
-    tone: opts.brokerConnected ? "profit" : "muted",
+      : "Broker not linked",
+    tone: opts.brokerConnected ? "profit" : "amber",
+    href: opts.brokerConnected ? undefined : "/settings",
+    hrefLabel: opts.brokerConnected ? undefined : "Configure Alpaca keys",
+    title: opts.brokerConnected
+      ? undefined
+      : "AlphaDesk hasn't seen Alpaca credentials yet. Open /settings to paste your keys.",
   });
   pills.push({
     label: opts.marketOpen

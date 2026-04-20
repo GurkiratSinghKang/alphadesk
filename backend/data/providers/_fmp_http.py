@@ -6,6 +6,7 @@ simpler than the Polygon client — just a GET with retry.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -74,6 +75,25 @@ class FMPHTTP:
 
 
 def _sleep(seconds: float) -> None:
+    """Sync backoff sleep.
+
+    Retained for the sync ``get()`` call path, which is invoked from
+    strategies via ``asyncio.to_thread`` — in that case the event loop
+    runs on a different thread so ``time.sleep`` blocks only the
+    thread-pool worker, not the loop. Direct async call sites should
+    await :func:`_asleep` instead.
+    """
     import time as _time
 
     _time.sleep(seconds)
+
+
+async def _asleep(seconds: float) -> None:
+    """Async backoff sleep — non-blocking on the event loop.
+
+    Wave 3L Fix 2 (persona-86/90): the task flagged ``time.sleep`` at
+    the original retry site as blocking the event loop. This coroutine
+    variant lets async call sites yield control via ``asyncio.sleep``
+    instead. Tests can patch this symbol to short-circuit the backoff.
+    """
+    await asyncio.sleep(seconds)

@@ -1408,7 +1408,26 @@ async def start_daily_pipeline_async(
     CURRENT_RUN_ID = run_id
     CURRENT_STARTED_AT = datetime.now(timezone.utc)
 
+    # Wave 3K Fix 6 (persona-87 P2): structured pipeline-start event.
+    # Previously the background launcher returned silently; the only
+    # record of a new pipeline run was scattered across whatever the
+    # inner function logged. A single ``event=pipeline_started`` at
+    # launch makes the run trivially correlatable with the completion
+    # record emitted below (same ``run_id``).
+    logger.info(
+        "pipeline_started",
+        extra={
+            "event": "pipeline_started",
+            "run_id": run_id,
+            "screen_limit": screen_limit,
+            "analyze_limit": analyze_limit,
+            "only_strategies": list(only_strategies) if only_strategies else None,
+        },
+    )
+
     async def _wrapper() -> None:
+        _outcome = "success"
+        _error_repr: str | None = None
         try:
             await run_daily_pipeline(
                 screen_limit=screen_limit,
@@ -1417,10 +1436,25 @@ async def start_daily_pipeline_async(
             )
         except _PipelineCancelled:
             # Already logged + last_result set inside the inner function.
-            pass
+            _outcome = "cancelled"
         except Exception as exc:
             logger.exception("Background pipeline run failed: %s", exc)
             _pipeline_status["last_result"] = f"error: {exc}"
+            _outcome = "error"
+            _error_repr = repr(exc)
+        finally:
+            # Wave 3K Fix 6 (persona-87 P2): mirror the start event on
+            # completion so downstream dashboards can compute run
+            # duration / success-rate directly from the log stream.
+            logger.info(
+                "pipeline_completed",
+                extra={
+                    "event": "pipeline_completed",
+                    "run_id": run_id,
+                    "outcome": _outcome,
+                    "error": _error_repr,
+                },
+            )
 
     asyncio.create_task(_wrapper())
     return run_id

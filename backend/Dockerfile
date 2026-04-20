@@ -33,4 +33,15 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "3", "--bind", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]
+# Wave 3L Fix 7 (persona-86/90): drop gunicorn workers from 3 to 1. On a
+# 2 vCPU box, -w 3 was oversubscribed (context-switch overhead) and —
+# more critically — every worker spawned the lifespan background
+# services (Alpaca stream, pipeline scheduler, realtime scanner,
+# continuous monitor, fill reconciler). Three copies of the scheduler
+# ticking once per minute created a concrete duplicate-order risk on
+# live paper accounts. A single worker is the safe default until
+# lifespan bg services are protected by a distributed leader-election
+# lock (tracked for a follow-up wave). Single-worker FastAPI with
+# uvloop (Fix 5) and ORJSONResponse (Fix 4) still comfortably handles
+# our traffic level; horizontal scaling remains an option behind Caddy.
+CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "1", "--bind", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-"]

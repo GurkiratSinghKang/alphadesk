@@ -20,6 +20,15 @@ MODEL_HAIKU = "haiku"
 # Locate the claude CLI binary
 CLAUDE_CLI = shutil.which("claude")
 
+# Wave 3L Fix 9 (persona-86/90): concurrency ceiling on Claude calls.
+# Without this, a burst of agent requests (e.g. 50 screener triggers
+# firing on a market event) would spawn 50 concurrent ``claude`` CLI
+# subprocesses or API requests. The CLI is memory-heavy (~300 MB each)
+# and the API enforces provider-side rate limits that failing retries
+# don't help with. 4 parallel in-flight calls balances throughput and
+# resource safety on our 2 vCPU box. Applies to both CLI and API paths.
+_CLAUDE_SEMAPHORE = asyncio.Semaphore(4)
+
 
 class BaseAgent(ABC):
     """Base class for all AlphaDesk agents.
@@ -112,45 +121,50 @@ class BaseAgent(ABC):
 
         cmd.append(prompt)
 
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                t0 = time.monotonic()
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=120
-                )
-                elapsed = time.monotonic() - t0
+        # Wave 3L Fix 9: global semaphore caps concurrent Claude subprocess
+        # calls at 4. Each CLI subprocess is memory-heavy (~300 MB) and
+        # the parent process is 2 vCPU, so unbounded fanout from a burst
+        # of agent triggers would OOM the container.
+        async with _CLAUDE_SEMAPHORE:
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    t0 = time.monotonic()
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(), timeout=120
+                    )
+                    elapsed = time.monotonic() - t0
 
-                if proc.returncode != 0:
-                    err = stderr.decode(errors="replace").strip()
-                    self.logger.error("CLI error (attempt %d): %s", attempt, err[:200])
+                    if proc.returncode != 0:
+                        err = stderr.decode(errors="replace").strip()
+                        self.logger.error("CLI error (attempt %d): %s", attempt, err[:200])
+                        if attempt < self.max_retries:
+                            await asyncio.sleep(self.retry_delay)
+                            continue
+                        return {"response": f"CLI error: {err[:500]}", "error": True}
+
+                    raw = stdout.decode(errors="replace").strip()
+                    self.logger.info("CLI completed in %.1fs (%d chars)", elapsed, len(raw))
+
+                    return self._parse_cli_response(raw)
+
+                except asyncio.TimeoutError:
+                    self.logger.warning("CLI timeout (attempt %d)", attempt)
                     if attempt < self.max_retries:
                         await asyncio.sleep(self.retry_delay)
                         continue
-                    return {"response": f"CLI error: {err[:500]}", "error": True}
+                    return {"response": "Agent timed out.", "error": True}
 
-                raw = stdout.decode(errors="replace").strip()
-                self.logger.info("CLI completed in %.1fs (%d chars)", elapsed, len(raw))
-
-                return self._parse_cli_response(raw)
-
-            except asyncio.TimeoutError:
-                self.logger.warning("CLI timeout (attempt %d)", attempt)
-                if attempt < self.max_retries:
-                    await asyncio.sleep(self.retry_delay)
-                    continue
-                return {"response": "Agent timed out.", "error": True}
-
-            except Exception as exc:
-                self.logger.error("CLI exception (attempt %d): %s", attempt, exc)
-                if attempt < self.max_retries:
-                    await asyncio.sleep(self.retry_delay)
-                    continue
-                return {"response": f"Agent error: {exc}", "error": True}
+                except Exception as exc:
+                    self.logger.error("CLI exception (attempt %d): %s", attempt, exc)
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    return {"response": f"Agent error: {exc}", "error": True}
 
         return {"response": "Agent failed after retries.", "error": True}
 
@@ -193,32 +207,36 @@ class BaseAgent(ABC):
         }
         model_id = model_map.get(self.model, self.model)
 
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                t0 = time.monotonic()
-                response = await self._api_client.messages.create(
-                    model=model_id,
-                    max_tokens=4096,
-                    system=self.system_prompt,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                elapsed = time.monotonic() - t0
-                self.logger.info(
-                    "API completed in %.1fs (tokens: %d in / %d out)",
-                    elapsed, response.usage.input_tokens, response.usage.output_tokens,
-                )
-                text = "".join(b.text for b in response.content if hasattr(b, "text"))
-                return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
+        # Wave 3L Fix 9: same concurrency ceiling as the CLI path so
+        # API-mode agents don't bypass the bound and blow past the
+        # provider rate limits (which retries wouldn't help with).
+        async with _CLAUDE_SEMAPHORE:
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    t0 = time.monotonic()
+                    response = await self._api_client.messages.create(
+                        model=model_id,
+                        max_tokens=4096,
+                        system=self.system_prompt,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    elapsed = time.monotonic() - t0
+                    self.logger.info(
+                        "API completed in %.1fs (tokens: %d in / %d out)",
+                        elapsed, response.usage.input_tokens, response.usage.output_tokens,
+                    )
+                    text = "".join(b.text for b in response.content if hasattr(b, "text"))
+                    return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
 
-            except anthropic.RateLimitError:
-                wait = self.retry_delay * (2 ** (attempt - 1))
-                self.logger.warning("Rate limited, retrying in %.1fs", wait)
-                await asyncio.sleep(wait)
-            except anthropic.APIError as exc:
-                self.logger.error("API error (attempt %d): %s", attempt, exc)
-                if attempt == self.max_retries:
-                    return {"response": f"API error: {exc}", "error": True}
-                await asyncio.sleep(self.retry_delay)
+                except anthropic.RateLimitError:
+                    wait = self.retry_delay * (2 ** (attempt - 1))
+                    self.logger.warning("Rate limited, retrying in %.1fs", wait)
+                    await asyncio.sleep(wait)
+                except anthropic.APIError as exc:
+                    self.logger.error("API error (attempt %d): %s", attempt, exc)
+                    if attempt == self.max_retries:
+                        return {"response": f"API error: {exc}", "error": True}
+                    await asyncio.sleep(self.retry_delay)
 
         return {"response": "Agent failed.", "error": True}
 
@@ -234,34 +252,39 @@ class BaseAgent(ABC):
         model_id = model_map.get(self.model, self.model)
         messages = [{"role": "user", "content": prompt}]
 
-        for _ in range(max_iterations):
-            response = await self._api_client.messages.create(
-                model=model_id, max_tokens=4096,
-                system=self.system_prompt, messages=messages, tools=tools,
-            )
-            text_parts, tool_calls = [], []
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-                elif block.type == "tool_use":
-                    tool_calls.append({"id": block.id, "name": block.name, "input": block.input})
+        # Wave 3L Fix 9: concurrency ceiling applied to the full
+        # tool-loop run (not per-iteration) so a long tool exchange
+        # still counts as a single slot. Otherwise a 10-iteration loop
+        # could trickle through the semaphore and blow past the cap.
+        async with _CLAUDE_SEMAPHORE:
+            for _ in range(max_iterations):
+                response = await self._api_client.messages.create(
+                    model=model_id, max_tokens=4096,
+                    system=self.system_prompt, messages=messages, tools=tools,
+                )
+                text_parts, tool_calls = [], []
+                for block in response.content:
+                    if block.type == "text":
+                        text_parts.append(block.text)
+                    elif block.type == "tool_use":
+                        tool_calls.append({"id": block.id, "name": block.name, "input": block.input})
 
-            if not tool_calls:
-                text = "".join(text_parts)
-                return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
+                if not tool_calls:
+                    text = "".join(text_parts)
+                    return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
 
-            serialized = [
-                {"type": b.type, "text": b.text} if b.type == "text"
-                else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                for b in response.content
-            ]
-            messages.append({"role": "assistant", "content": serialized})
+                serialized = [
+                    {"type": b.type, "text": b.text} if b.type == "text"
+                    else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                    for b in response.content
+                ]
+                messages.append({"role": "assistant", "content": serialized})
 
-            tool_results = []
-            for tc in tool_calls:
-                result = await self._execute_tool(tc["name"], tc["input"])
-                tool_results.append({"type": "tool_result", "tool_use_id": tc["id"], "content": str(result)})
-            messages.append({"role": "user", "content": tool_results})
+                tool_results = []
+                for tc in tool_calls:
+                    result = await self._execute_tool(tc["name"], tc["input"])
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc["id"], "content": str(result)})
+                messages.append({"role": "user", "content": tool_results})
 
         return {"response": "Reached max tool iterations.", "error": True}
 

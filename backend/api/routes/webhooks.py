@@ -79,8 +79,18 @@ async def receive_tradingview_webhook(
 
     # Rate limit — 30 requests per minute per source IP. Applied before
     # JSON parsing / HMAC so a flood attacker can't waste CPU on us.
-    # Fail-open on Redis errors: don't lose legitimate TV alerts because
-    # of a transient infra blip.
+    #
+    # Wave 3M / persona-91 #3: fail CLOSED on Redis errors. This endpoint
+    # is a public, unauthenticated attack surface (anyone who knows the
+    # path can POST to it; the shared secret is the only gate). If Redis
+    # is down, fail-open meant an attacker could DoS Redis (or time a
+    # burst to coincide with a Redis restart) and then spray the webhook
+    # with credential-stuffing / secret-bruteforce payloads at unbounded
+    # rate, each one still triggering HMAC compare + JSON parse. 503 is
+    # the correct response: operations is notified (alerts fire on 5xx
+    # rate), legitimate TradingView delivery retries after the Redis
+    # service recovers, and we don't lose the security property of the
+    # rate-limit during the outage window.
     try:
         redis = await get_redis()
         minute_bucket = int(time.time() // 60)
@@ -101,7 +111,16 @@ async def receive_tradingview_webhook(
     except HTTPException:
         raise
     except Exception:
-        logger.exception("Rate-limit check failed; allowing request")
+        # Fail-closed: reject with 503 rather than silently allowing the
+        # request through. See the security note above.
+        logger.exception(
+            "Rate-limit check failed for ip=%s; rejecting request (fail-closed)",
+            client_ip,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Rate limiter unavailable; retry later.",
+        )
 
     # Replay protection — require a fresh timestamp header. Reject anything
     # older/newer than TV_REPLAY_WINDOW_SECONDS to defeat captured-payload

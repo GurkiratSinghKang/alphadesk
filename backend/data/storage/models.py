@@ -17,6 +17,7 @@ def _define_models() -> dict[str, Any]:
         return _models_cache
 
     from sqlalchemy import (
+        BigInteger,
         Boolean,
         Column,
         DateTime,
@@ -29,7 +30,7 @@ def _define_models() -> dict[str, Any]:
         Index,
         func,
     )
-    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.dialects.postgresql import INET, JSONB
 
     from core.database import get_base
 
@@ -266,6 +267,66 @@ def _define_models() -> dict[str, Any]:
         triggered_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
         acknowledged = Column(Boolean, nullable=False, default=False)
 
+    class AuditLog(Base):
+        """Durable compliance trail for authenticated + trading actions.
+
+        Wave 3K — persona-87 P1 #1. Replaces the prior stdout-only
+        ``_audit(...)`` callsites across auth.py / trades.py /
+        trading_gate.py so a container rotation no longer evaporates the
+        compliance record.  Every ``core.audit.write_audit(...)`` invocation
+        appends one row here; the same helper also emits a structured log
+        record so existing log-aggregation pipelines keep functioning
+        unchanged.
+
+        Fields mirror the columns declared in
+        ``alembic/versions/0005_audit_log.py``.  See that migration's
+        docstring for the rationale behind each column's nullability and
+        type choice.  Schema highlights:
+
+        * ``id``         — BIGINT surrogate PK. BigInteger rather than
+          Integer because audit inserts aggregate across every auth event,
+          every order submit, and every live-gate rejection — at even
+          modest load a 32-bit serial would wrap inside a couple of years.
+        * ``ts``         — server-side ``NOW()`` default so a skewed
+          client clock cannot corrupt the timeline.
+        * ``event``      — short snake_case identifier
+          (``login``/``halt_trading``/``wash_trade_rejected``/…).
+        * ``username``   — NULL for pre-auth events (e.g. failed login
+          against an unknown user).
+        * ``ip``         — stored in Postgres's native INET type so CIDR
+          containment queries work ("every event from 10.0.0.0/8").
+        * ``request_id`` — the request-correlation id from
+          ``request.state.request_id`` / ``REQUEST_ID.get()``; pivots
+          from an audit row to every structured log line in the same
+          request.
+        * ``details``    — JSONB free-form kwargs
+          (``reason``/``symbol``/``new_password_version``/…).
+        """
+
+        __tablename__ = "audit_log"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        ts = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        )
+        event = Column(String(64), nullable=False)
+        username = Column(String(128), nullable=True)
+        ip = Column(INET, nullable=True)
+        request_id = Column(String(64), nullable=True)
+        details = Column(JSONB, nullable=True)
+
+        __table_args__ = (
+            # Indexes mirror the alembic migration 1:1. Declared at the
+            # ORM level only (migration owns the DDL); SQLAlchemy's
+            # create_all picks them up so in-memory test DBs get the same
+            # shape as production.
+            Index("ix_audit_log_ts", "ts"),
+            Index("ix_audit_log_event_ts", "event", "ts"),
+            Index("ix_audit_log_username_ts", "username", "ts"),
+        )
+
     _models_cache.update({
         "OHLCVBar": OHLCVBar,
         "OptionsSnapshot": OptionsSnapshot,
@@ -276,6 +337,7 @@ def _define_models() -> dict[str, Any]:
         "AgentAnalysis": AgentAnalysis,
         "StrategySignal": StrategySignal,
         "Alert": Alert,
+        "AuditLog": AuditLog,
     })
     return _models_cache
 

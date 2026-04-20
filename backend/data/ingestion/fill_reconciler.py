@@ -145,6 +145,25 @@ async def _apply_event(event: dict[str, Any]) -> None:
     if not new_status:
         # Ignore non-terminal events (``new``, ``accepted``, …) — they are
         # informational and would only thrash the column.
+        #
+        # Wave 3K Fix 7 (persona-87 P2): debug-level breadcrumb so an
+        # operator can tail ``event=reconciler_ignored_event`` and
+        # confirm the reconciler is actually seeing the stream during
+        # an investigation, without the noise on INFO.
+        raw = event.get("raw") or {}
+        _order = raw.get("order") if isinstance(raw, dict) else None
+        _order = _order or {}
+        logger.debug(
+            "reconciler_ignored_event",
+            extra={
+                "event": event_name,
+                "order_id": event.get("order_id") or _order.get("id"),
+                "client_order_id": (
+                    event.get("client_order_id")
+                    or _order.get("client_order_id")
+                ),
+            },
+        )
         return
 
     raw = event.get("raw") or {}

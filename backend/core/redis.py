@@ -16,7 +16,15 @@ _redis_pool: aioredis.Redis | None = None
 
 
 async def get_redis() -> aioredis.Redis:
-    """Return the global Redis connection (lazily initialised)."""
+    """Return the global Redis connection (lazily initialised).
+
+    Wave 3L Fix 8 (persona-86/90): connection pool sized for a single
+    worker (Fix 7 drops gunicorn to ``-w 1``). 50 keepalive connections
+    comfortably covers ~50 concurrent Redis-using coroutines — more than
+    enough for WS pubsub + cache reads + streams. If we ever reintroduce
+    multi-worker + leader election, this can stay at 50 per worker (each
+    worker has its own pool, tracked independently by Redis).
+    """
     global _redis_pool
     if _redis_pool is None:
         _redis_pool = aioredis.from_url(

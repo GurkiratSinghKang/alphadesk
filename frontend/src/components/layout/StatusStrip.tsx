@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { useRegime } from "@/hooks/useQueries";
+import { useRegime, usePortfolioSummary } from "@/hooks/useQueries";
 
 export function StatusStrip() {
   const [mounted, setMounted] = useState(false);
@@ -18,13 +19,19 @@ export function StatusStrip() {
 
   const { data: regimeData } = useRegime();
   const regime = regimeData?.regime ?? null;
+  // Wave 3N persona-94 #8: portfolio summary exposes its own `is_demo`
+  // flag — when the user has no Alpaca creds, we want to light up the
+  // banner regardless of whether regime data has loaded yet.
+  const { data: portfolioResp } = usePortfolioSummary();
 
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
   const hasPnl = Number.isFinite(summary.dayPnl);
 
   const regimeColor = regime?.label === "bull" ? "text-[var(--profit)]" : regime?.label === "bear" ? "text-[var(--loss)]" : "text-amber";
-  const isDemo = regimeData?.is_demo === true;
+  const isDemo =
+    regimeData?.is_demo === true ||
+    (portfolioResp as { is_demo?: boolean } | undefined)?.is_demo === true;
 
   if (!mounted) {
     return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-[11px]" />;
@@ -78,6 +85,29 @@ export function StatusStrip() {
           {tradingMode}
         </span>
       </div>
+      {/* Wave 3N persona-94 #8: `is_demo` is the backend's signal that
+          no Alpaca credentials are configured. Don't just mute the other
+          cells — tell the user what state they're in and link them to
+          the fix path. Rendered last so it sits at the right edge of the
+          strip and doesn't re-layout the P&L cluster. */}
+      {isDemo && (
+        <Link
+          href="/settings"
+          className="ml-auto flex items-center gap-1.5 border-l border-border/50 pl-4 text-amber hover:text-foreground"
+          title="AlphaDesk hasn't seen Alpaca credentials yet. Click to configure."
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full bg-amber"
+            aria-hidden
+          />
+          <span className="font-semibold uppercase tracking-wider text-[9px]">
+            Demo data
+          </span>
+          <span className="hidden sm:inline text-[10px] text-muted-foreground">
+            · link Alpaca in /settings
+          </span>
+        </Link>
+      )}
     </div>
   );
 }

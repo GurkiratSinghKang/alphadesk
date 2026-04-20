@@ -27,21 +27,51 @@ def _client_ip(req: Request) -> str:
     return req.client.host if req.client else "unknown"
 
 
-def _audit(event: str, *, user: str, ip: str, result: str, **extra: object) -> None:
-    """Emit a structured auth audit record at INFO.
+async def _audit(
+    event: str,
+    *,
+    user: str,
+    ip: str,
+    result: str,
+    req: Request | None = None,
+    **extra: object,
+) -> None:
+    """Emit a structured auth audit record AND persist to ``audit_log``.
 
-    The JSON formatter in core/logging.py promotes ``extra=`` kwargs to
-    top-level fields, so a log aggregator can filter on ``event`` or
-    ``user`` directly. The message string stays human-readable for plain-
-    text viewers (``docker logs backend``).
+    Wave 3K (persona-87 P1 #1): previously the compliance trail was
+    stdout-only, so a container rotation evaporated the record beyond
+    whatever the aggregator had already shipped.  Delegates to
+    ``core.audit.write_audit`` which:
+
+      1. Emits the same structured log record (``alphadesk.audit``) that
+         existing log-aggregation pipelines already consume — no change
+         to downstream tooling.
+      2. Appends a row to the durable ``audit_log`` Postgres table so the
+         trail survives container churn.
+
+    The helper is now async because DB persistence is async; every caller
+    in this file was already inside an async handler so the await is
+    trivial.  ``request_id`` is read from ``req.state.request_id`` when a
+    request is available, falling back to ``REQUEST_ID.get()`` otherwise
+    (e.g. logout's failure branches that don't carry the full request).
     """
-    audit_logger.info(
-        "audit event=%s user=%s ip=%s result=%s",
+    from core.audit import write_audit
+    from core.logging import REQUEST_ID
+
+    request_id: str | None = None
+    if req is not None:
+        request_id = getattr(req.state, "request_id", None)
+    if request_id is None:
+        rid = REQUEST_ID.get()
+        request_id = rid if rid and rid != "-" else None
+
+    details: dict[str, object] = {"result": result, **extra}
+    await write_audit(
         event,
-        user,
-        ip,
-        result,
-        extra={"event": event, "user": user, "ip": ip, "result": result, **extra},
+        username=user if user and user != "-" else None,
+        ip=ip if ip and ip != "unknown" else None,
+        request_id=request_id,
+        details=details,
     )
 
 from core.auth import (
@@ -491,7 +521,7 @@ async def login(request: LoginRequest, req: Request):
     ):
         # Audit the failed attempt. ``user`` records the *submitted* username
         # so investigations can see attempts against non-existent accounts.
-        _audit("login", user=submitted_username or "-", ip=client_ip, result="failure")
+        await _audit("login", user=submitted_username or "-", ip=client_ip, result="failure", req=req)
         # Bump the failed-attempt counters so the NEXT attempt sees the
         # higher count (and the IP / pair eventually trips the lockout).
         await _record_login_failure(client_ip, submitted_username or "-")
@@ -509,14 +539,14 @@ async def login(request: LoginRequest, req: Request):
     if totp_secret:
         code = (request.totp_code or "").strip()
         if not code:
-            _audit("login", user=submitted_username, ip=client_ip, result="totp_required")
+            await _audit("login", user=submitted_username, ip=client_ip, result="totp_required", req=req)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="totp_required",
             )
         pyotp = _require_pyotp()
         if not pyotp.TOTP(totp_secret).verify(code, valid_window=1):
-            _audit("login", user=submitted_username, ip=client_ip, result="totp_failure")
+            await _audit("login", user=submitted_username, ip=client_ip, result="totp_failure", req=req)
             await _record_login_failure(client_ip, submitted_username)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -539,7 +569,7 @@ async def login(request: LoginRequest, req: Request):
     await _clear_login_failures(client_ip, submitted_username)
 
     # Audit the successful login. Do NOT log the tokens or password hash.
-    _audit("login", user=submitted_username, ip=client_ip, result="success")
+    await _audit("login", user=submitted_username, ip=client_ip, result="success", req=req)
 
     # Return tokens in body (for backward compat) AND set HttpOnly cookies
     response = JSONResponse(content={
@@ -562,18 +592,18 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
         # Bad / expired / tampered token. Audit the attempt (no username yet
         # since we couldn't decode) and re-raise so decode_token's HTTPException
         # surfaces to the caller.
-        _audit("refresh", user="-", ip=client_ip, result="failure")
+        await _audit("refresh", user="-", ip=client_ip, result="failure", req=req)
         raise
 
     username = payload.get("sub", "")
     if not username:
-        _audit("refresh", user="-", ip=client_ip, result="failure")
+        await _audit("refresh", user="-", ip=client_ip, result="failure", req=req)
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
     # Check if the old refresh token was already revoked (replay attack detection)
     jti = payload.get("jti")
     if jti and await is_token_revoked(jti):
-        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoked")
+        await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoked", req=req)
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
     # Wave 2I: refuse refresh tokens minted before the latest password change
@@ -581,12 +611,12 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
     token_pv = int(payload.get("pv", 1))
     current_pv = await get_password_version(username)
     if token_pv < current_pv:
-        _audit("refresh", user=username, ip=client_ip, result="failure", reason="password_changed")
+        await _audit("refresh", user=username, ip=client_ip, result="failure", reason="password_changed", req=req)
         raise HTTPException(status_code=401, detail="Token invalidated by password change")
     token_epoch = int(payload.get("epoch", 1))
     current_epoch = await get_session_epoch(username)
     if token_epoch < current_epoch:
-        _audit("refresh", user=username, ip=client_ip, result="failure", reason="logged_out_all")
+        await _audit("refresh", user=username, ip=client_ip, result="failure", reason="logged_out_all", req=req)
         raise HTTPException(status_code=401, detail="Session invalidated")
 
     # Revoke OLD refresh token FIRST, before minting a new one. If revocation
@@ -597,14 +627,14 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
         await revoke_token(request.refresh_token)
     except Exception:
         logger.warning("refresh: failed to revoke old token — aborting", exc_info=True)
-        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_failed")
+        await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_failed", req=req)
         raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
 
     # Verify the revocation landed. revoke_token() swallows failures internally,
     # so we double-check by querying the blocklist.
     if jti and not await is_token_revoked(jti):
         logger.warning("refresh: revoke_token did not persist jti=%s — aborting", jti)
-        _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_not_persisted")
+        await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoke_not_persisted", req=req)
         raise HTTPException(status_code=503, detail="Token service unavailable, please retry")
 
     new_tokens = TokenResponse(
@@ -613,7 +643,7 @@ async def refresh(request: RefreshRequest, req: Request) -> TokenResponse:
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
-    _audit("refresh", user=username, ip=client_ip, result="success")
+    await _audit("refresh", user=username, ip=client_ip, result="success", req=req)
 
     return new_tokens
 
@@ -667,7 +697,7 @@ async def logout(request: Request):
         except Exception:
             logger.warning("logout: revoke refresh token failed", exc_info=True)
 
-    _audit("logout", user=acting_user, ip=client_ip, result="success")
+    await _audit("logout", user=acting_user, ip=client_ip, result="success", req=request)
 
     response = JSONResponse(content={"ok": True})
     is_prod = settings.is_production
@@ -727,7 +757,7 @@ async def change_password(
         old_ok = False
 
     if not old_ok:
-        _audit("change_password", user=username, ip=client_ip, result="failure", reason="bad_old_password")
+        await _audit("change_password", user=username, ip=client_ip, result="failure", reason="bad_old_password", req=req)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Old password incorrect",
@@ -750,12 +780,13 @@ async def change_password(
     # env-rotation-deferred mode, every live token is immediately dead.
     new_pv = await bump_password_version(username)
 
-    _audit(
+    await _audit(
         "change_password",
         user=username,
         ip=client_ip,
         result="success",
         new_password_version=new_pv,
+        req=req,
     )
 
     # Return the new bcrypt hash so the operator can paste it into the env /
@@ -805,12 +836,13 @@ async def logout_all(
     refresh_token = create_refresh_token(username, password_version=pv, session_epoch=new_epoch)
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
-    _audit(
+    await _audit(
         "logout_all",
         user=username,
         ip=client_ip,
         result="success",
         new_session_epoch=new_epoch,
+        req=req,
     )
 
     response = JSONResponse(content={
@@ -869,7 +901,7 @@ async def totp_enroll(
         ttl_seconds=_TOTP_PENDING_TTL_SECONDS,
     )
 
-    _audit("totp_enroll", user=username, ip=_client_ip(req), result="success")
+    await _audit("totp_enroll", user=username, ip=_client_ip(req), result="success", req=req)
 
     # Secret is returned in base32 (and embedded in the provisioning URI) so
     # an authenticator app can be set up manually or via QR. The caller MUST
@@ -901,7 +933,7 @@ async def totp_verify(
     secret = str(pending["secret"])
     code = (body.code or "").strip()
     if not pyotp.TOTP(secret).verify(code, valid_window=1):
-        _audit("totp_verify", user=username, ip=_client_ip(req), result="failure")
+        await _audit("totp_verify", user=username, ip=_client_ip(req), result="failure", req=req)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid TOTP code",
@@ -914,7 +946,7 @@ async def totp_verify(
     await r.set(f"totp:{username}", secret)
     await r.delete(f"totp_pending:{username}")
 
-    _audit("totp_verify", user=username, ip=_client_ip(req), result="success")
+    await _audit("totp_verify", user=username, ip=_client_ip(req), result="success", req=req)
     return {"ok": True, "enrolled": True}
 
 
@@ -939,7 +971,7 @@ async def totp_disable(
 
     code = (body.code or "").strip()
     if not pyotp.TOTP(secret).verify(code, valid_window=1):
-        _audit("totp_disable", user=username, ip=_client_ip(req), result="failure")
+        await _audit("totp_disable", user=username, ip=_client_ip(req), result="failure", req=req)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid TOTP code",
@@ -950,5 +982,5 @@ async def totp_disable(
     await r.delete(f"totp:{username}")
     await r.delete(f"totp_pending:{username}")
 
-    _audit("totp_disable", user=username, ip=_client_ip(req), result="success")
+    await _audit("totp_disable", user=username, ip=_client_ip(req), result="success", req=req)
     return {"ok": True, "enrolled": False}

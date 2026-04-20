@@ -415,7 +415,16 @@ async def get_bars(
     _INTRADAY_TFS = {"1min", "5min", "15min", "30min", "1h"}
     cache_ttl = 0 if timeframe.value in _INTRADAY_TFS else 30
 
-    cache_key = f"bars:{symbol.upper()}:{timeframe.value}:{limit}"
+    # Wave 3L Fix 1 (persona-86/90): include date range in cache key so that
+    # /bars?start=2024-01-01 and /bars?start=2024-06-01 don't collide on the
+    # same symbol/timeframe/limit tuple. Prior fix (persona-15/55) patched the
+    # in-process dict cache but the Redis HTTP-layer cache key was left
+    # date-less, which silently returned stale ranges.
+    cache_key = (
+        f"bars:{symbol.upper()}:{timeframe.value}:{limit}:"
+        f"{effective_start.isoformat() if effective_start else 'none'}:"
+        f"{effective_end.isoformat() if effective_end else 'none'}"
+    )
     if cache_ttl > 0:
         cached = await cache_get(cache_key)
         if cached:

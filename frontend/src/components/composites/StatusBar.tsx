@@ -1,4 +1,5 @@
 import * as React from "react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import StatusDot from "@/components/primitives/StatusDot";
@@ -61,9 +62,22 @@ export default function StatusBar({
         <span
           key={p.label + i}
           className={cn("inline-flex items-center gap-1.5 shrink-0", pillToneClass[p.tone])}
+          title={p.title}
         >
           <StatusDot tone={pillDotTone[p.tone]} size={5} />
           <span>{p.label}</span>
+          {/* Wave 3N persona-94 #1: broker-offline (and any other
+              remediable) pill surfaces a tiny inline link to the
+              relevant settings page so a fresh user has somewhere to
+              go instead of staring at a dead "offline" state. */}
+          {p.href ? (
+            <Link
+              href={p.href}
+              className="font-mono text-[10px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+            >
+              {p.hrefLabel ?? "Fix"}
+            </Link>
+          ) : null}
         </span>
       ))}
 

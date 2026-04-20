@@ -154,10 +154,24 @@ def _audit_reject(
     reason: str,
     username: str | None,
 ) -> None:
-    """Emit a structured rejection log line. Called before the exception is raised.
+    """Emit a structured rejection log line AND persist to ``audit_log``.
 
-    Wave A scope: log-only. DB-side audit is owned by Wave B.
+    Wave 3K (persona-87 P1 #1): the Wave A "log-only" scope note is now
+    obsolete — every rejection is also appended to the durable
+    ``audit_log`` table via ``core.audit.write_audit`` so the compliance
+    trail survives a container rotation.
+
+    DB persistence is fire-and-forget: if this is called from a sync
+    context (no running event loop) we skip the DB write and fall back
+    to the log-only behaviour.  That matches the old semantics so
+    regression risk is limited to callsites that were already inside
+    ``asyncio.run()`` (none in the Wave A surface area — this helper is
+    only reached from ``reject_if_live_forbidden``, which is itself
+    invoked from inside async request handlers / ingestion tasks).
     """
+    # 1. Always emit the structured log record first. ``logger.warning``
+    #    is the same signal shape the existing Loki dashboards use, so
+    #    we do NOT regress the current alerting.
     logger.warning(
         "live_gate_reject",
         extra={
@@ -168,6 +182,44 @@ def _audit_reject(
             "username": username,
         },
     )
+
+    # 2. Append to audit_log.  The live-gate is reached from async paths
+    #    only; schedule the write on the running loop without awaiting
+    #    it so the caller is not delayed on a DB round-trip.
+    try:
+        import asyncio
+
+        from core.audit import write_audit
+        from core.logging import REQUEST_ID
+
+        rid = REQUEST_ID.get()
+        request_id = rid if rid and rid != "-" else None
+
+        coro = write_audit(
+            "live_gate_reject",
+            username=username,
+            ip=None,
+            request_id=request_id,
+            details={
+                "strategy": canonical,
+                "raw_strategy": raw_strategy,
+                "caller": caller,
+                "reason": reason,
+            },
+        )
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop — caller is in sync context (unusual for
+            # this module). Drop the DB write; the structured log line
+            # above is still queryable in the aggregator.
+            coro.close()
+        else:
+            loop.create_task(coro)
+    except Exception:
+        # Never allow the audit path to mask the real rejection.
+        logger.debug("live_gate audit persistence failed", exc_info=True)
 
 
 def reject_if_live_forbidden(

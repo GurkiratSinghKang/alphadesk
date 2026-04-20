@@ -160,13 +160,20 @@ export default function LoginForm() {
         // before its 8-hour TTL expires. See `frontend/src/lib/api.ts`.
         // The api.ts listener also persists this to sessionStorage so
         // the token survives a page reload (persona-9 #2 + persona-10 #2).
-        if (body?.refresh_token) {
-          window.dispatchEvent(
-            new CustomEvent("alphadesk:auth-login-success", {
-              detail: { refresh_token: body.refresh_token },
-            })
-          );
-        }
+        //
+        // Wave 3N persona-94 #7: always dispatch the auth event on login
+        // success — not just when a refresh token is returned — so
+        // listeners like `OnboardingTour` can react to the login itself
+        // (e.g. a fresh install shows the tour the first time the user
+        // signs in after server reset, even if sessionStorage still had
+        // a stale dismissed flag from a prior install).
+        window.dispatchEvent(
+          new CustomEvent("alphadesk:auth-login-success", {
+            detail: body?.refresh_token
+              ? { refresh_token: body.refresh_token }
+              : {},
+          })
+        );
         router.push("/");
       } catch {
         setError("Failed to connect to server");

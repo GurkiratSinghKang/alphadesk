@@ -379,6 +379,23 @@ Output JSON with: success (bool), order_id (str or null), details (dict), warnin
                     "warnings": [],
                 }
             else:
+                # Wave 3K Fix 3 (persona-87 P1): the agent broker-reject
+                # path used to return ``{success: False, error: ...}``
+                # with ZERO log emission, so an Alpaca 4xx that killed an
+                # agent-driven trade left no trace in the aggregator.
+                # Emit a structured ``broker_reject`` record with the
+                # full rejection shape so oncall can triage without
+                # pulling the pod's stdout buffer.
+                logger.error(
+                    "agent_broker_reject",
+                    extra={
+                        "event": "broker_reject",
+                        "status": resp.status_code,
+                        "symbol": symbol,
+                        "client_order_id": client_order_id,
+                        "body": resp.text[:500],
+                    },
+                )
                 return {
                     "success": False,
                     "error": f"Broker rejected: {resp.text}",

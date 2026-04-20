@@ -118,7 +118,14 @@ services:
       - -c
       - effective_cache_size=3GB
       - -c
-      - max_connections=100
+      # Wave 3L Fix 6 (persona-86/90): app pool is 20+10=30 per worker;
+      # with -w 1 that's 30 at peak, but 150 gives comfortable headroom
+      # for admin sessions, pgbouncer, alembic migrations, and future
+      # horizontal-scale to multiple workers (each up to 30 connections)
+      # without hitting the ceiling and returning "too many connections"
+      # mid-request. Was 100, which was tight once we factored in admin
+      # and migration sessions.
+      - max_connections=150
       - -c
       - random_page_cost=1.1
       - -c

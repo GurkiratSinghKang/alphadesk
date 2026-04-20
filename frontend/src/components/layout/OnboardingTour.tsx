@@ -78,12 +78,56 @@ export function OnboardingTour() {
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  // Show tour on first visit only, with delay for dashboard to render
+  // Wave 3N persona-94 #7: gate the tour on actual login events, not a
+  // bare mount. Listen for the `alphadesk:auth-login-success` event the
+  // LoginForm dispatches — when it fires, clear the dismissal markers so
+  // the tour runs once per successful login. Also honour the original
+  // "mount-based" path for users who were already signed in when we added
+  // this (no login event has fired, but clearing localStorage manually
+  // should still re-trigger the tour — the docstring promises this).
+  //
+  // Implementation note: we use a secondary `tour-shown-for-login` marker
+  // so that rapid re-mounts in the same authenticated session (navigating
+  // away and back to `/`) don't keep re-opening the tour. Only a fresh
+  // auth event resets it. If the user clears localStorage they get the
+  // tour back on next mount — the documented escape hatch.
+  const SHOWN_THIS_LOGIN_KEY = "alphadesk.tour-shown-this-login";
+
   useEffect(() => {
-    if (alreadyCompleted) return;
-    const timer = setTimeout(() => setActive(true), 1500);
-    return () => clearTimeout(timer);
+    // Mount path — honour the original contract.
+    if (!alreadyCompleted) {
+      const timer = setTimeout(() => setActive(true), 1500);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
   }, [alreadyCompleted]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    // Auth path — every login resets dismissal markers and re-shows the
+    // tour once, unless we've already shown it for THIS login session.
+    const handler = () => {
+      try {
+        // Idempotent: don't re-show inside the same authenticated session
+        // if the user already dismissed the tour after logging in.
+        if (sessionStorage.getItem(SHOWN_THIS_LOGIN_KEY) === "1") return;
+        sessionStorage.setItem(SHOWN_THIS_LOGIN_KEY, "1");
+        // Reset the persistent "I've seen the tour" markers so the
+        // effect below picks up and the tour runs fresh.
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(DISMISSED_KEY);
+      } catch {
+        // Storage unavailable (private mode etc.) — fall back to just
+        // activating the tour for this mount.
+      }
+      // Small delay so the dashboard has time to mount the targets.
+      window.setTimeout(() => setActive(true), 1500);
+    };
+    window.addEventListener("alphadesk:auth-login-success", handler as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:auth-login-success", handler as EventListener);
+    };
+  }, []);
 
   // Position the spotlight on the current step's element. If the target
   // element isn't on the page, advance to the next step that *is* (up to

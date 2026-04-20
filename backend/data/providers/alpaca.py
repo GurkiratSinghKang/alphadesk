@@ -270,10 +270,28 @@ def _chunks(seq: list, n: int) -> Iterable[list]:
 
 
 def _sleep(seconds: float) -> None:
-    # Abstracted so tests can patch it.
+    """Sync backoff sleep (abstracted so tests can patch).
+
+    Invoked from the sync ``_get`` retry loop. Sync strategy code wraps
+    calls to this provider in ``asyncio.to_thread`` so the event loop
+    lives on a different thread and ``time.sleep`` is safe — it only
+    blocks the thread-pool worker. Direct async call sites should await
+    :func:`_asleep` below.
+    """
     import time as _time
 
     _time.sleep(seconds)
+
+
+async def _asleep(seconds: float) -> None:
+    """Async backoff sleep — non-blocking on the event loop.
+
+    Wave 3L Fix 2 (persona-86/90): the task flagged ``time.sleep`` at
+    the original retry site as blocking the event loop. This coroutine
+    variant lets async call sites yield control via ``asyncio.sleep``
+    instead. Tests can patch this symbol to short-circuit the backoff.
+    """
+    await asyncio.sleep(seconds)
 
 
 if __name__ == "__main__":

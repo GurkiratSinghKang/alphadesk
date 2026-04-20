@@ -42,10 +42,22 @@ const jetbrainsMono = JetBrains_Mono({
   fallback: ["SF Mono", "Menlo", "monospace"],
 });
 
+// Wave 3N persona-94/95 tagline-drift fix: three different descriptions
+// (page title, og:description, twitter:description) collapsed to a single
+// pair of canonical copy — `TAGLINE_SHORT` for titles, `TAGLINE_LONG` for
+// descriptions. Change once, and every metadata field tracks it.
+const TAGLINE_SHORT = "AI-Powered Trading Terminal";
+const TAGLINE_LONG =
+  "Claude-powered trading platform with 12 systematic strategies, real-time analysis, and automated portfolio management.";
+const PAGE_TITLE = `AlphaDesk — ${TAGLINE_SHORT}`;
+// TODO(design): commission the real 1200×630 og card. For now we reference
+// `/og-image.png` so the tag is correct even if the file is the favicon
+// composited on a dark canvas placeholder. See `frontend/public/og-image.png`.
+const OG_IMAGE = "/og-image.png";
+
 export const metadata: Metadata = {
-  title: "AlphaDesk — AI-Powered Trading Terminal",
-  description:
-    "Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.",
+  title: PAGE_TITLE,
+  description: TAGLINE_LONG,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -53,17 +65,25 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "AlphaDesk — AI-Powered Trading Terminal",
-    description:
-      "Claude-powered trading platform with multi-strategy pipeline, real-time analysis, and automated portfolio management.",
+    title: PAGE_TITLE,
+    description: TAGLINE_LONG,
     url: "https://tradingalpha.net",
     siteName: "AlphaDesk",
     type: "website",
+    images: [
+      {
+        url: OG_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: "AlphaDesk — AI-Powered Trading Terminal",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "AlphaDesk — AI-Powered Trading Terminal",
-    description: "Claude-powered trading platform.",
+    title: PAGE_TITLE,
+    description: TAGLINE_LONG,
+    images: [OG_IMAGE],
   },
 };
 
