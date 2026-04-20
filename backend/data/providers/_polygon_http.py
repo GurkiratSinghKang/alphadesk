@@ -7,6 +7,7 @@ share a single connection-pooled ``httpx.Client`` with unified backoff.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Iterable
 
@@ -81,6 +82,7 @@ class PolygonHTTP:
                 return
             next_url = next_url + ("&" if "?" in next_url else "?") + f"apiKey={self._api_key}"
             delay = BACKOFF_BASE
+            data = None
             for attempt in range(MAX_RETRIES):
                 try:
                     r = self._client.get(next_url)
@@ -92,7 +94,30 @@ class PolygonHTTP:
                     delay *= 2
                     continue
                 if r.status_code == 200:
-                    break
+                    # Polygon occasionally serves a truncated chunked
+                    # response — the body stops mid-JSON-string and
+                    # ``r.json()`` raises JSONDecodeError. Treat that as a
+                    # retry-eligible transport failure rather than letting
+                    # it propagate (which aborts the whole options chain
+                    # snapshot for the calling strategy).
+                    try:
+                        data = r.json()
+                        break
+                    except json.JSONDecodeError as exc:
+                        if attempt == MAX_RETRIES - 1:
+                            logger.warning(
+                                "polygon paginate: truncated JSON on final attempt (%s) — giving up",
+                                exc,
+                            )
+                            raise
+                        logger.warning(
+                            "polygon paginate: truncated JSON (%s); retrying in %.1fs",
+                            exc,
+                            delay,
+                        )
+                        _sleep(delay)
+                        delay *= 2
+                        continue
                 if r.status_code == 429 or 500 <= r.status_code < 600:
                     if attempt == MAX_RETRIES - 1:
                         r.raise_for_status()
@@ -102,7 +127,9 @@ class PolygonHTTP:
                     delay *= 2
                     continue
                 r.raise_for_status()
-            data = r.json()
+            if data is None:
+                # All retries exhausted without a successful parse.
+                raise RuntimeError("polygon paginate: no data after retries")
 
 
 def _sleep(seconds: float) -> None:
