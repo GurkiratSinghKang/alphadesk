@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -45,19 +46,98 @@ async def _is_trading_halted() -> bool:
     return await _canonical()
 
 
-async def _set_trading_halted(halted: bool) -> None:
-    """Set trading halt state in Redis."""
+async def _set_trading_halted(
+    halted: bool,
+    *,
+    username: str | None = None,
+    reason: str | None = None,
+    pending_flatten: bool = False,
+) -> None:
+    """Set trading halt state.
+
+    Wave 4P Fix 1 (P96) — Postgres is the SOURCE OF TRUTH and is
+    written FIRST; Redis is a cache that is invalidated after the DB
+    commit lands.  Two reasons for the ordering:
+
+    1. If the DB write fails, we must NOT flip the Redis cache — an
+       operator reading the cache would see "halted" but the
+       pipeline's Postgres-first read path would keep trading.
+    2. If the Redis write fails AFTER the DB commit, the next
+       ``_is_trading_halted()`` call re-hydrates the cache from the
+       DB automatically, so the halt still takes effect.
+
+    The DB row is the singleton at ``halt_state.id = 1``.  ``halted_by``
+    / ``halted_at`` / ``reason`` only populate on halt transitions; on
+    resume they are cleared so a stale attribution doesn't survive
+    across the next halt event.
+    """
+    # ---- 1. Postgres (source of truth) ------------------------------
+    db_ok = False
+    try:
+        from core.config import settings as _s
+        if not _s.SKIP_DB_INIT:
+            from core.database import _get_session_factory
+            from data.storage.models import HaltState
+
+            factory = _get_session_factory()
+            async with factory() as db:
+                row = await db.get(HaltState, 1)
+                if row is None:
+                    # Seed row missing (e.g. migration hasn't run).
+                    # Create it defensively — any existing row will
+                    # trip the CheckConstraint so this is safe.
+                    row = HaltState(id=1, is_halted=False, pending_flatten=False)
+                    db.add(row)
+
+                row.is_halted = bool(halted)
+                if halted:
+                    row.halted_by = username
+                    row.halted_at = datetime.now(timezone.utc)
+                    row.reason = reason
+                    if pending_flatten:
+                        row.pending_flatten = True
+                else:
+                    # Clear halt attribution + pending_flatten on resume
+                    # so the next halt event starts with a clean slate.
+                    row.halted_by = None
+                    row.halted_at = None
+                    row.reason = None
+                    row.pending_flatten = False
+
+                await db.commit()
+                db_ok = True
+        else:
+            # SKIP_DB_INIT mode — there is no DB to write to.  Treat
+            # this as a successful write so the Redis path below still
+            # runs (test / offline dev loop behaviour).
+            db_ok = True
+    except Exception:
+        logger.error(
+            "Failed to persist halt_state to Postgres — NOT flipping Redis cache",
+            exc_info=True,
+        )
+        raise
+
+    # ---- 2. Redis (cache) -------------------------------------------
+    # Only runs after a successful DB commit.  Cache failures are
+    # logged but non-fatal because the Postgres row is authoritative.
+    if not db_ok:
+        return
     try:
         from core.redis import cache_set
         if halted:
-            await cache_set("trading:halted", {"halted": True}, ttl_seconds=86400)  # 24h max
+            await cache_set("trading:halted", {"halted": True}, ttl_seconds=86400)
         else:
             from core.redis import get_redis
             redis = await get_redis()
             if redis:
                 await redis.delete("trading:halted")
     except Exception:
-        logger.warning("Failed to set trading halt state in Redis", exc_info=True)
+        logger.warning(
+            "Failed to invalidate trading:halted Redis cache after DB commit — "
+            "next _is_trading_halted() read will re-hydrate from Postgres",
+            exc_info=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -103,12 +183,90 @@ class OrderStatus(str, Enum):
     REJECTED = "rejected"
 
 
+# Wave 4P Fix 4 (P98) — symbol regex covers BOTH equity AND OCC option
+# symbols in a single pattern so ``CreateOrderRequest.legs`` accepts
+# multi-leg option orders without a separate union type.
+#
+# Equity branch:   ``[A-Z][A-Z0-9.\-]{0,9}``      — 1-10 char ticker
+#                                                    (preserves BRK.B,
+#                                                     BF.B, RDS-A,
+#                                                     BTC-USD).
+# OCC option:      ``[A-Z0-9]{1,6}[0-9]{6}[CP][0-9]{8}``
+#                                                — 15–21 chars.
+#                                                  Root (1-6 A-Z/0-9) +
+#                                                  YYMMDD (6 digits) +
+#                                                  C or P +
+#                                                  Strike × 1000 (8 digits).
+#                                                  Example:
+#                                                  ``AAPL260420C00270000``.
+#
+# Before this fix the pattern capped at 10 chars, silently rejecting
+# every well-formed OCC symbol at validation time.  The resulting 422
+# was the ONLY error surface — a trader constructing a multi-leg
+# option order could not submit it through any path.
+_OCC_SYMBOL_PATTERN = (
+    r"^(?:"
+    # Equity: 1-10 char ticker (incl. BRK.B / BF.B / RDS-A / BTC-USD)
+    r"[A-Z][A-Z0-9.\-]{0,9}"
+    r"|"
+    # OCC option: 1-6 char root + YYMMDD + C|P + 8-digit strike×1000
+    r"[A-Z0-9]{1,6}[0-9]{6}[CP][0-9]{8}"
+    r")$"
+)
+
+
+def _parse_occ_symbol(symbol: str) -> dict[str, Any] | None:
+    """Parse an OCC option symbol into its components.
+
+    Wave 4P Fix 4 (P98) — used by downstream risk / analytics code
+    that needs the underlying / expiry / strike / call-or-put of a
+    multi-leg option order.  Returns ``None`` for equity-shaped
+    symbols so callers can distinguish "not an option" from a
+    malformed OCC symbol.
+
+    Shape: ``ROOT(1-6) + YYMMDD(6) + [CP](1) + STRIKE(8 digits × 1000)``.
+    """
+    if len(symbol) < 15 or len(symbol) > 21:
+        return None
+    # Strike is always the trailing 8 digits; C/P is the char before.
+    if len(symbol) < 9:
+        return None
+    strike_str = symbol[-8:]
+    if not strike_str.isdigit():
+        return None
+    cp = symbol[-9]
+    if cp not in ("C", "P"):
+        return None
+    date_str = symbol[-15:-9]
+    if not date_str.isdigit():
+        return None
+    root = symbol[:-15]
+    if not root or not root.isalnum() or len(root) > 6:
+        return None
+    try:
+        yy = int(date_str[0:2])
+        mm = int(date_str[2:4])
+        dd = int(date_str[4:6])
+        strike = int(strike_str) / 1000.0
+    except (TypeError, ValueError):
+        return None
+    if not (1 <= mm <= 12) or not (1 <= dd <= 31):
+        return None
+    return {
+        "underlying": root,
+        "expiry_yy": yy,
+        "expiry_mm": mm,
+        "expiry_dd": dd,
+        "call_put": "call" if cp == "C" else "put",
+        "strike": strike,
+    }
+
+
 class OrderLeg(BaseModel):
     # Matches the frontend symbol regex (dots/hyphens allowed for tickers
-    # like BRK.B, BF.B, RDS-A, BTC-USD). Previously this was the stricter
-    # ``^[A-Z]{1,10}$`` which rejected valid class-B / preferred-share tickers
-    # even though the frontend accepted them and the data APIs supported them.
-    symbol: str = Field(..., pattern=r"^[A-Z][A-Z0-9.\-]{0,9}$")
+    # like BRK.B, BF.B, RDS-A, BTC-USD) AND OCC option symbols up to 21
+    # chars (Wave 4P Fix 4 — P98).
+    symbol: str = Field(..., pattern=_OCC_SYMBOL_PATTERN, min_length=1, max_length=21)
     side: OrderSide
     qty: float = Field(..., gt=0, le=100000)
     order_type: OrderType = OrderType.LIMIT
@@ -324,6 +482,95 @@ def _alpaca_keys_empty() -> bool:
         not settings.ALPACA_API_KEY.get_secret_value()
         or not settings.ALPACA_SECRET_KEY.get_secret_value()
     )
+
+
+async def _fetch_position_qty(symbol: str) -> float | None:
+    """Return the signed current position qty for ``symbol`` from Alpaca.
+
+    Wave 4P Fix 3 (P97) — used by the trade_kind classifier to decide
+    whether an incoming order is opening or closing an existing
+    position.  Positive = long, negative = short, 0.0 = flat (or no
+    row), None = broker lookup failed (caller must fall back).
+
+    Best-effort: 2s timeout so a slow broker response doesn't bottleneck
+    the order submit path.  A None return tells the classifier to
+    default to "treat as open" — the fill_reconciler will get the
+    second-chance authoritative classification from a fresh broker
+    snapshot when the fill event arrives.
+    """
+    if _alpaca_keys_empty():
+        return None
+    try:
+        from core.config import settings
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions/{symbol}",
+                headers=headers,
+            )
+            if resp.status_code == 404:
+                # Alpaca returns 404 when the account has no open position
+                # in this symbol — treat as flat (qty=0), not "unknown".
+                return 0.0
+            if resp.status_code != 200:
+                return None
+            body = resp.json() or {}
+            raw_qty = body.get("qty")
+            if raw_qty is None:
+                return 0.0
+            try:
+                return float(raw_qty)
+            except (TypeError, ValueError):
+                return None
+    except Exception:
+        logger.debug("position qty lookup failed for %s", symbol, exc_info=True)
+        return None
+
+
+async def _classify_trade_kind_pre_submit(
+    *,
+    symbol: str,
+    submit_side: "OrderSide",
+) -> str | None:
+    """Compute ``trade_kind`` for a new order based on the pre-fill position.
+
+    Wave 4P Fix 3 (P97) — replaces the buggy "buy=long / sell=short"
+    heuristic that misclassified every long-exit as a ``short`` and
+    every short-cover as a ``long``.
+
+    Rules:
+        pre-fill qty > 0 (long)  + buy   → ``long_open``
+        pre-fill qty > 0 (long)  + sell  → ``long_close``
+        pre-fill qty < 0 (short) + sell  → ``short_open``
+        pre-fill qty < 0 (short) + buy   → ``short_close``
+        pre-fill qty == 0 (flat) + buy   → ``long_open``
+        pre-fill qty == 0 (flat) + sell  → ``short_open``
+
+    Returns None when the broker lookup failed — the caller falls back
+    to persisting ``trade_kind = None`` and the fill_reconciler will
+    stamp the correct classification at fill time.
+    """
+    try:
+        qty = await _fetch_position_qty(symbol)
+    except Exception:
+        qty = None
+    if qty is None:
+        return None
+
+    side_str = submit_side.value if hasattr(submit_side, "value") else str(submit_side)
+    side_str = side_str.lower()
+
+    if qty > 0:
+        # Long position in place.
+        return "long_open" if side_str == "buy" else "long_close"
+    if qty < 0:
+        # Short position in place.
+        return "short_open" if side_str == "sell" else "short_close"
+    # Flat.
+    return "long_open" if side_str == "buy" else "short_open"
 
 
 # ---------------------------------------------------------------------------
@@ -717,6 +964,26 @@ async def create_order(
             first_leg_side = payload.legs[0].side
             persisted_side = "short" if first_leg_side == OrderSide.SELL else "long"
 
+            # Wave 4P Fix 3 (P97): compute the POSITION-AWARE trade_kind
+            # using the pre-fill position snapshot from the broker.  The
+            # classification rules:
+            #
+            #     pre-fill qty > 0 (long)  + buy   → long_open   (adding to long)
+            #     pre-fill qty > 0 (long)  + sell  → long_close  (trimming / exiting long)
+            #     pre-fill qty < 0 (short) + sell  → short_open  (adding to short)
+            #     pre-fill qty < 0 (short) + buy   → short_close (covering / exiting short)
+            #     pre-fill qty == 0 (flat) + buy   → long_open
+            #     pre-fill qty == 0 (flat) + sell  → short_open
+            #
+            # Best-effort: a broker-lookup failure falls back to treating
+            # the order as an OPEN (preserving the legacy behaviour) —
+            # the fill_reconciler gets a second chance against the
+            # authoritative pre-fill state when the fill event arrives.
+            trade_kind = await _classify_trade_kind_pre_submit(
+                symbol=payload.legs[0].symbol,
+                submit_side=first_leg_side,
+            )
+
             # Stamp the correlation id onto the legs JSON so ``reconcile``
             # and any downstream ledger inspector can match against it.
             legs_payload = []
@@ -753,6 +1020,7 @@ async def create_order(
                     status="submitted",
                     notes=payload.notes,
                     side=persisted_side,
+                    trade_kind=trade_kind,
                     client_order_id=client_order_id,
                     account_env=_env,
                 )
@@ -2006,16 +2274,294 @@ async def _risk_check(request: CreateOrderRequest) -> tuple[bool, str]:
     return True, "passed"
 
 
+async def _is_market_open_now() -> bool:
+    """Return True if the US equity market is currently in regular session.
+
+    Wave 4P Fix 2 (P104) — helper for the flatten-queue path.  If the
+    operator halts while the market is CLOSED, we queue the flatten
+    intent in ``halt_state.pending_flatten = True`` instead of firing
+    market orders that would sit in Alpaca's queue until open.
+
+    Best-effort: a calendar failure falls through to a conservative
+    weekday-RTH check so we don't silently queue during real RTH.
+    """
+    et_now = datetime.now(ZoneInfo("America/New_York"))
+    try:
+        from data.calendar import USMarketCalendar
+        cal = USMarketCalendar()
+        if not cal.is_trading_day(et_now.date()):
+            return False
+        open_utc, close_utc = cal.session_hours(et_now.date())
+        open_et = open_utc.astimezone(ZoneInfo("America/New_York"))
+        close_et = close_utc.astimezone(ZoneInfo("America/New_York"))
+        return open_et <= et_now < close_et
+    except Exception:
+        # Fallback: weekday + 09:30-16:00 ET approximation.
+        if et_now.weekday() >= 5:
+            return False
+        if et_now.hour < 9 or (et_now.hour == 9 and et_now.minute < 30):
+            return False
+        if et_now.hour >= 16:
+            return False
+        return True
+
+
+async def _fetch_broker_positions(settings) -> list[dict[str, Any]]:
+    """Return the live broker position list.  [] on auth failure."""
+    if _alpaca_keys_empty():
+        return []
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers,
+        )
+        if resp.status_code != 200:
+            return []
+        return list(resp.json() or [])
+
+
+async def _submit_close_order(
+    settings,
+    *,
+    symbol: str,
+    qty: float,
+    close_side: str,
+    client_order_id: str,
+) -> dict[str, Any] | None:
+    """Submit a market-order to close a position.
+
+    ``close_side`` is the SIDE needed to flatten: a long position with
+    qty > 0 closes via ``sell``; a short position with qty < 0 closes
+    via ``buy``.  Returns the broker response on success, None on
+    failure.
+    """
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    body = {
+        "symbol": symbol,
+        "qty": abs(qty),
+        "side": close_side,
+        "type": "market",
+        "time_in_force": "day",
+        "client_order_id": client_order_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{settings.ALPACA_BASE_URL}/v2/orders",
+                headers=headers,
+                json=body,
+            )
+            if resp.status_code in (200, 201):
+                return resp.json()
+            logger.warning(
+                "flatten: close order rejected for %s (status=%s body=%s)",
+                symbol, resp.status_code, resp.text[:200],
+            )
+    except Exception:
+        logger.warning("flatten: close order submission failed for %s", symbol, exc_info=True)
+    return None
+
+
+async def _wait_for_fill(
+    settings, order_id: str, timeout_seconds: float = 30.0,
+) -> tuple[str, dict[str, Any]]:
+    """Poll the broker until the order reaches a terminal state or timeout.
+
+    Returns ``(status, last_body)``.  Status is the lowercase broker
+    status string — ``filled`` / ``canceled`` / ``rejected`` / ``expired``
+    / ``timeout`` if we ran out the clock.
+    """
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    terminal = {"filled", "canceled", "cancelled", "rejected", "expired"}
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    last_body: dict[str, Any] = {}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                resp = await client.get(
+                    f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    last_body = resp.json() or {}
+                    status = (last_body.get("status") or "").lower()
+                    if status in terminal:
+                        return status, last_body
+            except Exception:
+                logger.debug("flatten: poll for %s failed", order_id, exc_info=True)
+            await asyncio.sleep(0.5)
+    return "timeout", last_body
+
+
+async def _flatten_all_positions() -> dict[str, Any]:
+    """Close every open position at market.
+
+    Wave 4P Fix 2 (P104) — shared flow between ``POST /halt?flatten=true``
+    and the standalone ``POST /flatten_all``.
+
+    Returns a summary:
+        {
+            "cancelled_orders": bool,
+            "flatten_attempts": int,
+            "flatten_successes": int,
+            "flatten_failures": int,
+            "residual_positions": [...],
+            "details": [{symbol, qty, close_side, order_id, status, ...}, ...],
+        }
+    """
+    import asyncio as _asyncio  # local alias
+    from core.config import settings
+
+    summary: dict[str, Any] = {
+        "cancelled_orders": False,
+        "flatten_attempts": 0,
+        "flatten_successes": 0,
+        "flatten_failures": 0,
+        "residual_positions": [],
+        "details": [],
+    }
+
+    if _alpaca_keys_empty():
+        return summary
+
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+
+    # 1. Cancel open orders first so the broker's buying-power / margin
+    #    calculation isn't gated by stale working orders.
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.delete(
+                f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers,
+            )
+        summary["cancelled_orders"] = True
+    except Exception:
+        logger.error("flatten: failed to cancel open orders", exc_info=True)
+
+    # 2. Pull current positions.
+    positions = await _fetch_broker_positions(settings)
+
+    # 3. Submit a market-order close for each.  Kick them off in
+    #    parallel and collect their order ids, then poll each one
+    #    concurrently up to 30s per position.
+    close_tasks: list[tuple[str, float, str, _asyncio.Task | None]] = []
+    for pos in positions:
+        try:
+            symbol = pos.get("symbol") or ""
+            qty_raw = pos.get("qty", 0)
+            qty = float(qty_raw or 0)
+            if not symbol or qty == 0:
+                continue
+            close_side = "sell" if qty > 0 else "buy"
+            summary["flatten_attempts"] += 1
+            client_order_id = f"flatten_{symbol}_{_uuid.uuid4().hex[:8]}"[:128]
+            task = _asyncio.create_task(
+                _submit_close_order(
+                    settings,
+                    symbol=symbol,
+                    qty=qty,
+                    close_side=close_side,
+                    client_order_id=client_order_id,
+                )
+            )
+            close_tasks.append((symbol, qty, close_side, task))
+        except Exception:
+            logger.warning("flatten: position prep failed", exc_info=True)
+            summary["flatten_failures"] += 1
+
+    # 4. Await the submits, then poll each for fill.
+    for symbol, qty, close_side, task in close_tasks:
+        if task is None:
+            continue
+        body = await task
+        detail: dict[str, Any] = {
+            "symbol": symbol,
+            "qty": qty,
+            "close_side": close_side,
+            "order_id": None,
+            "status": None,
+        }
+        if body is None:
+            summary["flatten_failures"] += 1
+            detail["status"] = "submit_failed"
+            summary["details"].append(detail)
+            continue
+        order_id = body.get("id")
+        detail["order_id"] = order_id
+        if not order_id:
+            summary["flatten_failures"] += 1
+            detail["status"] = "no_order_id"
+            summary["details"].append(detail)
+            continue
+
+        status, last_body = await _wait_for_fill(settings, order_id, timeout_seconds=30.0)
+        detail["status"] = status
+        detail["filled_qty"] = last_body.get("filled_qty")
+        detail["filled_avg_price"] = last_body.get("filled_avg_price")
+        if status == "filled":
+            summary["flatten_successes"] += 1
+        else:
+            summary["flatten_failures"] += 1
+        summary["details"].append(detail)
+
+    # 5. Final position snapshot — anything left is a residual that
+    #    the operator needs to clean up manually.
+    try:
+        residual = await _fetch_broker_positions(settings)
+        summary["residual_positions"] = [
+            {
+                "symbol": p.get("symbol"),
+                "qty": float(p.get("qty") or 0),
+                "side": p.get("side"),
+            }
+            for p in residual
+            if float(p.get("qty") or 0) != 0
+        ]
+    except Exception:
+        logger.debug("flatten: residual-positions snapshot failed", exc_info=True)
+
+    return summary
+
+
 @router.post("/halt")
 async def halt_trading(
     req: Request,
+    flatten: bool = Query(
+        True,
+        description=(
+            "When True (default for safety), close all open positions at "
+            "market after cancelling open orders. If market is closed, the "
+            "intent is queued in halt_state.pending_flatten for next open."
+        ),
+    ),
+    reason: str | None = Query(None, max_length=256),
     username: str = Depends(require_auth),
 ):
-    """Emergency halt — prevents all new orders.
+    """Emergency halt — cancel open orders AND flatten positions.
 
-    Wave 3K (persona-87 P1 #1 gap 3): halt / resume were previously
-    not audited at all — operators could flip the killswitch from the
-    admin UI and leave no trail behind. Now every transition is
+    Wave 4P Fix 2 (P104): the old implementation cancelled orders but
+    left open positions intact — the operator's naked exposure sat
+    there, which is worse than useless during a real incident.  The
+    halt now FLATTENS by default (``flatten=True``) and surfaces a
+    detailed per-position summary so an operator can see exactly what
+    closed cleanly vs what needs manual attention.
+
+    Wave 4P Fix 1 (P96): halt state is persisted to Postgres FIRST,
+    then the Redis cache is invalidated.  A ``FLUSHALL`` or cold
+    restart can no longer silently un-halt trading.
+
+    Wave 3K (persona-87 P1 #1 gap 3): halt / resume transitions are
     persisted to ``audit_log`` via ``core.audit.write_audit``.
     """
     from core.audit import write_audit
@@ -2023,23 +2569,62 @@ async def halt_trading(
     request_id = getattr(req.state, "request_id", None)
     client_ip = _client_ip_for_audit(req)
 
-    await _set_trading_halted(True)
-    # Cancel all open orders on Alpaca
+    # Determine whether we can actually fire flatten orders now, or
+    # whether we need to queue the intent for next open.
+    market_open = await _is_market_open_now() if flatten else False
+    queued_for_next_open = flatten and not market_open
+
+    # 1. Persist the halt state (Postgres first, Redis cache after).
+    try:
+        await _set_trading_halted(
+            True,
+            username=username,
+            reason=reason,
+            pending_flatten=queued_for_next_open,
+        )
+    except Exception as exc:
+        await write_audit(
+            "halt_trading",
+            username=username,
+            ip=client_ip,
+            request_id=request_id,
+            details={"result": "failure", "error": repr(exc)},
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to persist halt state to Postgres — halt NOT active.",
+        )
+
+    # 2. Cancel open orders + optionally flatten positions.
+    flatten_summary: dict[str, Any] | None = None
     cancel_ok = True
     cancel_err: str | None = None
-    try:
-        from core.config import settings
-        headers = {
-            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-        }
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.delete(f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers)
-    except Exception as exc:
-        cancel_ok = False
-        cancel_err = repr(exc)
-        logger.error("Failed to cancel orders during halt", exc_info=True)
+    if flatten and market_open:
+        try:
+            flatten_summary = await _flatten_all_positions()
+            cancel_ok = bool(flatten_summary.get("cancelled_orders"))
+        except Exception as exc:
+            cancel_ok = False
+            cancel_err = repr(exc)
+            logger.error("halt: flatten flow raised", exc_info=True)
+    else:
+        # Cancel-only path (flatten=False OR market closed).
+        try:
+            from core.config import settings
+            headers = {
+                "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+                "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.delete(
+                    f"{settings.ALPACA_BASE_URL}/v2/orders", headers=headers,
+                )
+        except Exception as exc:
+            cancel_ok = False
+            cancel_err = repr(exc)
+            logger.error("Failed to cancel orders during halt", exc_info=True)
 
+    # 3. Durable audit trail.
     await write_audit(
         "halt_trading",
         username=username,
@@ -2049,9 +2634,73 @@ async def halt_trading(
             "result": "success",
             "cancel_open_orders_ok": cancel_ok,
             "cancel_error": cancel_err,
+            "flatten_requested": flatten,
+            "flatten_queued_for_next_open": queued_for_next_open,
+            "flatten_summary": flatten_summary,
+            "reason": reason,
         },
     )
-    return {"halted": True, "message": "All trading halted. All open orders cancelled."}
+
+    msg = "All trading halted. All open orders cancelled."
+    if flatten and market_open:
+        msg += (
+            f" Flatten: {flatten_summary['flatten_successes']}/"
+            f"{flatten_summary['flatten_attempts']} positions closed."
+        )
+    elif queued_for_next_open:
+        msg += " Flatten intent queued — will fire at next market open."
+
+    resp: dict[str, Any] = {
+        "halted": True,
+        "message": msg,
+        "flatten_queued_for_next_open": queued_for_next_open,
+    }
+    if flatten_summary is not None:
+        resp["flatten"] = flatten_summary
+    return resp
+
+
+@router.post("/flatten_all")
+async def flatten_all_positions(
+    req: Request,
+    username: str = Depends(require_auth),
+):
+    """Close every open position at market WITHOUT setting the halt flag.
+
+    Wave 4P Fix 2 (P104) — standalone companion to ``POST /halt``.
+    Use when the operator wants to flatten for a risk-reduction
+    reason (e.g. end-of-day de-risk, margin-call pre-emption) but
+    intends to keep trading enabled.
+
+    Admin-only because an accidental call on a live account has
+    material capital impact.
+    """
+    from core.audit import write_audit
+    from core.config import settings as _s
+
+    if username != _s.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    request_id = getattr(req.state, "request_id", None)
+    client_ip = _client_ip_for_audit(req)
+
+    summary = await _flatten_all_positions()
+
+    await write_audit(
+        "flatten_all",
+        username=username,
+        ip=client_ip,
+        request_id=request_id,
+        details={"summary": summary},
+    )
+
+    return {
+        "message": (
+            f"Flatten complete: {summary['flatten_successes']}/"
+            f"{summary['flatten_attempts']} positions closed."
+        ),
+        "summary": summary,
+    }
 
 
 @router.post("/resume")
@@ -2061,10 +2710,15 @@ async def resume_trading(
 ):
     """Resume trading after emergency halt.
 
+    Wave 4P Fix 1 (P96): resume now writes to Postgres FIRST, then
+    invalidates the Redis cache.  The Postgres commit is the
+    authoritative "resume"; if the DB write fails we refuse to flip
+    the Redis cache (which would mislead readers into thinking
+    trading is allowed).
+
     Wave 3K (persona-87 P1 #1 gap 3): see ``halt_trading`` — both
-    transitions are now persisted to the compliance ``audit_log`` so a
-    regulator can reconstruct when the killswitch was flipped and by
-    whom.
+    transitions are persisted to the compliance ``audit_log`` via
+    ``core.audit.write_audit``.
     """
     from core.audit import write_audit
 
@@ -2072,26 +2726,8 @@ async def resume_trading(
     client_ip = _client_ip_for_audit(req)
 
     try:
-        await _set_trading_halted(False)
-        # Verify the halt key was actually removed
-        from core.redis import get_redis
-        redis = await get_redis()
-        if redis:
-            still_halted = await redis.get("trading:halted")
-            if still_halted:
-                await write_audit(
-                    "resume_trading",
-                    username=username,
-                    ip=client_ip,
-                    request_id=request_id,
-                    details={"result": "failure", "reason": "halt_key_still_present"},
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail="Failed to resume trading — halt state could not be cleared.",
-                )
-    except HTTPException:
-        raise
+        # Postgres first, then Redis cache invalidation (inside the helper).
+        await _set_trading_halted(False, username=username)
     except Exception as exc:
         await write_audit(
             "resume_trading",
@@ -2102,8 +2738,31 @@ async def resume_trading(
         )
         raise HTTPException(
             status_code=503,
-            detail="Failed to resume trading — could not verify halt state was cleared.",
+            detail="Failed to resume trading — could not clear halt state in Postgres.",
         )
+
+    # Defence-in-depth: verify the canonical read path reports
+    # not-halted after the transition.  If Postgres says still halted
+    # (a concurrent halt lost the race) or the read itself fails, we
+    # surface the error instead of claiming the resume succeeded.
+    try:
+        from data.ingestion.daily_pipeline import _is_trading_halted as _check_halt
+        if await _check_halt():
+            await write_audit(
+                "resume_trading",
+                username=username,
+                ip=client_ip,
+                request_id=request_id,
+                details={"result": "failure", "reason": "halt_still_active_after_resume"},
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to resume trading — halt state is still active.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.debug("resume: post-commit verify failed (non-fatal)", exc_info=True)
 
     await write_audit(
         "resume_trading",
@@ -2545,10 +3204,28 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                     symbol = o.get("symbol", "")
                     qty = float(o.get("qty", 0) or 0)
                     side = (o.get("side") or "buy").lower()
+                    # Wave 4P Fix 3 (P97): persisted_side is only the
+                    # "direction of entry" for the broker's order record;
+                    # it stays derived from the order SIDE (buy→long,
+                    # sell→short) for legacy ledger consumers that only
+                    # understand OPEN orders.  The position-aware
+                    # ``trade_kind`` column carries the correct
+                    # OPEN/CLOSE classification and is persisted alongside
+                    # below.  For reconcile-backfill we cannot inspect
+                    # the pre-order position state (we only have the
+                    # already-filled order), so trade_kind falls back to
+                    # an OPEN classification unless the legs' filled_qty
+                    # tells us otherwise.
                     persisted_side = "short" if side == "sell" else "long"
                     entry_price = (
                         float(o.get("filled_avg_price") or 0)
                         or float(o.get("limit_price") or 0)
+                    )
+                    # Best-effort trade_kind for reconcile rows: we don't
+                    # know the pre-order position, so map side → open-side.
+                    # This is the same shape as the DB-migration backfill.
+                    reconciled_trade_kind = (
+                        "long_open" if persisted_side == "long" else "short_open"
                     )
                     submitted_at = o.get("submitted_at")
                     try:
@@ -2589,6 +3266,7 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                         status="reconciled",
                         notes=f"Reconciled from broker (alpaca_id={o.get('id')})",
                         side=persisted_side,
+                        trade_kind=reconciled_trade_kind,
                         client_order_id=coid,
                         broker_order_id=o.get("id"),
                         account_env=_env,
@@ -2672,7 +3350,22 @@ async def reconcile_on_boot() -> None:
     written after every successful reconcile.  On first boot after a
     fresh deploy the key is absent and we fall back to a 7-day window
     which covers typical release cadences with headroom.
+
+    Wave 4P Fix 1 (P96): runs ``halt_state_resync_on_boot`` so any
+    drift between the durable Postgres halt flag and the Redis cache
+    (the latter of which may have been wiped by a ``FLUSHALL`` or a
+    cold restart) is surfaced in the audit log before the scheduler
+    starts.
     """
+    # Wave 4P Fix 1: halt-state cache re-hydration.  Runs FIRST so a
+    # drifted cache doesn't let the scheduler start before the audit
+    # trail captures the discrepancy.
+    try:
+        from data.ingestion.daily_pipeline import halt_state_resync_on_boot
+        await halt_state_resync_on_boot()
+    except Exception:
+        logger.warning("halt_state_resync_on_boot raised", exc_info=True)
+
     now = datetime.now(timezone.utc)
     default_since = now - timedelta(days=7)
     since_dt = default_since

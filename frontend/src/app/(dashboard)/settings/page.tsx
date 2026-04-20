@@ -449,12 +449,34 @@ export default function SettingsPage() {
               <div>
                 <p className="text-xs font-medium text-foreground">Theme</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Dark. Light mode is coming soon.
+                  Dark is fully tuned. Light mode is Phase 2 — switching gives
+                  you agency today even while light surfaces are still being
+                  polished.
                 </p>
               </div>
-              <span className="text-[11px] font-medium text-muted-foreground rounded-md border border-border px-2 py-0.5">
-                Dark
-              </span>
+              <div
+                role="radiogroup"
+                aria-label="Theme preference"
+                className="flex rounded-md border border-border overflow-hidden"
+              >
+                {(["system", "dark", "light"] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    role="radio"
+                    aria-checked={display.theme === opt}
+                    onClick={() => setDisplayPref("theme", opt)}
+                    className={cn(
+                      "min-h-11 px-3 text-[11px] font-medium capitalize transition-colors",
+                      display.theme === opt
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                    )}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

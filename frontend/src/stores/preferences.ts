@@ -18,9 +18,19 @@ export interface NotificationPrefs {
   strategyEvents: boolean;
 }
 
+export type ThemePreference = "system" | "dark" | "light";
+
 export interface DisplayPrefs {
   tickerTapeOn: boolean;
   compactStrategyView: boolean;
+  /**
+   * Colour scheme preference. ``"system"`` defers to the OS via the
+   * ``prefers-color-scheme`` media query; ``"dark"`` / ``"light"`` force the
+   * matching ``class="dark"`` / ``class="light"`` attribute on ``<html>``.
+   * Phase 2 will ship proper light-mode surface tokens — for now the toggle
+   * exists so users have agency over the switch.
+   */
+  theme: ThemePreference;
   // animationSpeed: REMOVED (persona-8 #2) — no consumer. Wiring a single
   // global speed knob across lightweight-charts, the marquee, the pulse
   // dots, etc. is a real project; the rest of the app honours
@@ -61,6 +71,10 @@ const defaultNotifications: NotificationPrefs = {
 const defaultDisplay: DisplayPrefs = {
   tickerTapeOn: true,
   compactStrategyView: false,
+  // Default to "dark" (matches the pre-existing hardcoded `<html class="dark">`
+  // behaviour) so existing users see no visual change until they opt in to
+  // "system" or "light". New users can switch in Settings.
+  theme: "dark",
 };
 
 const defaultData: DataPrefs = {

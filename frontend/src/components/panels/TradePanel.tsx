@@ -67,6 +67,69 @@ interface TradeLeg {
   vega?: number | null;
 }
 
+/**
+ * Build an OCC-format option symbol from the leg metadata.
+ *
+ * Wave 4P Fix 4 (P98). Before this helper the submit path called
+ * `l.symbol` for every leg, which was the underlying ticker — the
+ * strike / expiry / call-or-put were dropped on the floor and the
+ * backend saw an EQUITY order for an AAPL position when the user
+ * picked an AAPL call.
+ *
+ * OCC format: ROOT(1-6) + YYMMDD + C|P + 8-digit strike × 1000.
+ * Example: AAPL expiring 2026-04-20 call with $270 strike →
+ *   `AAPL260420C00270000`
+ *
+ * Returns `null` for legs that aren't valid options (stock legs,
+ * missing strike/expiry, unparseable date). Callers fall back to
+ * the underlying symbol on null so at least one valid order reaches
+ * the backend instead of a 422 for every leg.
+ */
+function buildOccSymbol(leg: TradeLeg): string | null {
+  if (leg.type !== "call" && leg.type !== "put") return null;
+  if (leg.strike == null || leg.strike <= 0) return null;
+  if (!leg.expiry) return null;
+
+  // Accept either `YYYY-MM-DD` or `YYYYMMDD`; normalise to YYMMDD.
+  let y: number;
+  let m: number;
+  let d: number;
+  const iso = leg.expiry.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    y = parseInt(iso[1], 10);
+    m = parseInt(iso[2], 10);
+    d = parseInt(iso[3], 10);
+  } else {
+    const compact = leg.expiry.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!compact) return null;
+    y = parseInt(compact[1], 10);
+    m = parseInt(compact[2], 10);
+    d = parseInt(compact[3], 10);
+  }
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    return null;
+  }
+  // OCC uses a two-digit year (21st-century assumed).
+  const yy = String(y % 100).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  const dd = String(d).padStart(2, "0");
+
+  const cp = leg.type === "call" ? "C" : "P";
+
+  // Strike is stored as price × 1000 in 8 digits.  Round-half-up to
+  // the nearest 1/1000 so fractional strikes round predictably rather
+  // than truncating pennies silently.
+  const strikeScaled = Math.round(leg.strike * 1000);
+  if (strikeScaled <= 0 || strikeScaled > 99999999) return null;
+  const strikeStr = String(strikeScaled).padStart(8, "0");
+
+  // Underlying: uppercase, strip dots (OCC root is alnum only).
+  const root = (leg.symbol || "").toUpperCase().replace(/[.\-]/g, "");
+  if (!root || root.length > 6) return null;
+
+  return `${root}${yy}${mm}${dd}${cp}${strikeStr}`;
+}
+
 function detectStrategy(legs: TradeLeg[]): string {
   if (legs.length === 0) return "No Legs";
   if (legs.length === 1) {
@@ -252,22 +315,50 @@ function TradeBuilderTab() {
 
   const handleSubmit = useCallback(() => {
     if (legs.length === 0 || submitting) return;
+    // Wave 4P Fix 4 (P98): build OCC-format option symbols for every
+    // option leg so the backend sees the strike/expiry/call-put
+    // encoded in the symbol. Stock legs keep the underlying ticker.
+    // If OCC construction fails (missing expiry / bad strike) we
+    // fall back to the underlying + surface a toast so the trader
+    // sees it rather than a confusing 422 from the backend.
+    let occBuildWarned = false;
     const payload: PlaceOrderPayload = {
       symbol: selectedSymbol,
       side: legs[0].side,
       type: "limit",
       quantity: legs[0].quantity,
       price: legs[0].price,
-      legs: legs.map((l) => ({
-        symbol: l.symbol,
-        side: l.side,
-        quantity: l.quantity,
-        price: l.price,
-      })),
+      legs: legs.map((l) => {
+        if (l.type === "call" || l.type === "put") {
+          const occ = buildOccSymbol(l);
+          if (occ) {
+            return {
+              symbol: occ,
+              side: l.side,
+              quantity: l.quantity,
+              price: l.price,
+            };
+          }
+          if (!occBuildWarned) {
+            occBuildWarned = true;
+            toast({
+              type: "error",
+              message:
+                "Option leg missing strike or expiry — submitting underlying only",
+            });
+          }
+        }
+        return {
+          symbol: l.symbol,
+          side: l.side,
+          quantity: l.quantity,
+          price: l.price,
+        };
+      }),
     };
     setPendingOrder(payload);
     setConfirmOpen(true);
-  }, [legs, submitting, selectedSymbol]);
+  }, [legs, submitting, selectedSymbol, toast]);
 
   const confirmSubmit = useCallback(async () => {
     if (!pendingOrder || submitting) return;

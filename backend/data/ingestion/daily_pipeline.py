@@ -159,11 +159,86 @@ async def _is_trading_halted() -> bool:
     different error-message wording; the trades copy was dropped in favour
     of this one so a fix here applies everywhere.
 
-    Fails *closed* — if Redis is unreachable OR the call times out, we
-    treat the system as halted so an outage doesn't silently enable trading
-    during a crisis. The 0.5s ``asyncio.wait_for`` wrapper ensures a wedged
-    Redis connection cannot delay order submission indefinitely.
+    Wave 4P Fix 1 (P96) — two-tier read path.  Postgres is now the
+    SOURCE OF TRUTH; Redis is a cache.  Order of operations:
+
+        1. Read ``halt_state.is_halted`` from Postgres.  If the row
+           says halted, return True immediately.
+        2. Fall back to Redis (0.5s timeout) as a fast-path cache ONLY
+           when Postgres is unreachable.
+        3. If BOTH stores are unreachable AND no cache entry exists,
+           fail CLOSED (return True). An outage must not silently
+           enable trading.
+
+    Before this fix, a Redis ``FLUSHALL`` or cold restart would erase
+    the halt key and trading would auto-resume on the next tick.  The
+    Postgres row survives both — the cache is purely a latency
+    optimisation.
     """
+    # ---- Primary read: Postgres (source of truth) -------------------
+    pg_ok = False
+    pg_halted = False
+    skip_db = False
+    try:
+        from core.config import settings as _s
+        if _s.SKIP_DB_INIT:
+            # SKIP_DB_INIT mode — no DB available, rely on Redis alone.
+            # This preserves the pre-Wave-4P test behaviour where the
+            # halt flag flows through Redis only.
+            skip_db = True
+        else:
+            from core.database import _get_session_factory
+            from data.storage.models import HaltState
+
+            factory = _get_session_factory()
+            async with factory() as db:
+                row = await db.get(HaltState, 1)
+                if row is not None:
+                    pg_ok = True
+                    pg_halted = bool(row.is_halted)
+                else:
+                    # No seed row — treat as not halted.  Marks the
+                    # primary read as "succeeded" so we don't fail-closed
+                    # when the migration hasn't run yet (test fixtures).
+                    pg_ok = True
+                    pg_halted = False
+    except Exception:
+        # Postgres unreachable — fall through to Redis cache.
+        logger.warning(
+            "Halt-flag PG read failed; falling through to Redis cache",
+            exc_info=True,
+        )
+
+    if pg_ok:
+        # Keep the Redis cache in sync with the authoritative answer so
+        # downstream consumers that tail the key don't flap.  Best-effort.
+        try:
+            from core.redis import cache_set, get_redis
+            if pg_halted:
+                await cache_set(
+                    _HALT_REDIS_KEY, {"halted": True}, ttl_seconds=86400,
+                )
+            else:
+                r = await get_redis()
+                if r is not None:
+                    await r.delete(_HALT_REDIS_KEY)
+        except Exception:
+            logger.debug(
+                "Halt-flag cache refresh skipped (Redis unreachable)",
+                exc_info=True,
+            )
+        return pg_halted
+
+    # ---- Fallback: Redis cache --------------------------------------
+    # Either Postgres is unavailable OR SKIP_DB_INIT=True (test /
+    # offline dev loop).  Redis may still have the cached answer (e.g.
+    # from the last successful _is_trading_halted() call before
+    # Postgres went down, or from the halt endpoint that writes
+    # through to the cache).  An ERROR from Redis (timeout /
+    # exception) is still fail-closed, but a clean "key not found"
+    # falls through to False — otherwise a test / fresh-install
+    # environment with no halt ever set would permanently appear
+    # halted.
     try:
         from core.redis import cache_get
         result = await asyncio.wait_for(
@@ -172,6 +247,9 @@ async def _is_trading_halted() -> bool:
         )
         if result is not None and isinstance(result, dict):
             return bool(result.get("halted", False))
+        # Key absent in Redis.  Preserves the pre-Wave-4P semantics
+        # (missing key = not halted) so test / first-boot environments
+        # without Postgres keep working.
         return False
     except asyncio.TimeoutError:
         logger.error(
@@ -185,6 +263,74 @@ async def _is_trading_halted() -> bool:
             exc_info=True,
         )
         return True
+
+
+async def halt_state_resync_on_boot() -> None:
+    """Emit a ``halt_state_resync`` audit event if Redis drifted from PG.
+
+    Wave 4P Fix 1 (P96) — if a ``FLUSHALL`` or cold Redis restart
+    wiped the cache while Postgres says halted (or vice-versa),
+    surface the mismatch via ``core.audit`` so the operator knows the
+    cache was re-materialised from the DB.  Best-effort — boot must
+    not be blocked by an audit failure.
+    """
+    try:
+        from core.config import settings as _s
+        if _s.SKIP_DB_INIT:
+            return
+
+        from core.database import _get_session_factory
+        from data.storage.models import HaltState
+        from core.redis import cache_get, cache_set, get_redis
+        from core.audit import write_audit
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            row = await db.get(HaltState, 1)
+            pg_halted = bool(row.is_halted) if row is not None else False
+
+        redis_halted = False
+        cache_present = False
+        try:
+            cached = await cache_get(_HALT_REDIS_KEY)
+            if cached is not None and isinstance(cached, dict):
+                cache_present = True
+                redis_halted = bool(cached.get("halted", False))
+        except Exception:
+            logger.debug("halt_state_resync: redis read failed", exc_info=True)
+
+        if pg_halted != redis_halted or (pg_halted and not cache_present):
+            # Re-hydrate Redis from Postgres so future reads can use the
+            # fast path, then log a durable audit entry.
+            try:
+                if pg_halted:
+                    await cache_set(
+                        _HALT_REDIS_KEY, {"halted": True}, ttl_seconds=86400,
+                    )
+                else:
+                    r = await get_redis()
+                    if r is not None:
+                        await r.delete(_HALT_REDIS_KEY)
+            except Exception:
+                logger.debug("halt_state_resync: rehydrate failed", exc_info=True)
+
+            await write_audit(
+                "halt_state_resync",
+                username=None,
+                ip=None,
+                request_id=None,
+                details={
+                    "pg_halted": pg_halted,
+                    "redis_halted": redis_halted,
+                    "redis_cache_present": cache_present,
+                    "reason": "redis_wiped_or_drift_detected",
+                },
+            )
+    except Exception:
+        logger.debug(
+            "halt_state_resync: skipped (non-fatal boot check failure)",
+            exc_info=True,
+        )
 
 
 # ----- Pipeline state -----
@@ -325,11 +471,43 @@ def _base_url() -> str:
 
 
 def _is_within_trading_window() -> bool:
-    """Return True when current ET time is between 9:35 and 15:55."""
-    now = datetime.now(ET)
-    market_open = now.replace(hour=9, minute=35, second=0, microsecond=0)
-    market_close = now.replace(hour=15, minute=55, second=0, microsecond=0)
-    return market_open <= now <= market_close
+    """Return True when now is inside today's real equity session.
+
+    Wave 4R: previously hard-coded 9:35–15:55 ET, which:
+
+    * Fired against a closed market on half-days (Thanksgiving-eve, Jul 3)
+      where the session ends at 13:00 ET — Alpaca rejects any MOC order
+      submitted after the bell.
+    * Returned True on full holidays (MLK, Good Friday, Christmas-on-a-
+      weekday) because the check was purely a clock comparison with no
+      calendar awareness.
+
+    The replacement consults the shared :mod:`data.calendar` singleton so a
+    single holiday table (``pandas_market_calendars`` NYSE schedule) is the
+    authority for both the scheduler and the trade-submission path.
+
+    The 5-minute lead-in (``open + 5min``) preserves the previous
+    behaviour of skipping the first few minutes of chaotic open-cross
+    prints; the 5-minute lead-out (``close - 5min``) matches the old
+    15:55 ET cutoff so MOC orders have a minute-or-two slack for the
+    broker to accept them before the bell.
+    """
+    from data.calendar import (
+        is_trading_day as _is_trading_day,
+        market_open as _market_open,
+        market_close as _market_close,
+    )
+
+    now_et = datetime.now(ET)
+    today = now_et.date()
+    if not _is_trading_day(today):
+        return False
+    try:
+        open_et = _market_open(today).astimezone(ET) + timedelta(minutes=5)
+        close_et = _market_close(today).astimezone(ET) - timedelta(minutes=5)
+    except (ValueError, Exception):
+        return False
+    return open_et <= now_et <= close_et
 
 
 def _now_et() -> datetime:

@@ -19,6 +19,7 @@ def _define_models() -> dict[str, Any]:
     from sqlalchemy import (
         BigInteger,
         Boolean,
+        CheckConstraint,
         Column,
         DateTime,
         Float,
@@ -170,6 +171,18 @@ def _define_models() -> dict[str, Any]:
         # so existing rows pre-migration validate cleanly.
         version = Column(Integer, nullable=False, server_default="0", default=0)
 
+        # Wave 4P Fix 3 (P97) — position-aware trade classification.
+        # The legacy ``side`` column was derived from the broker-order
+        # SIDE (``buy`` → ``long``, ``sell`` → ``short``). That maps
+        # cleanly for OPENING orders but is wrong for CLOSES: selling
+        # to close a long is a LONG-EXIT, not a NEW SHORT. This column
+        # carries the correct position-aware classification:
+        #     ``long_open`` | ``long_close`` | ``short_open`` | ``short_close``
+        # Nullable so legacy rows don't fail post-migration validation.
+        # The fill_reconciler computes this against the pre-fill
+        # position state and stamps it onto the row at fill time.
+        trade_kind = Column(String(16), nullable=True, index=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }
@@ -316,6 +329,18 @@ def _define_models() -> dict[str, Any]:
         ip = Column(INET, nullable=True)
         request_id = Column(String(64), nullable=True)
         details = Column(JSONB, nullable=True)
+        # Wave 4Q (persona-103 P1 — GDPR Art. 17 / SEC 17a-4 interplay).
+        # When a user invokes the erasure endpoint we MUST delete their
+        # audit rows to honour Art. 17 — EXCEPT those whose event is on
+        # the regulatory minimum-retention list (halt_trading,
+        # resume_trading, wash_trade_reject, restricted_symbol_reject,
+        # live_gate_reject). Those rows survive but are flagged TRUE so
+        # downstream exports and admin UIs render them as "retained for
+        # regulatory compliance — not user-originated data" rather than
+        # as a privacy-policy breach.
+        retained_for_compliance = Column(
+            Boolean, nullable=False, server_default="false", default=False
+        )
 
         __table_args__ = (
             # Indexes mirror the alembic migration 1:1. Declared at the
@@ -325,6 +350,95 @@ def _define_models() -> dict[str, Any]:
             Index("ix_audit_log_ts", "ts"),
             Index("ix_audit_log_event_ts", "event", "ts"),
             Index("ix_audit_log_username_ts", "username", "ts"),
+        )
+
+    class ComplianceTicket(Base):
+        """Subject Access Request (SAR) / GDPR+CCPA rights ticket.
+
+        Wave 4Q — persona-103 P1 #5.  One row per incoming rights
+        request.  Statuses flow through ``received`` → ``verifying``
+        → ``in_progress`` → ``completed`` / ``denied`` / ``withdrawn``.
+        See ``docs/SAR_WORKFLOW.md`` for the operator runbook.
+        """
+
+        __tablename__ = "compliance_tickets"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        received_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        )
+        completed_at = Column(DateTime(timezone=True), nullable=True)
+        # access | erasure | rectification | portability | objection |
+        # restriction. CCPA know/delete map onto access/erasure.
+        request_type = Column(String(32), nullable=False)
+        # received | verifying | in_progress | completed | denied |
+        # withdrawn.
+        status = Column(String(32), nullable=False, server_default="received", default="received")
+        requester_email = Column(String(255), nullable=True)
+        requester_username = Column(String(128), nullable=True)
+        identity_verified = Column(
+            Boolean, nullable=False, server_default="false", default=False
+        )
+        denial_reason = Column(Text, nullable=True)
+        notes = Column(JSONB, nullable=True)
+
+        __table_args__ = (
+            Index(
+                "ix_compliance_tickets_status_received",
+                "status",
+                "received_at",
+            ),
+            Index(
+                "ix_compliance_tickets_requester_email",
+                "requester_email",
+            ),
+        )
+
+    class HaltState(Base):
+        """Singleton table holding the emergency kill-switch state.
+
+        Wave 4P Fix 1 (persona P96).  Before this model the halt flag
+        lived ONLY in Redis under ``trading:halted``.  A ``FLUSHALL`` or
+        a cold Redis restart silently un-halted trading — the next
+        pipeline tick saw an absent key and classified the system as
+        NOT-halted, resuming live orders without operator intent.
+
+        Postgres is now the SOURCE OF TRUTH: every halt / resume
+        transition writes to this row first, then invalidates the Redis
+        cache.  ``_is_trading_halted()`` reads Postgres first; Redis is
+        a 0.5s-latency cache that fails closed.
+
+        Singleton invariant is enforced by a CHECK constraint (id = 1)
+        mirroring ``alembic/versions/0006_halt_state_and_trade_kind.py``.
+        Any INSERT that is not id=1 will fail at the DB layer — defence
+        in depth against an application bug that tries to create a
+        second halt row.
+        """
+
+        __tablename__ = "halt_state"
+
+        # Singleton surrogate — always 1.  ``server_default='1'`` so a
+        # bare ``session.add(HaltState())`` populates the column without
+        # the caller having to remember.
+        id = Column(Integer, primary_key=True, server_default="1", default=1)
+        is_halted = Column(
+            Boolean, nullable=False, server_default="false", default=False,
+        )
+        halted_by = Column(String(128), nullable=True)
+        halted_at = Column(DateTime(timezone=True), nullable=True)
+        reason = Column(String(256), nullable=True)
+        # Wave 4P Fix 2 (P104): queue a flatten intent when the operator
+        # halts while the market is closed.  The next-open reconciler
+        # sees ``pending_flatten = TRUE`` and fires the close orders
+        # once regular trading hours resume.
+        pending_flatten = Column(
+            Boolean, nullable=False, server_default="false", default=False,
+        )
+
+        __table_args__ = (
+            CheckConstraint("id = 1", name="ck_halt_state_singleton"),
         )
 
     _models_cache.update({
@@ -338,6 +452,8 @@ def _define_models() -> dict[str, Any]:
         "StrategySignal": StrategySignal,
         "Alert": Alert,
         "AuditLog": AuditLog,
+        "ComplianceTicket": ComplianceTicket,
+        "HaltState": HaltState,
     })
     return _models_cache
 

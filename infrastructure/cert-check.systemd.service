@@ -1,0 +1,27 @@
+[Unit]
+Description=AlphaDesk TLS certificate expiry check (WARN < 14 days)
+Documentation=file:///opt/alphadesk/backend/scripts/check_cert_expiry.py
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Runs inside the backend container so the core.audit helper can reach the
+# durable audit_log table with the normal DATABASE_URL / REDIS_URL.
+# If the backend container isn't up we still want to know about an
+# upcoming expiry — the script gracefully falls back to log-only when
+# the DB is unreachable.
+ExecStart=/usr/bin/docker compose -f /opt/alphadesk/docker-compose.yml -f /opt/alphadesk/infrastructure/docker-compose.prod.yml exec -T backend python -m scripts.check_cert_expiry
+StandardOutput=journal
+StandardError=journal
+Restart=no
+TimeoutStartSec=2min
+
+# Hardening — read-only, no temp, no privilege escalation.
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

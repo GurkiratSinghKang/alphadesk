@@ -54,8 +54,14 @@ export const PRIVACY_CLAUSES: StaticClause[] = [
         <EditorialBullet>
           To provide AI-powered analysis using Anthropic&rsquo;s Claude API.
           Market data and strategy parameters may be sent to Anthropic for
-          analysis. No personally identifiable information is included in these
-          requests.
+          analysis. Every prompt is automatically scrubbed before
+          transmission: usernames, client order IDs, broker order IDs, email
+          addresses, and IP addresses are replaced with tokens such as{" "}
+          <code>&lt;USER&gt;</code>, <code>&lt;ORDER_ID&gt;</code>, and{" "}
+          <code>&lt;IP&gt;</code>. Where available we additionally rely on
+          Anthropic&rsquo;s zero-retention Enterprise plan so prompts and
+          responses are not used for model training and are not retained
+          beyond the live inference window.
         </EditorialBullet>
         <EditorialBullet>
           To improve platform performance and reliability.
@@ -89,26 +95,52 @@ export const PRIVACY_CLAUSES: StaticClause[] = [
   },
   {
     index: "05",
-    title: "Third-party services",
+    title: "Sub-processors",
     body: (
       <>
         <EditorialP>
-          We integrate with the following third-party services:
+          We engage the following sub-processors to deliver the service.
+          Every entry below is a processor under GDPR Art. 28 / CCPA
+          &ldquo;service provider&rdquo; terminology:
         </EditorialP>
         <ul className="mt-4 space-y-3">
           <EditorialBullet>
             <strong className="text-fg">Alpaca Markets.</strong> Brokerage
-            services for trade execution. Subject to{" "}
+            services for trade execution; receives symbol, quantity, side,
+            order type, and limit / stop prices for orders you route
+            through the platform. Subject to{" "}
             <ExternalA href="https://alpaca.markets/disclosures">
               Alpaca&rsquo;s privacy policy
             </ExternalA>
             .
           </EditorialBullet>
           <EditorialBullet>
-            <strong className="text-fg">Anthropic (Claude).</strong> AI analysis
-            services. Market data sent for analysis is subject to{" "}
+            <strong className="text-fg">Anthropic (Claude).</strong> AI
+            analysis services. Prompts are PII-scrubbed before transmission
+            (see section 02). Subject to{" "}
             <ExternalA href="https://www.anthropic.com/privacy">
               Anthropic&rsquo;s privacy policy
+            </ExternalA>
+            .
+          </EditorialBullet>
+          <EditorialBullet>
+            <strong className="text-fg">Polygon.io.</strong> Market-data
+            provider for real-time and historical equities / options
+            quotes, trades, and aggregates. Receives symbol queries and
+            request metadata only; no account identifiers leave the
+            platform. Subject to{" "}
+            <ExternalA href="https://polygon.io/privacy">
+              Polygon&rsquo;s privacy policy
+            </ExternalA>
+            .
+          </EditorialBullet>
+          <EditorialBullet>
+            <strong className="text-fg">Financial Modeling Prep (FMP).</strong>{" "}
+            Fundamentals, earnings calendar, and screener data. Receives
+            symbol queries only; no account identifiers leave the platform.
+            Subject to{" "}
+            <ExternalA href="https://site.financialmodelingprep.com/privacy-policy">
+              FMP&rsquo;s privacy policy
             </ExternalA>
             .
           </EditorialBullet>
@@ -121,18 +153,33 @@ export const PRIVACY_CLAUSES: StaticClause[] = [
     title: "Your rights",
     body: (
       <>
-        <EditorialP>You have the right to:</EditorialP>
+        <EditorialP>
+          You can exercise the following rights directly from the platform
+          or by emailing <MailA address="legal@tradingalpha.net" />:
+        </EditorialP>
         <ul className="mt-4 space-y-3">
           <EditorialBullet>
-            Request access to the personal data we hold about you.
+            <strong className="text-fg">Access / portability (GDPR Art. 20).</strong>{" "}
+            Authenticated users can call{" "}
+            <code>POST /api/v1/user/export</code> to download a JSON bundle
+            of every record AlphaDesk holds about them — trades, positions,
+            watchlists, alerts, audit entries, and account settings.
           </EditorialBullet>
           <EditorialBullet>
-            Request correction or deletion of your personal data.
+            <strong className="text-fg">Erasure (GDPR Art. 17).</strong>{" "}
+            <code>GET /api/v1/user/erase/preview</code> shows the row counts
+            that would be deleted; <code>POST /api/v1/user/erase</code>
+            performs the cascade after password re-authentication. Records
+            required by SEC 17a-4 minimum retention remain but are flagged
+            as retained for compliance.
+          </EditorialBullet>
+          <EditorialBullet>
+            Request correction of personal data by emailing the address
+            above.
           </EditorialBullet>
           <EditorialBullet>
             Revoke API key access at any time through your brokerage provider.
           </EditorialBullet>
-          <EditorialBullet>Request export of your trading data.</EditorialBullet>
         </ul>
       </>
     ),

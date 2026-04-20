@@ -1,0 +1,16 @@
+[Unit]
+Description=Daily AlphaDesk disk usage check
+Documentation=file:///opt/alphadesk/backend/scripts/check_disk_usage.py
+Requires=alphadesk-disk-check.service
+
+[Timer]
+# 03:45 America/New_York — runs between the cert check (03:30) and the
+# backup (04:00) so operators see disk issues before the backup kicks off
+# and potentially fails on a full disk.
+OnCalendar=*-*-* 03:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=5min
+Unit=alphadesk-disk-check.service
+
+[Install]
+WantedBy=timers.target

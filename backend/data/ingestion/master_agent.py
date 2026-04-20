@@ -15,6 +15,8 @@ import re
 import shutil
 from typing import Any
 
+from data.volatility_map import VOL_MAP_PRE_SP500
+
 logger = logging.getLogger("alphadesk.master_agent")
 
 
@@ -199,18 +201,14 @@ class MasterAgent:
     # mean-reversion (so category="equity" alone isn't enough to tell).
     MOMENTUM_GATE_SKIP_STRATEGIES: set[str] = {
         "rsi2_reversal",     # 2-period RSI bounce -- buys oversold dips
-        "mean_reversion",    # legacy adapter still referenced in some logs
     }
 
-    # Typical daily volatilities (shared across VaR + crowding detection)
-    VOL_MAP: dict[str, float] = {
-        "TSLA": 0.035, "NVDA": 0.030, "AMD": 0.030, "COIN": 0.040,
-        "META": 0.025, "NFLX": 0.025, "AAPL": 0.015, "MSFT": 0.014,
-        "AMZN": 0.020, "GOOGL": 0.018, "SPY": 0.010, "QQQ": 0.013,
-        "JPM": 0.015, "BAC": 0.018, "XOM": 0.016, "DIS": 0.020,
-        "WMT": 0.012, "INTC": 0.035, "CSCO": 0.015, "ABBV": 0.016,
-        "UNH": 0.028, "PG": 0.010, "MRK": 0.014, "KO": 0.009,
-    }
+    # Typical daily volatilities (shared across VaR + crowding detection).
+    # The canonical values live in :mod:`backend.data.volatility_map` so the
+    # list can be versioned and methodology documented in one place; the
+    # class attribute is kept as a compat shim for any caller that reads it
+    # via ``MasterAgent.VOL_MAP`` directly.
+    VOL_MAP: dict[str, float] = dict(VOL_MAP_PRE_SP500)
 
     def __init__(
         self,
@@ -293,12 +291,22 @@ class MasterAgent:
     # across runs. We persist both to Redis so the 30-day-rolling drawdown
     # view actually sticks.
 
-    # 30-day TTL: stale halts older than that are presumed resolved (strategy
-    # code has been iterated / peak definition no longer valid). Short enough
-    # that a dormant name doesn't block forever.
-    _STATE_TTL_SECONDS: int = 60 * 60 * 24 * 30
+    # 180-day TTL: a halted strategy needs to stay halted long enough that
+    # an operator investigates before it silently resurrects. Wave 4R Fix 3:
+    # the previous 30-day TTL caused the Redis set to expire after a month
+    # of inactivity — e.g. a strategy halted on Dec 1 would auto-un-halt on
+    # Jan 1 with no log line. 180 days covers a full quarter of operator
+    # vacation + a round of code iteration without spurious resurrection,
+    # and is still short enough that genuinely stale entries (code deleted,
+    # peak-definition obsolete) don't block forever.
+    _STATE_TTL_SECONDS: int = 60 * 60 * 24 * 180
     _REDIS_PEAKS_KEY: str = "master:strategy_peaks"
     _REDIS_HALTED_KEY: str = "master:halted_strategies"
+    # Redis hash mapping strategy -> ISO-8601 UTC timestamp of when the halt
+    # was recorded. Lets :meth:`resume_trading` log the halt duration and
+    # lets the boot-time halt-expiry check warn when a Redis halt has no
+    # corresponding durable record. Mirrors ``_REDIS_HALTED_KEY``'s TTL.
+    _REDIS_HALT_TIMESTAMPS_KEY: str = "master:halted_strategy_timestamps"
 
     async def load_persisted_state(self) -> None:
         """Populate ``strategy_peaks`` and ``halted_strategies`` from Redis.
@@ -368,16 +376,27 @@ class MasterAgent:
 
         Wave 2G / persona-79 Race 6: ``SADD`` + ``EXPIRE`` pipelined
         atomically so a crash between the two cannot leave the halted-set
-        without its 30-day TTL. Same rationale as ``_persist_peak``.
+        without its TTL.  Same rationale as ``_persist_peak``.
+
+        Wave 4R: also stamps ``_REDIS_HALT_TIMESTAMPS_KEY[strategy]`` with
+        the current UTC ISO-8601 timestamp so :meth:`resume_trading` can
+        log the halt duration on release.
         """
+        from datetime import datetime as _dt, timezone as _tz
+
         try:
             from core.redis import get_redis
             redis = await get_redis()
             if redis is None:
                 return
+            now_iso = _dt.now(_tz.utc).isoformat()
             async with redis.pipeline() as p:
                 p.sadd(self._REDIS_HALTED_KEY, strategy)
                 p.expire(self._REDIS_HALTED_KEY, self._STATE_TTL_SECONDS)
+                # Record halt-start only if absent (don't reset on idempotent re-add)
+                # We use HSETNX semantics via a GET-then-SET fallback below.
+                p.hsetnx(self._REDIS_HALT_TIMESTAMPS_KEY, strategy, now_iso)
+                p.expire(self._REDIS_HALT_TIMESTAMPS_KEY, self._STATE_TTL_SECONDS)
                 await p.execute()
         except Exception:
             logger.warning(
@@ -385,16 +404,136 @@ class MasterAgent:
             )
 
     async def _persist_halt_remove(self, strategy: str) -> None:
-        """Remove a strategy from the Redis halted-strategies set."""
+        """Remove a strategy from the Redis halted-strategies set.
+
+        Wave 4R: logs the halt duration when a timestamp is available so the
+        operator can see at-a-glance how long the strategy was blocked.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
         try:
             from core.redis import get_redis
             redis = await get_redis()
             if redis is None:
                 return
+            halted_since_raw = await redis.hget(
+                self._REDIS_HALT_TIMESTAMPS_KEY, strategy
+            )
             await redis.srem(self._REDIS_HALTED_KEY, strategy)
+            await redis.hdel(self._REDIS_HALT_TIMESTAMPS_KEY, strategy)
+            if halted_since_raw:
+                try:
+                    halted_since = _dt.fromisoformat(
+                        halted_since_raw.decode()
+                        if isinstance(halted_since_raw, (bytes, bytearray))
+                        else halted_since_raw
+                    )
+                    delta = _dt.now(_tz.utc) - halted_since
+                    logger.info(
+                        "RESUME strategy '%s' halted for %.1fh (since %s)",
+                        strategy, delta.total_seconds() / 3600.0,
+                        halted_since.isoformat(),
+                    )
+                except Exception:
+                    # Corrupt timestamp shouldn't block the resume.
+                    logger.debug(
+                        "Could not parse halt timestamp for %s",
+                        strategy, exc_info=True,
+                    )
         except Exception:
             logger.warning(
                 "Failed to remove halt(%s) from Redis", strategy, exc_info=True,
+            )
+
+    @classmethod
+    async def halt_expiry_boot_check(cls) -> None:
+        """Boot-time consistency check for the Redis halt set.
+
+        Wave 4R Fix 3: compares the Redis ``master:halted_strategies`` set
+        against any Postgres ``halt_state`` durable record (Wave 4P) and
+        logs discrepancies so an operator can spot:
+
+        * A Redis entry without a Postgres row (the halt will silently
+          vanish on TTL expiry without audit trail).
+        * A Postgres row without a Redis entry (the in-memory / runtime
+          view has lost track of an explicit operator halt — the next
+          pipeline run would trade as if no halt existed).
+
+        Runs once on boot from ``main.lifespan``. If the Postgres table
+        doesn't exist (Wave 4P not deployed yet), the check degrades to a
+        pure Redis inventory dump — still useful, since the halt-set
+        content is now visible in a boot log line.
+        """
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+            redis_halts: set[str] = set()
+            if redis is not None:
+                raw = await redis.smembers(cls._REDIS_HALTED_KEY)
+                redis_halts = {
+                    (s.decode() if isinstance(s, (bytes, bytearray)) else str(s))
+                    for s in (raw or set())
+                }
+        except Exception:
+            logger.warning(
+                "halt_expiry_boot_check: could not read Redis halt set",
+                exc_info=True,
+            )
+            return
+
+        # Best-effort Postgres side.  The Wave 4P ``halt_state`` table is a
+        # SINGLETON (id=1) kill-switch — ``is_halted=TRUE`` means "stop
+        # everything"; the per-strategy Redis halt set is orthogonal to it
+        # (drawdown-driven, per-name).  We read the singleton so the boot
+        # log surfaces BOTH signals and any ambiguity is visible.
+        pg_global_halted: bool | None = None
+        try:
+            from core.config import settings as _settings
+            if not _settings.SKIP_DB_INIT:
+                from core.database import _get_session_factory
+                from sqlalchemy import text as _text
+
+                factory = _get_session_factory()
+                async with factory() as session:
+                    try:
+                        result = await session.execute(
+                            _text(
+                                "SELECT is_halted FROM halt_state "
+                                "WHERE id = 1"
+                            )
+                        )
+                        row = result.fetchone()
+                        if row is not None:
+                            pg_global_halted = bool(row[0])
+                    except Exception:
+                        # Table doesn't exist / migration not applied — degrade.
+                        pass
+        except Exception:
+            logger.debug(
+                "halt_expiry_boot_check: Postgres lookup skipped",
+                exc_info=True,
+            )
+
+        # Log both signals so an operator can see what the next tick will
+        # do. A WARN fires only when the global kill-switch is active (the
+        # most urgent case). Per-strategy drift just rides the INFO line.
+        if pg_global_halted is True:
+            logger.warning(
+                "halt_expiry_boot_check: GLOBAL halt is ACTIVE "
+                "(halt_state.is_halted=TRUE); per-strategy redis halts=%s",
+                sorted(redis_halts),
+            )
+        elif pg_global_halted is False:
+            logger.info(
+                "halt_expiry_boot_check: global halt clear; "
+                "per-strategy redis halts (%d): %s",
+                len(redis_halts), sorted(redis_halts),
+            )
+        else:
+            # No halt_state row accessible — log redis inventory only.
+            logger.info(
+                "halt_expiry_boot_check: redis-only inventory (%d halts): %s",
+                len(redis_halts), sorted(redis_halts),
             )
 
     async def halt_strategy(self, strategy: str) -> None:

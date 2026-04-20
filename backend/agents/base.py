@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import time
 from abc import ABC
@@ -16,6 +17,107 @@ logger = logging.getLogger(__name__)
 MODEL_OPUS = "opus"
 MODEL_SONNET = "sonnet"
 MODEL_HAIKU = "haiku"
+
+
+# ---------------------------------------------------------------------------
+# PII scrubbing for outbound Claude prompts (Wave 4Q — persona-103 P1 #4).
+# ---------------------------------------------------------------------------
+# Anthropic is a sub-processor for us; our privacy policy tells users that no
+# PII is included in prompts.  The earlier implementation trusted agent
+# subclasses to construct clean prompts, which worked right up until the first
+# time someone interpolated a username or a ``client_order_id`` straight into
+# a task string (master_agent routing logs, ``run_with_tools`` context, …).
+# Scrubbing is belt-and-braces: even if a subclass leaks something, the
+# outbound payload is sanitised in ONE place.
+#
+# What we scrub
+# -------------
+# 1. The configured admin username — exactly.  Not a heuristic match;
+#    everywhere it would appear as a literal.  Replaced with ``<USER>``.
+# 2. ``client_order_id`` values — the project emits these in two shapes:
+#       a. ``manual_<username>_<32-hex-chars>``    (POST /trades).
+#       b. ``<strategy>_<SYMBOL>_<unix-timestamp>``  (scheduler routing).
+#    Both are pattern-matched and redacted to ``<ORDER_ID>``.
+# 3. ``broker_order_id`` — Alpaca UUIDs.  Scrubbed to ``<BROKER_ORDER_ID>``.
+# 4. IPv4 / IPv6 addresses — occasionally sneaked into logs via
+#    ``request.client.host``.  Replaced with ``<IP>``.
+# 5. Email addresses — RFC-5322-lite pattern, replaced with ``<EMAIL>``.
+#
+# What we DON'T scrub
+# -------------------
+# Market-data fields (symbol, price, volume), strategy names, technical
+# indicator numbers — these are NOT personal data even under the most
+# expansive GDPR reading.  Over-scrubbing would blind Claude to the actual
+# analysis task and is a reliability failure, not a privacy win.
+#
+# All regexes are compiled once at module load.
+
+# Alpaca UUID — 8-4-4-4-12 hex blocks, case-insensitive.
+_UUID_RE = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
+
+# client_order_id shape a: manual_<username>_<hex>. The <hex> is
+# sufficiently long (~32 chars) that false positives on arbitrary text are
+# vanishingly unlikely.
+_CLIENT_ORDER_ID_MANUAL_RE = re.compile(r"\bmanual_[A-Za-z0-9]+_[0-9a-fA-F]{12,}\b")
+
+# client_order_id shape b: <strategy>_<SYMBOL>_<unix-ts>. SYMBOL is
+# up-to-5-char uppercase; strategy is snake_case lowercase or mixed.
+_CLIENT_ORDER_ID_STRAT_RE = re.compile(r"\b[a-zA-Z][a-zA-Z0-9_]+_[A-Z]{1,5}_\d{10,}\b")
+
+# IPv4.  Too many false positives on version strings ("1.0.0.1") if we're
+# not careful, so we require at least one non-zero octet and bound via
+# word boundaries.
+_IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+# IPv6 — conservative match (full 8-group form + the common ::-compressed
+# variants).  Skipping the academic-paper-quality RFC-4291 grammar — the
+# goal is "don't leak an IP", not "parse IPv6 perfectly".
+_IPV6_RE = re.compile(r"\b[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){2,7}\b")
+
+# Email — practical, not RFC-strict.
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+
+
+def _scrub_pii(text: str) -> str:
+    """Redact personally-identifiable fields from ``text``.
+
+    Idempotent — running it twice on the same string is a no-op.  The
+    scrub is CONSERVATIVE: patterns are anchored by word boundaries so
+    we don't chew up legitimate tokens (market-data field names,
+    technical indicator identifiers).
+
+    Order matters: UUID must scrub BEFORE the order-id patterns so a
+    broker-order-id UUID doesn't accidentally match the strategy shape.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+
+    # Username first — literal replacement, no regex escape traps.
+    # Case-sensitive: ADMIN_USERNAME is "admin", we don't want to eat
+    # "Admin Schubert" in some future multilingual user-facing copy.
+    admin_username = (getattr(settings, "ADMIN_USERNAME", "") or "").strip()
+    if admin_username and len(admin_username) >= 3:
+        # Length gate avoids pathological cases where ADMIN_USERNAME is a
+        # common English word ("a", "me") that would chew the prompt.
+        text = re.sub(rf"\b{re.escape(admin_username)}\b", "<USER>", text)
+
+    # Broker order id (UUID) — scrub BEFORE the order-id shapes, so a
+    # stray UUID doesn't get mis-tagged as <ORDER_ID>.
+    text = _UUID_RE.sub("<BROKER_ORDER_ID>", text)
+
+    # client_order_id — two shapes, both -> <ORDER_ID>.
+    text = _CLIENT_ORDER_ID_MANUAL_RE.sub("<ORDER_ID>", text)
+    text = _CLIENT_ORDER_ID_STRAT_RE.sub("<ORDER_ID>", text)
+
+    # IPs and emails.
+    text = _IPV4_RE.sub("<IP>", text)
+    text = _IPV6_RE.sub("<IP>", text)
+    text = _EMAIL_RE.sub("<EMAIL>", text)
+
+    return text
 
 # Locate the claude CLI binary
 CLAUDE_CLI = shutil.which("claude")
@@ -293,7 +395,15 @@ class BaseAgent(ABC):
     # ------------------------------------------------------------------
 
     def _build_prompt(self, task: str, context: dict[str, Any] | None) -> str:
-        """Build the full prompt string from task + context."""
+        """Build the full prompt string from task + context.
+
+        Wave 4Q (persona-103 P1 #4): the final assembled prompt passes
+        through ``_scrub_pii`` before it leaves this method.  Every
+        outbound Claude call — CLI or API, run() or run_with_tools() —
+        ultimately derives its prompt from this one chokepoint, so a
+        single scrub here covers every outbound payload.  Callers do
+        NOT need to remember to sanitise upstream.
+        """
         parts = [task]
         if context:
             ctx_lines = [f"- {k}: {v}" for k, v in context.items() if k != "conversation_history"]
@@ -310,7 +420,10 @@ class BaseAgent(ABC):
                 if history_text:
                     parts.append(f"\nConversation history:\n{history_text}")
 
-        return "\n".join(parts)
+        assembled = "\n".join(parts)
+        # Single outbound-chokepoint scrub.  Safe to skip on the empty
+        # string (_scrub_pii short-circuits anyway).
+        return _scrub_pii(assembled)
 
     # ------------------------------------------------------------------
     # Shared extraction helpers (used by all agent subclasses)

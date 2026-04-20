@@ -18,6 +18,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +33,7 @@ from core.logging import REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news
+from api.routes import user as user_routes
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
@@ -115,6 +117,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Fill reconciler failed to start", exc_info=True)
 
+    # Wave 4R Fix 3: reconcile the Redis halt set with the durable halt
+    # record so any drift (Redis-only ghosts, Postgres-only orphans) is
+    # surfaced in the boot log BEFORE the scheduler starts trading. Runs
+    # pre-scheduler so the operator sees the discrepancy line first.
+    try:
+        from data.ingestion.master_agent import MasterAgent
+        await MasterAgent.halt_expiry_boot_check()
+    except Exception:
+        logger.warning("halt_expiry_boot_check raised", exc_info=True)
+
     # Start automated trading pipeline scheduler
     try:
         await start_pipeline_scheduler()
@@ -148,7 +160,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Boot bracket-outbox replay raised", exc_info=True)
 
+    # Wave 4Q (persona-103 P1 #3): schedule the audit_log retention
+    # sweeper.  Runs weekly, guarded by a Redis lock so a multi-worker
+    # deployment only sweeps once.  Safe to spawn even in SKIP_DB_INIT
+    # mode — sweep_once() no-ops when the DB is bypassed.
+    audit_cleanup_task = None
+    try:
+        from scripts.audit_log_cleanup import schedule_lifespan_task
+        audit_cleanup_task = await schedule_lifespan_task()
+        logger.info("Audit-log retention sweeper scheduled")
+    except Exception:
+        logger.warning("Audit-log retention sweeper failed to schedule", exc_info=True)
+
     yield
+
+    # Cancel audit cleanup task first — it's purely background, so
+    # cancelling it before the DB/Redis teardown is both safe and
+    # avoids spurious "engine disposed mid-sweep" log noise.
+    if audit_cleanup_task is not None:
+        audit_cleanup_task.cancel()
+        try:
+            await audit_cleanup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Stop real-time scanner
     try:
@@ -296,6 +330,12 @@ app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependenci
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News"], dependencies=[Depends(require_auth)])
 app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
+# Wave 4Q (persona-103): user-rights endpoints (GDPR Art. 17 + Art. 20 /
+# CCPA parity).  Auth is enforced INSIDE each handler via Depends(require_auth)
+# rather than router-level so the handlers can also do a password re-auth
+# on the erase path — a router-level dep would fire before we can read the
+# body for the password field.
+app.include_router(user_routes.router, prefix="/api/v1/user", tags=["User Rights"])
 
 # --- WebSocket ---
 app.websocket("/ws")(websocket_endpoint)
@@ -358,9 +398,16 @@ async def readyz() -> JSONResponse:
     a JSON body indicating which dependency is down, so oncall can triage
     without shelling into each container. Kept fast (<1s combined) by
     short-circuiting on first failure and using ``asyncio.wait_for`` timeouts.
+
+    Wave 4R Fix 8: also checks disk usage on the data dir. When > 90 % we
+    return ``status="degraded"`` (still HTTP 200 so the container stays in
+    rotation — a full disk isn't a reason to drop requests, but it IS a
+    reason to page the operator).  A dependency outage still short-circuits
+    to 503.
     """
-    result: dict[str, str] = {"db": "unknown", "redis": "unknown"}
+    result: dict[str, Any] = {"db": "unknown", "redis": "unknown", "disk": "unknown"}
     overall_ok = True
+    degraded = False
 
     # DB check — SELECT 1 is cheap and proves the connection pool is live.
     try:
@@ -388,6 +435,30 @@ async def readyz() -> JSONResponse:
         overall_ok = False
         result["redis"] = f"down: {type(e).__name__}"
 
+    # Wave 4R Fix 8: disk check. Failing to read the path is NOT a reason
+    # to 503 — the container can still serve traffic even if the mount is
+    # gone; it just tells us something's very wrong upstream and we want
+    # that in the body. > 90 % flips ``degraded`` (HTTP 200 but degraded).
+    try:
+        import os
+        from scripts.check_disk_usage import disk_usage_pct
+
+        data_path = os.environ.get("ALPHADESK_DATA_DIR", "/var/lib/alphadesk")
+        # Fall back to "/" if the configured path doesn't exist in this
+        # environment (e.g. a dev laptop without /var/lib/alphadesk).
+        if not os.path.exists(data_path):
+            data_path = "/"
+        pct = disk_usage_pct(data_path)
+        result["disk"] = {"path": data_path, "used_pct": round(pct, 2)}
+        if pct >= 90.0:
+            degraded = True
+    except Exception as e:
+        # Don't flap readyz over a shutil / fs hiccup.
+        result["disk"] = f"check_failed: {type(e).__name__}"
+
     status_code = 200 if overall_ok else 503
-    result["status"] = "ok" if overall_ok else "degraded"
+    if overall_ok:
+        result["status"] = "degraded" if degraded else "ok"
+    else:
+        result["status"] = "degraded"
     return JSONResponse(status_code=status_code, content=result)

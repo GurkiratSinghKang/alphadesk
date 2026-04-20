@@ -166,6 +166,113 @@ docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml e
 docker compose logs -f backend
 ```
 
+## TLS certificate expiry
+
+Caddy auto-renews via ACME, but a silent renewal failure only surfaces
+when the cert actually expires and browsers start throwing
+interstitials. The daily `alphadesk-cert-check.timer` (runs 03:30 ET)
+executes `backend/scripts/check_cert_expiry.py`, which:
+
+- Opens TLS to `https://{ALPHADESK_CERT_DOMAIN or tradingalpha.net}`.
+- WARNs + writes `audit_log` (`event="cert_expiring_soon"`) when less
+  than **14 days** remain.
+- ERRORs + writes `audit_log` (`event="cert_expired"` /
+  `"cert_check_error"`) on expiry or fetch failure.
+
+To inspect the last run:
+
+```
+journalctl -u alphadesk-cert-check.service -n 50
+```
+
+Query the audit trail:
+
+```
+docker compose exec timescaledb psql -U alphadesk -d alphadesk -c \
+  "SELECT ts, event, details FROM audit_log \
+   WHERE event LIKE 'cert_%' ORDER BY ts DESC LIMIT 20;"
+```
+
+### Force-renew the cert (when Caddy is stuck)
+
+Caddy stores certs in its config volume. To force a re-issue:
+
+```
+# From the VPS compose root.
+# 1. Delete the existing Caddy-managed cert / account cache for the site.
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+# If that doesn't retry ACME, nuclear option (tokens are re-minted):
+docker compose exec caddy sh -c "rm -rf /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/tradingalpha.net"
+docker compose restart caddy
+docker compose logs -f caddy   # watch for the ACME HTTP-01 or TLS-ALPN-01 handshake
+```
+
+If ACME is rate-limited (check the Caddy log for `urn:ietf:params:acme:
+error:rateLimited`), wait 60 minutes; do NOT loop. The `Retry-After`
+header from the ACME server has the exact window.
+
+## Redis AOF / persistence monitoring
+
+Redis is configured with AOF persistence (see
+`infrastructure/docker-compose.prod.yml`). A silent AOF rewrite failure
+means the next restart loses state — outbox entries, halt sets, cache
+values. Monitor with:
+
+```
+docker compose exec redis redis-cli INFO persistence | grep -E \
+  '(aof_enabled|aof_rewrite_in_progress|aof_last_write_status|aof_last_bgrewrite_status|aof_last_cow_size)'
+```
+
+Alerting (Uptime Robot custom HTTP, or whatever monitoring stack is
+in use):
+
+- `aof_last_write_status` must be `ok`. Anything else → page.
+- `aof_last_bgrewrite_status` must be `ok`. `err` → the last rewrite
+  failed and the AOF has been growing unchecked since — page.
+- `aof_rewrite_in_progress=1` sustained for > 30 min on a small DB is
+  suspicious; spot-check disk pressure and `docker compose logs redis`.
+
+Recovery:
+
+```
+docker compose exec redis redis-cli BGREWRITEAOF
+# Watch aof_rewrite_in_progress flip 1 -> 0 and aof_last_bgrewrite_status flip to ok.
+```
+
+If Redis refuses to start because the AOF is truncated (typically after
+an OOM kill mid-rewrite), use `redis-check-aof --fix /data/appendonly.aof`
+**from a copy** (never the live file) before restarting.
+
+## Disk usage monitoring
+
+The daily `alphadesk-disk-check.timer` (runs 03:45 ET) calls
+`backend/scripts/check_disk_usage.py` against `$ALPHADESK_DATA_DIR`
+(default `/var/lib/alphadesk`). Thresholds:
+
+| % used | Behaviour |
+| --- | --- |
+| < 85 % | Silent; INFO log only. |
+| 85 – 90 % | WARN log + `audit_log` (`event="disk_warn"`). |
+| >= 90 % | ERROR log + `audit_log` (`event="disk_critical"`) AND `/readyz` body flips `status` to `"degraded"` (HTTP stays 200). |
+
+Manual check:
+
+```
+docker compose exec backend python -m scripts.check_disk_usage
+```
+
+Recover quickly:
+
+```
+df -h /var/lib/alphadesk
+docker system df
+docker system prune -f --filter "until=48h"
+# Rotate pipeline_logs:
+find /var/lib/alphadesk/pipeline_logs -type f -mtime +30 -delete
+# Trim backups (retention is 30d but a runaway cron can stack):
+ls -1t /var/lib/alphadesk/backups | tail -n +31 | xargs -I {} rm /var/lib/alphadesk/backups/{}
+```
+
 ## Escalation
 
 If the platform is still down after 15 minutes of the above:

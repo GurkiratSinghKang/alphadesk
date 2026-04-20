@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/useToast";
 import { ensureTokenRefreshScheduled } from "@/lib/api";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
+import ThemeController from "@/components/layout/ThemeController";
 
 // ─── React Query ─────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeController />
       <ToastProvider>
         {isLogin ? (
           <TooltipProvider delay={200}>{children}</TooltipProvider>

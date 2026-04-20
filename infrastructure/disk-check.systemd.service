@@ -1,0 +1,25 @@
+[Unit]
+Description=AlphaDesk disk usage check (WARN >= 85%)
+Documentation=file:///opt/alphadesk/backend/scripts/check_disk_usage.py
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Runs inside the backend container so core.audit can reach the durable
+# audit_log table. If the container is down the script still exits non-
+# zero via systemd but the WARN line will not reach the DB — use the
+# journal to diagnose.
+ExecStart=/usr/bin/docker compose -f /opt/alphadesk/docker-compose.yml -f /opt/alphadesk/infrastructure/docker-compose.prod.yml exec -T backend python -m scripts.check_disk_usage
+StandardOutput=journal
+StandardError=journal
+Restart=no
+TimeoutStartSec=2min
+
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

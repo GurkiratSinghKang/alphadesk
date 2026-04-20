@@ -66,10 +66,9 @@ def memory_ledger(monkeypatch):
         conn.execute(sa_text(_SQLITE_DDL))
 
     # Short-circuit the module engine lookup so ``TradeLedger.__init__``
-    # picks up our SQLite engine and skips migration / Postgres DDL.
+    # picks up our SQLite engine and skips Postgres DDL.
     monkeypatch.setattr(tl_module, "_get_sync_engine", lambda: engine)
     monkeypatch.setattr(tl_module, "_ensure_schema", lambda _e: None)
-    monkeypatch.setattr(tl_module, "_run_migration", lambda _e: None)
 
     ledger = tl_module.TradeLedger()
     # Replace the Postgres-sequence id allocator with a monotonic counter.

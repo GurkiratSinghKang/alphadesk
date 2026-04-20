@@ -272,34 +272,6 @@ def load_all(package: str | None = None) -> list[str]:
         # them can pull in pytest fixtures with heavy side effects.
         if ".tests" in name or name.endswith(".tests") or name.endswith(".conftest"):
             continue
-        # Skip the legacy dead-code modules (they import BaseStrategy and have
-        # been flagged for Phase 2 removal). They live directly under the
-        # strategies package and use single-module rather than package layout.
-        # We match on the bare suffix so this works whether we were imported
-        # as ``strategies`` (container) or ``backend.strategies`` (dev).
-        _LEGACY_SUFFIXES = {
-            "momentum_quality",
-            "pead",
-            "vrp_harvest",
-            "earnings_vol",
-            "regime_adaptive",
-            "ts_momentum",
-            "rsi2_reversal",
-            "dual_momentum",
-            "pairs_trading",
-            "kama_breakout",
-            "orb",
-            "vwap_strategy",
-            "plugins",
-        }
-        # name is e.g. "strategies.momentum_quality" or
-        # "backend.strategies.momentum_quality". Strip the package prefix
-        # (target) to get the module leaf.
-        if name.startswith(f"{target}."):
-            leaf = name[len(target) + 1 :]
-            # Only match top-level legacy modules, not subpackages.
-            if leaf in _LEGACY_SUFFIXES:
-                continue
         try:
             importlib.import_module(name)
             imported.append(name)

@@ -287,80 +287,6 @@ def calendar_of(ctx: "Context") -> Any:
 # because of the re-export at the top of this file.
 
 
-# --------------------------------------------------------------------------- #
-# Legacy BaseStrategy (Phase 2 will delete this together with the dead         #
-# ``momentum_quality.py`` / ``pead.py`` / ... modules that still import it).  #
-# Do not add new code here -- use the Strategy protocol above for new work.   #
-# --------------------------------------------------------------------------- #
-import logging
-from abc import ABC, abstractmethod
-
-
-class BaseStrategy(ABC):
-    """Legacy ABC used by the 12 dead-code strategy modules in this package.
-
-    This class is retained so importing ``backend.strategies`` does not blow
-    up while Phase 2 is still pending. New strategies should implement the
-    :class:`Strategy` Protocol above instead.
-    """
-
-    name: str = "base"
-    description: str = ""
-    default_timeframe: str = "swing"  # scalp, day, swing, position
-    default_universe: str = "us_liquid"
-    min_iv_rank: float | None = None
-    max_iv_rank: float | None = None
-
-    def __init__(self) -> None:
-        self.logger = logging.getLogger(f"strategy.{self.name}")
-
-    @abstractmethod
-    async def screen(self, universe: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        ...
-
-    @abstractmethod
-    async def analyze(self, symbol: str, data: dict[str, Any]) -> dict[str, Any]:
-        ...
-
-    @abstractmethod
-    async def generate_signal(self, analysis: dict[str, Any]) -> dict[str, Any] | None:
-        ...
-
-    @abstractmethod
-    async def map_to_trade(
-        self, signal: dict[str, Any], portfolio: dict[str, Any]
-    ) -> dict[str, Any]:
-        ...
-
-    @abstractmethod
-    async def manage(
-        self, position: dict[str, Any], market_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        ...
-
-    async def run_full_pipeline(
-        self, universe: list[dict[str, Any]], portfolio: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        candidates = await self.screen(universe)
-        self.logger.info(
-            "Screened %d candidates from %d universe",
-            len(candidates),
-            len(universe),
-        )
-
-        trades = []
-        for candidate in candidates[:10]:
-            symbol = candidate.get("ticker", candidate.get("symbol", ""))
-            analysis = await self.analyze(symbol, candidate)
-            signal = await self.generate_signal(analysis)
-            if signal:
-                trade = await self.map_to_trade(signal, portfolio)
-                trades.append(trade)
-
-        self.logger.info("Generated %d trade ideas", len(trades))
-        return trades
-
-
 __all__ = [
     # protocol + meta
     "Strategy",
@@ -377,6 +303,4 @@ __all__ = [
     # helpers
     "cache_of",
     "calendar_of",
-    # legacy (Phase 2 removal)
-    "BaseStrategy",
 ]

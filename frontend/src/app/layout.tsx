@@ -6,8 +6,10 @@ import "./globals.css";
 // iOS/mobile viewport — `viewportFit: "cover"` allows the app to paint under
 // the notch / home-indicator bars; we then pad via env(safe-area-inset-*)
 // in globals.css so text and chrome stay clear of those zones.
-// TODO(design): produce /icon-192.png and /icon-512.png PNGs for the PWA
-//   manifest (frontend/public/manifest.webmanifest). Shipped without icons.
+// /icon-192.png and /icon-512.png (referenced by
+// frontend/public/manifest.webmanifest) are programmatically-generated
+// placeholders — an italic serif α glyph on our gold-frame + ink-panel
+// palette. Replace with designer-produced artwork when the mark lands.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -92,6 +94,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Dark is our SSR default — matches current visual behaviour and avoids
+  // a flash on first paint. Once the client hydrates, <ThemeController>
+  // reads `display.theme` from the preferences store and swaps the class
+  // to "dark" / "light" / the OS preference accordingly.
   return (
     <html
       lang="en"

@@ -1,30 +1,32 @@
-"""Legacy strategies aggregator — kept as empty stub during Phase 1.
+"""Strategies package — decorator-registered strategy subpackages.
 
-The top-level `backend.strategies` package was previously a flat module tree
-with a STRATEGIES dict. Phase 1 is migrating each strategy into its own
-subpackage (e.g. `backend.strategies.rsi2_reversal`) registered via the new
-`backend.strategies.registry` decorator. The legacy flat imports collide with
-the new subpackages (circular import), so the aggregator is emptied here.
+All strategies live in their own subpackage under ``backend/strategies/``
+(e.g. ``backend.strategies.rsi2_reversal``) and register themselves via the
+:mod:`backend.strategies.registry` decorator. The legacy ``BaseStrategy``
+ABC and its single-file strategy modules have been removed — use the
+:class:`backend.strategies.base.Strategy` protocol for new work.
 
-Phase 2 will delete the legacy flat modules entirely. Until then, use the
-registry: `from backend.strategies.registry import get_strategy, load_all`.
+Public lookup:
+
+    from strategies.registry import load_all, get_strategy
+
+    load_all()
+    cls = get_strategy("rsi2_reversal")
 """
 
 from __future__ import annotations
 
 import logging
 
-from strategies.base import BaseStrategy
-
 logger = logging.getLogger("alphadesk.strategies")
 
-STRATEGIES: dict[str, type[BaseStrategy]] = {}
 
+def get_strategy(name: str):
+    """Legacy shim — prefer :func:`backend.strategies.registry.get_strategy`.
 
-def get_strategy(name: str) -> BaseStrategy | None:
-    """Legacy shim — prefer backend.strategies.registry.get_strategy.
-
-    Forwards to the new registry so any remaining callers keep working.
+    Forwards to the registry so any remaining callers keep working. Returns
+    an *instance* (the registry returns the class); kept for the handful of
+    call-sites that still expect the pre-registry behaviour.
     """
 
     try:

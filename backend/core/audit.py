@@ -54,9 +54,17 @@ async def write_audit(
 
     * ``auth.py`` — login / logout / refresh / change_password /
       logout_all / totp_*.
-    * ``trades.py`` — halt_trading / resume_trading / wash_trade_rejected /
-      restricted_symbol_rejected / closing_auction_allowed.
+    * ``trades.py`` — halt_trading / resume_trading / flatten_all /
+      wash_trade_rejected / restricted_symbol_rejected /
+      closing_auction_allowed.
     * ``trading_gate.py`` — live_gate_reject (strategy on denylist, etc.).
+    * ``daily_pipeline.py`` — halt_state_resync (Wave 4P Fix 1 P96):
+      emitted on boot when the durable Postgres halt flag and the
+      Redis cache disagree (e.g. Redis was FLUSHALL-ed, cold restart
+      without AOF/RDB persistence). The cache is rehydrated from the
+      authoritative Postgres row and this audit row records the drift
+      so the operator can trace "why did the halt re-materialise at
+      02:17 UTC?" to the precise boot event.
 
     Parameters
     ----------

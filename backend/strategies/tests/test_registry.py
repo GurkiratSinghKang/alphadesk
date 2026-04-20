@@ -8,7 +8,6 @@ Covers:
 - Idempotent re-registration of the *same* class is a no-op.
 - :func:`load_all` walks subpackages and skips broken ones without failing.
 - The bundled ``buy_and_hold_spy`` smoke strategy registers end-to-end.
-- The legacy ``BaseStrategy`` ABC is still importable (Phase 2 will remove).
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from __future__ import annotations
 import pytest
 
 from strategies.base import (
-    BaseStrategy,
     Strategy,
     StrategyMeta,
     cache_of,
@@ -267,13 +265,6 @@ class TestSurface:
         assert s.symbol == "SPY"
         assert s.target_weight == 1.0
         assert s.order_type is OrderType.MOO
-
-    def test_legacy_base_strategy_still_importable(self):
-        """Phase 2 will delete this, but it must exist until then."""
-
-        from abc import ABC
-
-        assert issubclass(BaseStrategy, ABC)
 
     def test_cache_of_reads_state_field(self):
         from backtest.types import Context

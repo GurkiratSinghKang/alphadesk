@@ -1,0 +1,18 @@
+[Unit]
+Description=Daily AlphaDesk TLS certificate expiry check
+Documentation=file:///opt/alphadesk/backend/scripts/check_cert_expiry.py
+Requires=alphadesk-cert-check.service
+
+[Timer]
+# 03:30 America/New_York — runs before the 04:00 backup and comfortably
+# outside any business-hours maintenance window. Requires systemd >= 252
+# for tz-aware OnCalendar.
+OnCalendar=*-*-* 03:30:00 America/New_York
+# Re-run missed checks (e.g. if the VPS was down when the timer fired).
+Persistent=true
+# Jitter to avoid synchronising with other hourly/daily jobs.
+RandomizedDelaySec=5min
+Unit=alphadesk-cert-check.service
+
+[Install]
+WantedBy=timers.target

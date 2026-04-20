@@ -96,6 +96,47 @@ export default function OrderBar({
   );
   const [stop, setStop] = React.useState<string>(defaults?.stop ?? "");
 
+  // persona-99 #2 — Sell confirmation on mobile. At 375px the Buy/Sell
+  // buttons are shoulder-to-shoulder; a mis-tap on Sell is catastrophic.
+  // Require a second tap within 3s to commit the side switch.
+  const [sellArming, setSellArming] = React.useState(false);
+  const sellArmTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => {
+    if (sellArmTimer.current) clearTimeout(sellArmTimer.current);
+  }, []);
+  const handleSideClick = React.useCallback(
+    (next: OrderSide) => {
+      if (next === "buy") {
+        setSide("buy");
+        setSellArming(false);
+        return;
+      }
+      // Sell path: confirm on the second tap.
+      if (sellArming || side === "sell") {
+        setSide("sell");
+        setSellArming(false);
+        return;
+      }
+      setSellArming(true);
+      if (sellArmTimer.current) clearTimeout(sellArmTimer.current);
+      sellArmTimer.current = setTimeout(() => setSellArming(false), 3000);
+    },
+    [sellArming, side]
+  );
+
+  // persona-99 #3 — scroll Submit into view when Qty gains focus so the iOS
+  // keyboard doesn't hide the confirm affordance. 300ms matches the iOS
+  // keyboard animation so the scroll happens after the viewport settles.
+  const submitButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const handleQtyFocus = React.useCallback(() => {
+    setTimeout(() => {
+      submitButtonRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }, 300);
+  }, []);
+
   // Price / stop fields are meaningful only for certain order types.
   // Gate the inputs so market orders don't ask for a price, and stop
   // orders don't ask for a limit — matches the backend validator added
@@ -166,26 +207,41 @@ export default function OrderBar({
       </Field>
 
       <Field label="Side">
-        <div className="flex gap-1.5 w-full">
+        {/* persona-99 #2 — stack Buy/Sell on separate rows below md with a
+            24px gap, and use solid destructive colour for Sell so the
+            visual cue goes beyond the label. Single-tap Sell arms a
+            confirmation state; second tap commits. Desktop (md+) keeps the
+            inline row with the tinted variants. */}
+        <div className="flex flex-col md:flex-row gap-6 md:gap-1.5 w-full col-span-2 md:col-span-1">
           <Button
             type="button"
-            variant="buy"
+            variant="buy-solid"
             data-active={side === "buy" || undefined}
             aria-pressed={side === "buy"}
-            onClick={() => setSide("buy")}
-            className="min-h-11 min-w-11 md:min-h-9 md:min-w-0 flex-1 md:flex-initial"
+            onClick={() => handleSideClick("buy")}
+            className={cn(
+              "min-h-11 min-w-11 md:min-h-9 md:min-w-0 w-full md:w-auto md:flex-initial",
+              // Desktop falls back to the tinted variant look so we keep
+              // the editorial workstation palette at the desk resolutions.
+              "md:!bg-up-500/10 md:!text-up-500 md:!border-up-500/30",
+              side !== "buy" && "opacity-70"
+            )}
           >
             Buy
           </Button>
           <Button
             type="button"
-            variant="sell"
+            variant="sell-solid"
             data-active={side === "sell" || undefined}
             aria-pressed={side === "sell"}
-            onClick={() => setSide("sell")}
-            className="min-h-11 min-w-11 md:min-h-9 md:min-w-0 flex-1 md:flex-initial"
+            onClick={() => handleSideClick("sell")}
+            className={cn(
+              "min-h-11 min-w-11 md:min-h-9 md:min-w-0 w-full md:w-auto md:flex-initial",
+              "md:!bg-down-500/10 md:!text-down-500 md:!border-down-500/30",
+              side !== "sell" && !sellArming && "opacity-70"
+            )}
           >
-            Sell
+            {sellArming ? "Tap again to confirm" : "Sell"}
           </Button>
         </div>
       </Field>
@@ -211,6 +267,7 @@ export default function OrderBar({
           data-testid="order-bar-qty"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
+          onFocus={handleQtyFocus}
           inputMode="numeric"
           pattern="[0-9]*"
           className="min-w-[90px] w-full h-11 md:h-9"
@@ -278,6 +335,7 @@ export default function OrderBar({
 
       <div className="col-span-2 md:ml-auto md:w-auto flex flex-col items-stretch md:items-end gap-0.5">
         <Button
+          ref={submitButtonRef}
           type="button"
           variant="primary"
           className="w-full md:w-auto min-h-11"

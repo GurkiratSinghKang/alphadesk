@@ -10,11 +10,6 @@ This module now persists to Postgres via SQLAlchemy while keeping the public
 ``TradeLedger`` API surface 100% compatible with the rest of the codebase so
 that callers (pipeline, strategies, routes, etc.) require no changes.
 
-A one-shot, idempotent migration runs on first construction: any existing
-``ledger.json`` is bulk-inserted into the ``trades`` table (preserving the old
-``id`` values via ``ON CONFLICT DO NOTHING``) and the file is renamed to
-``ledger.json.migrated`` so subsequent constructions skip the import.
-
 If the database is unreachable at construction time the ledger falls back to
 an in-memory cache so strategy callers don't crash — this is explicitly a
 degraded mode and a warning is logged. The JSON file is *not* written in
@@ -22,13 +17,10 @@ fallback mode; recovery happens automatically when the DB returns.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
-from threading import Lock as _ThreadLock
 from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
@@ -67,15 +59,6 @@ def _to_decimal(x: Any) -> Decimal:
     if isinstance(x, Decimal):
         return x
     return Decimal(str(x))
-
-LEDGER_PATH = Path(__file__).resolve().parent.parent / "pipeline_logs" / "ledger.json"
-MIGRATED_PATH = LEDGER_PATH.with_suffix(".json.migrated")
-
-# Migration flag — persisted via the filesystem sentinel, guarded in-process so
-# only one thread attempts the migration.
-_migration_lock = _ThreadLock()
-_migration_done = False
-
 
 # ---------------------------------------------------------------------------
 # SQL helpers (sync, psycopg2-compatible driver via SQLAlchemy sync engine)
@@ -207,128 +190,6 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# One-shot JSON -> Postgres migration
-# ---------------------------------------------------------------------------
-
-def _run_migration(engine: Any) -> None:
-    """Read ``ledger.json`` (if present) and bulk-insert into ``trade_ledger``.
-
-    Safe to call repeatedly — ``ON CONFLICT DO NOTHING`` on ``id`` makes
-    re-insertion a no-op. After a successful migration the source file is
-    renamed to ``ledger.json.migrated`` so a second startup skips the read.
-    """
-    global _migration_done
-    with _migration_lock:
-        if _migration_done:
-            return
-        _migration_done = True
-
-        if not LEDGER_PATH.exists():
-            logger.info("TradeLedger: no legacy ledger.json found, skipping migration")
-            return
-
-        try:
-            raw = LEDGER_PATH.read_text(encoding="utf-8")
-        except Exception as exc:
-            logger.error("TradeLedger: could not read %s: %s", LEDGER_PATH, exc)
-            return
-
-        try:
-            payload = json.loads(raw)
-        except Exception as exc:
-            logger.error("TradeLedger: %s is corrupt, migration aborted: %s", LEDGER_PATH, exc)
-            return
-
-        trades = payload.get("trades") or []
-        if not trades:
-            logger.info("TradeLedger: ledger.json has no trades, marking migrated")
-            try:
-                LEDGER_PATH.replace(MIGRATED_PATH)
-            except Exception:
-                logger.warning(
-                    "TradeLedger: failed to rename %s -> %s",
-                    LEDGER_PATH, MIGRATED_PATH, exc_info=True,
-                )
-            return
-
-        inserted = 0
-        with engine.begin() as conn:
-            for t in trades:
-                try:
-                    legacy_side = str(t.get("side") or "long").lower()
-                    if legacy_side not in {"long", "short"}:
-                        legacy_side = (
-                            "short"
-                            if legacy_side in {"sell", "s"}
-                            else "long"
-                        )
-                    conn.execute(
-                        _text(
-                            """
-                            INSERT INTO trade_ledger (
-                                id, symbol, shares, entry_price, entry_time,
-                                stop_loss, take_profit, conviction, rationale,
-                                strategy, status, exit_price, exit_time,
-                                exit_reason, pnl, pnl_pct, side
-                            )
-                            VALUES (
-                                :id, :symbol, :shares, :entry_price, :entry_time,
-                                :stop_loss, :take_profit, :conviction, :rationale,
-                                :strategy, :status, :exit_price, :exit_time,
-                                :exit_reason, :pnl, :pnl_pct, :side
-                            )
-                            ON CONFLICT (id) DO NOTHING
-                            """
-                        ),
-                        {
-                            "id": t.get("id"),
-                            "symbol": t.get("symbol"),
-                            "shares": int(t.get("shares") or 0),
-                            "entry_price": t.get("entry_price"),
-                            "entry_time": t.get("entry_time")
-                            or datetime.now(timezone.utc).isoformat(),
-                            "stop_loss": t.get("stop_loss"),
-                            "take_profit": t.get("take_profit"),
-                            "conviction": t.get("conviction") or 0,
-                            "rationale": t.get("rationale"),
-                            "strategy": t.get("strategy") or "claude_alpha",
-                            "status": t.get("status") or "open",
-                            "exit_price": t.get("exit_price"),
-                            "exit_time": t.get("exit_time"),
-                            "exit_reason": t.get("exit_reason"),
-                            "pnl": t.get("pnl"),
-                            "pnl_pct": t.get("pnl_pct"),
-                            "side": legacy_side,
-                        },
-                    )
-                    inserted += 1
-                except Exception as exc:
-                    logger.warning(
-                        "TradeLedger migration: failed to insert id=%s: %s",
-                        t.get("id"), exc,
-                    )
-            # Advance the sequence past the largest migrated id
-            max_id = max((t.get("id") or 0 for t in trades), default=0)
-            if max_id > 0:
-                try:
-                    conn.execute(
-                        _text("SELECT setval('trade_ledger_id_seq', :v, true)"),
-                        {"v": max_id},
-                    )
-                except Exception as exc:
-                    logger.warning("TradeLedger migration: setval failed: %s", exc)
-
-        logger.info(
-            "TradeLedger: migrated %d/%d trades from %s -> %s",
-            inserted, len(trades), LEDGER_PATH, MIGRATED_PATH,
-        )
-        try:
-            LEDGER_PATH.replace(MIGRATED_PATH)
-        except Exception as exc:
-            logger.warning("TradeLedger: could not rename ledger.json after migration: %s", exc)
-
-
-# ---------------------------------------------------------------------------
 # TradeLedger — stable public API backed by Postgres
 # ---------------------------------------------------------------------------
 
@@ -370,9 +231,8 @@ class TradeLedger:
         if self._engine is not None:
             try:
                 _ensure_schema(self._engine)
-                _run_migration(self._engine)
             except Exception as exc:
-                logger.warning("TradeLedger: schema/migration failure: %s", exc)
+                logger.warning("TradeLedger: schema failure: %s", exc)
         # Legacy compatibility for callers that poke at ledger._data["trades"]
         self._data: Any = _LegacyDataView(self)
 

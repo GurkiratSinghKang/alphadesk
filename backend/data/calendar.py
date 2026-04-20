@@ -102,6 +102,53 @@ class USMarketCalendar:
         return self._cal.schedule(start_date=start, end_date=end)
 
 
+# ---------------------------------------------------------------------- #
+# Module-level convenience wrappers                                      #
+# ---------------------------------------------------------------------- #
+# Wave 4R: the scheduler and daily-pipeline callers reach for simple
+# module-level helpers rather than threading a class instance through every
+# layer. All of them delegate to a single shared :class:`USMarketCalendar`
+# so the schedule cache is shared across callers.
+
+_DEFAULT_CALENDAR: USMarketCalendar | None = None
+
+
+def _default() -> USMarketCalendar:
+    """Return the module-level singleton calendar (lazy)."""
+    global _DEFAULT_CALENDAR
+    if _DEFAULT_CALENDAR is None:
+        _DEFAULT_CALENDAR = USMarketCalendar()
+    return _DEFAULT_CALENDAR
+
+
+def is_trading_day(d: date | datetime | str) -> bool:
+    """True if ``d`` is a regular or half-day trading session."""
+    return _default().is_trading_day(d)
+
+
+def market_open(d: date | datetime | str) -> datetime:
+    """Return UTC-aware session open for ``d``.
+
+    Raises :class:`ValueError` if ``d`` is not a trading day.
+    """
+    open_utc, _ = _default().session_hours(d)
+    return open_utc
+
+
+def market_close(d: date | datetime | str) -> datetime:
+    """Return UTC-aware session close for ``d`` (half-days return 13:00 ET).
+
+    Raises :class:`ValueError` if ``d`` is not a trading day.
+    """
+    _, close_utc = _default().session_hours(d)
+    return close_utc
+
+
+def is_early_close(d: date | datetime | str) -> bool:
+    """True if ``d`` has an early close (e.g. half-day)."""
+    return _default().is_early_close(d)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     cal = USMarketCalendar()

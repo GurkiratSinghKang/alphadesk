@@ -239,31 +239,58 @@ def _in_window(target: dt_time, window_minutes: int = 5) -> bool:
     return target <= now <= end_time
 
 
-def _close_window_target(today: date) -> dt_time:
-    """Return the ET time to fire close-window strategies today.
+# Minutes-before-close offsets for each window-that-anchors-to-the-bell.
+# These are the REGULAR-day offsets relative to a 16:00 ET close:
+#   close:   15:30 -> 30 min before close
+#   weekly:  15:30 -> 30 min before close
+#   monthly: 15:55 ->  5 min before close
+# Wave 4R fix: on half-days the market closes at 13:00 ET so the hard-coded
+# WINDOWS["monthly"]=15:55 fires against a market that already closed two
+# hours earlier — Alpaca rejects the MOC orders. Instead, every bell-anchored
+# window derives its target from the day's actual close time.
+_WINDOW_CLOSE_OFFSETS_MIN: dict[str, int] = {
+    "close": 30,
+    "weekly": 30,
+    "monthly": 5,
+}
 
-    On regular session days the window fires at 15:30 ET (30 min before
-    16:00 close). On half-days the close is 13:00 ET and the window
-    shifts to 12:30 ET so MOC entries still land before the bell rather
-    than against a market that closed two hours earlier. See
-    edge-cases-audit-r3.md A/P1 "Early-close days".
+
+def _close_window_target(today: date, window_name: str = "close") -> dt_time:
+    """Return the ET time to fire a bell-anchored window on ``today``.
+
+    Delegates to :func:`data.calendar.market_close` so half-days / early
+    closes are respected without maintaining a duplicate holiday table here.
+    For ``window_name="close"`` the window fires 30 minutes before the
+    actual close (12:30 ET on a half-day, 15:30 ET on a regular day).
+    For ``"monthly"`` it fires 5 minutes before — 12:55 ET / 15:55 ET.
+    For ``"weekly"`` it mirrors ``close``.
+
+    If ``today`` is not a trading day or the calendar lookup fails, falls
+    back to the static ``WINDOWS`` entry so the scheduler still has a
+    defined target (the outer loop already guards on ``_is_trading_day``,
+    so falling back is belt-and-braces).
     """
-    default = WINDOWS["close"]
+    default = WINDOWS.get(window_name, WINDOWS["close"])
     try:
-        if not _CAL.is_trading_day(today) or not _CAL.is_early_close(today):
+        if not _CAL.is_trading_day(today):
             return default
-        _, close_utc = _CAL.session_hours(today)
+        from data.calendar import market_close as _market_close
+
+        close_utc = _market_close(today)
         close_et = close_utc.astimezone(ET)
-        # 30 minutes before the early close, same offset as the default.
+        offset = _WINDOW_CLOSE_OFFSETS_MIN.get(window_name, 30)
         shifted = (
             datetime.combine(today, dt_time(close_et.hour, close_et.minute))
-            - timedelta(minutes=30)
+            - timedelta(minutes=offset)
         ).time()
         return shifted
     except Exception:
         # If anything goes sideways in calendar lookup, fall back to the
         # hard-coded default rather than skipping the window entirely.
-        logger.warning("Could not compute early-close window for %s; using default", today)
+        logger.warning(
+            "Could not compute %s window target for %s; using default",
+            window_name, today,
+        )
         return default
 
 
@@ -341,7 +368,8 @@ async def _scheduler_loop() -> None:
                 await _run_window("midday", MIDDAY_STRATEGIES, state, cache_set)
 
             # ── Close window (3:30 PM regular / 12:30 PM on half-days) ──
-            close_target = _close_window_target(datetime.now(ET).date())
+            today_et = datetime.now(ET).date()
+            close_target = _close_window_target(today_et, "close")
             if _in_window(close_target):
                 await _run_window("close", CLOSE_STRATEGIES, state, cache_set)
 
@@ -355,12 +383,23 @@ async def _scheduler_loop() -> None:
                     except Exception:
                         logger.exception("Position check failed")
 
-                # Weekly (Friday): regime + pairs refresh
+                # Weekly (Friday): regime + pairs refresh — same bell-anchored
+                # offset as ``close``, so it picks up the half-day shift too.
                 if _is_friday():
-                    await _run_window("weekly", WEEKLY_STRATEGIES, state, cache_set)
+                    weekly_target = _close_window_target(today_et, "weekly")
+                    # ``weekly`` currently shares the close window's offset, so
+                    # _in_window(close_target) already covered it; keep the
+                    # explicit check for clarity and so the two offsets can
+                    # diverge without subtle breakage.
+                    if _in_window(weekly_target):
+                        await _run_window("weekly", WEEKLY_STRATEGIES, state, cache_set)
 
-            # ── Monthly rebalance (3:55 PM, last trading day) ──
-            if _in_window(WINDOWS["monthly"]) and _is_last_trading_day():
+            # ── Monthly rebalance (last trading day) ──
+            # 5 min before the bell — 15:55 ET regular, 12:55 ET half-day.
+            # Wave 4R: previously fired at WINDOWS["monthly"]=15:55 regardless
+            # of early close, against a market that closed at 13:00 ET.
+            monthly_target = _close_window_target(today_et, "monthly")
+            if _in_window(monthly_target) and _is_last_trading_day():
                 await _run_window("monthly", MONTHLY_STRATEGIES, state, cache_set)
 
             await asyncio.sleep(30)

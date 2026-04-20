@@ -81,6 +81,85 @@ _EVENT_TO_STATUS: dict[str, str] = {
 }
 
 
+async def _compute_trade_kind(
+    *, symbol: str, side: str, filled_qty: float, pre_fill_qty: float | None,
+) -> str | None:
+    """Classify a fill as ``long_open`` / ``long_close`` / ``short_open`` / ``short_close``.
+
+    Wave 4P Fix 3 (P97) — the pre-fill position qty determines whether
+    this fill OPENS or CLOSES a position:
+
+        pre-fill qty > 0 (long)  + buy   → ``long_open``   (adding to long)
+        pre-fill qty > 0 (long)  + sell  → ``long_close``  (trimming / exit)
+        pre-fill qty < 0 (short) + sell  → ``short_open``  (adding to short)
+        pre-fill qty < 0 (short) + buy   → ``short_close`` (cover / exit)
+        pre-fill qty == 0 (flat) + buy   → ``long_open``
+        pre-fill qty == 0 (flat) + sell  → ``short_open``
+
+    Returns None when ``pre_fill_qty`` is None (broker lookup failed)
+    so the Trade row keeps a None trade_kind rather than a fabricated
+    one.
+    """
+    if pre_fill_qty is None:
+        return None
+    s = (side or "").lower()
+    if pre_fill_qty > 0:
+        return "long_open" if s == "buy" else "long_close"
+    if pre_fill_qty < 0:
+        return "short_open" if s == "sell" else "short_close"
+    return "long_open" if s == "buy" else "short_open"
+
+
+async def _fetch_pre_fill_qty(
+    symbol: str, filled_qty: float, side: str,
+) -> float | None:
+    """Return the pre-fill position qty for ``symbol``.
+
+    Wave 4P Fix 3 (P97) — we need the qty AT THE INSTANT the fill
+    event was emitted, but Alpaca's ``/v2/positions`` returns the
+    CURRENT qty (post-fill).  Reconstruct pre-fill by subtracting the
+    ``filled_qty`` with the correct sign:
+
+        post_fill_qty = pre_fill_qty + signed_fill_delta
+        signed_fill_delta = +filled_qty for buy, -filled_qty for sell
+        → pre_fill_qty    = post_fill_qty - signed_fill_delta
+
+    Returns None on broker lookup failure.
+    """
+    try:
+        from core.config import settings
+        import httpx
+        headers = {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions/{symbol}",
+                headers=headers,
+            )
+            if resp.status_code == 404:
+                post_qty = 0.0
+            elif resp.status_code == 200:
+                body = resp.json() or {}
+                raw_qty = body.get("qty")
+                try:
+                    post_qty = float(raw_qty) if raw_qty is not None else 0.0
+                except (TypeError, ValueError):
+                    return None
+            else:
+                return None
+        s = (side or "").lower()
+        signed_delta = filled_qty if s == "buy" else -filled_qty
+        return post_qty - signed_delta
+    except Exception:
+        logger.debug(
+            "fill_reconciler: pre-fill qty lookup failed for %s",
+            symbol, exc_info=True,
+        )
+        return None
+
+
 def _resolve_account_env() -> str:
     """Return ``'paper'`` | ``'live'`` | ``'backtest'``.
 
@@ -354,6 +433,46 @@ async def _apply_event(event: dict[str, Any]) -> None:
                 # path is a safety net for reconciled rows.
                 if not trade.account_env or trade.account_env == "paper":
                     trade.account_env = account_env
+
+                # Wave 4P Fix 3 (P97): position-aware trade_kind.
+                # Only stamp for genuine fill events (not cancels /
+                # rejects / expires) AND only when not already set —
+                # the submit path may have pre-classified at order
+                # time.  Skipping these states keeps us from clobbering
+                # a pre-filled classification with a "nothing happened"
+                # no-op.
+                #
+                # ``getattr(..., "trade_kind", None)`` tolerates legacy
+                # ORM classes and test SimpleNamespace rows that
+                # predate the column.  Writing the attribute via
+                # ``setattr`` below is also tolerant — if the row has
+                # no such slot (pre-migration fixture) we silently skip.
+                if (
+                    event_name in ("fill", "partial_fill")
+                    and getattr(trade, "trade_kind", None) is None
+                ):
+                    try:
+                        filled_qty_raw = (
+                            order.get("filled_qty") or event.get("filled_qty") or 0
+                        )
+                        filled_qty = float(filled_qty_raw or 0)
+                    except (TypeError, ValueError):
+                        filled_qty = 0.0
+                    symbol_for_kind = (
+                        event.get("symbol")
+                        or order.get("symbol")
+                        or trade.symbol
+                    )
+                    if symbol_for_kind and filled_qty > 0 and side in ("buy", "sell"):
+                        pre_fill_qty = await _fetch_pre_fill_qty(
+                            symbol_for_kind, filled_qty, side,
+                        )
+                        trade.trade_kind = await _compute_trade_kind(
+                            symbol=symbol_for_kind,
+                            side=side,
+                            filled_qty=filled_qty,
+                            pre_fill_qty=pre_fill_qty,
+                        )
 
                 # Wave 2G — persona-85 gaps 1, 2, 10: stamp the
                 # execution-quality columns. Each is independently nullable

@@ -1,6 +1,17 @@
+"use client";
+
 import * as React from "react";
+import { Menu as MenuIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 /**
  * DeskLayout (Layer 3 shell)
@@ -17,6 +28,15 @@ import { cn } from "@/lib/utils";
  *   - parent (page) wires stores/queries and shapes props for composites,
  *   - composites carry styling for their cells,
  *   - this shell only guarantees the grid matches the kit.
+ *
+ * Mobile rail access (persona-99, Wave 4S)
+ * ───────────────────────────────────────
+ * Below the md breakpoint the left rail is display:none to free the viewport
+ * for chart + order ticket. Without an alternative, mobile users can't
+ * switch strategies. We render a hamburger trigger overlaid on the 38px
+ * ContextBar strip (mobile-only) that opens a left-side drawer containing
+ * the same `rail` node. Desktop (md+) keeps the inline rail unchanged —
+ * the trigger is hidden via `md:hidden`.
  */
 export interface DeskLayoutProps {
   /** 48px strip — TopBar composite goes here. */
@@ -43,6 +63,26 @@ export default function DeskLayout({
   statusBar,
   className,
 }: DeskLayoutProps) {
+  const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
+
+  // Close the drawer automatically when the user selects a row in the rail.
+  // StrategyRail doesn't know whether its host is a drawer or an inline
+  // aside, so we intercept clicks inside the drawer body and close when the
+  // click originated on a row button. Header buttons (e.g. the Sheet close
+  // button) live outside the rail container, so they don't retrigger this.
+  const handleDrawerClick = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // Rail rows are rendered inside `<aside data-slot="strategy-rail"> ul li button`.
+      const button = target.closest("button");
+      if (!button) return;
+      const rail = button.closest('[data-slot="strategy-rail"]');
+      if (rail) setMobileRailOpen(false);
+    },
+    []
+  );
+
   return (
     <div
       data-slot="desk-layout"
@@ -55,7 +95,44 @@ export default function DeskLayout({
       )}
     >
       {topBar}
-      {contextBar}
+
+      {/* The contextBar cell carries a mobile-only hamburger overlay in the
+          left gutter. We wrap the caller-provided context bar with a relative
+          positioning context, then absolute-position the trigger on top. This
+          avoids the trigger affecting desktop layout at all. */}
+      <div className="relative">
+        {contextBar}
+        <Sheet open={mobileRailOpen} onOpenChange={setMobileRailOpen}>
+          <SheetTrigger
+            aria-label="Open strategies menu"
+            className={cn(
+              // Mobile only — desk grid already shows the rail at md+.
+              "md:hidden absolute left-1 top-1/2 -translate-y-1/2 z-20",
+              "inline-flex items-center justify-center",
+              // WCAG 2.5.5: 44×44 tap target.
+              "min-h-11 min-w-11 rounded-sm",
+              "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
+          >
+            <MenuIcon className="h-5 w-5" />
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            data-slot="desk-rail-drawer"
+            className="p-0 flex flex-col"
+            onClickCapture={handleDrawerClick}
+          >
+            <SheetHeader>
+              <SheetTitle>Strategies</SheetTitle>
+              <SheetDescription>
+                Pick a strategy to switch the desk focus.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-auto">{rail}</div>
+          </SheetContent>
+        </Sheet>
+      </div>
 
       {/* Viewport audit r5 #1: at md (768-1023) the previous grid declared
           only 2 columns, so <desk-right> became an orphan that flowed into

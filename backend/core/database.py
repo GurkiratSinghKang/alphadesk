@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from core.config import settings
@@ -142,3 +143,90 @@ async def close_db() -> None:
         _engine = None
         _async_session_factory = None
     logger.info("Database engine disposed")
+
+
+# ---------------------------------------------------------------------------
+# Wave 4R Fix 6 — long-query timeout override
+# ---------------------------------------------------------------------------
+# The engine-wide ``statement_timeout=5000`` (5 s) is deliberately tight so
+# one runaway query can't pin a pooled connection through the 5-s checkout
+# timeout. Long analytic / report queries (quarterly P&L rollups, per-
+# symbol 52-week OHLCV aggregates) legitimately run longer than that and
+# would otherwise fail with ``canceling statement due to statement
+# timeout``. This context manager bumps the Postgres session-level
+# ``statement_timeout`` for the duration of the ``async with`` block and
+# restores it on exit, regardless of whether the block raised.
+#
+# Usage:
+#
+#     from core.database import long_query_timeout, get_db
+#
+#     @router.get("/reports/pnl")
+#     async def pnl_report(db: AsyncSession = Depends(get_db)):
+#         async with long_query_timeout(db, timeout_ms=30_000):
+#             rows = (await db.execute(text("SELECT ..."))).fetchall()
+#         return rows
+#
+# Notes:
+# * The override is scoped to the current session / connection. Because the
+#   pool reuses connections across requests, we MUST reset the GUC on exit
+#   — otherwise the next request that checks out the same connection
+#   inherits the loosened timeout and loses the tight default. We do the
+#   reset in a ``finally`` so it runs on happy path AND on exceptions.
+# * ``LOCAL`` cannot be used outside a transaction; SQLAlchemy's async
+#   session may or may not have one open. We use ``SET`` (session-level)
+#   with an explicit reset — safe in both cases.
+
+
+async def _set_statement_timeout(session: Any, timeout_ms: int) -> None:
+    """Issue ``SET statement_timeout = '<N>ms'`` on the given session."""
+    from sqlalchemy import text
+
+    await session.execute(text(f"SET statement_timeout = '{int(timeout_ms)}ms'"))
+
+
+@asynccontextmanager
+async def long_query_timeout(
+    session: Any, timeout_ms: int = 30_000
+) -> AsyncIterator[Any]:
+    """Temporarily bump ``statement_timeout`` on the given session.
+
+    Yields the same ``session`` so the caller can ``async with
+    long_query_timeout(db) as s:`` if they prefer to read the value back;
+    the no-argument form ``async with long_query_timeout(db): ...`` also
+    works.
+
+    Parameters
+    ----------
+    session:
+        An ``AsyncSession`` bound to the asyncpg-backed engine. The
+        session must already be checked out (i.e. usable); we issue the
+        ``SET`` against it directly.
+    timeout_ms:
+        New statement_timeout in milliseconds.  Default 30_000 (30 s) —
+        well above the slowest legitimate analytic query (~12 s at p99)
+        and short enough that a truly stuck query doesn't hoard the
+        connection forever.
+
+    Behaviour on exit
+    -----------------
+    The session-level ``statement_timeout`` is reset to the engine default
+    (``5000ms``, matching ``_get_engine``'s ``connect_args`` setting) so
+    the next request that re-uses this pooled connection sees the tight
+    default. Reset runs even if the inner block raised.
+    """
+    default_ms = 5000  # Must mirror _get_engine connect_args.
+    try:
+        await _set_statement_timeout(session, timeout_ms)
+        yield session
+    finally:
+        # Always restore, even on exception, so pooled connection reuse is
+        # safe. Swallow reset failures so a DB blip inside the block
+        # doesn't mask the original error.
+        try:
+            await _set_statement_timeout(session, default_ms)
+        except Exception:
+            logger.warning(
+                "long_query_timeout: failed to reset statement_timeout",
+                exc_info=True,
+            )
