@@ -563,7 +563,28 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
     try:
         # Require auth as first message within _WS_AUTH_TIMEOUT_SECONDS
-        from core.auth import decode_token, is_token_revoked
+        from core.auth import (
+            decode_token,
+            get_password_version,
+            get_session_epoch,
+            is_token_revoked,
+        )
+
+        async def _check_pv_epoch(payload: dict, user: str) -> bool:
+            """Mirror require_auth's pv/epoch gates at WS handshake.
+
+            Without this, a token minted before /auth/change-password or
+            /auth/logout-all is accepted on the initial WS connect and keeps
+            streaming portfolio/trade data until the 5-minute revalidator
+            tick catches it. Every authenticated HTTP route rejects the same
+            token immediately; the WS must match or logout-all is toothless
+            against an active socket.
+            """
+            token_pv = int(payload.get("pv", 1))
+            token_epoch = int(payload.get("epoch", 1))
+            current_pv = await get_password_version(user)
+            current_epoch = await get_session_epoch(user)
+            return token_pv >= current_pv and token_epoch >= current_epoch
 
         resolved_user_id = "default"
         try:
@@ -577,6 +598,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     return
                 # Capture username/sub for per-user stream scoping (Wave C).
                 resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                if not await _check_pv_epoch(payload, resolved_user_id):
+                    await ws.close(code=4001, reason="Session invalidated")
+                    return
                 retained_token = cookie_token
                 await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
             else:
@@ -594,6 +618,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await ws.close(code=1008, reason="Token revoked")
                     return
                 resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                if not await _check_pv_epoch(payload, resolved_user_id):
+                    await ws.close(code=4001, reason="Session invalidated")
+                    return
                 retained_token = msg["token"]
                 await ws.send_text(orjson.dumps({"type": "authenticated"}).decode())
         except asyncio.TimeoutError:
