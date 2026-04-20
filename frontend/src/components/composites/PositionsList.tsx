@@ -15,7 +15,15 @@ export interface OrderRow {
   quantity: number;
   limitPrice?: number;
   stopPrice?: number;
-  status: "pending" | "open" | "filled" | "partial" | "cancelled" | "rejected";
+  status:
+    | "pending"
+    | "submitted"
+    | "open"
+    | "filled"
+    | "partial"
+    | "partial_fill"
+    | "cancelled"
+    | "rejected";
   rejectReason?: string;
 }
 
@@ -400,8 +408,14 @@ function orderPriceLabel(o: OrderRow): string {
 // evolve.
 const STATUS_CHIP: Record<OrderRow["status"], string> = {
   pending: "bg-bg-elev-1 text-amber",
+  // "submitted" is what Alpaca / the backend returns after a POST /orders
+  // succeeds but before the broker acknowledges working — UI-wise it's the
+  // same state as "pending" (waiting for the exchange).
+  submitted: "bg-bg-elev-1 text-amber",
   open: "bg-bg-elev-1 text-amber",
   partial: "bg-bg-elev-1 text-amber",
+  // "partial_fill" is the raw Alpaca event name; equivalent to "partial".
+  partial_fill: "bg-bg-elev-1 text-amber",
   filled: "bg-bg-elev-1 text-up-500",
   cancelled: "bg-bg-elev-1 text-fg-muted",
   rejected: "bg-bg-elev-1 text-down-500",
