@@ -47,7 +47,20 @@ export interface Position {
 
 export type OrderSide = "buy" | "sell";
 export type OrderType = "market" | "limit" | "stop" | "stop_limit";
-export type OrderStatus = "pending" | "open" | "filled" | "partial" | "cancelled" | "rejected";
+// Backend emits the full enum from ``backend/api/routes/trades.py:OrderStatus``:
+// ``pending | submitted | open | filled | partial_fill | cancelled | rejected``.
+// "submitted" / "partial_fill" were missing from the FE union, so any
+// widget narrowing on ``status`` (notification toasts, orders table chip)
+// crashed the exhaustive-check branch and rendered the raw string.
+export type OrderStatus =
+  | "pending"
+  | "submitted"
+  | "open"
+  | "filled"
+  | "partial"
+  | "partial_fill"
+  | "cancelled"
+  | "rejected";
 
 export interface OrderLeg {
   symbol: string;

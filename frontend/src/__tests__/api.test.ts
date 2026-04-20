@@ -194,21 +194,21 @@ describe('API Types', () => {
   it('PipelineStatus shape is correct', () => {
     const status: PipelineStatus = {
       running: false,
-      lastRun: '2026-04-09T18:00:00Z',
-      lastResult: 'success',
+      last_run: '2026-04-09T18:00:00Z',
+      last_result: 'success',
     };
     expect(status.running).toBe(false);
-    expect(status.lastRun).toBeTruthy();
+    expect(status.last_run).toBeTruthy();
   });
 
-  it('PipelineStatus allows null lastRun and lastResult', () => {
+  it('PipelineStatus allows null last_run and last_result', () => {
     const status: PipelineStatus = {
       running: true,
-      lastRun: null,
-      lastResult: null,
+      last_run: null,
+      last_result: null,
     };
     expect(status.running).toBe(true);
-    expect(status.lastRun).toBeNull();
+    expect(status.last_run).toBeNull();
   });
 
   it('StrategyPerformance has required fields', () => {
@@ -309,7 +309,7 @@ describe('API Types', () => {
     const resp: ChatResponse = {
       conversation_id: 'conv-abc-123',
       message: 'AAPL is showing strong momentum.',
-      actions_taken: ['analyzed:AAPL'],
+      actions_taken: [{ action: 'analyzed', symbol: 'AAPL' }],
       suggestions: ['Check options chain', 'Review earnings date'],
       timestamp: '2026-04-10T10:00:00Z',
     };

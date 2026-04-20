@@ -1222,12 +1222,12 @@ describe('chatWithAgent', () => {
 
 describe('getPipelineStatus', () => {
   it('returns pipeline status directly', async () => {
-    const payload = { running: false, lastRun: '2026-04-10T18:00:00Z', lastResult: 'success' };
+    const payload = { running: false, last_run: '2026-04-10T18:00:00Z', last_result: 'success' };
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await getPipelineStatus();
     expect(result.running).toBe(false);
-    expect(result.lastRun).toBe('2026-04-10T18:00:00Z');
+    expect(result.last_run).toBe('2026-04-10T18:00:00Z');
   });
 });
 

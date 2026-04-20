@@ -996,7 +996,13 @@ export async function screenStocks(preset?: string, filters?: Record<string, unk
 }
 
 export function getScreenerPresets() {
-  return apiFetch<{ name: string; description: string }[]>(`/api/v1/screener/presets`);
+  // Backend emits ``PresetResponse[]`` (``id, name, filters, created_at``).
+  // ``description`` was a FE-invented field — no handler ever set it. Align
+  // the FE type to the real wire shape so callers rendering preset cards do
+  // not silently surface ``undefined`` as an em-dash.
+  return apiFetch<{ id: number; name: string; filters: unknown[]; created_at: string }[]>(
+    `/api/v1/screener/presets`,
+  );
 }
 
 // ─── Analysis ────────────────────────────────────────────────
@@ -1251,6 +1257,11 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     unrealized_pnl: number;
     unrealized_pnl_pct: number;
     realized_pnl_today: number;
+    // Now emitted by ``backend/api/routes/portfolio.py::PortfolioSummary``
+    // (previously computed but never surfaced, which forced this file to
+    // fall back to ``realized_pnl_today`` and double-count on positions
+    // held across trading days).
+    day_pnl?: number;
     positions_count: number;
     is_demo?: boolean;
     source?: string;
@@ -1487,7 +1498,10 @@ export function getMorningBrief() {
 export interface ChatResponse {
   conversation_id: string;
   message: string;
-  actions_taken: string[];
+  // Backend ``agents.py:ChatResponse.actions_taken`` is
+  // ``list[dict[str, Any]]``. The prior ``string[]`` was wishful — any caller
+  // dereferencing action entries as strings crashed on the .map call.
+  actions_taken: Record<string, unknown>[];
   suggestions: string[];
   timestamp: string;
 }
@@ -1567,8 +1581,17 @@ export function getTradeHistory(limit = 1000) {
 
 export interface PipelineStatus {
   running: boolean;
-  lastRun: string | null;
-  lastResult: string | null;
+  // Backend (``backend/api/routes/pipeline.py:PipelineStatus``) emits
+  // snake_case; the camelCase duplicates here never matched the wire shape
+  // and read as ``undefined`` on every caller. The dashboard page already
+  // reads ``status.last_run`` / ``status.last_result`` directly.
+  last_run: string | null;
+  last_result: string | null;
+  stage?: string | null;
+  progress?: Record<string, number> | null;
+  started_at?: string | null;
+  run_id?: string | null;
+  current_strategy?: string | null;
 }
 
 export interface PipelineScreenedStock {
