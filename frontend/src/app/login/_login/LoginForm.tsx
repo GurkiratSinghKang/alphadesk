@@ -118,6 +118,19 @@ export default function LoginForm() {
     }
   }, []);
 
+  // Manual override: wipe the client-side lockout log so a user whose
+  // localStorage latched `alphadesk.login_failures` (stale state from a
+  // prior session, cross-tab pileup) can recover without DevTools.
+  // The backend still owns the authoritative rate limit — clearing here
+  // just re-enables the Submit button; if the server lockout is still
+  // active the POST will 429 and the user sees the Retry-After message.
+  const handleResetLockout = useCallback(() => {
+    writeFailures([]);
+    setFailures([]);
+    setError("");
+    setNow(Date.now());
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -297,13 +310,23 @@ export default function LoginForm() {
       )}
 
       {locked && (
-        <p
-          role="alert"
-          aria-live="assertive"
-          className="font-mono text-[11.5px] text-down-500"
-        >
-          Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
-        </p>
+        <div className="flex flex-col gap-1.5">
+          <p
+            role="alert"
+            aria-live="assertive"
+            className="font-mono text-[11.5px] text-down-500"
+          >
+            Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
+          </p>
+          <button
+            type="button"
+            onClick={handleResetLockout}
+            className="self-start font-sans text-[10.5px] text-fg-hint underline decoration-fg-hint underline-offset-4 transition-colors hover:text-fg"
+            style={{ letterSpacing: "0.02em" }}
+          >
+            Reset lockout
+          </button>
+        </div>
       )}
 
       {!locked && failCount >= 3 && (
