@@ -839,10 +839,25 @@ async def _run_analysis_pipeline(symbol: str, request: AnalysisRequest) -> list[
                 summary=f"Agent '{agent_name}' not available",
                 timestamp=datetime.now(timezone.utc),
             )
-        result = await agent.run(
-            f"Analyze {symbol} for a {request.timeframe} timeframe trade. "
-            f"Depth: {request.depth}."
-        )
+        # Partial-failure tolerance: one misbehaving agent (Claude timeout,
+        # upstream 5xx, malformed JSON) must NOT take the whole analysis
+        # down. Previously ``asyncio.gather(..., return_exceptions=False)``
+        # propagated the first failure out of the pipeline, which then
+        # cascaded to the demo fallback — six healthy agents masked by
+        # one sick one. Swallow here and surface a degraded placeholder
+        # so the composite score is still meaningful.
+        try:
+            result = await agent.run(
+                f"Analyze {symbol} for a {request.timeframe} timeframe trade. "
+                f"Depth: {request.depth}."
+            )
+        except Exception as exc:
+            logger.warning("Agent %s failed for %s: %s", agent_name, symbol, exc, exc_info=True)
+            return AgentResult(
+                agent=agent_name, score=0, conviction="low",
+                summary=f"Agent '{agent_name}' unavailable: {exc}",
+                timestamp=datetime.now(timezone.utc),
+            )
         return AgentResult(
             agent=agent_name,
             score=result.get("score", 0),

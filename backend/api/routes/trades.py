@@ -2459,20 +2459,36 @@ async def _is_market_open_now() -> bool:
 
 
 async def _fetch_broker_positions(settings) -> list[dict[str, Any]]:
-    """Return the live broker position list.  [] on auth failure."""
+    """Return the live broker position list.  [] on any failure.
+
+    The flatten / halt flows call this twice (pre-close + residual snapshot)
+    and neither caller is wrapped in try/except — a transient network blip
+    or Alpaca 502 would previously propagate as a 500 out of ``/halt``,
+    which is the worst possible time for the endpoint to fall over. Swallow
+    httpx + JSONDecode errors and log so the caller sees an empty list and
+    can proceed with whatever other cleanup it has queued.
+    """
     if _alpaca_keys_empty():
         return []
     headers = {
         "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
     }
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers,
-        )
-        if resp.status_code != 200:
-            return []
-        return list(resp.json() or [])
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers,
+            )
+            if resp.status_code != 200:
+                return []
+            try:
+                return list(resp.json() or [])
+            except Exception:
+                logger.warning("flatten: /v2/positions returned non-JSON body", exc_info=True)
+                return []
+    except Exception:
+        logger.warning("flatten: /v2/positions fetch failed", exc_info=True)
+        return []
 
 
 async def _submit_close_order(
