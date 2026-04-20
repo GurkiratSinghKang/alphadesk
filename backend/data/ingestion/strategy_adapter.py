@@ -389,12 +389,10 @@ class LiveStrategyAdapter(BaseStrategyRunner):
                 continue
             sig = (a.get("signal") or "").lower()
             conv = int(a.get("conviction", 0))
-            if sig not in ("buy", "short") or conv < 50:
-                # The master agent's equity path only supports long entries
-                # and sells; short / option legs are submitted through the
-                # same ``request_trade`` call so the master can decide.
-                if sig != "buy":
-                    continue
+            if sig != "buy":
+                continue
+            if conv < 50:
+                continue
 
             price = a.get("entry_price") or a.get("price", 0)
             if not price or price <= 0:

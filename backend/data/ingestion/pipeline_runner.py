@@ -264,7 +264,10 @@ def _in_window(target: dt_time, window_minutes: int = 5) -> bool:
     now = now_dt.time()
     end_minute = target.minute + window_minutes
     end_hour = target.hour + end_minute // 60
-    end_time = dt_time(min(end_hour, 23), end_minute % 60)
+    if end_hour >= 24:
+        end_time = dt_time(23, 59)
+    else:
+        end_time = dt_time(end_hour, end_minute % 60)
     return target <= now <= end_time
 
 

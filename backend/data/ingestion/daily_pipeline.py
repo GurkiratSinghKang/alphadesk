@@ -1394,10 +1394,21 @@ async def _check_exits(
 
         # Time-based exit: Close positions held > 20 trading days (~28 calendar days)
         if not reason:
-            entry_date = datetime.fromisoformat(trade.get("entry_time", "2026-01-01T00:00:00+00:00"))
-            days_held = (datetime.now(timezone.utc) - entry_date).days
-            if days_held > 28:
-                reason = f"time_exit: held {days_held} days (max 20 trading days)"
+            entry_time_raw = trade.get("entry_time")
+            entry_date: datetime | None = None
+            if isinstance(entry_time_raw, datetime):
+                entry_date = entry_time_raw if entry_time_raw.tzinfo else entry_time_raw.replace(tzinfo=timezone.utc)
+            elif isinstance(entry_time_raw, str) and entry_time_raw:
+                try:
+                    entry_date = datetime.fromisoformat(entry_time_raw.replace("Z", "+00:00"))
+                    if entry_date.tzinfo is None:
+                        entry_date = entry_date.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    entry_date = None
+            if entry_date is not None:
+                days_held = (datetime.now(timezone.utc) - entry_date).days
+                if days_held > 28:
+                    reason = f"time_exit: held {days_held} days (max 20 trading days)"
 
         # Trailing stop: If position is up > 5%, move stop to breakeven + buffer
         if not reason and entry_price > 0 and current_price > entry_price * 1.05:

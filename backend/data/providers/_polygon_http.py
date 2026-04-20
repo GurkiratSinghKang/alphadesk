@@ -80,8 +80,27 @@ class PolygonHTTP:
             if not next_url:
                 return
             next_url = next_url + ("&" if "?" in next_url else "?") + f"apiKey={self._api_key}"
-            r = self._client.get(next_url)
-            if r.status_code != 200:
+            delay = BACKOFF_BASE
+            for attempt in range(MAX_RETRIES):
+                try:
+                    r = self._client.get(next_url)
+                except httpx.TransportError as exc:
+                    if attempt == MAX_RETRIES - 1:
+                        raise
+                    logger.warning("polygon paginate transport error %s; retrying in %.1fs", exc, delay)
+                    _sleep(delay)
+                    delay *= 2
+                    continue
+                if r.status_code == 200:
+                    break
+                if r.status_code == 429 or 500 <= r.status_code < 600:
+                    if attempt == MAX_RETRIES - 1:
+                        r.raise_for_status()
+                    retry_after = float(r.headers.get("Retry-After", delay))
+                    logger.warning("polygon paginate %s; sleep %.1fs", r.status_code, retry_after)
+                    _sleep(retry_after)
+                    delay *= 2
+                    continue
                 r.raise_for_status()
             data = r.json()
 

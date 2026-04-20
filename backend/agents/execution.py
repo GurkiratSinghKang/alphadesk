@@ -268,13 +268,21 @@ Reg NMS, or other US securities regulations.
             return {"success": False, "error": "Invalid spot price"}
 
         # Check buying power
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             headers = {
                 "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
                 "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
             }
             resp = await client.get(f"{settings.ALPACA_BASE_URL}/v2/account", headers=headers)
-            account = resp.json()
+            if resp.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"Alpaca account fetch failed: HTTP {resp.status_code}",
+                }
+            try:
+                account = resp.json()
+            except Exception:
+                return {"success": False, "error": "Alpaca account response not JSON"}
 
         buying_power = float(account.get("buying_power", 0))
         if buying_power < risk_budget:
@@ -360,7 +368,7 @@ Reg NMS, or other US securities regulations.
             }
 
         # Submit order
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 f"{settings.ALPACA_BASE_URL}/v2/orders",
                 headers=headers,

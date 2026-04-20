@@ -109,7 +109,7 @@ async def _check_price_alerts() -> list[dict]:
                 target = trade.get("take_profit", 0)
 
                 # Check proximity to stop (within 2%)
-                if stop and price > 0 and (price - stop) / price < 0.02:
+                if stop and price > 0 and abs(price - stop) / price < 0.02:
                     alerts.append({
                         "symbol": sym, "price": price, "stop": stop,
                         "message": f"{sym} at ${price:.2f} -- approaching stop-loss ${stop:.2f}",
@@ -118,7 +118,7 @@ async def _check_price_alerts() -> list[dict]:
                     logger.warning("PRICE ALERT: %s at $%.2f near stop $%.2f", sym, price, stop)
 
                 # Check proximity to target (within 2%)
-                if target and price > 0 and (target - price) / price < 0.02:
+                if target and price > 0 and abs(target - price) / price < 0.02:
                     alerts.append({
                         "symbol": sym, "price": price, "target": target,
                         "message": f"{sym} at ${price:.2f} -- approaching target ${target:.2f}",

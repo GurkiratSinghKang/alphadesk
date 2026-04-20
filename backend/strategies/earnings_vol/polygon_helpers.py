@@ -172,7 +172,7 @@ def contract_close(
                     _cache_put(_BARS_CACHE, key, val)
                     return val
             except Exception:
-                log.debug("contract_close: failed to parse close for %s %s", contract_id, asof, exc_info=True)
+                log.debug("contract_close: failed to parse close for %s %s", contract, asof, exc_info=True)
     _cache_put(_BARS_CACHE, key, None)
     return None
 
