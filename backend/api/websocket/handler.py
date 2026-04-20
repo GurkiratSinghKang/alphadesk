@@ -54,6 +54,24 @@ _listener_task: asyncio.Task | None = None
 _listener_lock = asyncio.Lock()
 
 
+# Round 7 Fix 1 (P127): connection caps. Without a ceiling on simultaneous
+# WebSocket clients, a malicious actor (or a runaway frontend in reconnect
+# storm) can open 10k sockets and exhaust kernel FDs. The manager rejects
+# registrations once EITHER the total or the per-user budget is exceeded.
+# Defaults sized for our single-VPS deployment — operators who need more
+# can bump ``settings.WS_MAX_TOTAL`` / ``settings.WS_MAX_PER_USER`` via
+# env without a code change. Constants referenced at register-time (not
+# module import) so live settings changes take effect without restart.
+_MAX_WS_CONNECTIONS_TOTAL = 500
+_MAX_WS_CONNECTIONS_PER_USER = 5
+
+# RFC 6455 close code 4008 is reserved for application-specific "policy
+# violation" semantics. We use it specifically for cap rejections so the
+# frontend can distinguish "server is full" (back off + retry later) from
+# "auth failed" (4001 — kick to /login).
+_WS_POLICY_VIOLATION_CLOSE_CODE = 4008
+
+
 class ConnectionManager:
     """Manages WebSocket connections and channel subscriptions.
 
@@ -80,18 +98,75 @@ class ConnectionManager:
     def active_count(self) -> int:
         return len(self._connections)
 
-    async def register(self, ws: WebSocket, user_id: str = "default") -> None:
+    async def register(self, ws: WebSocket, user_id: str = "default") -> bool:
         """Register an already-accepted WebSocket connection.
 
         ``user_id`` is pinned per-connection so the trade_updates stream
         subscription can address ``trade_updates:{user_id}`` without having
         to re-read the auth token on every subscribe frame.
+
+        Round 7 Fix 1 (P127): enforces two caps ahead of the dict insert.
+        Returns ``True`` on success; ``False`` on rejection (caller is
+        responsible for closing the socket with 4008). We close+return
+        rather than raise so the websocket_endpoint flow stays linear.
+
+        Cap values come from ``settings.WS_MAX_TOTAL`` /
+        ``settings.WS_MAX_PER_USER`` so operators can bump them per
+        deploy without a rebuild. The module-level defaults are used
+        only if settings import fails (defensive — should never trigger
+        in production).
         """
+        # Read caps fresh so env-var overrides take effect without a
+        # restart; fall back to module defaults if settings can't load.
+        try:
+            from core.config import settings
+            max_total = int(getattr(settings, "WS_MAX_TOTAL", _MAX_WS_CONNECTIONS_TOTAL))
+            max_per_user = int(getattr(settings, "WS_MAX_PER_USER", _MAX_WS_CONNECTIONS_PER_USER))
+        except Exception:
+            max_total = _MAX_WS_CONNECTIONS_TOTAL
+            max_per_user = _MAX_WS_CONNECTIONS_PER_USER
+
+        rejection_reason = ""
+        count = 0
         async with self._lock:
-            self._connections[ws] = set()
-            self._user_ids[ws] = user_id
-            count = len(self._connections)
+            total_active = len(self._connections)
+            if total_active >= max_total:
+                logger.warning(
+                    "WS register rejected: server cap reached (%d/%d)",
+                    total_active, max_total,
+                )
+                # Drop the lock before attempting the close so we don't
+                # hold the manager's mutex across a network I/O.
+                rejection_reason = "total"
+            else:
+                # Count this user's current sockets WITHIN the lock so a
+                # concurrent register() for the same user can't race past
+                # the cap. O(N) in total connections but N is bounded by
+                # max_total (≤500) so well under a millisecond.
+                per_user_active = sum(1 for uid in self._user_ids.values() if uid == user_id)
+                if per_user_active >= max_per_user:
+                    logger.warning(
+                        "WS register rejected: per-user cap reached for %s (%d/%d)",
+                        user_id, per_user_active, max_per_user,
+                    )
+                    rejection_reason = "per_user"
+                else:
+                    self._connections[ws] = set()
+                    self._user_ids[ws] = user_id
+                    count = len(self._connections)
+        if rejection_reason:
+            try:
+                await ws.close(
+                    code=_WS_POLICY_VIOLATION_CLOSE_CODE,
+                    reason="policy violation: server cap reached",
+                )
+            except Exception:
+                # Socket may already be dead; rejection is the important
+                # signal, the close is best-effort.
+                logger.debug("WS register: close-after-reject raised", exc_info=True)
+            return False
         logger.info("WebSocket client connected (%d active)", count)
+        return True
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
@@ -530,8 +605,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             await ws.close(code=4001, reason="Auth failed")
             return
 
-        # Auth passed — register connection
-        await manager.register(ws, user_id=resolved_user_id)
+        # Auth passed — register connection. Round 7 Fix 1 (P127): if the
+        # manager rejected us for cap reasons it already sent close 4008;
+        # bail out before starting the listener / revalidator so we don't
+        # spin up background tasks for a connection we just closed.
+        registered = await manager.register(ws, user_id=resolved_user_id)
+        if not registered:
+            return
 
         await _ensure_listener_started()
 

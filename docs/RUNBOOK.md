@@ -127,9 +127,81 @@ docker system df
 docker system prune -f --filter "until=24h"
 ```
 
-Backups live at `/var/lib/alphadesk/backups/`. Retention is 30 days.
-If the prune doesn't recover enough, drop older backups first
-(they've already been rclone'd offsite by nightly `backup.sh`).
+Backups live at `/var/lib/alphadesk/backups/`. Retention policy (set
+in `infrastructure/backup.sh`, Round 7 Fix 5):
+
+| File pattern | Retention | Why |
+| --- | --- | --- |
+| `*.sql.gz` (pg_dump) | 2200 days (~6 years + buffer) | SEC 17a-4 broker-trail. |
+| `redis-aof-*.tgz`    | 30 days | Transient outbox / rate-limit state. |
+
+Override per-stream via `ALPHADESK_PG_BACKUP_RETENTION_DAYS` /
+`ALPHADESK_REDIS_BACKUP_RETENTION_DAYS`. If the prune doesn't recover
+enough, drop older backups first (they've already been rclone'd offsite
+by nightly `backup.sh`).
+
+### Restoring from backup
+
+The counterpart to `backup.sh` is `infrastructure/restore.sh`. It pulls
+a pg_dump archive from the rclone remote (or a local path) and loads
+it into the live TimescaleDB container.
+
+**Caveats before you run anything:**
+
+- **No PITR.** We do not ship WAL archives in this deployment, so the
+  recovery point is the latest nightly dump — worst-case RPO ~24 h. If
+  sub-day recovery is required, set up WAL archiving first; this script
+  will not fake it.
+- **Destructive.** `restore.sh` DROPs and recreates the `alphadesk`
+  database inside the container. Confirm the environment before running.
+- **Redis is NOT restored.** AOF snapshots live next to pg dumps for
+  separate manual recovery. Outbox / rate-limit counters usually aren't
+  worth restoring — the backend replays pending brackets at boot via
+  `replay_pending_brackets()`.
+- **Target container must be running.** The script `docker exec`s into
+  `alphadesk-timescaledb`; if the container isn't up it exits 2.
+
+**Dry-run first:**
+
+```
+/opt/alphadesk/infrastructure/restore.sh --dry-run --latest
+```
+
+**Real run (latest dump from remote):**
+
+```
+/opt/alphadesk/infrastructure/restore.sh --latest
+# prompts "Type 'yes' to continue"
+```
+
+**Specific dump by name (e.g. from an audit timestamp):**
+
+```
+/opt/alphadesk/infrastructure/restore.sh --dump=20251015-030000.sql.gz
+```
+
+**Local-only restore (from a file already on disk):**
+
+```
+/opt/alphadesk/infrastructure/restore.sh --local=/tmp/dump.sql.gz
+```
+
+**After the restore:**
+
+1. Run pending migrations if the dump predates the current code:
+   ```
+   docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
+   ```
+2. Restart the backend so any stale connection pool picks up the
+   rebuilt DB:
+   ```
+   docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml restart backend
+   ```
+3. Verify: `curl -s http://localhost:8000/readyz | jq` — body should
+   show `postgres: ok`.
+4. Halt trading while validating (see [Halt trading](#halt-trading)).
+   Only re-enable after spot-checking portfolio equity, open orders,
+   and recent fills match the pre-disaster state.
 
 ### Strategies firing wrong orders
 

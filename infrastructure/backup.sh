@@ -5,7 +5,13 @@
 #   * Dumps the TimescaleDB Postgres database inside the `alphadesk-timescaledb`
 #     container to /var/lib/alphadesk/backups/<YYYYMMDD-HHMMSS>.sql.gz
 #   * Optionally syncs to the `hetzner-s3` rclone remote if configured.
-#   * Retention: deletes local dumps older than 30 days.
+#   * Retention:
+#       - pg_dump           : 2200 days (≈6 years + buffer) — SEC 17a-4.
+#       - redis-aof-*.tgz   : 30 days — transient outbox / counters.
+#     Override per-stream via ALPHADESK_PG_BACKUP_RETENTION_DAYS and
+#     ALPHADESK_REDIS_BACKUP_RETENTION_DAYS; the legacy
+#     ALPHADESK_BACKUP_RETENTION_DAYS still governs PG retention for
+#     back-compat.
 #
 # Options:
 #   --dry-run      Skip pg_dump / rclone / delete; print what would run.
@@ -25,7 +31,19 @@ CONTAINER_NAME="${ALPHADESK_TIMESCALEDB_CONTAINER:-alphadesk-timescaledb}"
 DB_NAME="${ALPHADESK_DB_NAME:-alphadesk}"
 DB_USER="${ALPHADESK_DB_USER:-alphadesk}"
 REMOTE="${ALPHADESK_BACKUP_REMOTE:-hetzner-s3:alphadesk-backups}"
-RETENTION_DAYS="${ALPHADESK_BACKUP_RETENTION_DAYS:-30}"
+# Round 7 Fix 5 (P130) — Postgres-dump retention honours the SEC 17a-4
+# promise (6 years + buffer) for broker/trading-relevant records. Redis
+# AOF is transient state (outbox, rate-limit counters) and stays on the
+# 30-day budget via REDIS_RETENTION_DAYS below; mixing both in one knob
+# would force an operator to pay 6 years of disk for throwaway state.
+PG_RETENTION_DAYS="${ALPHADESK_PG_BACKUP_RETENTION_DAYS:-2200}"
+REDIS_RETENTION_DAYS="${ALPHADESK_REDIS_BACKUP_RETENTION_DAYS:-30}"
+# Back-compat: the legacy single ALPHADESK_BACKUP_RETENTION_DAYS knob
+# previously governed both. If set, it still overrides PG retention so
+# an operator's existing env doesn't silently change behaviour.
+if [[ -n "${ALPHADESK_BACKUP_RETENTION_DAYS:-}" ]]; then
+    PG_RETENTION_DAYS="$ALPHADESK_BACKUP_RETENTION_DAYS"
+fi
 # Redis AOF source path on the host (see docker-compose.prod.yml redis volume).
 # Redis 7 splits AOF into multiple files (base + incremental + manifest); we
 # tar the whole thing. Older layouts (single appendonly.aof) are handled by
@@ -45,7 +63,7 @@ for arg in "$@"; do
             TEST_DB_URL="${arg#--test-db=}"
             ;;
         -h|--help)
-            sed -n '2,25p' "$0"
+            sed -n '2,32p' "$0"
             exit 0
             ;;
         *)
@@ -142,16 +160,29 @@ else
 fi
 
 # --- retention --------------------------------------------------------------
-log "Pruning local dumps older than ${RETENTION_DAYS} days"
+# Round 7 Fix 5 (P130): split pg-dump retention from redis-aof retention.
+# SEC 17a-4 requires 6 years of trading / order audit trail; pg_dump is the
+# durable backstop if the primary DB is wiped. Redis AOF is transient state
+# (rate-limit counters, bracket outbox) — pointless to keep for years.
+log "Pruning local pg dumps older than ${PG_RETENTION_DAYS} days"
 if [[ -d "$BACKUP_DIR" ]]; then
-    run "find '$BACKUP_DIR' -type f \( -name '*.sql.gz' -o -name 'redis-aof-*.tgz' \) -mtime +${RETENTION_DAYS} -print -delete"
+    run "find '$BACKUP_DIR' -type f -name '*.sql.gz' -mtime +${PG_RETENTION_DAYS} -print -delete"
+fi
+
+log "Pruning local redis aof archives older than ${REDIS_RETENTION_DAYS} days"
+if [[ -d "$BACKUP_DIR" ]]; then
+    run "find '$BACKUP_DIR' -type f -name 'redis-aof-*.tgz' -mtime +${REDIS_RETENTION_DAYS} -print -delete"
 fi
 
 # Matching retention on the remote is best-effort — older rclone versions use
 # --min-age, newer ones use days/hours suffixes. Fall back silently.
+# Split PG vs. Redis on the remote too so the 6-year PG archive is not
+# prematurely deleted by a Redis-tuned retention window.
 if rclone listremotes 2>/dev/null | grep -q "^${REMOTE%%:*}:"; then
-    log "Pruning remote dumps older than ${RETENTION_DAYS}d"
-    run "rclone delete '$REMOTE/daily/' --min-age ${RETENTION_DAYS}d 2>/dev/null || true"
+    log "Pruning remote pg dumps older than ${PG_RETENTION_DAYS}d"
+    run "rclone delete '$REMOTE/daily/' --min-age ${PG_RETENTION_DAYS}d --include '*.sql.gz' 2>/dev/null || true"
+    log "Pruning remote redis aof archives older than ${REDIS_RETENTION_DAYS}d"
+    run "rclone delete '$REMOTE/daily/' --min-age ${REDIS_RETENTION_DAYS}d --include 'redis-aof-*.tgz' 2>/dev/null || true"
 fi
 
 log "Backup complete"

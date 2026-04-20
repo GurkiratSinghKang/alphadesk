@@ -61,7 +61,11 @@ export const useNotificationsStore = create<NotificationsState>()(
                 read: false,
               },
               ...state.notifications,
-            ].slice(0, 200), // keep last 200
+            ].slice(0, 50), // Round 7 Fix 3 (P128) — keep last 50.
+            // Prior value 200 wrote a 200-item array to localStorage on
+            // every single notification (zustand persist fires on every
+            // set), which thrashed Safari's quota and made the bell feel
+            // sluggish. 50 covers "session history" without the IO cost.
           };
         }),
 
@@ -98,10 +102,15 @@ export const useNotificationsStore = create<NotificationsState>()(
         }
         return persistedState as NotificationsState;
       },
-      // Persist the full notifications array — read flag and dedup id
-      // both need to survive a reload; partializing them away would
-      // cause unread badges to ressurect on every refresh.
-      partialize: (state) => ({ notifications: state.notifications }),
+      // Round 7 Fix 3 (P128): persist only the newest 50 items. The
+      // in-memory state is already capped at 50 by the slice() above,
+      // but partialize gives us a belt-and-braces guarantee — an older
+      // client that persisted a 200-item array can't spontaneously
+      // rehydrate with more than 50, and the write cost stays bounded
+      // even if a future code change loosens the in-memory cap.
+      partialize: (state) => ({
+        notifications: state.notifications.slice(0, 50),
+      }),
       skipHydration: true,
     }
   )
@@ -113,8 +122,8 @@ export const useNotificationsStore = create<NotificationsState>()(
 // reflect that — otherwise the unread badge stays stuck. We DO sync the
 // full notifications list because the read flag lives inline on each
 // item; trying to sync only "ids of read items" would require a richer
-// schema. The list is capped at 200 in addNotification, so the storage
-// event payload is bounded.
+// schema. The list is capped at 50 in addNotification (Round 7 Fix 3),
+// so the storage event payload is bounded.
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key !== "alphadesk-notifications") return;

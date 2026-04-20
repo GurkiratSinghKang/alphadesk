@@ -890,6 +890,34 @@ export function ensureTokenRefreshScheduled(): void {
         // correct UX.
         clearInterval(tokenRefreshTimer);
         tokenRefreshTimer = null;
+        // Round 7 Fix 4 (P128): surface a warning banner *before* the
+        // hard-redirect fires on the next 401. The refresh tick runs 1
+        // hour before the 8-hour expiry (see TOKEN_REFRESH_INTERVAL_MS)
+        // so if refresh fails the user has ~60 minutes of usable session
+        // left — plenty of time to save unsaved state if we actually
+        // tell them about it. Prior behaviour: silent redirect on the
+        // next API call, with no warning, losing whatever was in an
+        // unsaved order-ticket / strategy editor.
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(
+              new CustomEvent("alphadesk:session-refresh-failed", {
+                detail: {
+                  // Hint for the banner copy — 5 min is the floor we
+                  // expect to show; actual remaining time depends on
+                  // when refresh was attempted vs. the real expiry
+                  // claim inside the JWT (which the frontend can't
+                  // read because the cookie is HttpOnly).
+                  minutesRemainingHint: 5,
+                  timestamp: Date.now(),
+                },
+              })
+            );
+          } catch {
+            // CustomEvent not supported (extremely old browser) —
+            // nothing to do, fall back to silent redirect on next 401.
+          }
+        }
       }
     }).catch(() => undefined);
   }, TOKEN_REFRESH_INTERVAL_MS);
@@ -1417,11 +1445,21 @@ export interface ChatResponse {
   timestamp: string;
 }
 
-export function chatWithAgent(message: string, symbol?: string, context?: string) {
+export function chatWithAgent(
+  message: string,
+  symbol?: string,
+  context?: string,
+  conversationId?: string,
+) {
+  // Round 7 Fix 6 (P131): pass back the ``conversation_id`` when continuing
+  // a thread so the backend can stitch the new turn onto its cached
+  // history (``conversation:{user}:{id}`` in Redis). On the very first
+  // turn the caller passes undefined and the backend mints a fresh UUID.
   return apiFetch<ChatResponse>(`/api/v1/agents/chat`, {
     method: "POST",
     body: JSON.stringify({
       message,
+      conversation_id: conversationId,
       context: { symbol, extra: context },
     }),
   });

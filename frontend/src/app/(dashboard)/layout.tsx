@@ -9,6 +9,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { WsStatusBanner } from "@/components/layout/WsStatusBanner";
+import { SessionExpiryBanner } from "@/components/layout/SessionExpiryBanner";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
@@ -122,6 +123,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             when wsStatus !== "open". Thin enough (py-1.5) to avoid shifting
             the desk grid noticeably. */}
         <WsStatusBanner />
+        {/* Round 7 Fix 4 (P128): warn the user *before* a silent redirect
+            so they can save unsaved order tickets / strategy drafts.
+            Render only after refresh failure — null on the happy path. */}
+        <SessionExpiryBanner />
         {children}
         <CommandPalette />
         <AICopilot />
@@ -148,6 +153,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* edge-cases-audit-r3 P0 #6 — see desk branch comment above. */}
       <WsStatusBanner />
+      {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
+      <SessionExpiryBanner />
       <TopBar />
       {tickerTapeOn && <TickerTape />}
       <StatusStrip />

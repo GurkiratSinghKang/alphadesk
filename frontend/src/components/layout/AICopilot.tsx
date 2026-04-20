@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { chatWithAgent } from "@/lib/api";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -14,6 +15,38 @@ interface Message {
   content: string;
   suggestions?: string[];
   timestamp: Date;
+}
+
+// Round 7 Fix 6 (P131): persist the last N messages + conversation_id
+// so an accidental refresh (or a session-expiry redirect) doesn't
+// vaporise a long chat thread. 50 matches the backend's per-conversation
+// history cap and keeps the localStorage payload reasonable (~50 * 1KB).
+const AICOPILOT_STORAGE_KEY = "alphadesk.aicopilot";
+const AICOPILOT_MAX_PERSISTED_MESSAGES = 50;
+
+interface PersistedCopilotState {
+  conversationId: string | null;
+  messages: {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    suggestions?: string[];
+    // Dates don't survive JSON.stringify. Round-trip as epoch ms.
+    timestamp: number;
+  }[];
+}
+
+function loadPersistedState(): PersistedCopilotState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = safeGetItem(AICOPILOT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedCopilotState;
+    if (!parsed || !Array.isArray(parsed.messages)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 const QUICK_PROMPTS = [
@@ -41,6 +74,10 @@ function getPageContext(pathname: string, symbol: string): string {
 export function AICopilot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Round 7 Fix 6 (P131): retain the backend conversation_id so every
+  // subsequent /agents/chat call stitches onto the same server-side
+  // history. Null means "start a fresh thread on the next send".
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
@@ -48,6 +85,56 @@ export function AICopilot() {
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Track whether we've finished the initial load so the save effect
+  // doesn't race with the load effect on first mount and write an
+  // empty array over a persisted thread.
+  const hydrated = useRef(false);
+
+  // ── Round 7 Fix 6 (P131): load persisted thread on mount ──
+  useEffect(() => {
+    const persisted = loadPersistedState();
+    if (persisted) {
+      setConversationId(persisted.conversationId ?? null);
+      setMessages(
+        persisted.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          suggestions: m.suggestions,
+          // Dates don't survive JSON; rehydrate from the epoch ms.
+          timestamp: new Date(m.timestamp),
+        })),
+      );
+    }
+    hydrated.current = true;
+  }, []);
+
+  // ── Round 7 Fix 6 (P131): persist messages + conversation_id ──
+  // Save on every change so a hard crash / refresh / tab close doesn't
+  // drop the thread. Cheap — we only persist the most recent N messages
+  // and the payload is bounded.
+  useEffect(() => {
+    if (!hydrated.current) return; // avoid clobbering load-effect on mount
+    if (typeof window === "undefined") return;
+    try {
+      const toPersist: PersistedCopilotState = {
+        conversationId,
+        messages: messages
+          .slice(-AICOPILOT_MAX_PERSISTED_MESSAGES)
+          .map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            suggestions: m.suggestions,
+            timestamp: m.timestamp.getTime(),
+          })),
+      };
+      safeSetItem(AICOPILOT_STORAGE_KEY, JSON.stringify(toPersist));
+    } catch {
+      // quota / serialisation failure — non-fatal, the thread still
+      // lives in React state for the current session.
+    }
+  }, [messages, conversationId]);
 
   // Cmd+J / Ctrl+J to toggle. The local keydown handler covers the case
   // where the user has focus on an INPUT (the global `useKeyboardShortcuts`
@@ -116,7 +203,11 @@ export function AICopilot() {
         const result = await chatWithAgent(
           text.trim(),
           selectedSymbol,
-          contextParts.join(". ")
+          contextParts.join(". "),
+          // Round 7 Fix 6 (P131): pass the stitched conversation_id so
+          // the backend appends to the existing Redis-cached history
+          // instead of spawning a new thread every turn.
+          conversationId ?? undefined,
         );
 
         let content =
@@ -125,6 +216,14 @@ export function AICopilot() {
           "No response";
         if (/error|Error code:/i.test(content)) {
           content = "AI assistant is currently unavailable. Please try again.";
+        }
+
+        // Capture the conversation_id on first-ever response. The backend
+        // echoes the same id on subsequent turns so we can fire-and-
+        // forget after that, but storing every time is cheap and tolerant
+        // of a server-side id rotation.
+        if (result.conversation_id) {
+          setConversationId(result.conversation_id);
         }
 
         const assistantMsg: Message = {
@@ -152,7 +251,14 @@ export function AICopilot() {
         setLoading(false);
       }
     },
-    [loading, pathname, selectedSymbol, summary.equity, summary.positionsCount]
+    [
+      loading,
+      pathname,
+      selectedSymbol,
+      summary.equity,
+      summary.positionsCount,
+      conversationId,
+    ]
   );
 
   const handleSend = useCallback(() => {

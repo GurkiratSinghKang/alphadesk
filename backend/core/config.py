@@ -100,6 +100,30 @@ class Settings(BaseSettings):
     # --- Production ---
     PRODUCTION_ORIGIN: str = ""  # e.g. "https://alphadesk.example.com"
 
+    # --- WebSocket capacity (Round 7 Fix 1 — P127) ---
+    # Hard caps so a burst of 10k clients cannot exhaust kernel FDs. The
+    # ConnectionManager consults these on register() and rejects new
+    # connections with close-code 4008 ("policy violation") once the total
+    # or per-user ceiling is hit. Generous per-user budget — a single
+    # operator runs the desk in 1-3 tabs, 5 leaves headroom for odd
+    # devtools reconnect churn. Total is sized for our current single-VPS
+    # target; bump in env if the deployment footprint grows.
+    WS_MAX_TOTAL: int = 500
+    WS_MAX_PER_USER: int = 5
+
+    # --- Market read-path rate limit (Round 7 Fix 2 — P127) ---
+    # Per-IP request budget for the heavy public-ish market routes
+    # (quotes / snapshot / bars). The backend can't install the
+    # caddy-ratelimit plugin in place, so we do an application-layer cap
+    # keyed on Redis INCR against ``market_rl:{ip}:{minute_bucket}``.
+    # Unauth callers get 10/sec; authed callers get 20/sec to cover
+    # watchlist refresh + chart pans without papering. Fails open on
+    # Redis outage — these are read-only paths, blocking them
+    # indiscriminately would make a Redis blip a full market-data
+    # blackout.
+    MARKET_RL_UNAUTH_PER_MIN: int = 600
+    MARKET_RL_AUTH_PER_MIN: int = 1200
+
     # --- Compliance (Wave 2H — persona 76 P76-7) ---
     # Operator-owned deny-list. Populated either inline (comma-separated) or
     # via a file path. Both sources union together at ``core.compliance``

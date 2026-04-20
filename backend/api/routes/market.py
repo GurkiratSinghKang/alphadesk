@@ -4,15 +4,141 @@ import hashlib
 import logging
 import random
 import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Round 7 Fix 2 (P127) — per-IP rate limit on the heavy public-ish endpoints.
+# ---------------------------------------------------------------------------
+# Caddy cannot install ``caddy-ratelimit`` in our managed build, so we enforce
+# the cap application-side. The three routes below — /quotes, /snapshot,
+# /bars — are the most-scraped market endpoints; /snapshots is the batched
+# variant of /snapshot and gets its own accounting. Rate-limit state lives in
+# Redis under ``market_rl:{ip}:{minute_bucket}`` with a 60s TTL so keys
+# auto-expire; a single INCR per request keeps the hot path cheap.
+#
+# Failure posture: FAIL-OPEN. Read-only routes. A Redis outage that also
+# blocked quotes would turn one infrastructure blip into a full market-data
+# blackout for every user — strictly worse than letting an attacker briefly
+# exceed the limit during a window where the operator is already on pager.
+# Errors are logged so the operator can correlate on post-mortem.
+
+
+def _client_ip(request: Request) -> str:
+    """Extract the client IP for rate-limit keying.
+
+    Honours the trusted-proxy header ``X-Forwarded-For`` set by Caddy (we
+    control the edge so spoofing requires bypassing Caddy). Falls back to
+    the direct connection address — covers tests and the dev-runner path
+    where no proxy is in front of uvicorn.
+
+    Returns the raw first XFF hop; an attacker who spoofs the header
+    at the edge still only shifts their bucket onto whatever IP they
+    lie about, they don't bypass the cap.
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # ``X-Forwarded-For: client, proxy1, proxy2`` — take the first hop.
+        first = xff.split(",", 1)[0].strip()
+        if first:
+            return first
+    if request.client is not None:
+        return request.client.host or "unknown"
+    return "unknown"
+
+
+def _is_authed(request: Request) -> bool:
+    """Best-effort auth-detection for choosing the rate-limit tier.
+
+    The router already enforces auth via ``Depends(require_auth)`` at
+    include-time, so in production ``_is_authed`` is True for every
+    request that reaches the handler. We still branch because the cap
+    semantics differ (authed users are legitimate traffic and should
+    get the larger budget) and because future unauthenticated routes on
+    the same router can reuse this helper.
+    """
+    if request.headers.get("authorization"):
+        return True
+    # HttpOnly cookie set by /auth/login carries the access token.
+    if request.cookies.get("access_token"):
+        return True
+    return False
+
+
+async def _market_rate_limit_or_429(request: Request, response: Response) -> None:
+    """Enforce the per-IP cap; raise 429 on overflow, no-op otherwise.
+
+    Uses a simple fixed-window-per-minute scheme: every request INCRs the
+    key ``market_rl:{ip}:{minute_bucket}`` and the first INCR on a new
+    bucket sets a 60s TTL. Simple, atomic (INCR+EXPIRE inside a pipeline),
+    and cheap enough for every read to pay without noticeable latency.
+
+    Sliding-window precision is not worth the cost for read-only market
+    endpoints — a client that lands right on the boundary may legitimately
+    double their budget for a second, which is acceptable for a
+    DoS-protection (not abuse-accounting) gate.
+    """
+    from core.config import settings
+    from core.redis import get_redis
+
+    try:
+        ip = _client_ip(request)
+        authed = _is_authed(request)
+        cap = int(
+            settings.MARKET_RL_AUTH_PER_MIN
+            if authed
+            else settings.MARKET_RL_UNAUTH_PER_MIN
+        )
+        # 60-second fixed window. Aligning on int(now/60) means every
+        # caller shares a bucket at the same minute boundary, which is
+        # the simplest correct implementation.
+        bucket = int(time.time()) // 60
+        key = f"market_rl:{ip}:{bucket}"
+
+        r = await get_redis()
+        # Pipeline so INCR + EXPIRE are one round-trip. EXPIRE is a no-op
+        # after the first hit on this bucket (TTL already set) but re-
+        # issuing is cheaper than a GET-before-SET branch.
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 60)
+        results = await pipe.execute()
+        current = int(results[0] or 0)
+    except Exception:
+        # Redis outage or unexpected error — fail OPEN (see module docstring).
+        logger.warning("market rate-limit: redis failure, failing open", exc_info=True)
+        return
+
+    if current > cap:
+        # Compute seconds until the current bucket expires so the
+        # Retry-After header is honest (rounded up; bounded to 60s).
+        retry_after = max(1, 60 - (int(time.time()) % 60))
+        # Attach to the response (FastAPI lifts these even on raise).
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limited",
+                "message": "Too many market-data requests. Please slow down.",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+    # Remaining-budget hint for clients that want to back off politely
+    # before they hit the cap. No strict need for this to be exact.
+    try:
+        response.headers["X-RateLimit-Limit"] = str(cap)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, cap - current))
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -305,8 +431,12 @@ def _alpaca_data_headers() -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/quotes/{symbol}", response_model=Quote)
-async def get_quote(symbol: str) -> Quote:
+async def get_quote(symbol: str, request: Request, response: Response) -> Quote:
     """Fetch the latest quote for a given symbol (Polygon -> Alpaca -> demo)."""
+
+    # Round 7 Fix 2 (P127) — per-IP rate-limit. Raises 429 on overflow;
+    # fail-open on Redis error (read-only path, see helper docstring).
+    await _market_rate_limit_or_429(request, response)
 
     # --- 1. Polygon (if key configured) ---
     if not _polygon_key_empty():
@@ -398,12 +528,17 @@ async def get_quote(symbol: str) -> Quote:
 @router.get("/bars/{symbol}", response_model=list[Bar])
 async def get_bars(
     symbol: str,
+    request: Request,
+    response: Response,
     timeframe: Timeframe = Query(Timeframe.DAY, description="Bar timeframe"),
     start: date | None = Query(None, description="Start date (YYYY-MM-DD)"),
     end: date | None = Query(None, description="End date (YYYY-MM-DD)"),
     limit: int = Query(500, ge=1, le=5000),
 ) -> list[Bar]:
     """Fetch OHLCV bars for a symbol over a date range (Polygon -> Alpaca -> demo)."""
+
+    # Round 7 Fix 2 (P127) — per-IP rate-limit (see module helpers).
+    await _market_rate_limit_or_429(request, response)
 
     effective_end = end or date.today()
     effective_start = start or (effective_end - timedelta(days=365))
@@ -551,9 +686,27 @@ async def get_bars(
 
 
 @router.get("/snapshot/{symbol}", response_model=Snapshot)
-async def get_snapshot(symbol: str) -> Snapshot:
+async def get_snapshot(
+    symbol: str,
+    request: Request,
+    response: Response,
+) -> Snapshot:
     """Fetch a full market snapshot for a symbol (Polygon -> Alpaca -> demo)."""
 
+    # Round 7 Fix 2 (P127) — per-IP rate-limit on the public-ish route.
+    await _market_rate_limit_or_429(request, response)
+
+    return await _fetch_snapshot_impl(symbol)
+
+
+async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
+    """Provider-waterfall body of ``get_snapshot`` with no rate-limit gate.
+
+    Round 7 Fix 2 (P127): factored out so the batched ``get_snapshots``
+    per-symbol fallback can reuse the exact same Polygon → Alpaca →
+    demo resolution without double-counting against the caller's
+    rate-limit bucket (the batch endpoint has already been accounted for).
+    """
     # --- 1. Polygon ---
     if not _polygon_key_empty():
         try:
@@ -871,7 +1024,7 @@ async def get_snapshots(
     missing = [s for s in symbol_list if s not in results]
     for sym in missing:
         try:
-            results[sym] = await get_snapshot(sym)
+            results[sym] = await _fetch_snapshot_impl(sym)
         except HTTPException:
             # 404 on an unknown symbol — just omit it from the batch reply
             # rather than sinking the entire request.
