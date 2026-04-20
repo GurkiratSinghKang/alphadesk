@@ -90,7 +90,7 @@ export default function TradePage() {
         const orders = await getOrders();
         if (!cancelled) setRecentOrders(orders.slice(0, 10));
       } catch {
-        if (!cancelled) setRecentOrders([]);
+        /* keep last-known orders on transient fetch failures */
       }
     }
     fetchRecent();

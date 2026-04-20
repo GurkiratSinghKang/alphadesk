@@ -120,7 +120,7 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             id="alert-symbol"
             type="text"
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
+            onChange={(e) => { setSymbol(e.target.value); if (fieldError) setFieldError(null); }}
             placeholder="AAPL"
             // BUG-042 — cap symbol length + hint the pattern so browsers
             // with pattern-validation UI can preempt bogus input (XSS
@@ -185,7 +185,7 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             id="alert-price"
             type="number"
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            onChange={(e) => { setPrice(e.target.value); if (fieldError) setFieldError(null); }}
             placeholder="150.00"
             step={0.01}
             // BUG-042 — `min={0}` allowed 0; require strictly positive.

@@ -331,19 +331,22 @@ export default function PipelinePage() {
       // request → AVGO +$275 / +$375 / +$284 across tabs.
       if (bp.status === "fulfilled") {
         usePortfolioStore.getState().setPositions(bp.value);
-        setBrokerPositions(bp.value.map(pos => ({
-          symbol: pos.symbol,
-          shares: pos.quantity,
-          entryPrice: pos.avgCost,
-          currentPrice: pos.currentPrice,
-          pnl: pos.unrealizedPnl,
-          pnlPct: pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost * 100) : 0,
-          stopLoss: null,
-          takeProfit: null,
-          entryDate: "",
-          signal: "hold",
-          rationale: "",
-        })));
+        setBrokerPositions(bp.value.map(pos => {
+          const sideSign = pos.side === "short" ? -1 : 1;
+          return {
+            symbol: pos.symbol,
+            shares: pos.quantity,
+            entryPrice: pos.avgCost,
+            currentPrice: pos.currentPrice,
+            pnl: pos.unrealizedPnl,
+            pnlPct: pos.avgCost > 0 ? ((pos.currentPrice - pos.avgCost) / pos.avgCost * 100) * sideSign : 0,
+            stopLoss: null,
+            takeProfit: null,
+            entryDate: "",
+            signal: "hold",
+            rationale: "",
+          };
+        }));
       }
       if (h.status === "fulfilled") setHistory(Array.isArray(h.value) ? h.value.slice(0, 7) : []);
 
