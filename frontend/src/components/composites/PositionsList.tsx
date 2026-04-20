@@ -15,7 +15,7 @@ export interface OrderRow {
   quantity: number;
   limitPrice?: number;
   stopPrice?: number;
-  status: "pending" | "filled" | "partial" | "cancelled" | "rejected";
+  status: "pending" | "open" | "filled" | "partial" | "cancelled" | "rejected";
   rejectReason?: string;
 }
 
@@ -400,6 +400,7 @@ function orderPriceLabel(o: OrderRow): string {
 // evolve.
 const STATUS_CHIP: Record<OrderRow["status"], string> = {
   pending: "bg-bg-elev-1 text-amber",
+  open: "bg-bg-elev-1 text-amber",
   partial: "bg-bg-elev-1 text-amber",
   filled: "bg-bg-elev-1 text-up-500",
   cancelled: "bg-bg-elev-1 text-fg-muted",

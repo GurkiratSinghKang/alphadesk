@@ -47,7 +47,7 @@ export interface Position {
 
 export type OrderSide = "buy" | "sell";
 export type OrderType = "market" | "limit" | "stop" | "stop_limit";
-export type OrderStatus = "pending" | "filled" | "partial" | "cancelled" | "rejected";
+export type OrderStatus = "pending" | "open" | "filled" | "partial" | "cancelled" | "rejected";
 
 export interface OrderLeg {
   symbol: string;
