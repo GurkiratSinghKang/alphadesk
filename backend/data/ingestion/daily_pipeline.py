@@ -143,11 +143,17 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
 _HALT_REDIS_KEY = "trading:halted"
 
 # Wave C (persona 74 P0 #3): bound the Redis halt-check so a wedged Redis
-# connection can't stall the order path indefinitely. 0.5s is generous for
-# a local Redis (typical round-trip is <5ms) but short enough that an
-# operator pressing the panic button during a Redis incident still gets a
-# fail-closed response within sub-second latency.
-_HALT_CHECK_TIMEOUT_SECONDS = 0.5
+# connection can't stall the order path indefinitely.
+#
+# 2026-04-20 — raised from 0.5s to 2.0s. In production, 0.5s was being hit
+# under load (~5 timeouts/hour on the master-agent loop) because the Redis
+# call can coincide with a cold-connection handshake or a brief event-loop
+# pause from another awaitable. Every timeout caused fail-closed HALTED,
+# which cascaded into "Strategy X skipped" for every strategy in that
+# pipeline tick — i.e. the bot stopped trading for ~30 min per false
+# positive. 2s is still well under the pipeline stage budget and still
+# sub-second-plus-headroom for a real panic-button press.
+_HALT_CHECK_TIMEOUT_SECONDS = 2.0
 
 
 async def _is_trading_halted() -> bool:
