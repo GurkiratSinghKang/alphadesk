@@ -12,3 +12,17 @@ if (typeof Element !== 'undefined' && !('animate' in Element.prototype)) {
     finish() {},
   });
 }
+
+// 2026-04-20 dashboard redesign: ChartPane → TradingChart attaches a
+// ResizeObserver so the canvas resizes with its container. jsdom has no
+// RO — tests that mount the chart (PriceChartPanel, ChartPane) crashed
+// with `ResizeObserver is not defined` until this polyfill was added at
+// global setup level. The shim in setup-mocks.ts only loads for tests
+// that explicitly import it; this line is the unconditional fallback.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

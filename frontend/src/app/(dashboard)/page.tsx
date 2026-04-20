@@ -19,15 +19,15 @@ import {
   PositionsList,
   PriceChartPanel,
   StatusBar,
-  StrategyRail,
   TopBar,
+  Watchlist,
   type ChartBar,
   type ChartRange,
   type OrderRow,
   type PositionTab,
   type StagedOrder,
 } from "@/components/composites";
-import { DeskLayout } from "@/components/layouts";
+import { DashboardLayout } from "@/components/layouts";
 // Wave 6α Fix 6 (persona-124 P0): MorningBrief was previously dead code —
 // the component + its `useMorningBrief` query existed but nothing rendered
 // it. Mount in the right-hand column above the Positions list, where the
@@ -45,7 +45,11 @@ import {
 } from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
-import { computeStrategyCounts } from "@/lib/strategiesSummary";
+// `computeStrategyCounts` was used to render a "N / M" pill inside the
+// dashboard's StrategyRail header; the rail is no longer on the
+// dashboard (2026-04-20 redesign — it duplicated `/strategies`). The
+// helper still lives in `@/lib/strategiesSummary` for use on the
+// `/strategies` page header.
 import {
   useIndices,
   useRegime,
@@ -152,12 +156,6 @@ export default function DeskPage() {
   /* ─── Selected strategy for rail highlight + order bar ── */
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
   const strategyOptions = useMemo(() => toStrategyOptions(rail), [rail]);
-  // BUG-009: shared aggregator so desk rail "N / M" agrees with the
-  // /strategies and /reports pages.
-  const counts = useMemo(
-    () => computeStrategyCounts(strategiesResp ?? []),
-    [strategiesResp]
-  );
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>(
     () => rail[0]?.id ?? ""
   );
@@ -508,7 +506,7 @@ export default function DeskPage() {
   );
 
   return (
-    <DeskLayout
+    <DashboardLayout
       topBar={
         <div
           onClickCapture={(e) => {
@@ -519,10 +517,10 @@ export default function DeskPage() {
             }
           }}
         >
-          {/* BUG-022 — WCAG 2.4.6/1.3.1: desk page previously had no <h1>.
+          {/* BUG-022 — WCAG 2.4.6/1.3.1: dashboard previously had no <h1>.
               Visually-hidden heading provides a landmark for AT and
               document-outline tooling without altering the visual design. */}
-          <h1 className="sr-only">Trading desk</h1>
+          <h1 className="sr-only">Trading dashboard</h1>
           <TopBar
             currentRoute="/"
             routes={NAV_ROUTES}
@@ -536,20 +534,6 @@ export default function DeskPage() {
         </div>
       }
       contextBar={<ContextBar cells={contextCells} />}
-      rail={
-        <StrategyRail
-          items={rail}
-          selectedId={selectedStrategyId}
-          onSelect={handleSelectStrategy}
-          // BUG-009: desk rail previously showed "12/13" (active over rail
-          // items), but `/strategies` header showed "20 total" (includes
-          // planned). Feed both from the shared aggregator so the numbers
-          // always agree.
-          countLabel={`${String(counts.active).padStart(2, "0")} / ${String(
-            counts.total
-          ).padStart(2, "0")}`}
-        />
-      }
       center={
         <>
           <PriceChartPanel
@@ -590,11 +574,20 @@ export default function DeskPage() {
       }
       right={
         <>
-          {/* Wave 6α Fix 6: morning brief mount. Self-hides when the
-              data query returns empty / errored (see MorningBrief.tsx),
-              and supports per-day dismiss via localStorage, so the
-              component stays out of the way once the user has seen it. */}
-          <MorningBrief />
+          {/* 2026-04-20 dashboard redesign. Right rail stacks:
+              - Watchlist (fixed height so book can flex below),
+              - PositionsList (flex-1, scrolls internally),
+              - MorningBrief (only rendered when it has content and
+                hasn't been dismissed for the day — self-gates),
+              - AIMemoPanel (pinned footer).
+              The previous dashboard mounted StrategyRail on the LEFT
+              (260px) — removed per owner feedback: it duplicates the
+              `/strategies` page and was eating viewport. Heads-up: the
+              strategies selector still lives inside OrderBar below the
+              chart, so users can attach trades to a strategy. */}
+          <div className="shrink-0 border-b border-border-hair">
+            <Watchlist />
+          </div>
           <div className="flex-1 min-h-0 overflow-auto">
             <PositionsList
               positions={positionRows}
@@ -619,6 +612,7 @@ export default function DeskPage() {
               }}
             />
           </div>
+          <MorningBrief />
           <AIMemoPanel memo={memo} />
         </>
       }

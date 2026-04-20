@@ -3,17 +3,37 @@ import { render } from "@testing-library/react";
 import PriceChartPanel from "@/components/composites/PriceChartPanel";
 
 // Avoid loading the real chart library in the jsdom test runner.
+// 2026-04-20 dashboard redesign: ChartPane (via TradingChart) imports
+// CandlestickSeries / HistogramSeries / AreaSeries markers too, so the
+// mock needs to export those identity sentinels.
 vi.mock("lightweight-charts", () => ({
   createChart: () => ({
-    addSeries: () => ({ setData: () => {}, createPriceLine: () => {} }),
-    timeScale: () => ({ fitContent: () => {} }),
+    addSeries: () => ({
+      setData: () => {},
+      createPriceLine: () => {},
+      update: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      attachPrimitive: () => {},
+      detachPrimitive: () => {},
+    }),
+    timeScale: () => ({
+      fitContent: () => {},
+      subscribeVisibleTimeRangeChange: () => {},
+    }),
+    priceScale: () => ({ applyOptions: () => {} }),
     applyOptions: () => {},
+    subscribeCrosshairMove: () => {},
+    resize: () => {},
     remove: () => {},
   }),
+  CandlestickSeries: "candlestick",
   LineSeries: "line",
+  AreaSeries: "area",
+  HistogramSeries: "histogram",
   ColorType: { Solid: "solid" },
-  LineStyle: { Dotted: 0, Dashed: 1 },
-  CrosshairMode: { Normal: 0 },
+  LineStyle: { Dotted: 0, Dashed: 1, Solid: 2 },
+  CrosshairMode: { Normal: 0, Magnet: 1 },
 }));
 
 describe("PriceChartPanel", () => {

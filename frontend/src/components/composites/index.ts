@@ -42,4 +42,10 @@ export type { EditorialNameplateProps } from "./EditorialNameplate";
 export { default as ClaudeStamp } from "./ClaudeStamp";
 export type { ClaudeStampProps } from "./ClaudeStamp";
 
+// Dashboard redesign 2026-04-20. Watchlist replaces the StrategyRail on
+// `/` — strategies list lives on `/strategies` only. Watchlist also
+// appears on a future `/trade` focused single-symbol view.
+export { default as Watchlist } from "./Watchlist";
+export type { WatchlistProps } from "./Watchlist";
+
 export * from "./types";

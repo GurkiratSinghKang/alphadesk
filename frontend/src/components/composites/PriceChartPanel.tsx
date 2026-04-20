@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import Mono from "@/components/typography/Mono";
+import ChartPane from "@/components/charts/ChartPane";
 import type {
   ChartBar,
   ChartPoint,
@@ -13,6 +14,7 @@ import type {
   Quote,
   RegimeBand,
 } from "./types";
+import type { OHLCVBar } from "@/types";
 
 /**
  * PriceChartPanel (composite)
@@ -356,7 +358,21 @@ export default function PriceChartPanel({
             </span>
           </div>
         ) : (
-          <ChartCanvas series={series} smaSeries={smaSeries} regimeBands={regimeBands} />
+          // 2026-04-20 dashboard redesign: the line-only ChartCanvas is
+          // replaced by ChartPane (candle-default + volume histogram +
+          // chart-type toggle + drawing-tools rail + indicator menu).
+          // ChartCanvas remains exported below for any caller that still
+          // wants the minimal line-only version; the dashboard does not.
+          <ChartPane
+            data={series.map<OHLCVBar>((b) => ({
+              time: b.time,
+              open: b.open,
+              high: b.high,
+              low: b.low,
+              close: b.close,
+              volume: b.volume ?? 0,
+            }))}
+          />
         )}
       </div>
     </section>

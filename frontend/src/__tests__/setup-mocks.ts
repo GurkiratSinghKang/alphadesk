@@ -15,19 +15,50 @@ vi.mock('next/navigation', () => ({
 }));
 
 // ─── Lightweight Charts ────────────────────────────────────
+// v5 switched from `chart.addCandlestickSeries()` to
+// `chart.addSeries(CandlestickSeries, options)`. The markers
+// (CandlestickSeries / LineSeries / AreaSeries / HistogramSeries) are
+// exported as module-level tokens — tests need them present or imports
+// crash with "No X export is defined" the moment a new file pulls any
+// of them in. Keeping the old `addXxxSeries` shims too so we don't have
+// to touch callers that predate the v5 migration.
+const _seriesStub = () => ({
+  setData: vi.fn(),
+  update: vi.fn(),
+  createPriceLine: vi.fn(),
+  removePriceLine: vi.fn(),
+  applyOptions: vi.fn(),
+  priceScale: () => ({ applyOptions: vi.fn() }),
+  attachPrimitive: vi.fn(),
+  detachPrimitive: vi.fn(),
+  priceToCoordinate: vi.fn(() => 0),
+});
 vi.mock('lightweight-charts', () => ({
   createChart: () => ({
-    addCandlestickSeries: () => ({ setData: vi.fn(), update: vi.fn(), createPriceLine: vi.fn(), removePriceLine: vi.fn() }),
-    addLineSeries: () => ({ setData: vi.fn(), update: vi.fn(), createPriceLine: vi.fn(), removePriceLine: vi.fn() }),
-    addAreaSeries: () => ({ setData: vi.fn(), update: vi.fn(), createPriceLine: vi.fn(), removePriceLine: vi.fn() }),
-    addHistogramSeries: () => ({ setData: vi.fn() }),
-    timeScale: () => ({ fitContent: vi.fn(), scrollToRealTime: vi.fn(), subscribeVisibleTimeRangeChange: vi.fn() }),
+    addSeries: () => _seriesStub(),
+    addCandlestickSeries: () => _seriesStub(),
+    addLineSeries: () => _seriesStub(),
+    addAreaSeries: () => _seriesStub(),
+    addHistogramSeries: () => _seriesStub(),
+    timeScale: () => ({
+      fitContent: vi.fn(),
+      scrollToRealTime: vi.fn(),
+      subscribeVisibleTimeRangeChange: vi.fn(),
+      timeToCoordinate: vi.fn(() => 0),
+    }),
     priceScale: () => ({ applyOptions: vi.fn() }),
     applyOptions: vi.fn(),
     subscribeCrosshairMove: vi.fn(),
     resize: vi.fn(),
     remove: vi.fn(),
   }),
+  // v5 series markers — identity sentinels is enough for a mock.
+  CandlestickSeries: 'CandlestickSeries',
+  LineSeries: 'LineSeries',
+  AreaSeries: 'AreaSeries',
+  HistogramSeries: 'HistogramSeries',
+  BaselineSeries: 'BaselineSeries',
+  BarSeries: 'BarSeries',
   ColorType: { Solid: 'Solid', VerticalGradient: 'VerticalGradient' },
   LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
   CrosshairMode: { Normal: 0, Magnet: 1 },
