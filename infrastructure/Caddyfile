@@ -82,13 +82,19 @@
         # entirely — JSON responses and bundled JS files don't need it — and
         # drops ws:// from connect-src so production only tolerates wss://.
         #
-        # `?Content-Security-Policy` uses Caddy's "default" prefix: the
-        # header is set ONLY if the upstream response didn't already set
-        # it. That lets Next's proxy-emitted nonce-based CSP pass through
-        # unchanged for HTML responses while we still cover the non-HTML
-        # paths (API JSON, /livez, /_next/static) with this fallback.
+        # CSP — INCIDENT 2026-04-20 13:43 ET. Wave 3M's nonce-based CSP
+        # via Next.js proxy.ts broke login: prerendered (X-Nextjs-Cache:
+        # HIT) HTML pages contain inline scripts whose nonce is baked in
+        # at build time; per-request CSP nonce mismatch → strict-dynamic
+        # blocks every script. The compiled middleware was hot-patched in
+        # prod to stop emitting a CSP header, and Caddy now FORCES (`>`
+        # operator) a permissive script-src 'self' 'unsafe-inline' https:
+        # so cached HTML works. TODO: re-engineer the nonce flow so it's
+        # generated per-request AND injected into the prerendered HTML
+        # (likely requires `dynamic = "force-dynamic"` on /login + the
+        # dashboard, OR a hash-based CSP with built-in script hashes).
         # See: https://caddyserver.com/docs/caddyfile/directives/header
-        ?Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'"
+        >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the
