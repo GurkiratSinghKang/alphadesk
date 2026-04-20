@@ -127,14 +127,17 @@ async def test_submit_order_rejects_unknown_strategy_on_live(
 
 
 @pytest.mark.asyncio
-async def test_submit_order_allows_manual_none_strategy_on_live(
+async def test_submit_order_allows_manual_explicit_strategy_on_live(
     live_armed: None, broker_server: Any, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Manual orders (strategy=None) pass the gate even when live is armed.
+    """Manual orders must pass an explicit ``strategy`` (Wave 5β Fix 3).
 
-    The MCP tool should reach the broker POST in that case. We replace
-    httpx with a happy-path stub that returns a 201-ish order dict so
-    the test can assert the ``order_id`` round-trips cleanly.
+    Prior behaviour: ``strategy=None`` was accepted and the live-gate
+    was skipped for that call. That let an LLM agent submit any order
+    to live capital just by omitting ``strategy``. The MCP tool now
+    REQUIRES a non-empty ``strategy``; the happy-path here passes
+    ``"manual"`` (a non-denylisted identifier) so the gate evaluates
+    normally and the order reaches the broker.
     """
     class _OKResponse:
         def raise_for_status(self) -> None:
@@ -183,7 +186,33 @@ async def test_submit_order_allows_manual_none_strategy_on_live(
         raising=False,
     )
 
-    # Manual / discretionary order — no strategy passed.
-    result = await broker_server.submit_order(symbol="AAPL", qty=10, side="buy")
+    # Manual / discretionary order — explicit 'manual' strategy.
+    result = await broker_server.submit_order(
+        symbol="AAPL", qty=10, side="buy", strategy="manual",
+    )
     assert result["order_id"] == "broker-1"
     assert result["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_missing_strategy(
+    broker_server: Any,
+) -> None:
+    """Wave 5β Fix 3 (P108 P1): missing strategy raises ValueError.
+
+    A prior wave treated ``strategy=None`` as "manual / discretionary"
+    and skipped the live-gate denylist check. An LLM agent that forgot
+    to pass ``strategy`` could therefore bypass the gate. We now fail
+    fast with a ValueError, preventing both accidental omission and
+    deliberate gate-evasion by agents.
+    """
+    with pytest.raises(ValueError, match="strategy"):
+        await broker_server.submit_order(symbol="AAPL", qty=10, side="buy")
+    with pytest.raises(ValueError, match="strategy"):
+        await broker_server.submit_order(
+            symbol="AAPL", qty=10, side="buy", strategy="",
+        )
+    with pytest.raises(ValueError, match="strategy"):
+        await broker_server.submit_order(
+            symbol="AAPL", qty=10, side="buy", strategy=None,
+        )

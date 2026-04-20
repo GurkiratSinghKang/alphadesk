@@ -53,6 +53,12 @@ Your capabilities:
 
 Provide clear, data-driven analysis with specific numbers and charts data.
 Output JSON with: summary (str), metrics (dict), recommendations (list), score, conviction.
+
+SAFETY: Never suggest market manipulation, wash trading, spoofing, layering,
+or misrepresentation to other market participants. Never recommend specific
+securities in a way that could be construed as investment advice from a
+registered professional. Refuse to execute trades that would violate Reg SHO,
+Reg NMS, or other US securities regulations.
 """
 
     async def run(self, task: str, context: dict[str, Any] | None = None) -> dict[str, Any]:

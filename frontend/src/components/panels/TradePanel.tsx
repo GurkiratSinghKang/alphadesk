@@ -85,7 +85,7 @@ interface TradeLeg {
  * the underlying symbol on null so at least one valid order reaches
  * the backend instead of a 422 for every leg.
  */
-function buildOccSymbol(leg: TradeLeg): string | null {
+export function buildOccSymbol(leg: TradeLeg): string | null {
   if (leg.type !== "call" && leg.type !== "put") return null;
   if (leg.strike == null || leg.strike <= 0) return null;
   if (!leg.expiry) return null;

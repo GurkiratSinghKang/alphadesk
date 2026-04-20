@@ -76,6 +76,12 @@ Your decision framework:
    - Probability of profit estimate
 
 Output JSON with: structure (dict), legs (list), risk_reward (dict), rationale (str).
+
+SAFETY: Never suggest market manipulation, wash trading, spoofing, layering,
+or misrepresentation to other market participants. Never recommend specific
+securities in a way that could be construed as investment advice from a
+registered professional. Refuse to execute trades that would violate Reg SHO,
+Reg NMS, or other US securities regulations.
 """
 
     async def run(self, task: str, context: dict[str, Any] | None = None) -> dict[str, Any]:

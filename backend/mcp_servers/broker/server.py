@@ -70,15 +70,16 @@ class BrokerServer(BaseMCPServer):
             "order_type": {"type": "string", "description": "market, limit, stop, stop_limit"},
             "limit_price": {"type": "number", "description": "Limit price (required for limit orders)", "optional": True},
             "time_in_force": {"type": "string", "description": "day, gtc, ioc, fok"},
-            # Wave-A bypass-fix: ``strategy`` is now a first-class parameter so
-            # the live-trading deny-gate can refuse denylisted strategies. MCP
-            # tool schema treats it as optional for back-compat with callers
-            # that don't pass one (manual / discretionary orders pass through
-            # the gate as ``None``, same as the HTTP endpoint).
+            # Wave 5β Fix 3 (P108 P1): ``strategy`` is now REQUIRED. Prior
+            # wave permitted ``None`` for back-compat; the live-trading gate
+            # then received ``None`` and the denylist check was skipped. An
+            # LLM agent submitting ``strategy=None`` could therefore route
+            # denylisted ideas to live capital without triggering
+            # ``reject_if_live_forbidden``. Requiring the originating
+            # strategy forces every call through the gate.
             "strategy": {
                 "type": "string",
-                "description": "Originating strategy name (gates live submissions)",
-                "optional": True,
+                "description": "Originating strategy name (REQUIRED — gates live submissions)",
             },
         },
     )
@@ -92,6 +93,18 @@ class BrokerServer(BaseMCPServer):
         time_in_force: str = "day",
         strategy: str | None = None,
     ) -> dict[str, Any]:
+        # Wave 5β Fix 3 (P108 P1): fail fast if no strategy supplied. The
+        # signature retains the ``str | None`` type for ergonomics (agents
+        # may omit the kwarg accidentally), but a missing strategy is a
+        # programming error and must raise rather than fall through to the
+        # broker — the live-trading denylist check is a no-op on ``None``.
+        if strategy is None or not str(strategy).strip():
+            raise ValueError(
+                "mcp.broker.submit_order: 'strategy' is required. "
+                "Manual / discretionary orders must pass the explicit "
+                "'manual' strategy (or another non-empty identifier)."
+            )
+
         # Wave-A bypass-fix: the MCP broker tool previously had ZERO live-
         # trading gates — an LLM agent invoking this tool could submit any
         # strategy to live capital. Personas 66/67/69 converged on this as the

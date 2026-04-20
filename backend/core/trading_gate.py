@@ -60,6 +60,11 @@ _STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
     "kama-breakout": "kama_breakout",
     "orb": "orb",
     "vwap-strategy": "vwap",
+    # Discretionary/manual order marker — explicit, gated-allowed.
+    # Wave 5β required MCP callers to pass a non-None strategy; "manual"
+    # is the canonical label for operator-submitted trades outside any
+    # systematic strategy. Never in DENY/PAPER_ONLY sets.
+    "manual": "manual",
 }
 
 

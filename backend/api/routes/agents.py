@@ -213,13 +213,42 @@ async def agent_chat(
 
     try:
         from agents.supervisor import SupervisorAgent
-        from core.redis import cache_get, cache_set
+        from core.redis import cache_get, cache_set, get_redis
 
         conversation_id = request.conversation_id or str(uuid.uuid4())
 
-        # Load conversation history from cache
-        history_key = f"conversation:{conversation_id}"
-        history: list[dict] = (await cache_get(history_key)) or []
+        # Wave 5β Fix 1 (P108 P0): user-scope conversation history.
+        # Previously the key was ``conversation:{conversation_id}`` — any
+        # authenticated user could read another user's chat by guessing the
+        # UUID. Now we scope by username so one user's conversation_id
+        # collisions or leaks don't hand over another user's chat.
+        #
+        # Backward compatibility: the OLD key shape (no username) still
+        # exists in production Redis for in-flight conversations. On first
+        # read we migrate the old key to the new user-scoped key and then
+        # delete the old key so future reads go through the scoped path.
+        history_key = f"conversation:{username}:{conversation_id}"
+        legacy_key = f"conversation:{conversation_id}"
+        history: list[dict] | None = await cache_get(history_key)
+        if history is None:
+            legacy = await cache_get(legacy_key)
+            if legacy:
+                # Migrate legacy → scoped, then wipe the unscoped copy so
+                # another user can't read it by guessing the same
+                # conversation_id.
+                history = legacy
+                await cache_set(history_key, history, ttl_seconds=3600)
+                try:
+                    r = await get_redis()
+                    await r.delete(legacy_key)
+                except Exception:
+                    logger.warning(
+                        "conversation scoping: failed to delete legacy key %s",
+                        legacy_key,
+                        exc_info=True,
+                    )
+            else:
+                history = []
         history.append({"role": "user", "content": request.message})
 
         # Build context for the supervisor

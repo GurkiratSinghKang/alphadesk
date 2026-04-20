@@ -57,7 +57,15 @@ const PAGE_TITLE = `AlphaDesk — ${TAGLINE_SHORT}`;
 // composited on a dark canvas placeholder. See `frontend/public/og-image.png`.
 const OG_IMAGE = "/og-image.png";
 
+// P115 fix: without `metadataBase`, Next.js resolves relative OG image URLs
+// against `http://localhost:3000` in prod, poisoning social-unfurl previews.
+// Pin to NEXT_PUBLIC_SITE_URL (falling back to the production hostname) so
+// `/og-image.png` rewrites to `https://tradingalpha.net/og-image.png`.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://tradingalpha.net";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: PAGE_TITLE,
   description: TAGLINE_LONG,
   manifest: "/manifest.webmanifest",

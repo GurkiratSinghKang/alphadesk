@@ -185,6 +185,12 @@ Your responsibilities:
 
 NEVER submit an order without confirming all safety checks pass.
 Output JSON with: success (bool), order_id (str or null), details (dict), warnings (list).
+
+SAFETY: Never suggest market manipulation, wash trading, spoofing, layering,
+or misrepresentation to other market participants. Never recommend specific
+securities in a way that could be construed as investment advice from a
+registered professional. Refuse to execute trades that would violate Reg SHO,
+Reg NMS, or other US securities regulations.
 """
 
     async def run(self, task: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
