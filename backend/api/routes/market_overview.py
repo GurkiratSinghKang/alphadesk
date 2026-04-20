@@ -272,81 +272,95 @@ async def get_sectors() -> SectorsResponse:
     )
 
 
-@router.get("/regime", response_model=RegimeResponse)
-async def get_regime() -> RegimeResponse:
-    """Get the current detected market regime from live Alpaca data."""
+async def _get_regime_data() -> dict[str, Any] | None:
+    """Fetch the live regime snapshot as a plain dict, or None on failure.
+
+    Shared by the public ``/regime`` route and the daily pipeline's VIX
+    fallback (``backend/data/ingestion/daily_pipeline.py:_get_vix_level``).
+    Returning a dict keeps the helper independent of the pydantic model so
+    non-route callers don't have to import ``RegimeResponse`` just to read
+    one field.
+    """
     import httpx
     from core.config import settings
 
-    try:
-        headers = {
-            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        # Use snapshot API for accurate prev_close
+        snap_resp = await client.get(
+            "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
+            headers=headers,
+        )
+        if snap_resp.status_code != 200:
+            return None
+
+        snapshots = snap_resp.json()
+        spy_snap = snapshots.get("SPY", {})
+        spy_price = spy_snap.get("latestTrade", {}).get("p", 0)
+        spy_prev_close = spy_snap.get("prevDailyBar", {}).get("c", 0)
+        if not spy_price or not spy_prev_close:
+            return None
+
+        # Use VIXY from the same snapshot batch
+        vix_level = 18.0  # default mid-range
+        vixy_snap = snapshots.get("VIXY", {})
+        vixy_price = vixy_snap.get("latestTrade", {}).get("p", 0)
+        if vixy_price > 0:
+            vix_level = vixy_price
+
+        # Determine regime
+        spy_up = spy_price > spy_prev_close
+        vol_high = vix_level >= 20
+
+        if spy_up and not vol_high:
+            regime_str = "Bull - Low Volatility"
+            label = "bull"
+            description = "Broad market uptrend with below-average volatility. Momentum and risk-on strategies favored."
+            confidence = 0.75
+        elif spy_up and vol_high:
+            regime_str = "Bull - High Volatility"
+            label = "bull"
+            description = "Market trending up but with elevated volatility. Caution on position sizing."
+            confidence = 0.60
+        elif not spy_up and not vol_high:
+            regime_str = "Sideways - Normal Volatility"
+            label = "sideways"
+            description = "Market flat to slightly down with normal volatility. Mean-reversion strategies may be favored."
+            confidence = 0.55
+        else:
+            regime_str = "Bear - High Volatility"
+            label = "bear"
+            description = "Market declining with elevated volatility. Defensive positioning and hedging recommended."
+            confidence = 0.65
+
+        spy_change_pct = round((spy_price - spy_prev_close) / spy_prev_close * 100, 2) if spy_prev_close else 0
+
+        return {
+            "regime": regime_str,
+            "label": label,
+            "confidence": confidence,
+            "vix_level": round(vix_level, 1),
+            "description": description,
+            "indicators": {
+                "spy_price": round(spy_price, 2),
+                "spy_prev_close": round(spy_prev_close, 2),
+                "spy_change_pct": spy_change_pct,
+                "vix_proxy": round(vix_level, 1),
+            },
         }
-        async with httpx.AsyncClient(timeout=10) as client:
-            # Use snapshot API for accurate prev_close
-            snap_resp = await client.get(
-                "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
-                headers=headers,
-            )
-            if snap_resp.status_code != 200:
-                raise ValueError("Failed to fetch snapshot data from Alpaca")
 
-            snapshots = snap_resp.json()
-            spy_snap = snapshots.get("SPY", {})
-            spy_price = spy_snap.get("latestTrade", {}).get("p", 0)
-            spy_prev_close = spy_snap.get("prevDailyBar", {}).get("c", 0)
-            if not spy_price or not spy_prev_close:
-                raise ValueError("Incomplete SPY snapshot data")
 
-            # Use VIXY from the same snapshot batch
-            vix_level = 18.0  # default mid-range
-            vixy_snap = snapshots.get("VIXY", {})
-            vixy_price = vixy_snap.get("latestTrade", {}).get("p", 0)
-            if vixy_price > 0:
-                vix_level = vixy_price
-
-            # Determine regime
-            spy_up = spy_price > spy_prev_close
-            vol_high = vix_level >= 20
-
-            if spy_up and not vol_high:
-                regime_str = "Bull - Low Volatility"
-                label = "bull"
-                description = "Broad market uptrend with below-average volatility. Momentum and risk-on strategies favored."
-                confidence = 0.75
-            elif spy_up and vol_high:
-                regime_str = "Bull - High Volatility"
-                label = "bull"
-                description = "Market trending up but with elevated volatility. Caution on position sizing."
-                confidence = 0.60
-            elif not spy_up and not vol_high:
-                regime_str = "Sideways - Normal Volatility"
-                label = "sideways"
-                description = "Market flat to slightly down with normal volatility. Mean-reversion strategies may be favored."
-                confidence = 0.55
-            else:
-                regime_str = "Bear - High Volatility"
-                label = "bear"
-                description = "Market declining with elevated volatility. Defensive positioning and hedging recommended."
-                confidence = 0.65
-
-            spy_change_pct = round((spy_price - spy_prev_close) / spy_prev_close * 100, 2) if spy_prev_close else 0
-
+@router.get("/regime", response_model=RegimeResponse)
+async def get_regime() -> RegimeResponse:
+    """Get the current detected market regime from live Alpaca data."""
+    try:
+        data = await _get_regime_data()
+        if data is not None:
             return RegimeResponse(
-                regime=MarketRegime(
-                    regime=regime_str,
-                    label=label,
-                    confidence=confidence,
-                    vix_level=round(vix_level, 1),
-                    description=description,
-                    indicators={
-                        "spy_price": round(spy_price, 2),
-                        "spy_prev_close": round(spy_prev_close, 2),
-                        "spy_change_pct": spy_change_pct,
-                        "vix_proxy": round(vix_level, 1),
-                    },
-                ),
+                regime=MarketRegime(**data),
                 as_of=datetime.now(timezone.utc),
                 is_demo=False,
             )
