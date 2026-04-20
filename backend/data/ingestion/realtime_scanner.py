@@ -403,6 +403,38 @@ async def _check_pairs_zscore() -> None:
         async with _setups_lock:
             pairs_snapshot = list(_pairs_setups)
 
+        # qa2-team-C perf: previously issued 2 sequential ``/trades/latest``
+        # calls per pair (N pairs × 2 HTTP calls every 30s). Alpaca's batch
+        # endpoint ``/v2/stocks/trades/latest?symbols=...`` returns all legs
+        # in a single request. With 10 pairs this drops from 20 sequential
+        # calls (~4s) to one.
+        needed: set[str] = set()
+        for setup in pairs_snapshot:
+            a = setup.get("sym_a", "")
+            b = setup.get("sym_b", "")
+            if a:
+                needed.add(a)
+            if b:
+                needed.add(b)
+
+        latest_prices: dict[str, float] = {}
+        if needed:
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    resp = await client.get(
+                        "https://data.alpaca.markets/v2/stocks/trades/latest",
+                        headers=headers,
+                        params={"symbols": ",".join(sorted(needed))},
+                    )
+                    if resp.status_code == 200:
+                        trades = resp.json().get("trades", {}) or {}
+                        for sym, trade in trades.items():
+                            p = (trade or {}).get("p", 0) or 0
+                            if p > 0:
+                                latest_prices[sym] = float(p)
+            except Exception:
+                logger.debug("Pairs batch price fetch error", exc_info=True)
+
         for setup in pairs_snapshot:
             sym_a = setup.get("sym_a", "")
             sym_b = setup.get("sym_b", "")
@@ -412,18 +444,8 @@ async def _check_pairs_zscore() -> None:
             spread_std = setup.get("spread_std", 1)
 
             try:
-                async with httpx.AsyncClient(timeout=5) as client:
-                    resp_a = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym_a}/trades/latest",
-                        headers=headers,
-                    )
-                    resp_b = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym_b}/trades/latest",
-                        headers=headers,
-                    )
-
-                    price_a = resp_a.json().get("trade", {}).get("p", 0) if resp_a.status_code == 200 else 0
-                    price_b = resp_b.json().get("trade", {}).get("p", 0) if resp_b.status_code == 200 else 0
+                price_a = latest_prices.get(sym_a, 0)
+                price_b = latest_prices.get(sym_b, 0)
 
                 if price_a > 0 and price_b > 0:
                     spread = price_a - hedge_ratio * price_b
@@ -443,7 +465,7 @@ async def _check_pairs_zscore() -> None:
                     remaining.append(setup)
             except Exception:
                 logger.debug(
-                    "Pairs price fetch error for %s/%s", sym_a, sym_b, exc_info=True,
+                    "Pairs z-score compute error for %s/%s", sym_a, sym_b, exc_info=True,
                 )
                 remaining.append(setup)
 

@@ -169,6 +169,13 @@ async def _generate_risk_dashboard() -> RiskDashboard:
     current_dd = 0.0
     max_dd = 0.0
     base_equity_for_dd = last_equity if last_equity > 0 else (equity if equity > 0 else 100_000.0)
+    # qa2-team-B: weekly_pnl and monthly_pnl previously copied daily_pnl
+    # (monthly was ``equity - last_equity`` which reduces to daily_pnl when
+    # ``invested = last_equity``). Compute both from the closed-trade ledger
+    # using ET-day boundaries consistent with realized_pnl_today in
+    # portfolio.py.
+    weekly_pnl = 0.0
+    monthly_pnl = 0.0
     try:
         from data.ingestion.trade_ledger import TradeLedger
         ledger = TradeLedger()
@@ -176,14 +183,26 @@ async def _generate_risk_dashboard() -> RiskDashboard:
         if closed:
             cumulative = 0.0
             peak_equity = base_equity_for_dd
+            # Windows anchored in ET to match market/realized_today boundary.
+            from zoneinfo import ZoneInfo as _ZI
+            _et = _ZI("America/New_York")
+            _now_et = datetime.now(_et)
+            week_cutoff = (_now_et - timedelta(days=7)).isoformat()
+            month_cutoff = (_now_et - timedelta(days=30)).isoformat()
             for t in sorted(closed, key=lambda x: x.get("exit_time", "")):
-                cumulative += t.get("pnl", 0) or 0
+                pnl_t = t.get("pnl", 0) or 0
+                cumulative += pnl_t
                 equity_i = base_equity_for_dd + cumulative
                 if equity_i > peak_equity:
                     peak_equity = equity_i
                 dd = equity_i - peak_equity
                 if dd < max_dd:
                     max_dd = dd
+                exit_time = t.get("exit_time") or ""
+                if exit_time and exit_time >= week_cutoff:
+                    weekly_pnl += pnl_t
+                if exit_time and exit_time >= month_cutoff:
+                    monthly_pnl += pnl_t
             current_dd = (base_equity_for_dd + cumulative) - peak_equity
     except Exception:
         logger.warning("Failed to compute drawdown from trade ledger", exc_info=True)
@@ -205,8 +224,8 @@ async def _generate_risk_dashboard() -> RiskDashboard:
         total_portfolio_value=round(equity, 2),
         total_invested=round(invested, 2),
         daily_pnl=round(daily_pnl, 2),
-        weekly_pnl=round(daily_pnl, 2),
-        monthly_pnl=round(equity - invested, 2) if invested > 0 else 0.0,
+        weekly_pnl=round(weekly_pnl, 2),
+        monthly_pnl=round(monthly_pnl, 2),
         position_count=position_count,
         as_of=datetime.now(timezone.utc),
         estimated=not has_account,
@@ -339,35 +358,51 @@ async def _generate_var() -> VaRResponse:
             if not symbols:
                 return _empty_var("No open positions to compute VaR.")
 
-            # Fetch 30-day daily bars for each position to estimate volatility
+            # Fetch 30-day daily bars for each position to estimate volatility.
+            # qa2-team-C perf: previously this looped N sequential Alpaca calls
+            # (one per position); with 20 positions that is 20 round-trips at
+            # ~200ms each = ~4s of blocking IO every /risk/var hit. Alpaca's
+            # ``/v2/stocks/bars`` endpoint accepts a comma-separated
+            # ``symbols=...`` list and returns ``{bars: {SYM: [...], ...}}`` —
+            # one HTTP call for the whole batch.
             start_date = (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%dT00:00:00Z")
             position_vols: dict[str, float] = {}
             portfolio_value = sum(abs(v) for v in market_values.values())
 
+            bars_by_symbol: dict[str, list[dict]] = {}
+            try:
+                bars_resp = await client.get(
+                    "https://data.alpaca.markets/v2/stocks/bars",
+                    headers=headers,
+                    params={
+                        "symbols": ",".join(symbols),
+                        "timeframe": "1Day",
+                        "start": start_date,
+                        "limit": 10000,
+                        "sort": "asc",
+                    },
+                )
+                if bars_resp.status_code == 200:
+                    bars_by_symbol = bars_resp.json().get("bars", {}) or {}
+            except Exception:
+                logger.debug("VaR: batched bars fetch failed", exc_info=True)
+
             for sym in symbols:
-                try:
-                    bars_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym}/bars"
-                        f"?timeframe=1Day&start={start_date}&limit=30&sort=asc",
-                        headers=headers,
-                    )
-                    if bars_resp.status_code == 200:
-                        bars = bars_resp.json().get("bars", [])
-                        if len(bars) >= 5:
-                            closes = [b["c"] for b in bars]
-                            returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes)) if closes[i - 1] > 0]
-                            # Sample standard deviation (Bessel-corrected, ÷ N-1).
-                            # The previous divisor ÷ N was the biased MLE, which
-                            # systematically understated volatility — and
-                            # therefore VaR — especially on small samples (a
-                            # 30-bar sample understates vol by ~3% just from
-                            # the wrong divisor). Need at least 2 observations.
-                            if len(returns) >= 2:
-                                mean_r = sum(returns) / len(returns)
-                                vol = (sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5
-                                position_vols[sym] = vol
-                except Exception:
-                    logger.debug("VaR: bars fetch failed for %s", sym, exc_info=True)
+                bars = bars_by_symbol.get(sym) or []
+                if len(bars) < 5:
+                    continue
+                closes = [b["c"] for b in bars]
+                returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes)) if closes[i - 1] > 0]
+                # Sample standard deviation (Bessel-corrected, ÷ N-1).
+                # The previous divisor ÷ N was the biased MLE, which
+                # systematically understated volatility — and
+                # therefore VaR — especially on small samples (a
+                # 30-bar sample understates vol by ~3% just from
+                # the wrong divisor). Need at least 2 observations.
+                if len(returns) >= 2:
+                    mean_r = sum(returns) / len(returns)
+                    vol = (sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5
+                    position_vols[sym] = vol
 
             if not position_vols:
                 return _empty_var("Insufficient price history to estimate volatility.")

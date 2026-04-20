@@ -389,7 +389,7 @@ async def get_index_sparklines() -> IndexSparklinesResponse:
     from core.config import settings
 
     symbols = ["SPY", "QQQ", "IWM", "DIA"]
-    sparklines: dict[str, list[float]] = {}
+    sparklines: dict[str, list[float]] = {sym: [] for sym in symbols}
 
     try:
         headers = {
@@ -399,28 +399,33 @@ async def get_index_sparklines() -> IndexSparklinesResponse:
         # Go back ~30 calendar days to ensure we get 20 trading days
         start_date = (datetime.now(timezone.utc) - timedelta(days=35)).strftime("%Y-%m-%dT00:00:00Z")
 
+        # qa2-team-C perf: previously issued 4 sequential Alpaca calls (one per
+        # index ETF) on every dashboard load — ~800ms of blocking IO for data
+        # that fits in a single batched request. Alpaca's multi-symbol bars
+        # endpoint returns {bars: {SYM: [...], ...}} in one call.
         async with httpx.AsyncClient(timeout=10) as client:
-            for sym in symbols:
-                try:
-                    resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym}/bars"
-                        f"?timeframe=1Day&start={start_date}&limit=25&sort=asc",
-                        headers=headers,
-                    )
-                    if resp.status_code == 200:
-                        bars = resp.json().get("bars", [])
+            try:
+                resp = await client.get(
+                    "https://data.alpaca.markets/v2/stocks/bars",
+                    headers=headers,
+                    params={
+                        "symbols": ",".join(symbols),
+                        "timeframe": "1Day",
+                        "start": start_date,
+                        "limit": 10000,
+                        "sort": "asc",
+                    },
+                )
+                if resp.status_code == 200:
+                    bars_by_symbol = resp.json().get("bars", {}) or {}
+                    for sym in symbols:
+                        bars = bars_by_symbol.get(sym) or []
                         closes = [b["c"] for b in bars]
-                        # Take the last 20
                         sparklines[sym] = closes[-20:] if len(closes) > 20 else closes
-                    else:
-                        sparklines[sym] = []
-                except Exception:
-                    logger.warning("Failed to fetch bars for %s", sym, exc_info=True)
-                    sparklines[sym] = []
+            except Exception:
+                logger.warning("Failed to fetch batched sparkline bars", exc_info=True)
     except Exception:
         logger.warning("Failed to fetch index sparkline data from Alpaca", exc_info=True)
-        for sym in symbols:
-            sparklines.setdefault(sym, [])
 
     return IndexSparklinesResponse(
         sparklines=sparklines,
