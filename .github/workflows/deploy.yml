@@ -285,84 +285,164 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Resolved deploy SHA: $SHA"
 
+      # 2026-04-21 — replaced appleboy/ssh-action@v1 with raw ssh. Multiple
+      # successful-looking deploys across three different workflow revisions
+      # (--force-recreate, then `down + up`, then `pull_policy: always`,
+      # then eliminating the base compose `build:` directive entirely) kept
+      # reporting `Container X Recreated / Healthy / Deploy successful`
+      # while the VPS docker events log showed ZERO container-lifecycle
+      # events in the deploy window. The only common denominator across
+      # every failed deploy was the appleboy action — running the SAME
+      # compose commands manually from an ssh session as the same deploy
+      # user ALWAYS swapped containers cleanly.
+      #
+      # This step now opens a single `ssh … bash -s` and streams every
+      # command over stdin with `set -x`. That means:
+      #   1. Shell environment is visible in the job log (PATH, DOCKER_HOST,
+      #      DOCKER_CONTEXT, DOCKER_BUILDKIT) — no more guessing whether
+      #      the action injected something weird.
+      #   2. Every docker command is echoed before it runs — so if compose
+      #      is silently dry-running (the ghost's signature) we'll see the
+      #      exact command and its trailing `$?` exit code.
+      #   3. A real `set -euo pipefail` aborts at the first failure
+      #      instead of the action burying a non-zero exit inside its own
+      #      stdout-buffering layer.
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           FRONTEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-frontend:${{ steps.deploy_sha.outputs.sha }}
           BACKEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ steps.deploy_sha.outputs.sha }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: deploy
-          key: ${{ secrets.VPS_SSH_KEY }}
-          envs: GHCR_TOKEN,GHCR_USER,FRONTEND_IMAGE,BACKEND_IMAGE
-          script: |
-            set -e
+          GHCR_REPO_FRONTEND: ghcr.io/${{ steps.repo.outputs.name }}-frontend
+          GHCR_REPO_BACKEND: ghcr.io/${{ steps.repo.outputs.name }}-backend
+        run: |
+          set -euo pipefail
+          # Key is already in ~/.ssh/deploy_key from the sync step. known_hosts
+          # was also populated there. Re-use both so this step stays idempotent
+          # if the sync step ever changes.
+          if [ ! -f ~/.ssh/deploy_key ]; then
+            mkdir -p ~/.ssh
+            printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+          # Pass the deploy-time env into the remote shell via `SendEnv`
+          # would require remote sshd to `AcceptEnv` — not guaranteed.
+          # Instead, prefix the heredoc with explicit exports so the remote
+          # `bash -s` sees them. Values are single-quoted locally then
+          # assigned with escaped double-quotes remotely.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              -o LogLevel=ERROR \
+              "deploy@${VPS_HOST}" \
+              "GHCR_TOKEN='${GHCR_TOKEN}' GHCR_USER='${GHCR_USER}' FRONTEND_IMAGE='${FRONTEND_IMAGE}' BACKEND_IMAGE='${BACKEND_IMAGE}' GHCR_REPO_FRONTEND='${GHCR_REPO_FRONTEND}' GHCR_REPO_BACKEND='${GHCR_REPO_BACKEND}' bash -s" <<'REMOTE_SCRIPT'
+            set -euo pipefail
+            set -x
+
+            echo "─── Preflight diagnostics ──────────────────────────────"
+            whoami
+            id
+            which docker
+            docker --version
+            docker context ls
+            docker info --format '{{.ServerVersion}} | containers={{.Containers}} running={{.ContainersRunning}}' || true
+            uname -a
+            printenv | grep -E '^(DOCKER|PATH|HOME|USER|SHELL)=' | sort
+            echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+            echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+
+            echo "─── Before state ───────────────────────────────────────"
+            docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' || true
+
             cd /opt/alphadesk
-            # Authenticate to GHCR with the ephemeral job token so the
-            # VPS can pull the images built seconds earlier in this run.
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            # Load non-compose secrets from .env.prod so compose can
-            # interpolate them (REDIS_PASSWORD, STATUS_PASS_HASH, etc.).
+            # Auth to GHCR with the ephemeral job token.
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+            # Load non-compose secrets from .env.prod (REDIS_PASSWORD,
+            # STATUS_PASS_HASH, etc.). `.env.prod` is intentionally NOT
+            # tracked in git; see infrastructure/.env.prod.example.
             set -a
             . ./.env.prod
             set +a
+
+            echo "─── Pull images ────────────────────────────────────────"
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml pull frontend backend
-            # 2026-04-20 — final fix for the "Recreated-but-not-actually" ghost.
-            # Even with build: removed from base compose, --pull always in the
-            # up command, AND pull_policy: always in the prod override, the
-            # SAME bug persisted: compose emitted "Container X Recreated" +
-            # "Healthy" + "Deploy successful" but docker inspect showed the
-            # container's Image was still the PRIOR SHA, and the new SHA
-            # wasn't among `docker images` minutes later. The in-place
-            # --force-recreate code path seems to be the problem.
-            #
-            # Solution: explicitly tear down with `down`, then bring up with
-            # `up -d --pull never` (pull already happened above). This
-            # produces a fresh container from scratch — no in-place recreate
-            # state machine quirks. Downtime: ~6-8s during the swap.
+
+            # Verify the just-pulled images are locally tagged. If the pull
+            # silently used a cached layer and left the tag pointing at an
+            # old digest, the subsequent `up` would boot the stale image.
+            docker image inspect "${FRONTEND_IMAGE}" --format 'pulled-frontend-ok: {{.Id}}'
+            docker image inspect "${BACKEND_IMAGE}" --format 'pulled-backend-ok: {{.Id}}'
+
+            echo "─── down + up swap ─────────────────────────────────────"
+            # `down` tears the project's entire stack down (containers +
+            # network) so there's no in-place-recreate state-machine for
+            # compose to mis-handle. `up -d --pull never` then brings a
+            # fresh stack up using the images we just pulled. This costs
+            # ~6-8s of downtime per deploy; the user-visible pause stays
+            # under Caddy's 30s write timeout so no request is dropped.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml down --remove-orphans
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --pull never
-            # Wait for the backend container to come up healthy before
-            # applying schema changes. 15s matches the previous sleep and
-            # also matches the backend healthcheck start_period.
-            sleep 15
-            # Verify the running container is actually on the SHA we just
-            # pushed. Two prior "successful" deploys on 2026-04-20 reported
-            # "Recreated/Healthy" but left containers on the prior SHA —
-            # compose silently fell back to the ``build:`` directive in the
-            # base compose file against stale /opt/alphadesk local source.
-            # The base file's ``build:`` has since moved to a dev-only
-            # override, BUT this assertion prevents any future drift from
-            # slipping through.
-            running_backend=$(docker inspect alphadesk-backend --format '{{.Config.Image}}')
-            running_frontend=$(docker inspect alphadesk-frontend --format '{{.Config.Image}}')
-            if [ "$running_backend" != "$BACKEND_IMAGE" ] || [ "$running_frontend" != "$FRONTEND_IMAGE" ]; then
-              echo "FATAL: container image mismatch after --force-recreate" >&2
-              echo "  backend:  running=$running_backend expected=$BACKEND_IMAGE" >&2
-              echo "  frontend: running=$running_frontend expected=$FRONTEND_IMAGE" >&2
+
+            echo "─── Wait for backend healthcheck ───────────────────────"
+            # Backend healthcheck start_period is 15s; poll every 2s up to
+            # 60s so we don't silently proceed against a partially-booted
+            # stack.
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+              health=$(docker inspect alphadesk-backend --format '{{.State.Health.Status}}' 2>/dev/null || echo "creating")
+              echo "  [${i}/30] backend health=${health}"
+              if [ "${health}" = "healthy" ]; then break; fi
+              sleep 2
+            done
+            [ "${health}" = "healthy" ] || { echo "FATAL: backend never became healthy"; exit 1; }
+
+            echo "─── Post-swap image-ID assertion ───────────────────────"
+            # Compare .Image (the resolved sha256 of the running image) and
+            # .Config.Image (the tag the container was created with).
+            # Previously the ghost bug manifested as .Config.Image
+            # matching the expected tag while .Image pointed at the PRIOR
+            # digest — meaning docker had re-resolved the tag behind our
+            # back. Now we check BOTH.
+            running_backend_cfg=$(docker inspect alphadesk-backend --format '{{.Config.Image}}')
+            running_frontend_cfg=$(docker inspect alphadesk-frontend --format '{{.Config.Image}}')
+            expected_backend_id=$(docker image inspect "${BACKEND_IMAGE}" --format '{{.Id}}')
+            expected_frontend_id=$(docker image inspect "${FRONTEND_IMAGE}" --format '{{.Id}}')
+            running_backend_id=$(docker inspect alphadesk-backend --format '{{.Image}}')
+            running_frontend_id=$(docker inspect alphadesk-frontend --format '{{.Image}}')
+            echo "  backend  cfg=${running_backend_cfg}"
+            echo "  backend  run-id=${running_backend_id} expected-id=${expected_backend_id}"
+            echo "  frontend cfg=${running_frontend_cfg}"
+            echo "  frontend run-id=${running_frontend_id} expected-id=${expected_frontend_id}"
+            if [ "${running_backend_cfg}" != "${BACKEND_IMAGE}" ] \
+              || [ "${running_frontend_cfg}" != "${FRONTEND_IMAGE}" ] \
+              || [ "${running_backend_id}" != "${expected_backend_id}" ] \
+              || [ "${running_frontend_id}" != "${expected_frontend_id}" ]; then
+              echo "FATAL: post-swap container state does not match the pushed tags"
+              echo "  (see run-id vs expected-id above)"
+              docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}'
               exit 1
             fi
-            # Run DB migrations against the freshly-booted backend. alembic
-            # is idempotent (upgrade head is a no-op when already current),
-            # so rollbacks to a prior image_sha don't downgrade schemas —
-            # schema changes require an explicit `alembic downgrade`, which
-            # the rollback playbook (docs/ROLLBACK.md) covers.
+
+            echo "─── Alembic migrations ─────────────────────────────────"
+            # Alembic upgrade head is idempotent — no-op when already at
+            # head, so rolling back to a prior image_sha doesn't
+            # downgrade. Downgrades are manual (docs/ROLLBACK.md).
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
-            curl -sf http://localhost:8000/readyz || (echo "Readiness check failed!" && exit 1)
-            # Tidy up old images. 2026-04-20: the prior prune
-            # (``system prune -f --filter until=24h``) did NOT touch TAGGED
-            # images — it only removes dangling images by default. With each
-            # backend image weighing ~4 GB and a deploy every few hours,
-            # the VPS filled to 100% in two days, which deadlocked Timescale
-            # ("No space left on device" on postmaster.pid) and forced a
-            # manual cleanup. Keep only the three most recent SHA tags per
-            # image repo (current + 2-deep rollback buffer). Rollback
-            # beyond that pulls from GHCR (we never prune remote tags).
-            for repo in ghcr.io/${{ steps.repo.outputs.name }}-backend ghcr.io/${{ steps.repo.outputs.name }}-frontend; do
+
+            echo "─── Readiness check ────────────────────────────────────"
+            curl -sf http://localhost:8000/readyz || { echo "FATAL: readiness check failed"; exit 1; }
+
+            echo "─── Image-cache retention ──────────────────────────────"
+            # Keep the 3 most recent SHA tags per image repo (current +
+            # 2-deep rollback). Pruning older tags keeps disk under
+            # control (each backend image is ~4 GB, a deploy every few
+            # hours fills 38 GB fast). Rollback further than the retention
+            # window still works — GHCR never deletes remote tags, the
+            # rollback just has to pull again.
+            for repo in "${GHCR_REPO_BACKEND}" "${GHCR_REPO_FRONTEND}"; do
               docker images --format '{{.Repository}}:{{.Tag}} {{.CreatedAt}}' \
-                | awk -v r="$repo:" '$1 ~ ("^" r) { print }' \
+                | awk -v r="${repo}:" '$1 ~ ("^" r) { print }' \
                 | sort -k2,3 -r \
                 | awk 'NR>3 {print $1}' \
                 | xargs -r -I{} docker rmi {} || true
@@ -370,4 +450,8 @@ jobs:
             docker image prune -f
             docker builder prune -af --keep-storage 2GB || true
             docker logout ghcr.io
-            echo "Deploy successful: ${FRONTEND_IMAGE} + ${BACKEND_IMAGE}"
+
+            echo "─── After state ────────────────────────────────────────"
+            docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}'
+            echo "Deploy successful: FRONTEND=${FRONTEND_IMAGE} BACKEND=${BACKEND_IMAGE}"
+          REMOTE_SCRIPT
