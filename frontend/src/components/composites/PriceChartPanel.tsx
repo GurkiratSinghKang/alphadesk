@@ -244,37 +244,45 @@ export default function PriceChartPanel({
           with `px-7` (28px gutters) — that consumed ~280px of a 390px viewport
           and overflowed every time. Step down the type ladder on mobile so the
           header fits, then restore at sm/md. */}
-      <header className="flex flex-wrap items-end gap-4 md:gap-6 px-4 md:px-7 pt-4 md:pt-5 pb-3.5 border-b border-border-hair">
-        <div>
-          <div
-            className="font-display italic text-[22px] sm:text-[32px] md:text-[40px] text-ink-1000"
-            style={{ letterSpacing: "-0.025em", lineHeight: 1 }}
-          >{symbol.name}</div>
-          <div
-            className="font-sans font-semibold text-[13px] text-fg-muted mt-1 uppercase"
+      {/* 2026-04-20 r2: the hero serif NAME (40px) + mono PRICE (48px)
+          were visually over-dominant — they dwarfed the meta cells and
+          the rest of the page. Trader dashboards (TV, ToS, Webull)
+          prioritise a chart canvas that fills the space; the header is
+          a dense strip, not a magazine hero. Stepped both down to a
+          sensible size (name 24px serif italic; price 32px mono
+          tabular) and tightened vertical padding from pt-5 to pt-3.5
+          so the chart gets ~40 more vertical pixels. */}
+      <header className="flex flex-wrap items-baseline gap-4 md:gap-6 px-4 md:px-6 pt-3 md:pt-3.5 pb-3 border-b border-border-hair">
+        <div className="flex items-baseline gap-3">
+          <span
+            className="font-display italic text-[22px] md:text-[26px] text-ink-1000"
+            style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
+          >{symbol.name}</span>
+          <span
+            className="font-sans font-semibold text-[12px] text-fg-muted uppercase"
             style={{ letterSpacing: "0.12em" }}
-          >{symbol.ticker} · {symbol.venue}</div>
+          >{symbol.ticker}{symbol.venue ? ` · ${symbol.venue}` : ""}</span>
         </div>
 
-        <div>
-          <div
-            className="font-mono tabular-nums text-[22px] sm:text-[28px] md:text-[48px] font-light text-ink-1000"
-            style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
+        <div className="flex items-baseline gap-2">
+          <span
+            className="font-mono tabular-nums text-[24px] md:text-[32px] font-light text-ink-1000"
+            style={{ letterSpacing: "-0.015em", lineHeight: 1 }}
           >
-            {last == null ? <DashSpan size={36} /> : last.toFixed(2)}
-          </div>
-          <div className={cn("font-mono tabular-nums text-base mt-1", change == null ? "text-fg-hint" : deltaTone)}>
+            {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
+          </span>
+          <span className={cn("font-mono tabular-nums text-[14px] md:text-[15px]", change == null ? "text-fg-hint" : deltaTone)}>
             {change == null || changePct == null ? (
-              <DashSpan size={13} />
+              <DashSpan size={14} />
             ) : (
               <>
                 {deltaSign}{Math.abs(change).toFixed(2)} · {deltaSign}{Math.abs(changePct).toFixed(2)}%
               </>
             )}
-          </div>
+          </span>
         </div>
 
-        <div className="flex flex-wrap gap-x-3 gap-y-2 md:gap-[18px] ml-auto font-mono text-base text-fg-muted">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 md:gap-x-5 ml-auto font-mono text-[13px] text-fg-muted">
           <MetaCell k="Vol" value={meta.volume} />
           <MetaCell k="Avg Vol" value={meta.avgVolume} />
           <MetaCell k="Range" value={meta.range} />

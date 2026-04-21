@@ -206,7 +206,16 @@ export default function DeskPage() {
       setBarsLoading(true);
       setBarsError(false);
       try {
-        const bars = await getBars(selectedSymbol, "D", rangeToLimit(range));
+        // 2026-04-20 round 2: switched from always-daily to a
+        // range-aware timeframe so zooming in on the chart actually
+        // shows MORE granular data, not a compressed-daily view of
+        // the same 2 bars. A user selecting `1D` now gets 5-minute
+        // candles (≈78 bars across the 6.5h session); `1M` gets
+        // 1-hour candles; `6M+` stays daily. Matches the behaviour
+        // on TradingView / ToS / Webull where each timeframe pill
+        // loads its own granularity.
+        const [tf, limit] = rangeToTimeframe(range);
+        const bars = await getBars(selectedSymbol, tf, limit);
         if (!cancelled) setSeries(bars);
       } catch {
         if (!cancelled) {
@@ -585,7 +594,14 @@ export default function DeskPage() {
               `/strategies` page and was eating viewport. Heads-up: the
               strategies selector still lives inside OrderBar below the
               chart, so users can attach trades to a strategy. */}
-          <div className="shrink-0 border-b border-border-hair">
+          {/* Watchlist: fixed max-height so the Book below can flex; the
+              watchlist itself scrolls internally when it overflows. The
+              wrapping div intentionally has NO border — Watchlist owns
+              its own card border so stacking a second one here would
+              double the hairline and look "boxed twice". Max-height of
+              34vh keeps roughly 6-7 rows visible at typical viewport
+              heights while leaving room for Positions + AI memo below. */}
+          <div className="shrink-0 max-h-[34vh] overflow-auto p-2">
             <Watchlist />
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
@@ -623,16 +639,32 @@ export default function DeskPage() {
 
 /* ─── Tiny helpers kept inline ──────────────────────────── */
 
-function rangeToLimit(r: ChartRange): number {
+// Range pill → (timeframe, bar-limit) lookup. Shorter ranges intentionally
+// request finer timeframes so a user zooming to 1D sees the day's
+// 5-minute candles, not a two-bar daily compression. Limits are calibrated
+// to comfortably cover the range's calendar span:
+//   1D  → 5-min bars, 78 bars per 6.5-hour session × some headroom
+//   5D  → 15-min bars
+//   1M  → 1-hour bars (~7 × 22 trading days)
+//   3M+ → daily bars (`D`)
+//   ALL → weekly bars so we don't pull 10 years of 1D data
+//
+// This mirrors the default stepping used by TradingView / ToS / Webull.
+// The backend's `/api/v1/market/bars/<sym>` endpoint accepts the
+// TimeFrame codes `1m, 5m, 15m, 1H, 4H, D, W, M` — see the mapping in
+// `getBars` at lib/api.ts.
+function rangeToTimeframe(
+  r: ChartRange,
+): [import("@/types").TimeFrame, number] {
   switch (r) {
-    case "1D": return 2;
-    case "5D": return 5;
-    case "1M": return 22;
-    case "3M": return 66;
-    case "6M": return 132;
-    case "YTD": return 260;
-    case "1Y": return 260;
-    case "ALL": return 1000;
+    case "1D":  return ["5m",  100];   // ~6.5h session, some pre/post
+    case "5D":  return ["15m", 140];   // 5 sessions × ~26 fifteen-min bars
+    case "1M":  return ["1H",  160];   // 22 days × 7 hours
+    case "3M":  return ["D",   66];
+    case "6M":  return ["D",   132];
+    case "YTD": return ["D",   260];
+    case "1Y":  return ["D",   260];
+    case "ALL": return ["W",   520];
   }
 }
 
