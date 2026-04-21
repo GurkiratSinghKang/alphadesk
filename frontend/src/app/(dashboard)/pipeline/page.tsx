@@ -61,6 +61,7 @@ import {
   type SchedulerState,
 } from "@/lib/pipeline-api";
 import { usePortfolioStore } from "@/stores/portfolio";
+import { useToast } from "@/hooks/useToast";
 
 // ─── Next-session helper ────────────────────────────────────
 // The scheduler uses `USMarketCalendar` on the backend now, so the UI
@@ -101,7 +102,7 @@ function SignalBadge({ signal }: { signal: string }) {
       ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
       : "bg-amber/15 text-amber border-amber/30";
   return (
-    <Badge className={cn("text-[10px] font-bold uppercase border", color)}>
+    <Badge className={cn("t-label border", color)}>
       {signal}
     </Badge>
   );
@@ -146,24 +147,24 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
                 ? "border-primary/40 bg-primary/5"
                 : "border-border bg-[var(--surface)]"
             )}>
-              <p className={cn("text-lg font-bold tabular-nums", stage.count > 0 ? "text-primary" : "text-[#8a8a95]")}>
+              <p className={cn("t-num-lg", stage.count > 0 ? "text-primary" : "text-muted-foreground")}>
                 {stage.count}
               </p>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+              <p className="t-label mt-0.5">{stage.label}</p>
             </div>
             {i < stages.length - 1 && (
-              <span className="text-muted-foreground/40 text-sm shrink-0">→</span>
+              <span className="text-muted-foreground/40 text-sm shrink-0" aria-hidden>→</span>
             )}
           </div>
         ))}
       </div>
       {allZero && (
-        <p className="text-xs text-muted-foreground mt-2 text-center">
+        <p className="t-meta mt-2 text-center">
           Pipeline has not run today &mdash; awaiting next scheduled run
         </p>
       )}
       {!allZero && runDateLabel && (
-        <p className="text-xs text-muted-foreground mt-2 text-center">
+        <p className="t-meta mt-2 text-center">
           Showing latest run{runDateLabel}
         </p>
       )}
@@ -230,7 +231,10 @@ function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null })
       aria-pressed={enabled}
       aria-label={`Risk Monitor ${enabled ? "enabled" : "disabled"} — click to toggle`}
       className={cn(
-        "flex items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
+        // WCAG 2.5.5 / Apple HIG: a toggle that controls a backend feature
+        // needs a ≥44px tap target. Keep the visible pill compact (px-3)
+        // but guarantee the hit box via `min-h-11`.
+        "flex min-h-11 items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
         tone,
       )}
       title={
@@ -241,7 +245,7 @@ function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null })
           : "Risk monitor is ON — click to disable"
       }
     >
-      <span className={cn("h-2 w-2 rounded-full", dot)} />
+      <span className={cn("h-2 w-2 rounded-full", dot)} aria-hidden />
       {label}
     </button>
   );
@@ -249,6 +253,7 @@ function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null })
 
 
 export default function PipelinePage() {
+  const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   // `running` here is "the user clicked Run Now and we're awaiting the
@@ -487,9 +492,25 @@ export default function PipelinePage() {
     } catch (err) {
       if (err instanceof PipelineApiError && err.status === 429 && err.retryAfter) {
         setRetryAfter(err.retryAfter);
+        toast({
+          type: "warning",
+          message: `Rate-limited — retry in ${err.retryAfter}s.`,
+        });
+      } else if (err instanceof PipelineApiError && err.status === 403) {
+        // Admin-only endpoint. Previously the 403 returned by
+        // `/pipeline/run` for non-admins was swallowed silently; the UI
+        // left the operator staring at a non-running Run Now with no
+        // explanation. Toast surfaces the real reason.
+        toast({
+          type: "error",
+          message: "You don't have permission to run the pipeline.",
+        });
+      } else {
+        // Generic fallback so a 5xx or network error isn't silent.
+        const msg =
+          err instanceof Error ? err.message : "Could not start the pipeline.";
+        toast({ type: "error", message: msg });
       }
-      // Other errors fall silently — last_result on the next status
-      // poll will surface anything user-visible.
     } finally {
       setSubmitting(false);
     }
@@ -505,10 +526,26 @@ export default function PipelinePage() {
         const s = await getPipelineStatus();
         setStatus(s);
       } catch {
-        // ignore
+        // ignore — next scheduled poll will catch up.
       }
-    } catch {
-      // Likely 403 (non-admin) — could surface a toast in a follow-up.
+      toast({
+        type: "success",
+        message: "Cancel requested. Pipeline will stop at next safe checkpoint.",
+      });
+    } catch (err) {
+      // Previously this catch was empty — a 403 (non-admin) or 5xx left
+      // the Cancel button showing "Cancelling..." with no feedback. Toast
+      // the real status so the operator knows their click didn't work.
+      if (err instanceof PipelineApiError && err.status === 403) {
+        toast({
+          type: "error",
+          message: "You don't have permission to cancel the pipeline.",
+        });
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "Could not cancel the pipeline.";
+        toast({ type: "error", message: msg });
+      }
     } finally {
       setCancelling(false);
     }
@@ -591,23 +628,37 @@ export default function PipelinePage() {
 
   const pipelineActions = (
     <>
-      <div className="flex items-center gap-2">
+      {/* Status chip — explicit "RUNNING / IDLE / CANCELLED / ERROR" pill
+          using the editorial `t-label` caps token so the state is legible
+          at a glance alongside the clock + toggles. Previously the label
+          was a flat 11px sans — too close to the surrounding meta text to
+          register as a status reading. */}
+      <div
+        aria-label={`Pipeline status: ${statusLabel}`}
+        className="flex items-center gap-2"
+      >
         <span
           className={cn(
             "inline-block h-2 w-2 rounded-full",
             statusColor,
             isRunning && "animate-pulse",
           )}
+          aria-hidden
         />
-        <span className="font-sans text-[11px] font-medium text-fg-muted">
-          {statusLabel}
-        </span>
+        <span className="t-label text-fg">{statusLabel}</span>
       </div>
       {lastRun && (
         <span className="flex items-center gap-1 text-fg-muted">
           <Clock className="h-3 w-3" aria-hidden />
-          <Mono className="text-[11px] text-fg-muted">
-            {new Date(lastRun).toLocaleString()}
+          <Mono className="t-meta">
+            {new Date(lastRun).toLocaleString("en-US", {
+              timeZone: "America/New_York",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            {" ET"}
           </Mono>
         </span>
       )}
@@ -661,39 +712,41 @@ export default function PipelinePage() {
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-[var(--profit)] animate-pulse" />
-                        <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        <Activity className="h-4 w-4 text-[var(--profit)] animate-pulse" aria-hidden />
+                        <span className="t-label text-foreground">
                           Pipeline running
                         </span>
                         {status.stage && (
-                          <Badge variant="secondary" className="text-[10px]">
+                          <Badge variant="secondary" className="t-label">
                             {status.stage}
                           </Badge>
                         )}
                         {status.current_strategy && (
-                          <Badge variant="outline" className="text-[10px] font-mono">
+                          <Badge variant="outline" className="t-meta">
                             {status.current_strategy}
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-fg-muted">
+                      <div className="flex items-center gap-3 text-fg-muted">
                         {status.started_at && (
-                          <span className="tabular-nums">
-                            Elapsed:{" "}
-                            {(() => {
-                              const start = new Date(status.started_at).getTime();
-                              const elapsedSec = Math.max(
-                                0,
-                                Math.floor((Date.now() - start) / 1000),
-                              );
-                              const m = Math.floor(elapsedSec / 60);
-                              const s = elapsedSec % 60;
-                              return `${m}:${String(s).padStart(2, "0")}`;
-                            })()}
+                          <span className="flex items-center gap-1.5">
+                            <span className="t-label">Elapsed</span>
+                            <Mono className="t-num-md text-foreground">
+                              {(() => {
+                                const start = new Date(status.started_at).getTime();
+                                const elapsedSec = Math.max(
+                                  0,
+                                  Math.floor((Date.now() - start) / 1000),
+                                );
+                                const m = Math.floor(elapsedSec / 60);
+                                const s = elapsedSec % 60;
+                                return `${m}:${String(s).padStart(2, "0")}`;
+                              })()}
+                            </Mono>
                           </span>
                         )}
                         {status.run_id && (
-                          <Mono className="text-[10px] text-fg-muted">
+                          <Mono className="t-meta">
                             #{status.run_id.slice(0, 8)}
                           </Mono>
                         )}
@@ -715,11 +768,11 @@ export default function PipelinePage() {
                     </div>
                     {status.progress && status.progress.total > 0 && (
                       <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px] text-fg-muted">
-                          <span>Strategies completed</span>
-                          <span className="tabular-nums">
+                        <div className="flex items-center justify-between text-fg-muted">
+                          <span className="t-label">Strategies completed</span>
+                          <Mono className="t-num-md text-foreground">
                             {status.progress.current} / {status.progress.total}
-                          </span>
+                          </Mono>
                         </div>
                         <div className="h-1.5 w-full rounded-full bg-[var(--surface)] overflow-hidden">
                           <div
@@ -747,17 +800,20 @@ export default function PipelinePage() {
             {!isRunning && scheduler && (
               <section>
                 <Card className="border-border bg-[var(--surface)]">
-                  <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap text-[11px]">
+                  <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-fg-muted">Next scheduled run:</span>
-                      <Mono className="text-foreground">
-                        {/* BUG-013: the header elsewhere on this page calls
-                            the next run "09:30 ET" (market open). The
-                            scheduler timestamp — formatted via `toLocaleString`
-                            — rendered as "9:35:00 AM" in the user's local
-                            locale, contradicting the header. Normalise to
-                            "YYYY-MM-DD 09:30 ET" so both readings agree. */}
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      <span className="t-label">Next run</span>
+                      {/* BUG-013: the header elsewhere on this page calls
+                          the next run "09:30 ET" (market open). The
+                          scheduler timestamp — formatted via `toLocaleString`
+                          — rendered as "9:35:00 AM" in the user's local
+                          locale, contradicting the header. Normalise to
+                          "YYYY-MM-DD 09:30 ET" so both readings agree.
+                          Using `t-num-md` so it lands mono-tabular and
+                          slightly larger than meta — it's the actionable
+                          number on this card. */}
+                      <Mono className="t-num-md text-foreground">
                         {scheduler.next_scheduled_run
                           ? `${new Intl.DateTimeFormat("en-CA", {
                               timeZone: "America/New_York",
@@ -769,13 +825,21 @@ export default function PipelinePage() {
                       </Mono>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-fg-muted">Last heartbeat:</span>
-                      <Mono className="text-foreground">
-                        {scheduler.last_heartbeat ?? "Never"}
+                      <span className="t-label">Heartbeat</span>
+                      <Mono className="t-meta text-foreground">
+                        {scheduler.last_heartbeat
+                          ? new Date(scheduler.last_heartbeat).toLocaleString("en-US", {
+                              timeZone: "America/New_York",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }) + " ET"
+                          : "Never"}
                       </Mono>
                       {scheduler.missed_runs > 0 && (
                         <Badge
-                          className="text-[10px] bg-amber/15 text-amber border-amber/30"
+                          className="t-label bg-amber/15 text-amber border-amber/30"
                         >
                           {scheduler.missed_runs} missed
                         </Badge>
@@ -789,12 +853,12 @@ export default function PipelinePage() {
             {/* Section 1: Current Positions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Target className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Current Positions
+                <Target className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
+                  Current positions
                 </h2>
                 {displayPositions.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px]">
+                  <Badge variant="secondary" className="t-label">
                     {displayPositions.length}
                   </Badge>
                 )}
@@ -820,38 +884,38 @@ export default function PipelinePage() {
                   <Table className="min-w-[900px]">
                     <TableHeader>
                       <TableRow className="border-border">
-                        <TableHead className="text-[11px]">Symbol</TableHead>
-                        <TableHead className="text-[11px]">Shares</TableHead>
-                        <TableHead className="text-[11px]">Entry</TableHead>
-                        <TableHead className="text-[11px]">Current</TableHead>
-                        <TableHead className="text-[11px]">P&L ($)</TableHead>
-                        <TableHead className="text-[11px]">P&L (%)</TableHead>
-                        <TableHead className="text-[11px]">Stop Loss</TableHead>
-                        <TableHead className="text-[11px]">
-                          Take Profit
-                        </TableHead>
-                        <TableHead className="text-[11px]">Entry Date</TableHead>
-                        <TableHead className="text-[11px]">Signal</TableHead>
+                        {/* `t-label` (12px caps, tracked 0.12em) is the
+                            dashboard standard for column eyebrows. */}
+                        <TableHead className="t-label">Symbol</TableHead>
+                        <TableHead className="t-label">Shares</TableHead>
+                        <TableHead className="t-label">Entry</TableHead>
+                        <TableHead className="t-label">Current</TableHead>
+                        <TableHead className="t-label">P&L ($)</TableHead>
+                        <TableHead className="t-label">P&L (%)</TableHead>
+                        <TableHead className="t-label">Stop loss</TableHead>
+                        <TableHead className="t-label">Take profit</TableHead>
+                        <TableHead className="t-label">Entry date</TableHead>
+                        <TableHead className="t-label">Signal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {displayPositions.map((pos) => (
                         <TableRow key={`${pos.symbol}-${pos.entryDate}`} className="border-border">
-                          <TableCell className="text-xs font-bold text-foreground">
+                          <TableCell className="font-sans font-semibold text-[13px] text-foreground">
                             {pos.symbol}
                           </TableCell>
-                          <TableCell className="text-xs tabular-nums">
+                          <TableCell className="t-num-md text-foreground">
                             {pos.shares}
                           </TableCell>
-                          <TableCell className="text-xs tabular-nums">
+                          <TableCell className="t-num-md text-foreground">
                             {formatCurrency(pos.entryPrice)}
                           </TableCell>
-                          <TableCell className="text-xs tabular-nums">
+                          <TableCell className="t-num-md text-foreground">
                             {formatCurrency(pos.currentPrice)}
                           </TableCell>
                           <TableCell
                             className={cn(
-                              "text-xs font-medium tabular-nums",
+                              "t-num-md",
                               (pos.pnl ?? 0) > 0
                                 ? "text-[var(--profit)]"
                                 : (pos.pnl ?? 0) < 0
@@ -864,7 +928,7 @@ export default function PipelinePage() {
                           </TableCell>
                           <TableCell
                             className={cn(
-                              "text-xs font-medium tabular-nums",
+                              "t-num-md",
                               (pos.pnlPct ?? 0) > 0
                                 ? "text-[var(--profit)]"
                                 : (pos.pnlPct ?? 0) < 0
@@ -875,17 +939,17 @@ export default function PipelinePage() {
                             {(pos.pnlPct ?? 0) >= 0 ? "+" : ""}
                             {(pos.pnlPct ?? 0).toFixed(2)}%
                           </TableCell>
-                          <TableCell className="text-xs tabular-nums text-muted-foreground">
+                          <TableCell className="t-num-md text-muted-foreground">
                             {pos.stopLoss
                               ? formatCurrency(pos.stopLoss)
-                              : <span className="inline-flex items-center gap-1 text-amber" title="No stop loss set — position is unprotected">None</span>}
+                              : <span className="t-label text-amber" title="No stop loss set — position is unprotected">None</span>}
                           </TableCell>
-                          <TableCell className="text-xs tabular-nums text-muted-foreground">
+                          <TableCell className="t-num-md text-muted-foreground">
                             {pos.takeProfit
                               ? formatCurrency(pos.takeProfit)
                               : "—"}
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
+                          <TableCell className="t-meta text-muted-foreground">
                             {pos.entryDate
                               ? new Date(pos.entryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
                               : "—"}
@@ -905,9 +969,9 @@ export default function PipelinePage() {
             {/* Section 2: Today's Pipeline Run */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Zap className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Latest Pipeline Run
+                <Zap className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
+                  Latest pipeline run
                 </h2>
               </div>
               {todayRun ? (
@@ -957,11 +1021,13 @@ export default function PipelinePage() {
             {/* Strategy Builder */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Brain className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Strategy Builder
+                <Brain className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
+                  Strategy builder
                 </h2>
-                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium">AI</span>
+                <span className="t-label text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                  AI
+                </span>
               </div>
               <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
                 <StrategyBuilder />
@@ -973,8 +1039,8 @@ export default function PipelinePage() {
             {/* Backtesting */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
                   Backtesting
                 </h2>
               </div>
@@ -988,9 +1054,9 @@ export default function PipelinePage() {
             {/* Section 3: History */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  History (Last 7 Days)
+                <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
+                  History &nbsp;<span className="t-meta">· last 7 days</span>
                 </h2>
               </div>
               {history.length === 0 ? (
@@ -1007,9 +1073,9 @@ export default function PipelinePage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border">
-                        <TableHead className="text-[11px] w-8" />
-                        <TableHead className="text-[11px]">Date</TableHead>
-                        <TableHead className="text-[11px]">Summary</TableHead>
+                        <TableHead className="t-label w-8" />
+                        <TableHead className="t-label">Date</TableHead>
+                        <TableHead className="t-label">Summary</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1042,48 +1108,66 @@ export default function PipelinePage() {
                                 <ChevronRight className="h-3 w-3" />
                               )}
                             </TableCell>
-                            <TableCell className="text-xs font-medium text-foreground">
-                              {h.date}
+                            <TableCell>
+                              {/* Date column — mono-tabular so vertically-
+                                  stacked YYYY-MM-DDs align. */}
+                              <Mono className="t-num-md text-foreground">
+                                {h.date}
+                              </Mono>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
+                            <TableCell className="t-meta text-muted-foreground">
                               {isExpanded && run ? (
                                 <div className="space-y-1 py-1">
-                                  <div className="flex gap-4 text-[11px]">
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 t-meta">
                                     <span>
-                                      Screened: {run.counts?.screened ?? run.screened.length}
+                                      <span className="t-label mr-1">Screened</span>
+                                      <Mono className="t-num-md text-foreground">
+                                        {run.counts?.screened ?? run.screened.length}
+                                      </Mono>
                                     </span>
                                     <span>
-                                      Analyzed: {run.counts?.analyzed ?? run.analyzed.length}
+                                      <span className="t-label mr-1">Analyzed</span>
+                                      <Mono className="t-num-md text-foreground">
+                                        {run.counts?.analyzed ?? run.analyzed.length}
+                                      </Mono>
                                     </span>
                                     <span>
-                                      Signals: {run.signals.length}
+                                      <span className="t-label mr-1">Signals</span>
+                                      <Mono className="t-num-md text-foreground">
+                                        {run.signals.length}
+                                      </Mono>
                                     </span>
                                     <span>
-                                      Orders: {run.ordersPlaced.length}
+                                      <span className="t-label mr-1">Orders</span>
+                                      <Mono className="t-num-md text-foreground">
+                                        {run.ordersPlaced.length}
+                                      </Mono>
                                     </span>
                                   </div>
                                   {run.portfolioSnapshot && (
-                                    <div className="flex gap-4 text-[11px]">
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1 t-meta">
                                       <span>
-                                        Equity:{" "}
-                                        {formatCurrency(
-                                          run.portfolioSnapshot.equity
-                                        )}
+                                        <span className="t-label mr-1">Equity</span>
+                                        <Mono className="t-num-md text-foreground">
+                                          {formatCurrency(run.portfolioSnapshot.equity)}
+                                        </Mono>
                                       </span>
                                       <span>
-                                        Cash:{" "}
-                                        {formatCurrency(
-                                          run.portfolioSnapshot.cash
-                                        )}
+                                        <span className="t-label mr-1">Cash</span>
+                                        <Mono className="t-num-md text-foreground">
+                                          {formatCurrency(run.portfolioSnapshot.cash)}
+                                        </Mono>
                                       </span>
                                       <span>
-                                        Positions:{" "}
-                                        {run.portfolioSnapshot.positions}
+                                        <span className="t-label mr-1">Positions</span>
+                                        <Mono className="t-num-md text-foreground">
+                                          {run.portfolioSnapshot.positions}
+                                        </Mono>
                                       </span>
                                     </div>
                                   )}
                                   {run.errors.length > 0 && (
-                                    <div className="text-[11px] text-[var(--loss)]">
+                                    <div className="t-meta text-[var(--loss)]">
                                       {run.errors.length} error(s)
                                     </div>
                                   )}
@@ -1164,9 +1248,9 @@ export default function PipelinePage() {
             {/* Section 4: Performance Summary */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Performance Summary
+                <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <h2 className="t-display-section text-foreground">
+                  Performance summary
                 </h2>
               </div>
               {!perfData && !hasPnlData && displayPositions.length === 0 ? (
@@ -1186,9 +1270,7 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-gradient-to-r from-[var(--profit)] to-[var(--loss)]" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Total P&L
-                    </p>
+                    <p className="t-label mb-1">Total P&L</p>
                     {(() => {
                       const closedPnl = perfData?.totalPnl ?? 0;
                       const openPnl = totalPnl;
@@ -1196,7 +1278,7 @@ export default function PipelinePage() {
                       return (
                         <p
                           className={cn(
-                            "text-lg font-bold tabular-nums",
+                            "t-num-lg",
                             combined > 0
                               ? "text-[var(--profit)]"
                               : combined < 0
@@ -1214,10 +1296,8 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-primary/60" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Win Rate
-                    </p>
-                    <p className="text-lg font-bold tabular-nums text-foreground">
+                    <p className="t-label mb-1">Win rate</p>
+                    <p className="t-num-lg text-foreground">
                       {perfData ? ((perfData.winRate ?? 0) > 0 ? `${(perfData.winRate ?? 0).toFixed(1)}%` : "N/A") : winRate !== "N/A" ? `${winRate}%` : "N/A"}
                     </p>
                   </CardContent>
@@ -1226,10 +1306,8 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-primary/40" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Total Trades
-                    </p>
-                    <p className="text-lg font-bold tabular-nums text-foreground">
+                    <p className="t-label mb-1">Total trades</p>
+                    <p className="t-num-lg text-foreground">
                       {perfData ? perfData.totalTrades : displayPositions.length}
                     </p>
                   </CardContent>
@@ -1238,10 +1316,8 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-primary/30" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Active Positions
-                    </p>
-                    <p className="text-lg font-bold tabular-nums text-foreground">
+                    <p className="t-label mb-1">Active positions</p>
+                    <p className="t-num-lg text-foreground">
                       {displayPositions.length}
                     </p>
                   </CardContent>
@@ -1250,10 +1326,8 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-[var(--profit)]/60" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Best Trade
-                    </p>
-                    <p className={cn("text-lg font-bold tabular-nums", perfData?.bestTrade && perfData.bestTrade.pnl > 0 ? "text-[var(--profit)]" : bestTrade && (bestTrade.pnl ?? 0) > 0 ? "text-[var(--profit)]" : "text-muted-foreground")}>
+                    <p className="t-label mb-1">Best trade</p>
+                    <p className={cn("t-num-lg", perfData?.bestTrade && perfData.bestTrade.pnl > 0 ? "text-[var(--profit)]" : bestTrade && (bestTrade.pnl ?? 0) > 0 ? "text-[var(--profit)]" : "text-muted-foreground")}>
                       {perfData?.bestTrade && perfData.bestTrade.pnl > 0
                         ? `+${formatCurrency(perfData.bestTrade.pnl)}`
                         : bestTrade && (bestTrade.pnl ?? 0) > 0
@@ -1261,7 +1335,7 @@ export default function PipelinePage() {
                         : "—"}
                     </p>
                     {((perfData?.bestTrade && perfData.bestTrade.pnl > 0) || (bestTrade && (bestTrade.pnl ?? 0) > 0)) && (
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="t-meta mt-0.5">
                         {perfData?.bestTrade?.symbol ?? bestTrade?.symbol}
                       </p>
                     )}
@@ -1271,10 +1345,8 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)] overflow-hidden">
                   <div className="h-0.5 bg-[var(--loss)]/60" />
                   <CardContent className="p-4 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                      Worst Trade
-                    </p>
-                    <p className={cn("text-lg font-bold tabular-nums", (perfData?.worstTrade || (worstTrade && (worstTrade.pnl ?? 0) < 0)) ? "text-[var(--loss)]" : "text-muted-foreground")}>
+                    <p className="t-label mb-1">Worst trade</p>
+                    <p className={cn("t-num-lg", (perfData?.worstTrade || (worstTrade && (worstTrade.pnl ?? 0) < 0)) ? "text-[var(--loss)]" : "text-muted-foreground")}>
                       {perfData?.worstTrade
                         ? formatCurrency(perfData.worstTrade.pnl)
                         : worstTrade && (worstTrade.pnl ?? 0) < 0
@@ -1282,7 +1354,7 @@ export default function PipelinePage() {
                         : "—"}
                     </p>
                     {(perfData?.worstTrade || (worstTrade && (worstTrade.pnl ?? 0) < 0)) && (
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="t-meta mt-0.5">
                         {perfData?.worstTrade?.symbol ?? worstTrade?.symbol}
                       </p>
                     )}

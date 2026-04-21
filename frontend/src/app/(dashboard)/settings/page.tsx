@@ -39,12 +39,12 @@ function Toggle({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
-      <div>
+      <div className="min-w-0">
         <p className="text-xs font-medium text-foreground">{label}</p>
         {description && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {description}
-          </p>
+          // Per-toggle hint — `t-meta` (13px mono fg-muted) matches the
+          // dashboard's "field caption" voice used on settings rows.
+          <p className="t-meta mt-0.5">{description}</p>
         )}
       </div>
       {/* Wave 29 persona-5 #3: Apple HIG + WCAG 2.5.5 require a 44x44 tap
@@ -105,9 +105,9 @@ function IntervalSlider({
     <div className="py-1.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs font-medium text-foreground" id="interval-label">
-          Portfolio refresh interval: {value} seconds
+          Portfolio refresh interval
         </p>
-        <span className="text-xs font-semibold text-primary tabular-nums">
+        <span className="t-num-md text-primary">
           {labels[value] ?? `${value}s`}
         </span>
       </div>
@@ -123,8 +123,11 @@ function IntervalSlider({
             role="radio"
             aria-checked={value === opt}
             onClick={() => onChange(opt)}
+            // `h-10` matches the dashboard's form-input hit-target rule —
+            // small pills in a 5-option radiogroup can drift below 30px
+            // otherwise, violating WCAG 2.5.5.
             className={cn(
-              "flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors",
+              "flex-1 h-10 px-3 text-[12px] font-medium transition-colors",
               value === opt
                 ? "bg-primary/15 text-primary"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
@@ -134,7 +137,7 @@ function IntervalSlider({
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-muted-foreground mt-1">
+      <p className="t-meta mt-1">
         Lower intervals increase API usage. Default is 30s.
       </p>
     </div>
@@ -150,17 +153,10 @@ export default function SettingsPage() {
   // Wave 29 persona-1 #7: the old toggle flipped straight to live with no
   // guard. There's no /auth/switch-mode endpoint yet (ProfileMenu confirms);
   // the dialog below asks for confirmation first, and confirming toasts
-  // honestly instead of silently staying on paper.
+  // honestly instead of silently staying on paper. The segmented-control
+  // below calls `setLiveConfirmOpen` / `setTradingMode` inline so this
+  // helper was removed in the 2026-04 polish pass.
   const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
-
-  function handleTradingModeToggle() {
-    if (tradingMode === "live") {
-      // Switching back to paper is always safe
-      setTradingMode("paper");
-    } else {
-      setLiveConfirmOpen(true);
-    }
-  }
 
   const notifications = usePreferencesStore((s) => s.notifications);
   const display = usePreferencesStore((s) => s.display);
@@ -315,91 +311,99 @@ export default function SettingsPage() {
         {/* Trading Mode */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Monitor className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Trading Mode</h2>
+            <Monitor className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Trading mode</h2>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs text-muted-foreground">
                 Switch between paper and live trading environments.
               </p>
-              <p className="text-[10px] text-amber mt-1">
+              <p className="t-meta text-amber mt-1">
                 {tradingMode === "live"
                   ? "Live mode uses real capital. Be cautious."
                   : "Paper mode uses simulated funds. Safe for testing."}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            {/* BUG (market standard): the previous pill used a red/green
+                "switch" whose resting state (green = paper) looked like a
+                positive live indicator — ambiguous on first glance. Replaced
+                with a two-button segmented control where the ACTIVE side
+                wears the gold brand accent (`bg-brand/20 text-brand`). A
+                sibling `aria-labelledby="trading-mode-label"` radiogroup
+                exposes the same semantics for AT. */}
+            <div className="flex flex-col items-end gap-1">
               <span
-                className={cn(
-                  "text-[11px] font-medium",
-                  tradingMode === "paper"
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-                )}
+                id="trading-mode-label"
+                className="t-label"
               >
-                Paper
+                Mode
               </span>
-              {/* Wave 29 persona-5 #3: trading-mode toggle is the most
-                  consequential switch on the page — wrap in 44x44 min tap
-                  target and gate switching to live through a confirmation
-                  dialog. */}
-              <button
-                role="switch"
-                aria-checked={tradingMode === "live"}
-                aria-label="Trading mode toggle"
-                onClick={handleTradingModeToggle}
-                className="relative inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 p-2.5 -mr-2.5"
+              <div
+                role="radiogroup"
+                aria-labelledby="trading-mode-label"
+                className="flex rounded-md border border-border overflow-hidden"
               >
-                <span
-                  className={cn(
-                    "relative inline-flex h-6 w-11 items-center rounded-full border-2 transition-colors",
-                    tradingMode === "live"
-                      ? "bg-loss/80 border-loss/60"
-                      : "bg-profit/60 border-profit/40"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 rounded-full bg-fg shadow transition-transform",
-                      tradingMode === "live"
-                        ? "translate-x-5"
-                        : "translate-x-0.5"
-                    )}
-                  />
-                </span>
-              </button>
-              <span
-                className={cn(
-                  "text-[11px] font-medium",
-                  tradingMode === "live"
-                    ? "text-loss"
-                    : "text-muted-foreground"
-                )}
-              >
-                Live
-              </span>
+                {(["paper", "live"] as const).map((opt) => {
+                  const active = tradingMode === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        if (opt === "live" && tradingMode !== "live") {
+                          setLiveConfirmOpen(true);
+                        } else if (opt === "paper" && tradingMode !== "paper") {
+                          setTradingMode("paper");
+                        }
+                      }}
+                      className={cn(
+                        // WCAG 2.5.5: ≥44x44 tap target on each option.
+                        // Both sides keep the same geometry so the active
+                        // pill is signalled by colour alone — the gold
+                        // accent on the selected side is unmistakable;
+                        // live carries a loss-red accent to keep the
+                        // cost-of-being-wrong legible at a glance.
+                        "min-h-11 min-w-[88px] px-4 font-sans text-[12px] font-semibold uppercase tracking-wider transition-colors",
+                        active
+                          ? opt === "live"
+                            ? "bg-loss/15 text-loss"
+                            : "bg-brand/20 text-brand"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                      )}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* API Keys */}
+        {/* API Keys / Broker Credentials. Intentionally shows only a "set
+            on server" status — never the key or secret itself (security). */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Key className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">API Keys</h2>
+            <Key className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">API keys</h2>
+            <span className="t-label bg-brand/10 text-brand border border-brand/30 rounded-sm px-1.5 py-0.5">
+              Set on server
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
             Alpaca API keys are configured on the server. Contact admin to update
-            brokerage credentials.
+            brokerage credentials. Keys and secrets are never displayed here.
           </p>
         </div>
 
         {/* Notifications */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Notifications</h2>
+            <Bell className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Notifications</h2>
           </div>
           <div className="space-y-1">
             <Toggle
@@ -430,8 +434,8 @@ export default function SettingsPage() {
         {/* Display */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Palette className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Display</h2>
+            <Palette className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Display</h2>
           </div>
           <div className="space-y-1">
             <Toggle
@@ -462,7 +466,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between gap-4 py-1.5">
               <div>
                 <p className="text-xs font-medium text-foreground">Theme</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="t-meta mt-0.5">
                   Dark mode is fully tuned today. Light mode is coming in a
                   future release.
                 </p>
@@ -480,7 +484,7 @@ export default function SettingsPage() {
                     aria-checked={display.theme === opt}
                     onClick={() => setDisplayPref("theme", opt)}
                     className={cn(
-                      "min-h-11 px-3 text-[11px] font-medium capitalize transition-colors",
+                      "min-h-11 px-4 text-[12px] font-medium capitalize transition-colors",
                       display.theme === opt
                         ? "bg-primary/15 text-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
@@ -497,8 +501,8 @@ export default function SettingsPage() {
         {/* Data Refresh */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <RefreshCw className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Data Refresh</h2>
+            <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Data refresh</h2>
           </div>
           <IntervalSlider
             value={data.refreshInterval}
@@ -509,52 +513,54 @@ export default function SettingsPage() {
         {/* Export */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Download className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Export Data</h2>
+            <Download className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Export data</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
             Download your data in standard formats for backup or analysis.
           </p>
+          {/* Market-standard hit-target: `h-10` (40px) aligns with the
+              frontend typography contract's form-input rule. */}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-7"
+              className="text-xs gap-1.5 h-10"
               onClick={handleExportWatchlist}
             >
               {exportDone === "watchlist" ? (
-                <Check className="h-3 w-3 text-profit" />
+                <Check className="h-3 w-3 text-profit" aria-hidden />
               ) : (
-                <Download className="h-3 w-3" />
+                <Download className="h-3 w-3" aria-hidden />
               )}
               Watchlist (JSON)
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-7"
+              className="text-xs gap-1.5 h-10"
               onClick={handleExportTrades}
               disabled={exportingTrades}
             >
               {exportingTrades ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
               ) : exportDone === "trades" ? (
-                <Check className="h-3 w-3 text-profit" />
+                <Check className="h-3 w-3 text-profit" aria-hidden />
               ) : (
-                <Download className="h-3 w-3" />
+                <Download className="h-3 w-3" aria-hidden />
               )}
               Trade History (CSV)
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-7"
+              className="text-xs gap-1.5 h-10"
               onClick={handleExportSettings}
             >
               {exportDone === "settings" ? (
-                <Check className="h-3 w-3 text-profit" />
+                <Check className="h-3 w-3 text-profit" aria-hidden />
               ) : (
-                <Download className="h-3 w-3" />
+                <Download className="h-3 w-3" aria-hidden />
               )}
               Settings (JSON)
             </Button>
@@ -564,8 +570,8 @@ export default function SettingsPage() {
         {/* Security */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Security</h2>
+            <Shield className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <h2 className="t-display-section text-foreground">Security</h2>
           </div>
           <p className="text-xs text-muted-foreground">
             Sessions expire after 8 hours. JWT tokens are stored in HttpOnly
@@ -580,12 +586,12 @@ export default function SettingsPage() {
             `resetAll()`; this button is the missing UI. Confirmation
             dialog prevents accidental clicks from blowing away a
             carefully-tuned setup. */}
-        <div className="flex items-center justify-between rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div>
             <p className="text-xs font-medium text-foreground">
               Reset preferences
             </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
+            <p className="t-meta mt-0.5">
               Restore notifications, display, and data-refresh preferences
               to defaults. Trading mode and watchlist are not affected.
             </p>
@@ -593,7 +599,7 @@ export default function SettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="text-xs gap-1.5 h-7"
+            className="text-xs gap-1.5 h-10"
             onClick={() => setResetConfirmOpen(true)}
           >
             {resetDone ? (
