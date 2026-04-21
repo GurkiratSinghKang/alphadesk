@@ -17,7 +17,7 @@ import type { CanvasRenderingTarget2D } from "fancy-canvas";
 
 // ─── Public types ────────────────────────────────────────────
 
-export type DrawingKind = "trend" | "rect" | "fib";
+export type DrawingKind = "trend" | "rect" | "fib" | "horizontal";
 
 export interface DrawingPoint {
   /** Unix seconds (matches LWC v5 `Time` when used as number). */
@@ -28,7 +28,11 @@ export interface DrawingPoint {
 export interface Drawing {
   id: string;
   kind: DrawingKind;
-  /** trend: 2 points, rect: 2 points (opposite corners), fib: 2 points. */
+  /**
+   * trend / rect / fib: 2 points.
+   * horizontal: 1 point — the price level; the line is drawn across the
+   * full visible bitmap width so it tracks the chart as the user pans.
+   */
   points: DrawingPoint[];
   /** CSS color token value (already resolved to a usable color string). */
   color: string;
@@ -73,8 +77,18 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
       const timeScale = this.chart.timeScale();
 
       for (const d of this.drawings) {
-        if (!d.points || d.points.length < 2) continue;
+        if (!d.points || d.points.length < 1) continue;
         const p1 = d.points[0];
+
+        // Horizontal line: only one anchor point — draw across full width.
+        if (d.kind === "horizontal") {
+          const y = this.series.priceToCoordinate(p1.price);
+          if (y == null) continue;
+          drawHorizontal(ctx, y * vPx, d.color, scope.bitmapSize.width, hPx, vPx, p1.price);
+          continue;
+        }
+
+        if (d.points.length < 2) continue;
         const p2 = d.points[1];
         // Convert to media-coordinate pixels first.
         const x1 = timeScale.timeToCoordinate(p1.time as unknown as Time);
@@ -123,6 +137,33 @@ function drawTrend(
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawHorizontal(
+  ctx: CanvasRenderingContext2D,
+  y: number,
+  color: string,
+  bitmapWidth: number,
+  hPx: number,
+  vPx: number,
+  price: number,
+): void {
+  // Stretches edge-to-edge so the line keeps reading as a price level when
+  // the user pans. Price label sits on the right so it doesn't collide
+  // with the axis labels on the outer edge of the canvas.
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * hPx;
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(bitmapWidth, y);
+  ctx.stroke();
+  ctx.font = `${10 * vPx}px sans-serif`;
+  ctx.textBaseline = "bottom";
+  ctx.textAlign = "right";
+  ctx.fillStyle = color;
+  ctx.fillText(price.toFixed(2), bitmapWidth - 6 * hPx, y - 2 * vPx);
   ctx.restore();
 }
 

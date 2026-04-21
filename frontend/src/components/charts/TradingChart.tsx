@@ -24,6 +24,11 @@ import {
   CrosshairMode,
 } from "lightweight-charts";
 import type { OHLCVBar, ChartType, Indicator } from "@/types";
+import {
+  attachDrawingPane,
+  type Drawing,
+  type DrawingPaneHandle,
+} from "@/components/charts/drawingPlugin";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -47,6 +52,29 @@ interface TradingChartProps {
     takeProfit: number | null;
   } | null;
   drawingPriceLines?: Array<{ price: number; color: string; label?: string }>;
+  /**
+   * Fired when the user clicks on the chart canvas with a time+price the
+   * drawing state machine can consume. Skipped when the click lands outside
+   * the plot area (no `time` or `point` on the event).
+   */
+  onChartClick?: (pt: { time: number; price: number }) => void;
+  /**
+   * Fired on crosshair movement with a time+price point the drawing preview
+   * can track, or null when the pointer leaves the canvas. Narrower shape
+   * than `onCrosshairMove` which also ships OHLCV — this path stays cheap.
+   */
+  onDrawCrosshair?: (pt: { time: number; price: number } | null) => void;
+  /**
+   * When true, pan + zoom are disabled so the draw click doesn't fight the
+   * scroll handlers. Toggle on when entering any non-cursor tool.
+   */
+  drawMode?: boolean;
+  /**
+   * Persisted drawings to render on top of the main series via the drawing
+   * plugin's series primitive. Whenever this reference changes the plugin
+   * repaints — diff happens at the caller.
+   */
+  drawings?: Drawing[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -245,7 +273,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines, drawingPriceLines },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -254,6 +282,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
     const lastBarRef = useRef<OHLCVBar | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<SeriesType>[]>([]);
+    const drawingPaneRef = useRef<DrawingPaneHandle | null>(null);
+    // Keep the latest callbacks in refs so we can subscribe once inside the
+    // chart-creation effect without re-subscribing on every render.
+    const onChartClickRef = useRef(onChartClick);
+    const onDrawCrosshairRef = useRef(onDrawCrosshair);
+    useEffect(() => { onChartClickRef.current = onChartClick; }, [onChartClick]);
+    useEffect(() => { onDrawCrosshairRef.current = onDrawCrosshair; }, [onDrawCrosshair]);
 
     // Expose imperative handle
     useImperativeHandle(ref, () => ({
@@ -436,6 +471,51 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         });
       }
 
+      // Drawing-path click: translates the mouse event into a {time, price}
+      // pair for the state machine in ChartPane. LWC v5 fires subscribeClick
+      // with .time undefined if the click lands outside the x-range of bars
+      // and .point undefined if the click is off-canvas — guard both.
+      chart.subscribeClick((param) => {
+        const cb = onChartClickRef.current;
+        if (!cb) return;
+        if (!param.point || param.time == null) return;
+        const price = mainSeries.coordinateToPrice(param.point.y);
+        if (price == null) return;
+        const t = typeof param.time === "number" ? param.time : Number(param.time);
+        if (!Number.isFinite(t)) return;
+        cb({ time: t, price: Number(price) });
+      });
+
+      // Crosshair tracking for in-progress drawing preview. Emits null on
+      // leave so the preview overlay can hide. Kept separate from the
+      // existing onCrosshairMove so OHLCV readouts and draw-preview stay
+      // decoupled (and the ChartPane doesn't have to care about BarData).
+      chart.subscribeCrosshairMove((param) => {
+        const cb = onDrawCrosshairRef.current;
+        if (!cb) return;
+        if (!param.point || param.time == null) {
+          cb(null);
+          return;
+        }
+        const price = mainSeries.coordinateToPrice(param.point.y);
+        if (price == null) {
+          cb(null);
+          return;
+        }
+        const t = typeof param.time === "number" ? param.time : Number(param.time);
+        if (!Number.isFinite(t)) {
+          cb(null);
+          return;
+        }
+        cb({ time: t, price: Number(price) });
+      });
+
+      // Attach the drawing plugin to the main series so user-drawn shapes
+      // render on the same canvas as the candles. The handle stays put even
+      // when `drawings` is empty so adding the first one doesn't require
+      // a re-attach.
+      drawingPaneRef.current = attachDrawingPane(chart, mainSeries, []);
+
       // ResizeObserver
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
@@ -447,6 +527,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
 
       return () => {
         observer.disconnect();
+        try { drawingPaneRef.current?.detach(); } catch { /* noop */ }
+        drawingPaneRef.current = null;
         chart.remove();
         chartRef.current = null;
         mainSeriesRef.current = null;
@@ -687,6 +769,31 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         });
       };
     }, [positionLines, chartType]);
+
+    // Push the drawings array into the attached pane whenever it changes.
+    // The primitive diffs internally (setDrawings calls requestUpdate), so
+    // reference-equal arrays produce a no-op repaint.
+    useEffect(() => {
+      drawingPaneRef.current?.setDrawings(drawings ?? []);
+    }, [drawings]);
+
+    // Draw-mode toggles pan/zoom. Without this, clicking on the chart to
+    // place a draw point would also start a drag-pan, stealing the click.
+    useEffect(() => {
+      const chart = chartRef.current;
+      if (!chart) return;
+      if (drawMode) {
+        chart.applyOptions({
+          handleScroll: false,
+          handleScale: false,
+        });
+      } else {
+        chart.applyOptions({
+          handleScroll: { mouseWheel: true, pressedMouseMove: true },
+          handleScale: { mouseWheel: true, pinch: true },
+        });
+      }
+    }, [drawMode]);
 
     // Drawing price lines (user-drawn horizontal lines)
     useEffect(() => {

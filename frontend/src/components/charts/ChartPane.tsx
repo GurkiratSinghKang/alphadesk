@@ -5,6 +5,9 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { TradingChart } from "@/components/charts/TradingChart";
 import type { ChartType, Indicator, OHLCVBar } from "@/types";
+import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
+import { useChartDrawings } from "@/hooks/useChartDrawings";
+import { useMarketStore } from "@/stores/market";
 
 /**
  * ChartPane — dashboard chart surface (2026-04-20 redesign)
@@ -86,7 +89,20 @@ const ALL_INDICATORS: Indicator[] = ["VWAP", "EMA", "SMA", "Bollinger", "RSI", "
 // local state — actual primitives land in a follow-up.
 type DrawingTool = "cursor" | "trend" | "horizontal" | "rect" | "fib" | "text";
 
-const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode }[] = [
+/**
+ * Map non-cursor tools to the concrete `DrawingKind` the plugin renders.
+ * `text` is excluded — we surface it disabled in the rail until v2 so
+ * the user can't enter a dead-end draw mode. `cursor` also has no entry
+ * because it's the default pan/zoom state, not a draw target.
+ */
+const TOOL_TO_KIND: Partial<Record<DrawingTool, DrawingKind>> = {
+  trend: "trend",
+  horizontal: "horizontal",
+  rect: "rect",
+  fib: "fib",
+};
+
+const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
   {
     id: "cursor",
     label: "Select",
@@ -137,7 +153,8 @@ const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode }[]
   },
   {
     id: "text",
-    label: "Text",
+    label: "Text (coming soon)",
+    disabled: true,
     icon: (
       <svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none">
         <path d="M2 2h9v2h-3.5v8h-2V4H2z" fill="currentColor" />
@@ -145,6 +162,18 @@ const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode }[]
     ),
   },
 ];
+
+/**
+ * Resolve a design-token color for the drawing currently being placed.
+ * Runs lazily (each add) so the plugin renders with whatever tokens are
+ * live at the moment of creation; persisted drawings keep their resolved
+ * color verbatim so re-renders don't silently shift palette.
+ */
+function readDrawingColor(): string {
+  if (typeof window === "undefined") return "#c9a66b";
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--gold-300");
+  return (v && v.trim()) || "#e0c070";
+}
 
 export default function ChartPane({
   data,
@@ -157,6 +186,16 @@ export default function ChartPane({
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [indicators, setIndicators] = React.useState<Indicator[]>(["Volume"]);
+
+  // Drawing state machine: `firstPoint` is set on the first click of a
+  // two-click drawing (trend/rect/fib). The second click commits via
+  // `add(...)` and clears. `hoverPoint` trails the crosshair so we can
+  // render the in-progress preview without re-querying the chart API.
+  const [firstPoint, setFirstPoint] = React.useState<{ time: number; price: number } | null>(null);
+  const [hoverPoint, setHoverPoint] = React.useState<{ time: number; price: number } | null>(null);
+
+  const symbol = useMarketStore((s) => s.selectedSymbol);
+  const { drawings, add } = useChartDrawings(symbol);
 
   const menuRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -179,6 +218,96 @@ export default function ChartPane({
     };
   }, [menuOpen]);
 
+  // Global Esc handler for the draw state machine: cancels in-progress
+  // draw and falls back to the cursor tool. Scoped at window level so it
+  // fires even when focus is on the chart canvas (which isn't focusable
+  // by default in lightweight-charts v5).
+  React.useEffect(() => {
+    if (activeTool === "cursor" && firstPoint == null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setFirstPoint(null);
+      setActiveTool("cursor");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeTool, firstPoint]);
+
+  // Clicking a new tool mid-draw should abandon the in-progress draw so
+  // the user doesn't end up with a half-committed shape bridging tools.
+  const selectTool = React.useCallback((t: DrawingTool) => {
+    setActiveTool(t);
+    setFirstPoint(null);
+  }, []);
+
+  // Handle a click on the chart canvas. `horizontal` finalizes on the
+  // FIRST click (single-point tool); other tools need two points. Text
+  // is disabled at the button level, so this branch is defensive.
+  const handleChartClick = React.useCallback(
+    (pt: { time: number; price: number }) => {
+      if (activeTool === "cursor") return;
+      if (activeTool === "text") {
+        console.warn("text drawing coming in v2");
+        return;
+      }
+      const kind = TOOL_TO_KIND[activeTool];
+      if (!kind) return;
+      const color = readDrawingColor();
+      if (kind === "horizontal") {
+        add({ kind, points: [pt], color });
+        // Drop back to cursor so the user doesn't accidentally line-flood
+        // the chart — matches TradingView's single-shot-tool behaviour.
+        setFirstPoint(null);
+        setActiveTool("cursor");
+        return;
+      }
+      if (firstPoint == null) {
+        setFirstPoint(pt);
+        return;
+      }
+      add({ kind, points: [firstPoint, pt], color });
+      setFirstPoint(null);
+      setActiveTool("cursor");
+    },
+    [activeTool, firstPoint, add],
+  );
+
+  // Compose the drawings array with a transient preview entry whenever
+  // the user has placed firstPoint and the crosshair is over the canvas.
+  // The preview is a real Drawing object so the plugin renders it with
+  // the same code path as persisted shapes — no preview-only renderer.
+  const drawingsWithPreview = React.useMemo<Drawing[]>(() => {
+    const kind = TOOL_TO_KIND[activeTool];
+    if (!kind || activeTool === "cursor") return drawings;
+    if (kind === "horizontal" && hoverPoint) {
+      return [
+        ...drawings,
+        {
+          id: "__preview",
+          kind,
+          points: [hoverPoint],
+          color: "rgba(224, 192, 112, 0.6)",
+          createdAt: 0,
+        },
+      ];
+    }
+    if (firstPoint && hoverPoint) {
+      return [
+        ...drawings,
+        {
+          id: "__preview",
+          kind,
+          points: [firstPoint, hoverPoint],
+          color: "rgba(224, 192, 112, 0.6)",
+          createdAt: 0,
+        },
+      ];
+    }
+    return drawings;
+  }, [drawings, activeTool, firstPoint, hoverPoint]);
+
+  const drawMode = activeTool !== "cursor";
+
   const toggleIndicator = (i: Indicator) => {
     setIndicators((prev) =>
       prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
@@ -188,47 +317,17 @@ export default function ChartPane({
   return (
     <div
       data-slot="chart-pane"
-      className={cn("relative flex-1 min-h-0 flex", className)}
+      className={cn("relative flex-1 min-h-0 flex flex-col", className)}
     >
-      {/* Drawing-tools rail (left). 44px wide so each button hits the
-          WCAG 2.5.5 40x40 minimum on desktop. Mobile (below md): the rail
-          collapses into a popover; since this is a dashboard viewport
-          target we render the full rail at md+. */}
-      <div
-        data-slot="chart-tools"
-        role="toolbar"
-        aria-label="Drawing tools"
-        aria-orientation="vertical"
-        className="hidden md:flex flex-col gap-px w-11 shrink-0 bg-bg-elev-1/40 border-r border-border-hair py-1"
-      >
-        {DRAWING_TOOLS.map((t) => {
-          const active = activeTool === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTool(t.id)}
-              title={t.label}
-              aria-label={t.label}
-              aria-pressed={active}
-              className={cn(
-                "w-11 h-10 inline-flex items-center justify-center rounded-xs transition-colors",
-                active
-                  ? "text-gold-300 bg-bg-elev-2"
-                  : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
-              )}
-            >
-              {t.icon}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Chart canvas area */}
-      <div className="relative flex-1 min-w-0 flex flex-col">
-        {/* Top chrome: chart-type toggle (left) + indicator button (right).
-            36px tall to match h-9 hit targets. */}
-        <div className="flex items-center justify-between gap-2 h-9 px-3 border-b border-border-hair bg-bg-elev-1/30">
+      {/* Top chrome: chart-type toggle (left) + indicator button (right).
+          40px tall (h-10, WCAG 2.5.5 hit target). Rendered OUTSIDE the
+          inner rail+canvas flex-row so it spans full width — previously
+          the drawing rail sat alongside this bar and the first tool
+          button's top edge clipped into the chrome's border, making it
+          appear half-hidden. With the chrome above and the rail below,
+          every drawing button is fully visible and unambiguously
+          clickable. */}
+      <div className="flex items-center justify-between gap-2 h-10 px-3 border-b border-border-hair bg-bg-elev-1/30 shrink-0">
           <div role="radiogroup" aria-label="Chart type" className="flex gap-0.5">
             {TYPES.map((t) => {
               const active = chartType === t.id;
@@ -325,8 +424,48 @@ export default function ChartPane({
           </div>
         </div>
 
+      {/* Below-chrome row: drawing-tools rail (left, md+) + canvas area. */}
+      <div className="flex-1 min-h-0 flex">
+        {/* Drawing-tools rail (left). 44px wide — each button hits the
+            WCAG 2.5.5 40×40 minimum on desktop. Mobile (<md) hides the
+            rail; a follow-up will surface it as a popover. */}
+        <div
+          data-slot="chart-tools"
+          role="toolbar"
+          aria-label="Drawing tools"
+          aria-orientation="vertical"
+          className="hidden md:flex flex-col gap-px w-11 shrink-0 bg-bg-elev-1/40 border-r border-border-hair py-1"
+        >
+          {DRAWING_TOOLS.map((t) => {
+            const active = activeTool === t.id;
+            const disabled = Boolean(t.disabled);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => { if (!disabled) selectTool(t.id); }}
+                title={t.label}
+                aria-label={t.label}
+                aria-pressed={active}
+                aria-disabled={disabled || undefined}
+                disabled={disabled}
+                className={cn(
+                  "w-11 h-10 inline-flex items-center justify-center rounded-xs transition-colors",
+                  disabled
+                    ? "text-fg-hint/50 cursor-not-allowed"
+                    : active
+                      ? "text-gold-300 bg-bg-elev-2"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+                )}
+              >
+                {t.icon}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Canvas */}
-        <div className="flex-1 relative min-h-[260px]">
+        <div className="flex-1 relative min-h-[260px] min-w-0">
           {error ? (
             <div
               role="alert"
@@ -364,11 +503,20 @@ export default function ChartPane({
               </span>
             </div>
           ) : (
-            <TradingChart
-              data={data}
-              chartType={chartType}
-              indicators={indicators}
-            />
+            // Wrapper carries the draw-mode cursor so the chart canvas
+            // (which is inside TradingChart) visually telegraphs that a
+            // click will drop a point instead of panning.
+            <div className={cn("absolute inset-0", drawMode && "cursor-crosshair")}>
+              <TradingChart
+                data={data}
+                chartType={chartType}
+                indicators={indicators}
+                drawMode={drawMode}
+                drawings={drawingsWithPreview}
+                onChartClick={handleChartClick}
+                onDrawCrosshair={setHoverPoint}
+              />
+            </div>
           )}
         </div>
       </div>

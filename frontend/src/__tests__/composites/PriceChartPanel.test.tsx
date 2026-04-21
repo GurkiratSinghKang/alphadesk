@@ -24,6 +24,8 @@ vi.mock("lightweight-charts", () => ({
     priceScale: () => ({ applyOptions: () => {} }),
     applyOptions: () => {},
     subscribeCrosshairMove: () => {},
+    subscribeClick: () => {},
+    unsubscribeClick: () => {},
     resize: () => {},
     remove: () => {},
   }),
