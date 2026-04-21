@@ -51,6 +51,10 @@ export default function EquityPanel({
   const gradId = `equity-grad-${idBase}`;
 
   if (!data || data.length < 2) {
+    // 2026-04-21 polish: empty-state copy was 14px italic serif; bumped
+    // to 15px so the editorial voice reads with the same weight as the
+    // equivalent copy block on the strategy hero empty state above.
+    // Preserves the "no data" typographic rhythm across both surfaces.
     return (
       <div
         className={cn(
@@ -58,7 +62,7 @@ export default function EquityPanel({
           className
         )}
       >
-        <p className="font-display italic text-[14px] text-fg-muted">
+        <p className="font-display italic text-[15px] text-fg-muted">
           Not enough data for equity curve.
         </p>
       </div>
@@ -127,6 +131,12 @@ export default function EquityPanel({
         >
           {RANGES.map((r) => {
             const active = r === activeRange;
+            // 2026-04-21 polish: range chips were 24px tall (text-[11px]
+            // + py-1) — below the 36px desktop hit-target floor and with
+            // no visible focus ring. Raised to h-8 / min-w-[40px] and added
+            // a focus-visible outline so keyboard users can see where they
+            // are when arrowing through the radiogroup. Text bumped to
+            // 12px (fs-label floor).
             return (
               <button
                 key={r}
@@ -137,10 +147,11 @@ export default function EquityPanel({
                 data-testid={`range-${r}`}
                 onClick={() => onRangeChange(r)}
                 className={cn(
-                  "font-mono text-[11px] px-2.5 py-1 rounded transition-colors",
+                  "inline-flex h-8 min-w-[40px] items-center justify-center font-mono text-[12px] tabular-nums px-2.5 rounded transition-colors",
                   active
                     ? "bg-bg-elev-2 text-fg"
-                    : "text-fg-muted hover:text-fg"
+                    : "text-fg-muted hover:text-fg",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 )}
                 style={{ letterSpacing: "0.04em" }}
               >

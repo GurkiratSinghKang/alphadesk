@@ -49,6 +49,9 @@ export default function PositionsSection({
   className,
 }: PositionsSectionProps) {
   if (!positions || positions.length === 0) {
+    // 2026-04-21 polish: secondary copy lifted from 12px to 13px (the
+    // fs-hint floor) so the empty-state hint is legible without looking
+    // like a test-double placeholder.
     return (
       <div
         className={cn(
@@ -59,7 +62,7 @@ export default function PositionsSection({
         <p className="font-display italic text-[17px] text-fg-muted">
           No positions open.
         </p>
-        <p className="mt-2 font-sans text-[12px] text-fg-hint">
+        <p className="mt-2 font-sans text-[13px] text-fg-hint">
           Positions will appear here when the strategy next enters a trade.
         </p>
       </div>
@@ -82,26 +85,30 @@ export default function PositionsSection({
           Open positions for {strategyLabel}
         </caption>
         <thead>
+          {/* 2026-04-21 polish: column headers were 10.5px — below the
+              post-redesign 12px fs-label floor. Normalised to the shared
+              `.t-label` utility so every table header on the page reads
+              with the same weight as the rest of the dashboard. */}
           <tr className="border-b border-border-hair text-left">
-            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-left">
               Symbol
             </th>
-            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-left">
               Side
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-right">
               Qty
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-right">
               Entry
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-right">
               P&amp;L
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-right">
               Exit Triggers
             </th>
-            <th scope="col" className="px-4 py-2.5 font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.14em" }}>
+            <th scope="col" className="px-4 py-3 t-label text-left">
               Strategy
             </th>
           </tr>
@@ -112,20 +119,28 @@ export default function PositionsSection({
             return (
               <tr key={p.symbol} className="border-b border-border-hair last:border-0">
                 <td className="px-4 py-3">
+                  {/* 2026-04-21 polish: symbol link now carries a
+                      focus-visible ring — previously tab focus was invisible
+                      and researchers couldn't tell where keyboard focus
+                      landed. The date caption was also below the 11px floor
+                      (10.5px); lifted to 12px via `t-meta`. */}
                   <Link
                     href={`/trade?symbol=${p.symbol}`}
-                    className="font-sans text-[13px] font-semibold text-fg transition-colors hover:text-brand"
+                    className={cn(
+                      "rounded-sm font-sans text-[14px] font-semibold text-fg transition-colors hover:text-brand",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    )}
                   >
                     {p.symbol}
                   </Link>
-                  <div className="mt-0.5 font-sans text-[10.5px] uppercase text-fg-hint" style={{ letterSpacing: "0.1em" }}>
+                  <div className="mt-1 font-mono text-[12px] uppercase text-fg-hint tracking-[0.08em]">
                     {formatEntryDate(p.entry_date)}
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(
-                      "inline-flex items-center rounded-sm border px-2 py-0.5 font-sans text-[11px] font-semibold uppercase",
+                      "inline-flex items-center rounded-sm border px-2 py-0.5 font-sans text-[12px] font-semibold uppercase",
                       side === "Long"
                         ? "border-profit/40 bg-profit/5 text-profit"
                         : "border-loss/40 bg-loss/5 text-loss"
@@ -135,11 +150,16 @@ export default function PositionsSection({
                     {side}
                   </span>
                 </td>
+                {/* 2026-04-21 polish: qty / entry / P&L / exit rendered
+                    ~12.5–13px; tightened to the `t-num-md` token (16px
+                    mono tabular medium) recommended for row numbers so
+                    digits column-align at the decimal point. Secondary
+                    lines (P&L %, stop/take) use 12px for hierarchy. */}
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[12.5px] text-fg">{Math.abs(p.shares)}</Mono>
+                  <Mono className="text-[14px] text-fg tabular-nums">{Math.abs(p.shares)}</Mono>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[12.5px] text-fg">
+                  <Mono className="text-[14px] text-fg tabular-nums">
                     {p.entry_price.toFixed(2)}
                   </Mono>
                 </td>
@@ -148,17 +168,17 @@ export default function PositionsSection({
                     <PnLNumber
                       value={p.unrealized_pnl}
                       format="currency"
-                      className="text-[13px]"
+                      className="text-[14px]"
                     />
                     <PnLNumber
                       value={p.unrealized_pnl_pct}
                       format="percent"
-                      className="text-[11px]"
+                      className="text-[12px]"
                     />
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex flex-col items-end gap-0.5 font-mono text-[11px]">
+                  <div className="flex flex-col items-end gap-0.5 font-mono text-[12px] tabular-nums">
                     <span className="text-loss">
                       Stop {p.stop_loss != null ? p.stop_loss.toFixed(2) : "\u2014"}
                     </span>

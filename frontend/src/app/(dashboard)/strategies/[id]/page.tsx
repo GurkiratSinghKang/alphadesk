@@ -287,15 +287,14 @@ function formatLastTrade(dateStr: string | undefined | null): string {
  * returns null (common on a freshly activated strategy).
  */
 function EmptySection({ title, reason }: { title: string; reason: string }) {
+  // 2026-04-21 polish: title eyebrow was 10.5px; normalised to the shared
+  // `.t-label` (12px fs-label) used by every other eyebrow on the page so
+  // empty-state and populated sections read with the same typographic
+  // weight.
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border-hair bg-bg-elev-1 px-5 py-6">
-      <p
-        className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
-        style={{ letterSpacing: "0.14em" }}
-      >
-        {title}
-      </p>
-      <p className="font-display italic text-[14.5px] text-fg-muted leading-snug">
+    <div className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-5 py-6">
+      <p className="t-label">{title}</p>
+      <p className="font-display italic text-[15px] text-fg-muted leading-snug">
         {reason}
       </p>
     </div>
@@ -593,8 +592,17 @@ export default function StrategyDetailPage() {
       {/* Breadcrumb — BUG-020: previously said "Dashboard / <name>" even
           though this page lives under /strategies. Anchor to the strategies
           catalogue so the trail mirrors the URL path. */}
-      <nav className="flex items-center gap-2 font-sans text-[12px] text-fg-muted" aria-label="Breadcrumb">
-        <Link href="/strategies" className="transition-colors hover:text-fg">
+      <nav className="flex items-center gap-2 font-sans text-[13px] text-fg-muted" aria-label="Breadcrumb">
+        {/* 2026-04-21 polish: breadcrumb size lifted from 12px to 13px and a
+            focus-visible ring added — previously the link had no visible
+            outline when tabbed to, making keyboard navigation blind to it. */}
+        <Link
+          href="/strategies"
+          className={cn(
+            "rounded-sm transition-colors hover:text-fg",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:px-1"
+          )}
+        >
           Strategies
         </Link>
         <span aria-hidden>/</span>
@@ -696,24 +704,32 @@ export default function StrategyDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* 2026-04-21 polish: both action buttons previously rendered at
+              ~28px tall (px-3 py-1.5 + 12px text). Hit-target floor is 36px
+              on desktop. Swapped px/py for `h-9` + `px-3.5` so the visual
+              weight matches the rest of the row (regime pill, last-trade
+              chip). Added `focus-visible:ring-2 ring-brand` to both buttons
+              so keyboard users see a visible outline — previously none. */}
           <button
             type="button"
             data-testid="strategy-pause"
             onClick={handleToggle}
             disabled={toggling || !perf}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3 py-1.5 font-sans text-[12px] font-semibold text-fg transition-colors",
-              "hover:bg-bg-elev-2 disabled:opacity-50"
+              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3.5 font-sans text-[12px] font-semibold text-fg transition-colors",
+              "hover:bg-bg-elev-2 disabled:opacity-50",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             )}
+            aria-label={perf?.status === "active" ? `Pause ${meta.name}` : `Resume ${meta.name}`}
           >
             {perf?.status === "active" ? (
               <>
-                <Pause className="h-3 w-3" aria-hidden />
+                <Pause className="h-3.5 w-3.5" aria-hidden />
                 Pause
               </>
             ) : (
               <>
-                <Play className="h-3 w-3" aria-hidden />
+                <Play className="h-3.5 w-3.5" aria-hidden />
                 Resume
               </>
             )}
@@ -721,10 +737,14 @@ export default function StrategyDetailPage() {
           <button
             type="button"
             onClick={() => router.push(`/?strategy=${strategyId}`)}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-sm bg-brand px-3.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            )}
+            aria-label={`View ${meta.name} trades on the desk`}
           >
             View trades
-            <ArrowRight className="h-3 w-3" aria-hidden />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       </div>
@@ -807,16 +827,23 @@ export default function StrategyDetailPage() {
       ) : null}
 
       {/* Retry — shown only when perf didn't load. Gives the user a way
-          to refetch without refreshing the whole page. */}
+          to refetch without refreshing the whole page.
+          2026-04-21 polish: bumped button text from 11px to 12px and
+          raised min-height to `h-9` (36px) to meet the desktop hit-target
+          floor. Added a focus-visible ring so the button is keyboard-
+          reachable with a legible outline. */}
       {!perf ? (
-        <div className="flex flex-col items-center gap-2 border-t border-border-hair pt-6">
-          <span className="font-display italic text-[13px] text-fg-muted">
+        <div className="flex flex-col items-center gap-3 border-t border-border-hair pt-6">
+          <span className="font-display italic text-[14px] text-fg-muted">
             Performance data unavailable.
           </span>
           <button
             type="button"
             onClick={fetchData}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3 py-1.5 font-sans text-[11px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-4 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            )}
             style={{ letterSpacing: "0.1em" }}
           >
             Retry
@@ -830,8 +857,12 @@ export default function StrategyDetailPage() {
           that applies to every strategy page regardless of stage. Uses
           ``text-fg-hint`` so it does not compete with the editorial
           sections above. */}
+      {/* 2026-04-21 polish: disclaimer was 11.5px — below the fs-hint floor.
+          Bumped to 13px so the legal copy is readable without straining;
+          `text-fg-hint` keeps it visually subordinate to the editorial
+          sections. */}
       <footer className="border-t border-border-hair pt-6">
-        <p className="font-sans text-[11.5px] leading-relaxed text-fg-hint">
+        <p className="font-sans text-[13px] leading-relaxed text-fg-hint">
           Past performance does not guarantee future results. Backtest
           metrics are derived from historical data; live results may
           differ materially. See the{" "}

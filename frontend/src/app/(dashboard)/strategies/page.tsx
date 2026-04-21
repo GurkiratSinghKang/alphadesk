@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -196,17 +196,21 @@ function StrategyCatalogCard({
           >
             {s.displayName}
           </div>
-          <div className="font-sans text-[11.5px] leading-[1.4] text-fg-muted">
+          <div className="font-sans text-[12px] leading-[1.45] text-fg-muted">
             {s.subtitle}
           </div>
           {pillLabel ? (
+            // 2026-04-21 polish: bumped pill text from 9.5px to 11px — the
+            // lower value was below the post-redesign 11px readable floor
+            // (design-tokens.css sets --fs-label=12). Capitalised tracking is
+            // preserved so the pill still reads as a chip, not prose.
             <span
               data-testid="strategy-card-pill"
               role="status"
               aria-label={pillAriaLabel}
               className={cn(
                 "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
-                "font-sans text-[9.5px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+                "font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100"
               )}
             >
               {pillLabel}
@@ -227,13 +231,17 @@ function StrategyCatalogCard({
       </div>
 
       {!comingSoon && (
-        <div className="flex items-center justify-between font-mono text-[10.5px] text-fg-muted">
+        // 2026-04-21 polish: the position / invested footer previously rendered
+        // at 10.5px, below the post-redesign readable floor. Bumped to
+        // .t-meta (13px, mono, tabular) so dollar figures keep their column
+        // alignment with the card's other numeric cells.
+        <div className="flex items-center justify-between t-meta text-fg-muted">
           <span className="flex items-center gap-1.5">
             <StatusDot
               tone={bucket === "active" ? "profit" : "muted"}
-              size={5}
+              size={7}
             />
-            <span>{s.activePositions} positions</span>
+            <span className="tabular-nums">{s.activePositions} positions</span>
           </span>
           <span
             title={formatUsdPrecise(s.investedAmount)}
@@ -248,10 +256,13 @@ function StrategyCatalogCard({
       )}
 
       {comingSoon && (
-        <p className="font-sans text-[11px] leading-relaxed text-fg-hint">
+        // 2026-04-21 polish: inline Mono raised from 10.5px to 12px so the
+        // path token sits on the --fs-label floor and is legible at desk
+        // viewing distance. Body copy raised to 12px (fs-label) to match.
+        <p className="font-sans text-[12px] leading-relaxed text-fg-hint">
           Advertised in the catalogue. No backend implementation ships yet —
           the strategy will become tradable once the Python package lands
-          under <Mono className="text-[10.5px]">backend/strategies/</Mono>.
+          under <Mono className="text-[12px]">backend/strategies/</Mono>.
         </p>
       )}
     </>
@@ -303,14 +314,16 @@ function StrategyCatalogCard({
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
+  // 2026-04-21 polish: card metric labels were 9.5px (well below the 11px
+  // readable floor; all-caps + tracking made the problem worse at low
+  // stroke weights on macOS subpixel AA). Use the repo's canonical
+  // `.t-label` utility (12px fs-label, 0.12em tracking, 600 weight) so the
+  // eyebrows here match every other card on the dashboard. The numeric
+  // value uses tabular-nums so Sharpe / CAGR / MaxDD stay column-aligned
+  // as cards re-render during the progressive per-id resolve.
   return (
-    <div className="flex flex-col gap-0.5">
-      <span
-        className="font-sans text-[9.5px] uppercase text-fg-muted"
-        style={{ letterSpacing: "0.12em" }}
-      >
-        {label}
-      </span>
+    <div className="flex flex-col gap-1">
+      <span className="t-label">{label}</span>
       <Mono className="text-[13.5px] tabular-nums text-fg">{value}</Mono>
     </div>
   );
@@ -396,8 +409,15 @@ export default function StrategiesListingPage() {
 
   // Initial summaries — fills investedAmount / status / positions for every
   // strategy in one call.
-  useEffect(() => {
+  //
+  // 2026-04-21 polish: extracted into a useCallback so the retry CTA below
+  // can re-run the fetch without a page reload. Previously the error panel
+  // had no affordance and users had to refresh the whole route to recover
+  // from a transient /api/v1/strategies failure.
+  const loadSummaries = useCallback(() => {
     let cancelled = false;
+    setLoadError(null);
+    setSummaries(null);
     getStrategies()
       .then((rows) => {
         if (!cancelled) setSummaries(rows);
@@ -410,6 +430,11 @@ export default function StrategiesListingPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const cancel = loadSummaries();
+    return cancel;
+  }, [loadSummaries]);
 
   // A3#2 (Wave 8) — catalog fetch (cheap, no DB). Failure is non-fatal:
   // the static manifest still lights the pill for ``orb`` and
@@ -553,7 +578,11 @@ export default function StrategiesListingPage() {
   );
 
   const actions = (
-    <span className="font-sans text-[11px] text-fg-muted tabular-nums">
+    // 2026-04-21 polish: header summary was 11px — on the floor but still
+    // hard to scan next to the 28px italic title. Bumped to fs-label (12px)
+    // via `.t-meta` so the live count reads with the same weight as every
+    // other meta label on the page.
+    <span className="t-meta tabular-nums">
       {summaryLine}
     </span>
   );
@@ -566,11 +595,27 @@ export default function StrategiesListingPage() {
     >
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
         {loadError && (
+          // 2026-04-21 polish: error surface now offers a retry affordance
+          // (previously was a dead string — the only recovery path was a
+          // full page refresh). The button is sized to the 36px hit-target
+          // floor and carries a visible focus-ring so keyboard users can
+          // reach it after tabbing past the page title.
           <div
             role="alert"
-            className="rounded-md border border-border-hair bg-bg-elev-1 px-4 py-3 font-sans text-[12px] text-fg-muted"
+            className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-4 py-4 font-sans text-[13px] text-fg-muted sm:flex-row sm:items-center sm:justify-between"
           >
-            Couldn't load catalogue: {loadError}
+            <span>Couldn&apos;t load catalogue: {loadError}</span>
+            <button
+              type="button"
+              onClick={loadSummaries}
+              className={cn(
+                "inline-flex h-9 items-center justify-center rounded-sm border border-border bg-bg-elev-2 px-4 font-sans text-[12px] font-semibold text-fg transition-colors",
+                "hover:bg-bg-card",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              )}
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -621,7 +666,11 @@ export default function StrategiesListingPage() {
             caveat once, up-front. Styled with ``text-fg-hint`` so it
             doesn't compete with the card sections above. */}
         <footer className="border-t border-border-hair pt-6">
-          <p className="font-sans text-[11.5px] leading-relaxed text-fg-hint">
+          {/* 2026-04-21 polish: raised to 13px (the fs-hint floor) so the
+              disclosure copy is legible without sitting flush on the
+              typographic floor. Still visually subordinate to the sections
+              above thanks to `text-fg-hint`. */}
+          <p className="font-sans text-[13px] leading-relaxed text-fg-hint">
             Past performance does not guarantee future results. Backtest
             metrics are derived from historical data; live results may
             differ materially. See the{" "}

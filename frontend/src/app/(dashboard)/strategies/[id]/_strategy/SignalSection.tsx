@@ -46,11 +46,13 @@ export default function SignalSection({
       </div>
 
       {edge ? (
+        // 2026-04-21 polish: "Edge" eyebrow was 10.5px with 0.18em tracking
+        // — below the readable floor. Swapped to the shared `.t-label`
+        // utility (12px, 0.12em) so this edge callout uses the same label
+        // weight as every other eyebrow on the page.
         <div className="rounded-md border-l-2 border-brand bg-bg-elev-1 py-3 pl-4 pr-4">
-          <p className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted" style={{ letterSpacing: "0.18em" }}>
-            Edge
-          </p>
-          <p className="mt-1 font-display italic text-[15px] text-fg">
+          <p className="t-label">Edge</p>
+          <p className="mt-1.5 font-display italic text-[15px] text-fg">
             {edge}
           </p>
         </div>

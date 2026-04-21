@@ -120,13 +120,17 @@ export default function StrategyDisclosure({
           Disclosure
         </Eyebrow>
         {pillLabel ? (
+          // 2026-04-21 polish: pill text was 10.5px (below the 11px
+          // readable floor). Bumped to 11px and padding tightened so the
+          // chip still reads as a marker, not prose. `tracking-[0.14em]`
+          // preserved for visual parity with `t-label` spacing.
           <span
             data-testid="strategy-disclosure-pill"
             role="status"
             aria-label={pillAriaLabel}
             className={cn(
-              "inline-flex items-center rounded-pill border border-amber/60 px-2 py-0.5",
-              "font-sans text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+              "inline-flex items-center rounded-pill border border-amber/60 px-2.5 py-0.5",
+              "font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100"
             )}
           >
             {pillLabel}

@@ -90,16 +90,16 @@ const NAV_ROUTES = [
   { label: "Reports", href: "/reports" },
 ];
 
-// 2026-04-20 round 2: the dashboard was being served with
-// ``x-nextjs-cache: HIT`` and ``s-maxage=31536000`` — Next.js 16 treated
-// the page as statically prerenderable and CACHED it at build time.
-// Result: redeploys (even with --no-cache rebuilds) kept serving HTML
-// that referenced chunk names from a PRIOR build, which no longer exist
-// on disk, so the UI froze on the last cached render. Force dynamic
-// rendering and zero-revalidate so every request goes through the
-// server and gets the current chunks for the current image.
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// 2026-04-20 round 2 (REVERTED 2026-04-21): tried `export const dynamic
+// = "force-dynamic"` and `revalidate = 0` to bust a stale prerender.
+// Next.js 16 rejects both in a "use client" component — the build fails
+// at prerender time with `Invalid revalidate value ... must be a
+// non-negative number or false`, because client components can't own
+// route-segment config. The prerender-cache bust has to live in a
+// server-component wrapper (a future refactor) — for now, the
+// raw-ssh deploy pipeline fully tears containers down + up with
+// fresh chunks, so the stale-chunk problem is handled at the deploy
+// layer instead.
 
 const BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev";
