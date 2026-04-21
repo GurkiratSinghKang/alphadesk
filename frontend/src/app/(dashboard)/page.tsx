@@ -90,6 +90,17 @@ const NAV_ROUTES = [
   { label: "Reports", href: "/reports" },
 ];
 
+// 2026-04-20 round 2: the dashboard was being served with
+// ``x-nextjs-cache: HIT`` and ``s-maxage=31536000`` — Next.js 16 treated
+// the page as statically prerenderable and CACHED it at build time.
+// Result: redeploys (even with --no-cache rebuilds) kept serving HTML
+// that referenced chunk names from a PRIOR build, which no longer exist
+// on disk, so the UI froze on the last cached render. Force dynamic
+// rendering and zero-revalidate so every request goes through the
+// server and gets the current chunks for the current image.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev";
 
