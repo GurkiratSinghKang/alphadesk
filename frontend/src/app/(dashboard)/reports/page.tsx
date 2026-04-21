@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Download, FileText, BarChart3, Calculator, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Download,
+  FileText,
+  BarChart3,
+  Calculator,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
+} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
@@ -15,6 +24,16 @@ import {
 import { usePortfolioStore } from "@/stores/portfolio";
 import type { Position, PortfolioSummary } from "@/types";
 import { cn, formatCurrency } from "@/lib/utils";
+
+// 2026-04-21 polish — reports page lifted onto the editorial token ladder
+// matching /analytics + the dashboard hero:
+//   .t-display-section  22 serif italic       — section headers
+//   .t-label            12 sans caps 0.12em   — table/field eyebrows
+//   .t-num-md           16 mono tabular-med   — row numbers + %
+//   .t-num-lg           20 mono tabular-med   — summary-tile scalars
+// Plus: sortable closed-trades table, explicit disabled state on every
+// CSV-export button when there's nothing to export, editorial empty
+// state with `/trade` CTA.
 
 // ─── Range types ────────────────────────────────────────────
 // Matches the Analytics page radiogroup so the two pages share a
@@ -93,15 +112,22 @@ function csvRow(label: string, value: unknown): string {
 
 function SectionCard({
   title,
+  eyebrow,
   icon: Icon,
   children,
   defaultOpen = true,
 }: {
   title: string;
+  /** Tracked-caps tag above the serif title, e.g. "§ STATEMENT". */
+  eyebrow?: string;
   icon: React.ElementType;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
+  // 2026-04-21 polish — serif-italic section titles bring the reports
+  // cards onto the same voice as the dashboard hero + analytics cards.
+  // Chevron stays on the far right of the button so the whole header is
+  // a clickable collapse/expand target.
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)] overflow-hidden">
@@ -109,13 +135,66 @@ function SectionCard({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 border-b border-border px-4 py-3 hover:bg-accent/30 transition-colors"
+        className={cn(
+          "flex w-full items-center gap-3 border-b border-border px-4 py-3",
+          "text-left hover:bg-bg-elev-1/40 transition-colors",
+          "focus-visible:outline-none focus-visible:bg-bg-elev-1/50",
+        )}
       >
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold text-foreground flex-1 text-left">{title}</h2>
-        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <Icon className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          {eyebrow ? <span className="t-label">{eyebrow}</span> : null}
+          <h2 className="t-display-section text-ink-1000 truncate">{title}</h2>
+        </div>
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
+        )}
       </button>
       {open && <div className="p-4">{children}</div>}
+    </div>
+  );
+}
+
+// ─── KPI Tile ──────────────────────────────────────────────
+// 2026-04-21 polish — the summary tiles on Portfolio Statement and the
+// Tax Report are the marquee numeric elements on the page. Lifting them
+// onto `.t-num-lg` (20px mono tabular medium) + `.t-label` eyebrows gives
+// them hero-level presence without needing a full re-layout.
+function KpiTile({
+  label,
+  value,
+  tone = "neutral",
+  hint,
+  align = "left",
+}: {
+  label: string;
+  value: string;
+  tone?: "profit" | "loss" | "neutral";
+  /** Optional sub-line (e.g. "7 trades"). Rendered in .t-meta. */
+  hint?: string;
+  align?: "left" | "center";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border bg-[var(--panel)] px-3 py-2.5",
+        align === "center" && "text-center",
+      )}
+    >
+      <p className="t-label mb-1">{label}</p>
+      <p
+        className={cn(
+          "t-num-lg tabular-nums",
+          tone === "profit" && "text-[var(--profit)]",
+          tone === "loss" && "text-[var(--loss)]",
+          tone === "neutral" && "text-ink-1000",
+        )}
+      >
+        {value}
+      </p>
+      {hint ? <p className="t-meta mt-0.5">{hint}</p> : null}
     </div>
   );
 }
@@ -189,80 +268,82 @@ function PortfolioStatement({
     downloadCsv(`portfolio-statement-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
 
+  // P&L tones driven by sign; keep neutral when exactly zero so a fresh
+  // account doesn't paint all three tiles green from just the formatting.
+  const pnlTone = (v: number): "profit" | "loss" | "neutral" =>
+    v > 0 ? "profit" : v < 0 ? "loss" : "neutral";
+  const fmtSigned = (v: number): string =>
+    v > 0 ? `+${formatCurrency(v)}` : formatCurrency(v);
+
   return (
     <div className="space-y-4">
-      {/* Account Summary */}
+      {/* Account Summary — KpiTile gives every dashboard-like tile the
+          same 20px mono-tabular headline + tracked-caps eyebrow. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Equity</p>
-          <p className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(summary.equity)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Cash</p>
-          <p className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(summary.cash)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Buying Power</p>
-          <p className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(summary.buyingPower)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Positions</p>
-          <p className="text-sm font-bold tabular-nums text-foreground">{summary.positionsCount}</p>
-        </div>
+        <KpiTile label="Equity" value={formatCurrency(summary.equity)} />
+        <KpiTile label="Cash" value={formatCurrency(summary.cash)} />
+        <KpiTile label="Buying Power" value={formatCurrency(summary.buyingPower)} />
+        <KpiTile label="Positions" value={String(summary.positionsCount)} />
       </div>
 
-      {/* P&L Summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3 text-center">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Unrealized P&L</p>
-          <p className={cn("text-sm font-bold tabular-nums", totalUnrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {totalUnrealizedPnl >= 0 ? "+" : ""}{formatCurrency(totalUnrealizedPnl)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3 text-center">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Realized P&L</p>
-          <p className={cn("text-sm font-bold tabular-nums", totalRealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {totalRealizedPnl >= 0 ? "+" : ""}{formatCurrency(totalRealizedPnl)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3 text-center">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total P&L</p>
-          <p className={cn("text-sm font-bold tabular-nums", totalPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}
-          </p>
-        </div>
+      {/* P&L Summary — signed values so negative P&L reads as "-$…",
+          positive as "+$…", and a zero-P&L tile doesn't misleadingly
+          paint green. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <KpiTile
+          label="Unrealized P&L"
+          value={fmtSigned(totalUnrealizedPnl)}
+          tone={pnlTone(totalUnrealizedPnl)}
+          align="center"
+        />
+        <KpiTile
+          label="Realized P&L"
+          value={fmtSigned(totalRealizedPnl)}
+          tone={pnlTone(totalRealizedPnl)}
+          align="center"
+        />
+        <KpiTile
+          label="Total P&L"
+          value={fmtSigned(totalPnl)}
+          tone={pnlTone(totalPnl)}
+          align="center"
+        />
       </div>
 
       {/* Current Positions Table */}
       <div>
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Current Positions</p>
+        <p className="t-label mb-2">Current Positions</p>
         {positions.length === 0 ? (
           <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
             No positions in this period.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
+            <table className="w-full">
               <thead>
                 <tr className="bg-[var(--panel)] border-b border-border">
-                  <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Qty</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Avg Cost</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Price</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Mkt Value</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">P&L</th>
+                  <th className="px-3 py-2 text-left"><span className="t-label">Symbol</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Qty</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Avg Cost</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Price</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Mkt Value</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">P&amp;L</span></th>
                 </tr>
               </thead>
               <tbody>
                 {positions.map(p => (
-                  <tr key={p.symbol} className="border-b border-border/50 last:border-0">
-                    <td className="px-3 py-2 font-medium text-foreground">{p.symbol}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{p.quantity}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(p.avgCost)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatCurrency(p.currentPrice)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatCurrency(p.marketValue)}</td>
-                    <td className={cn("px-3 py-2 text-right tabular-nums font-medium", p.unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                      {p.unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(p.unrealizedPnl)}
+                  <tr key={p.symbol} className="border-b border-border-hair last:border-0">
+                    <td className="px-3 py-2 font-mono text-[13px] text-ink-900">{p.symbol}</td>
+                    <td className="px-3 py-2 text-right t-num-md text-fg">{p.quantity}</td>
+                    <td className="px-3 py-2 text-right t-num-md text-fg-muted">{formatCurrency(p.avgCost)}</td>
+                    <td className="px-3 py-2 text-right t-num-md text-fg">{formatCurrency(p.currentPrice)}</td>
+                    <td className="px-3 py-2 text-right t-num-md text-fg">{formatCurrency(p.marketValue)}</td>
+                    <td className={cn(
+                      "px-3 py-2 text-right t-num-md tabular-nums",
+                      p.unrealizedPnl > 0 ? "text-[var(--profit)]" :
+                      p.unrealizedPnl < 0 ? "text-[var(--loss)]" : "text-fg",
+                    )}>
+                      {p.unrealizedPnl > 0 ? "+" : ""}{formatCurrency(p.unrealizedPnl)}
                     </td>
                   </tr>
                 ))}
@@ -272,56 +353,361 @@ function PortfolioStatement({
         )}
       </div>
 
-      {/* Recent Closed Trades */}
-      <div>
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-          Closed Trades{closedTrades.length > 0 ? ` (${closedTrades.length} total)` : ""}
-        </p>
-        {closedTrades.length === 0 ? (
-          // BUG-040 — empty-state voice aligned with analytics / alerts:
-          // italic-serif full-sentence headline, always ending with a
-          // period. Points at the range selector so the user has a
-          // concrete next action.
-          <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
-            No trades closed in this period &mdash; adjust the range above to broaden the search.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-[var(--panel)] border-b border-border">
-                  <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</th>
-                  <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Side</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Qty</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Entry</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Exit</th>
-                  <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">P&L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {closedTrades.slice(0, 50).map(t => (
-                  <tr key={t.id} className="border-b border-border/50 last:border-0">
-                    <td className="px-3 py-2 font-medium text-foreground">{t.symbol}</td>
-                    <td className="px-3 py-2 text-foreground capitalize">{t.side}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{t.quantity}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(t.entry_price)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatCurrency(t.exit_price ?? 0)}</td>
-                    <td className={cn("px-3 py-2 text-right tabular-nums font-medium", (t.pnl ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                      {(t.pnl ?? 0) >= 0 ? "+" : ""}{formatCurrency(t.pnl ?? 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Closed Trades (sortable + paginated) */}
+      <ClosedTradesTable trades={closedTrades} />
 
-      <Button onClick={handleDownload} size="sm" className="gap-1.5">
+      <Button
+        onClick={handleDownload}
+        size="sm"
+        className="gap-1.5"
+        // 2026-04-21 polish — export buttons disable when there's nothing
+        // to export. Previously clicking "Download" on an empty account
+        // generated a two-line CSV with just a header, which is noise.
+        // Keeping the button mounted (vs hiding it) preserves discovery.
+        disabled={closedTrades.length === 0 && positions.length === 0}
+        title={
+          closedTrades.length === 0 && positions.length === 0
+            ? "Nothing to export yet"
+            : undefined
+        }
+      >
         <Download className="h-3 w-3" />
         Download Portfolio Statement (CSV)
       </Button>
     </div>
+  );
+}
+
+// ─── Sortable Closed-Trades Table ─────────────────────────
+// 2026-04-21 polish — new composite local to the reports page. Users can
+// sort by entry/exit/symbol/strategy/P&L$/P&L%/hold-time columns, and
+// paginate 25-rows-at-a-time instead of the previous hardcoded first-50
+// cutoff that silently truncated the table.
+type SortKey =
+  | "entry_time"
+  | "exit_time"
+  | "symbol"
+  | "strategy"
+  | "pnl"
+  | "pnl_pct"
+  | "hold_ms";
+type SortDir = "asc" | "desc";
+
+function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
+  // Default to most-recent first (exit_time desc) — that's what a trader
+  // glances at when they open Reports: "what did I just close?"
+  const [sortKey, setSortKey] = useState<SortKey>("exit_time");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 25;
+
+  function toggleSort(k: SortKey) {
+    if (k === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(k);
+      // Textual columns sort asc by default, numeric desc — mirrors
+      // how TradingView/ToS/Webull present their trade blotters.
+      setSortDir(k === "symbol" || k === "strategy" ? "asc" : "desc");
+    }
+    // Reset to first page when sort changes — otherwise the current
+    // page-window could point past the end of a re-sorted list.
+    setPage(0);
+  }
+
+  const sorted = useMemo(() => {
+    const copy = [...trades];
+    copy.sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (sortKey) {
+        case "entry_time":
+          av = new Date(a.entry_time).getTime() || 0;
+          bv = new Date(b.entry_time).getTime() || 0;
+          break;
+        case "exit_time":
+          av = a.exit_time ? new Date(a.exit_time).getTime() || 0 : 0;
+          bv = b.exit_time ? new Date(b.exit_time).getTime() || 0 : 0;
+          break;
+        case "symbol":
+          av = a.symbol || "";
+          bv = b.symbol || "";
+          break;
+        case "strategy":
+          av = a.strategy ?? "";
+          bv = b.strategy ?? "";
+          break;
+        case "pnl":
+          av = a.pnl ?? 0;
+          bv = b.pnl ?? 0;
+          break;
+        case "pnl_pct":
+          av = a.pnl_pct ?? 0;
+          bv = b.pnl_pct ?? 0;
+          break;
+        case "hold_ms": {
+          // Synthesize hold-time from entry/exit. Open positions have
+          // no exit; fall back to 0 so they always sort at the bottom
+          // regardless of direction.
+          const ah = a.entry_time && a.exit_time
+            ? new Date(a.exit_time).getTime() - new Date(a.entry_time).getTime()
+            : 0;
+          const bh = b.entry_time && b.exit_time
+            ? new Date(b.exit_time).getTime() - new Date(b.entry_time).getTime()
+            : 0;
+          av = ah;
+          bv = bh;
+          break;
+        }
+      }
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      const an = typeof av === "number" ? av : 0;
+      const bn = typeof bv === "number" ? bv : 0;
+      return sortDir === "asc" ? an - bn : bn - an;
+    });
+    return copy;
+  }, [trades, sortKey, sortDir]);
+
+  // Clamp page if the trade list shrinks (e.g. range selector narrows
+  // the dataset) so the user doesn't land on an empty window.
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const view = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  // Header cell: click-to-sort with chevron indicator. Aligns right for
+  // numeric columns, left for textual ones. Keyboard: button element is
+  // naturally focusable and activates on Enter/Space.
+  function Th({
+    k,
+    label,
+    align = "left",
+    widthClass,
+  }: {
+    k: SortKey;
+    label: string;
+    align?: "left" | "right";
+    widthClass?: string;
+  }) {
+    const active = sortKey === k;
+    const Chevron = active
+      ? sortDir === "asc"
+        ? ChevronUp
+        : ChevronDown
+      : ChevronsUpDown;
+    return (
+      <th
+        className={cn(
+          "px-3 py-2",
+          align === "right" ? "text-right" : "text-left",
+          widthClass,
+        )}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      >
+        <button
+          type="button"
+          onClick={() => toggleSort(k)}
+          data-testid={`sort-${k}`}
+          className={cn(
+            "inline-flex items-center gap-1 t-label",
+            "hover:text-fg transition-colors",
+            "focus-visible:outline-none focus-visible:text-fg",
+            align === "right" && "flex-row-reverse",
+            active && "text-ink-1000",
+          )}
+        >
+          {label}
+          <Chevron
+            className={cn(
+              "h-3 w-3 shrink-0",
+              active ? "text-ink-1000" : "text-fg-muted/60",
+            )}
+            aria-hidden
+          />
+        </button>
+      </th>
+    );
+  }
+
+  function formatHold(ms: number): string {
+    if (!Number.isFinite(ms) || ms <= 0) return "—";
+    const hours = ms / (1000 * 60 * 60);
+    if (hours < 24) return `${hours.toFixed(1)}h`;
+    return `${(hours / 24).toFixed(1)}d`;
+  }
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="t-label">
+          Closed Trades{sorted.length > 0 ? ` · ${sorted.length}` : ""}
+        </p>
+        {sorted.length > 0 && (
+          <p className="t-meta">
+            Showing {safePage * PAGE_SIZE + 1}
+            &ndash;
+            {Math.min((safePage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+          </p>
+        )}
+      </div>
+
+      {sorted.length === 0 ? (
+        // BUG-040 — empty-state voice aligned with analytics / alerts:
+        // italic-serif full-sentence headline, always ending with a
+        // period. Points at the range selector so the user has a
+        // concrete next action.
+        <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13.5px] text-fg-muted">
+          No trades closed in this period &mdash; adjust the range above to broaden the search.
+        </p>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[var(--panel)] border-b border-border">
+                  <Th k="symbol" label="Symbol" />
+                  <Th k="strategy" label="Strategy" />
+                  <Th k="entry_time" label="Entry" />
+                  <Th k="exit_time" label="Exit" />
+                  <Th k="pnl" label="P&L $" align="right" />
+                  <Th k="pnl_pct" label="P&L %" align="right" />
+                  <Th k="hold_ms" label="Hold" align="right" />
+                </tr>
+              </thead>
+              <tbody>
+                {view.map((t) => {
+                  const holdMs =
+                    t.entry_time && t.exit_time
+                      ? new Date(t.exit_time).getTime() - new Date(t.entry_time).getTime()
+                      : 0;
+                  const pnl = t.pnl ?? 0;
+                  const pnlPct = t.pnl_pct;
+                  return (
+                    <tr key={t.id} className="border-b border-border-hair last:border-0">
+                      <td className="px-3 py-2 font-mono text-[13px] text-ink-900">
+                        {t.symbol}
+                      </td>
+                      <td className="px-3 py-2 font-sans text-[12.5px] text-fg truncate max-w-[140px]">
+                        {t.strategy ?? <span className="text-fg-muted">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2 t-meta">
+                        {t.entry_time ? new Date(t.entry_time).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-3 py-2 t-meta">
+                        {t.exit_time ? new Date(t.exit_time).toLocaleDateString() : "—"}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-right t-num-md tabular-nums",
+                          pnl > 0 ? "text-[var(--profit)]" :
+                          pnl < 0 ? "text-[var(--loss)]" : "text-fg",
+                        )}
+                      >
+                        {pnl > 0 ? "+" : ""}{formatCurrency(pnl)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-right t-num-md tabular-nums",
+                          (pnlPct ?? 0) > 0 ? "text-[var(--profit)]" :
+                          (pnlPct ?? 0) < 0 ? "text-[var(--loss)]" : "text-fg-muted",
+                        )}
+                      >
+                        {pnlPct == null
+                          ? <span className="text-fg-muted">&mdash;</span>
+                          : <>{pnlPct > 0 ? "+" : ""}{pnlPct.toFixed(2)}%</>}
+                      </td>
+                      <td className="px-3 py-2 text-right t-meta">
+                        {formatHold(holdMs)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination controls — accessible, keyboard-operable. Hidden
+              when there's only one page so single-page views don't get a
+              dangling "Page 1/1" chrome. */}
+          {totalPages > 1 && (
+            <nav
+              aria-label="Closed trades pagination"
+              className="flex items-center justify-between mt-3"
+            >
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                data-testid="closed-trades-prev"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
+                  "font-sans text-[11.5px] text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  "disabled:opacity-40 disabled:pointer-events-none",
+                )}
+              >
+                <ChevronLeftIcon /> Prev
+              </button>
+              <span className="t-meta">
+                Page {safePage + 1} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage >= totalPages - 1}
+                data-testid="closed-trades-next"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
+                  "font-sans text-[11.5px] text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  "disabled:opacity-40 disabled:pointer-events-none",
+                )}
+              >
+                Next <ChevronRightIcon />
+              </button>
+            </nav>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Tiny inline chevrons for the pagination buttons — avoids importing
+// another lucide icon just for two usages.
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }
 
@@ -436,39 +822,54 @@ function StrategyPerformanceReport({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-xs">
+        <table className="w-full">
           <thead>
             <tr className="bg-[var(--panel)] border-b border-border">
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy</th>
-              <th className="px-3 py-2 text-center text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Status</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Return</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Sharpe</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Max DD</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Trades</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Win Rate</th>
+              <th className="px-3 py-2 text-left"><span className="t-label">Strategy</span></th>
+              <th className="px-3 py-2 text-center"><span className="t-label">Status</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Return</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Sharpe</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Max DD</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Trades</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Win Rate</span></th>
             </tr>
           </thead>
           <tbody>
             {strategyRows.map(s => (
-              <tr key={s.id} className="border-b border-border/50 last:border-0">
-                <td className="px-3 py-2 font-medium text-foreground">{s.name}</td>
+              <tr key={s.id} className="border-b border-border-hair last:border-0">
+                <td className="px-3 py-2 font-sans text-[12.5px] font-medium text-ink-900">{s.name}</td>
                 <td className="px-3 py-2 text-center">
+                  {/* Status chip — active reads chartreuse-tinted; anything
+                      else (paused, draft) reads muted so the eye lands on
+                      running strategies first. */}
                   <span className={cn(
-                    "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
-                    s.status === "active" ? "bg-[var(--profit)]/15 text-[var(--profit)]" : "bg-muted text-muted-foreground"
-                  )}>
+                    "inline-block rounded-sm px-2 py-0.5 font-sans text-[10.5px] font-semibold uppercase",
+                    s.status === "active"
+                      ? "bg-[var(--profit-tint)] text-[var(--profit)]"
+                      : "bg-bg-elev-1 text-fg-muted",
+                  )}
+                  style={{ letterSpacing: "0.08em" }}>
                     {s.status}
                   </span>
                 </td>
-                <td className={cn("px-3 py-2 text-right tabular-nums font-medium", s.total_return_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                  {(s.total_return_pct ?? 0) >= 0 ? "+" : ""}{(s.total_return_pct ?? 0).toFixed(1)}%
+                <td className={cn(
+                  "px-3 py-2 text-right t-num-md tabular-nums",
+                  s.total_return_pct > 0 ? "text-[var(--profit)]" :
+                  s.total_return_pct < 0 ? "text-[var(--loss)]" : "text-fg",
+                )}>
+                  {s.total_return_pct > 0 ? "+" : ""}{(s.total_return_pct ?? 0).toFixed(1)}%
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">{(s.sharpe ?? 0).toFixed(2)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-[var(--loss)]">-{(s.maxDd ?? 0).toFixed(1)}%</td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.tradeCount}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                <td className="px-3 py-2 text-right t-num-md text-fg">{(s.sharpe ?? 0).toFixed(2)}</td>
+                <td className={cn(
+                  "px-3 py-2 text-right t-num-md tabular-nums",
+                  s.maxDd > 0 ? "text-[var(--loss)]" : "text-fg-muted",
+                )}>
+                  {s.maxDd > 0 ? `-${s.maxDd.toFixed(1)}%` : "0.0%"}
+                </td>
+                <td className="px-3 py-2 text-right t-num-md text-fg">{s.tradeCount}</td>
+                <td className="px-3 py-2 text-right t-num-md text-fg">
                   {s.winRate == null ? (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-fg-muted">&mdash;</span>
                   ) : (
                     `${s.winRate.toFixed(0)}%`
                   )}
@@ -477,8 +878,10 @@ function StrategyPerformanceReport({
             ))}
             {strategyRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                  No strategies found
+                <td colSpan={7} className="px-3 py-8 text-center">
+                  <p className="font-display italic text-[13px] text-fg-muted">
+                    No strategies configured yet.
+                  </p>
                 </td>
               </tr>
             )}
@@ -486,7 +889,14 @@ function StrategyPerformanceReport({
         </table>
       </div>
 
-      <Button onClick={handleDownload} size="sm" className="gap-1.5">
+      <Button
+        onClick={handleDownload}
+        size="sm"
+        className="gap-1.5"
+        // 2026-04-21 — disable when there are no strategies to export.
+        disabled={strategyRows.length === 0}
+        title={strategyRows.length === 0 ? "No strategies to export" : undefined}
+      >
         <Download className="h-3 w-3" />
         Download Strategy Report (CSV)
       </Button>
@@ -599,65 +1009,86 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
     downloadCsv(`tax-report-${taxYear}.csv`, csv);
   };
 
+  // Tone helpers shared with the short/long-term breakdown
+  const netTone = (v: number): "profit" | "loss" | "neutral" =>
+    v > 0 ? "profit" : v < 0 ? "loss" : "neutral";
+  const fmtSigned = (v: number): string =>
+    v > 0 ? `+${formatCurrency(v)}` : formatCurrency(v);
+
   return (
     <div className="space-y-4">
-      {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Short-Term Net</p>
-          <p className={cn("text-sm font-bold tabular-nums", (shortTermGains + shortTermLosses) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {formatCurrency(shortTermGains + shortTermLosses)}
-          </p>
-          <p className="text-[10px] text-muted-foreground">{shortTermTrades.length} trades</p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Long-Term Net</p>
-          <p className={cn("text-sm font-bold tabular-nums", (longTermGains + longTermLosses) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {formatCurrency(longTermGains + longTermLosses)}
-          </p>
-          <p className="text-[10px] text-muted-foreground">{longTermTrades.length} trades</p>
-        </div>
-        <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Realized</p>
-          <p className={cn("text-sm font-bold tabular-nums", totalRealized >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-            {formatCurrency(totalRealized)}
-          </p>
-          <p className="text-[10px] text-muted-foreground">{classified.length} trades in {taxYear}</p>
-        </div>
+      {/* Summary — KpiTile gives the same 20px mono-tabular hero scalar
+          as the Portfolio Statement tiles. Hint line carries the trade
+          count so the net dollar figure reads first. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <KpiTile
+          label="Short-Term Net"
+          value={fmtSigned(shortTermGains + shortTermLosses)}
+          tone={netTone(shortTermGains + shortTermLosses)}
+          hint={`${shortTermTrades.length} trades`}
+        />
+        <KpiTile
+          label="Long-Term Net"
+          value={fmtSigned(longTermGains + longTermLosses)}
+          tone={netTone(longTermGains + longTermLosses)}
+          hint={`${longTermTrades.length} trades`}
+        />
+        <KpiTile
+          label="Total Realized"
+          value={fmtSigned(totalRealized)}
+          tone={netTone(totalRealized)}
+          hint={`${classified.length} trades in ${taxYear}`}
+        />
       </div>
 
       {/* Breakdown tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Short-term */}
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-            Short-Term (held &le; 365 days)
-          </p>
+          <p className="t-label mb-2">Short-Term (held &le; 365 days)</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded border border-border bg-[var(--panel)] p-2 text-center">
-              <p className="text-[9px] text-muted-foreground uppercase">Gains</p>
-              <p className="text-xs font-bold tabular-nums text-[var(--profit)]">+{formatCurrency(shortTermGains)}</p>
+            <div className="rounded-md border border-border bg-[var(--panel)] p-2.5 text-center">
+              <p className="t-label mb-1">Gains</p>
+              <p className={cn(
+                "t-num-md tabular-nums",
+                shortTermGains > 0 ? "text-[var(--profit)]" : "text-fg-muted",
+              )}>
+                {shortTermGains > 0 ? "+" : ""}{formatCurrency(shortTermGains)}
+              </p>
             </div>
-            <div className="rounded border border-border bg-[var(--panel)] p-2 text-center">
-              <p className="text-[9px] text-muted-foreground uppercase">Losses</p>
-              <p className="text-xs font-bold tabular-nums text-[var(--loss)]">{formatCurrency(shortTermLosses)}</p>
+            <div className="rounded-md border border-border bg-[var(--panel)] p-2.5 text-center">
+              <p className="t-label mb-1">Losses</p>
+              <p className={cn(
+                "t-num-md tabular-nums",
+                shortTermLosses < 0 ? "text-[var(--loss)]" : "text-fg-muted",
+              )}>
+                {formatCurrency(shortTermLosses)}
+              </p>
             </div>
           </div>
         </div>
 
         {/* Long-term */}
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-            Long-Term (held &gt; 365 days)
-          </p>
+          <p className="t-label mb-2">Long-Term (held &gt; 365 days)</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded border border-border bg-[var(--panel)] p-2 text-center">
-              <p className="text-[9px] text-muted-foreground uppercase">Gains</p>
-              <p className="text-xs font-bold tabular-nums text-[var(--profit)]">+{formatCurrency(longTermGains)}</p>
+            <div className="rounded-md border border-border bg-[var(--panel)] p-2.5 text-center">
+              <p className="t-label mb-1">Gains</p>
+              <p className={cn(
+                "t-num-md tabular-nums",
+                longTermGains > 0 ? "text-[var(--profit)]" : "text-fg-muted",
+              )}>
+                {longTermGains > 0 ? "+" : ""}{formatCurrency(longTermGains)}
+              </p>
             </div>
-            <div className="rounded border border-border bg-[var(--panel)] p-2 text-center">
-              <p className="text-[9px] text-muted-foreground uppercase">Losses</p>
-              <p className="text-xs font-bold tabular-nums text-[var(--loss)]">{formatCurrency(longTermLosses)}</p>
+            <div className="rounded-md border border-border bg-[var(--panel)] p-2.5 text-center">
+              <p className="t-label mb-1">Losses</p>
+              <p className={cn(
+                "t-num-md tabular-nums",
+                longTermLosses < 0 ? "text-[var(--loss)]" : "text-fg-muted",
+              )}>
+                {formatCurrency(longTermLosses)}
+              </p>
             </div>
           </div>
         </div>
@@ -666,33 +1097,40 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       {/* Trade list preview */}
       {classified.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-xs">
+          <table className="w-full">
             <thead>
               <tr className="bg-[var(--panel)] border-b border-border">
-                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</th>
-                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Type</th>
-                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">P&L</th>
-                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Days Held</th>
-                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Exit Date</th>
+                <th className="px-3 py-2 text-left"><span className="t-label">Symbol</span></th>
+                <th className="px-3 py-2 text-left"><span className="t-label">Type</span></th>
+                <th className="px-3 py-2 text-right"><span className="t-label">P&amp;L</span></th>
+                <th className="px-3 py-2 text-right"><span className="t-label">Days Held</span></th>
+                <th className="px-3 py-2 text-left"><span className="t-label">Exit Date</span></th>
               </tr>
             </thead>
             <tbody>
               {classified.slice(0, 30).map(t => (
-                <tr key={t.id} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2 font-medium text-foreground">{t.symbol}</td>
+                <tr key={t.id} className="border-b border-border-hair last:border-0">
+                  <td className="px-3 py-2 font-mono text-[13px] text-ink-900">{t.symbol}</td>
                   <td className="px-3 py-2">
                     <span className={cn(
-                      "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
-                      t.isLongTerm ? "bg-primary/15 text-primary" : "bg-muted text-foreground"
-                    )}>
+                      "inline-block rounded-sm px-2 py-0.5 font-sans text-[10.5px] font-semibold uppercase",
+                      t.isLongTerm
+                        ? "bg-brand/15 text-brand"
+                        : "bg-bg-elev-1 text-fg-muted",
+                    )}
+                    style={{ letterSpacing: "0.08em" }}>
                       {t.classification}
                     </span>
                   </td>
-                  <td className={cn("px-3 py-2 text-right tabular-nums font-medium", (t.pnl ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {(t.pnl ?? 0) >= 0 ? "+" : ""}{formatCurrency(t.pnl ?? 0)}
+                  <td className={cn(
+                    "px-3 py-2 text-right t-num-md tabular-nums",
+                    (t.pnl ?? 0) > 0 ? "text-[var(--profit)]" :
+                    (t.pnl ?? 0) < 0 ? "text-[var(--loss)]" : "text-fg",
+                  )}>
+                    {(t.pnl ?? 0) > 0 ? "+" : ""}{formatCurrency(t.pnl ?? 0)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{t.holdingDays}d</td>
-                  <td className="px-3 py-2 text-muted-foreground">{t.exit_time ? new Date(t.exit_time).toLocaleDateString() : ""}</td>
+                  <td className="px-3 py-2 text-right t-num-md text-fg-muted">{t.holdingDays}d</td>
+                  <td className="px-3 py-2 t-meta">{t.exit_time ? new Date(t.exit_time).toLocaleDateString() : ""}</td>
                 </tr>
               ))}
             </tbody>
@@ -716,7 +1154,19 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
         Informational only — not tax advice. Consult a qualified professional.
       </p>
 
-      <Button onClick={handleDownload} size="sm" className="gap-1.5">
+      <Button
+        onClick={handleDownload}
+        size="sm"
+        className="gap-1.5"
+        // 2026-04-21 — disable when the selected tax year has no realized
+        // trades; the CSV would otherwise export just headers + disclaimer.
+        disabled={classified.length === 0}
+        title={
+          classified.length === 0
+            ? `No realized trades to export for ${taxYear}`
+            : undefined
+        }
+      >
         <Download className="h-3 w-3" />
         Download Tax Report (CSV)
       </Button>
@@ -847,32 +1297,86 @@ export default function ReportsPage() {
     );
   }
 
+  // 2026-04-21 — editorial "no data yet" card mirrors the analytics page.
+  // Triggered when we have zero closed trades across the whole dataset
+  // AND no current positions, so every report section would be empty.
+  // Range selector is intentionally suppressed here since narrowing the
+  // window would still yield empty sections.
+  const allEmpty =
+    trades.length === 0 &&
+    positions.length === 0 &&
+    strategies.length === 0;
+
+  if (allEmpty) {
+    return (
+      <ScrollArea className="h-full">
+        <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
+          <div className="rounded-xl border border-border bg-[var(--panel)] px-8 py-12">
+            <div className="flex flex-col gap-4 max-w-[640px]">
+              <span className="t-label">§ AWAITING DATA</span>
+              <p className="t-display-section">
+                Reports become available after your first closed trades.
+              </p>
+              <p className="font-sans text-[13px] leading-relaxed text-fg-muted">
+                Portfolio statement, strategy performance, and the tax-year
+                breakdown will appear here once trades accumulate. Nothing
+                is exportable yet.
+              </p>
+              <div>
+                <a
+                  href="/trade"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
+                    "bg-transparent px-4 py-2 font-sans text-[12.5px] font-medium",
+                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  )}
+                >
+                  Place your first trade
+                  <span aria-hidden>&rarr;</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </DashboardPageLayout>
+      </ScrollArea>
+    );
+  }
+
   return (
     <ScrollArea className="h-full">
       <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" actions={rangeSelector}>
         {/* Portfolio Statement */}
-        <SectionCard title="Portfolio Statement" icon={FileText}>
+        <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
           {summary ? (
             <PortfolioStatement summary={summary} positions={positions} trades={filteredTrades} />
           ) : (
-            <p className="text-xs text-muted-foreground text-center py-6">Unable to load portfolio data.</p>
+            <p className="font-display italic text-[13px] text-fg-muted text-center py-6">
+              Unable to load portfolio data.
+            </p>
           )}
         </SectionCard>
 
         {/* Strategy Performance */}
-        <SectionCard title="Strategy Performance Report" icon={BarChart3}>
+        <SectionCard title="Strategy performance" eyebrow="§ STRATEGIES" icon={BarChart3}>
           <StrategyPerformanceReport strategies={strategies} trades={filteredTrades} />
         </SectionCard>
 
         {/* Tax Report */}
-        <SectionCard title="Tax Report (Simplified)" icon={Calculator} defaultOpen={false}>
-          <div className="mb-4">
-            <label htmlFor="tax-year" className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Tax Year</label>
+        <SectionCard title="Tax report (simplified)" eyebrow="§ TAX YEAR" icon={Calculator} defaultOpen={false}>
+          <div className="mb-4 flex items-center gap-3">
+            <label htmlFor="tax-year" className="t-label">
+              Tax Year
+            </label>
             <select
               id="tax-year"
               value={taxYear}
               onChange={(e) => setTaxYear(parseInt(e.target.value))}
-              className="ml-2 h-7 rounded border border-border bg-background px-2 text-xs text-foreground"
+              className={cn(
+                "h-7 rounded-sm border border-border bg-bg px-2",
+                "font-mono text-[12px] tabular-nums text-ink-900",
+                "focus-visible:outline-none focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand",
+              )}
             >
               {/* BUG-038: dropdown reported as "only 2026 visible" —
                   guard explicitly so the current year AND the prior year

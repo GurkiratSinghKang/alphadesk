@@ -8,6 +8,16 @@ import { getPortfolioPerformance, getTradeHistory, type TradeHistoryEntry } from
 import { cn } from "@/lib/utils";
 import { useAccountEquity, equityAtPoint, startingEquity } from "@/lib/accountEquity";
 
+// 2026-04-21 typography polish: the `/analytics` page predated the
+// editorial token system the dashboard hero rolled onto. Section titles
+// were set in bland `text-sm font-semibold`, KPI values in unopinionated
+// `text-xs font-medium`. Three shared classes pulled from
+// `styles/design-tokens.css` bring this page onto the same ladder:
+//   .t-display-section  22 serif italic       — section headers
+//   .t-label            12 sans caps 0.12em   — KPI eyebrows
+//   .t-num-md           16 mono tabular-med   — row numbers / percents
+// Kept local to avoid touching shared composites.
+
 // ─── Token helpers ──────────────────────────────────────────
 // SVG `fill` / `stroke` attributes need a concrete color string at runtime —
 // the browser does not resolve `var(--down-500)` inside those attributes.
@@ -236,9 +246,11 @@ function formatDuration(ms: number): string {
 
 function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
   if (data.length === 0) return <EmptyState label="No drawdown data" />;
-  const w = 600, h = 200, px = 40, py = 20;
+  // 2026-04-21 polish — match distribution dims (220×48×24×18) so rows
+  // of charts line up on the same baseline. Axis tick font 8→10 px.
+  const w = 600, h = 220, px = 48, py = 24, axisPy = 18;
   const minDD = Math.min(...data.map((d) => d.dd));
-  const yScale = (v: number) => py + ((0 - v) / (0 - minDD || 1)) * (h - 2 * py);
+  const yScale = (v: number) => py + ((0 - v) / (0 - minDD || 1)) * (h - py - axisPy);
   const xScale = (i: number) => px + (i / (data.length - 1 || 1)) * (w - 2 * px);
 
   const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${(xScale(i) ?? 0).toFixed(1)},${(yScale(d.dd) ?? 0).toFixed(1)}`).join(" ");
@@ -259,8 +271,24 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
       {/* Grid lines */}
       {yTicks.map((t, i) => (
         <g key={i}>
-          <line x1={px} y1={yScale(t)} x2={w - px} y2={yScale(t)} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="4 4" />
-          <text x={px - 4} y={yScale(t) + 3} textAnchor="end" fill="var(--muted-foreground)" fontSize="9" fontFamily="monospace">
+          <line
+            x1={px}
+            y1={yScale(t)}
+            x2={w - px}
+            y2={yScale(t)}
+            stroke="var(--border)"
+            strokeWidth="0.5"
+            strokeDasharray="4 4"
+          />
+          <text
+            x={px - 6}
+            y={yScale(t) + 3}
+            textAnchor="end"
+            fill="var(--fg-muted)"
+            fontSize="10"
+            fontFamily="monospace"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
             {(t * 100).toFixed(1)}%
           </text>
         </g>
@@ -271,7 +299,16 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
       <path d={pathD} fill="none" stroke={downColor} strokeWidth="1.5" />
       {/* X-axis labels */}
       {[0, Math.floor(data.length / 2), data.length - 1].map((idx) => (
-        <text key={idx} x={xScale(idx)} y={h - 2} textAnchor="middle" fill="var(--muted-foreground)" fontSize="8" fontFamily="monospace">
+        <text
+          key={idx}
+          x={xScale(idx)}
+          y={h - 4}
+          textAnchor="middle"
+          fill="var(--fg-muted)"
+          fontSize="10"
+          fontFamily="monospace"
+          style={{ fontVariantNumeric: "tabular-nums" }}
+        >
           {data[idx]?.date?.slice(5) ?? ""}
         </text>
       ))}
@@ -281,12 +318,15 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
 
 function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[] }) {
   if (data.length === 0) return <EmptyState label="Not enough data for rolling Sharpe (need 30+ days)" />;
-  const w = 600, h = 200, px = 40, py = 20;
+  // 2026-04-21 polish — harmonised dims + axis fontSize to match the
+  // other charts on the page. Y-axis label gutter lifted (48 → leaves
+  // room for 3-digit sharpe prints like `-3.2`).
+  const w = 600, h = 220, px = 48, py = 24, axisPy = 18;
   const values = data.map((d) => d.sharpe);
   const minV = Math.min(...values, -1);
   const maxV = Math.max(...values, 1);
   const range = maxV - minV || 1;
-  const yScale = (v: number) => py + ((maxV - v) / range) * (h - 2 * py);
+  const yScale = (v: number) => py + ((maxV - v) / range) * (h - py - axisPy);
   const xScale = (i: number) => px + (i / (data.length - 1 || 1)) * (w - 2 * px);
 
   const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"}${(xScale(i) ?? 0).toFixed(1)},${(yScale(d.sharpe) ?? 0).toFixed(1)}`).join(" ");
@@ -298,19 +338,53 @@ function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[]
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
       {yTicks.map((t, i) => (
         <g key={i}>
-          <line x1={px} y1={yScale(t)} x2={w - px} y2={yScale(t)} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="4 4" />
-          <text x={px - 4} y={yScale(t) + 3} textAnchor="end" fill="var(--muted-foreground)" fontSize="9" fontFamily="monospace">
-            {(t ?? 0).toFixed(1)}
+          <line
+            x1={px}
+            y1={yScale(t)}
+            x2={w - px}
+            y2={yScale(t)}
+            stroke="var(--border)"
+            strokeWidth="0.5"
+            strokeDasharray="4 4"
+          />
+          <text
+            x={px - 6}
+            y={yScale(t) + 3}
+            textAnchor="end"
+            fill="var(--fg-muted)"
+            fontSize="10"
+            fontFamily="monospace"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            {t.toFixed(1)}
           </text>
         </g>
       ))}
-      {/* Zero line */}
+      {/* Zero line — dashed hairline splits winning vs losing Sharpe */}
       {minV < 0 && maxV > 0 && (
-        <line x1={px} y1={zeroY} x2={w - px} y2={zeroY} stroke="var(--muted-foreground)" strokeWidth="0.5" strokeDasharray="2 2" />
+        <line
+          x1={px}
+          y1={zeroY}
+          x2={w - px}
+          y2={zeroY}
+          stroke="var(--fg-muted)"
+          strokeWidth="0.5"
+          strokeDasharray="2 2"
+          opacity="0.55"
+        />
       )}
       <path d={pathD} fill="none" stroke="var(--primary)" strokeWidth="1.5" />
       {[0, Math.floor(data.length / 2), data.length - 1].map((idx) => (
-        <text key={idx} x={xScale(idx)} y={h - 2} textAnchor="middle" fill="var(--muted-foreground)" fontSize="8" fontFamily="monospace">
+        <text
+          key={idx}
+          x={xScale(idx)}
+          y={h - 4}
+          textAnchor="middle"
+          fill="var(--fg-muted)"
+          fontSize="10"
+          fontFamily="monospace"
+          style={{ fontVariantNumeric: "tabular-nums" }}
+        >
           {data[idx]?.date?.slice(5) ?? ""}
         </text>
       ))}
@@ -320,7 +394,10 @@ function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[]
 
 function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: number; count: number }[]; dailyReturns: { ret: number }[] }) {
   if (bins.length === 0) return <EmptyState label="No return data" />;
-  const w = 600, h = 200, px = 40, py = 20;
+  // 2026-04-21 polish — taller viewport (220) + wider padding (px 48)
+  // so the tick labels never collide with the first/last bar. Axis font
+  // bumped from 8 → 10 (SVG px) so labels are legible on retina displays.
+  const w = 600, h = 220, px = 48, py = 24, axisPy = 18;
   const maxCount = Math.max(...bins.map((b) => b.count), 1);
   const barW = (w - 2 * px) / bins.length;
 
@@ -335,7 +412,7 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
     const midX = px + i * barW + barW / 2;
     const midVal = (b.min + b.max) / 2;
     const density = normalPDF(midVal, mean, std) * normalScale;
-    const normY = py + ((maxCount - density) / maxCount) * (h - 2 * py);
+    const normY = py + ((maxCount - density) / maxCount) * (h - py - axisPy);
     return `${i === 0 ? "M" : "L"}${(midX ?? 0).toFixed(1)},${(Math.max(py, normY) ?? 0).toFixed(1)}`;
   }).join(" ");
 
@@ -348,26 +425,89 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
   const upFill = rgbaFromHex(upHex, 0.4);
   const downFill = rgbaFromHex(downHex, 0.4);
 
+  // Outlier markers — flag bins whose midpoint falls beyond ±2σ. Rendered
+  // as a thin coral/chartreuse tick above each offending bar so the tail
+  // stands out against the bulk of the distribution.
+  const outlierThreshold = 2 * std;
+
+  // x-axis: first / quartile / median / three-quarter / last — five
+  // reference points so labels stay spaced comfortably on narrow cards.
+  const labelIdxs = Array.from(
+    new Set([
+      0,
+      Math.floor(bins.length * 0.25),
+      Math.floor(bins.length * 0.5),
+      Math.floor(bins.length * 0.75),
+      bins.length - 1,
+    ]),
+  ).filter((i) => i >= 0 && i < bins.length);
+
+  // Zero reference line — vertical rule at x = 0% so winning bins sit to
+  // the right and losing bins to the left at a glance.
+  const zeroBinIdx = bins.findIndex((b) => b.min <= 0 && b.max >= 0);
+  const zeroX = zeroBinIdx >= 0 ? px + zeroBinIdx * barW + barW / 2 : null;
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+      {/* Zero reference line */}
+      {zeroX !== null && (
+        <line
+          x1={zeroX}
+          y1={py}
+          x2={zeroX}
+          y2={h - axisPy}
+          stroke="var(--border)"
+          strokeWidth="0.75"
+          strokeDasharray="3 3"
+        />
+      )}
       {/* Bars */}
       {bins.map((b, i) => {
-        const barH = (b.count / maxCount) * (h - 2 * py);
+        const barH = (b.count / maxCount) * (h - py - axisPy);
         const x = px + i * barW;
-        const y = h - py - barH;
+        const y = h - axisPy - barH;
         const midVal = (b.min + b.max) / 2;
+        const isOutlier = Math.abs(midVal - mean) > outlierThreshold && b.count > 0;
+        const fill = midVal >= 0 ? upFill : downFill;
+        const outlineColor = midVal >= 0 ? upHex : downHex;
         return (
-          <rect key={i} x={x + 1} y={y} width={Math.max(barW - 2, 1)} height={barH}
-            fill={midVal >= 0 ? upFill : downFill}
-            rx="1"
-          />
+          <g key={i}>
+            <rect
+              x={x + 1}
+              y={y}
+              width={Math.max(barW - 2, 1)}
+              height={barH}
+              fill={fill}
+              rx="1"
+            />
+            {isOutlier && (
+              // Thin accent stroke above the bar marks the ±2σ tail.
+              <line
+                x1={x + 1}
+                y1={y - 3}
+                x2={x + Math.max(barW - 1, 2)}
+                y2={y - 3}
+                stroke={outlineColor}
+                strokeWidth="1.5"
+              />
+            )}
+          </g>
         );
       })}
       {/* Normal curve overlay */}
       <path d={normalPoints} fill="none" stroke="var(--chart-4)" strokeWidth="1.5" strokeDasharray="4 2" />
-      {/* X-axis labels */}
-      {[0, Math.floor(bins.length / 2), bins.length - 1].map((idx) => (
-        <text key={idx} x={px + idx * barW + barW / 2} y={h - 2} textAnchor="middle" fill="var(--muted-foreground)" fontSize="8" fontFamily="monospace">
+      {/* X-axis labels — five evenly-spaced ticks, 10px mono tabular */}
+      {labelIdxs.map((idx) => (
+        <text
+          key={idx}
+          x={px + idx * barW + barW / 2}
+          y={h - 4}
+          textAnchor="middle"
+          fill="var(--fg-muted)"
+          fontSize="10"
+          fontFamily="monospace"
+          style={{ fontVariantNumeric: "tabular-nums" }}
+        >
           {((bins[idx].min + bins[idx].max) / 2).toFixed(1)}%
         </text>
       ))}
@@ -396,19 +536,44 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
     const alpha = 0.15 + intensity * 0.55;
     if (val > 0) return rgbaFromHex(upHex, alpha);
     if (val < 0) return rgbaFromHex(downHex, alpha);
-    return "var(--panel)";
+    // 2026-04-21 polish — scratch (exactly-zero return) months must be
+    // visually distinct from *losing* months. Before this change a 0.0%
+    // month painted with no background and read as "no data" (same as
+    // undefined cells), which is misleading. Ink-tinted neutral plate
+    // signals "traded, broke even."
+    return "rgba(236, 230, 210, 0.05)";
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[10px] border-collapse">
+      {/* 2026-04-21 polish — fixed-layout table forces equal column widths
+          so Jan/Feb/...Dec cells line up on a pixel grid regardless of the
+          contents. Previously a +10.0% in March made that column wider
+          than October's +1.0%. */}
+      <table
+        className="w-full border-collapse"
+        style={{ tableLayout: "fixed" }}
+      >
+        <colgroup>
+          <col style={{ width: "64px" }} />
+          {months.map((m) => (
+            <col key={m} style={{ width: "auto" }} />
+          ))}
+          <col style={{ width: "72px" }} />
+        </colgroup>
         <thead>
           <tr>
-            <th className="px-2 py-1 text-left text-muted-foreground font-medium">Year</th>
+            <th className="px-2 py-1.5 text-left">
+              <span className="t-label">Year</span>
+            </th>
             {months.map((m) => (
-              <th key={m} className="px-1 py-1 text-center text-muted-foreground font-medium">{m}</th>
+              <th key={m} className="px-1 py-1.5 text-center">
+                <span className="t-label">{m}</span>
+              </th>
             ))}
-            <th className="px-2 py-1 text-center text-muted-foreground font-medium">YTD</th>
+            <th className="px-2 py-1.5 text-center">
+              <span className="t-label">YTD</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -425,7 +590,9 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
               }, 1) - 1) * 100;
             return (
               <tr key={year}>
-                <td className="px-2 py-1 text-foreground font-medium tabular-nums">{year}</td>
+                <td className="px-2 py-1.5 font-mono tabular-nums text-[13px] text-ink-900">
+                  {year}
+                </td>
                 {months.map((_, mi) => {
                   const key = `${year}-${String(mi + 1).padStart(2, "0")}`;
                   const val = monthlyReturns.get(key);
@@ -433,20 +600,34 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                     <td key={mi} className="px-1 py-1 text-center">
                       {val !== undefined ? (
                         <span
-                          className="inline-block w-full rounded px-1 py-0.5 tabular-nums font-medium"
-                          style={{ backgroundColor: cellColor(val), color: Math.abs(val) > maxAbs * 0.3 ? "var(--ink-1000)" : "var(--fg)" }}
+                          className="inline-block w-full rounded-[3px] px-1 py-1 font-mono tabular-nums text-[11.5px]"
+                          title={val === 0 ? "Break-even month" : undefined}
+                          style={{
+                            backgroundColor: cellColor(val),
+                            color:
+                              val === 0
+                                ? "var(--fg-muted)"
+                                : Math.abs(val) > maxAbs * 0.3
+                                  ? "var(--ink-1000)"
+                                  : "var(--fg)",
+                          }}
                         >
-                          {(val ?? 0) >= 0 ? "+" : ""}{(val ?? 0).toFixed(1)}%
+                          {val > 0 ? "+" : val < 0 ? "" : ""}{val.toFixed(1)}%
                         </span>
                       ) : (
-                        <span className="text-muted-foreground/30">--</span>
+                        <span className="t-meta opacity-40">&mdash;</span>
                       )}
                     </td>
                   );
                 })}
                 <td className="px-2 py-1 text-center">
-                  <span className={cn("tabular-nums font-semibold", ytd >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
-                    {(ytd ?? 0) >= 0 ? "+" : ""}{(ytd ?? 0).toFixed(1)}%
+                  <span
+                    className={cn(
+                      "t-num-md tabular-nums",
+                      ytd > 0 ? "text-[var(--profit)]" : ytd < 0 ? "text-[var(--loss)]" : "text-fg-muted",
+                    )}
+                  >
+                    {ytd > 0 ? "+" : ""}{ytd.toFixed(1)}%
                   </span>
                 </td>
               </tr>
@@ -473,12 +654,56 @@ function EmptyState({ label }: { label: string }) {
 
 // ─── Section Card ───────────────────────────────────────────
 
-function SectionCard({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  eyebrow,
+  icon: Icon,
+  value,
+  valueTone,
+  children,
+}: {
+  title: string;
+  /** Tracked-caps tag above the serif title (e.g. "§ DRAWDOWN"). */
+  eyebrow?: string;
+  icon: React.ElementType;
+  /** Optional last-value chip (right-aligned in the header). Accepts a
+   *  ready-formatted string so SVG charts can surface the most recent
+   *  data-point as a crosshair-style readout. */
+  value?: string;
+  /** Tones the value chip for profit/loss/neutral semantics. */
+  valueTone?: "profit" | "loss" | "neutral";
+  children: React.ReactNode;
+}) {
+  // 2026-04-21: lifted to serif-italic `.t-display-section` so every
+  // analytics card shares the editorial voice the dashboard hero set.
+  // Eyebrow chip is optional and prints above the title as `§ LABEL`
+  // when supplied — matches the page-level header pattern.
+  const toneClass =
+    valueTone === "profit"
+      ? "text-[var(--profit)]"
+      : valueTone === "loss"
+        ? "text-[var(--loss)]"
+        : "text-fg";
   return (
     <div className="rounded-xl border border-border bg-[var(--panel)] overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
+          <div className="flex flex-col gap-0.5 min-w-0">
+            {eyebrow ? (
+              <span className="t-label">{eyebrow}</span>
+            ) : null}
+            <h2 className="t-display-section text-ink-1000 truncate">{title}</h2>
+          </div>
+        </div>
+        {value ? (
+          <span
+            aria-label={`Current value ${value}`}
+            className={cn("t-num-md shrink-0 tabular-nums", toneClass)}
+          >
+            {value}
+          </span>
+        ) : null}
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -515,26 +740,41 @@ function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats
   const avgWinLabel = stats.avgWin == null ? "n/a" : `$${stats.avgWin.toFixed(2)}`;
   const avgLossLabel = stats.avgLoss == null ? "n/a" : `-$${stats.avgLoss.toFixed(2)}`;
 
-  const rows: [string, string][] = [
-    ["Total Trades", String(stats.totalTrades)],
-    ["Win Rate", winRateLabel],
-    ["Profit Factor", profitFactorLabel],
-    ["Avg Win", avgWinLabel],
-    ["Avg Loss", avgLossLabel],
-    ["Largest Win", `$${(stats.largestWin ?? 0).toFixed(2)}`],
-    ["Largest Loss", `$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`],
-    ["Avg Hold Time", formatDuration(stats.avgHoldMs)],
-    ["Max Hold Time", formatDuration(stats.maxHoldMs)],
-    ["Max Consec. Wins", String(stats.maxConsecWins)],
-    ["Max Consec. Losses", String(stats.maxConsecLosses)],
+  // 2026-04-21 polish — tone hints drive per-row color so losses render
+  // in coral, wins in chartreuse, and neutral metadata stays fg-muted.
+  // "neutral" leaves the value in the default fg color so counts + hold
+  // times don't read as profit/loss.
+  type Tone = "profit" | "loss" | "neutral";
+  const rows: { label: string; value: string; tone: Tone }[] = [
+    { label: "Total Trades",    value: String(stats.totalTrades),                          tone: "neutral" },
+    { label: "Win Rate",        value: winRateLabel,                                       tone: "neutral" },
+    { label: "Profit Factor",   value: profitFactorLabel,                                  tone: "neutral" },
+    { label: "Avg Win",         value: avgWinLabel,                                        tone: stats.avgWin == null ? "neutral" : "profit" },
+    { label: "Avg Loss",        value: avgLossLabel,                                       tone: stats.avgLoss == null ? "neutral" : "loss" },
+    { label: "Largest Win",     value: `+$${(stats.largestWin ?? 0).toFixed(2)}`,          tone: stats.largestWin > 0 ? "profit" : "neutral" },
+    { label: "Largest Loss",    value: `-$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`, tone: stats.largestLoss < 0 ? "loss" : "neutral" },
+    { label: "Avg Hold Time",   value: formatDuration(stats.avgHoldMs),                    tone: "neutral" },
+    { label: "Max Hold Time",   value: formatDuration(stats.maxHoldMs),                    tone: "neutral" },
+    { label: "Max Consec. Wins",   value: String(stats.maxConsecWins),                     tone: stats.maxConsecWins > 0 ? "profit" : "neutral" },
+    { label: "Max Consec. Losses", value: String(stats.maxConsecLosses),                   tone: stats.maxConsecLosses > 0 ? "loss" : "neutral" },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex items-center justify-between py-1.5 border-b border-border/50">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <span className="text-xs font-medium text-foreground tabular-nums">{value}</span>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0.5">
+      {rows.map(({ label, value, tone }) => (
+        <div key={label} className="flex items-baseline justify-between py-2 border-b border-border-hair last:border-0">
+          {/* Tracked-caps eyebrow for the label — signature metadata voice */}
+          <span className="t-label">{label}</span>
+          <span
+            className={cn(
+              "t-num-md tabular-nums",
+              tone === "profit" && "text-[var(--profit)]",
+              tone === "loss" && "text-[var(--loss)]",
+              tone === "neutral" && "text-fg",
+            )}
+          >
+            {value}
+          </span>
         </div>
       ))}
     </div>
@@ -718,14 +958,13 @@ export default function AnalyticsPage() {
           actions={<RangeSelector value={range} onChange={setRange} />}
         >
           <div className="rounded-xl border border-border bg-[var(--panel)] px-8 py-12">
-            <div className="flex flex-col gap-3 max-w-[640px]">
-              <p
-                className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
-                style={{ letterSpacing: "0.14em" }}
-              >
-                Awaiting data
-              </p>
-              <p className="font-display italic text-[20px] leading-snug text-fg">
+            <div className="flex flex-col gap-4 max-w-[640px]">
+              {/* Editorial empty-state uses the token ladder:
+                  tracked-caps eyebrow → serif italic headline → body copy
+                  → in-line CTA linking to /trade. Matches the voice used
+                  on the alerts/reports empty states. */}
+              <span className="t-label">§ AWAITING DATA</span>
+              <p className="t-display-section">
                 Analytics become available after your first closed trades.
               </p>
               <p className="font-sans text-[13px] leading-relaxed text-fg-muted">
@@ -733,6 +972,24 @@ export default function AnalyticsPage() {
                 monthly heatmap and trade stats will appear here as trades
                 accumulate.
               </p>
+              <div>
+                {/* BUG-analytics-empty-cta — direct link to /trade mirrors
+                    the dashboard's "Place your first trade" pattern so the
+                    empty state always gives the user a concrete next step
+                    instead of being a dead end. */}
+                <a
+                  href="/trade"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
+                    "bg-transparent px-4 py-2 font-sans text-[12.5px] font-medium",
+                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  )}
+                >
+                  Place your first trade
+                  <span aria-hidden>&rarr;</span>
+                </a>
+              </div>
             </div>
           </div>
         </DashboardPageLayout>
@@ -748,30 +1005,108 @@ export default function AnalyticsPage() {
         actions={<RangeSelector value={range} onChange={setRange} />}
       >
         {/* Row 1: Drawdown + Rolling Sharpe */}
-        {/* Viewport audit r5 #6: with DashboardPageLayout now lifted to
-            1480/1680 max-w at 2xl, a 4-col lay-out fits on 1920+/4K — quant
-            users can see all four charts side-by-side. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-          <SectionCard title="Underwater equity (drawdown)" icon={TrendingDown}>
-            <DrawdownChart data={drawdownData} />
-          </SectionCard>
-          <SectionCard title="30-day rolling Sharpe ratio" icon={Activity}>
-            <RollingSharpeChart data={rollingSharpe} />
-          </SectionCard>
+        {/* 4-col at 2xl (1536+) matches the dashboard hero layout — all
+            four charts line up on wide monitors while staying stacked on
+            laptop widths. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {(() => {
+            // Last-value chips surface the most recent data-point as a
+            // TradingView-style crosshair readout. Cheap (last element
+            // lookup) and valuable for "where are we now?" glance-value.
+            const latestDd = drawdownData[drawdownData.length - 1]?.dd;
+            const latestSharpe = rollingSharpe[rollingSharpe.length - 1]?.sharpe;
+            // Drawdown tone: non-zero dd is always a loss (<= 0), so any
+            // print below zero is coral; flat peak reads neutral.
+            const ddLabel = latestDd === undefined
+              ? undefined
+              : `${(latestDd * 100).toFixed(2)}%`;
+            const ddTone: "loss" | "neutral" = (latestDd ?? 0) < 0 ? "loss" : "neutral";
+            // Sharpe tone: positive is profit, negative is loss.
+            const sharpeLabel = latestSharpe === undefined
+              ? undefined
+              : latestSharpe.toFixed(2);
+            const sharpeTone: "profit" | "loss" | "neutral" =
+              (latestSharpe ?? 0) > 0
+                ? "profit"
+                : (latestSharpe ?? 0) < 0
+                  ? "loss"
+                  : "neutral";
+            return (
+              <>
+                <SectionCard
+                  title="Underwater equity"
+                  eyebrow="§ DRAWDOWN"
+                  icon={TrendingDown}
+                  value={ddLabel}
+                  valueTone={ddTone}
+                >
+                  <DrawdownChart data={drawdownData} />
+                </SectionCard>
+                <SectionCard
+                  title="30-day rolling Sharpe"
+                  eyebrow="§ RISK-ADJUSTED"
+                  icon={Activity}
+                  value={sharpeLabel}
+                  valueTone={sharpeTone}
+                >
+                  <RollingSharpeChart data={rollingSharpe} />
+                </SectionCard>
+              </>
+            );
+          })()}
         </div>
 
         {/* Row 2: Distribution + Trade Stats */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-          <SectionCard title="Daily return distribution" icon={BarChart3}>
-            <ReturnDistribution bins={histogram} dailyReturns={dailyReturns} />
-          </SectionCard>
-          <SectionCard title="Trade statistics" icon={Table2}>
-            <TradeStatsTable stats={tradeStats} />
-          </SectionCard>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {(() => {
+            // Distribution legend: mean ± std of daily returns, in %.
+            const returnsPct = dailyReturns.map((d) => d.ret * 100);
+            const mean =
+              returnsPct.length > 0
+                ? returnsPct.reduce((s, v) => s + v, 0) / returnsPct.length
+                : 0;
+            const std =
+              returnsPct.length > 1
+                ? Math.sqrt(
+                    returnsPct.reduce((s, v) => s + (v - mean) ** 2, 0) /
+                      (returnsPct.length - 1),
+                  )
+                : 0;
+            const distLabel =
+              returnsPct.length > 0
+                ? `${mean >= 0 ? "+" : ""}${mean.toFixed(2)}% ± ${std.toFixed(2)}%`
+                : undefined;
+            return (
+              <>
+                <SectionCard
+                  title="Daily return distribution"
+                  eyebrow="§ HISTOGRAM"
+                  icon={BarChart3}
+                  value={distLabel}
+                  valueTone="neutral"
+                >
+                  <ReturnDistribution bins={histogram} dailyReturns={dailyReturns} />
+                </SectionCard>
+                <SectionCard
+                  title="Trade statistics"
+                  eyebrow="§ EXECUTION"
+                  icon={Table2}
+                  value={`${tradeStats.totalTrades} trades`}
+                  valueTone="neutral"
+                >
+                  <TradeStatsTable stats={tradeStats} />
+                </SectionCard>
+              </>
+            );
+          })()}
         </div>
 
         {/* Row 3: Monthly Heatmap */}
-        <SectionCard title="Monthly returns heatmap" icon={Calendar}>
+        <SectionCard
+          title="Monthly returns"
+          eyebrow="§ HEATMAP"
+          icon={Calendar}
+        >
           <MonthlyHeatmap monthlyReturns={monthlyReturns} />
         </SectionCard>
       </DashboardPageLayout>
