@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -237,11 +238,37 @@ function AlertRow({
   onDelete: (id: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  // Two-tap delete confirmation — `confirmArmed` flips to true on the
+  // first click; the button re-labels to "Confirm?" and a second click
+  // (or Enter) within the 4s window actually deletes. A stray tap on
+  // the small 14px trash icon previously wiped a row with no recovery.
+  // ToS / TradingView / Webull all gate delete actions this way.
+  const [confirmArmed, setConfirmArmed] = useState(false);
+  const disarmTimer = useRef<number | null>(null);
 
-  const handleDelete = async () => {
+  useEffect(() => {
+    return () => {
+      if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
+    };
+  }, []);
+
+  const arm = () => {
+    setConfirmArmed(true);
+    if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
+    disarmTimer.current = window.setTimeout(() => setConfirmArmed(false), 4000);
+  };
+
+  const handleDeleteClick = async () => {
+    if (!confirmArmed) {
+      arm();
+      return;
+    }
+    if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
     setDeleting(true);
     await onDelete(alert.id);
+    // Row unmounts on success; on failure we re-enable so the user can retry.
     setDeleting(false);
+    setConfirmArmed(false);
   };
 
   return (
@@ -261,8 +288,9 @@ function AlertRow({
         )}
       </div>
 
-      {/* Symbol */}
-      <span className="w-16 shrink-0 font-semibold text-foreground tabular-nums">
+      {/* Symbol — mono (alphabetic, not numeric) so tickers stay aligned
+          in the column without the tabular-nums misapplication. */}
+      <span className="w-16 shrink-0 font-mono font-semibold text-foreground">
         {alert.symbol}
       </span>
 
@@ -281,8 +309,9 @@ function AlertRow({
         </Badge>
       </span>
 
-      {/* Target Price */}
-      <span className="w-24 shrink-0 tabular-nums text-foreground">
+      {/* Target Price — t-num-md token so prices sit in the 16px mono
+          tabular row the rest of the polished pages use. */}
+      <span className="w-24 shrink-0 t-num-md text-foreground">
         ${(alert.price ?? 0).toFixed(2)}
       </span>
 
@@ -297,22 +326,42 @@ function AlertRow({
         )}
       </span>
 
-      {/* Created / Triggered date */}
-      <span className="flex-1 text-xs text-muted-foreground truncate">
+      {/* Created / Triggered date — t-meta for the 13px mono muted
+          timestamp style that matches dashboard/analytics rows. */}
+      <span className="flex-1 t-meta truncate">
         {alert.triggered && alert.triggered_at
           ? `Triggered ${formatDate(alert.triggered_at)}`
           : `Created ${formatDate(alert.created_at)}`}
       </span>
 
-      {/* Delete */}
+      {/* Delete — two-tap confirmation. h-9 / 36px hit target (was 22px,
+          below the 36px floor) so the button is comfortable on touch
+          and doesn't get fat-fingered. Arms on first click; commits on
+          the second within 4s. */}
       <button
-        onClick={handleDelete}
+        onClick={handleDeleteClick}
         disabled={deleting}
-        className="shrink-0 rounded p-1 text-muted-foreground hover:text-[var(--loss)] hover:bg-[var(--loss)]/10 transition-colors disabled:opacity-50"
-        aria-label={`Delete alert for ${alert.symbol}`}
+        className={cn(
+          "shrink-0 rounded transition-colors disabled:opacity-50 inline-flex items-center justify-center",
+          "h-9 px-2 gap-1",
+          confirmArmed
+            ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-[11px] font-semibold"
+            : "text-muted-foreground hover:text-[var(--loss)] hover:bg-[var(--loss)]/10 w-9"
+        )}
+        aria-label={
+          confirmArmed
+            ? `Confirm delete alert for ${alert.symbol}`
+            : `Delete alert for ${alert.symbol}`
+        }
+        data-testid={confirmArmed ? "alert-delete-confirm" : "alert-delete-arm"}
       >
         {deleting ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : confirmArmed ? (
+          <>
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Confirm?</span>
+          </>
         ) : (
           <Trash2 className="h-3.5 w-3.5" />
         )}
@@ -328,14 +377,28 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [showClearTriggeredConfirm, setShowClearTriggeredConfirm] = useState(false);
+  // Triggered-history section is collapsible (brief call-out). Default
+  // open so current users' mental model is unchanged; state is per-session.
+  const [triggeredOpen, setTriggeredOpen] = useState(true);
+  // Track whether we've had a successful load so subsequent transient
+  // fetch failures don't wipe the list (same anti-pattern the /trade
+  // recent-orders strip fixed). First-load 5xx still falls through to
+  // the empty state so the user isn't stuck on a skeleton.
+  const hasLoadedOnce = useRef(false);
 
   const fetchAlerts = useCallback(async () => {
     try {
       const data = await getPriceAlerts();
       setAlerts(data);
+      hasLoadedOnce.current = true;
     } catch {
-      // API may not be available yet - show empty state
-      setAlerts([]);
+      // Only wipe to empty on the *first* load — otherwise a flaky
+      // refetch (e.g. after createPriceAlert / deletePriceAlert) would
+      // erase the list the user is editing. Keep the last-known array.
+      if (!hasLoadedOnce.current) {
+        setAlerts([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -346,7 +409,18 @@ export default function AlertsPage() {
   }, [fetchAlerts]);
 
   const activeAlerts = alerts.filter((a) => !a.triggered);
-  const triggeredAlerts = alerts.filter((a) => a.triggered);
+  // Brief: priority sort the triggered section by time. Newest fired first
+  // — that's the "most-actionable" ordering traders expect (fresh fires
+  // at the top, older history decays down). Missing `triggered_at`
+  // falls back to `created_at` so nothing sinks to the bottom blank.
+  const triggeredAlerts = alerts
+    .filter((a) => a.triggered)
+    .slice()
+    .sort((a, b) => {
+      const ta = new Date(a.triggered_at ?? a.created_at).getTime();
+      const tb = new Date(b.triggered_at ?? b.created_at).getTime();
+      return tb - ta;
+    });
 
   const handleDelete = async (id: string) => {
     try {
@@ -404,14 +478,50 @@ export default function AlertsPage() {
         {triggeredAlerts.length > 0 ? ` / ${triggeredAlerts.length} triggered` : ""}
       </span>
       {triggeredAlerts.length > 0 && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-xs h-8"
-          onClick={handleClearTriggered}
-        >
-          Clear Triggered
-        </Button>
+        // Clear Triggered is a bulk-delete — put it behind the same
+        // popover-confirm gate as "Delete All" so a single fat-finger
+        // tap doesn't erase the triggered history. Matches market
+        // convention for bulk destructive actions in trading UIs.
+        <div className="relative">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8"
+            onClick={() => setShowClearTriggeredConfirm(true)}
+          >
+            Clear Triggered
+          </Button>
+          {showClearTriggeredConfirm && (
+            <div className="absolute right-0 top-full mt-2 z-50 rounded-md border border-border bg-bg-elev-1 p-4 shadow-lg min-w-[240px]">
+              <p className="font-sans text-[13px] font-medium text-fg mb-1">Clear triggered alerts?</p>
+              <p className="font-sans text-[11px] text-fg-muted mb-3">
+                This will permanently delete {triggeredAlerts.length} triggered alert
+                {triggeredAlerts.length !== 1 ? "s" : ""}. This action cannot be undone.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => setShowClearTriggeredConfirm(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => {
+                    setShowClearTriggeredConfirm(false);
+                    handleClearTriggered();
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       <div className="relative">
         <Button
@@ -497,13 +607,15 @@ export default function AlertsPage() {
                   Active Alerts ({activeAlerts.length})
                 </span>
               </div>
-              <div className="flex items-center gap-3 px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/50">
+              <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/50">
+                {/* t-label: aligns column titles with the dashboard wave's
+                    eyebrow style instead of ad-hoc 10px caps styling. */}
                 <span className="w-4 shrink-0" />
-                <span className="w-16 shrink-0">Symbol</span>
-                <span className="w-20 shrink-0">Condition</span>
-                <span className="w-24 shrink-0">Target</span>
-                <span className="w-20 shrink-0">Status</span>
-                <span className="flex-1">Date</span>
+                <span className="w-16 shrink-0 t-label">Symbol</span>
+                <span className="w-20 shrink-0 t-label">Condition</span>
+                <span className="w-24 shrink-0 t-label">Target</span>
+                <span className="w-20 shrink-0 t-label">Status</span>
+                <span className="flex-1 t-label">Date</span>
                 <span className="w-8 shrink-0" />
               </div>
             </>
@@ -538,38 +650,60 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Triggered History */}
+      {/* Triggered History — collapsible (brief call-out). Using a
+          plain button + aria-expanded rather than <details> so the
+          styling matches the adjacent "Active Alerts" panel and we
+          control the chevron animation. Sort order is newest-first
+          (see triggeredAlerts sort above). */}
       {!loading && triggeredAlerts.length > 0 && (
         <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
+          <button
+            type="button"
+            onClick={() => setTriggeredOpen((v) => !v)}
+            aria-expanded={triggeredOpen}
+            aria-controls="triggered-history-body"
+            className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50 hover:bg-[var(--panel)]/70 transition-colors text-left"
+          >
             <CheckCircle2 className="h-3.5 w-3.5 text-[var(--profit)]" />
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-xs font-semibold text-foreground flex-1">
               Triggered History ({triggeredAlerts.length})
             </span>
-          </div>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                !triggeredOpen && "-rotate-90"
+              )}
+              aria-hidden
+            />
+          </button>
 
-          {/* Column headers */}
-          <div className="flex items-center gap-3 px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/50">
-            <span className="w-4 shrink-0" />
-            <span className="w-16 shrink-0">Symbol</span>
-            <span className="w-20 shrink-0">Condition</span>
-            <span className="w-24 shrink-0">Target</span>
-            <span className="w-20 shrink-0">Status</span>
-            <span className="flex-1">Date</span>
-            <span className="w-8 shrink-0" />
-          </div>
+          {triggeredOpen && (
+            <div id="triggered-history-body">
+              {/* Column headers — t-label for the caps/tracked eyebrow row
+                  so column titles in both sections read the same. */}
+              <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/50">
+                <span className="w-4 shrink-0" />
+                <span className="w-16 shrink-0 t-label">Symbol</span>
+                <span className="w-20 shrink-0 t-label">Condition</span>
+                <span className="w-24 shrink-0 t-label">Target</span>
+                <span className="w-20 shrink-0 t-label">Status</span>
+                <span className="flex-1 t-label">Date</span>
+                <span className="w-8 shrink-0" />
+              </div>
 
-          <ScrollArea className="max-h-[300px]">
-            <div className="divide-y divide-border/50">
-              {triggeredAlerts.map((alert) => (
-                <AlertRow
-                  key={alert.id}
-                  alert={alert}
-                  onDelete={handleDelete}
-                />
-              ))}
+              <ScrollArea className="max-h-[300px]">
+                <div className="divide-y divide-border/50">
+                  {triggeredAlerts.map((alert) => (
+                    <AlertRow
+                      key={alert.id}
+                      alert={alert}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
+          )}
         </div>
       )}
     </DashboardPageLayout>

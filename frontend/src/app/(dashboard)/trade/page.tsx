@@ -167,16 +167,22 @@ export default function TradePage() {
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6 min-h-[calc(100dvh-48px-22px)]">
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Trade</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Full-screen order workspace · {symbol.ticker}
-          </p>
+        <div className="flex flex-col gap-1">
+          {/* Dashboard-wave editorial header — t-label eyebrow + italic
+              display title, matching DashboardPageLayout's rhythm. We
+              don't swap in DashboardPageLayout wholesale because `/trade`
+              runs full-bleed (chart + order bar need the extra pixels),
+              but the typography should read the same as the other
+              polished pages. */}
+          <span className="t-label">§ TRADE</span>
+          <h1 className="t-display-section">
+            Trade <span className="not-italic text-fg-muted">· {symbol.ticker}</span>
+          </h1>
         </div>
         <button
           type="button"
           onClick={() => router.push("/")}
-          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 h-9 px-2"
         >
           Back to desk
         </button>
@@ -213,11 +219,21 @@ export default function TradePage() {
       </section>
 
       <section className="rounded-lg border border-border bg-[var(--surface)] p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Recent orders</h2>
+        {/* Dashboard-wave typography: section header uses the display
+            italic token so the `/trade` page aligns with the editorial
+            voice the rest of the polished pages share. */}
+        <h2 className="t-display-section mb-3">Recent orders</h2>
         {recentOrders.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">
-            No orders yet — submit one above to see it here.
-          </p>
+          // Editorial empty-state — mirrors the alerts / analytics voice:
+          // italic-serif headline sentence, sans sentence-case subtitle.
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <p className="font-display italic text-[15px] text-fg">
+              No orders yet today.
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              Stage one above and it&rsquo;ll appear here as soon as the broker acknowledges.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -228,23 +244,26 @@ export default function TradePage() {
                   that only read the table landmark. */}
               <caption className="sr-only">Recent orders</caption>
               <thead>
-                <tr className="text-left text-muted-foreground border-b border-border">
+                {/* t-label token — matches dashboard-wave "eyebrow" style
+                    (caps, tracked 0.12em, 12px sans) so column headers in
+                    `/trade` read the same as every other polished page. */}
+                <tr className="text-left border-b border-border">
                   {/* BUG-041: Date column added alongside Time so a
                       multi-day list (pre-market orders, pending orders
                       that fill tomorrow) is disambiguated at a glance. */}
-                  <th scope="col" className="py-2 px-2 font-medium">Date</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Time</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Symbol</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Side</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Qty</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Type</th>
-                  <th scope="col" className="py-2 px-2 font-medium">Status</th>
+                  <th scope="col" className="py-2 px-2 t-label">Date</th>
+                  <th scope="col" className="py-2 px-2 t-label">Time</th>
+                  <th scope="col" className="py-2 px-2 t-label">Symbol</th>
+                  <th scope="col" className="py-2 px-2 t-label">Side</th>
+                  <th scope="col" className="py-2 px-2 t-label">Qty</th>
+                  <th scope="col" className="py-2 px-2 t-label">Type</th>
+                  <th scope="col" className="py-2 px-2 t-label">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {recentOrders.map((o) => (
                   <tr key={o.id} className="border-b border-border/40">
-                    <td className="py-2 px-2 text-muted-foreground tabular-nums">
+                    <td className="py-2 px-2 t-meta">
                       {o.createdAt
                         ? new Date(o.createdAt).toLocaleDateString(undefined, {
                             year: "numeric",
@@ -253,7 +272,7 @@ export default function TradePage() {
                           })
                         : "—"}
                     </td>
-                    <td className="py-2 px-2 text-muted-foreground tabular-nums">
+                    <td className="py-2 px-2 t-meta">
                       {o.createdAt ? new Date(o.createdAt).toLocaleTimeString() : "—"}
                     </td>
                     <td className="py-2 px-2 font-mono text-foreground">{o.symbol}</td>
@@ -262,9 +281,32 @@ export default function TradePage() {
                     }`}>
                       {o.side}
                     </td>
-                    <td className="py-2 px-2 tabular-nums text-foreground">{o.quantity}</td>
-                    <td className="py-2 px-2 text-muted-foreground">{o.type}</td>
-                    <td className="py-2 px-2 text-foreground">{o.status}</td>
+                    <td className="py-2 px-2 t-num-md text-foreground">{o.quantity}</td>
+                    <td className="py-2 px-2 text-muted-foreground capitalize">
+                      {o.type.replace("_", " ")}
+                    </td>
+                    <td className="py-2 px-2">
+                      {/* Status pill — legibility upgrade. Raw status
+                          strings blended into body text; a colour-token
+                          chip makes filled vs. rejected vs. working
+                          glanceable without re-reading. Same token map
+                          PositionsList uses (STATUS_CHIP) kept inline to
+                          stay self-contained without importing a shared
+                          composite the brief scoped away. */}
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
+                          o.status === "filled"
+                            ? "bg-[var(--profit)]/15 text-[var(--profit)]"
+                            : o.status === "rejected"
+                            ? "bg-[var(--loss)]/15 text-[var(--loss)]"
+                            : o.status === "cancelled"
+                            ? "bg-[var(--neutral)]/15 text-[var(--neutral)]"
+                            : "bg-[var(--chart-4)]/15 text-[var(--chart-4)]"
+                        }`}
+                      >
+                        {o.status}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
