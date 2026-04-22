@@ -10,7 +10,11 @@
  * new UI while the panel retirement pass is in-flight.
  *
  * Layout (single-column, scrolls): heading → chart → order bar →
- * recent orders.
+ * pre-staged contract(s) → recent orders.
+ *
+ * Query-param pre-fill (Task 22/23):
+ *   Single-leg:  /trade?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1
+ *   Multi-leg:   /trade?symbol=NVDA&legs=NVDA260425P00195000:sell:1,NVDA260425C00210000:sell:1
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -38,6 +42,62 @@ import {
   toStrategyOptions,
 } from "../_desk/selectors";
 
+// ─── OCC symbol helpers ────────────────────────────────────────────────────────
+
+/**
+ * Parse an OCC option symbol into its constituent parts.
+ *
+ * Format: SSSSSS YYMMDD C|P NNNNNNNN  (strike is 8 digits, price × 1000)
+ * Example: NVDA260425C00205000 → { symbol:"NVDA", expiry:"2026-04-25", side:"call", strike:205 }
+ */
+export function parseOccSymbol(occ: string): {
+  symbol: string;
+  expiry: string;
+  side: "call" | "put";
+  strike: number;
+} | null {
+  const m = /^([A-Z]+)(\d{6})([CP])(\d{8})$/.exec(occ);
+  if (!m) return null;
+  const [, sym, yymmdd, sideChar, strikeStr] = m;
+  const expiry =
+    "20" +
+    yymmdd.slice(0, 2) +
+    "-" +
+    yymmdd.slice(2, 4) +
+    "-" +
+    yymmdd.slice(4, 6);
+  return {
+    symbol: sym,
+    expiry,
+    side: sideChar === "C" ? "call" : "put",
+    strike: parseInt(strikeStr, 10) / 1000,
+  };
+}
+
+// ─── Pre-fill state types ──────────────────────────────────────────────────────
+
+interface ActiveContract {
+  occ: string;
+  symbol: string;
+  expiry: string;
+  side: "call" | "put";
+  strike: number;
+  orderSide: "buy" | "sell";
+  qty: number;
+}
+
+interface ActiveLeg {
+  occ: string;
+  symbol: string;
+  expiry: string;
+  side: "call" | "put";
+  strike: number;
+  orderSide: "buy" | "sell";
+  qty: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function rangeToLimit(r: ChartRange): number {
   switch (r) {
     case "1D": return 2;
@@ -61,6 +121,41 @@ export default function TradePage() {
 
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
   const strategyOptions = useMemo(() => toStrategyOptions(rail), [rail]);
+
+  // ─── Query-param pre-fill (Task 22 / 23) ────────────────────────────────────
+  const [activeContract, setActiveContract] = useState<ActiveContract | null>(null);
+  const [activeLegs, setActiveLegs] = useState<ActiveLeg[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const contractOcc = params.get("contract");
+    const legsParam = params.get("legs");
+
+    if (contractOcc) {
+      // Single-leg deep-link.
+      const parsed = parseOccSymbol(contractOcc);
+      if (parsed) {
+        const rawSide = params.get("side") ?? "buy";
+        const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
+        const qty = parseInt(params.get("qty") ?? "1", 10) || 1;
+        setActiveContract({ occ: contractOcc, ...parsed, orderSide, qty });
+      }
+    } else if (legsParam) {
+      // Multi-leg deep-link: comma-separated CONTRACT:side:qty triplets.
+      const legs: ActiveLeg[] = [];
+      for (const raw of legsParam.split(",")) {
+        const parts = raw.split(":");
+        if (parts.length < 1) continue;
+        const [occ, rawSide, rawQty] = parts;
+        const parsed = parseOccSymbol(occ);
+        if (!parsed) continue;
+        const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
+        const qty = parseInt(rawQty ?? "1", 10) || 1;
+        legs.push({ occ, ...parsed, orderSide, qty });
+      }
+      if (legs.length > 0) setActiveLegs(legs);
+    }
+  }, []);
 
   const [range, setRange] = useState<ChartRange>("1M");
   const [series, setSeries] = useState<ChartBar[]>([]);
@@ -217,6 +312,84 @@ export default function TradePage() {
           }}
         />
       </section>
+
+      {/* ─── Pre-staged contract (single-leg deep-link) ──────────── */}
+      {activeContract && (
+        <section
+          className="rounded-lg border border-border bg-[var(--surface)] p-4"
+          aria-label="Pre-staged option contract"
+        >
+          <h2 className="t-display-section mb-3">Pre-staged contract</h2>
+          <p className="text-xs text-muted-foreground mb-2">
+            Review the contract below before placing. Nothing auto-submits.
+          </p>
+          {/* data-order-side is the test-observable attribute for the staged side */}
+          <div
+            data-order-side={activeContract.orderSide}
+            data-slot="active-contract"
+            className="flex flex-wrap items-center gap-3 rounded border border-border bg-[var(--bg-elev-1)] px-4 py-3 font-mono text-sm"
+          >
+            <span className="font-semibold text-foreground">{activeContract.occ}</span>
+            <span className="text-muted-foreground">
+              {activeContract.symbol} &nbsp;
+              {activeContract.expiry} &nbsp;
+              {activeContract.side.toUpperCase()} &nbsp;
+              ${activeContract.strike}
+            </span>
+            <span
+              className={`uppercase font-medium ${
+                activeContract.orderSide === "sell"
+                  ? "text-[var(--loss)]"
+                  : "text-[var(--profit)]"
+              }`}
+            >
+              {activeContract.orderSide} &times; {activeContract.qty}
+            </span>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Pre-staged legs (multi-leg / strangle deep-link) ────── */}
+      {activeLegs.length > 0 && (
+        <section
+          className="rounded-lg border border-border bg-[var(--surface)] p-4"
+          aria-label="Pre-staged multi-leg order"
+        >
+          <h2 className="t-display-section mb-3">Pre-staged combo order</h2>
+          <p className="text-xs text-muted-foreground mb-2">
+            Multi-leg combos may need to be submitted per-leg if the broker
+            backend does not support combo orders. Review each leg before placing.
+          </p>
+          <div data-slot="active-legs" className="flex flex-col gap-2">
+            {activeLegs.map((leg, i) => (
+              <div
+                key={leg.occ}
+                data-slot="active-leg"
+                data-order-side={leg.orderSide}
+                className="flex flex-wrap items-center gap-3 rounded border border-border bg-[var(--bg-elev-1)] px-4 py-3 font-mono text-sm"
+              >
+                <span className="text-xs text-muted-foreground">Leg {i + 1}</span>
+                <span className="font-semibold text-foreground">{leg.occ}</span>
+                <span className="text-muted-foreground">
+                  {leg.symbol} &nbsp;
+                  {leg.expiry} &nbsp;
+                  {leg.side.toUpperCase()} &nbsp;
+                  ${leg.strike}
+                </span>
+                <span
+                  className={`uppercase font-medium ${
+                    leg.orderSide === "sell"
+                      ? "text-[var(--loss)]"
+                      : "text-[var(--profit)]"
+                  }`}
+                >
+                  {leg.orderSide} &times; {leg.qty}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-border bg-[var(--surface)] p-4">
         {/* Dashboard-wave typography: section header uses the display
