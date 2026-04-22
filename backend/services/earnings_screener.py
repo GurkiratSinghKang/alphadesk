@@ -133,13 +133,22 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             symbol = item.get("symbol")
             if not symbol:
                 continue
+            symbol_str = str(symbol)
+            # FMP returns GLOBAL earnings — foreign exchanges (.L, .TO, .V,
+            # .CN, .PA, etc.) and OTC pink sheets that Alpaca can't quote.
+            # Filter to plain US-listed tickers only: 1-5 uppercase letters
+            # with no suffix. Anything with a dot (exchange suffix) or
+            # longer than 5 chars (typically 5-letter pinks like XTRRF)
+            # gets dropped — saves ~400 pointless 404s per calendar fetch.
+            if "." in symbol_str or len(symbol_str) > 5 or not symbol_str.isalpha():
+                continue
             report_date_val = item.get("date")
             if report_date_val is None:
                 continue
             report_time_raw = (item.get("announcement_when") or "unknown").lower()
             out.append({
-                "symbol": str(symbol),
-                "company": str(symbol),  # FMP /earnings-calendar has no name
+                "symbol": symbol_str,
+                "company": symbol_str,  # FMP /earnings-calendar has no name
                 "sector": "",
                 "report_date": (
                     report_date_val.isoformat()
@@ -525,14 +534,33 @@ async def list_upcoming(
             error="earnings calendar unavailable",
         )
 
+    # Cap the fan-out so a busy earnings week (100+ US tickers) doesn't
+    # stall the whole endpoint past the frontend's 15s timeout. Sort by
+    # report_date ascending and take the first N — nearest earnings first
+    # is the most useful default anyway.
+    raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
+    MAX_ROWS = 60
+    if len(raw_rows) > MAX_ROWS:
+        log.info(
+            "earnings calendar: %d rows → capped to %d (window=%s)",
+            len(raw_rows), MAX_ROWS, window,
+        )
+        raw_rows = raw_rows[:MAX_ROWS]
+
+    # Cap concurrency so we don't open 60 parallel Alpaca+FMP+Claude flights
+    # at once — Alpaca's rate limit is ~200 req/min across the whole backend
+    # and other endpoints need headroom.
+    hydrate_sem = asyncio.Semaphore(10)
+
     async def safe_hydrate(row: dict) -> dict | None:
-        try:
-            return await _hydrate_row(row, min_iv_rank=min_iv_rank)
-        except Exception as e:
-            log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
-            nonlocal partial
-            partial = True
-            return row  # keep symbol visible with null fields
+        async with hydrate_sem:
+            try:
+                return await _hydrate_row(row, min_iv_rank=min_iv_rank)
+            except Exception as e:
+                log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
+                nonlocal partial
+                partial = True
+                return row  # keep symbol visible with null fields
 
     hydrated = await asyncio.gather(*[safe_hydrate(r) for r in raw_rows])
     rows: list[CalendarRow] = []
