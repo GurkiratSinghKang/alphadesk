@@ -18,7 +18,8 @@ describe('Strategy configuration', () => {
     // removing from STRATEGY_ORDER. 2026-04-20: dropped to 19 after removing
     // the duplicate "pairs-stat-arb" entry (same backend package as
     // "pairs-trading"; rendered twice on /strategies).
-    expect(STRATEGY_ORDER.length).toBe(19);
+    // 2026-04-22: bumped to 20 — added earnings-options-play (research kind).
+    expect(STRATEGY_ORDER.length).toBe(20);
   });
 
   it('has unique strategy IDs', () => {

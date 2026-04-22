@@ -24,8 +24,10 @@ import {
   STRATEGY_META,
   STRATEGY_ORDER,
   metaStage,
+  metaKind,
   type StrategyStage,
 } from "@/lib/strategies";
+import ResearchStrategyCard from "@/components/strategies/ResearchStrategyCard";
 import { computeStrategyCounts } from "@/lib/strategiesSummary";
 import { cn } from "@/lib/utils";
 
@@ -358,15 +360,17 @@ function Section({
   strategies,
   bucket,
   empty,
+  "data-section": dataSection,
 }: {
   title: string;
   count: number;
   strategies: ListingStrategy[];
   bucket: Bucket;
   empty: string;
+  "data-section"?: string;
 }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3" data-section={dataSection}>
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <Display size="md" as="h2" className="text-[22px]">
@@ -542,13 +546,23 @@ export default function StrategiesListingPage() {
     });
   }, [summaries, perf, catalog]);
 
+  // Split research-kind strategies out BEFORE stage bucketing — they never
+  // enter the active/paused/coming_soon buckets since they are not autonomous.
+  const researchEntries = useMemo(
+    () => strategies.filter((s) => metaKind(s.id) === "research"),
+    [strategies],
+  );
+
   const grouped = useMemo(() => {
     const g: Record<Bucket, ListingStrategy[]> = {
       active: [],
       paused: [],
       coming_soon: [],
     };
-    for (const s of strategies) g[bucketFor(s)].push(s);
+    for (const s of strategies) {
+      if (metaKind(s.id) === "research") continue;
+      g[bucketFor(s)].push(s);
+    }
     return g;
   }, [strategies]);
 
@@ -633,6 +647,7 @@ export default function StrategiesListingPage() {
         {!loading && (
           <>
             <Section
+              data-section="active"
               title="Active"
               count={counts.active}
               bucket="active"
@@ -641,6 +656,7 @@ export default function StrategiesListingPage() {
             />
             {grouped.paused.length > 0 && (
               <Section
+                data-section="paused"
                 title="Paused"
                 count={counts.paused}
                 bucket="paused"
@@ -648,8 +664,43 @@ export default function StrategiesListingPage() {
                 empty="No paused strategies."
               />
             )}
+            {researchEntries.length > 0 && (
+              <section
+                data-section="research"
+                className="flex flex-col gap-3"
+              >
+                <header className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-3">
+                    <Display size="md" as="h2" className="text-[22px]">
+                      Research
+                    </Display>
+                    <Mono size="micro" className="text-fg-hint">
+                      {String(researchEntries.length).padStart(2, "0")}
+                    </Mono>
+                  </div>
+                </header>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {researchEntries.map((s) => (
+                    <ResearchStrategyCard
+                      key={s.id}
+                      id={s.id}
+                      name={s.displayName}
+                      subtitle={STRATEGY_META[s.id]?.regimeNote ?? ""}
+                      metrics={{
+                        // Placeholder zeros — Task 10 wires real values from
+                        // the preview API. Card renders em-dash for 0/null.
+                        thisWeekCount: 0,
+                        avgIvRank: 0,
+                        topSetup: null,
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
             {grouped.coming_soon.length > 0 && (
               <Section
+                data-section="coming-soon"
                 title="Coming soon"
                 count={counts.coming_soon}
                 bucket="coming_soon"

@@ -88,6 +88,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getMarketSectors: vi.fn().mockResolvedValue({ sectors: [] }),
     getMarketNews: vi.fn().mockResolvedValue([]),
     getStrategies: vi.fn().mockResolvedValue([]),
+    getStrategyCatalog: vi.fn().mockResolvedValue([]),
     getStrategyPerformance: vi.fn().mockResolvedValue({ name: 'Test', description: '', status: 'active', invested_amount: 0, current_value: 0, total_return_pct: 0, annualized_return_pct: 0, return_dollars: 0, win_rate: -1, sharpe_ratio: 0, max_drawdown: 0, active_positions_count: 0, equity_curve: [], last_trade_date: '' }),
     getStrategyTrades: vi.fn().mockResolvedValue([]),
     getStrategyAnalytics: vi.fn().mockResolvedValue(null),

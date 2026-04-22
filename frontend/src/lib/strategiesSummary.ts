@@ -11,7 +11,7 @@
  * Input is the raw `/api/v1/strategies` list (as shaped by `getStrategies`
  * in lib/api). Output is the canonical bucket counts the UI displays.
  */
-import { STRATEGY_META, metaStage } from "@/lib/strategies";
+import { STRATEGY_META, metaStage, metaKind } from "@/lib/strategies";
 
 export interface RawStrategySummary {
   id: string;
@@ -48,6 +48,9 @@ export function computeStrategyCounts(
   let paused = 0;
   let comingSoon = 0;
   for (const id of Object.keys(STRATEGY_META)) {
+    // Research-kind entries are never autonomous strategies — skip them so
+    // the active/paused/coming-soon counts don't include research tools.
+    if (metaKind(id) === "research") continue;
     const stage = metaStage(id);
     if (stage === "planned") {
       comingSoon += 1;
