@@ -69,7 +69,7 @@ describe("Earnings Options Play — full flow", () => {
         top_setup: "short strangle",
       }], generated_at: new Date().toISOString(), partial: false,
     });
-    const fullNvdaDetail = {
+    const fullNvdaDetail: import("@/types").EarningsDetail = {
       symbol: "NVDA", company: "Nvidia", sector: "Semis",
       report_date: "2026-04-23", report_time: "AMC",
       quote: { last: 201.7, change: -1.4, change_pct: -0.007 },
