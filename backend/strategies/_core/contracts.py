@@ -236,3 +236,116 @@ class StrategyInput(BaseModel):
             if df is not None:
                 h.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
         return h.hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Task 5: StrategyResult, Trade, ReproMeta, BacktestConfig, BacktestResult
+# ---------------------------------------------------------------------------
+
+from datetime import datetime
+from pathlib import Path
+
+
+class StrategyResult(BaseModel):
+    """What Strategy.run() returns on each bar.
+
+    signals — entry/exit intents the executor will try to fill
+    state_update — mutations to the strategy's state dict; runner shallow-merges
+    diagnostics — strategy-specific observability (universe size, filter pass counts);
+                  surfaces in `explain` CLI mode
+    warnings — free-form warnings the strategy wants to flag (e.g. 'provider returned
+               stale data'); aggregated into BacktestResult.warnings_by_asof
+    """
+
+    signals: list[Signal] = Field(default_factory=list)
+    state_update: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class Trade(BaseModel):
+    """One closed round-trip trade (entry + exit). `pnl` is signed; negative on loss.
+    `exit_date` and `exit_price` are None for open positions (included in
+    BacktestResult.trades for positions still open at backtest end)."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    symbol: str
+    entry_date: date
+    exit_date: date | None = None
+    entry_price: Decimal
+    exit_price: Decimal | None = None
+    quantity: int                                   # signed: + long, − short
+    pnl: Decimal | None = None                      # realized at close
+    tag: str = Field(default="", max_length=256)
+
+
+class ReproMeta(BaseModel):
+    """Reproducibility metadata stamped on every BacktestResult.
+
+    Given identical (git_sha, param_hash, snapshot_root, seed) → re-running
+    the strategy produces bitwise-identical results. This is the "replay
+    guarantee" that makes post-mortem debugging possible.
+
+    runner_version is bumped on any behavior-changing runner release
+    (bar iteration order, fill model, seed-forking scheme, etc). See
+    strategies/_core/__init__.py for the constant.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    git_sha: str
+    param_hash: str
+    snapshot_root: str = Field(default="", description="Compound SHA of per-bar snapshot_ids; '' when no snapshots were written")
+    seed: int
+    run_at: datetime
+    strategy_name: str
+    runner_version: str
+
+
+class BacktestConfig(BaseModel):
+    """Configuration for a single BacktestRunner.run() invocation.
+
+    Distinct from strategy params: this holds run-level settings (date
+    range, capital, commission model) that are orthogonal to strategy
+    logic. Changing these does NOT invalidate strategy params.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    start: date
+    end: date
+    starting_cash: Decimal = Decimal("100000")
+    commission_per_share: Decimal = Decimal("0.005")
+    slippage_bps: float = Field(default=1.0, ge=0)
+    fill_model: Literal["next_open", "next_close", "midpoint"] = "next_open"
+    snapshot_dir: Path | None = Field(
+        default=None,
+        description="If set, write per-bar StrategyInput snapshots to this dir for replay.",
+    )
+    seed: int = Field(default=0, ge=0)
+
+
+class BacktestResult(BaseModel):
+    """Aggregated result of a BacktestRunner.run().
+
+    Contains time series (equity_curve, daily_returns) as pandas objects for
+    analytics, and discrete artifacts (trades, signals_emitted) as lists of
+    Pydantic models for round-trippable serialization.
+
+    `repro` is the single source of truth for reproducibility metadata;
+    see ReproMeta for replay semantics.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    equity_curve: pd.DataFrame                      # columns: cash, positions_value, equity, drawdown
+    daily_returns: pd.Series
+    trades: list[Trade]
+    signals_emitted: list[Signal]
+    metrics: dict[str, float]                       # sharpe, sortino, cagr, max_dd, calmar, turnover
+    params: dict                                    # params.model_dump()
+    start: date
+    end: date
+    repro: ReproMeta
+    warnings_by_asof: dict[date, list[str]] = Field(default_factory=dict)

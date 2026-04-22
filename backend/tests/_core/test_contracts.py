@@ -245,3 +245,66 @@ def test_strategy_input_snapshot_id_varies_with_data():
             seed=0, rng=np.random.default_rng(0),
         )
     assert StrategyInput.snapshot_id(_make(b1)) != StrategyInput.snapshot_id(_make(b2))
+
+
+# ---------------------------------------------------------------------------
+# Task 5: StrategyResult, Trade, ReproMeta, BacktestConfig, BacktestResult
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone
+
+from strategies._core.contracts import (
+    BacktestConfig,
+    BacktestResult,
+    ReproMeta,
+    StrategyResult,
+    Trade,
+)
+
+
+def test_strategy_result_defaults():
+    r = StrategyResult()
+    assert r.signals == []
+    assert r.state_update == {}
+    assert r.diagnostics == {}
+    assert r.warnings == []
+
+
+def test_trade_roundtrip():
+    t = Trade(
+        symbol="NVDA",
+        entry_date=date(2024, 1, 1),
+        exit_date=date(2024, 1, 10),
+        entry_price=Decimal("200"),
+        exit_price=Decimal("210"),
+        quantity=100,
+        pnl=Decimal("1000"),
+        tag="test",
+    )
+    dumped = t.model_dump()
+    reloaded = Trade(**dumped)
+    assert reloaded == t
+
+
+def test_repro_meta_required_fields():
+    m = ReproMeta(
+        git_sha="abc123",
+        param_hash="deadbeef" * 2,
+        snapshot_root="cafe" * 4,
+        seed=42,
+        run_at=datetime.now(timezone.utc),
+        strategy_name="pead",
+        runner_version="1.0.0",
+    )
+    assert m.git_sha == "abc123"
+    assert m.strategy_name == "pead"
+
+
+def test_backtest_config_defaults():
+    c = BacktestConfig(start=date(2023, 1, 1), end=date(2023, 12, 31))
+    assert c.starting_cash == Decimal("100000")
+    assert c.commission_per_share == Decimal("0.005")
+    assert c.slippage_bps == 1.0
+    assert c.fill_model == "next_open"
+    assert c.snapshot_dir is None
+    assert c.seed == 0
