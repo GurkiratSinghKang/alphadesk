@@ -48,3 +48,65 @@ def test_historical_stats_empty():
     assert stats["wins"] == 0
     assert stats["losses"] == 0
     assert stats["surprise_beat_rate"] == 0.0
+
+
+from services.earnings_prompts import (
+    build_structured_prompt,
+    parse_structured_response,
+)
+
+
+def test_structured_prompt_includes_all_context_keys():
+    """Prompt must surface IV rank, expected move, hist avg, news headlines,
+    and regime — the geeky-user-level context the model needs to produce a
+    decent thesis."""
+    prompt = build_structured_prompt(
+        symbol="NVDA",
+        company="Nvidia",
+        sector="Semiconductors",
+        report_date="2026-04-23",
+        report_time="AMC",
+        price=201.7,
+        iv_rank=78,
+        iv_percentile=82,
+        hv_20=0.42,
+        expected_move_pct=0.064,
+        hist_avg_abs_move_pct=0.052,
+        recent_beats_misses=[("2026-01-22", "+8%"), ("2025-10-22", "-2%")],
+        headlines=["Blackwell ramp on track", "China export pivot"],
+        market_regime="Bear-HighVol",
+    )
+    text = prompt["user"]
+    for key in ["NVDA", "Semiconductors", "IV rank: 78", "expected move", "±5.2", "Blackwell", "Bear-HighVol"]:
+        assert key in text, f"missing {key!r} in prompt"
+    assert "JSON" in prompt["system"]
+
+
+def test_parse_structured_response_happy_path():
+    raw = '''{
+      "verdict": "neutral-bull",
+      "direction_magnitude": {"bull_case_pct": 0.04, "bear_case_pct": -0.05},
+      "thesis": "IV is overpricing vs realized.",
+      "catalysts": ["data-center guide"],
+      "risks": ["guide miss"],
+      "suggested_play": "short strangle",
+      "suggested_play_reason": "IVR > 75 bucket",
+      "confidence": 0.62
+    }'''
+    parsed = parse_structured_response(raw)
+    assert parsed["verdict"] == "neutral-bull"
+    assert parsed["confidence"] == 0.62
+    assert parsed["suggested_play"] == "short strangle"
+
+
+def test_parse_structured_response_rejects_invalid_verdict():
+    import pytest
+    raw = '{"verdict": "moonshot", "direction_magnitude": {"bull_case_pct": 0, "bear_case_pct": 0}, "thesis": "x", "catalysts": [], "risks": [], "suggested_play": "short call", "suggested_play_reason": "x", "confidence": 0.5}'
+    with pytest.raises(ValueError, match="verdict"):
+        parse_structured_response(raw)
+
+
+def test_parse_structured_response_rejects_malformed_json():
+    import pytest
+    with pytest.raises(ValueError, match="JSON"):
+        parse_structured_response("not json {")
