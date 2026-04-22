@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
-import Display from "@/components/typography/Display";
 import {
   getEarningsCalendar,
   getEarningsDetail,
@@ -119,20 +118,20 @@ export default function EarningsOptionsPlayPage() {
     }
   }, [selectedSymbol]);
 
-  return (
-    <DashboardPageLayout>
-      <header className="mb-6">
-        <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
-        <Display as="h1" size="xl">
-          This week · next week
-        </Display>
-        <p className="mt-1 font-mono text-[color:var(--fg-muted)]">
-          {calendar
-            ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}`
-            : "Loading…"}
-        </p>
-      </header>
+  const actions = (
+    <span className="t-meta tabular-nums text-[color:var(--fg-muted)]">
+      {calendar
+        ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}`
+        : "Loading…"}
+    </span>
+  );
 
+  return (
+    <DashboardPageLayout
+      eyebrow="§ EARNINGS · OPTIONS PLAY"
+      title="This week · next week"
+      actions={actions}
+    >
       <FiltersBar filters={filters} onChange={setFilters} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
