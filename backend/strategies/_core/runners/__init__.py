@@ -1,8 +1,6 @@
-"""Runners — orchestrate Strategy.run() for different invocation contexts.
+"""Runners — orchestrate Strategy.run() for different invocation contexts."""
+from strategies._core.runners.backtest_runner import BacktestRunner
+from strategies._core.runners.pipeline_runner import DailyPipelineRunner
+from strategies._core.runners.signal_runner import SignalRunner
 
-Re-enable imports after Tasks 8-10 land the runner modules.
-"""
-# from strategies._core.runners.backtest_runner import BacktestRunner
-# from strategies._core.runners.pipeline_runner import DailyPipelineRunner
-# from strategies._core.runners.signal_runner import SignalRunner
-# __all__ = ["BacktestRunner", "DailyPipelineRunner", "SignalRunner"]
+__all__ = ["BacktestRunner", "DailyPipelineRunner", "SignalRunner"]
