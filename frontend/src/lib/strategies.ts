@@ -37,6 +37,11 @@ export type StrategyGroup = "fundamental" | "technical" | "other";
  */
 export type StrategyStage = "live" | "planned" | "other";
 
+/** Kind — autonomous strategies run in the engine; research entries are
+ *  decision-support screeners (no auto-trading). Drives /strategies section
+ *  grouping (Active / Research / Coming soon). */
+export type StrategyKind = "autonomous" | "research";
+
 export interface StrategyMetaEntry {
   name: string;
   shortName: string;
@@ -46,9 +51,21 @@ export interface StrategyMetaEntry {
   /** Implementation stage (see :type:`StrategyStage`). Defaults to "live"
    *  when omitted so adding a new real package is one line. */
   stage?: StrategyStage;
+  /** Strategy kind — defaults to "autonomous" when omitted. */
+  kind?: StrategyKind;
 }
 
 export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
+  // ─── Research Tools ─────────────────────────────────────────
+  "earnings-options-play": {
+    name: "Earnings Options Play",
+    shortName: "Earnings Options",
+    icon: CandlestickChart,
+    regimeNote: "Research screener · pick your own trade",
+    group: "fundamental",
+    kind: "research",
+  },
+
   // ─── Fundamental / Options Strategies ──────────────────────
   "momentum-quality": {
     name: "Cross-Sectional Momentum + Quality",
@@ -209,6 +226,12 @@ export function metaStage(id: string): StrategyStage {
   return STRATEGY_META[id]?.stage ?? "live";
 }
 
+/** Convenience accessor: treat missing ``kind`` as "autonomous" so callers can
+ *  write ``metaKind(id) === "research"`` without null-handling. */
+export function metaKind(id: string): StrategyKind {
+  return STRATEGY_META[id]?.kind ?? "autonomous";
+}
+
 /** True when the strategy ships a real backend implementation (decorator-
  *  registered package). Ghosts and manual return false. */
 export function isStrategyLive(id: string): boolean {
@@ -216,6 +239,8 @@ export function isStrategyLive(id: string): boolean {
 }
 
 export const STRATEGY_ORDER: string[] = [
+  // Research tools (rendered in the Research section, not Active/Coming Soon)
+  "earnings-options-play",
   // Fundamental
   "momentum-quality",
   "pead",
