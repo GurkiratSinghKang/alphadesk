@@ -1,0 +1,5 @@
+# Dev-only Python dependencies (install on top of requirements.txt).
+# Keep this list minimal — anything a developer needs for tests / local
+# linting, nothing the prod container needs at runtime.
+pytest>=8
+pytest-asyncio>=0.23

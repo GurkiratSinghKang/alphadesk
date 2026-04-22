@@ -71,25 +71,31 @@ class StrategyRegistrationError(RuntimeError):
 
 
 def register_strategy(
-    name: str | None = None,
+    name: "str | StrategyMeta | None" = None,
     *,
     category: str = "equity",
-    required_bars: tuple[str, ...] | list[str] = ("daily",),
+    required_bars: "tuple[str, ...] | list[str]" = ("daily",),
     required_lookback_days: int = 250,
     min_universe_size: int = 1,
     supports_shorts: bool = False,
     supports_options: bool = False,
     description: str = "",
-) -> Callable[[type[T]], type[T]]:
+    kind: str = "autonomous",
+) -> "Callable[[type[T]], type[T]]":
     """Decorator: register a strategy class with the registry.
 
     Parameters
     ----------
     name:
-        Registry key. If omitted, the class's ``name`` attribute is used.
+        Registry key (string), or a fully-constructed :class:`StrategyMeta`
+        instance. When a ``StrategyMeta`` is passed all other keyword
+        arguments are ignored and the meta is used as-is.  If omitted, the
+        class's ``name`` attribute is used.
     category, required_bars, required_lookback_days, min_universe_size,
-    supports_shorts, supports_options, description:
-        Fields forwarded to :class:`StrategyMeta`.
+    supports_shorts, supports_options, description, kind:
+        Fields forwarded to :class:`StrategyMeta`.  ``kind`` must be
+        ``'autonomous'`` (default, run by the engine) or ``'research'``
+        (decision-support UI only; engine never calls ``generate_signals``).
 
     Raises
     ------
@@ -97,10 +103,21 @@ def register_strategy(
         If the name is already registered, or if the class does not carry
         the ``name`` / ``required_bars`` / ``required_lookback_days``
         attributes the :class:`Strategy` protocol requires.
+    ValueError
+        If ``kind`` is not one of the allowed values.
     """
 
-    def decorator(cls: type[T]) -> type[T]:
-        key = name or getattr(cls, "name", None)
+    # Support @register_strategy(StrategyMeta(...)) call form.
+    _meta_override: "StrategyMeta | None" = None
+    _name_str: "str | None" = None
+    if isinstance(name, StrategyMeta):
+        _meta_override = name
+        _name_str = name.name
+    else:
+        _name_str = name  # type: ignore[assignment]
+
+    def decorator(cls: "type[T]") -> "type[T]":
+        key = _name_str or getattr(cls, "name", None)
         if not key:
             raise StrategyRegistrationError(
                 f"@register_strategy: class {cls.__name__} has no 'name' "
@@ -128,16 +145,26 @@ def register_strategy(
             # but don't fail registration over it.
             pass
 
-        meta = StrategyMeta(
-            name=key,
-            category=category,
-            required_bars=tuple(required_bars),
-            required_lookback_days=required_lookback_days,
-            min_universe_size=min_universe_size,
-            supports_shorts=supports_shorts,
-            supports_options=supports_options,
-            description=description,
-        )
+        if _meta_override is not None:
+            meta = _meta_override
+        else:
+            meta = StrategyMeta(
+                name=key,
+                category=category,
+                required_bars=tuple(required_bars),
+                required_lookback_days=required_lookback_days,
+                min_universe_size=min_universe_size,
+                supports_shorts=supports_shorts,
+                supports_options=supports_options,
+                description=description,
+                kind=kind,
+            )
+
+        if meta.kind not in ("autonomous", "research"):
+            raise ValueError(
+                f"Invalid strategy kind {meta.kind!r} for {meta.name!r}. "
+                "Must be 'autonomous' or 'research'."
+            )
 
         if key in _STRATEGY_CLASSES:
             existing = _STRATEGY_CLASSES[key]

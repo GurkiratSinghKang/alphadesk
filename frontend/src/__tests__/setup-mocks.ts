@@ -88,6 +88,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getMarketSectors: vi.fn().mockResolvedValue({ sectors: [] }),
     getMarketNews: vi.fn().mockResolvedValue([]),
     getStrategies: vi.fn().mockResolvedValue([]),
+    getStrategyCatalog: vi.fn().mockResolvedValue([]),
     getStrategyPerformance: vi.fn().mockResolvedValue({ name: 'Test', description: '', status: 'active', invested_amount: 0, current_value: 0, total_return_pct: 0, annualized_return_pct: 0, return_dollars: 0, win_rate: -1, sharpe_ratio: 0, max_drawdown: 0, active_positions_count: 0, equity_curve: [], last_trade_date: '' }),
     getStrategyTrades: vi.fn().mockResolvedValue([]),
     getStrategyAnalytics: vi.fn().mockResolvedValue(null),
@@ -105,6 +106,31 @@ vi.mock('@/lib/api', async (importOriginal) => {
     placeOrder: vi.fn().mockResolvedValue({ id: '1', symbol: 'SPY', side: 'buy', type: 'market', quantity: 10, status: 'filled', createdAt: '' }),
     getOrders: vi.fn().mockResolvedValue([]),
     cancelOrder: vi.fn().mockResolvedValue({ success: true }),
+    getEarningsCalendar: vi.fn().mockResolvedValue({
+      earnings: [],
+      generated_at: new Date().toISOString(),
+      partial: false,
+    }),
+    getEarningsDetail: vi.fn().mockResolvedValue({
+      symbol: "NVDA", company: "Nvidia", sector: "Semis",
+      report_date: "2026-04-23", report_time: "AMC",
+      quote: null, metrics: null, strike_ladder: null,
+      claude_structured: null, claude_full_research: null,
+      historical_earnings: null, iv_term_structure: null, skew: null,
+      news: [], partial: false,
+      generated_at: new Date().toISOString(),
+    }),
+    postEarningsFullResearch: vi.fn().mockResolvedValue({
+      thesis_paragraph: "mock research",
+      comparable_setups: [],
+      post_earnings_drift_playbook: "",
+      sector_backdrop: "",
+      analyst_consensus_delta: "",
+      what_would_change_my_mind: "",
+      confidence: 0.5,
+      model: "claude-opus-4-7",
+      generated_at: new Date().toISOString(),
+    }),
   };
 });
 

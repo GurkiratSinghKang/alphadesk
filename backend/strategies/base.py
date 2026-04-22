@@ -172,6 +172,11 @@ class StrategyMeta:
     supports_shorts: bool = False
     supports_options: bool = False
     description: str = ""
+    kind: str = "autonomous"
+    """Strategy kind — 'autonomous' strategies are run by the engine; 'research'
+    entries are decision-support UIs (e.g. earnings-options-play screener) that
+    the engine never calls `generate_signals` on. The /strategies list page
+    uses this to group cards under Active/Research/Coming soon."""
 
 
 # --------------------------------------------------------------------------- #

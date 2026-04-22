@@ -33,6 +33,7 @@ from core.logging import REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news
+from api.routes import earnings
 from api.routes import user as user_routes
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
@@ -362,6 +363,7 @@ app.include_router(market_overview.router, prefix="/api/v1/market-overview", tag
 app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependencies=[Depends(require_auth)])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News"], dependencies=[Depends(require_auth)])
+app.include_router(earnings.router, prefix="/api/v1", tags=["Earnings"], dependencies=[Depends(require_auth)])
 app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
 # Wave 4Q (persona-103): user-rights endpoints (GDPR Art. 17 + Art. 20 /
 # CCPA parity).  Auth is enforced INSIDE each handler via Depends(require_auth)

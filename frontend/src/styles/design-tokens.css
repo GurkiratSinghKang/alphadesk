@@ -300,3 +300,33 @@ html, body {
   height: 1px;
   background: linear-gradient(90deg, var(--border) 0%, var(--border) 88px, transparent 88px);
 }
+
+/* Strike ladder — aligned mono columns for options tables.
+   Column widths are fixed so call/put rows align even at different values. */
+.t-ladder-row {
+  display: grid;
+  grid-template-columns:
+    minmax(52px, auto)   /* strike */
+    minmax(40px, auto)   /* delta */
+    minmax(50px, auto)   /* mid */
+    minmax(44px, auto)   /* iv */
+    minmax(46px, auto)   /* yield */
+    minmax(40px, auto)   /* pop */
+    1fr;                 /* side label */
+  column-gap: 0.75rem;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.t-ladder-row--head {
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.t-ladder-row--data {
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+}

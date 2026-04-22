@@ -4456,7 +4456,7 @@ git commit -m "feat(earnings): EarningsDetailPanel V2 responsive shell"
 - Modify: `frontend/src/app/(dashboard)/trade/page.tsx`
 - Test: `frontend/src/__tests__/trade-deeplink.test.tsx`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Create `frontend/src/__tests__/trade-deeplink.test.tsx`:
 
@@ -4500,9 +4500,9 @@ describe("/trade deep-link pre-fill", () => {
 });
 ```
 
-- [ ] **Step 2: Verify fails** — `pnpm test -- trade-deeplink`
+- [x] **Step 2: Verify fails** — `pnpm test -- trade-deeplink`
 
-- [ ] **Step 3: Inspect current trade page + implement pre-fill**
+- [x] **Step 3: Inspect current trade page + implement pre-fill**
 
 Open `frontend/src/app/(dashboard)/trade/page.tsx` and find where the order ticket state is managed. Add a `useEffect` that runs on mount (before any user interaction) to read URL params and dispatch the equivalent of a "contract selected" event.
 
@@ -4565,9 +4565,9 @@ Also add `data-order-side="<side>"` and `data-slot="active-contract"` attributes
 )}
 ```
 
-- [ ] **Step 4: Verify passes** — `pnpm test -- trade-deeplink`
+- [x] **Step 4: Verify passes** — `pnpm test -- trade-deeplink`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/\(dashboard\)/trade/page.tsx frontend/src/__tests__/trade-deeplink.test.tsx
@@ -4582,7 +4582,7 @@ git commit -m "feat(trade): single-leg query-param pre-fill (symbol/contract/sid
 - Modify: `frontend/src/app/(dashboard)/trade/page.tsx` (and whichever order-ticket component it uses)
 - Modify: `frontend/src/__tests__/trade-deeplink.test.tsx` (add test)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Append to `frontend/src/__tests__/trade-deeplink.test.tsx`:
 
@@ -4602,9 +4602,9 @@ describe("/trade multi-leg pre-staging", () => {
 });
 ```
 
-- [ ] **Step 2: Verify fails** — `pnpm test -- trade-deeplink`
+- [x] **Step 2: Verify fails** — `pnpm test -- trade-deeplink`
 
-- [ ] **Step 3: Add multi-leg parsing + rendering**
+- [x] **Step 3: Add multi-leg parsing + rendering**
 
 In the same useEffect from Task 22, replace the "handled in Task 23" comment with:
 
@@ -4655,9 +4655,9 @@ type Leg = {
 
 **If the existing order ticket does not support multi-leg orders**: this task must add a minimal "Combo" mode that accepts N legs, collects them visually, and on submit sends them as a single order to `placeOrder` (or a new `placeComboOrder` backed by the broker's multi-leg endpoint). If that's a bigger lift than expected, scope it into a separate sub-task and surface a warning banner for now: "Multi-leg orders are preview — review each leg on /trade and submit legs individually." The deep-link still works; the execution path is what gets scoped.
 
-- [ ] **Step 4: Verify passes** — `pnpm test -- trade-deeplink`
+- [x] **Step 4: Verify passes** — `pnpm test -- trade-deeplink`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/\(dashboard\)/trade/page.tsx frontend/src/__tests__/trade-deeplink.test.tsx
