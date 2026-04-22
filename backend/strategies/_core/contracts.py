@@ -148,3 +148,91 @@ class Signal(BaseModel):
                 f"(target_weight={self.target_weight}, quantity={self.quantity})"
             )
         return self
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Position, Fill, StrategyInput
+# ---------------------------------------------------------------------------
+
+from decimal import Decimal
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+
+class Position(BaseModel):
+    """Current portfolio position in one symbol. Read-only in StrategyInput."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    symbol: str
+    quantity: int = Field(description="Signed: + long, − short")
+    avg_entry_price: Decimal
+    entry_date: date
+    tag: str = Field(default="", max_length=256)
+
+
+class Fill(BaseModel):
+    """One executed order. Returned by the fill simulator or the live broker;
+    strategy sees it via on_fill() between bars."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    symbol: str
+    asof: date
+    quantity: int = Field(description="Signed: + long, − short")
+    price: Decimal
+    commission: Decimal = Decimal("0")
+    signal_tag: str = Field(default="", max_length=256)
+
+
+class StrategyInput(BaseModel):
+    """Immutable snapshot of everything a strategy needs on one tick.
+
+    Backtest: runner builds one per bar. Live: pipeline builds one per day.
+    All time fields use `asof` (date) — the strategy must NOT read
+    wall-clock. All randomness flows through `rng`, which the runner seeds
+    deterministically from `seed`.
+
+    Lookback windows (`bars`, `earnings`, `fundamentals`, `news`) are
+    pre-sliced by the runner to the strategy's declared META.lookback_days
+    (or META-declared requirement for each provider).
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    asof: date
+    mode: Literal["backtest", "paper", "live"]
+
+    bars: pd.DataFrame
+    earnings: pd.DataFrame | None = None
+    fundamentals: pd.DataFrame | None = None
+    news: pd.DataFrame | None = None
+
+    cash: Decimal
+    equity: Decimal
+    positions: list[Position]
+
+    state: dict[str, Any] = Field(default_factory=dict)
+
+    seed: int
+    rng: np.random.Generator = Field(exclude=True)   # not serialized; reconstructed from seed
+
+    @classmethod
+    def snapshot_id(cls, inst: "StrategyInput") -> str:
+        """Hash of asof + mode + data DataFrames. Excludes seed, rng, state,
+        positions, cash, equity — those are runtime state, not inputs to
+        the strategy's alpha logic. Returns 16-char hex prefix of SHA-256.
+
+        Essential for replay: a snapshot_id uniquely identifies the
+        "data situation" the strategy faced. Given identical snapshot_id +
+        params + seed + git_sha, strategy output is bitwise-identical."""
+        h = hashlib.sha256()
+        h.update(inst.asof.isoformat().encode())
+        h.update(inst.mode.encode())
+        h.update(pd.util.hash_pandas_object(inst.bars, index=True).values.tobytes())
+        for df in (inst.earnings, inst.fundamentals, inst.news):
+            if df is not None:
+                h.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
+        return h.hexdigest()[:16]
