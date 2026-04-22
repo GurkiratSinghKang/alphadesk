@@ -33,12 +33,18 @@ def build_structured_prompt(
     iv_percentile: float,
     hv_20: float,
     expected_move_pct: float,
-    hist_avg_abs_move_pct: float,
+    hist_avg_abs_move_pct: float | None,
     recent_beats_misses: Sequence[tuple[str, str]],
     headlines: Sequence[str],
     market_regime: str,
 ) -> dict:
-    """Return a {'system': str, 'user': str} prompt dict."""
+    """Return a {'system': str, 'user': str} prompt dict.
+
+    `hist_avg_abs_move_pct` is nullable — pass `None` when historical
+    earnings moves are unavailable. The prompt will then OMIT the line
+    entirely rather than sending literal "0.00%" which would mislead the
+    model into concluding there's zero historical vol.
+    """
     beats_block = "\n".join(f"  · {d}: {s}" for d, s in recent_beats_misses[:4])
     news_block = "\n".join(f"  · {h}" for h in headlines[:5])
     system = (
@@ -54,12 +60,17 @@ def build_structured_prompt(
         ' "confidence": float 0-1}\n'
         "No markdown. No prose outside the JSON."
     )
+    hist_line = (
+        f" Historical avg |move| last 8q: ±{hist_avg_abs_move_pct:.2%}."
+        if hist_avg_abs_move_pct is not None
+        else " Historical avg |move|: unavailable (treat realized-vol comparison as unknown)."
+    )
     user = (
         f"Earnings setup — {company} ({symbol}), {sector}.\n"
         f"Reports: {report_date} {report_time}.\n"
         f"Price: {price:.2f}. IV rank: {iv_rank:.0f} · IV pctl: {iv_percentile:.0f}.\n"
-        f"HV 20d: {hv_20:.2%}. IV-implied expected move (straddle): ±{expected_move_pct:.2%}. "
-        f"Historical avg |move| last 8q: ±{hist_avg_abs_move_pct:.2%}.\n"
+        f"HV 20d: {hv_20:.2%}. IV-implied expected move (straddle): ±{expected_move_pct:.2%}."
+        f"{hist_line}\n"
         f"Recent earnings:\n{beats_block}\n"
         f"Top news:\n{news_block}\n"
         f"Market regime: {market_regime}.\n\n"

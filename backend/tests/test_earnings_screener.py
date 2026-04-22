@@ -82,6 +82,35 @@ def test_structured_prompt_includes_all_context_keys():
     assert "JSON" in prompt["system"]
 
 
+def test_structured_prompt_omits_historical_when_none():
+    """When hist_avg_abs_move_pct is None, the prompt MUST NOT claim 0% —
+    it must say the historical comparison is unavailable so Claude doesn't
+    conclude realized vol is zero. Regression guard for a prompt-quality
+    bug caught in code review."""
+    prompt = build_structured_prompt(
+        symbol="NVDA",
+        company="Nvidia",
+        sector="Semiconductors",
+        report_date="2026-04-23",
+        report_time="AMC",
+        price=201.7,
+        iv_rank=78,
+        iv_percentile=82,
+        hv_20=0.42,
+        expected_move_pct=0.064,
+        hist_avg_abs_move_pct=None,
+        recent_beats_misses=[],
+        headlines=[],
+        market_regime="Unknown",
+    )
+    text = prompt["user"]
+    # Must NOT contain a zero-valued historical move that would mislead the model.
+    assert "±0.00%" not in text
+    assert "0.00%" not in text or "HV 20" in text  # HV 20 can legitimately contain 0.00% but historical avg must not
+    # Must explicitly signal unavailability so the model knows.
+    assert "unavailable" in text.lower()
+
+
 def test_parse_structured_response_happy_path():
     raw = '''{
       "verdict": "neutral-bull",

@@ -621,7 +621,9 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "iv_percentile": metrics.get("iv_percentile", 0) if metrics else 0,
         "hv_20": metrics.get("hv_20", 0) if metrics else 0,
         "expected_move_pct": metrics.get("expected_move_pct", 0) if metrics else 0,
-        "hist_avg_abs_move_pct": 0,  # wire once _load_historical is real
+        # Pass None (not 0) when historical is unavailable so the prompt omits
+        # the line instead of lying to Claude that |move| is literally 0%.
+        "hist_avg_abs_move_pct": (hist.get("stats", {}).get("avg_abs_move_pct") if hist else None),
         "recent_beats_misses": [],
         "headlines": [n["title"] for n in news],
         "market_regime": "Unknown",  # wire once regime service is exposed
