@@ -238,3 +238,179 @@ export interface QuickOrderEvent {
   side: "buy" | "sell";
   price: number;
 }
+
+// ─── Earnings Options Play ───────────────────────────────────
+
+export type EarningsReportTime = "BMO" | "AMC" | "DMT";
+export type EarningsVerdict = "bullish" | "neutral-bull" | "neutral" | "neutral-bear" | "bearish";
+export type EarningsTopSetup = "short call" | "cash-secured put" | "short strangle" | "iron condor";
+export type EarningsOptionSide = "call" | "put";
+export type EarningsBucket = "15Δ" | "30Δ" | "ATM";
+
+export interface CalendarRow {
+  symbol: string;
+  company: string;
+  sector: string;
+  report_date: string;
+  report_time: EarningsReportTime;
+  days_until: number;
+  price: number | null;
+  change: number | null;
+  change_pct: number | null;
+  iv_rank: number | null;
+  premium_yield_call_atm: number | null;
+  premium_yield_put_atm: number | null;
+  expected_move_pct: number | null;
+  hist_avg_abs_move_pct: number | null;
+  claude_verdict: EarningsVerdict | null;
+  claude_confidence: number | null;
+  top_setup: EarningsTopSetup | null;
+}
+
+export interface CalendarResponse {
+  earnings: CalendarRow[];
+  generated_at: string;
+  partial: boolean;
+  error?: string | null;
+}
+
+export interface LadderRow {
+  strike: number;
+  side: EarningsOptionSide;
+  bucket: EarningsBucket;
+  delta: number;
+  bid: number;
+  ask: number;
+  mid: number;
+  iv: number;
+  yield_pct: number;
+  pop: number;
+  theta: number;
+  gamma: number;
+  vega: number;
+  oi: number;
+  volume: number;
+}
+
+export interface StrikeLadder {
+  expiry: string;
+  underlying_price: number;
+  rows: LadderRow[];
+}
+
+export interface ClaudeStructured {
+  verdict: EarningsVerdict;
+  direction_magnitude: { bull_case_pct: number; bear_case_pct: number };
+  thesis: string;
+  catalysts: string[];
+  risks: string[];
+  suggested_play: EarningsTopSetup;
+  suggested_play_reason: string;
+  confidence: number;
+  model: string;
+  generated_at: string;
+}
+
+export interface ComparableSetup {
+  report_date: string;
+  iv_rank: number;
+  setup: string;
+  outcome: string;
+  similarity_score: number;
+}
+
+export interface ClaudeFullResearch {
+  thesis_paragraph: string;
+  comparable_setups: ComparableSetup[];
+  post_earnings_drift_playbook: string;
+  sector_backdrop: string;
+  analyst_consensus_delta: string;
+  what_would_change_my_mind: string;
+  confidence: number;
+  model: string;
+  generated_at: string;
+}
+
+export interface HistQuarter {
+  report_date: string;
+  surprise_pct: number | null;
+  next_day_move_pct: number;
+  five_day_move_pct: number;
+}
+
+export interface HistoricalStats {
+  avg_abs_move_pct: number;
+  wins: number;
+  losses: number;
+  surprise_beat_rate: number;
+  iv_vs_hist_vol_points: number | null;
+}
+
+export interface HistoricalBlock {
+  quarters: HistQuarter[];
+  stats: HistoricalStats;
+}
+
+export interface IVTermPoint {
+  expiry: string;
+  dte: number;
+  atm_iv: number;
+}
+
+export interface SkewBlock {
+  put_iv_25d: number | null;
+  call_iv_25d: number | null;
+  skew_points: number | null;
+  interpretation: "put-heavy skew" | "call-heavy skew" | "neutral" | null;
+}
+
+export interface EarningsMetricsBlock {
+  iv_rank: number | null;
+  iv_percentile: number | null;
+  current_iv: number | null;
+  hv_20: number | null;
+  hv_50: number | null;
+  hv_100: number | null;
+  hv_iv_ratio: number | null;
+  expected_move_pct: number | null;
+  expected_move_dollars: number | null;
+  hist_avg_abs_move_pct: number | null;
+  beat_rate: number | null;
+  days_to_earnings: number | null;
+  days_to_expiry: number | null;
+}
+
+export interface EarningsNewsArticle {
+  title: string;
+  source: string;
+  published_at: string;
+  url: string;
+}
+
+export interface EarningsDetail {
+  symbol: string;
+  company: string;
+  sector: string;
+  report_date: string;
+  report_time: EarningsReportTime;
+  quote: { last: number; change: number; change_pct: number } | null;
+  metrics: EarningsMetricsBlock | null;
+  strike_ladder: StrikeLadder | null;
+  claude_structured: ClaudeStructured | null;
+  claude_full_research: ClaudeFullResearch | null;
+  historical_earnings: HistoricalBlock | null;
+  iv_term_structure: IVTermPoint[] | null;
+  skew: SkewBlock | null;
+  news: EarningsNewsArticle[];
+  partial: boolean;
+  generated_at: string;
+}
+
+export interface EarningsCalendarFilters {
+  window?: "current" | "next" | "both";
+  min_iv_rank?: number;
+  market_cap?: "mega" | "large" | "mid" | "small" | "all";
+  bmo_amc?: "bmo" | "amc" | "both";
+  watchlist_only?: boolean;
+  sort?: "date" | "iv_rank" | "yield" | "claude_confidence";
+}

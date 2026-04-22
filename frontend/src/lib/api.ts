@@ -10,6 +10,10 @@ import type {
   Analysis,
   ScreenerResult,
   TimeFrame,
+  CalendarResponse,
+  EarningsDetail,
+  EarningsCalendarFilters,
+  ClaudeFullResearch,
 } from "@/types";
 
 // ─── Base Fetch ──────────────────────────────────────────────
@@ -1787,6 +1791,44 @@ export interface PipelinePerformance {
   avgPnlPct: number;
   bestTrade: { symbol: string; pnl: number } | null;
   worstTrade: { symbol: string; pnl: number } | null;
+}
+
+/**
+ * Fetch the earnings-options-play calendar for the screener.
+ * Backend: GET /api/v1/earnings/calendar
+ */
+export async function getEarningsCalendar(
+  filters: EarningsCalendarFilters = {},
+): Promise<CalendarResponse> {
+  const params = new URLSearchParams();
+  if (filters.window) params.set("window", filters.window);
+  if (filters.min_iv_rank !== undefined) params.set("min_iv_rank", String(filters.min_iv_rank));
+  if (filters.market_cap) params.set("market_cap", filters.market_cap);
+  if (filters.bmo_amc) params.set("bmo_amc", filters.bmo_amc);
+  if (filters.watchlist_only) params.set("watchlist_only", "true");
+  if (filters.sort) params.set("sort", filters.sort);
+  const query = params.toString();
+  return apiFetch<CalendarResponse>(`/api/v1/earnings/calendar${query ? `?${query}` : ""}`);
+}
+
+/**
+ * Fetch the detail panel payload for one symbol's earnings.
+ * Backend: GET /api/v1/earnings/{symbol}/detail
+ */
+export async function getEarningsDetail(symbol: string): Promise<EarningsDetail> {
+  return apiFetch<EarningsDetail>(`/api/v1/earnings/${encodeURIComponent(symbol)}/detail`);
+}
+
+/**
+ * Trigger the on-demand Claude Opus full research note.
+ * Backend: POST /api/v1/earnings/{symbol}/full-research
+ * Rate-limited per user (~30/5min via backend middleware).
+ */
+export async function postEarningsFullResearch(symbol: string): Promise<ClaudeFullResearch> {
+  return apiFetch<ClaudeFullResearch>(
+    `/api/v1/earnings/${encodeURIComponent(symbol)}/full-research`,
+    { method: "POST", timeoutMs: 60_000 },
+  );
 }
 
 export async function getPipelinePositions(): Promise<{ positions: PipelinePosition[]; performance: PipelinePerformance }> {
