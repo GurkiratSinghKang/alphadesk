@@ -79,3 +79,75 @@ def test_param_hash_is_16_char_hex():
     h = ExampleParams.param_hash(p)
     assert len(h) == 16
     int(h, 16)  # raises if not hex
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Signal, OptionLeg, OrderType, TimeInForce
+# ---------------------------------------------------------------------------
+
+from datetime import date
+
+from strategies._core.contracts import (
+    OptionLeg,
+    OrderType,
+    Signal,
+    TimeInForce,
+)
+
+
+def test_signal_requires_exactly_one_sizing():
+    """target_weight and quantity are mutually exclusive — exactly one must be set."""
+    # Both set → error
+    with pytest.raises(ValidationError, match="exactly one"):
+        Signal(symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT,
+               target_weight=0.5, quantity=10)
+    # Neither set → error
+    with pytest.raises(ValidationError, match="exactly one"):
+        Signal(symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT)
+    # Only weight → OK
+    s = Signal(symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT, target_weight=0.5)
+    assert s.target_weight == 0.5
+    # Only quantity → OK
+    s = Signal(symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT, quantity=10)
+    assert s.quantity == 10
+
+
+def test_signal_frozen():
+    s = Signal(symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT, quantity=10)
+    with pytest.raises(ValidationError):
+        s.symbol = "AAPL"
+
+
+def test_signal_with_option_legs():
+    """Multi-leg option orders pack into a single Signal via `legs`."""
+    s = Signal(
+        symbol="NVDA",
+        asof=date(2024, 1, 1),
+        order_type=OrderType.LMT,
+        target_weight=0.0,           # opens a risk-neutral position
+        legs=[
+            OptionLeg(occ_symbol="NVDA260425P00195000", side="sell", quantity=1),
+            OptionLeg(occ_symbol="NVDA260425C00210000", side="sell", quantity=1),
+        ],
+    )
+    assert len(s.legs) == 2
+    assert s.legs[0].side == "sell"
+
+
+def test_signal_tag_max_length():
+    """tag caps at 256 chars so audit ledger entries stay bounded."""
+    with pytest.raises(ValidationError, match="at most 256"):
+        Signal(
+            symbol="NVDA", asof=date(2024, 1, 1), order_type=OrderType.MKT,
+            quantity=10, tag="x" * 257,
+        )
+
+
+def test_order_type_values():
+    assert OrderType.MKT.value == "MKT"
+    assert OrderType.MOO.value == "MOO"
+
+
+def test_time_in_force_values():
+    assert TimeInForce.DAY.value == "DAY"
+    assert TimeInForce.GTC.value == "GTC"

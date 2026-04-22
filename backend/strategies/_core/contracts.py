@@ -60,3 +60,91 @@ class StrategyParams(BaseModel):
         """
         serialized = instance.model_dump_json(round_trip=True)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Task 3: OrderType, TimeInForce, OptionLeg, Signal
+# ---------------------------------------------------------------------------
+
+from datetime import date
+from enum import Enum
+from typing import Literal
+
+from pydantic import Field, model_validator
+
+
+class OrderType(str, Enum):
+    """Supported order types. MOO/MOC = market-on-open/close — commonly used
+    by daily strategies to avoid intraday timing dependencies."""
+    MKT = "MKT"
+    LMT = "LMT"
+    STP = "STP"
+    STP_LMT = "STP_LMT"
+    MOO = "MOO"
+    MOC = "MOC"
+
+
+class TimeInForce(str, Enum):
+    """Order time-in-force. DAY is the common default; GTC for resting orders
+    held across sessions; IOC/FOK for intraday immediate-or-cancel semantics."""
+    DAY = "DAY"
+    GTC = "GTC"
+    IOC = "IOC"
+    FOK = "FOK"
+
+
+class OptionLeg(BaseModel):
+    """One leg of a multi-leg options order. Packed into Signal.legs for
+    strangles, iron condors, etc. The broker-side executor is responsible
+    for routing multi-leg orders atomically where supported, or per-leg
+    with risk-awareness where not."""
+
+    model_config = ConfigDict(frozen=True)
+
+    occ_symbol: str = Field(
+        description="OCC option symbol, e.g. NVDA260425C00205000",
+        pattern=r"^[A-Z]{1,6}\d{6}[CP]\d{8}$",
+    )
+    side: Literal["buy", "sell"]
+    quantity: int = Field(ge=1, description="Number of contracts")
+    limit_price: float | None = Field(default=None, ge=0)
+
+
+class Signal(BaseModel):
+    """One order intent emitted by a strategy on a single bar.
+
+    Exactly one of `target_weight` or `quantity` must be set. `target_weight`
+    is a fraction of portfolio equity (+0.05 = long 5%, −0.05 = short 5%);
+    the executor translates to share count at fill time. `quantity` is an
+    absolute signed share count the executor uses directly.
+
+    `legs` populates for multi-leg options orders; equity orders leave it
+    None.
+
+    `tag` is a free-form audit label that surfaces in the trade ledger
+    and slippage metadata; max 256 chars to keep logs bounded.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    symbol: str
+    asof: date
+    order_type: OrderType
+    time_in_force: TimeInForce = TimeInForce.DAY
+    target_weight: float | None = None
+    quantity: int | None = None
+    limit_price: float | None = Field(default=None, ge=0)
+    stop_price: float | None = Field(default=None, ge=0)
+    tag: str = Field(default="", max_length=256)
+    legs: list[OptionLeg] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_sizing(self) -> "Signal":
+        has_w = self.target_weight is not None
+        has_q = self.quantity is not None
+        if has_w == has_q:  # both or neither
+            raise ValueError(
+                "Signal requires exactly one of target_weight or quantity "
+                f"(target_weight={self.target_weight}, quantity={self.quantity})"
+            )
+        return self
