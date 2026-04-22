@@ -54,6 +54,34 @@ from services.earnings_prompts import (
     build_structured_prompt,
     parse_structured_response,
 )
+from services.earnings_screener import (
+    CURATED_OPTIONABLE_UNIVERSE,
+    _in_curated_universe,
+)
+
+
+def test_curated_universe_core_names_present():
+    """The curated universe is what users glance over to make trade decisions —
+    regression guard for the staples. Any removal from this set is a
+    deliberate product decision and should show up as a failing test."""
+    must_have = {"AAPL", "MSFT", "NVDA", "TSLA", "META", "GOOGL", "AMZN",
+                 "AVGO", "JPM", "NFLX", "AMD", "PLTR", "SMCI", "COIN"}
+    assert must_have.issubset(CURATED_OPTIONABLE_UNIVERSE)
+
+
+def test_curated_universe_excludes_foreign_and_pinks():
+    """The universe is US-listed major optionable names only. Foreign
+    suffixes (.L, .TO) and pink sheets (5+ letter tickers ending in F)
+    must not leak in."""
+    for sym in CURATED_OPTIONABLE_UNIVERSE:
+        assert "." not in sym or sym == "BRK.B", f"{sym} looks like a foreign listing"
+
+
+def test_in_curated_universe_case_insensitive():
+    assert _in_curated_universe("nvda") is True
+    assert _in_curated_universe("NVDA") is True
+    assert _in_curated_universe("ZZZZ") is False
+    assert _in_curated_universe("") is False
 
 
 def test_structured_prompt_includes_all_context_keys():

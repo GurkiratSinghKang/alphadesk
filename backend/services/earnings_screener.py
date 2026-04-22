@@ -94,6 +94,55 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
 _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 
 
+# Curated universe of liquid, Claude-analyzable, options-heavy US names.
+# Philosophy: the user glances over a short list and decides whether to
+# sell a call or a put. That workflow needs names with (a) deep options
+# chains so the strike ladder / yield / POP numbers are meaningful, (b)
+# enough news + analyst coverage that Claude's thesis has real substance,
+# and (c) a recognizable single-business story (not obscure micro-caps or
+# weird conglomerates where "direction" is noise).
+#
+# Roughly tiered:
+#   • S&P 100-equivalent mega caps — always tradeable
+#   • Liquid large caps outside SP100 — semis, cloud, consumer, banks
+#   • High-beta momentum names — tradeable when reporting because IV is rich
+#
+# Anything NOT in this set gets filtered out of the earnings screener even
+# if FMP lists it — an upcoming earning for an illiquid Russell-2000 name
+# rarely offers a tradeable options setup. Users who want the full list
+# can pass ?market_cap=all to bypass this filter.
+CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
+    # Mega caps / SP100
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
+    "BRK.B", "AVGO", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
+    "COST", "HD", "PG", "JNJ", "NFLX", "BAC", "CRM", "ABBV", "CVX",
+    "KO", "MRK", "AMD", "ADBE", "PEP", "TMO", "ACN", "LIN", "CSCO",
+    "MCD", "ABT", "TXN", "GE", "DHR", "WFC", "NOW", "INTU", "IBM",
+    "CAT", "AMGN", "NEE", "ISRG", "PFE", "PM", "QCOM", "GS", "UNP",
+    "VZ", "T", "RTX", "COP", "SPGI", "LOW", "ETN", "BLK", "HON",
+    "SYK", "AXP", "BKNG", "VRTX", "C", "ELV", "DE", "TJX", "ADP",
+    "GILD", "PLD", "PANW", "SCHW", "MMC", "LMT", "CB", "REGN", "MDT",
+    "UBER", "BSX", "MU", "SBUX", "FI", "BX", "AMT", "KLAC", "MDLZ",
+    "ADI", "CVS", "SO", "GEV", "ZTS", "CI", "MO", "CL", "DUK",
+    "BMY", "WM", "ICE", "SNPS", "APH", "SHW", "PYPL", "CME",
+    # High-flyers / retail favorites — rich IV into earnings
+    "PLTR", "SMCI", "SNOW", "COIN", "SHOP", "ABNB", "CVNA", "RBLX",
+    "HOOD", "DKNG", "MARA", "RIOT", "ROKU", "U", "NET", "CRWD",
+    "ZS", "OKTA", "MDB", "DDOG", "SQ", "SOFI", "PINS", "SNAP",
+    "DASH", "AFRM", "RIVN", "LCID", "NIO", "XPEV", "BYND", "PTON",
+    "GME", "BB", "BBIG", "AMC",
+    # Other well-known optionable large caps
+    "BA", "F", "GM", "DIS", "NKE", "SPOT", "ZM", "DOCU", "FSLY",
+    "TWLO", "TEAM", "ANET", "MRVL", "LRCX", "WDAY", "FTNT", "CDNS",
+    "ASML", "TSM", "BABA", "JD", "PDD", "NTES", "BIDU",
+})
+
+
+def _in_curated_universe(symbol: str) -> bool:
+    """Case-insensitive membership check for the curated universe."""
+    return symbol.upper() in CURATED_OPTIONABLE_UNIVERSE
+
+
 # ─── Upstream adapters (thin wrappers; fan-outs call these) ──
 
 async def _fmp_upcoming(window: str) -> list[dict]:
@@ -534,12 +583,24 @@ async def list_upcoming(
             error="earnings calendar unavailable",
         )
 
-    # Cap the fan-out so a busy earnings week (100+ US tickers) doesn't
-    # stall the whole endpoint past the frontend's 15s timeout. Sort by
-    # report_date ascending and take the first N — nearest earnings first
-    # is the most useful default anyway.
+    # Default shortlist behavior: restrict to the curated optionable
+    # universe (mega + liquid large caps + momentum names) so the screener
+    # is a *decision tool* showing ~5-10 names the user can actually
+    # evaluate, not a feed of ~60 Russell-2000 names with thin option
+    # chains. Users who want the long list pass market_cap="all".
+    if market_cap != "all":
+        before_count = len(raw_rows)
+        raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
+        log.info(
+            "earnings calendar: curated universe kept %d/%d rows (window=%s, market_cap=%s)",
+            len(raw_rows), before_count, window, market_cap,
+        )
+
+    # Hard cap. At curated-universe default this is rarely binding (≤10
+    # tradeable names per week typical), but protects us on weeks where
+    # many mega caps report in parallel.
     raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
-    MAX_ROWS = 60
+    MAX_ROWS = 8
     if len(raw_rows) > MAX_ROWS:
         log.info(
             "earnings calendar: %d rows → capped to %d (window=%s)",
