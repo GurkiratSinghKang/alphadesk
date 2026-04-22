@@ -75,6 +75,7 @@ def compute_historical_stats(quarters: Sequence[Mapping]) -> dict:
 from api.schemas.earnings import (  # noqa: E402 — after helpers by design
     CalendarResponse,
     CalendarRow,
+    ClaudeFullResearch,
     ClaudeStructured,
     EarningsDetail,
     HistoricalBlock,
@@ -649,3 +650,63 @@ async def get_detail(symbol: str) -> EarningsDetail:
         partial=partial,
         generated_at=datetime.now(timezone.utc),
     )
+
+
+async def run_full_research(symbol: str) -> ClaudeFullResearch:
+    """24h-cached full Claude research note for one symbol.
+
+    Cache hit → return parsed payload straight. Cache miss → gather context,
+    build the full prompt, call Claude Opus, persist, return.
+    """
+    from agents.claude_client import ClaudeClient
+    from core.cache import get_cache
+    from services.earnings_prompts import (
+        MODEL_FULL,
+        build_full_prompt,
+        parse_full_response,
+    )
+
+    meta = await _load_earnings_meta(symbol)
+    if not meta:
+        raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
+
+    cache = get_cache()
+    key = f"earnings:claude-full:{symbol}:{meta['report_date']}"
+    cached = await cache.get(key)
+    if cached:
+        return ClaudeFullResearch(**cached)
+
+    quote, metrics, hist, news = await asyncio.gather(
+        _load_quote(symbol),
+        _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
+        _load_historical(symbol),
+        _load_news(symbol),
+        return_exceptions=True,
+    )
+    prompt = build_full_prompt(
+        symbol=symbol,
+        company=meta["company"],
+        sector=meta["sector"],
+        report_date=meta["report_date"],
+        report_time=meta["report_time"],
+        price=quote["last"] if isinstance(quote, dict) else 0.0,
+        iv_rank=metrics.get("iv_rank", 0) if isinstance(metrics, dict) else 0,
+        iv_percentile=metrics.get("iv_percentile", 0) if isinstance(metrics, dict) else 0,
+        expected_move_pct=metrics.get("expected_move_pct", 0) if isinstance(metrics, dict) else 0,
+        historical_quarters=hist.get("quarters", []) if isinstance(hist, dict) else [],
+        headlines=[n["title"] for n in news] if isinstance(news, list) else [],
+        market_regime="Unknown",  # wire once regime service is exposed
+        sector_peers_pct_change_5d={},  # wire once sector-peers helper exists
+    )
+    client = ClaudeClient()
+    raw = await client.complete(
+        system=prompt["system"], user=prompt["user"], model=MODEL_FULL
+    )
+    parsed = parse_full_response(raw)
+    payload = {
+        **parsed,
+        "model": MODEL_FULL,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await cache.set(key, payload, ttl_seconds=24 * 3600)
+    return ClaudeFullResearch(**payload)

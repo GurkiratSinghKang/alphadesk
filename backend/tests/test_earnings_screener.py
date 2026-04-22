@@ -238,3 +238,89 @@ async def test_get_detail_merges_all_blocks():
     # Blocks that returned None must stay None
     assert detail.strike_ladder is None
     assert detail.claude_structured is None
+
+
+@pytest.mark.asyncio
+async def test_run_full_research_calls_opus_and_caches():
+    """run_full_research builds the richer prompt, calls Claude Opus, parses
+    response, and caches 24h. Also verifies the parsed shape is a valid
+    ClaudeFullResearch."""
+    from services import earnings_screener as svc
+    from api.schemas.earnings import ClaudeFullResearch
+
+    fake_claude_raw = (
+        '{"thesis_paragraph": "...", "comparable_setups": [], '
+        '"post_earnings_drift_playbook": "...", "sector_backdrop": "...", '
+        '"analyst_consensus_delta": "...", "what_would_change_my_mind": "...", '
+        '"confidence": 0.72}'
+    )
+    fake_cache = AsyncMock()
+    fake_cache.get = AsyncMock(return_value=None)
+    fake_cache.set = AsyncMock()
+    fake_client = AsyncMock()
+    fake_client.complete = AsyncMock(return_value=fake_claude_raw)
+
+    with patch.object(
+         svc, "_load_earnings_meta",
+         AsyncMock(return_value={
+             "company": "Nvidia", "sector": "Semis",
+             "report_date": "2026-04-23", "report_time": "AMC",
+         }),
+         ), \
+         patch.object(
+             svc, "_load_quote",
+             AsyncMock(return_value={"last": 200.0, "change": -1, "change_pct": -0.5}),
+         ), \
+         patch.object(
+             svc, "_load_metrics",
+             AsyncMock(return_value={
+                 "iv_rank": 78, "iv_percentile": 82, "expected_move_pct": 0.064,
+             }),
+         ), \
+         patch.object(
+             svc, "_load_historical",
+             AsyncMock(return_value={
+                 "quarters": [],
+                 "stats": {
+                     "avg_abs_move_pct": 0.05, "wins": 4, "losses": 4,
+                     "surprise_beat_rate": 0.5, "iv_vs_hist_vol_points": 1.2,
+                 },
+             }),
+         ), \
+         patch.object(svc, "_load_news", AsyncMock(return_value=[])), \
+         patch("core.cache.get_cache", return_value=fake_cache), \
+         patch("agents.claude_client.ClaudeClient", return_value=fake_client):
+        result = await svc.run_full_research("NVDA")
+
+    assert isinstance(result, ClaudeFullResearch)
+    assert result.confidence == 0.72
+    fake_cache.set.assert_called_once()
+    args, kwargs = fake_cache.set.call_args
+    assert "earnings:claude-full:NVDA" in args[0]
+    assert kwargs.get("ttl_seconds") == 24 * 3600
+
+
+@pytest.mark.asyncio
+async def test_run_full_research_returns_cached_when_present():
+    from services import earnings_screener as svc
+    cached_payload = {
+        "thesis_paragraph": "cached", "comparable_setups": [],
+        "post_earnings_drift_playbook": "p", "sector_backdrop": "s",
+        "analyst_consensus_delta": "a", "what_would_change_my_mind": "w",
+        "confidence": 0.5, "model": "claude-opus-4-7",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    fake_cache = AsyncMock()
+    fake_cache.get = AsyncMock(return_value=cached_payload)
+    fake_cache.set = AsyncMock()
+    with patch("core.cache.get_cache", return_value=fake_cache), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "N", "sector": "S",
+                 "report_date": "2026-04-23", "report_time": "AMC",
+             }),
+         ):
+        result = await svc.run_full_research("NVDA")
+    assert result.thesis_paragraph == "cached"
+    fake_cache.set.assert_not_called()
