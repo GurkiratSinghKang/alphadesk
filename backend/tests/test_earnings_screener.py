@@ -110,3 +110,131 @@ def test_parse_structured_response_rejects_malformed_json():
     import pytest
     with pytest.raises(ValueError, match="JSON"):
         parse_structured_response("not json {")
+
+
+# ─── Aggregator tests (Tasks 7 + 8) ──────────────────────────
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_happy_path():
+    """FMP returns 2 upcoming earnings; each symbol resolves quote/IV/Claude-cached.
+    Result shape matches CalendarResponse."""
+    from services import earnings_screener as svc
+
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+        {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
+         "report_date": "2026-04-24", "report_time": "AMC"},
+    ]
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(
+             svc, "_hydrate_row",
+             AsyncMock(side_effect=lambda row, **_: {**row, "price": 200.0, "iv_rank": 70.0}),
+         ):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    assert len(resp.earnings) == 2
+    assert resp.earnings[0].symbol == "NVDA"
+    assert resp.earnings[0].price == 200.0
+    assert resp.partial is False
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_filters_by_iv_rank():
+    """min_iv_rank excludes rows under the threshold."""
+    from services import earnings_screener as svc
+
+    fake_earnings = [
+        {"symbol": "A", "company": "A", "sector": "x",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+        {"symbol": "B", "company": "B", "sector": "x",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+    ]
+    hydrated = {"A": {"iv_rank": 80}, "B": {"iv_rank": 30}}
+
+    async def hydrate(row, *, min_iv_rank: float = 0):
+        iv = hydrated[row["symbol"]]["iv_rank"]
+        if iv < min_iv_rank:
+            return None
+        return {**row, "price": 100.0, "iv_rank": iv}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=50)
+    symbols = [r.symbol for r in resp.earnings]
+    assert symbols == ["A"]
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_partial_on_hydrate_failure():
+    """If one symbol's hydrate raises, the row comes back with partial=True
+    and the response itself marks partial=True but does not 500."""
+    from services import earnings_screener as svc
+
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+        {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
+         "report_date": "2026-04-24", "report_time": "AMC"},
+    ]
+
+    async def hydrate(row, *, min_iv_rank: float = 0):
+        if row["symbol"] == "TSLA":
+            raise RuntimeError("options provider down")
+        return {**row, "price": 200.0, "iv_rank": 70.0}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+    assert resp.partial is True
+    symbols_with_price = [r.symbol for r in resp.earnings if r.price is not None]
+    assert "NVDA" in symbols_with_price
+    assert "TSLA" in [r.symbol for r in resp.earnings]  # still present, fields null
+
+
+@pytest.mark.asyncio
+async def test_get_detail_merges_all_blocks():
+    """get_detail pulls quote, options-chain, news, claude-structured and
+    returns a populated EarningsDetail. Missing blocks become None; partial=True
+    only when at least one block failed."""
+    from services import earnings_screener as svc
+
+    metrics = {
+        "iv_rank": 78, "iv_percentile": 82, "current_iv": 0.79,
+        "hv_20": 0.42, "hv_50": 0.38, "hv_100": 0.35, "hv_iv_ratio": 0.71,
+        "expected_move_pct": 0.064, "expected_move_dollars": 12.8,
+        "hist_avg_abs_move_pct": 0.052, "beat_rate": 0.87,
+        "days_to_earnings": 1, "days_to_expiry": 3,
+    }
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value=metrics)), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_historical", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_news", AsyncMock(return_value=[])), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Nvidia", "sector": "Semis",
+                 "report_date": "2026-04-23", "report_time": "AMC",
+             }),
+         ):
+        detail = await svc.get_detail("NVDA")
+
+    assert detail.symbol == "NVDA"
+    assert detail.quote.last == 200.0
+    assert detail.metrics.iv_rank == 78
+    # Blocks that returned None must stay None
+    assert detail.strike_ladder is None
+    assert detail.claude_structured is None
