@@ -220,47 +220,9 @@ def load_universe(
     return list(UNIVERSE_SEED)
 
 
-# --------------------------------------------------------------------------- #
-# Backwards-compat shims                                                      #
-# --------------------------------------------------------------------------- #
-# The ``DEFAULTS`` dict and ``search_space()`` function are the pre-Task-13
-# API surface. They remain here only so the existing ``strategy.py`` (which
-# still uses the old Strategy protocol) keeps loading until Task 14 rewrites
-# it onto the new shell. Downstream callers that still reference these names
-# will break at Task 14's commit; that is intentional and tracked in the
-# Strategy SOTA Foundation plan.
-DEFAULTS: dict[str, Any] = PEADParams().model_dump()
-
-
-def search_space() -> dict[str, Any]:
-    """Optuna search space (legacy API).
-
-    The canonical source of truth is :meth:`PEADParams.tune_space`; this
-    function remains for the short window during which the old
-    ``strategy.py`` still imports ``search_space`` by name. It is removed
-    in Task 14 when ``strategy.py`` is rewritten onto the new shell.
-    """
-
-    # Deferred import so this module is importable without optuna.
-    from tuner.search import Categorical, FloatRange
-
-    return {
-        "sue_threshold": FloatRange(1.0, 3.0),
-        "holding_days": Categorical([20, 30, 40, 60]),
-        "sue_lookback_quarters": Categorical([4, 8, 12]),
-        "max_concurrent_positions": Categorical([5, 10, 15, 20]),
-        "allocation_per_position": FloatRange(0.03, 0.10),
-        "allow_shorts": Categorical([True, False]),
-        "universe_min_mcap_bn": Categorical([2, 5, 10]),
-        "sue_universe_rank_top_pct": FloatRange(0.05, 0.20),
-    }
-
-
 __all__ = [
     "PEADParams",
-    "DEFAULTS",
     "UNIVERSE_SEED",
     "UNIVERSE_HAS_SURVIVORSHIP_BIAS",
     "load_universe",
-    "search_space",
 ]

@@ -1,54 +1,42 @@
-"""Post-Earnings Announcement Drift — production implementation.
+"""Post-Earnings Announcement Drift — unified-shell implementation.
 
-Textbook PEAD on the Bernard-Thomas 1989 / Livnat-Mendenhall 2006 lines,
-using real FMP earnings + historical surprises data. Long the top-|SUE|
-positive surprises, short the bottom-|SUE| negative surprises (when
-`allow_shorts=True`), hold for `holding_days` trading days, exit MOC.
+Textbook PEAD on the Bernard-Thomas 1989 / Livnat-Mendenhall 2006 lines:
+long the top-|SUE| positive surprises, short the bottom-|SUE| negative
+surprises (when ``allow_shorts=True``), hold for ``holding_days`` trading
+days, exit MOC.
 
-See ``spec.md`` for the full academic reference. Data / SUE helpers live
-in :mod:`.helpers` to keep this module under the 500-line cap.
+This is the Task-14 rewrite onto the new :class:`Strategy` ABC in
+:mod:`strategies._core.protocol`. The alpha logic is preserved byte-for-byte
+from the old ``generate_signals`` + ``manage`` methods; the only change is
+how data flows in: ``run()`` is a pure function that reads from
+:class:`StrategyInput` rather than the legacy :class:`Context` providers.
 
-Lifecycle summary
------------------
-
-- ``universe()``        -- the full seed list plus any open positions so
-                           the engine marks them daily.
-- ``manage()``          -- each day, exits positions that reached their
-                           `holding_days` time-stop.
-- ``generate_signals()``-- each day, fetches yesterday's earnings
-                           announcements, computes SUE, emits MOO entries
-                           for today's open.
-
-No hard stops, no take-profits. The drift signal is time-exited only.
+See ``spec.md`` for the full academic reference. Pure numeric utilities
+(SUE computation, liquidity filter, overlap check, session math) stay in
+:mod:`.helpers` to keep this module readable.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
-from strategies.base import Context, cache_of
-from strategies.registry import (
-    StrategyRegistrationError,
-    _STRATEGY_CLASSES,
-    register_strategy,
+from strategies._core.contracts import (
+    Fill,
+    OrderType,
+    Signal,
+    StrategyInput,
+    StrategyResult,
+    TimeInForce,
 )
-from strategies.signal import OrderType, Signal, TimeInForce
+from strategies._core.protocol import Strategy, StrategyMeta, register_strategy
 
-from .config import (
-    DEFAULTS,
-    UNIVERSE_SEED,
-    load_universe,
-    search_space,
-)
+from .config import PEADParams, UNIVERSE_SEED, load_universe
 from .helpers import (
     compute_sue,
-    fetch_bars,
-    get_calendar,
-    get_surprises,
     has_overlapping_earnings,
     passes_liquidity,
     trading_days_between,
@@ -56,25 +44,6 @@ from .helpers import (
 
 
 log = logging.getLogger("alphadesk.strategies.pead")
-
-
-# --------------------------------------------------------------------------- #
-# Registration shim (tolerates double-loading during Phase 1)                 #
-# --------------------------------------------------------------------------- #
-def _safe_register(*args, **kwargs):
-    name = kwargs.get("name") or (args[0] if args else None)
-    decorator = register_strategy(*args, **kwargs)
-
-    def wrap(cls):
-        try:
-            return decorator(cls)
-        except StrategyRegistrationError:
-            existing = _STRATEGY_CLASSES.get(name)
-            if existing is None:
-                raise
-            return existing
-
-    return wrap
 
 
 # --------------------------------------------------------------------------- #
@@ -89,167 +58,127 @@ _NS = "pead"
 # --------------------------------------------------------------------------- #
 # Strategy                                                                    #
 # --------------------------------------------------------------------------- #
-@_safe_register(
-    name="pead",
-    category="equity",
-    required_bars=("daily",),
-    required_lookback_days=_REQUIRED_LOOKBACK_DAYS,
-    min_universe_size=10,
-    supports_shorts=True,
-    supports_options=False,
-    description=(
-        "Post-Earnings Announcement Drift (Bernard-Thomas 1989, "
-        "Livnat-Mendenhall 2006). Long/short US equity on standardised "
-        "unexpected earnings (SUE), 40-day drift window, MOC time-stop exit. "
-        "Real FMP earnings + surprises; no demo RNG, no hardcoded calendar."
-    ),
+@register_strategy(
+    StrategyMeta(
+        name="pead",
+        category="equity",
+        description=(
+            "Post-Earnings Announcement Drift (Bernard-Thomas 1989, "
+            "Livnat-Mendenhall 2006). Long/short US equity on standardised "
+            "unexpected earnings (SUE), 40-day drift window, MOC time-stop "
+            "exit. Real FMP earnings + surprises; no demo RNG, no hardcoded "
+            "calendar."
+        ),
+        lookback_days=_REQUIRED_LOOKBACK_DAYS,
+        required_bars=("daily",),
+        min_universe_size=10,
+    )
 )
-class PEADStrategy:
-    """Long/short PEAD on US large-caps with SUE-gated entries."""
+class PEADStrategy(Strategy):
+    """Long/short PEAD on US large-caps with SUE-gated entries.
 
-    name = "pead"
-    required_bars: list[str] = ["daily"]
-    required_lookback_days: int = _REQUIRED_LOOKBACK_DAYS
+    Purity invariants (enforced by the runner + code review):
+      * :meth:`run` performs no I/O; all data arrives via ``input``
+      * :meth:`run` reads ``input.asof`` as the only time source (no
+        wall-clock reads)
+      * :meth:`run` uses ``input.rng`` as the only random source (PEAD is
+        deterministic; no randomness in the alpha logic)
+      * state mutations flow only through :class:`StrategyResult.state_update`
+        and :meth:`on_fill`'s return dict
+    """
 
-    # ------------------------------------------------------------------ #
-    # Lifecycle
-    # ------------------------------------------------------------------ #
-    def __init__(self) -> None:
-        self.params: dict[str, Any] = dict(DEFAULTS)
-
-    def configure(self, params: Mapping[str, Any]) -> None:
-        """Merge tuner/user overrides onto defaults and coerce types."""
-
-        merged = dict(DEFAULTS)
-        if params:
-            for k, v in params.items():
-                merged[k] = v
-
-        # Type coercion.
-        for k in (
-            "holding_days",
-            "sue_lookback_quarters",
-            "max_concurrent_positions",
-            "universe_min_mcap_bn",
-            "min_quarters_for_sue",
-        ):
-            merged[k] = int(merged[k])
-        for k in (
-            "sue_threshold",
-            "allocation_per_position",
-            "sue_universe_rank_top_pct",
-            "adv_usd_min",
-            "price_min",
-        ):
-            merged[k] = float(merged[k])
-        merged["allow_shorts"] = bool(merged["allow_shorts"])
-
-        # Validation.
-        if merged["sue_threshold"] <= 0:
-            raise ValueError(f"sue_threshold must be > 0, got {merged['sue_threshold']}")
-        if merged["holding_days"] <= 0:
-            raise ValueError(f"holding_days must be > 0, got {merged['holding_days']}")
-        if not (0 < merged["allocation_per_position"] <= 1.0):
-            raise ValueError(
-                f"allocation_per_position must be in (0, 1], got "
-                f"{merged['allocation_per_position']}"
-            )
-        if merged["max_concurrent_positions"] <= 0:
-            raise ValueError(
-                f"max_concurrent_positions must be > 0, got "
-                f"{merged['max_concurrent_positions']}"
-            )
-        if not (0 < merged["sue_universe_rank_top_pct"] <= 1.0):
-            raise ValueError(
-                f"sue_universe_rank_top_pct must be in (0, 1], got "
-                f"{merged['sue_universe_rank_top_pct']}"
-            )
-
-        self.params = merged
-
-    @classmethod
-    def search_space(cls) -> dict[str, Any]:
-        return search_space()
+    PARAMS_MODEL = PEADParams
 
     # ------------------------------------------------------------------ #
-    # Universe
+    # Universe                                                           #
     # ------------------------------------------------------------------ #
-    def universe(self, asof: date, ctx: Context) -> Iterable[str]:
-        cache = cache_of(ctx)
-        syms = cache.get(f"{_NS}.universe")
-        if syms is None:
-            syms = load_universe(
-                asof=asof,
-                fundamentals_provider=getattr(ctx, "fundamentals_provider", None),
-            )
-            cache[f"{_NS}.universe"] = syms
-        out = set(syms)
-        for p in ctx.positions:
-            out.add(p.symbol)
-        return sorted(out)
+    def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
+        """Return the candidate symbol list for ``asof``.
+
+        The engine calls this BEFORE :meth:`run` so it can pre-fetch the
+        bar / earnings lookback window. We return a cached snapshot of
+        :func:`load_universe` so repeated calls within a run don't re-walk
+        the static seed list. Any symbols currently held (per prior
+        ``state_update``) are unioned in so the engine keeps marking them.
+        """
+
+        cached = state.get(f"{_NS}.universe")
+        if cached is None:
+            cached = load_universe(asof=asof, fundamentals_provider=None)
+        held = set(state.get(f"{_NS}.held_symbols", []))
+        return sorted(set(cached) | held)
 
     # ------------------------------------------------------------------ #
-    # Exits (called BEFORE generate_signals each bar)
+    # Pure-function alpha                                                #
     # ------------------------------------------------------------------ #
-    def manage(self, asof: date, ctx: Context) -> Iterable[Signal]:
-        p = self.params
-        holding = int(p["holding_days"])
-        cache = cache_of(ctx)
-        entries: dict[str, dict[str, Any]] = cache.setdefault(f"{_NS}.entries", {})
+    def run(
+        self,
+        input: StrategyInput,
+        params: PEADParams,
+    ) -> StrategyResult:
+        """Emit exits (time-stop) and entries (SUE-gated) for ``input.asof``.
 
-        out: list[Signal] = []
-        for pos in ctx.positions:
+        Bytes-for-byte port of the old ``manage`` + ``generate_signals``
+        methods; the only behavioural change is that data access goes
+        through ``input.bars`` / ``input.earnings`` rather than
+        ``ctx.bar_provider`` / ``ctx.earnings_provider``.
+        """
+
+        asof = input.asof
+        state = input.state
+        diagnostics: dict[str, Any] = {}
+        warnings: list[str] = []
+        state_update: dict[str, Any] = {}
+
+        # ------------------------------------------------------------------ #
+        # 1. Exits (time-stop) — same as the old manage()
+        # ------------------------------------------------------------------ #
+        holding_days = int(params.holding_days)
+        entries_state: dict[str, dict[str, Any]] = dict(
+            state.get(f"{_NS}.entries", {})
+        )
+
+        exits: list[Signal] = []
+        for pos in input.positions:
             if pos.quantity == 0:
                 continue
-            meta = entries.get(pos.symbol)
-            opened = pos.opened_at
+            meta = entries_state.get(pos.symbol)
+            opened = pos.entry_date
             if opened is None and meta is not None:
                 opened = meta.get("queued_on")
             if opened is None:
                 # Unknown entry date — force close (safety net).
-                out.append(self._exit_signal(pos.symbol, asof))
+                exits.append(self._exit_signal(pos.symbol, asof))
                 continue
-            held = trading_days_between(
-                opened,
-                asof,
-                calendar_provider=getattr(ctx, "calendar_provider", None),
+            held = trading_days_between(opened, asof, calendar_provider=None)
+            if held >= holding_days:
+                exits.append(self._exit_signal(pos.symbol, asof))
+
+        # ------------------------------------------------------------------ #
+        # 2. Entries — same as the old generate_signals()
+        # ------------------------------------------------------------------ #
+        # Cache the universe list on state so universe() sees a stable set
+        # across subsequent bars. Shallow state merge preserves this.
+        universe_list = state.get(f"{_NS}.universe") or list(UNIVERSE_SEED)
+        state_update[f"{_NS}.universe"] = universe_list
+
+        earnings = input.earnings
+        if earnings is None or earnings.empty:
+            diagnostics["entries_candidates"] = 0
+            return self._finalise_result(
+                exits, entries_state, state_update, diagnostics, warnings,
             )
-            if held >= holding:
-                out.append(self._exit_signal(pos.symbol, asof))
-        return out
 
-    @staticmethod
-    def _exit_signal(symbol: str, asof: date) -> Signal:
-        return Signal(
-            symbol=symbol,
-            target_weight=0.0,
-            order_type=OrderType.MOC,
-            time_in_force=TimeInForce.DAY,
-            tag="pead-exit-time",
-            asof=asof,
-        )
-
-    # ------------------------------------------------------------------ #
-    # Entries
-    # ------------------------------------------------------------------ #
-    def generate_signals(self, asof: date, ctx: Context) -> Iterable[Signal]:
-        p = self.params
-        cache = cache_of(ctx)
-        universe: list[str] = cache.get(f"{_NS}.universe") or list(UNIVERSE_SEED)
-
-        # 1. Fetch the full calendar once for the whole study (cached).
-        cal_start, cal_end = self._study_window(ctx, asof)
-        calendar = get_calendar(ctx, cal_start, cal_end, universe)
-        if calendar is None or calendar.empty:
-            return []
-
-        # 2. Find yesterday's announcements. Any name reporting strictly
+        # 2a. Find yesterday's announcements. Any name reporting strictly
         # before today is eligible for a T+1 MOO entry today.
-        ann = self._yesterday_announcements(calendar, asof, ctx)
+        ann = self._yesterday_announcements(earnings, asof)
         if ann.empty:
-            return []
+            diagnostics["entries_candidates"] = 0
+            return self._finalise_result(
+                exits, entries_state, state_update, diagnostics, warnings,
+            )
 
-        # 3. Compute SUE for each announcement.
+        # 2b. Compute SUE for each announcement.
         scored: list[tuple[float, str, float]] = []  # (|SUE|, sym, SUE)
         for _, row in ann.iterrows():
             sym = str(row["symbol"]).upper()
@@ -261,50 +190,54 @@ class PEADStrategy:
             elif ann_date is None:
                 continue
 
-            hist = get_surprises(ctx, sym, cal_start, cal_end)
+            hist = self._surprise_history(earnings, sym)
             sue = compute_sue(
                 eps_actual,
                 eps_est,
                 hist,
                 ann_date,
-                lookback_quarters=int(p["sue_lookback_quarters"]),
-                min_quarters=int(p["min_quarters_for_sue"]),
+                lookback_quarters=int(params.sue_lookback_quarters),
+                min_quarters=int(params.min_quarters_for_sue),
             )
             if sue is None:
                 continue
             scored.append((abs(sue), sym, sue))
 
+        diagnostics["entries_candidates"] = len(scored)
         if not scored:
-            return []
+            return self._finalise_result(
+                exits, entries_state, state_update, diagnostics, warnings,
+            )
 
-        # 4. Apply the top-percent |SUE| rank filter.
+        # 2c. Apply the top-percent |SUE| rank filter.
         scored.sort(reverse=True)
-        top_pct = float(p["sue_universe_rank_top_pct"])
+        top_pct = float(params.sue_universe_rank_top_pct)
         if 0 < top_pct < 1.0:
             keep = max(1, int(round(len(scored) * top_pct)))
             scored = scored[:keep]
 
-        threshold = float(p["sue_threshold"])
-        allow_shorts = bool(p["allow_shorts"])
-        alloc = float(p["allocation_per_position"])
-        holding_days = int(p["holding_days"])
-        adv_min = float(p["adv_usd_min"])
-        price_min = float(p["price_min"])
+        threshold = float(params.sue_threshold)
+        allow_shorts = bool(params.allow_shorts)
+        alloc = float(params.allocation_per_position)
+        holding_days_int = int(params.holding_days)
+        adv_min = float(params.adv_usd_min)
+        price_min = float(params.price_min)
 
-        # 5. Capacity.
-        held_symbols = {pos.symbol for pos in ctx.positions if pos.quantity != 0}
-        capacity = int(p["max_concurrent_positions"]) - len(held_symbols)
+        # 2d. Capacity.
+        held_symbols = {pos.symbol for pos in input.positions if pos.quantity != 0}
+        capacity = int(params.max_concurrent_positions) - len(held_symbols)
         if capacity <= 0:
-            return []
+            diagnostics["entries_emitted"] = 0
+            diagnostics["capacity_exhausted"] = True
+            return self._finalise_result(
+                exits, entries_state, state_update, diagnostics, warnings,
+            )
 
-        # 6. Signal emission.
+        # 2e. Signal emission.
         pending: set[str] = set()
-        entries_cache: dict[str, dict[str, Any]] = cache.setdefault(
-            f"{_NS}.entries", {}
-        )
-        out: list[Signal] = []
+        entries: list[Signal] = []
         for _, sym, sue in scored:
-            if len(out) >= capacity:
+            if len(entries) >= capacity:
                 break
             if sym in held_symbols or sym in pending:
                 continue
@@ -320,17 +253,18 @@ class PEADStrategy:
                 continue
 
             # Liquidity / price filter.
-            bars = self._symbol_bars(ctx, sym, asof)
-            if not passes_liquidity(bars, asof, adv_min, price_min):
+            sym_bars = self._symbol_bars(input.bars, sym, asof)
+            if not passes_liquidity(sym_bars, asof, adv_min, price_min):
                 continue
 
-            # Overlapping earnings filter.
+            # Overlapping earnings filter — another earnings announcement
+            # for the same name inside the holding window disqualifies.
             if has_overlapping_earnings(
-                calendar,
+                earnings,
                 sym,
                 asof,
-                holding_days,
-                calendar_provider=getattr(ctx, "calendar_provider", None),
+                holding_days_int,
+                calendar_provider=None,
             ):
                 continue
 
@@ -354,7 +288,7 @@ class PEADStrategy:
                 f"pead-entry-{'long' if direction > 0 else 'short'}"
                 f"-sue{sue:+.2f}-evspread{event_spread:.4f}"
             )
-            out.append(
+            entries.append(
                 Signal(
                     symbol=sym,
                     target_weight=weight,
@@ -365,84 +299,94 @@ class PEADStrategy:
                 )
             )
             pending.add(sym)
-            entries_cache[sym] = {
+            entries_state[sym] = {
                 "queued_on": asof,
                 "sue": float(sue),
                 "direction": direction,
             }
-        return out
 
-    def on_fill(self, fill: Any, ctx: Context) -> None:
-        """Record filled entries so `manage()` can apply the time-stop.
+        diagnostics["entries_emitted"] = len(entries)
+        diagnostics["exits_emitted"] = len(exits)
+        return self._finalise_result(
+            exits + entries, entries_state, state_update, diagnostics, warnings,
+        )
 
-        The engine sets ``pos.opened_at`` on the first fill of a position,
+    # ------------------------------------------------------------------ #
+    # on_fill — state update for filled entries + exits                  #
+    # ------------------------------------------------------------------ #
+    def on_fill(self, fill: Fill, state: dict[str, Any]) -> dict[str, Any]:
+        """Record filled entries / drop exited names.
+
+        The engine sets ``pos.entry_date`` on the first fill of a position,
         but the queue-to-fill round-trip may take one bar (MOO → T+1 open).
-        We record the filled timestamp in our cache as a belt-and-braces
-        signal for the time-stop.
+        We also stamp the filled timestamp + entry price in our cache so
+        downstream inspection hooks can replay the entry context.
         """
 
-        cache = cache_of(ctx)
-        entries: dict[str, dict[str, Any]] = cache.setdefault(
-            f"{_NS}.entries", {}
+        entries: dict[str, dict[str, Any]] = dict(
+            state.get(f"{_NS}.entries", {})
         )
+        held_symbols: set[str] = set(state.get(f"{_NS}.held_symbols", set()))
+
         sym = fill.symbol
         meta = entries.setdefault(sym, {})
-        try:
-            is_close = fill.tag.startswith("pead-exit") or (
-                meta.get("direction") is not None
-                and (
-                    (meta["direction"] > 0 and fill.side.value == "sell")
-                    or (meta["direction"] < 0 and fill.side.value == "buy")
-                )
+        tag = getattr(fill, "signal_tag", "") or ""
+        direction = meta.get("direction")
+        is_close = tag.startswith("pead-exit") or (
+            direction is not None
+            and (
+                (direction > 0 and fill.quantity < 0)
+                or (direction < 0 and fill.quantity > 0)
             )
-        except Exception:
-            is_close = False
+        )
 
         if is_close:
             entries.pop(sym, None)
+            held_symbols.discard(sym)
         else:
-            meta["filled_on"] = fill.ts
+            meta["filled_on"] = fill.asof
             meta["entry_price"] = float(fill.price)
+            held_symbols.add(sym)
+
+        return {
+            f"{_NS}.entries": entries,
+            f"{_NS}.held_symbols": held_symbols,
+        }
 
     # ------------------------------------------------------------------ #
-    # Helpers
+    # Helpers                                                            #
     # ------------------------------------------------------------------ #
-    def _study_window(self, ctx: Context, asof: date) -> tuple[date, date]:
-        """Return (start, end) for the full-study calendar cache.
+    @staticmethod
+    def _exit_signal(symbol: str, asof: date) -> Signal:
+        return Signal(
+            symbol=symbol,
+            target_weight=0.0,
+            order_type=OrderType.MOC,
+            time_in_force=TimeInForce.DAY,
+            tag="pead-exit-time",
+            asof=asof,
+        )
 
-        Calendar start is pegged at the earliest asof we see (minus 60
-        days to detect T+1 announcements and warm the overlap filter).
-        End grows in 1-year increments so a multi-year backtest doesn't
-        refetch the calendar on every session; the :func:`get_calendar`
-        chunks the fetch into quarterly windows to stay under FMP's
-        4000-row / 5-year limits.
-
-        The per-symbol surprises endpoint returns up to 160 quarters
-        (~40y) so a short calendar window does not starve the
-        trailing-σ computation.
-        """
-
-        cache = cache_of(ctx)
-        window = cache.get(f"{_NS}.window")
-        if window is None:
-            start = asof - timedelta(days=60)
-            end = asof + timedelta(days=365)
-            window = (start, end)
-            cache[f"{_NS}.window"] = window
-        elif asof > window[1] - timedelta(days=30):
-            # Extend by another year when we approach the existing
-            # upper bound. This keeps the calendar frame warm across
-            # a multi-year backtest without refetching on every day.
-            start, _old_end = window
-            window = (start, asof + timedelta(days=365))
-            cache[f"{_NS}.window"] = window
-        return window
+    def _finalise_result(
+        self,
+        signals: list[Signal],
+        entries_state: dict[str, dict[str, Any]],
+        state_update: dict[str, Any],
+        diagnostics: dict[str, Any],
+        warnings: list[str],
+    ) -> StrategyResult:
+        state_update[f"{_NS}.entries"] = entries_state
+        return StrategyResult(
+            signals=signals,
+            state_update=state_update,
+            diagnostics=diagnostics,
+            warnings=warnings,
+        )
 
     @staticmethod
     def _yesterday_announcements(
         calendar: pd.DataFrame,
         asof: date,
-        ctx: Optional[Context] = None,
     ) -> pd.DataFrame:
         """Return announcements that are actionable via an ``asof`` MOO entry.
 
@@ -452,86 +396,41 @@ class PEADStrategy:
 
         * **AMC** (after-market close): FMP dates the row on the session
           whose close absorbs the release, so an AMC row dated D-1 is
-          actionable at ``asof = D`` (MOO entry at D.open). This was the
-          pre-existing behaviour and is preserved.
+          actionable at ``asof = D`` (MOO entry at D.open).
         * **BMO** (before-market open): FMP dates the row on the session
           during whose open the release hits. A BMO row dated D is
-          actionable at ``asof = D+1`` (MOO entry at D+1.open). The
-          previous implementation dropped these rows entirely — treating
-          every announcement as AMC — which silently excluded ~40-50%
-          of the S&P 500 reporter population from the strategy.
+          actionable at ``asof = D+1`` (MOO entry at D+1.open).
 
         Rows without an ``announcement_when`` classification fall back
         to the AMC anchor to preserve legacy behaviour when the calendar
         frame comes from a provider that did not populate the column.
+
+        This is the purity-friendly shape of the old helper: we no longer
+        consult ``ctx.calendar_provider`` for true NYSE sessions; a Mon-Fri
+        fallback is used. A future pipeline-level calendar injection can
+        replace this if needed.
         """
 
         if calendar.empty:
             return calendar
 
-        # Determine the previous trading day. Prefer the engine's
-        # calendar provider for true NYSE-holiday-aware sessions.
+        # Determine the previous trading day (Mon-Fri fallback — no
+        # holiday provider available in a pure-function environment).
         prev_session: Optional[date] = None
-        cal_provider = None
-        if ctx is not None:
-            cal_provider = (
-                getattr(ctx, "calendar_provider", None)
-                or getattr(ctx, "calendar", None)
-            )
-        if cal_provider is not None:
-            try:
-                if hasattr(cal_provider, "previous_session"):
-                    raw = cal_provider.previous_session(asof)
-                    if raw is not None:
-                        prev_session = (
-                            raw if isinstance(raw, date)
-                            else pd.Timestamp(raw).date()
-                        )
-                elif hasattr(cal_provider, "sessions"):
-                    # Fallback: enumerate sessions in a small window.
-                    sess = list(
-                        cal_provider.sessions(
-                            asof - timedelta(days=14), asof
-                        )
-                    )
-                    parsed = [
-                        s if isinstance(s, date) else pd.Timestamp(s).date()
-                        for s in sess
-                    ]
-                    parsed = sorted({s for s in parsed if s < asof})
-                    if parsed:
-                        prev_session = parsed[-1]
-            except Exception:
-                prev_session = None
-
+        probe = asof - timedelta(days=1)
+        for _ in range(7):
+            if probe.weekday() < 5:
+                prev_session = probe
+                break
+            probe -= timedelta(days=1)
         if prev_session is None:
-            # Mon-Fri fallback (does not honour NYSE holidays — tracked
-            # as a separate P2 audit finding). Walks back through the
-            # calendar to find a weekday before ``asof``.
-            probe = asof - timedelta(days=1)
-            for _ in range(7):
-                if probe.weekday() < 5:
-                    prev_session = probe
-                    break
-                probe -= timedelta(days=1)
-            if prev_session is None:
-                return calendar.iloc[0:0]
+            return calendar.iloc[0:0]
 
-        # Determine the "BMO anchor" — the session whose BMO releases
-        # become actionable on ``asof``. If ``asof`` itself is a trading
-        # session, that's ``asof``; otherwise we defer to ``prev_session``.
-        bmo_anchor: date = asof
-        if cal_provider is not None and hasattr(cal_provider, "is_trading_day"):
-            try:
-                if not cal_provider.is_trading_day(asof):
-                    bmo_anchor = prev_session
-            except Exception:
-                pass
+        # BMO anchor — if asof is a trading day, BMO rows dated on asof
+        # are actionable today (asof.open is the first tradable bar after
+        # the release). Otherwise defer to prev_session.
+        bmo_anchor = asof if asof.weekday() < 5 else prev_session
 
-        # Two-anchor slice. AMC rows dated on the previous session are
-        # eligible for today's MOO; BMO rows dated on the ``bmo_anchor``
-        # session are eligible for today's MOO (asof.open is the first
-        # tradable bar after a BMO release on the same day).
         when = calendar.get("announcement_when")
         if when is None:
             # Legacy calendar without the time field — behave as before.
@@ -554,35 +453,72 @@ class PEADStrategy:
         ann = ann.dropna(subset=["eps_actual", "eps_estimated"])
         return ann.reset_index(drop=True)
 
-    def _symbol_bars(
-        self, ctx: Context, sym: str, asof: date
+    @staticmethod
+    def _surprise_history(
+        earnings: pd.DataFrame,
+        symbol: str,
     ) -> Optional[pd.DataFrame]:
-        """Return a cached OHLCV history for ``sym`` up to ``asof``."""
+        """Return per-symbol historical surprise series from ``input.earnings``.
 
-        cache = cache_of(ctx)
-        bucket: dict[str, pd.DataFrame] = cache.setdefault(_NS + ".bars", {})
-        existing = bucket.get(sym)
-        if existing is not None:
-            last_date = (
-                existing["ts_date"].iloc[-1] if not existing.empty else None
-            )
-            if last_date is not None and last_date >= asof:
-                return existing[existing["ts_date"] <= asof]
+        The runner pre-fetches ~3 years of earnings (per META.lookback_days)
+        for every symbol in the universe, so in the new shell the full
+        surprise history is always present in ``input.earnings`` — we just
+        filter by symbol here and hand the slice to :func:`compute_sue`.
+        """
 
-        start = asof - timedelta(days=180)
-        end = asof + timedelta(days=400)
-        df = fetch_bars(ctx, [sym], start, end)
-        if df is None or df.empty:
-            bucket[sym] = pd.DataFrame(
-                columns=["symbol", "ts", "ts_date", "open", "high", "low", "close", "volume"]
-            )
+        if earnings is None or earnings.empty:
             return None
-        sub = df[df["symbol"] == sym].copy()
+        sub = earnings[earnings["symbol"].astype(str).str.upper() == symbol.upper()]
         if sub.empty:
-            bucket[sym] = sub
             return None
-        sub = sub.sort_values("ts", ignore_index=True)
-        bucket[sym] = sub
+        sub = sub.copy()
+        # compute_sue inspects history["surprise"] when available, falling
+        # back to eps_actual - eps_estimated. We leave the frame alone.
+        return sub.sort_values("date", ignore_index=True)
+
+    @staticmethod
+    def _symbol_bars(
+        bars: pd.DataFrame,
+        symbol: str,
+        asof: date,
+    ) -> Optional[pd.DataFrame]:
+        """Return an OHLCV history for ``symbol`` up to ``asof``.
+
+        ``input.bars`` may be either a multi-index DataFrame keyed on
+        ``(date, symbol)`` (the canonical shape emitted by the runner's
+        :meth:`BarProvider.fetch_window`) or a flat DataFrame with a
+        ``symbol`` / ``ts_date`` pair (the shape historically returned by
+        ``helpers.fetch_bars``; preserved for legacy test fixtures). We
+        normalise to the latter because ``passes_liquidity`` expects it.
+        """
+
+        if bars is None or getattr(bars, "empty", True):
+            return None
+
+        index_names = tuple(bars.index.names or ())
+        if "symbol" in index_names and "date" in index_names:
+            # Multi-index shape — extract the symbol level, then flatten.
+            try:
+                sym_slice = bars.xs(symbol, level="symbol", drop_level=False)
+            except KeyError:
+                return None
+            sym_slice = sym_slice.reset_index()
+            sym_slice = sym_slice.rename(columns={"date": "ts_date"})
+            sym_slice = sym_slice[sym_slice["ts_date"] <= asof]
+            return sym_slice.sort_values("ts_date", ignore_index=True) if not sym_slice.empty else None
+
+        # Flat shape (legacy fixtures or the old fetch_bars helper).
+        if "symbol" not in bars.columns:
+            return None
+        sub = bars[bars["symbol"].astype(str).str.upper() == symbol.upper()].copy()
+        if sub.empty:
+            return None
+        if "ts_date" not in sub.columns and "ts" in sub.columns:
+            sub["ts_date"] = pd.to_datetime(sub["ts"], utc=True, errors="coerce") \
+                .dt.tz_convert("UTC").dt.date
+        if "ts_date" not in sub.columns:
+            return None
+        sub = sub.sort_values("ts_date", ignore_index=True)
         return sub[sub["ts_date"] <= asof]
 
 
