@@ -4,6 +4,10 @@ Single source of truth for every knob the strategy exposes. Defaults track
 the Bernard-Thomas 1989 canonical specification with Livnat-Mendenhall 2006
 analyst-consensus SUE; search ranges stay close to the literature.
 
+The ``PEADParams`` model is a Pydantic-v2 :class:`StrategyParams` subclass;
+tunable fields declare their Optuna distribution via ``json_schema_extra``
+so :meth:`StrategyParams.tune_space` auto-derives the search space.
+
 See :mod:`backend.strategies.pead.spec` (the ``spec.md`` next to this file)
 for the academic rationale for each knob.
 """
@@ -13,6 +17,10 @@ from __future__ import annotations
 import logging
 from datetime import date
 from typing import Any, Optional
+
+from pydantic import Field
+
+from strategies._core.contracts import StrategyParams
 
 
 log = logging.getLogger("alphadesk.strategies.pead.config")
@@ -27,33 +35,87 @@ UNIVERSE_HAS_SURVIVORSHIP_BIAS: bool = False
 
 
 # --------------------------------------------------------------------------- #
-# Defaults                                                                    #
+# Params                                                                      #
 # --------------------------------------------------------------------------- #
-DEFAULTS: dict[str, Any] = {
+class PEADParams(StrategyParams):
+    """Typed Pydantic-v2 params model for the PEAD strategy.
+
+    Every field in this model is the single source of truth for its
+    default value and (where applicable) its Optuna search range. The
+    ``json_schema_extra={"tune": {...}}`` descriptors are consumed by
+    :meth:`StrategyParams.tune_space` at tuner launch; fields without a
+    ``tune`` descriptor are held fixed across all trials.
+
+    Defaults match the historical ``DEFAULTS`` dict byte-for-byte so the
+    parity harness in Task 16 can verify no alpha drift.
+    """
+
     # |SUE| threshold for entry. Bernard-Thomas used 1.5-2.0 for deciles.
-    "sue_threshold": 1.5,
+    sue_threshold: float = Field(
+        default=1.5,
+        gt=0.0,
+        json_schema_extra={"tune": {"low": 1.0, "high": 3.0, "type": "float"}},
+    )
     # Holding period in trading days. Canonical Bernard-Thomas = 60; we
     # default to 40 which is the Chordia-et-al post-liquidity midpoint.
-    "holding_days": 40,
+    holding_days: int = Field(
+        default=40,
+        gt=0,
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": [20, 30, 40, 60]}
+        },
+    )
     # Trailing quarterly count for the SUE-σ denominator.
-    "sue_lookback_quarters": 8,
+    sue_lookback_quarters: int = Field(
+        default=8,
+        gt=0,
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": [4, 8, 12]}
+        },
+    )
     # Max simultaneous positions (long + short combined).
-    "max_concurrent_positions": 10,
+    max_concurrent_positions: int = Field(
+        default=10,
+        gt=0,
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": [5, 10, 15, 20]}
+        },
+    )
     # Fraction of initial equity per position.
-    "allocation_per_position": 0.05,
+    allocation_per_position: float = Field(
+        default=0.05,
+        gt=0.0,
+        le=1.0,
+        json_schema_extra={"tune": {"low": 0.03, "high": 0.10, "type": "float"}},
+    )
     # Trade both directions. False = long-only.
-    "allow_shorts": True,
+    allow_shorts: bool = Field(
+        default=True,
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": [True, False]}
+        },
+    )
     # Market-cap floor in $B (proxy via the curated universe seed list).
-    "universe_min_mcap_bn": 5,
+    universe_min_mcap_bn: int = Field(
+        default=5,
+        ge=0,
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": [2, 5, 10]}
+        },
+    )
     # Keep only the top-X percent of |SUE| per announcement day. 1.0 = no filter.
-    "sue_universe_rank_top_pct": 1.0,
+    sue_universe_rank_top_pct: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        json_schema_extra={"tune": {"low": 0.05, "high": 0.20, "type": "float"}},
+    )
     # Liquidity floors — fixed, not searched.
-    "adv_usd_min": 20_000_000.0,
-    "price_min": 10.0,
+    adv_usd_min: float = Field(default=20_000_000.0, ge=0.0)
+    price_min: float = Field(default=10.0, ge=0.0)
     # Minimum trailing quarters required to compute σ (< lookback is allowed
     # but we require at least this many to generate a SUE).
-    "min_quarters_for_sue": 4,
-}
+    min_quarters_for_sue: int = Field(default=4, gt=0)
 
 
 # --------------------------------------------------------------------------- #
@@ -111,27 +173,6 @@ UNIVERSE_SEED: tuple[str, ...] = (
 UNIVERSE_SEED = tuple(dict.fromkeys(UNIVERSE_SEED))
 
 
-# --------------------------------------------------------------------------- #
-# Search space                                                                #
-# --------------------------------------------------------------------------- #
-def search_space() -> dict[str, Any]:
-    """Optuna search space. Matches the Wave D brief."""
-
-    # Deferred import so this module is importable without optuna.
-    from tuner.search import Categorical, FloatRange
-
-    return {
-        "sue_threshold": FloatRange(1.0, 3.0),
-        "holding_days": Categorical([20, 30, 40, 60]),
-        "sue_lookback_quarters": Categorical([4, 8, 12]),
-        "max_concurrent_positions": Categorical([5, 10, 15, 20]),
-        "allocation_per_position": FloatRange(0.03, 0.10),
-        "allow_shorts": Categorical([True, False]),
-        "universe_min_mcap_bn": Categorical([2, 5, 10]),
-        "sue_universe_rank_top_pct": FloatRange(0.05, 0.20),
-    }
-
-
 def load_universe(
     asof: Optional[date] = None,
     fundamentals_provider: Any = None,
@@ -179,7 +220,44 @@ def load_universe(
     return list(UNIVERSE_SEED)
 
 
+# --------------------------------------------------------------------------- #
+# Backwards-compat shims                                                      #
+# --------------------------------------------------------------------------- #
+# The ``DEFAULTS`` dict and ``search_space()`` function are the pre-Task-13
+# API surface. They remain here only so the existing ``strategy.py`` (which
+# still uses the old Strategy protocol) keeps loading until Task 14 rewrites
+# it onto the new shell. Downstream callers that still reference these names
+# will break at Task 14's commit; that is intentional and tracked in the
+# Strategy SOTA Foundation plan.
+DEFAULTS: dict[str, Any] = PEADParams().model_dump()
+
+
+def search_space() -> dict[str, Any]:
+    """Optuna search space (legacy API).
+
+    The canonical source of truth is :meth:`PEADParams.tune_space`; this
+    function remains for the short window during which the old
+    ``strategy.py`` still imports ``search_space`` by name. It is removed
+    in Task 14 when ``strategy.py`` is rewritten onto the new shell.
+    """
+
+    # Deferred import so this module is importable without optuna.
+    from tuner.search import Categorical, FloatRange
+
+    return {
+        "sue_threshold": FloatRange(1.0, 3.0),
+        "holding_days": Categorical([20, 30, 40, 60]),
+        "sue_lookback_quarters": Categorical([4, 8, 12]),
+        "max_concurrent_positions": Categorical([5, 10, 15, 20]),
+        "allocation_per_position": FloatRange(0.03, 0.10),
+        "allow_shorts": Categorical([True, False]),
+        "universe_min_mcap_bn": Categorical([2, 5, 10]),
+        "sue_universe_rank_top_pct": FloatRange(0.05, 0.20),
+    }
+
+
 __all__ = [
+    "PEADParams",
     "DEFAULTS",
     "UNIVERSE_SEED",
     "UNIVERSE_HAS_SURVIVORSHIP_BIAS",

@@ -31,7 +31,8 @@ import pandas as pd
 import pytest
 
 from backtest.types import Context, Position, Side
-from strategies.pead.config import DEFAULTS, UNIVERSE_SEED, search_space
+from pydantic import ValidationError
+from strategies.pead.config import PEADParams, UNIVERSE_SEED, search_space
 from strategies.pead.helpers import (
     compute_sue,
     has_overlapping_earnings,
@@ -39,6 +40,111 @@ from strategies.pead.helpers import (
     trading_days_between,
 )
 from strategies.pead.strategy import PEADStrategy
+
+
+# --------------------------------------------------------------------------- #
+# PEADParams (Task 13 — Pydantic v2 params model)                             #
+# --------------------------------------------------------------------------- #
+# The defaults below are the byte-for-byte copy of the historical
+# ``DEFAULTS`` dict that lived in ``config.py`` before Task 13. Kept here
+# as the reference source-of-truth so ``test_pead_params_defaults_match_old_DEFAULTS``
+# catches any drift between the old dict and the new Pydantic model.
+_OLD_DEFAULTS: dict = {
+    "sue_threshold": 1.5,
+    "holding_days": 40,
+    "sue_lookback_quarters": 8,
+    "max_concurrent_positions": 10,
+    "allocation_per_position": 0.05,
+    "allow_shorts": True,
+    "universe_min_mcap_bn": 5,
+    "sue_universe_rank_top_pct": 1.0,
+    "adv_usd_min": 20_000_000.0,
+    "price_min": 10.0,
+    "min_quarters_for_sue": 4,
+}
+
+
+class TestPEADParams:
+    def test_pead_params_defaults_match_old_DEFAULTS(self):
+        """Every default in PEADParams must equal the pre-Task-13 DEFAULTS
+        dict byte-for-byte — the Task-16 parity harness relies on this.
+        """
+
+        p = PEADParams()
+        dumped = p.model_dump()
+        # Every key from the old dict must appear in the model dump with
+        # the same value and the same type.
+        for k, expected in _OLD_DEFAULTS.items():
+            assert k in dumped, f"PEADParams missing field {k!r}"
+            actual = dumped[k]
+            assert actual == expected, (
+                f"PEADParams.{k} = {actual!r} but old DEFAULTS had {expected!r}"
+            )
+            assert type(actual) is type(expected), (
+                f"PEADParams.{k} is {type(actual).__name__}, "
+                f"old DEFAULTS had {type(expected).__name__}"
+            )
+        # No new fields snuck in without an equivalent in the old DEFAULTS.
+        assert set(dumped) == set(_OLD_DEFAULTS), (
+            f"PEADParams / old DEFAULTS key-set drift: "
+            f"only-in-model={set(dumped) - set(_OLD_DEFAULTS)}, "
+            f"only-in-old={set(_OLD_DEFAULTS) - set(dumped)}"
+        )
+
+    def test_pead_params_tune_space_populated(self):
+        """Every tunable parameter from the old ``search_space()`` function
+        must surface in ``PEADParams.tune_space()``.
+        """
+
+        space = PEADParams.tune_space()
+        expected_tune_keys = {
+            "sue_threshold",
+            "holding_days",
+            "sue_lookback_quarters",
+            "max_concurrent_positions",
+            "allocation_per_position",
+            "allow_shorts",
+            "universe_min_mcap_bn",
+            "sue_universe_rank_top_pct",
+        }
+        assert set(space.keys()) == expected_tune_keys
+        # Every descriptor must declare a ``type`` and carry either
+        # low/high or a ``choices`` list — the tuner consumes those.
+        for name, desc in space.items():
+            assert "type" in desc, f"{name}: tune descriptor missing 'type'"
+            if desc["type"] in ("float", "int"):
+                assert "low" in desc and "high" in desc, (
+                    f"{name}: {desc['type']} range missing low/high"
+                )
+            elif desc["type"] == "categorical":
+                assert "choices" in desc and desc["choices"], (
+                    f"{name}: categorical descriptor missing choices"
+                )
+
+    def test_pead_params_rejects_invalid_values(self):
+        """Out-of-bounds or wrongly-typed overrides must fail construction.
+
+        Exercises two distinct validators: ``sue_threshold`` (>0) and
+        ``allocation_per_position`` (0<x<=1). Pydantic v2 surfaces these
+        as ``ValidationError``.
+        """
+
+        # Non-positive SUE threshold.
+        with pytest.raises(ValidationError):
+            PEADParams(sue_threshold=-1.0)
+        with pytest.raises(ValidationError):
+            PEADParams(sue_threshold=0.0)
+        # Out-of-range allocation.
+        with pytest.raises(ValidationError):
+            PEADParams(allocation_per_position=0.0)
+        with pytest.raises(ValidationError):
+            PEADParams(allocation_per_position=1.5)
+        # Holding days must be positive.
+        with pytest.raises(ValidationError):
+            PEADParams(holding_days=0)
+        # Unknown field — extra="forbid" rejects typos.
+        with pytest.raises(ValidationError):
+            PEADParams(no_such_field=42)
 
 
 # --------------------------------------------------------------------------- #
