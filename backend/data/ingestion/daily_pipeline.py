@@ -1953,7 +1953,18 @@ async def _run_pipeline_inner(
             _completed_strategies = 0
 
             async def _run_single_strategy(strategy: BaseStrategyRunner) -> tuple[str, dict[str, Any]]:
-                """Screen, analyze, and generate trades for one strategy."""
+                """Run one strategy end-to-end and route its signals through master.
+
+                Task-17 rewrite: the legacy three-stage protocol
+                (``screen()`` → ``analyze()`` → ``generate_trades(master)``) is
+                replaced by a single ``runner.run(master)`` call that wraps
+                the unified :class:`~strategies._core.protocol.Strategy` ABC.
+                The runner internally drives a
+                :class:`~strategies._core.runners.pipeline_runner.DailyPipelineRunner`
+                and converts each emitted :class:`Signal` into a
+                ``master.request_trade`` call, preserving the legacy
+                approvals/rejections flow on the master agent.
+                """
                 global CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
                 nonlocal _completed_strategies
                 strat_name = strategy.name
@@ -1961,8 +1972,8 @@ async def _run_pipeline_inner(
                 # Halt checkpoint (persona-16 P0-1): the admin halt flag must
                 # stop the strategy loop at the entrance of each stage, not
                 # only in the manual-order handler. If the operator hits the
-                # panic button after screen() started, we still bail before
-                # generate_trades() can request any new orders.
+                # panic button mid-run, we still bail before request_trade()
+                # touches MasterAgent.
                 if await _is_trading_halted():
                     logger.warning(
                         "Strategy %s skipped — trading halted by admin",
@@ -1986,34 +1997,25 @@ async def _run_pipeline_inner(
                 # parallel via gather — CURRENT_STRATEGY reflects the most
                 # recent one to start, which is good enough for UI breadcrumbs.
                 CURRENT_STRATEGY = strat_name
+                CURRENT_STAGE = "risk"
                 logger.info("Running strategy: %s", strat_name)
 
-                # Screen
-                CURRENT_STAGE = "screen"
-                candidates = await strategy.screen()
-                logger.info(
-                    "  %s screened %d candidates", strat_name, len(candidates),
-                )
-                _check_cancel(f"strategy:{strat_name}:post_screen")
+                try:
+                    result = await strategy.run(master)
+                except Exception:
+                    logger.exception("pipeline run failed for %s", strat_name)
+                    result = {
+                        "screened": 0, "analyzed": 0, "analyses": [],
+                        "trades_requested": 0, "trades_approved": 0, "trades": [],
+                    }
+                _check_cancel(f"strategy:{strat_name}:post_run")
 
-                # Analyze (limit per strategy to conserve CLI calls)
-                CURRENT_STAGE = "analyze"
-                to_analyze = candidates[:per_strategy_limit]
-                analyses = await strategy.analyze(to_analyze)
                 logger.info(
-                    "  %s analyzed %d candidates", strat_name, len(analyses),
-                )
-                _check_cancel(f"strategy:{strat_name}:post_analyze")
-
-                # Generate trades (asks master for permission). This is the
-                # "risk" stage — master agent decides approve / reject per
-                # symbol against position limits, sector caps, etc.
-                CURRENT_STAGE = "risk"
-                trades = await strategy.generate_trades(analyses, master)
-                approved = [t for t in trades if t.get("approved")]
-                logger.info(
-                    "  %s: %d trades requested, %d approved",
-                    strat_name, len(trades), len(approved),
+                    "  %s: %d signals, %d trades requested, %d approved",
+                    strat_name,
+                    result.get("screened", 0),
+                    result.get("trades_requested", 0),
+                    result.get("trades_approved", 0),
                 )
 
                 _completed_strategies += 1
@@ -2023,14 +2025,7 @@ async def _run_pipeline_inner(
                         "total": num_strategies,
                     }
 
-                return strat_name, {
-                    "screened": len(candidates),
-                    "analyzed": len(analyses),
-                    "analyses": analyses,
-                    "trades_requested": len(trades),
-                    "trades_approved": len(approved),
-                    "trades": trades,
-                }
+                return strat_name, result
 
             results = await asyncio.gather(
                 *[_run_single_strategy(s) for s in strategy_instances],
