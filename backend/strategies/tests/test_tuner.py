@@ -1,8 +1,13 @@
 """Unit tests for the tuner primitives.
 
 These tests exercise the pure-Python plumbing (search space, scoring math,
-Optuna integration) without touching the engine. The engine-integration
-smoke test lives in :mod:`backend.backtest.tests` (F1).
+Optuna integration) without touching the engine.
+
+Task-18 migration note: the objective now drives the unified-shell
+:class:`~strategies._core.runners.backtest_runner.BacktestRunner` per trial
+rather than the legacy F1 :class:`WalkForwardRunner`. The fakes in this
+module now stand in for :class:`BacktestResult` (``_FakeResult``) rather
+than :class:`WalkForwardResult`. The scoring formula is unchanged.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from strategies._core.contracts import StrategyParams
 from tuner.objective import WalkForwardObjective
 from tuner.search import (
     Categorical,
@@ -106,14 +112,6 @@ class TestSearchSpace:
 # Objective scoring math                                                      #
 # --------------------------------------------------------------------------- #
 @dataclass
-class _FakeResult:
-    """Minimal stand-in for :class:`BacktestResult`."""
-
-    metrics: dict = field(default_factory=dict)
-    daily_returns: object = field(default_factory=lambda: _FakeSeries(n=252))
-
-
-@dataclass
 class _FakeSeries:
     n: int = 0
 
@@ -122,56 +120,32 @@ class _FakeSeries:
 
 
 @dataclass
-class _FakeWF:
-    """Minimal stand-in for :class:`WalkForwardResult`.
+class _FakeResult:
+    """Minimal stand-in for :class:`BacktestResult`.
 
-    Wave 5/7 made the objective read in-sample metrics by default
-    (tune_on="train"). Tests populate ``is_metrics`` (the scoring leg); the
-    OOS leg is kept as an empty-metrics placeholder so we catch any
-    regression that reintroduces the OOS peek.
+    Task-18 migration: the objective reads ``result.metrics`` and
+    ``result.daily_returns`` directly from :class:`BacktestResult` — no
+    WalkForwardResult wrapper. Tests populate ``metrics`` (the scoring
+    dict) and ``daily_returns`` (a sized-only stub sufficient for
+    turnover annualisation).
     """
 
-    is_metrics: dict
-    folds: list = field(default_factory=list)
-    n_days: int = 252
-
-    @property
-    def in_sample_result(self):
-        return _FakeResult(
-            metrics=self.is_metrics,
-            daily_returns=_FakeSeries(n=self.n_days),
-        )
-
-    @property
-    def out_of_sample_result(self):
-        return _FakeResult(
-            metrics={},
-            daily_returns=_FakeSeries(n=0),
-        )
-
-    @property
-    def aggregated_metrics(self):
-        return {}
+    metrics: dict = field(default_factory=dict)
+    daily_returns: object = field(default_factory=lambda: _FakeSeries(n=252))
 
 
 class _DummyProvider:
     pass
 
 
+class _DummyParams(StrategyParams):
+    """Bare StrategyParams subclass — tests exercise scoring, not params."""
+    pass
+
+
 class _DummyStrategy:
-    name = "dummy"
-    required_bars = ["daily"]
-    required_lookback_days = 1
-
-    def configure(self, p): ...
-
-    def universe(self, a, c): return []
-
-    def generate_signals(self, a, c): return []
-
-    def manage(self, a, c): return []
-
-    def on_fill(self, f, c): ...
+    """Minimal PARAMS_MODEL carrier; scoring tests never call the ABC."""
+    PARAMS_MODEL = _DummyParams
 
 
 def _obj(**overrides):
@@ -180,7 +154,6 @@ def _obj(**overrides):
         bar_provider=_DummyProvider(),
         start=date(2020, 1, 1),
         end=date(2020, 12, 31),
-        train_end=date(2020, 9, 30),
     )
     kwargs.update(overrides)
     return WalkForwardObjective(**kwargs)
@@ -191,84 +164,76 @@ class TestObjectiveScoring:
         """Sharpe 1.0 / low turnover / low DD -> no penalty."""
 
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.10},
-            n_days=252,
+        r = _FakeResult(
+            metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.10},
         )
-        score = obj._score_from_result(wf)
+        score = obj._score_from_result(r)
         assert score == pytest.approx(1.0)
 
     def test_penalised_high_turnover(self):
         """turnover_yr = 8.0 -> penalty = 0.05 * (8 - 5) = 0.15."""
 
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": 1.0, "turnover": 8.0, "max_drawdown": 0.10},
-            n_days=252,
+        r = _FakeResult(
+            metrics={"sharpe": 1.0, "turnover": 8.0, "max_drawdown": 0.10},
         )
-        score = obj._score_from_result(wf)
+        score = obj._score_from_result(r)
         assert score == pytest.approx(1.0 - 0.15)
 
     def test_penalised_deep_drawdown(self):
         """MDD = 0.40 -> penalty = 0.5 * (0.40 - 0.30) = 0.05."""
 
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.40},
-            n_days=252,
+        r = _FakeResult(
+            metrics={"sharpe": 1.0, "turnover": 2.0, "max_drawdown": 0.40},
         )
-        score = obj._score_from_result(wf)
+        score = obj._score_from_result(r)
         assert score == pytest.approx(1.0 - 0.05)
 
     def test_penalised_both_penalties(self):
         """Combined: turnover_yr=10, MDD=0.50 -> 0.05*5 + 0.5*0.20 = 0.35."""
 
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": 0.8, "turnover": 10.0, "max_drawdown": 0.50},
-            n_days=252,
+        r = _FakeResult(
+            metrics={"sharpe": 0.8, "turnover": 10.0, "max_drawdown": 0.50},
         )
-        score = obj._score_from_result(wf)
+        score = obj._score_from_result(r)
         expected = 0.8 - 0.05 * 5 - 0.5 * 0.20
         assert score == pytest.approx(expected)
 
     def test_sharpe_mode_ignores_penalties(self):
         obj = _obj(scoring="sharpe")
-        wf = _FakeWF(
-            is_metrics={"sharpe": 2.0, "turnover": 20.0, "max_drawdown": 0.80},
-            n_days=252,
+        r = _FakeResult(
+            metrics={"sharpe": 2.0, "turnover": 20.0, "max_drawdown": 0.80},
         )
-        assert obj._score_from_result(wf) == pytest.approx(2.0)
+        assert obj._score_from_result(r) == pytest.approx(2.0)
 
     def test_nan_sharpe_returns_neg_inf(self):
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": float("nan")},
-            n_days=252,
-        )
-        assert obj._score_from_result(wf) == -math.inf
+        r = _FakeResult(metrics={"sharpe": float("nan")})
+        assert obj._score_from_result(r) == -math.inf
 
     def test_turnover_annualisation(self):
         """Half-year backtest with cum turnover 3.0 -> annualised ~ 6.0."""
 
         obj = _obj()
-        wf = _FakeWF(
-            is_metrics={"sharpe": 1.0, "turnover": 3.0, "max_drawdown": 0.05},
-            n_days=126,  # half a trading year
+        r = _FakeResult(
+            metrics={"sharpe": 1.0, "turnover": 3.0, "max_drawdown": 0.05},
+            daily_returns=_FakeSeries(n=126),  # half a trading year
         )
         # turnover_yr = 3.0 * 252/126 = 6.0 -> penalty = 0.05 * (6-5) = 0.05
-        assert obj._score_from_result(wf) == pytest.approx(1.0 - 0.05)
+        assert obj._score_from_result(r) == pytest.approx(1.0 - 0.05)
 
     def test_failed_backtest_returns_neg_inf(self):
-        """If run_walkforward raises, __call__ returns -inf (never propagates)."""
+        """If _run_backtest raises, __call__ returns -inf (never propagates)."""
 
         obj = _obj()
 
         def boom(params):
             raise RuntimeError("engine failure")
 
-        obj._run_walkforward = boom  # type: ignore[assignment]
-        assert obj({"x": 1}) == -math.inf
+        obj._run_backtest = boom  # type: ignore[assignment]
+        assert obj({}) == -math.inf
 
     def test_invalid_scoring_raises(self):
         with pytest.raises(ValueError):

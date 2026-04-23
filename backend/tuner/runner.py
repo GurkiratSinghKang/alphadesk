@@ -31,8 +31,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from strategies.registry import get_strategy, list_names, load_all
-from tuner.objective import WalkForwardObjective
+from strategies._core.protocol import get_strategy as _new_get_strategy, list_strategies as _new_list_strategies
+from tuner.objective import WalkForwardObjective, search_space_from_params_model
 from tuner.search import ParameterSearch
 
 log = logging.getLogger("alphadesk.tuner.runner")
@@ -145,13 +145,33 @@ def build_parser() -> argparse.ArgumentParser:
 # Main                                                                        #
 # --------------------------------------------------------------------------- #
 def _resolve_strategy(name: str) -> type:
-    load_all()
+    """Resolve a strategy class via the NEW registry only.
+
+    Phase-2 reality: only migrated strategies expose ``PARAMS_MODEL`` and
+    can be driven by the new :class:`BacktestRunner`. Legacy-registry
+    names still exist but can't be tuned through this path until they're
+    ported in Phase 3.
+
+    Ensures ``strategies.pead`` is imported so its ``@register_strategy``
+    decorator populates the registry before we look it up.
+    """
+    # Import migrated strategies so @register_strategy side effects fire.
     try:
-        return get_strategy(name)
-    except KeyError as exc:
+        import strategies.pead  # noqa: F401
+    except Exception:
+        log.warning(
+            "Could not import strategies.pead for registry registration",
+            exc_info=True,
+        )
+
+    cls = _new_get_strategy(name)
+    if cls is None:
+        registered = sorted(m.name for m in _new_list_strategies())
         raise SystemExit(
-            f"Unknown strategy {name!r}. Registered: {list_names()}\n{exc}"
-        ) from None
+            f"Unknown strategy {name!r} (not on the new registry). "
+            f"Registered: {registered}"
+        )
+    return cls
 
 
 def _resolve_bar_provider() -> Any:
@@ -210,16 +230,17 @@ def run(
 
     strategy_cls = _resolve_strategy(strategy_name)
 
-    space_fn = getattr(strategy_cls, "search_space", None)
-    if space_fn is None:
+    params_model = getattr(strategy_cls, "PARAMS_MODEL", None)
+    if params_model is None:
         raise SystemExit(
-            f"Strategy {strategy_name!r} does not declare search_space(); "
+            f"Strategy {strategy_name!r} does not declare PARAMS_MODEL; "
             "nothing to tune."
         )
-    space = space_fn()
+    space = search_space_from_params_model(params_model)
     if not space:
         raise SystemExit(
-            f"Strategy {strategy_name!r}.search_space() is empty; nothing to tune."
+            f"Strategy {strategy_name!r}.PARAMS_MODEL.tune_space() is empty; "
+            "nothing to tune."
         )
 
     if bar_provider is None:
@@ -230,6 +251,7 @@ def run(
 
     objective = WalkForwardObjective(
         strategy_cls=strategy_cls,
+        params_model=params_model,
         bar_provider=bar_provider,
         start=start,
         end=end,

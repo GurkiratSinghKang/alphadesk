@@ -216,7 +216,10 @@ def main() -> int:
         on_result=_on_result,
     )
 
-    space = PEADStrategy.search_space()
+    # Task 18 migration: PEADStrategy no longer declares search_space();
+    # use the Pydantic PARAMS_MODEL.tune_space() via the tuner helper.
+    from backend.tuner.objective import search_space_from_params_model
+    space = search_space_from_params_model(PEADStrategy.PARAMS_MODEL)
     print(f"Search space dims: {sorted(space)}")
 
     search = ParameterSearch(

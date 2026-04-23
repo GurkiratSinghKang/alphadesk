@@ -1,7 +1,9 @@
-"""Walk-forward objective function for parameter search.
+"""Optuna objective for parameter search over the unified-shell BacktestRunner.
 
-:class:`WalkForwardObjective` wraps F1's :class:`WalkForwardRunner` and
-returns a single scalar that the Optuna study maximises. Two scoring modes:
+:class:`WalkForwardObjective` wraps a single-window
+:class:`~strategies._core.runners.backtest_runner.BacktestRunner` run per
+trial, returning a scalar that the Optuna study maximises. Two scoring
+modes, preserved byte-for-byte from the legacy F1 runner:
 
 - ``"penalised"`` (default) -- the composite score defined in the design
   spec section 8::
@@ -10,31 +12,29 @@ returns a single scalar that the Optuna study maximises. Two scoring modes:
               - 0.05 * max(0, turnover_yr - 5.0)
               - 0.5  * max(0, max_drawdown - 0.30)
 
-  This penalises strategies that churn more than 500% per year (turnover is
-  expressed as dollars traded divided by average equity, annualised) and
-  those that suffer drawdowns deeper than 30%.
+  This penalises strategies that churn more than 500% per year (turnover
+  is dollars traded / average equity, annualised) and those that suffer
+  drawdowns deeper than 30%. The new BacktestRunner does not yet compute
+  a turnover metric; until it does, ``turnover_yr`` falls back to 0 and
+  the turnover penalty is suppressed. The drawdown penalty is active.
 
-- ``"sharpe"`` -- returns raw OOS Sharpe, no penalties. Useful for sanity
+- ``"sharpe"`` -- returns raw Sharpe, no penalties. Useful for sanity
   checks and baseline comparisons.
 
-The objective never raises; a failed backtest (data missing, strategy crash,
-engine error) returns ``-math.inf`` so Optuna can move on to the next trial.
+The objective never raises; a failed backtest (provider error, strategy
+crash, invalid parameter combo caught by Pydantic) returns ``-math.inf``
+so Optuna can move on.
 
-Coordinating with F1 (walk-forward harness)
--------------------------------------------
+Walk-forward is the caller's concern
+------------------------------------
 
-Train/test leakage is the walk-forward harness's job, not ours. We simply
-call :meth:`WalkForwardRunner.run_train_test` (primary protocol: train
-2019-01 ... 2022-12, test 2023-01 ... 2024-12) or ``run_k_fold`` as the
-caller requested.
-
-By default (``tune_on="train"``) this objective scores trials on the
-TRAIN-window metrics of the returned :class:`WalkForwardResult`. The
-caller is then expected to perform a single authoritative OOS evaluation
-with the winning parameter set — that is the *only* time OOS metrics
-should influence a report. Opt into ``tune_on="test"`` only for
-debugging; tuning against OOS is structural selection-on-test and must
-not ship.
+The legacy F1 harness invoked :class:`WalkForwardRunner` inside the
+objective and exposed a ``tune_on`` flag to select IS vs OOS metrics.
+Under the new runner contract, walk-forward splitting is explicit — the
+caller runs the objective over a training window, picks the best params,
+then (and only then) evaluates on a held-out window. This objective does
+NOT introspect train/test legs; the ``tune_on`` kwarg is kept for API
+back-compat but is inert.
 """
 
 from __future__ import annotations
@@ -46,7 +46,10 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Callable, Literal, Mapping, Optional
 
-from backtest.types import BacktestResult
+from pydantic import ValidationError
+
+from strategies._core.contracts import BacktestConfig, BacktestResult, StrategyParams
+from strategies._core.runners.backtest_runner import BacktestRunner
 
 log = logging.getLogger("alphadesk.tuner.objective")
 
@@ -57,82 +60,71 @@ TRADING_DAYS = 252
 
 @dataclass
 class WalkForwardObjective:
-    """Callable Optuna objective that drives a walk-forward backtest.
+    """Callable Optuna objective that drives a single-window backtest.
+
+    Name retained for back-compat (the old class name is imported by
+    :mod:`tuner.runner`). Internally this runs one
+    :class:`~strategies._core.runners.backtest_runner.BacktestRunner`
+    per trial; walk-forward is the caller's concern (see module docstring).
 
     Parameters
     ----------
     strategy_cls:
-        The strategy class registered via :func:`register_strategy`.
+        A :class:`~strategies._core.protocol.Strategy` subclass. Must
+        declare ``PARAMS_MODEL`` (the Pydantic :class:`StrategyParams`
+        subclass whose fields define the search space).
     bar_provider:
-        Concrete :class:`BarProvider`. Required.
+        Concrete :class:`~strategies._core.providers.BarProvider`. Required.
     start, end:
-        Full date range for the walk-forward study.
-    train_end:
-        For the train/test protocol, the last calendar day in the training
-        window. If omitted, a 5-fold purged walk-forward is used instead
-        (``k_folds=5`` by default, override via ``k_folds``).
-    k_folds, purge_days:
-        Forwarded to :class:`WalkForwardConfig` when ``train_end`` is None.
+        Backtest window. The same window is used for every trial; the
+        caller is responsible for later evaluating the winner on a
+        held-out OOS window.
     scoring:
         ``"penalised"`` (default) or ``"sharpe"``.
-    turnover_threshold_annual:
-        Annualised turnover above this triggers the linear penalty.
-        Default 5.0 (i.e. 500%).
-    turnover_penalty_coef:
-        Multiplier on ``max(0, turnover_yr - threshold)``. Default 0.05.
-    drawdown_threshold:
-        Absolute max drawdown above this triggers the linear penalty.
-        Default 0.30 (30%).
-    drawdown_penalty_coef:
-        Multiplier on ``max(0, mdd - threshold)``. Default 0.5.
+    turnover_threshold_annual, turnover_penalty_coef,
+    drawdown_threshold, drawdown_penalty_coef:
+        Coefficients for the composite score. Defaults match the legacy
+        F1 formula byte-for-byte.
     starting_cash:
-        Engine starting cash. Defaults to ``Decimal("100000")``.
-    options_provider, earnings_provider, fundamentals_provider,
-    calendar_provider, cost_model:
-        Optional engine wiring; forwarded to :class:`WalkForwardRunner`.
+        Backtest starting cash. Defaults to ``Decimal("100000")``.
+    earnings_provider, fundamentals_provider:
+        Optional providers forwarded to :class:`BacktestRunner`.
+    params_model:
+        Override the :class:`StrategyParams` subclass used to validate
+        trial params. Defaults to ``strategy_cls.PARAMS_MODEL``.
     base_params:
-        Parameter dict merged below the trial-suggested params. Lets the
-        caller pin non-search knobs (e.g. risk-free rate) without threading
-        them through the search space.
+        Param dict merged below the trial-suggested params. Lets callers
+        pin non-search fields without threading them through the space.
     on_result:
-        Optional callback ``(params, wf_result, score)`` invoked after each
+        Optional callback ``(params, result, score)`` invoked after each
         trial. Used by the runner CLI to log progress.
     tune_on:
-        Which leg of a train/test walk-forward to score the trial on.
-
-        - ``"train"`` (default): read metrics from
-          ``in_sample_result.metrics``. This is the correct protocol —
-          hyperparameters are selected on the training window, then the
-          *caller* performs a single authoritative OOS evaluation after
-          tuning completes.
-        - ``"test"``: read metrics from ``out_of_sample_result.metrics``.
-          Selection-on-test; useful ONLY for backtest debugging and must
-          never ship to production. Every strategy tuned under this mode
-          reports an OOS Sharpe that is a max-of-N order statistic on
-          the very window it claims to have held out.
-
-        For k-fold walk-forward (``train_end=None``) this flag is ignored;
-        the aggregated cross-validated metrics are used.
+        Back-compat kwarg (legacy API accepted ``"train"``/``"test"``).
+        Inert under the new runner — the objective only sees a single
+        window. Validation is kept so typos fail loudly.
     """
 
     strategy_cls: type
     bar_provider: Any
     start: date
     end: date
-    train_end: Optional[date] = None
-    k_folds: int = 5
-    purge_days: int = 60
     scoring: str = "penalised"
     turnover_threshold_annual: float = 5.0
     turnover_penalty_coef: float = 0.05
     drawdown_threshold: float = 0.30
     drawdown_penalty_coef: float = 0.5
     starting_cash: Decimal = Decimal("100000")
-    options_provider: Any = None
     earnings_provider: Any = None
     fundamentals_provider: Any = None
+    # Legacy WF-harness knobs — retained for API compatibility with the
+    # existing tuner/runner CLI but inert under the new runner path.
+    train_end: Optional[date] = None
+    k_folds: int = 5
+    purge_days: int = 60
+    options_provider: Any = None
     calendar_provider: Any = None
     cost_model: Any = None
+    params_model: Optional[type[StrategyParams]] = None
     base_params: Mapping[str, Any] | None = None
     on_result: Optional[Callable[[dict, Any, float], None]] = None
     tune_on: Literal["train", "test"] = "train"
@@ -147,90 +139,101 @@ class WalkForwardObjective:
             raise ValueError(
                 f"tune_on={self.tune_on!r}; expected 'train' or 'test'."
             )
+        if self.params_model is None:
+            pm = getattr(self.strategy_cls, "PARAMS_MODEL", None)
+            if pm is None:
+                raise ValueError(
+                    f"{self.strategy_cls.__name__} does not declare PARAMS_MODEL; "
+                    "pass params_model= explicitly."
+                )
+            self.params_model = pm
 
     # Main entry ----------------------------------------------------------- #
     def __call__(self, params: Mapping[str, Any]) -> float:
-        """Run the walk-forward backtest with ``params`` and return a score.
+        """Run the backtest with ``params`` and return a score.
 
-        Never raises; failures map to ``-math.inf``.
+        Never raises; invalid params (ValidationError from Pydantic) and
+        backtest failures both map to ``-math.inf`` so Optuna moves on.
         """
 
         merged = dict(self.base_params or {})
         merged.update(params)
 
+        # Build the Pydantic params instance. Extra-forbid + frozen
+        # StrategyParams means typos, out-of-range values, and unknown
+        # fields all raise ValidationError here.
         try:
-            wf_result = self._run_walkforward(merged)
-        except Exception:
-            log.exception(
-                "walk-forward backtest failed for params=%s; returning -inf.",
-                merged,
+            validated: StrategyParams = self.params_model(**merged)
+        except ValidationError as exc:
+            log.warning(
+                "trial params failed validation: %s — returning -inf", exc,
             )
             return -math.inf
 
-        score = self._score_from_result(wf_result)
+        try:
+            result = self._run_backtest(validated)
+        except Exception:
+            log.exception(
+                "backtest failed for params=%s; returning -inf.", merged,
+            )
+            return -math.inf
+
+        score = self._score_from_result(result)
 
         if self.on_result is not None:
             try:
-                self.on_result(dict(merged), wf_result, score)
+                self.on_result(dict(merged), result, score)
             except Exception:
                 log.exception("on_result callback raised; continuing.")
 
         return score
 
     # Sub-tasks ------------------------------------------------------------ #
-    def _run_walkforward(self, params: Mapping[str, Any]) -> Any:
-        """Invoke the F1 walk-forward runner with the given parameter set."""
+    def _run_backtest(self, params: StrategyParams) -> BacktestResult:
+        """Drive the unified-shell :class:`BacktestRunner` for one trial."""
 
-        # Deferred import so the objective module can still be imported (and
-        # tested) in environments that haven't yet installed the engine's
-        # heavy dependencies (pandas, numpy are already required but engine
-        # features like cost models may pull additional packages).
-        from backtest.walkforward import (
-            WalkForwardConfig,
-            WalkForwardRunner,
-        )
-
-        cfg = WalkForwardConfig(
+        strategy = self.strategy_cls()
+        cfg = BacktestConfig(
             start=self.start,
             end=self.end,
-            train_end=self.train_end,
-            k_folds=self.k_folds if self.train_end is None else 0,
-            purge_days=self.purge_days,
             starting_cash=self.starting_cash,
         )
-        runner = WalkForwardRunner(
-            strategy_factory=self.strategy_cls,
-            bar_provider=self.bar_provider,
+        runner = BacktestRunner(
+            strategy=strategy,
             config=cfg,
-            cost_model=self.cost_model,
-            options_provider=self.options_provider,
+            bar_provider=self.bar_provider,
             earnings_provider=self.earnings_provider,
             fundamentals_provider=self.fundamentals_provider,
-            calendar_provider=self.calendar_provider,
-            strategy_params=dict(params),
         )
-        if self.train_end is not None:
-            return runner.run_train_test()
-        return runner.run_k_fold()
+        return runner.run(params)
 
-    def _score_from_result(self, wf_result: Any) -> float:
-        """Pull the relevant metrics out of a walk-forward result."""
+    def _score_from_result(self, result: BacktestResult) -> float:
+        """Pull metrics from a :class:`BacktestResult` and apply the score formula.
 
-        metrics = self._extract_metrics(wf_result)
+        Preserves the legacy penalised formula byte-for-byte:
+
+            score = sharpe
+                    - 0.05 * max(0, turnover_yr - 5.0)
+                    - 0.5  * max(0, max_drawdown - 0.30)
+        """
+
+        metrics = dict(result.metrics or {})
         if not metrics:
-            log.warning("walk-forward result had no metrics; returning -inf.")
+            log.warning("backtest result had no metrics; returning -inf.")
             return -math.inf
 
-        sharpe_val = float(metrics.get("sharpe", metrics.get("sharpe_mean", 0.0)))
+        sharpe_val = float(metrics.get("sharpe", 0.0))
         if math.isnan(sharpe_val) or math.isinf(sharpe_val):
             return -math.inf
 
         if self.scoring == "sharpe":
             return sharpe_val
 
-        # Penalised composite
-        mdd = float(metrics.get("max_drawdown", metrics.get("max_drawdown_mean", 0.0)))
-        turnover_annual = self._annualised_turnover(wf_result, metrics)
+        # Penalised composite. ``max_drawdown`` from the new runner is
+        # signed (negative number); legacy code used ``abs(...)``.
+        mdd_raw = float(metrics.get("max_drawdown", 0.0))
+        mdd = abs(mdd_raw)
+        turnover_annual = self._annualised_turnover(result, metrics)
 
         turnover_pen = self.turnover_penalty_coef * max(
             0.0, turnover_annual - self.turnover_threshold_annual
@@ -239,105 +242,86 @@ class WalkForwardObjective:
         score = sharpe_val - turnover_pen - dd_pen
         log.debug(
             "score=%.4f sharpe=%.4f turnover_yr=%.3f mdd=%.3f penalties=(%.4f, %.4f)",
-            score,
-            sharpe_val,
-            turnover_annual,
-            mdd,
-            turnover_pen,
-            dd_pen,
+            score, sharpe_val, turnover_annual, mdd, turnover_pen, dd_pen,
         )
         return score
 
     # Helpers -------------------------------------------------------------- #
-    def _extract_metrics(self, wf_result: Any) -> dict[str, float]:
-        """Pull the fitness-signal metrics dict from a :class:`WalkForwardResult`.
+    def _annualised_turnover(
+        self, result: BacktestResult, metrics: dict[str, float],
+    ) -> float:
+        """Annualise cumulative turnover when the runner exposes it.
 
-        Selection is governed by ``self.tune_on``:
-
-        * ``tune_on="train"`` (default, correct protocol):
-          train/test -> ``in_sample_result.metrics`` (the TRAIN window).
-          If an in-sample leg is unavailable, fall back to
-          ``out_of_sample_result.metrics`` so callers with older fake
-          result objects (e.g. unit-test fixtures) still work.
-        * ``tune_on="test"`` (debug only, selection-on-test):
-          train/test -> ``out_of_sample_result.metrics``.
-
-        For k-fold walk-forward there is no IS/OOS split; both modes
-        fall through to the aggregated cross-validated metrics.
+        The new :class:`BacktestRunner._compute_metrics` does not yet
+        compute turnover — the metric is a Phase-3 TODO. Falling back to
+        0 disables the turnover penalty but keeps the drawdown penalty
+        active, which is the minimum the legacy formula needs.
         """
 
-        is_result: BacktestResult | None = getattr(
-            wf_result, "in_sample_result", None
-        )
-        oos: BacktestResult | None = getattr(
-            wf_result, "out_of_sample_result", None
-        )
-        aggregated = dict(getattr(wf_result, "aggregated_metrics", {}) or {})
-
-        if self.tune_on == "train":
-            # Tripwire: never fall back to OOS under tune_on="train" — that reintroduces the peek Wave 5 removed.
-            if is_result is None or not is_result.metrics:
-                return {}
-            primary = is_result
-        else:
-            primary = oos
-
-        if primary is not None and primary.metrics:
-            merged = dict(primary.metrics)
-            merged.update(aggregated)
-            return merged
-        return aggregated
-
-    # Back-compat alias -- kept for any caller that still looks for the old
-    # method name. Returns metrics according to the configured ``tune_on``.
-    def _extract_oos_metrics(self, wf_result: Any) -> dict[str, float]:
-        return self._extract_metrics(wf_result)
-
-    def _annualised_turnover(self, wf_result: Any, metrics: dict[str, float]) -> float:
-        """Annualise cumulative turnover.
-
-        ``backend.backtest.metrics.turnover`` returns cumulative
-        ``sum(|notional|) / mean(equity)`` over the backtest window. We
-        annualise by scaling with ``252 / n_trading_days``. This matches the
-        design-spec phrasing "turnover_yr".
-        """
-
-        cum_turnover = float(
-            metrics.get("turnover", metrics.get("turnover_mean", 0.0))
-        )
+        cum_turnover = float(metrics.get("turnover", 0.0))
         if cum_turnover <= 0:
             return 0.0
 
-        n_days = self._count_days(wf_result)
+        n_days = self._count_days(result)
         if n_days <= 0:
             return cum_turnover
         return cum_turnover * (TRADING_DAYS / n_days)
 
-    def _count_days(self, wf_result: Any) -> int:
-        """Number of bars in the window used for scoring (annualisation)."""
+    @staticmethod
+    def _count_days(result: BacktestResult) -> int:
+        """Trading-day count used for turnover annualisation."""
+        returns = getattr(result, "daily_returns", None)
+        if returns is None:
+            return 0
+        try:
+            return int(len(returns))
+        except TypeError:
+            return 0
 
-        is_result: BacktestResult | None = getattr(
-            wf_result, "in_sample_result", None
-        )
-        oos: BacktestResult | None = getattr(
-            wf_result, "out_of_sample_result", None
-        )
-        if self.tune_on == "train":
-            # Tripwire: never fall back to OOS under tune_on="train" — that reintroduces the peek Wave 5 removed.
-            if is_result is None or getattr(is_result, "daily_returns", None) is None:
-                return 0
-            primary = is_result
+
+# --------------------------------------------------------------------------- #
+# tune_space() -> SearchSpec translation                                      #
+# --------------------------------------------------------------------------- #
+def search_space_from_params_model(
+    params_model: type[StrategyParams],
+) -> dict[str, Any]:
+    """Translate a ``StrategyParams.tune_space()`` dict into :mod:`tuner.search`.
+
+    Returns ``dict[str, SearchSpec]`` suitable for
+    :class:`~tuner.search.ParameterSearch.space`.
+    """
+
+    from tuner.search import Categorical, FloatRange, IntRange
+
+    raw = params_model.tune_space()
+    space: dict[str, Any] = {}
+    for name, cfg in raw.items():
+        t = cfg.get("type")
+        if t == "float":
+            space[name] = FloatRange(
+                low=float(cfg["low"]),
+                high=float(cfg["high"]),
+                log=bool(cfg.get("log", False)),
+                step=cfg.get("step"),
+            )
+        elif t == "int":
+            space[name] = IntRange(
+                low=int(cfg["low"]),
+                high=int(cfg["high"]),
+                step=int(cfg.get("step", 1)),
+            )
+        elif t == "categorical":
+            space[name] = Categorical(cfg["choices"])
         else:
-            primary = oos
-
-        if primary is not None and getattr(primary, "daily_returns", None) is not None:
-            return int(len(primary.daily_returns))
-        folds = getattr(wf_result, "folds", None) or []
-        total = 0
-        for f in folds:
-            if getattr(f, "result", None) is not None:
-                total += int(len(f.result.daily_returns))
-        return total
+            raise ValueError(
+                f"Unknown tune-space entry type {t!r} on param {name!r}; "
+                "expected 'float', 'int', or 'categorical'."
+            )
+    return space
 
 
-__all__ = ["WalkForwardObjective", "TRADING_DAYS"]
+__all__ = [
+    "WalkForwardObjective",
+    "TRADING_DAYS",
+    "search_space_from_params_model",
+]
