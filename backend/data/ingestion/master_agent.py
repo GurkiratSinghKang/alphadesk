@@ -106,14 +106,13 @@ class MasterAgent:
         if cls._STRATEGY_LIMITS_CACHE is not None:
             return cls._STRATEGY_LIMITS_CACHE
         try:
-            from strategies.registry import load_all, list_strategies
-            load_all()  # idempotent — ensures registry is populated
+            # Task 19: switched from the legacy ``strategies.registry`` (now
+            # nearly empty — the 12 unmigrated strategies fail to import
+            # post-base.py-deletion) to ``_core.protocol``. Phase 3 migrates
+            # strategies one-by-one; as each lands, the equal-weight cap
+            # rebalances automatically.
+            from strategies._core.protocol import list_strategies
             metas = list_strategies()
-            # Filter out excluded categories (smoke, etc.) to match
-            # strategy_adapter.build_all_strategies(). This prevents the
-            # off-by-one where N=13 (incl. buy_and_hold_spy) but only 12
-            # strategies actually ran and each got 1/13 ≈ 7.69% with one
-            # slot reserved for a never-run name.
             names = [
                 m.name for m in metas
                 if m.category not in cls.EXCLUDE_FROM_LIMITS
@@ -805,12 +804,13 @@ class MasterAgent:
         if strategy in self.MOMENTUM_GATE_SKIP_STRATEGIES:
             return True
         try:
-            # Import here to avoid a hard dependency at module-import time
-            # (the registry may not be populated when this module loads in
-            # tests that don't exercise it).
-            from strategies.registry import get_meta
+            # Task 19: switched to ``_core.protocol.get_meta`` — the legacy
+            # registry is empty post-``strategies/base.py``-deletion.
+            from strategies._core.protocol import get_meta
             meta = get_meta(strategy)
-        except KeyError:
+        except Exception:
+            meta = None
+        if meta is None:
             if strategy not in self._MOMENTUM_GATE_WARNED:
                 self._MOMENTUM_GATE_WARNED.add(strategy)
                 logger.warning(

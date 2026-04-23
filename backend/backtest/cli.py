@@ -1,198 +1,73 @@
-"""Command-line entrypoint for the backtest engine.
+"""Legacy compatibility dispatcher. Forwards ``--strategy=NAME`` to
+``python -m strategies.NAME`` so existing shell scripts keep working.
 
-    python -m backend.backtest --strategy=NAME --start=YYYY-MM-DD --end=YYYY-MM-DD
+New code should invoke per-strategy CLIs directly::
 
-Flags:
+    python -m strategies.pead backtest --from ... --to ...
 
-    --strategy       strategy registry key (e.g. "rsi2", "momentum_quality")
-    --start / --end  ISO dates (inclusive)
-    --cash           starting equity (default 100000)
-    --walk-forward   run a 5-fold purged walk-forward instead of a single pass
-    --train-end      when set, run a train/test split with this OOS boundary
-    --k-folds        K-fold count (default 5, used with --walk-forward)
-    --purge-days     purge window (default 60)
-    --benchmark      symbol for benchmark comparison (e.g. SPY)
-    --output-dir     where to write reports (default ./backtest_reports)
-    --params         JSON string of strategy params
-    --seed           RNG seed (default 42)
-
-The strategy is resolved through ``backend.strategies.registry.get_strategy``
-when that module exists (team F4). Until it lands, the CLI reports a helpful
-error and exits.
+This module used to host the monolithic ``BacktestEngine``-driven CLI. That
+engine (``backend/backtest/engine_legacy.py``) was retired in Task 19 of the
+Strategy SOTA Foundation plan; each strategy now owns its own ``__main__``
+module and drives the shared :class:`strategies._core.runners.BacktestRunner`
+directly. This file survives only to keep the ``python -m backend.backtest
+--strategy=X ...`` invocation working during the transition.
 """
-
 from __future__ import annotations
 
 import argparse
-import json
-import logging
+import importlib
 import sys
-from datetime import date, datetime
-from decimal import Decimal
-from pathlib import Path
-from typing import Any, Callable, Optional
-
-from backtest.engine_legacy import BacktestEngine, EngineConfig
-from backtest.report import ReportWriter
-from backtest.walkforward import WalkForwardConfig, WalkForwardRunner
-
-logger = logging.getLogger("alphadesk.backtest.cli")
 
 
-def _parse_date(s: str) -> date:
-    return datetime.strptime(s, "%Y-%m-%d").date()
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m backend.backtest",
+        description="Legacy compat dispatcher — forwards to strategies.<name>.",
+    )
+    parser.add_argument("--strategy", required=True)
+    args, remaining = parser.parse_known_args()
 
-
-def _resolve_strategy_factory(name: str) -> Callable[[], Any]:
-    """Return a callable that returns a fresh strategy instance."""
-
-    try:  # pragma: no cover - optional dependency on team F4
-        from strategies.registry import get_strategy  # type: ignore
-
-        def factory() -> Any:
-            return get_strategy(name)
-
-        return factory
-    except Exception:
-        logger.debug(
-            "backtest cli: strategies.registry import failed — "
-            "factory will raise a helpful RuntimeError when invoked",
-            exc_info=True,
+    # Each migrated strategy ships its own ``__main__.py`` wired to the
+    # shared CLI helper in ``strategies._core.cli``. Importing the
+    # ``__main__`` module triggers strategy registration as a side effect;
+    # we then resolve ``run_cli`` + the concrete strategy class and invoke
+    # the ``backtest`` subcommand with the forwarded args.
+    try:
+        main_module = importlib.import_module(
+            f"strategies.{args.strategy}.__main__"
         )
-
-        def factory() -> Any:  # pragma: no cover
-            raise RuntimeError(
-                "Strategy registry not available yet. Team F4 is building "
-                "`backend/strategies/registry.py`. Once it exists, the CLI "
-                "will resolve strategies via `get_strategy(name)`."
-            )
-
-        return factory
-
-
-def _resolve_bar_provider():
-    """Pick the default bar provider from team F2 if available."""
-
-    try:  # pragma: no cover
-        from data.providers.alpaca import AlpacaBarProvider  # type: ignore
-
-        return AlpacaBarProvider()
-    except Exception:
-        logger.debug("backtest cli: AlpacaBarProvider unavailable", exc_info=True)
-        return None
-
-
-def _resolve_extra_providers() -> dict[str, Any]:
-    providers: dict[str, Any] = {}
-    try:  # pragma: no cover
-        from data.providers.polygon import PolygonOptionsProvider  # type: ignore
-
-        providers["options_provider"] = PolygonOptionsProvider()
-    except Exception:
-        logger.debug("backtest cli: PolygonOptionsProvider unavailable", exc_info=True)
-    try:  # pragma: no cover
-        from data.providers.fmp import (  # type: ignore
-            FmpEarningsProvider,
-            FmpFundamentalsProvider,
-        )
-
-        providers["earnings_provider"] = FmpEarningsProvider()
-        providers["fundamentals_provider"] = FmpFundamentalsProvider()
-    except Exception:
-        logger.debug("backtest cli: FMP providers unavailable", exc_info=True)
-    try:  # pragma: no cover
-        from data.calendar import UsMarketCalendar  # type: ignore
-
-        providers["calendar_provider"] = UsMarketCalendar()
-    except Exception:
-        logger.debug("backtest cli: UsMarketCalendar unavailable", exc_info=True)
-    return providers
-
-
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="backend.backtest", description=__doc__)
-    p.add_argument("--strategy", required=True)
-    p.add_argument("--start", required=True, type=_parse_date)
-    p.add_argument("--end", required=True, type=_parse_date)
-    p.add_argument("--cash", type=Decimal, default=Decimal("100000"))
-    p.add_argument("--walk-forward", action="store_true")
-    p.add_argument("--train-end", type=_parse_date, default=None)
-    p.add_argument("--k-folds", type=int, default=5)
-    p.add_argument("--purge-days", type=int, default=60)
-    p.add_argument("--benchmark", type=str, default=None)
-    p.add_argument("--output-dir", type=Path, default=Path("./backtest_reports"))
-    p.add_argument("--params", type=str, default="{}", help="JSON dict")
-    p.add_argument("--seed", type=int, default=42)
-    return p
-
-
-def main(argv: Optional[list[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
-
-    strategy_factory = _resolve_strategy_factory(args.strategy)
-    bar_provider = _resolve_bar_provider()
-    if bar_provider is None:
+    except ModuleNotFoundError as exc:
         print(
-            "error: no bar provider available. Team F2 is building "
-            "`backend/data/providers/`. Provide one via the Python API "
-            "or wait for the data team to land.",
+            f"error: strategy {args.strategy!r} has no __main__ module — "
+            f"has it been migrated onto the new shell? ({exc})",
             file=sys.stderr,
         )
         return 2
 
-    extra = _resolve_extra_providers()
-    params = json.loads(args.params) if args.params else {}
-
-    if args.walk_forward or args.train_end is not None:
-        wf_cfg = WalkForwardConfig(
-            start=args.start,
-            end=args.end,
-            train_end=args.train_end,
-            k_folds=args.k_folds,
-            purge_days=args.purge_days,
-            starting_cash=args.cash,
-            benchmark=args.benchmark,
-            seed=args.seed,
+    run_cli = getattr(main_module, "run_cli", None)
+    strategy_cls_name = None
+    strategy_cls = None
+    # Each strategy's __main__ imports exactly one Strategy subclass from
+    # its sibling ``strategy`` module. Find it by scanning the module
+    # namespace for the first class with a ``META`` attribute matching the
+    # CLI-requested name.
+    for attr in vars(main_module).values():
+        meta = getattr(attr, "META", None)
+        if meta is not None and getattr(meta, "name", None) == args.strategy:
+            strategy_cls = attr
+            strategy_cls_name = attr.__name__
+            break
+    if strategy_cls is None or run_cli is None:
+        print(
+            f"error: could not resolve run_cli + strategy class from "
+            f"strategies.{args.strategy}.__main__. This dispatcher expects "
+            "each strategy's __main__ to import its class + run_cli.",
+            file=sys.stderr,
         )
-        runner = WalkForwardRunner(
-            strategy_factory=strategy_factory,
-            bar_provider=bar_provider,
-            config=wf_cfg,
-            strategy_params=params,
-            **extra,
-        )
-        if args.train_end is not None:
-            wf = runner.run_train_test()
-        else:
-            wf = runner.run_k_fold()
-        writer = ReportWriter(args.output_dir)
-        if wf.out_of_sample_result is not None:
-            writer.write(wf.out_of_sample_result, name=f"{args.strategy}_oos")
-        if wf.in_sample_result is not None:
-            writer.write(wf.in_sample_result, name=f"{args.strategy}_is")
-        for fr in wf.folds:
-            writer.write(fr.result, name=f"{args.strategy}_fold{fr.fold}")
-        print(json.dumps(wf.aggregated_metrics, default=str, indent=2))
-        return 0
+        return 2
 
-    engine = BacktestEngine(
-        strategy=strategy_factory(),
-        bar_provider=bar_provider,
-        config=EngineConfig(
-            start=args.start,
-            end=args.end,
-            starting_cash=args.cash,
-            benchmark=args.benchmark,
-            seed=args.seed,
-        ),
-        strategy_params=params,
-        **extra,
-    )
-    result = engine.run()
-    writer = ReportWriter(args.output_dir)
-    writer.write(result, name=args.strategy)
-    print(json.dumps(result.metrics, default=str, indent=2))
-    return 0
+    sys.argv = [f"strategies.{args.strategy}", "backtest", *remaining]
+    return run_cli(strategy_cls)
 
 
 if __name__ == "__main__":

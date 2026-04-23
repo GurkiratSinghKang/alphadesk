@@ -36,12 +36,59 @@ import importlib
 import logging
 import pkgutil
 import sys
-from dataclasses import replace
-from typing import Callable, TypeVar
-
-from strategies.base import Strategy, StrategyMeta
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Protocol, TypeVar, runtime_checkable
 
 log = logging.getLogger("alphadesk.strategies.registry")
+
+
+# --------------------------------------------------------------------------- #
+# Legacy Strategy protocol + StrategyMeta                                     #
+# --------------------------------------------------------------------------- #
+# These used to live in ``backend/strategies/base.py``, which was deleted in
+# Task 19 of the Strategy SOTA Foundation plan. The new ABC lives in
+# :mod:`strategies._core.protocol` — migrated strategies (pead, …) register
+# themselves there. This legacy registry survives only so the handful of
+# framework callers that still walk it (notably ``MasterAgent`` for its
+# ``MOMENTUM_GATE_SKIP_CATEGORIES`` lookup) keep working during Phase 2 /
+# Phase 3. The Strategy protocol below is a pure duck-type; no strategy
+# currently satisfies it post-Task-19 (all 13 legacy ``strategy.py`` files
+# import from the deleted ``strategies.base``), so :func:`load_all` logs and
+# skips every subpackage. The decorator, dict, and listing helpers remain
+# safe: they handle an empty registry cleanly.
+@dataclass(frozen=True)
+class StrategyMeta:
+    """Legacy descriptive metadata attached to a strategy by the decorator.
+
+    Kept in the framework surface so tests and ``MasterAgent`` can compare
+    categories without reaching into the new ``_core`` package.
+    """
+
+    name: str
+    category: str = "equity"
+    required_bars: tuple[str, ...] = ("daily",)
+    required_lookback_days: int = 250
+    min_universe_size: int = 1
+    supports_shorts: bool = False
+    supports_options: bool = False
+    description: str = ""
+    kind: str = "autonomous"
+
+
+@runtime_checkable
+class Strategy(Protocol):
+    """Legacy strategy protocol — duck-typed. See ``_core.protocol.Strategy``
+    for the post-migration ABC."""
+
+    name: str
+    required_bars: list[str]
+    required_lookback_days: int
+
+    def configure(self, params: Any) -> None: ...
+    def universe(self, asof: Any, ctx: Any) -> Any: ...
+    def generate_signals(self, asof: Any, ctx: Any) -> Any: ...
+    def on_fill(self, fill: Any, ctx: Any) -> None: ...
+    def manage(self, asof: Any, ctx: Any) -> Any: ...
 
 T = TypeVar("T")
 

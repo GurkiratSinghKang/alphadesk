@@ -1,17 +1,18 @@
 """Strategies package — decorator-registered strategy subpackages.
 
-All strategies live in their own subpackage under ``backend/strategies/``
-(e.g. ``backend.strategies.rsi2_reversal``) and register themselves via the
-:mod:`backend.strategies.registry` decorator. The legacy ``BaseStrategy``
-ABC and its single-file strategy modules have been removed — use the
-:class:`backend.strategies.base.Strategy` protocol for new work.
+All migrated strategies live under ``backend/strategies/<name>/`` and
+register themselves via :func:`strategies._core.protocol.register_strategy`.
+The legacy ``BaseStrategy`` ABC, its single-file modules, and
+``strategies/base.py`` were removed in Task 19 of the Strategy SOTA
+Foundation plan. Unmigrated strategy packages (Phase 3 work) still import
+from the deleted ``strategies.base`` and will fail to load — that is
+expected and absorbed by :func:`strategies.registry.load_all`.
 
 Public lookup:
 
-    from strategies.registry import load_all, get_strategy
+    from strategies._core.protocol import list_strategies, get_strategy
 
-    load_all()
-    cls = get_strategy("rsi2_reversal")
+    cls = get_strategy("pead")
 """
 
 from __future__ import annotations

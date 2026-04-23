@@ -1,45 +1,17 @@
-"""AlphaDesk backtest engine.
+"""AlphaDesk backtest package — legacy.
 
-Event-driven, bar-by-bar backtester with walk-forward support. Supports equities
-and multi-leg options. Money in ``Decimal``, ratios in ``float``.
+The legacy bar-by-bar backtester (``backend.backtest.engine_legacy``) was
+retired in Task 19 of the Strategy SOTA Foundation plan. The new shell
+lives under :mod:`strategies._core.runners`; each strategy owns its own
+``__main__`` CLI.
 
-Public surface:
+This package now exists only to support two legacy entry points:
 
-    from backtest.types import Bar, Signal, Fill, Position, Trade, Context, BacktestResult
-    from backtest.types import OrderType, TimeInForce, Side
-    from backtest.portfolio import Portfolio
-    from backtest.execution import ExecutionSimulator
-    from backtest.costs import CostModel, DefaultCostModel
-    from backtest.engine_legacy import BacktestEngine
-    from backtest.metrics import summary_dict
-    from backtest.walkforward import WalkForwardRunner
-    from backtest.report import ReportWriter
+* ``python -m backend.backtest --strategy=NAME ...`` — dispatches to the
+  per-strategy ``__main__`` module (see :mod:`backend.backtest.cli`).
+* ``backtest.walkforward`` / ``backtest.portfolio`` / ``backtest.execution``
+  / ``backtest.costs`` / ``backtest.report`` / ``backtest.metrics`` —
+  retained so existing in-package tests can still import them. They are
+  **not** part of the post-Task-19 public surface; new code must use the
+  ``strategies._core`` shell instead.
 """
-
-from backtest.types import (
-    Bar,
-    Fill,
-    Signal,
-    Position,
-    OptionLeg,
-    Trade,
-    Context,
-    BacktestResult,
-    OrderType,
-    TimeInForce,
-    Side,
-)
-
-__all__ = [
-    "Bar",
-    "Fill",
-    "Signal",
-    "Position",
-    "OptionLeg",
-    "Trade",
-    "Context",
-    "BacktestResult",
-    "OrderType",
-    "TimeInForce",
-    "Side",
-]
