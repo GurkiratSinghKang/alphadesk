@@ -99,15 +99,23 @@ def test_on_fill_default_noop():
 
 
 def test_list_strategies_returns_all_registered():
-    _REGISTRY.clear()
+    """Save-and-restore _REGISTRY so this test doesn't nuke production
+    strategy registrations (pead, earnings-options-play, etc.) in a
+    full-suite run."""
+    saved = dict(_REGISTRY)
+    try:
+        _REGISTRY.clear()
 
-    @register_strategy(StrategyMeta(name="alpha"))
-    class A(DummyStrategy):
-        pass
+        @register_strategy(StrategyMeta(name="alpha"))
+        class A(DummyStrategy):
+            pass
 
-    @register_strategy(StrategyMeta(name="beta"))
-    class B(DummyStrategy):
-        pass
+        @register_strategy(StrategyMeta(name="beta"))
+        class B(DummyStrategy):
+            pass
 
-    names = {m.name for m in list_strategies()}
-    assert {"alpha", "beta"}.issubset(names)
+        names = {m.name for m in list_strategies()}
+        assert {"alpha", "beta"}.issubset(names)
+    finally:
+        _REGISTRY.clear()
+        _REGISTRY.update(saved)
