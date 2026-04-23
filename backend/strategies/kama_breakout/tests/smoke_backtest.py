@@ -78,7 +78,7 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    from backtest.engine import BacktestEngine, EngineConfig
+    from backtest.engine_legacy import BacktestEngine, EngineConfig
     from data.providers.alpaca import AlpacaBarProvider
     from strategies.kama_breakout.strategy import KamaBreakout
 

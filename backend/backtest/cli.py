@@ -32,7 +32,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from backtest.engine import BacktestEngine, EngineConfig
+from backtest.engine_legacy import BacktestEngine, EngineConfig
 from backtest.report import ReportWriter
 from backtest.walkforward import WalkForwardConfig, WalkForwardRunner
 

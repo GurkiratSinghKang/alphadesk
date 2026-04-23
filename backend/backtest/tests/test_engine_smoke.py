@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.engine import BacktestEngine, EngineConfig
+from backtest.engine_legacy import BacktestEngine, EngineConfig
 from backtest.types import (
     Context,
     OrderType,

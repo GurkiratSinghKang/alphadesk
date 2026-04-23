@@ -10,7 +10,7 @@ Public surface:
     from backtest.portfolio import Portfolio
     from backtest.execution import ExecutionSimulator
     from backtest.costs import CostModel, DefaultCostModel
-    from backtest.engine import BacktestEngine
+    from backtest.engine_legacy import BacktestEngine
     from backtest.metrics import summary_dict
     from backtest.walkforward import WalkForwardRunner
     from backtest.report import ReportWriter

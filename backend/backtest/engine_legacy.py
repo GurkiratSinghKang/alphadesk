@@ -1,4 +1,9 @@
-"""Event-driven backtest engine.
+"""Event-driven backtest engine (LEGACY — scheduled for removal in Task 19).
+
+This module is preserved during Phase 2 of the Strategy SOTA Foundation
+migration so the parity harness (Task 16 — ``backend/tests/test_pead_parity.py``)
+can verify that :class:`strategies._core.runners.BacktestRunner` produces
+results matching this implementation before Task 19 deletes it.
 
 Bar-by-bar loop:
 

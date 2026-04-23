@@ -109,7 +109,10 @@ class BacktestRunner:
             next_asof = trading_days[i + 1] if i + 1 < len(trading_days) else None
             if next_asof is not None and result.signals:
                 next_bars = self._next_bars(symbols, next_asof)
-                fills = self._executor.fill(result.signals, next_bars, next_asof)
+                sized_signals = self._size_signals(
+                    result.signals, next_bars, bars_window, asof,
+                )
+                fills = self._executor.fill(sized_signals, next_bars, next_asof)
                 for fill in fills:
                     self._portfolio.apply_fill(fill)
                     state = {**state, **self._strategy.on_fill(fill, state)}
@@ -148,6 +151,79 @@ class BacktestRunner:
             except KeyError:
                 continue
         return result
+
+    def _size_signals(
+        self,
+        signals,
+        next_bars: dict[str, pd.Series],
+        bars_window: pd.DataFrame,
+        asof: date,
+    ):
+        """Translate ``target_weight`` signals into sized ``quantity`` signals.
+
+        Mirrors the legacy engine's ``_queue_signal`` sizing rule:
+            target_qty = floor(equity * weight / price)
+            delta = target_qty - current_qty
+        so emitted signals carry the signed delta as ``quantity`` while
+        preserving their other fields (symbol, order_type, tag, ...). Signals
+        that already carry ``quantity`` pass through unchanged.
+        """
+        from strategies._core.contracts import Signal  # local import to avoid cycles
+
+        sized = []
+        # Current holdings by symbol for the delta computation.
+        current_qty: dict[str, int] = {}
+        for p in self._portfolio.positions_snapshot():
+            current_qty[p.symbol] = p.quantity
+
+        # Mark-to-market price lookup for weight→share translation.
+        mark_prices: dict[str, Decimal] = {}
+        try:
+            today = bars_window.xs(asof, level="date")
+        except KeyError:
+            today = pd.DataFrame()
+        if not today.empty:
+            for sym, row in today.iterrows():
+                try:
+                    mark_prices[sym] = Decimal(str(row["close"]))
+                except Exception:
+                    continue
+
+        equity = self._portfolio.cash
+        for p in self._portfolio.positions_snapshot():
+            price = mark_prices.get(p.symbol, p.avg_entry_price)
+            equity += price * Decimal(p.quantity)
+
+        for s in signals:
+            if s.quantity is not None:
+                sized.append(s)
+                continue
+            if s.target_weight is None:
+                continue
+
+            # Use next-bar open as the sizing reference when available — matches
+            # MOO order semantics; fall back to today's close otherwise.
+            nb = next_bars.get(s.symbol)
+            price: Decimal | None = None
+            if nb is not None:
+                try:
+                    price = Decimal(str(nb.get("open", nb.get("close"))))
+                except Exception:
+                    price = None
+            if price is None or price <= 0:
+                price = mark_prices.get(s.symbol)
+            if price is None or price <= 0:
+                continue
+
+            target_value = Decimal(str(s.target_weight)) * equity
+            target_qty = int((target_value / price).to_integral_value(rounding="ROUND_DOWN"))
+            delta = target_qty - current_qty.get(s.symbol, 0)
+            if delta == 0:
+                continue
+
+            sized.append(s.model_copy(update={"target_weight": None, "quantity": delta}))
+
+        return sized
 
     def _mark_to_market(self, asof: date, bars_window: pd.DataFrame) -> dict:
         try:
