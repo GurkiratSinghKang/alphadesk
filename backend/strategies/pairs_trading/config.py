@@ -1,61 +1,20 @@
 """Parameter defaults, universe, and Optuna search space for Pairs Trading.
 
-Kept separate from ``strategy.py`` so notebooks / reports can import
-configuration without pulling in the engine-heavy strategy module.
-
 See ``spec.md`` for the academic rationale for each knob.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Literal
 
-from tuner.search import Categorical, FloatRange, IntRange
+from pydantic import Field
 
-
-# --------------------------------------------------------------------------- #
-# Defaults                                                                    #
-# --------------------------------------------------------------------------- #
-DEFAULTS: dict[str, Any] = {
-    # z-score rolling window (bars)
-    "z_window": 60,
-    # Entry / exit / stop thresholds on |z|
-    "z_entry": 2.0,
-    "z_exit": 0.5,
-    "z_stop": 3.5,
-    # Sizing
-    "pair_weight": 0.10,
-    "max_pairs": 5,
-    # Hedge ratio: "ols" (static) or "kalman" (dynamic)
-    "hedge_method": "ols",
-    # Rescreen cadence (trading days). ~63 = quarterly
-    "rescreen_days": 63,
-    # Admission gates during rescreen
-    "ou_halflife_max_days": 30.0,
-    "adf_pvalue_max": 0.05,
-    "hurst_max": 0.45,
-    # Formation window (fixed) — one trading year of closes for E-G
-    "formation_days": 252,
-    # Structural-break watchdog (fixed)
-    "watchdog_days": 21,
-    "watchdog_pvalue": 0.10,
-    # Kalman noise parameters (fixed; Chan 2013 defaults)
-    "kalman_delta": 1e-5,
-    "kalman_r": 1e-3,
-    # Whether OLS beta and the spread / z-score are computed on
-    # log-prices. Default True per spec §3.3 (Engle-Granger path) and
-    # audit P0-4 (raw-price spreads produce level-dependent
-    # heteroskedasticity in the "stationary" residual). Flip to False
-    # only for diagnostic comparisons.
-    "prices_in_log_space": True,
-}
+from strategies._core.contracts import StrategyParams
 
 
 # --------------------------------------------------------------------------- #
 # Sector-grouped universe                                                     #
 # --------------------------------------------------------------------------- #
-# 49 mega-cap S&P 500 names across 6 sectors. Within-sector pair screen
-# evaluates each candidate once per rescreen_days (~quarterly).
 UNIVERSE_BY_SECTOR: dict[str, tuple[str, ...]] = {
     "Tech": (
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "ORCL", "CRM", "ADBE",
@@ -77,21 +36,13 @@ UNIVERSE_BY_SECTOR: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Flat list for universe()
 UNIVERSE: tuple[str, ...] = tuple(
     sym for syms in UNIVERSE_BY_SECTOR.values() for sym in syms
 )
 
 
 def all_within_sector_pairs() -> list[tuple[str, str, str]]:
-    """Return all within-sector candidate pairs as (sector, sym_y, sym_x).
-
-    The "y" symbol is always the alphabetically-first of the two — this is
-    a convention only; Engle-Granger's hedge ratio is symmetric up to
-    sign of the residual stationarity p-value, but in practice we regress
-    the alphabetically-first name on the second.
-    """
-
+    """Return all within-sector candidate pairs as (sector, sym_y, sym_x)."""
     out: list[tuple[str, str, str]] = []
     for sector, syms in UNIVERSE_BY_SECTOR.items():
         lst = sorted(syms)
@@ -102,29 +53,77 @@ def all_within_sector_pairs() -> list[tuple[str, str, str]]:
 
 
 # --------------------------------------------------------------------------- #
-# Search space (Optuna)                                                       #
+# Params                                                                      #
 # --------------------------------------------------------------------------- #
-def search_space() -> dict[str, Any]:
-    """Optuna search space. Matches the ranges documented in spec.md."""
+class PairsTradingParams(StrategyParams):
+    """Typed Pydantic-v2 params model for pairs_trading."""
 
-    return {
-        "z_window": Categorical([30, 45, 60, 90]),
-        "z_entry": FloatRange(1.5, 3.0),
-        "z_exit": FloatRange(0.0, 1.0),
-        "z_stop": FloatRange(3.0, 5.0),
-        "pair_weight": FloatRange(0.05, 0.15),
-        "max_pairs": Categorical([3, 5, 8]),
-        "hedge_method": Categorical(["ols", "kalman"]),
-        "rescreen_days": Categorical([42, 63, 126]),
-        "ou_halflife_max_days": FloatRange(20.0, 60.0),
-        "adf_pvalue_max": FloatRange(0.01, 0.10),
-    }
+    z_window: int = Field(
+        default=60,
+        gt=0,
+        le=252,
+        json_schema_extra={"tune": {"type": "categorical", "choices": [30, 45, 60, 90]}},
+    )
+    z_entry: float = Field(
+        default=2.0,
+        gt=0.0,
+        json_schema_extra={"tune": {"low": 1.5, "high": 3.0, "type": "float"}},
+    )
+    z_exit: float = Field(
+        default=0.5,
+        ge=0.0,
+        json_schema_extra={"tune": {"low": 0.0, "high": 1.0, "type": "float"}},
+    )
+    z_stop: float = Field(
+        default=3.5,
+        gt=0.0,
+        json_schema_extra={"tune": {"low": 3.0, "high": 5.0, "type": "float"}},
+    )
+    pair_weight: float = Field(
+        default=0.10,
+        gt=0.0,
+        le=1.0,
+        json_schema_extra={"tune": {"low": 0.05, "high": 0.15, "type": "float"}},
+    )
+    max_pairs: int = Field(
+        default=5,
+        ge=1,
+        json_schema_extra={"tune": {"type": "categorical", "choices": [3, 5, 8]}},
+    )
+    hedge_method: Literal["ols", "kalman"] = Field(
+        default="ols",
+        json_schema_extra={
+            "tune": {"type": "categorical", "choices": ["ols", "kalman"]}
+        },
+    )
+    rescreen_days: int = Field(
+        default=63,
+        ge=1,
+        json_schema_extra={"tune": {"type": "categorical", "choices": [42, 63, 126]}},
+    )
+    ou_halflife_max_days: float = Field(
+        default=30.0,
+        gt=0.0,
+        json_schema_extra={"tune": {"low": 20.0, "high": 60.0, "type": "float"}},
+    )
+    adf_pvalue_max: float = Field(
+        default=0.05,
+        gt=0.0,
+        le=1.0,
+        json_schema_extra={"tune": {"low": 0.01, "high": 0.10, "type": "float"}},
+    )
+    hurst_max: float = Field(default=0.45, ge=0.0, le=1.0)
+    formation_days: int = Field(default=252, ge=60)
+    watchdog_days: int = Field(default=21, ge=0)
+    watchdog_pvalue: float = Field(default=0.10, gt=0.0, le=1.0)
+    kalman_delta: float = Field(default=1e-5, gt=0.0)
+    kalman_r: float = Field(default=1e-3, gt=0.0)
+    prices_in_log_space: bool = Field(default=True)
 
 
 __all__ = [
-    "DEFAULTS",
+    "PairsTradingParams",
     "UNIVERSE_BY_SECTOR",
     "UNIVERSE",
     "all_within_sector_pairs",
-    "search_space",
 ]
