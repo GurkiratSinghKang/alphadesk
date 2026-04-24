@@ -56,11 +56,36 @@ export default function EarningsDetailPanel({
     );
   }
 
+  // Missing-field hints may be populated later by the backend (Agent α's
+  // B-81 work). Read defensively — fall back to a generic banner.
+  const missingFields = extractMissingFields(detail);
+
   return (
     <section
       data-slot="earnings-detail-panel"
       className="rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4"
     >
+      {detail.partial && (
+        <div
+          data-slot="partial-data-banner"
+          role="status"
+          aria-live="polite"
+          className="mb-3 rounded border border-[color:var(--warn,#d97706)] bg-[color:var(--warn-tint,rgba(217,119,6,0.12))] px-3 py-2"
+        >
+          <p className="font-mono text-[12px] text-[color:var(--warn,#d97706)]">
+            ⚠ Partial data — some providers were unavailable.
+          </p>
+          {missingFields && missingFields.length > 0 ? (
+            <p className="mt-1 font-mono text-[11px] u-muted">
+              Missing: {missingFields.join(", ")}
+            </p>
+          ) : (
+            <p className="mt-1 font-mono text-[11px] u-muted">
+              Some data unavailable — see fields marked —
+            </p>
+          )}
+        </div>
+      )}
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         report_date={detail.report_date} report_time={detail.report_time}
@@ -99,14 +124,25 @@ export default function EarningsDetailPanel({
       )}
 
       <TradeButtonRow symbol={detail.symbol} ladder={detail.strike_ladder} />
-
-      {detail.partial && (
-        <p className="mt-3 font-mono text-[11px] text-[color:var(--fg-muted)]">
-          Some fields partial — one or more providers were unavailable.
-        </p>
-      )}
     </section>
   );
+}
+
+/**
+ * Pull an optional list of missing-field names off the detail payload.
+ * Agent α's B-81 work may add `missing_fields` or `validation_errors`
+ * to the schema — read without hard-typing so we surface whichever
+ * lands without pushing types/index.ts changes through this bundle.
+ */
+function extractMissingFields(detail: EarningsDetail): string[] | null {
+  const raw = detail as unknown as {
+    missing_fields?: unknown;
+    validation_errors?: unknown;
+  };
+  const src = raw.missing_fields ?? raw.validation_errors;
+  if (!Array.isArray(src)) return null;
+  const out = src.filter((x): x is string => typeof x === "string" && x.length > 0);
+  return out.length > 0 ? out : null;
 }
 
 /**
