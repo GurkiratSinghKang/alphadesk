@@ -119,8 +119,8 @@ export default function EarningsDetailPanel({
       )}
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
-        report_date={detail.report_date} report_time={detail.report_time}
-        quote={detail.quote} generated_at={detail.generated_at}
+        reportDate={detail.reportDate} reportTime={detail.reportTime}
+        quote={detail.quote} generatedAt={detail.generatedAt}
         headingRef={detailHeaderRef}
       />
       <MetricsStrip metrics={detail.metrics} />
@@ -130,7 +130,7 @@ export default function EarningsDetailPanel({
           {/* Left column: thesis + news */}
           <div className="min-w-0 space-y-3">
             <ClaudeThesisCard
-              structured={detail.claude_structured} full={detail.claude_full_research}
+              structured={detail.claudeStructured} full={detail.claudeFullResearch}
               running={runningFull} onRunFull={onRunFullResearch}
               symbol={detail.symbol}
             />
@@ -138,24 +138,24 @@ export default function EarningsDetailPanel({
           </div>
           {/* Right column: ladder + term/skew */}
           <div className="min-w-0 space-y-3">
-            <StrikeLadder ladder={detail.strike_ladder} />
-            <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
+            <StrikeLadder ladder={detail.strikeLadder} />
+            <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           </div>
         </div>
       ) : (
         <div className="mt-4 space-y-4">
           <ClaudeThesisCard
-            structured={detail.claude_structured} full={detail.claude_full_research}
+            structured={detail.claudeStructured} full={detail.claudeFullResearch}
             running={runningFull} onRunFull={onRunFullResearch}
             symbol={detail.symbol}
           />
-          <StrikeLadder ladder={detail.strike_ladder} />
-          <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
+          <StrikeLadder ladder={detail.strikeLadder} />
+          <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           <NewsFeed news={detail.news} />
         </div>
       )}
 
-      <TradeButtonRow symbol={detail.symbol} ladder={detail.strike_ladder} />
+      <TradeButtonRow symbol={detail.symbol} ladder={detail.strikeLadder} />
 
       <p
         data-slot="data-disclaimer"

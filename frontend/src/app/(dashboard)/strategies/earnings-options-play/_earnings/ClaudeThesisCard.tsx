@@ -63,9 +63,9 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull,
         </span>
       </div>
       <p className="t-meta mt-1">
-        est. move: {fmtPct(structured.direction_magnitude.bull_case_pct, 1, { signDisplay: "always" })}
+        est. move: {fmtPct(structured.directionMagnitude.bullCasePct, 1, { signDisplay: "always" })}
         &nbsp;/&nbsp;
-        {fmtPct(structured.direction_magnitude.bear_case_pct, 1, { signDisplay: "always" })}
+        {fmtPct(structured.directionMagnitude.bearCasePct, 1, { signDisplay: "always" })}
       </p>
       <div
         data-slot="claude-thesis-text"
@@ -85,8 +85,8 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull,
       )}
       <p className="mt-1 t-mono text-[11.5px]">
         <span className="u-muted">Play:</span>{" "}
-        <span className="u-brand">{structured.suggested_play}</span>
-        <span className="u-muted"> — {structured.suggested_play_reason}</span>
+        <span className="u-brand">{structured.suggestedPlay}</span>
+        <span className="u-muted"> — {structured.suggestedPlayReason}</span>
       </p>
 
       <div className="mt-3 border-t border-[color:var(--border)] pt-3">
@@ -127,24 +127,24 @@ function FullResearchBlock({ full }: { full: ClaudeFullResearch }) {
   return (
     <div data-slot="claude-full-research" className="space-y-3">
       <p className="t-label u-brand">◈ FULL RESEARCH NOTE</p>
-      <p className="t-mono text-[13px] leading-relaxed">{full.thesis_paragraph}</p>
-      {full.comparable_setups.length > 0 && (
+      <p className="t-mono text-[13px] leading-relaxed">{full.thesisParagraph}</p>
+      {full.comparableSetups.length > 0 && (
         <div>
           <p className="t-label u-muted">COMPARABLE SETUPS</p>
           <ul className="mt-1 space-y-1 t-mono text-[11.5px]">
-            {full.comparable_setups.map((c, i) => (
+            {full.comparableSetups.map((c, i) => (
               <li key={i} className="u-muted">
-                <span className="">{fmtDate(c.report_date, { year: "numeric", month: "short", day: "numeric" })}</span> · IVR {fmtNumber(c.iv_rank, { maximumFractionDigits: 0 })} · {c.setup} →{" "}
+                <span className="">{fmtDate(c.reportDate, { year: "numeric", month: "short", day: "numeric" })}</span> · IVR {fmtNumber(c.ivRank, { maximumFractionDigits: 0 })} · {c.setup} →{" "}
                 <span className="u-brand">{c.outcome}</span>
               </li>
             ))}
           </ul>
         </div>
       )}
-      <BlockField label="POST-EARNINGS DRIFT PLAYBOOK" text={full.post_earnings_drift_playbook} />
-      <BlockField label="SECTOR BACKDROP" text={full.sector_backdrop} />
-      <BlockField label="ANALYST CONSENSUS DELTA" text={full.analyst_consensus_delta} />
-      <BlockField label="WHAT WOULD CHANGE MY MIND" text={full.what_would_change_my_mind} />
+      <BlockField label="POST-EARNINGS DRIFT PLAYBOOK" text={full.postEarningsDriftPlaybook} />
+      <BlockField label="SECTOR BACKDROP" text={full.sectorBackdrop} />
+      <BlockField label="ANALYST CONSENSUS DELTA" text={full.analystConsensusDelta} />
+      <BlockField label="WHAT WOULD CHANGE MY MIND" text={full.whatWouldChangeMyMind} />
     </div>
   );
 }

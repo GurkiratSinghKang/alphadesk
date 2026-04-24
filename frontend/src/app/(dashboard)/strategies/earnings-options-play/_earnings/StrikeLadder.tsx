@@ -32,7 +32,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
         <h3 className="t-display-section italic text-[13px]">
           Strike ladder{" "}
           <span className="t-label">
-            · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlying_price, "USD")}
+            · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlyingPrice, "USD")}
           </span>
         </h3>
         {hasGreeks && (
@@ -108,7 +108,7 @@ function LadderDataRow({ row, showGreeks }: { row: LadderRow; showGreeks: boolea
       </td>
       {midCell}
       <td>{fmtPct(row.iv, 0)}</td>
-      <td className="u-profit">{fmtPct(row.yield_pct, 1)}</td>
+      <td className="u-profit">{fmtPct(row.yieldPct, 1)}</td>
       <td>{fmtPct(row.pop, 0)}</td>
       {showGreeks && (
         <>

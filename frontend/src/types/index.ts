@@ -251,25 +251,25 @@ export interface CalendarRow {
   symbol: string;
   company: string;
   sector: string;
-  report_date: string;
-  report_time: EarningsReportTime;
-  days_until: number;
+  reportDate: string;
+  reportTime: EarningsReportTime;
+  daysUntil: number;
   price: number | null;
   change: number | null;
-  change_pct: number | null;
-  iv_rank: number | null;
-  premium_yield_call_atm: number | null;
-  premium_yield_put_atm: number | null;
-  expected_move_pct: number | null;
-  hist_avg_abs_move_pct: number | null;
-  claude_verdict: EarningsVerdict | null;
-  claude_confidence: number | null;
-  top_setup: EarningsTopSetup | null;
+  changePct: number | null;
+  ivRank: number | null;
+  premiumYieldCallAtm: number | null;
+  premiumYieldPutAtm: number | null;
+  expectedMovePct: number | null;
+  histAvgAbsMovePct: number | null;
+  claudeVerdict: EarningsVerdict | null;
+  claudeConfidence: number | null;
+  topSetup: EarningsTopSetup | null;
 }
 
 export interface CalendarResponse {
   earnings: CalendarRow[];
-  generated_at: string;
+  generatedAt: string;
   partial: boolean;
   error?: string | null;
   /**
@@ -291,7 +291,7 @@ export interface LadderRow {
   ask: number;
   mid: number;
   iv: number;
-  yield_pct: number;
+  yieldPct: number;
   pop: number;
   theta: number;
   gamma: number;
@@ -302,56 +302,56 @@ export interface LadderRow {
 
 export interface StrikeLadder {
   expiry: string;
-  underlying_price: number;
+  underlyingPrice: number;
   rows: LadderRow[];
 }
 
 export interface ClaudeStructured {
   verdict: EarningsVerdict;
-  direction_magnitude: { bull_case_pct: number; bear_case_pct: number };
+  directionMagnitude: { bullCasePct: number; bearCasePct: number };
   thesis: string;
   catalysts: string[];
   risks: string[];
-  suggested_play: EarningsTopSetup;
-  suggested_play_reason: string;
+  suggestedPlay: EarningsTopSetup;
+  suggestedPlayReason: string;
   confidence: number;
   model: string;
-  generated_at: string;
+  generatedAt: string;
 }
 
 export interface ComparableSetup {
-  report_date: string;
-  iv_rank: number;
+  reportDate: string;
+  ivRank: number;
   setup: string;
   outcome: string;
-  similarity_score: number;
+  similarityScore: number;
 }
 
 export interface ClaudeFullResearch {
-  thesis_paragraph: string;
-  comparable_setups: ComparableSetup[];
-  post_earnings_drift_playbook: string;
-  sector_backdrop: string;
-  analyst_consensus_delta: string;
-  what_would_change_my_mind: string;
+  thesisParagraph: string;
+  comparableSetups: ComparableSetup[];
+  postEarningsDriftPlaybook: string;
+  sectorBackdrop: string;
+  analystConsensusDelta: string;
+  whatWouldChangeMyMind: string;
   confidence: number;
   model: string;
-  generated_at: string;
+  generatedAt: string;
 }
 
 export interface HistQuarter {
-  report_date: string;
-  surprise_pct: number | null;
-  next_day_move_pct: number;
-  five_day_move_pct: number;
+  reportDate: string;
+  surprisePct: number | null;
+  nextDayMovePct: number;
+  fiveDayMovePct: number;
 }
 
 export interface HistoricalStats {
-  avg_abs_move_pct: number;
+  avgAbsMovePct: number;
   wins: number;
   losses: number;
-  surprise_beat_rate: number;
-  iv_vs_hist_vol_points: number | null;
+  surpriseBeatRate: number;
+  ivVsHistVolPoints: number | null;
 }
 
 export interface HistoricalBlock {
@@ -362,36 +362,36 @@ export interface HistoricalBlock {
 export interface IVTermPoint {
   expiry: string;
   dte: number;
-  atm_iv: number;
+  atmIv: number;
 }
 
 export interface SkewBlock {
-  put_iv_25d: number | null;
-  call_iv_25d: number | null;
-  skew_points: number | null;
+  putIv25d: number | null;
+  callIv25d: number | null;
+  skewPoints: number | null;
   interpretation: "put-heavy skew" | "call-heavy skew" | "neutral" | null;
 }
 
 export interface EarningsMetricsBlock {
-  iv_rank: number | null;
-  iv_percentile: number | null;
-  current_iv: number | null;
-  hv_20: number | null;
-  hv_50: number | null;
-  hv_100: number | null;
-  hv_iv_ratio: number | null;
-  expected_move_pct: number | null;
-  expected_move_dollars: number | null;
-  hist_avg_abs_move_pct: number | null;
-  beat_rate: number | null;
-  days_to_earnings: number | null;
-  days_to_expiry: number | null;
+  ivRank: number | null;
+  ivPercentile: number | null;
+  currentIv: number | null;
+  hv20: number | null;
+  hv50: number | null;
+  hv100: number | null;
+  hvIvRatio: number | null;
+  expectedMovePct: number | null;
+  expectedMoveDollars: number | null;
+  histAvgAbsMovePct: number | null;
+  beatRate: number | null;
+  daysToEarnings: number | null;
+  daysToExpiry: number | null;
 }
 
 export interface EarningsNewsArticle {
   title: string;
   source: string;
-  published_at: string;
+  publishedAt: string;
   url: string;
 }
 
@@ -401,28 +401,28 @@ export interface EarningsDetail {
   sector: string;
   // Nullable for stub-detail responses when the symbol isn't on the
   // current FMP calendar slice and has no known next-report date (B-41).
-  report_date: string | null;
-  report_time: EarningsReportTime;
-  quote: { last: number; change: number; change_pct: number } | null;
+  reportDate: string | null;
+  reportTime: EarningsReportTime;
+  quote: { last: number; change: number; changePct: number } | null;
   metrics: EarningsMetricsBlock | null;
-  strike_ladder: StrikeLadder | null;
-  claude_structured: ClaudeStructured | null;
-  claude_full_research: ClaudeFullResearch | null;
-  // B-63: `historical_earnings` removed — backend loader was a stub; the
+  strikeLadder: StrikeLadder | null;
+  claudeStructured: ClaudeStructured | null;
+  claudeFullResearch: ClaudeFullResearch | null;
+  // B-63: `historicalEarnings` removed — backend loader was a stub; the
   // FMP surprises join will return as a dedicated follow-up PR.
-  iv_term_structure: IVTermPoint[] | null;
+  ivTermStructure: IVTermPoint[] | null;
   skew: SkewBlock | null;
   news: EarningsNewsArticle[];
   partial: boolean;
-  generated_at: string;
+  generatedAt: string;
 }
 
 export interface EarningsCalendarFilters {
   window?: "current" | "next" | "both";
-  min_iv_rank?: number;
-  // B-66: `market_cap` removed — curated-universe filter always applies.
-  bmo_amc?: "bmo" | "amc" | "both";
-  watchlist_only?: boolean;
+  minIvRank?: number;
+  // B-66: `marketCap` removed — curated-universe filter always applies.
+  bmoAmc?: "bmo" | "amc" | "both";
+  watchlistOnly?: boolean;
   sort?: "date" | "iv_rank" | "yield" | "claude_confidence";
 }
 

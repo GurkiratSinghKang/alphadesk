@@ -21,7 +21,7 @@ import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
  * /strategies/earnings-options-play — research screener.
  *
  * Layout C (Bloomberg): left calendar sidebar + right persistent detail panel.
- * URL state: ?symbol=NVDA&window=both&min_iv_rank=50&sort=date — refresh
+ * URL state: ?symbol=NVDA&window=both&minIvRank=50&sort=date — refresh
  * preserves selection and filters.
  *
  * Data layer (B-97): react-query owns calendar + detail + full-research.
@@ -86,7 +86,7 @@ export default function EarningsOptionsPlayPage() {
       queryClient.setQueryData(
         ["earnings-detail", selectedSymbol],
         (prev: EarningsDetail | undefined) =>
-          prev ? { ...prev, claude_full_research: full } : prev,
+          prev ? { ...prev, claudeFullResearch: full } : prev,
       );
     },
   });
@@ -186,7 +186,7 @@ export default function EarningsOptionsPlayPage() {
           filters={filters}
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
-          onResetFilters={() => setFilters({ window: "both", min_iv_rank: 50, sort: "date" })}
+          onResetFilters={() => setFilters({ window: "both", minIvRank: 50, sort: "date" })}
         />
         <EarningsDetailPanel
           detail={detail}
@@ -217,7 +217,7 @@ function titleForWindow(win: EarningsCalendarFilters["window"]): string {
 // ─── URL sync helpers ────────────────────────────────────────
 
 function readFiltersFromURL(): EarningsCalendarFilters {
-  if (typeof window === "undefined") return { window: "both", min_iv_rank: 50, sort: "date" };
+  if (typeof window === "undefined") return { window: "both", minIvRank: 50, sort: "date" };
   const p = new URLSearchParams(window.location.search);
   const out: EarningsCalendarFilters = {};
 
@@ -227,29 +227,29 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   const win = p.get("window");
   if (win === "current" || win === "next" || win === "both") out.window = win;
 
-  // B-58 + B-66: strict range validation for min_iv_rank; market_cap
+  // B-58 + B-66: strict range validation for minIvRank; market_cap
   // dropped entirely (curated-universe filter is always on now).
-  const rawIv = p.get("min_iv_rank");
+  const rawIv = p.get("minIvRank");
   if (rawIv != null) {
     const n = Number(rawIv);
-    if (Number.isFinite(n) && n >= 0 && n <= 100) out.min_iv_rank = n;
+    if (Number.isFinite(n) && n >= 0 && n <= 100) out.minIvRank = n;
   }
 
-  const ba = p.get("bmo_amc");
+  const ba = p.get("bmoAmc");
   if (ba && ["bmo", "amc", "both"].includes(ba)) {
-    out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
+    out.bmoAmc = ba as EarningsCalendarFilters["bmoAmc"];
   }
 
-  const wl = p.get("watchlist_only");
-  if (wl === "true") out.watchlist_only = true;
-  else if (wl === "false") out.watchlist_only = false;
+  const wl = p.get("watchlistOnly");
+  if (wl === "true") out.watchlistOnly = true;
+  else if (wl === "false") out.watchlistOnly = false;
 
   const sort = p.get("sort");
   if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) {
     out.sort = sort as EarningsCalendarFilters["sort"];
   }
 
-  return { window: "both", min_iv_rank: 50, sort: "date", ...out };
+  return { window: "both", minIvRank: 50, sort: "date", ...out };
 }
 
 function syncURL(
@@ -260,10 +260,10 @@ function syncURL(
   const p = new URLSearchParams();
   if (state.symbol) p.set("symbol", state.symbol);
   if (state.window) p.set("window", state.window);
-  if (state.min_iv_rank !== undefined) p.set("min_iv_rank", String(state.min_iv_rank));
+  if (state.minIvRank !== undefined) p.set("minIvRank", String(state.minIvRank));
   // B-66: market_cap removed from URL sync.
-  if (state.bmo_amc && state.bmo_amc !== "both") p.set("bmo_amc", state.bmo_amc);
-  if (state.watchlist_only) p.set("watchlist_only", "true");
+  if (state.bmoAmc && state.bmoAmc !== "both") p.set("bmoAmc", state.bmoAmc);
+  if (state.watchlistOnly) p.set("watchlistOnly", "true");
   if (state.sort && state.sort !== "date") p.set("sort", state.sort);
   const newUrl = `${window.location.pathname}?${p.toString()}`;
   // B-39: only the initial mount-normalization should replaceState.

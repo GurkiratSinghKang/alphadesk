@@ -21,7 +21,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
       </h3>
       <ul className="mt-1 space-y-0.5">
         {news.slice(0, 10).map((a, i) => {
-          const rel = fmtRelative(a.published_at);
+          const rel = fmtRelative(a.publishedAt);
           return (
             <li
               key={a.url ?? i}

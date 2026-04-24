@@ -8,24 +8,24 @@ export interface DetailHeaderProps {
   company: string;
   sector: string;
   // Nullable for stub-detail responses — see B-41 in earnings_screener.py.
-  report_date: string | null;
-  report_time: EarningsReportTime;
-  quote: { last: number; change: number; change_pct: number } | null;
+  reportDate: string | null;
+  reportTime: EarningsReportTime;
+  quote: { last: number; change: number; changePct: number } | null;
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
    *  "Updated 5 m ago" label in the header. */
-  generated_at?: string;
+  generatedAt?: string;
   /** Ref to the H2 heading so the parent panel can move focus here
    *  after a filter-triggered symbol change (B-56). */
   headingRef?: Ref<HTMLHeadingElement>;
 }
 
 export default function DetailHeader({
-  symbol, company, sector, report_date, report_time, quote, generated_at, headingRef,
+  symbol, company, sector, reportDate, reportTime, quote, generatedAt, headingRef,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
-  const changePct = quote?.change_pct ?? null;
+  const changePct = quote?.changePct ?? null;
   const isNeg = (change ?? 0) < 0;
-  const freshness = getFreshness(generated_at);
+  const freshness = getFreshness(generatedAt);
 
   return (
     <header
@@ -46,14 +46,14 @@ export default function DetailHeader({
         >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
-        <p className="t-meta mt-1">{sector} · Reports {report_date ? formatReportDate(report_date) : "—"} · {report_time}</p>
-        {generated_at && (
+        <p className="t-meta mt-1">{sector} · Reports {reportDate ? formatReportDate(reportDate) : "—"} · {reportTime}</p>
+        {generatedAt && (
           <p
             data-slot="detail-updated"
             className="t-meta mt-0.5 u-muted"
-            title={generated_at}
+            title={generatedAt}
           >
-            Updated {fmtRelativeTime(generated_at)}
+            Updated {fmtRelativeTime(generatedAt)}
           </p>
         )}
       </div>
@@ -62,7 +62,7 @@ export default function DetailHeader({
           {freshness && (
             <span
               data-slot="freshness-pill"
-              title={generated_at}
+              title={generatedAt}
               aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
               className={
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[10px] uppercase tracking-wide " +
@@ -98,7 +98,7 @@ export default function DetailHeader({
 }
 
 /**
- * Convert a generated_at timestamp into a LIVE/DELAYED pill descriptor.
+ * Convert a generatedAt timestamp into a LIVE/DELAYED pill descriptor.
  * <30s old reads as live; otherwise shows the short relative age.
  */
 function getFreshness(iso: string | undefined): { kind: "live" | "delayed"; age: string } | null {

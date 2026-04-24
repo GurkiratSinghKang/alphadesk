@@ -34,19 +34,19 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
             <div>
               25Δ put IV:{" "}
               <span className="tabular-nums">
-                {skew.put_iv_25d ? fmtPct(skew.put_iv_25d, 1) : "—"}
+                {skew.putIv25d ? fmtPct(skew.putIv25d, 1) : "—"}
               </span>
             </div>
             <div>
               25Δ call IV:{" "}
               <span className="tabular-nums">
-                {skew.call_iv_25d ? fmtPct(skew.call_iv_25d, 1) : "—"}
+                {skew.callIv25d ? fmtPct(skew.callIv25d, 1) : "—"}
               </span>
             </div>
             <div className="u-brand">
               Skew:{" "}
-              {skew.skew_points != null
-                ? `${fmtNumber(skew.skew_points, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "always" })}pts`
+              {skew.skewPoints != null
+                ? `${fmtNumber(skew.skewPoints, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "always" })}pts`
                 : "—"}
             </div>
             <div className="u-muted">{skew.interpretation ?? ""}</div>
@@ -60,18 +60,18 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
 }
 
 function TermStrip({ points }: { points: IVTermPoint[] }) {
-  const max = Math.max(...points.map((p) => p.atm_iv));
-  const min = Math.min(...points.map((p) => p.atm_iv));
+  const max = Math.max(...points.map((p) => p.atmIv));
+  const min = Math.min(...points.map((p) => p.atmIv));
   const range = max - min || 1;
   return (
     <div className="mt-1">
       <div className="flex h-10 items-end gap-1">
         {points.map((p) => {
-          const h = ((p.atm_iv - min) / range) * 30 + 8;
+          const h = ((p.atmIv - min) / range) * 30 + 8;
           return (
             <div
               key={p.expiry}
-              title={`${p.expiry}: ${fmtPct(p.atm_iv, 1)}`}
+              title={`${p.expiry}: ${fmtPct(p.atmIv, 1)}`}
               className="flex flex-col items-center gap-0.5"
             >
               <div
@@ -84,8 +84,8 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
         })}
       </div>
       <p className="mt-1 t-mono text-[11px] u-muted">
-        front {fmtPct(points[0].atm_iv, 0)} → back{" "}
-        {fmtPct(points[points.length - 1].atm_iv, 0)}
+        front {fmtPct(points[0].atmIv, 0)} → back{" "}
+        {fmtPct(points[points.length - 1].atmIv, 0)}
       </p>
     </div>
   );

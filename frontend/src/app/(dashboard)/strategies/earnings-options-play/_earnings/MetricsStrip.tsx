@@ -25,25 +25,25 @@ export default function MetricsStrip({ metrics }: MetricsStripProps) {
           percentages/ratios/counts where the value is self-describing. */}
       <Cell
         label="IV RANK"
-        value={fmtInt(metrics.iv_rank)}
-        accent={!!(metrics.iv_rank && metrics.iv_rank > 70)}
-        ariaLabel={metrics.iv_rank == null ? "IV rank unavailable" : `IV rank ${Math.round(metrics.iv_rank)} out of 100`}
+        value={fmtInt(metrics.ivRank)}
+        accent={!!(metrics.ivRank && metrics.ivRank > 70)}
+        ariaLabel={metrics.ivRank == null ? "IV rank unavailable" : `IV rank ${Math.round(metrics.ivRank)} out of 100`}
       />
       <Cell
         label="IV %ILE"
-        value={fmtInt(metrics.iv_percentile)}
-        ariaLabel={metrics.iv_percentile == null ? "IV percentile unavailable" : `IV percentile ${Math.round(metrics.iv_percentile)} out of 100`}
+        value={fmtInt(metrics.ivPercentile)}
+        ariaLabel={metrics.ivPercentile == null ? "IV percentile unavailable" : `IV percentile ${Math.round(metrics.ivPercentile)} out of 100`}
       />
-      <Cell label="HV 20" value={fmtPctCell(metrics.hv_20)} />
-      <Cell label="HV / IV" value={fmtRatio(metrics.hv_iv_ratio)} />
-      <Cell label="EXP MOVE" value={fmtPctSigned(metrics.expected_move_pct)} accent />
-      <Cell label="HIST |MV|" value={fmtPctSigned(metrics.hist_avg_abs_move_pct)} />
+      <Cell label="HV 20" value={fmtPctCell(metrics.hv20)} />
+      <Cell label="HV / IV" value={fmtRatio(metrics.hvIvRatio)} />
+      <Cell label="EXP MOVE" value={fmtPctSigned(metrics.expectedMovePct)} accent />
+      <Cell label="HIST |MV|" value={fmtPctSigned(metrics.histAvgAbsMovePct)} />
       <Cell
         label="BEAT %"
-        value={fmtInt(metrics.beat_rate != null ? metrics.beat_rate * 100 : null)}
-        ariaLabel={metrics.beat_rate == null ? "Beat rate unavailable" : `Beat rate ${Math.round(metrics.beat_rate * 100)} out of 100`}
+        value={fmtInt(metrics.beatRate != null ? metrics.beatRate * 100 : null)}
+        ariaLabel={metrics.beatRate == null ? "Beat rate unavailable" : `Beat rate ${Math.round(metrics.beatRate * 100)} out of 100`}
       />
-      <Cell label="DTE" value={metrics.days_to_expiry == null ? DASH : fmtNumber(metrics.days_to_expiry, { maximumFractionDigits: 0 })} />
+      <Cell label="DTE" value={metrics.daysToExpiry == null ? DASH : fmtNumber(metrics.daysToExpiry, { maximumFractionDigits: 0 })} />
     </div>
   );
 }

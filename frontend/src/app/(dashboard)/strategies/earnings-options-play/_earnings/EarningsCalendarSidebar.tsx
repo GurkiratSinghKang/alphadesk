@@ -141,7 +141,7 @@ export default function EarningsCalendarSidebar({
                   }}
                   title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
                   aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
-                  aria-label={`Select ${r.symbol} · reports ${fmtDate(r.report_date, { weekday: "long", month: "long", day: "numeric" })}${r.iv_rank != null ? ' · IV rank ' + Math.round(r.iv_rank) : ''}`}
+                  aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}`}
                   data-selected={r.symbol === selected}
                   className={cn(
                     // B-57: px-3/py-2 ensures ≥44 px touch target on iPad.
@@ -153,11 +153,11 @@ export default function EarningsCalendarSidebar({
                 >
                   <span>
                     <span className="font-semibold text-[color:var(--fg-base)]">{r.symbol}</span>
-                    <span className="ml-1 text-[10px] text-[color:var(--fg-muted)]">{r.report_time}</span>
+                    <span className="ml-1 text-[10px] text-[color:var(--fg-muted)]">{r.reportTime}</span>
                   </span>
-                  {r.iv_rank != null && (
+                  {r.ivRank != null && (
                     <span className="text-[11px] tabular-nums text-[color:var(--fg-pos)]">
-                      {Math.round(r.iv_rank)}
+                      {Math.round(r.ivRank)}
                     </span>
                   )}
                 </button>
@@ -173,8 +173,8 @@ export default function EarningsCalendarSidebar({
 function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: CalendarRow[] }[] {
   const map = new Map<string, CalendarRow[]>();
   for (const r of rows) {
-    if (!map.has(r.report_date)) map.set(r.report_date, []);
-    map.get(r.report_date)!.push(r);
+    if (!map.has(r.reportDate)) map.set(r.reportDate, []);
+    map.get(r.reportDate)!.push(r);
   }
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
@@ -197,13 +197,13 @@ function buildEmptyStateMessage(filters: EarningsCalendarFilters | undefined): s
     : windowKey === "next"  ? "the next week"
     : "the current/next week";
   const parts: string[] = [`No earnings in ${windowLabel}`];
-  if (filters.min_iv_rank != null && filters.min_iv_rank > 0) {
-    parts.push(`with IV rank \u2265 ${filters.min_iv_rank}`);
+  if (filters.minIvRank != null && filters.minIvRank > 0) {
+    parts.push(`with IV rank \u2265 ${filters.minIvRank}`);
   }
-  if (filters.bmo_amc && filters.bmo_amc !== "both") {
-    parts.push(`reporting ${filters.bmo_amc.toUpperCase()}`);
+  if (filters.bmoAmc && filters.bmoAmc !== "both") {
+    parts.push(`reporting ${filters.bmoAmc.toUpperCase()}`);
   }
-  if (filters.watchlist_only) {
+  if (filters.watchlistOnly) {
     parts.push("on your watchlist");
   }
   return `${parts.join(" ")} \u00b7`;

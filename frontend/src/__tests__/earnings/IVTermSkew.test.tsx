@@ -5,12 +5,12 @@ import IVTermSkew from "@/app/(dashboard)/strategies/earnings-options-play/_earn
 
 describe("IVTermSkew", () => {
   const term = [
-    { expiry: "2026-04-25", dte: 3, atm_iv: 0.79 },
-    { expiry: "2026-05-02", dte: 10, atm_iv: 0.58 },
-    { expiry: "2026-05-16", dte: 24, atm_iv: 0.48 },
+    { expiry: "2026-04-25", dte: 3, atmIv: 0.79 },
+    { expiry: "2026-05-02", dte: 10, atmIv: 0.58 },
+    { expiry: "2026-05-16", dte: 24, atmIv: 0.48 },
   ];
   const skew = {
-    put_iv_25d: 0.82, call_iv_25d: 0.77, skew_points: 3.2,
+    putIv25d: 0.82, callIv25d: 0.77, skewPoints: 3.2,
     interpretation: "put-heavy skew" as const,
   };
 

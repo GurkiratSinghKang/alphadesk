@@ -8,8 +8,8 @@ describe("DetailHeader", () => {
     const { container } = render(
       <DetailHeader
         symbol="NVDA" company="Nvidia" sector="Semiconductors"
-        report_date="2026-04-23" report_time="AMC"
-        quote={{ last: 201.7, change: -1.42, change_pct: -0.007 }}
+        reportDate="2026-04-23" reportTime="AMC"
+        quote={{ last: 201.7, change: -1.42, changePct: -0.007 }}
       />,
     );
     expect(container.textContent).toContain("Nvidia");
@@ -25,7 +25,7 @@ describe("DetailHeader", () => {
 
   it("shows em-dash for missing quote", () => {
     const { container } = render(
-      <DetailHeader symbol="NVDA" company="Nvidia" sector="Semis" report_date="2026-04-23" report_time="AMC" quote={null} />,
+      <DetailHeader symbol="NVDA" company="Nvidia" sector="Semis" reportDate="2026-04-23" reportTime="AMC" quote={null} />
     );
     expect(container.textContent).toContain("—");
   });

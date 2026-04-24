@@ -40,7 +40,7 @@ const SORT_DIRECTION: Record<SortOption["key"], { arrow: string; aria: string }>
 };
 
 export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBarProps) {
-  const ivRank = filters.min_iv_rank ?? 50;
+  const ivRank = filters.minIvRank ?? 50;
   const sortKey = (filters.sort ?? "date") as SortOption["key"];
   const sortDir = SORT_DIRECTION[sortKey];
 
@@ -74,12 +74,12 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         <span className="t-label text-[color:var(--fg-muted)]">IV RANK &ge;</span>
         <input
           type="range"
-          name="min_iv_rank"
+          name="minIvRank"
           min={0}
           max={100}
           step={5}
           value={ivRank}
-          onChange={(e) => onChange({ ...filters, min_iv_rank: Number(e.target.value) })}
+          onChange={(e) => onChange({ ...filters, minIvRank: Number(e.target.value) })}
           // B-56: once the user stops dragging/typing the slider, let
           // the parent page move focus somewhere more useful (a filter
           // change re-renders the sidebar, which used to eat focus).
@@ -101,8 +101,8 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
       <label className="flex items-center gap-2">
         <span className="t-label text-[color:var(--fg-muted)]">TIME</span>
         <select
-          value={filters.bmo_amc ?? "both"}
-          onChange={(e) => onChange({ ...filters, bmo_amc: e.target.value as EarningsCalendarFilters["bmo_amc"] })}
+          value={filters.bmoAmc ?? "both"}
+          onChange={(e) => onChange({ ...filters, bmoAmc: e.target.value as EarningsCalendarFilters["bmoAmc"] })}
           className="rounded border border-[color:var(--fg-border)] bg-transparent px-1 py-0.5 font-mono text-[12px]"
         >
           <option value="both">Both</option>
@@ -115,8 +115,8 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
-          checked={filters.watchlist_only ?? false}
-          onChange={(e) => onChange({ ...filters, watchlist_only: e.target.checked })}
+          checked={filters.watchlistOnly ?? false}
+          onChange={(e) => onChange({ ...filters, watchlistOnly: e.target.checked })}
         />
         <span className="t-label text-[color:var(--fg-muted)]">WATCHLIST ONLY</span>
       </label>

@@ -6,12 +6,12 @@ import HistoricalMoves from "@/app/(dashboard)/strategies/earnings-options-play/
 describe("HistoricalMoves", () => {
   const historical = {
     quarters: [
-      { report_date: "2025-01-22", surprise_pct: 0.08, next_day_move_pct: 0.042, five_day_move_pct: 0.053 },
-      { report_date: "2024-10-22", surprise_pct: -0.02, next_day_move_pct: -0.081, five_day_move_pct: -0.023 },
-      { report_date: "2024-07-22", surprise_pct: 0.05, next_day_move_pct: 0.034, five_day_move_pct: 0.041 },
-      { report_date: "2024-04-22", surprise_pct: 0.12, next_day_move_pct: 0.090, five_day_move_pct: 0.110 },
+      { reportDate: "2025-01-22", surprisePct: 0.08, nextDayMovePct: 0.042, fiveDayMovePct: 0.053 },
+      { reportDate: "2024-10-22", surprisePct: -0.02, nextDayMovePct: -0.081, fiveDayMovePct: -0.023 },
+      { reportDate: "2024-07-22", surprisePct: 0.05, nextDayMovePct: 0.034, fiveDayMovePct: 0.041 },
+      { reportDate: "2024-04-22", surprisePct: 0.12, nextDayMovePct: 0.090, fiveDayMovePct: 0.110 },
     ],
-    stats: { avg_abs_move_pct: 0.062, wins: 3, losses: 1, surprise_beat_rate: 1.0, iv_vs_hist_vol_points: 1.2 },
+    stats: { avgAbsMovePct: 0.062, wins: 3, losses: 1, surpriseBeatRate: 1.0, ivVsHistVolPoints: 1.2 },
   };
 
   it("renders one bar per quarter + stats block", () => {

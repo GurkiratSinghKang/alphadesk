@@ -5,13 +5,13 @@ import EarningsCalendarSidebar from "@/app/(dashboard)/strategies/earnings-optio
 import type { CalendarRow } from "@/types";
 
 const rows: CalendarRow[] = [
-  { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: 201.7, change: -1.4, change_pct: -0.007, iv_rank: 78, premium_yield_call_atm: 0.031, premium_yield_put_atm: 0.028, expected_move_pct: 0.064, hist_avg_abs_move_pct: 0.052, claude_verdict: "neutral-bull", claude_confidence: 0.62, top_setup: "short strangle" },
-  { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: 392, change: -8.2, change_pct: -0.02, iv_rank: 84, premium_yield_call_atm: 0.042, premium_yield_put_atm: 0.039, expected_move_pct: 0.081, hist_avg_abs_move_pct: 0.078, claude_verdict: "neutral", claude_confidence: 0.55, top_setup: "iron condor" },
-  { symbol: "META", company: "Meta", sector: "Tech", report_date: "2026-04-24", report_time: "AMC", days_until: 2, price: 672, change: -16, change_pct: -0.023, iv_rank: 71, premium_yield_call_atm: 0.026, premium_yield_put_atm: 0.024, expected_move_pct: 0.058, hist_avg_abs_move_pct: 0.049, claude_verdict: "bullish", claude_confidence: 0.71, top_setup: "cash-secured put" },
+  { symbol: "NVDA", company: "Nvidia", sector: "Semis", reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1, price: 201.7, change: -1.4, changePct: -0.007, ivRank: 78, premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028, expectedMovePct: 0.064, histAvgAbsMovePct: 0.052, claudeVerdict: "neutral-bull", claudeConfidence: 0.62, topSetup: "short strangle" },
+  { symbol: "TSLA", company: "Tesla", sector: "Auto", reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1, price: 392, change: -8.2, changePct: -0.02, ivRank: 84, premiumYieldCallAtm: 0.042, premiumYieldPutAtm: 0.039, expectedMovePct: 0.081, histAvgAbsMovePct: 0.078, claudeVerdict: "neutral", claudeConfidence: 0.55, topSetup: "iron condor" },
+  { symbol: "META", company: "Meta", sector: "Tech", reportDate: "2026-04-24", reportTime: "AMC", daysUntil: 2, price: 672, change: -16, changePct: -0.023, ivRank: 71, premiumYieldCallAtm: 0.026, premiumYieldPutAtm: 0.024, expectedMovePct: 0.058, histAvgAbsMovePct: 0.049, claudeVerdict: "bullish", claudeConfidence: 0.71, topSetup: "cash-secured put" },
 ];
 
 describe("EarningsCalendarSidebar", () => {
-  it("groups rows by report_date with day headers", () => {
+  it("groups rows by reportDate with day headers", () => {
     const { container } = render(
       <EarningsCalendarSidebar rows={rows} loading={false} error={null} selected="NVDA" onSelect={() => {}} />,
     );
@@ -64,7 +64,7 @@ describe("EarningsCalendarSidebar", () => {
         error={null}
         selected={null}
         onSelect={() => {}}
-        filters={{ window: "current", min_iv_rank: 50, sort: "date" }}
+        filters={{ window: "current", minIvRank: 50, sort: "date" }}
       />,
     );
     const summary = container.querySelector('[data-slot="calendar-summary"]');
@@ -84,7 +84,7 @@ describe("EarningsCalendarSidebar", () => {
         error={null}
         selected={null}
         onSelect={() => {}}
-        filters={{ window: "current", min_iv_rank: 80, sort: "iv_rank" }}
+        filters={{ window: "current", minIvRank: 80, sort: "iv_rank" }}
         onResetFilters={onResetFilters}
       />,
     );
@@ -104,7 +104,7 @@ describe("EarningsCalendarSidebar", () => {
         error={null}
         selected={null}
         onSelect={() => {}}
-        filters={{ window: "current", min_iv_rank: 80 }}
+        filters={{ window: "current", minIvRank: 80 }}
       />,
     );
     expect(queryByRole("button", { name: /loosen/i })).toBeNull();
@@ -116,7 +116,7 @@ describe("EarningsCalendarSidebar", () => {
     const originalSearch = window.location.search;
     Object.defineProperty(window, "location", {
       writable: true,
-      value: { ...window.location, pathname: "/strategies/earnings-options-play", search: "?window=both&sort=iv_rank" },
+      value: { ...window.location, pathname: "/strategies/earnings-options-play", search: "?window=both&sort=ivRank" },
     });
 
     const { getByText } = render(
@@ -130,7 +130,7 @@ describe("EarningsCalendarSidebar", () => {
       "noopener,noreferrer",
     );
     const url = openSpy.mock.calls[0][0] as string;
-    expect(url).toContain("sort=iv_rank");
+    expect(url).toContain("sort=ivRank");
 
     openSpy.mockRestore();
     Object.defineProperty(window, "location", {

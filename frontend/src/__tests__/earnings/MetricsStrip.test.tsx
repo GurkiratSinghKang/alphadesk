@@ -7,11 +7,11 @@ describe("MetricsStrip", () => {
   it("renders IV rank, IV %ile, HV/IV, expected move, hist |move|, beat rate, DTE", () => {
     const { container } = render(
       <MetricsStrip metrics={{
-        iv_rank: 78, iv_percentile: 82, current_iv: 0.79,
-        hv_20: 0.42, hv_50: null, hv_100: null, hv_iv_ratio: 0.71,
-        expected_move_pct: 0.064, expected_move_dollars: 12.8,
-        hist_avg_abs_move_pct: 0.052, beat_rate: 0.87,
-        days_to_earnings: 1, days_to_expiry: 3,
+        ivRank: 78, ivPercentile: 82, currentIv: 0.79,
+        hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71,
+        expectedMovePct: 0.064, expectedMoveDollars: 12.8,
+        histAvgAbsMovePct: 0.052, beatRate: 0.87,
+        daysToEarnings: 1, daysToExpiry: 3,
       }} />,
     );
     expect(container.textContent).toContain("78");
