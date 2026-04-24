@@ -249,6 +249,11 @@ _VALID_DEMO_SYMBOLS: set[str] = {
     "UPS", "URI", "USB", "V", "VICI", "VLO", "VRSK", "VRTX", "VZ", "WBA",
     "WBD", "WDAY", "WEC", "WELL", "WFC", "WM", "WMT", "XEL", "XOM", "ZS",
     "ZTS",
+    # -- Optionable high-flyers reported via earnings screener. Some of these
+    #    have feed-tier restrictions on Alpaca's free IEX plan and can fail
+    #    both Polygon and Alpaca snapshot paths; without a demo fallback we
+    #    404 in the earnings calendar even though the symbol is legitimate.
+    "RBLX",
     # -- Major ETFs / indices --
     "DIA", "EEM", "EFA", "GLD", "HYG", "IVV", "IWM", "LQD", "QQQ", "SLV",
     "SPY", "TLT", "VEA", "VNQ", "VOO", "VTI", "VWO", "XLB", "XLE", "XLF",
