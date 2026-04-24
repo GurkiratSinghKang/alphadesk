@@ -8,6 +8,7 @@ import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
+from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -653,10 +654,17 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
 @router.get("/chain/{symbol}", response_model=OptionChain)
 async def get_options_chain(
     symbol: str,
-    expiry: date | None = Query(None, description="Filter to a specific expiration"),
-    strike_min: float | None = Query(None),
-    strike_max: float | None = Query(None),
-    option_type: OptionType | None = Query(None),
+    # NOTE: Use Annotated[..., Query()] so the Python default stays a real
+    # None. This route is also called directly as a helper from
+    # `services.earnings_screener` (and others) — with the old
+    # `= Query(None)` form, unspecified kwargs leak the raw Query() sentinel
+    # into downstream code, producing
+    # "'Query' object has no attribute 'value'" when we do
+    # `option_type_filter.value` in `_fetch_real_chain`.
+    expiry: Annotated[date | None, Query(description="Filter to a specific expiration")] = None,
+    strike_min: Annotated[float | None, Query()] = None,
+    strike_max: Annotated[float | None, Query()] = None,
+    option_type: Annotated[OptionType | None, Query()] = None,
 ) -> OptionChain:
     """Fetch the full options chain for an underlying symbol.
 
