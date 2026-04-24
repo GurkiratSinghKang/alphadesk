@@ -1,4 +1,5 @@
 import type { IVTermPoint, SkewBlock } from "@/types";
+import { fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface IVTermSkewProps {
   term: IVTermPoint[] | null;
@@ -33,19 +34,19 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
             <div>
               25Δ put IV:{" "}
               <span className="tabular-nums">
-                {skew.put_iv_25d ? (skew.put_iv_25d * 100).toFixed(1) + "%" : "—"}
+                {skew.put_iv_25d ? fmtPct(skew.put_iv_25d, 1) : "—"}
               </span>
             </div>
             <div>
               25Δ call IV:{" "}
               <span className="tabular-nums">
-                {skew.call_iv_25d ? (skew.call_iv_25d * 100).toFixed(1) + "%" : "—"}
+                {skew.call_iv_25d ? fmtPct(skew.call_iv_25d, 1) : "—"}
               </span>
             </div>
             <div className="u-brand">
               Skew:{" "}
               {skew.skew_points != null
-                ? `${skew.skew_points >= 0 ? "+" : ""}${skew.skew_points.toFixed(1)}pts`
+                ? `${fmtNumber(skew.skew_points, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "always" })}pts`
                 : "—"}
             </div>
             <div className="u-muted">{skew.interpretation ?? ""}</div>
@@ -70,7 +71,7 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
           return (
             <div
               key={p.expiry}
-              title={`${p.expiry}: ${(p.atm_iv * 100).toFixed(1)}%`}
+              title={`${p.expiry}: ${fmtPct(p.atm_iv, 1)}`}
               className="flex flex-col items-center gap-0.5"
             >
               <div
@@ -83,8 +84,8 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
         })}
       </div>
       <p className="mt-1 t-mono text-[11px] u-muted">
-        front {(points[0].atm_iv * 100).toFixed(0)}% → back{" "}
-        {(points[points.length - 1].atm_iv * 100).toFixed(0)}%
+        front {fmtPct(points[0].atm_iv, 0)} → back{" "}
+        {fmtPct(points[points.length - 1].atm_iv, 0)}
       </p>
     </div>
   );

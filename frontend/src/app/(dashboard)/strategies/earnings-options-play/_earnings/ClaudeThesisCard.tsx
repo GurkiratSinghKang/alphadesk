@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
+import { fmtDate, fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface ClaudeThesisCardProps {
   structured: ClaudeStructured | null;
@@ -51,13 +52,13 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull 
           {structured.verdict.toUpperCase()}
         </span>
         <span className="t-meta">
-          conf {Math.round(structured.confidence * 100)}%
+          conf {fmtPct(structured.confidence, 0)}
         </span>
       </div>
       <p className="t-meta mt-1">
-        est. move: +{(structured.direction_magnitude.bull_case_pct * 100).toFixed(1)}%
+        est. move: {fmtPct(structured.direction_magnitude.bull_case_pct, 1, { signDisplay: "always" })}
         &nbsp;/&nbsp;
-        {(structured.direction_magnitude.bear_case_pct * 100).toFixed(1)}%
+        {fmtPct(structured.direction_magnitude.bear_case_pct, 1, { signDisplay: "always" })}
       </p>
       <div
         data-slot="claude-thesis-text"
@@ -111,7 +112,7 @@ function FullResearchBlock({ full }: { full: ClaudeFullResearch }) {
           <ul className="mt-1 space-y-1 t-mono text-[11.5px]">
             {full.comparable_setups.map((c, i) => (
               <li key={i} className="u-muted">
-                <span className="">{c.report_date}</span> · IVR {c.iv_rank.toFixed(0)} · {c.setup} →{" "}
+                <span className="">{fmtDate(c.report_date, { year: "numeric", month: "short", day: "numeric" })}</span> · IVR {fmtNumber(c.iv_rank, { maximumFractionDigits: 0 })} · {c.setup} →{" "}
                 <span className="u-brand">{c.outcome}</span>
               </li>
             ))}

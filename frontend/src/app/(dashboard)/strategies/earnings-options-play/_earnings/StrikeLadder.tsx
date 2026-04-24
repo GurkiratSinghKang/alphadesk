@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { StrikeLadder as LadderShape, LadderRow } from "@/types";
+import { fmtCurrency, fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface StrikeLadderProps {
   ladder: LadderShape | null;
@@ -31,7 +32,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
         <h3 className="t-display-section italic text-[13px]">
           Strike ladder{" "}
           <span className="t-label">
-            · expiry {ladder.expiry} · underlying {ladder.underlying_price.toFixed(2)}
+            · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlying_price, "USD")}
           </span>
         </h3>
         {hasGreeks && (
@@ -82,26 +83,33 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
 
 function LadderDataRow({ row, showGreeks }: { row: LadderRow; showGreeks: boolean }) {
   const sideLabel = `${row.side} ${row.bucket}`;
-  const yieldStr = `${(row.yield_pct * 100).toFixed(1)}%`;
   // Flag wide bid/ask spreads (>10% of mid). Guard against zero-side
   // quotes which aren't real two-sided markets.
   const wideSpread = isWideSpread(row.bid, row.ask);
   const midCell = wideSpread ? (
     <td className="u-loss" title="Wide bid/ask spread — liquidity risk">
-      {row.mid.toFixed(2)}
+      {fmtCurrency(row.mid, "USD")}
       <span className="ml-1" aria-label="wide spread" role="img">⚠</span>
     </td>
   ) : (
-    <td>{row.mid.toFixed(2)}</td>
+    <td>{fmtCurrency(row.mid, "USD")}</td>
   );
   return (
     <tr className="t-ladder-row t-ladder-row--data">
-      <th scope="row" className="text-left font-normal">{row.strike.toFixed(0)}</th>
-      <td>{row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)}</td>
+      <th scope="row" className="text-left font-normal">
+        {fmtNumber(row.strike, { maximumFractionDigits: 0 })}
+      </th>
+      <td>
+        {fmtNumber(row.delta, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+          signDisplay: "always",
+        })}
+      </td>
       {midCell}
-      <td>{(row.iv * 100).toFixed(0)}%</td>
-      <td className="u-profit">{yieldStr}</td>
-      <td>{(row.pop * 100).toFixed(0)}%</td>
+      <td>{fmtPct(row.iv, 0)}</td>
+      <td className="u-profit">{fmtPct(row.yield_pct, 1)}</td>
+      <td>{fmtPct(row.pop, 0)}</td>
       {showGreeks && (
         <>
           <td>{fmtGreek(row.theta)}</td>
@@ -116,7 +124,11 @@ function LadderDataRow({ row, showGreeks }: { row: LadderRow; showGreeks: boolea
 
 function fmtGreek(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+  return fmtNumber(n, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: "always",
+  });
 }
 
 function isWideSpread(bid: number, ask: number): boolean {

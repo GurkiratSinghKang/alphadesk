@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import type { EarningsReportTime } from "@/types";
+import { fmtCurrency, fmtDate, fmtPct } from "@/lib/intl";
 import { fmtRelativeTime } from "@/lib/time";
 
 export interface DetailHeaderProps {
@@ -77,11 +78,13 @@ export default function DetailHeader({
             </span>
           )}
           <div className="t-num-hero">
-            {quote ? quote.last.toFixed(2) : "—"}
+            {quote ? fmtCurrency(quote.last, "USD") : "—"}
           </div>
         </div>
         <div className={"t-mono text-[13px] " + (isNeg ? "u-loss" : "u-profit")}>
-          {change == null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(2)} · ${((changePct ?? 0) * 100).toFixed(2)}%`}
+          {change == null
+            ? "—"
+            : `${fmtCurrency(change, "USD", { signDisplay: "always" })} · ${fmtPct(changePct ?? 0, 2)}`}
         </div>
       </div>
     </header>
@@ -102,6 +105,6 @@ function getFreshness(iso: string | undefined): { kind: "live" | "delayed"; age:
 }
 
 function formatReportDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  // Locale-aware via Intl — formats in the viewer's timezone and locale.
+  return fmtDate(iso, { weekday: "short", month: "short", day: "numeric" });
 }

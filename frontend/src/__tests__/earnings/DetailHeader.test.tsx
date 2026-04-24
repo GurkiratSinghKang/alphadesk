@@ -17,7 +17,10 @@ describe("DetailHeader", () => {
     expect(container.textContent).toContain("Semiconductors");
     expect(container.textContent).toContain("201.70");
     expect(container.textContent).toMatch(/AMC/);
-    expect(container.textContent).toMatch(/-1\.42|\-0\.70%|-0.7%/);
+    // Post-i18n: price/change render via fmtCurrency + fmtPct. Accept either
+    // the old raw form ("-1.42") or the currency-wrapped form ("-$1.42") and
+    // either percent form ("-0.70%", "-0.7%") emitted by Intl.
+    expect(container.textContent).toMatch(/-\$?1\.42|\-0\.70%|-0\.7%/);
   });
 
   it("shows em-dash for missing quote", () => {

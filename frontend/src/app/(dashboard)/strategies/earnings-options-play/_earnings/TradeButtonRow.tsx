@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { StrikeLadder, LadderRow } from "@/types";
+import { fmtNumber } from "@/lib/intl";
 
 export interface TradeButtonRowProps {
   symbol: string;
@@ -32,7 +33,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           href={buildSingleLegURL({ symbol, row: atmCall, expiry: ladder.expiry })}
           className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
-          ▸ Short call {Math.round(atmCall.strike)}c
+          ▸ Short call {fmtNumber(Math.round(atmCall.strike), { maximumFractionDigits: 0 })}c
         </Link>
       )}
       {atmPut && (
@@ -41,7 +42,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           href={buildSingleLegURL({ symbol, row: atmPut, expiry: ladder.expiry })}
           className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
-          ▸ Short put {Math.round(atmPut.strike)}p
+          ▸ Short put {fmtNumber(Math.round(atmPut.strike), { maximumFractionDigits: 0 })}p
         </Link>
       )}
       {farPut && farCall && (
@@ -50,7 +51,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           href={buildStrangleURL({ symbol, put: farPut, call: farCall, expiry: ladder.expiry })}
           className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
-          ▸ Sell strangle {Math.round(farPut.strike)}/{Math.round(farCall.strike)}
+          ▸ Sell strangle {fmtNumber(Math.round(farPut.strike), { maximumFractionDigits: 0 })}/{fmtNumber(Math.round(farCall.strike), { maximumFractionDigits: 0 })}
         </Link>
       )}
     </div>

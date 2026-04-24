@@ -1,4 +1,5 @@
 import type { EarningsNewsArticle } from "@/types";
+import { fmtRelative } from "@/lib/intl";
 
 export interface NewsFeedProps {
   news: EarningsNewsArticle[];
@@ -33,7 +34,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
               {a.title}
             </a>
             <span className="ml-2 t-mono text-[11px] u-muted">
-              — {a.source} · {relativeTime(a.published_at)}
+              — {a.source} · {fmtRelative(a.published_at)}
             </span>
           </li>
         ))}
@@ -42,10 +43,3 @@ export default function NewsFeed({ news }: NewsFeedProps) {
   );
 }
 
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffSec = (Date.now() - then) / 1000;
-  if (diffSec < 60 * 60) return `${Math.round(diffSec / 60)}m ago`;
-  if (diffSec < 60 * 60 * 24) return `${Math.round(diffSec / 3600)}h ago`;
-  return `${Math.round(diffSec / 86400)}d ago`;
-}
