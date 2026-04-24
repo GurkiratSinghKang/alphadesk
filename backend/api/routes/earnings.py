@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -21,10 +23,44 @@ async def get_calendar(
     watchlist_only: bool = False,
     sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence)$"),
 ) -> CalendarResponse:
-    return await earnings_screener.list_upcoming(
+    # B-68: emit structured request-boundary logs so Loki / CloudWatch can
+    # compute p50/p95 latency, rows-returned distribution, and partial rate
+    # without a full metrics library. ``request_id`` short-form so it's
+    # greppable in oneliners. The request-id middleware in main.py sets a
+    # proper X-Request-ID ContextVar that JsonFormatter picks up
+    # automatically; this local id is the structured-log correlation key
+    # in case the call is invoked outside a request (tests, bg tasks).
+    request_id = uuid.uuid4().hex[:8]
+    t0 = time.perf_counter()
+    logger.info(
+        "calendar.request.start",
+        extra={
+            "event": "calendar",
+            "stage": "start",
+            "request_id": request_id,
+            "window": window,
+            "market_cap": market_cap,
+            "bmo_amc": bmo_amc,
+            "sort": sort,
+            "min_iv_rank": min_iv_rank,
+        },
+    )
+    r = await earnings_screener.list_upcoming(
         window=window, min_iv_rank=min_iv_rank, market_cap=market_cap,
         bmo_amc=bmo_amc, watchlist_only=watchlist_only, sort=sort,
     )
+    logger.info(
+        "calendar.request.end",
+        extra={
+            "event": "calendar",
+            "stage": "end",
+            "request_id": request_id,
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "rows_returned": len(r.earnings),
+            "partial": r.partial,
+        },
+    )
+    return r
 
 
 @router.get("/{symbol}/detail", response_model=EarningsDetail)
