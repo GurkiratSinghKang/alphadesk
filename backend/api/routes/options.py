@@ -97,8 +97,44 @@ _DEMO_BASE_PRICES: dict[str, float] = {
     "QQQ": 639.0,
 }
 
-# Cache for real spot prices fetched from Alpaca
-_real_spot_cache: dict[str, tuple[float, float]] = {}  # symbol -> (price, timestamp)
+# B-47/B-48: in-process caches are TTL+LRU bounded rather than plain dicts.
+# Plain dicts accumulate stale keys forever (values expire per-TTL-on-read
+# but keys are never removed); a long-running process screens thousands of
+# symbols and leaks ~100 B/entry, O(session length) memory growth. Wrap
+# every write through ``_ttl_lru_set`` which evicts expired entries AND
+# enforces a max-size cap (LRU).
+from collections import OrderedDict as _OrderedDict
+
+_CACHE_MAX_ENTRIES = 500  # per cache; bounds total memory at ~50 KB per cache
+
+def _ttl_lru_set(
+    cache: "_OrderedDict[str, tuple[object, float]]",
+    key: str,
+    value: object,
+    now: float,
+    ttl: float,
+    maxsize: int = _CACHE_MAX_ENTRIES,
+) -> None:
+    """TTL+LRU set: evict expired entries, then cap at ``maxsize``."""
+    # Purge expired entries from the head (OrderedDict is insertion-ordered).
+    while cache:
+        oldest_k = next(iter(cache))
+        _, ts = cache[oldest_k]
+        if now - ts > ttl:
+            cache.pop(oldest_k)
+        else:
+            break
+    # Re-insert this key at the tail (so it becomes the newest).
+    if key in cache:
+        cache.move_to_end(key)
+    cache[key] = (value, now)
+    # Enforce max-size by evicting from head (LRU).
+    while len(cache) > maxsize:
+        cache.popitem(last=False)
+
+
+# Cache for real spot prices fetched from Alpaca.
+_real_spot_cache: "_OrderedDict[str, tuple[float, float]]" = _OrderedDict()
 _SPOT_CACHE_TTL = 60  # seconds
 
 _DEMO_BASE_IV: dict[str, float] = {
@@ -137,7 +173,7 @@ async def _demo_spot(symbol: str) -> float:
         if resp.status_code == 200:
             price = resp.json().get("trade", {}).get("p", 0)
             if price > 0:
-                _real_spot_cache[s] = (price, now)
+                _ttl_lru_set(_real_spot_cache, s, price, now, _SPOT_CACHE_TTL)
                 return price
     except httpx.TimeoutException:
         logger.warning("Alpaca spot-price request timed out for %s", s)
@@ -335,12 +371,12 @@ def _polygon_key_empty() -> bool:
 
 _ALPACA_OPTIONS_BASE = "https://data.alpaca.markets/v1beta1/options"
 
-# Cache: symbol -> (OptionChain, timestamp)
-_chain_cache: dict[str, tuple[OptionChain, float]] = {}
+# Cache: symbol -> (OptionChain, timestamp). B-48: bounded via _ttl_lru_set.
+_chain_cache: "_OrderedDict[str, tuple[OptionChain, float]]" = _OrderedDict()
 _CHAIN_CACHE_TTL = 30  # seconds
 
-# Cache: symbol -> (IVData, timestamp)
-_iv_cache: dict[str, tuple[IVData, float]] = {}
+# Cache: symbol -> (IVData, timestamp). B-48: bounded via _ttl_lru_set.
+_iv_cache: "_OrderedDict[str, tuple[IVData, float]]" = _OrderedDict()
 _IV_CACHE_TTL = 30
 
 
@@ -549,7 +585,7 @@ async def _fetch_real_chain(
             contracts=contracts,
             fetched_at=datetime.now(timezone.utc),
         )
-        _chain_cache[ckey] = (chain, time.time())
+        _ttl_lru_set(_chain_cache, ckey, chain, time.time(), _CHAIN_CACHE_TTL)
         return chain
 
     except httpx.TimeoutException:
@@ -640,7 +676,7 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
             iv_skew=skew,
             term_structure=term_structure,
         )
-        _iv_cache[s] = (result, time.time())
+        _ttl_lru_set(_iv_cache, s, result, time.time(), _IV_CACHE_TTL)
         return result
     except Exception:
         logger.warning("Failed to compute real IV data for %s", s, exc_info=True)
