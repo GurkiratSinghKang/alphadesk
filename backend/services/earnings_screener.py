@@ -649,6 +649,12 @@ async def list_upcoming(
         wanted = bmo_amc.upper()
         rows = [r for r in rows if r.report_time == wanted]
 
+    # B-43: drop stale earnings. FMP's window query can return rows whose
+    # report_date already passed (timezone races around midnight, or an
+    # upstream cache bug). Rendering them in the calendar is misleading —
+    # a negative `days_until` looks like a typo.
+    rows = [r for r in rows if (r.days_until or 0) >= 0]
+
     if sort == "date":
         rows.sort(key=lambda r: (r.report_date, r.symbol))
     elif sort == "iv_rank":

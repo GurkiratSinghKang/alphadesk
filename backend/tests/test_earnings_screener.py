@@ -1,6 +1,6 @@
 """Pure-function tests for earnings_screener. Provider mocking comes in
 Task 8 when we test the aggregator; these tests cover the math."""
-from datetime import date
+from datetime import date, timedelta
 
 from services.earnings_screener import (
     compute_expected_move_from_straddle,
@@ -183,11 +183,13 @@ async def test_list_upcoming_happy_path():
     Result shape matches CalendarResponse."""
     from services import earnings_screener as svc
 
+    d1 = (date.today() + timedelta(days=1)).isoformat()
+    d2 = (date.today() + timedelta(days=2)).isoformat()
     fake_earnings = [
         {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
-         "report_date": "2026-04-23", "report_time": "AMC"},
+         "report_date": d1, "report_time": "AMC"},
         {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
-         "report_date": "2026-04-24", "report_time": "AMC"},
+         "report_date": d2, "report_time": "AMC"},
     ]
     with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
          patch.object(
@@ -207,11 +209,12 @@ async def test_list_upcoming_filters_by_iv_rank():
     """min_iv_rank excludes rows under the threshold."""
     from services import earnings_screener as svc
 
+    future = (date.today() + timedelta(days=1)).isoformat()
     fake_earnings = [
         {"symbol": "A", "company": "A", "sector": "x",
-         "report_date": "2026-04-23", "report_time": "AMC"},
+         "report_date": future, "report_time": "AMC"},
         {"symbol": "B", "company": "B", "sector": "x",
-         "report_date": "2026-04-23", "report_time": "AMC"},
+         "report_date": future, "report_time": "AMC"},
     ]
     hydrated = {"A": {"iv_rank": 80}, "B": {"iv_rank": 30}}
 
@@ -234,11 +237,13 @@ async def test_list_upcoming_partial_on_hydrate_failure():
     and the response itself marks partial=True but does not 500."""
     from services import earnings_screener as svc
 
+    d1 = (date.today() + timedelta(days=1)).isoformat()
+    d2 = (date.today() + timedelta(days=2)).isoformat()
     fake_earnings = [
         {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
-         "report_date": "2026-04-23", "report_time": "AMC"},
+         "report_date": d1, "report_time": "AMC"},
         {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
-         "report_date": "2026-04-24", "report_time": "AMC"},
+         "report_date": d2, "report_time": "AMC"},
     ]
 
     async def hydrate(row, *, min_iv_rank: float = 0):
@@ -295,6 +300,35 @@ async def test_get_detail_merges_all_blocks():
     # Blocks that returned None must stay None
     assert detail.strike_ladder is None
     assert detail.claude_structured is None
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_filters_stale_earnings():
+    """B-43 regression: rows with `days_until < 0` (report already happened)
+    must not render in the calendar. FMP's window can return past dates on
+    timezone edges and such rows look like typos to the user."""
+    from services import earnings_screener as svc
+
+    today = date.today()
+    past_date = (today - timedelta(days=3)).isoformat()
+    future_date = (today + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "STAL", "company": "Stale", "sector": "x",
+         "report_date": past_date, "report_time": "AMC"},
+        {"symbol": "FRSH", "company": "Fresh", "sector": "x",
+         "report_date": future_date, "report_time": "AMC"},
+    ]
+
+    async def hydrate(row, *, min_iv_rank: float = 0):
+        return {**row, "price": 100.0, "iv_rank": 70.0}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    symbols = [r.symbol for r in resp.earnings]
+    assert "FRSH" in symbols
+    assert "STAL" not in symbols
 
 
 @pytest.mark.asyncio
