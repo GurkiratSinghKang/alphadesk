@@ -241,13 +241,20 @@ async def _fmp_upcoming(window: str) -> list[dict]:
 class _StubRequest:
     """Minimal Request-shaped object so we can call `api.routes.market.get_quote`
     without a real FastAPI request context. The rate-limiter only reads
-    ``request.client.host`` and ``request.headers``."""
+    ``request.client.host`` and ``request.headers``.
+
+    B-33: Accept a ``client_host`` kwarg so hydration paths can propagate
+    the real user's IP instead of always spoofing ``127.0.0.1`` (which
+    bypassed the per-IP rate limiter). Default ``None`` falls back to
+    loopback for callers without a request (internal jobs, tests).
+    """
 
     class _Client:
-        host = "127.0.0.1"
+        def __init__(self, host: str = "127.0.0.1") -> None:
+            self.host = host
 
-    def __init__(self) -> None:
-        self.client = self._Client()
+    def __init__(self, client_host: str | None = None) -> None:
+        self.client = self._Client(host=client_host or "127.0.0.1")
         self.headers: dict[str, str] = {}
 
 
@@ -255,11 +262,13 @@ class _StubResponse:
     headers: dict[str, str] = {}
 
 
-async def _load_quote(symbol: str) -> dict | None:
+async def _load_quote(symbol: str, client_host: str | None = None) -> dict | None:
     from api.routes.market import get_quote  # existing helper
 
     try:
-        q = await get_quote(symbol, _StubRequest(), _StubResponse())  # type: ignore[arg-type]
+        q = await get_quote(
+            symbol, _StubRequest(client_host=client_host), _StubResponse(),
+        )  # type: ignore[arg-type]
         return {
             "last": float(q.last),
             "change": float(q.change),
@@ -282,6 +291,7 @@ async def _load_metrics(
     symbol: str,
     report_date: date | None = None,
     expiry: date | None = None,
+    client_host: str | None = None,  # B-33 — accepted for API parity; unused today
 ) -> dict | None:
     from api.routes.options import get_iv_analysis, get_options_chain
 
@@ -547,11 +557,18 @@ async def _load_earnings_meta(symbol: str) -> dict | None:
     return next((r for r in rows if r["symbol"] == symbol), None)
 
 
-async def _hydrate_row(row: dict, *, min_iv_rank: float = 0) -> dict | None:
+async def _hydrate_row(
+    row: dict,
+    *,
+    min_iv_rank: float = 0,
+    client_host: str | None = None,
+) -> dict | None:
     """Enrich one FMP row with price, IV rank, expected move, and days-until.
 
     Returns the enriched dict or ``None`` when ``iv_rank`` is below the
     threshold filter. Raises on truly unrecoverable errors (caller catches).
+    ``client_host`` is threaded through to ``_load_quote`` so per-IP rate
+    limits kick in on the real user's IP instead of loopback (B-33).
     """
     symbol = row["symbol"]
     # B-35: gather with return_exceptions=True gives us clean per-task
@@ -559,8 +576,12 @@ async def _hydrate_row(row: dict, *, min_iv_rank: float = 0) -> dict | None:
     # wait/result sequence re-raised either task's exception without
     # distinguishing the source, and required manual Task plumbing.
     quote_result, metrics_result = await asyncio.gather(
-        _load_quote(symbol),
-        _load_metrics(symbol, report_date=date.fromisoformat(row["report_date"])),
+        _load_quote(symbol, client_host=client_host),
+        _load_metrics(
+            symbol,
+            report_date=date.fromisoformat(row["report_date"]),
+            client_host=client_host,
+        ),
         return_exceptions=True,
     )
     if isinstance(quote_result, Exception):
@@ -604,8 +625,14 @@ async def list_upcoming(
     bmo_amc: str = "both",
     watchlist_only: bool = False,
     sort: str = "date",
+    client_host: str | None = None,
 ) -> CalendarResponse:
-    """Fan out over FMP + per-symbol hydrators, return one calendar response."""
+    """Fan out over FMP + per-symbol hydrators, return one calendar response.
+
+    ``client_host`` is the caller's IP (passed from the FastAPI route) so
+    downstream per-IP rate limiters see the real user instead of loopback
+    (B-33).
+    """
     partial = False
     try:
         raw_rows = await _fmp_upcoming(window)
@@ -651,7 +678,9 @@ async def list_upcoming(
     async def safe_hydrate(row: dict) -> dict | None:
         async with hydrate_sem:
             try:
-                return await _hydrate_row(row, min_iv_rank=min_iv_rank)
+                return await _hydrate_row(
+                    row, min_iv_rank=min_iv_rank, client_host=client_host,
+                )
             except Exception as e:
                 log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
                 nonlocal partial

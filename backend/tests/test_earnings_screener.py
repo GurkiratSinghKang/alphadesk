@@ -218,7 +218,7 @@ async def test_list_upcoming_filters_by_iv_rank():
     ]
     hydrated = {"A": {"iv_rank": 80}, "B": {"iv_rank": 30}}
 
-    async def hydrate(row, *, min_iv_rank: float = 0):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
         iv = hydrated[row["symbol"]]["iv_rank"]
         if iv < min_iv_rank:
             return None
@@ -246,7 +246,7 @@ async def test_list_upcoming_partial_on_hydrate_failure():
          "report_date": d2, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
         if row["symbol"] == "TSLA":
             raise RuntimeError("options provider down")
         return {**row, "price": 200.0, "iv_rank": 70.0}
@@ -317,7 +317,7 @@ async def test_list_upcoming_surfaces_validation_errors():
          "report_date": future, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
         if row["symbol"] == "BAD":
             # Return a payload that violates the schema (report_time invalid).
             return {**row, "report_time": "NOPE", "price": 100.0, "iv_rank": 70}
@@ -352,7 +352,7 @@ async def test_list_upcoming_filters_stale_earnings():
          "report_date": future_date, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
         return {**row, "price": 100.0, "iv_rank": 70.0}
 
     with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
@@ -362,6 +362,85 @@ async def test_list_upcoming_filters_stale_earnings():
     symbols = [r.symbol for r in resp.earnings]
     assert "FRSH" in symbols
     assert "STAL" not in symbols
+
+
+@pytest.mark.asyncio
+async def test_stub_request_uses_provided_client_host():
+    """B-33 regression: the _StubRequest used inside _load_quote must carry
+    the caller's real IP when supplied, so the per-IP rate limiter in
+    /quotes/{symbol} counts against the user (not loopback)."""
+    from services import earnings_screener as svc
+
+    captured = {}
+
+    class _Q:
+        last = 100.0
+        change = 1.0
+        changePct = 0.5
+
+    async def fake_get_quote(symbol, request, response):
+        captured["host"] = request.client.host
+        return _Q()
+
+    with patch("api.routes.market.get_quote", fake_get_quote):
+        out = await svc._load_quote("NVDA", client_host="203.0.113.7")
+
+    assert out == {"last": 100.0, "change": 1.0, "change_pct": 0.5}
+    assert captured["host"] == "203.0.113.7"
+
+
+@pytest.mark.asyncio
+async def test_stub_request_default_is_loopback():
+    """B-33: when no client_host is supplied, fall back to 127.0.0.1
+    (preserves prior behavior for tests / internal jobs)."""
+    from services import earnings_screener as svc
+
+    captured = {}
+
+    class _Q:
+        last = 100.0
+        change = 1.0
+        changePct = 0.5
+
+    async def fake_get_quote(symbol, request, response):
+        captured["host"] = request.client.host
+        return _Q()
+
+    with patch("api.routes.market.get_quote", fake_get_quote):
+        await svc._load_quote("NVDA")
+
+    assert captured["host"] == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_threads_client_host_to_load_quote():
+    """B-33 end-to-end: the client_host arg on list_upcoming reaches
+    _load_quote through the safe_hydrate -> _hydrate_row chain."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=3)).isoformat()
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+    ]
+    captured: list[str | None] = []
+
+    async def spy_load_quote(symbol, client_host=None):
+        captured.append(client_host)
+        return {"last": 100.0, "change": 0.0, "change_pct": 0.0}
+
+    async def spy_load_metrics(symbol, report_date=None, expiry=None, client_host=None):
+        return {"iv_rank": 70, "expected_move_pct": 0.05}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_load_quote", spy_load_quote), \
+         patch.object(svc, "_load_metrics", spy_load_metrics):
+        resp = await svc.list_upcoming(
+            window="both", min_iv_rank=0, client_host="198.51.100.42",
+        )
+
+    assert resp.earnings[0].symbol == "NVDA"
+    assert captured == ["198.51.100.42"]
 
 
 @pytest.mark.asyncio
