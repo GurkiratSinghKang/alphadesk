@@ -1,640 +1,368 @@
-"""KAMA Breakout — Kaufman adaptive MA + Donchian breakout + ER gate.
+"""KAMA Breakout — SOTA shell.
 
-See ``spec.md`` for the academic lineage and full rule set. This module
-implements the :class:`backend.strategies.base.Strategy` protocol.
+Kaufman adaptive MA + Donchian breakout + ER gate + 200-SMA filter.
+See ``spec.md`` for the academic spec.
 
-Design-spec section references:
-
-* Entry: ``close > KAMA`` AND ``close > Donchian_upper`` AND ``ER >= er_min_trend``
-  AND ``close > SMA_200`` (rising). Signals fire MOO so they fill at T+1 open.
-* Exit: chandelier trailing stop (``HH_22 - 3*ATR``) OR KAMA crossunder.
-  No hard take-profit — trend strategies must let winners run.
-* Sizing: volatility parity at 1% of equity per trade,
-  ``shares = risk * equity / stop_distance`` (fixes the legacy 3%-instead-of-1%
-  bug the audit flagged).
-* Pyramiding: add 1/2 size at +1 ATR advance. Cap total allocation 15%.
+Registered with ``meta.paper_only=True``: the strategy backtests + paper-
+trades normally, but the DailyPipelineRunner blocks live-mode emission
+until OOS track record is established.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 
 from indicators.trend import donchian, kama, sma
 from indicators.volatility import atr
-from strategies.base import Context, cache_of
-from strategies.registry import register_strategy
-from strategies.signal import OrderType, Signal
 
-from .config import DEFAULTS, DEFAULT_UNIVERSE, search_space as _cfg_search_space
+from strategies._core.contracts import (
+    Fill,
+    OrderType,
+    Signal,
+    StrategyInput,
+    StrategyResult,
+    TimeInForce,
+)
+from strategies._core.protocol import Strategy, StrategyMeta, register_strategy
+
+from .config import DEFAULT_UNIVERSE, KamaBreakoutParams
+
 
 log = logging.getLogger("alphadesk.strategies.kama_breakout")
 
+_NS = "kama_breakout"
+_REQUIRED_LOOKBACK_DAYS = 260
 
-# ----------------------------------------------------------------------------
-# Per-position state carried in ctx.cache["positions"] — keyed by symbol.
-# ----------------------------------------------------------------------------
+
 @dataclass
-class _PosState:
-    """State the strategy tracks per open position (not by the engine)."""
-
-    entry_ts: Optional[date] = None
+class PosState:
+    """State per open position. Serialisable via dict-like conversion."""
+    entry_date: Optional[date] = None
     entry_price: float = 0.0
     atr_at_entry: float = 0.0
-    highest_high: float = 0.0          # ratchets up each bar the pos is open
-    pyramid_count: int = 0             # how many add-ons we've done
-    shares_initial: int = 0            # from the first entry (for pyramid sizing)
+    highest_high: float = 0.0
+    pyramid_count: int = 0
+    shares_initial: int = 0
 
 
-# ----------------------------------------------------------------------------
-# Registered strategy class
-# ----------------------------------------------------------------------------
 @register_strategy(
-    name="kama_breakout",
-    category="equity",
-    # Need KAMA + Donchian + ATR + 200-SMA warmup, plus slack for ER & volume.
-    required_bars=("daily",),
-    required_lookback_days=260,
-    min_universe_size=1,
-    supports_shorts=False,
-    supports_options=False,
-    description=(
-        "Kaufman adaptive MA + Donchian 20 breakout, gated by Efficiency "
-        "Ratio and 200-SMA trend filter. Chandelier trailing stop, "
-        "volatility-parity sizing, 1/2 size pyramid at +1 ATR."
-    ),
+    StrategyMeta(
+        name="kama_breakout",
+        category="equity",
+        paper_only=True,  # audit: OOS track record not yet established
+        description=(
+            "Kaufman adaptive MA + Donchian 20 breakout, gated by Efficiency "
+            "Ratio and 200-SMA trend filter. Chandelier trailing stop, "
+            "volatility-parity sizing, 1/2 size pyramid at +1 ATR."
+        ),
+        lookback_days=_REQUIRED_LOOKBACK_DAYS,
+        required_bars=("daily",),
+        min_universe_size=1,
+    )
 )
-class KamaBreakout:
+class KamaBreakoutStrategy(Strategy):
     """Long-only adaptive-MA trend-following strategy."""
 
-    name = "kama_breakout"
-    required_bars: list[str] = ["daily"]
-    required_lookback_days: int = 260
+    PARAMS_MODEL = KamaBreakoutParams
 
-    # ---------- construction + configuration ---------------------------------
-    def __init__(self) -> None:
-        # Copy defaults; overridden by configure().
-        self._p: dict[str, Any] = dict(DEFAULTS)
-        self._universe_cache: Optional[list[str]] = None
+    def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
+        return list(DEFAULT_UNIVERSE)
 
-    def configure(self, params: Mapping[str, Any]) -> None:
-        """Coerce / validate parameter overrides."""
+    def run(
+        self,
+        input: StrategyInput,
+        params: KamaBreakoutParams,
+    ) -> StrategyResult:
+        asof = input.asof
+        state = input.state
+        diagnostics: dict[str, Any] = {}
+        warnings: list[str] = []
+        state_update: dict[str, Any] = {}
 
-        merged = dict(DEFAULTS)
-        merged.update(params or {})
-        # Integer coercions
-        for k in (
-            "kama_er_period",
-            "kama_fast",
-            "kama_slow",
-            "donchian_period",
-            "atr_period",
-            "trend_sma_period",
-            "max_positions",
-            "volume_sma_period",
-            "earnings_skip_days",
-        ):
-            merged[k] = int(merged[k])
-        # Float coercions
-        for k in (
-            "chandelier_atr_mult",
-            "er_min_trend",
-            "risk_per_trade",
-            "max_allocation",
-            "volume_surge_min",
-            "pyramid_trigger_atr",
-            "pyramid_size_fraction",
-        ):
-            merged[k] = float(merged[k])
-        # Bool coercions
-        for k in ("volume_surge_enabled", "pyramid_enabled"):
-            merged[k] = bool(merged[k])
+        positions_state: dict[str, dict] = dict(state.get(f"{_NS}.positions", {}))
 
-        # Universe normalisation
-        syms = merged.get("universe_symbols") or DEFAULT_UNIVERSE
-        if isinstance(syms, str):
-            merged["universe_symbols"] = (syms,)
-        else:
-            merged["universe_symbols"] = tuple(str(s).upper() for s in syms)
+        signals: list[Signal] = []
 
-        # Sanity checks
-        if merged["kama_fast"] >= merged["kama_slow"]:
-            raise ValueError(
-                f"kama_fast ({merged['kama_fast']}) must be < kama_slow "
-                f"({merged['kama_slow']})"
-            )
-        if not (0.0 < merged["risk_per_trade"] < 0.1):
-            raise ValueError(
-                f"risk_per_trade={merged['risk_per_trade']} out of (0, 0.1]"
-            )
-        if not (0.0 < merged["max_allocation"] <= 1.0):
-            raise ValueError(
-                f"max_allocation={merged['max_allocation']} out of (0, 1]"
-            )
-
-        self._p = merged
-        self._universe_cache = list(merged["universe_symbols"])
-        log.debug("kama_breakout configured with %s", self._p)
-
-    # ---------- lifecycle hooks ---------------------------------------------
-    def universe(self, asof: date, ctx: Context) -> Iterable[str]:
-        return self._universe_cache or list(DEFAULT_UNIVERSE)
-
-    def generate_signals(
-        self, asof: date, ctx: Context
-    ) -> Iterable[Signal]:
-        """Emit entry signals for names whose rules all fire on bar ``asof``.
-
-        All signals are MOO -> fill at next bar's open.
-        """
-
-        cache = cache_of(ctx)
-        pos_state: dict[str, _PosState] = cache.setdefault("positions", {})
-
-        # Count currently-open positions (after engine mark-to-market).
-        open_positions = [p for p in ctx.positions if p.quantity != 0]
-        n_open = len(open_positions)
-
-        max_pos = int(self._p["max_positions"])
-        if n_open >= max_pos:
-            return []
-
-        open_symbols = {p.symbol for p in open_positions}
-        candidates: list[tuple[str, Signal, float]] = []  # (symbol, signal, er)
-
-        for sym in self._universe_cache or []:
-            if sym in open_symbols:
-                continue
-            try:
-                sig, er = self._entry_signal(sym, asof, ctx)
-            except Exception:  # pragma: no cover - defensive
-                log.exception("entry evaluation failed for %s", sym)
-                continue
-            if sig is not None:
-                candidates.append((sym, sig, er))
-
-        if not candidates:
-            return []
-
-        # Rank by ER descending so we take the strongest trend signals first.
-        candidates.sort(key=lambda t: t[2], reverse=True)
-        slots = max_pos - n_open
-        picked = candidates[:slots]
-
-        # Record pending entry state so on_fill can populate _PosState fields.
-        pending = cache.setdefault("pending_entries", {})
-        for sym, sig, _er in picked:
-            pending[sym] = {
-                "atr": float(sig.stop_price or 0.0),  # will be overwritten
-                "asof": asof,
-            }
-
-        return [sig for _, sig, _ in picked]
-
-    def manage(self, asof: date, ctx: Context) -> Iterable[Signal]:
-        """Update trailing stops, exit on KAMA crossunder, handle pyramids."""
-
-        cache = cache_of(ctx)
-        pos_state: dict[str, _PosState] = cache.setdefault("positions", {})
-        pending = cache.setdefault("pending_entries", {})
-
-        out: list[Signal] = []
-        for pos in list(ctx.positions):
-            if pos.quantity <= 0:  # long-only
+        # --- Exits (chandelier + KAMA crossunder) --------------------- #
+        closed_syms: set[str] = set()
+        for pos in input.positions:
+            if pos.quantity <= 0:
                 continue
             sym = pos.symbol
-            st = pos_state.get(sym)
-            if st is None:
-                # Filled but on_fill didn't stash state (e.g. first bar after
-                # restart). Seed a best-effort entry record from the position.
-                st = _PosState(
-                    entry_ts=asof,
-                    entry_price=float(pos.avg_price),
+            st_dict = positions_state.get(sym)
+            if st_dict is None:
+                st = PosState(
+                    entry_date=pos.entry_date,
+                    entry_price=float(pos.avg_entry_price),
                     atr_at_entry=0.0,
-                    highest_high=float(pos.last_price or pos.avg_price),
-                    shares_initial=pos.quantity,
+                    highest_high=float(pos.avg_entry_price),
+                    shares_initial=int(pos.quantity),
                 )
-                pos_state[sym] = st
+            else:
+                st = PosState(**st_dict)
 
-            # Pull recent bars to evaluate exits / pyramids.
-            df = self._history(sym, asof, ctx)
-            if df is None or len(df) < self._min_history():
+            hist = _symbol_history(input.bars, sym, asof)
+            if hist is None or len(hist) < params.trend_sma_period + 15:
+                positions_state[sym] = _pos_state_to_dict(st)
                 continue
 
-            close = float(df["close"].iloc[-1])
-            high = float(df["high"].iloc[-1])
-
-            # Ratchet highest_high.
+            close = float(hist["close"].iloc[-1])
+            high = float(hist["high"].iloc[-1])
             if high > st.highest_high:
                 st.highest_high = high
 
-            # KAMA / ATR recomputed on the full history.
             kama_series = kama(
-                df["close"],
-                er_period=self._p["kama_er_period"],
-                fast=self._p["kama_fast"],
-                slow=self._p["kama_slow"],
+                hist["close"],
+                er_period=params.kama_er_period,
+                fast=params.kama_fast,
+                slow=params.kama_slow,
             )
-            kama_last = float(kama_series.iloc[-1]) if not pd.isna(
-                kama_series.iloc[-1]
-            ) else None
-            atr_series = atr(
-                df["high"], df["low"], df["close"], period=self._p["atr_period"]
-            )
-            atr_last = float(atr_series.iloc[-1]) if not pd.isna(
-                atr_series.iloc[-1]
-            ) else None
+            kama_last = float(kama_series.iloc[-1]) if not pd.isna(kama_series.iloc[-1]) else None
+            atr_series = atr(hist["high"], hist["low"], hist["close"], period=params.atr_period)
+            atr_last = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else None
 
-            # --- Exit conditions ---
-            # 1) Chandelier trailing stop.
+            # 1. Chandelier trailing stop.
             if atr_last and atr_last > 0:
-                chandelier_stop = (
-                    st.highest_high - float(self._p["chandelier_atr_mult"]) * atr_last
-                )
+                chandelier_stop = st.highest_high - params.chandelier_atr_mult * atr_last
                 if close <= chandelier_stop:
-                    out.append(
-                        Signal(
-                            symbol=sym,
-                            target_weight=0.0,
-                            order_type=OrderType.MOO,
-                            tag="chandelier",
-                        )
-                    )
+                    signals.append(Signal(
+                        symbol=sym, target_weight=0.0,
+                        order_type=OrderType.MOO,
+                        time_in_force=TimeInForce.DAY,
+                        tag="kama-exit-chandelier", asof=asof,
+                    ))
+                    closed_syms.add(sym)
+                    positions_state.pop(sym, None)
                     continue
 
-            # 2) KAMA crossunder.
+            # 2. KAMA crossunder.
             if kama_last is not None and close < kama_last:
-                out.append(
-                    Signal(
-                        symbol=sym,
-                        target_weight=0.0,
-                        order_type=OrderType.MOO,
-                        tag="kama_crossunder",
-                    )
-                )
+                signals.append(Signal(
+                    symbol=sym, target_weight=0.0,
+                    order_type=OrderType.MOO,
+                    time_in_force=TimeInForce.DAY,
+                    tag="kama-exit-crossunder", asof=asof,
+                ))
+                closed_syms.add(sym)
+                positions_state.pop(sym, None)
                 continue
 
-            # --- Pyramiding ---
-            if (
-                self._p["pyramid_enabled"]
-                and st.pyramid_count == 0
-                and st.atr_at_entry > 0
-                and close - st.entry_price
-                >= float(self._p["pyramid_trigger_atr"]) * st.atr_at_entry
-            ):
-                # Add half the initial shares, respecting max_allocation cap.
-                pyramid_shares = int(
-                    round(
-                        st.shares_initial * float(self._p["pyramid_size_fraction"])
-                    )
+            positions_state[sym] = _pos_state_to_dict(st)
+
+        # --- Entries --------------------------------------------------- #
+        open_positions = [p for p in input.positions if p.quantity > 0 and p.symbol not in closed_syms]
+        n_open = len(open_positions)
+
+        if n_open < params.max_positions:
+            open_symbols = {p.symbol for p in open_positions}
+            candidates: list[tuple[str, float, int, float]] = []  # (sym, er, shares, atr)
+            for sym in DEFAULT_UNIVERSE:
+                if sym in open_symbols:
+                    continue
+                evaluation = _evaluate_entry(
+                    input.bars, input.earnings, sym, asof, params, float(input.equity),
                 )
-                if pyramid_shares > 0:
-                    max_alloc = float(self._p["max_allocation"])
-                    equity = float(ctx.equity)
-                    cur_notional = abs(pos.quantity) * close
-                    max_notional = max_alloc * equity
-                    max_add_shares = int(
-                        max(0, (max_notional - cur_notional) // close)
-                    )
-                    add_qty = min(pyramid_shares, max_add_shares)
-                    if add_qty > 0:
-                        out.append(
-                            Signal(
-                                symbol=sym,
-                                quantity=pos.quantity + add_qty,
-                                order_type=OrderType.MOO,
-                                tag="pyramid",
-                            )
-                        )
-                        st.pyramid_count += 1
+                if evaluation is not None:
+                    candidates.append(evaluation)
 
-        # Clean out stale pending entries (older than 2 sessions).
-        stale = [
-            s
-            for s, info in pending.items()
-            if (asof - info["asof"]).days > 3
-        ]
-        for s in stale:
-            pending.pop(s, None)
+            candidates.sort(key=lambda t: t[1], reverse=True)
+            slots = params.max_positions - n_open
+            for sym, er, shares, atr_val in candidates[:slots]:
+                signals.append(Signal(
+                    symbol=sym, quantity=shares,
+                    order_type=OrderType.MOO,
+                    time_in_force=TimeInForce.DAY,
+                    tag=f"kama-entry er={er:.2f}", asof=asof,
+                ))
+                # Record atr-at-entry so pyramid logic can use it later.
+                positions_state[sym] = _pos_state_to_dict(PosState(
+                    entry_date=asof,
+                    entry_price=0.0,  # populated by on_fill
+                    atr_at_entry=atr_val,
+                    highest_high=0.0,
+                    shares_initial=shares,
+                    pyramid_count=0,
+                ))
+            diagnostics["entries_emitted"] = len(candidates[:slots])
 
-        return out
+        state_update[f"{_NS}.positions"] = positions_state
 
-    def on_fill(self, fill: Any, ctx: Context) -> None:
-        """Record per-position state after an entry fill."""
+        return StrategyResult(
+            signals=signals,
+            state_update=state_update,
+            diagnostics=diagnostics,
+            warnings=warnings,
+        )
 
-        cache = cache_of(ctx)
-        pos_state: dict[str, _PosState] = cache.setdefault("positions", {})
-        pending: dict[str, dict] = cache.setdefault("pending_entries", {})
+    def on_fill(self, fill: Fill, state: dict[str, Any]) -> dict[str, Any]:
+        positions = dict(state.get(f"{_NS}.positions", {}))
         sym = fill.symbol
+        st_dict = positions.get(sym)
+        if st_dict is None:
+            # Closing fill on a position we never recorded — no-op.
+            return {f"{_NS}.positions": positions}
 
-        # If the fill closes the position (exit), wipe state.
-        pos_after = ctx.position(sym)
-        if pos_after is None or pos_after.quantity == 0:
-            pos_state.pop(sym, None)
-            pending.pop(sym, None)
-            return
-
-        # This is an entry or pyramid add. First-time entry: seed state.
-        st = pos_state.get(sym)
-        if st is None:
-            # Pull a few bars to derive ATR at entry if we can.
-            df = self._history(sym, ctx.asof, ctx)
-            atr_entry = 0.0
-            if df is not None and len(df) >= self._p["atr_period"] + 2:
-                a = atr(
-                    df["high"],
-                    df["low"],
-                    df["close"],
-                    period=self._p["atr_period"],
-                )
-                if not pd.isna(a.iloc[-1]):
-                    atr_entry = float(a.iloc[-1])
-            price = float(fill.price)
-            pos_state[sym] = _PosState(
-                entry_ts=ctx.asof,
-                entry_price=price,
-                atr_at_entry=atr_entry,
-                highest_high=price,
-                shares_initial=abs(int(fill.quantity)),
-                pyramid_count=0,
-            )
+        if fill.quantity < 0 or (fill.signal_tag or "").startswith("kama-exit"):
+            positions.pop(sym, None)
         else:
-            # Pyramid add: just leave the original entry_price / shares_initial
-            # alone; ATR and pyramid_count are already set in manage().
-            pass
+            # Entry fill: stamp the real entry price and seed highest_high.
+            st_dict["entry_price"] = float(fill.price)
+            if st_dict.get("highest_high", 0.0) <= 0:
+                st_dict["highest_high"] = float(fill.price)
+            positions[sym] = st_dict
 
-        pending.pop(sym, None)
+        return {f"{_NS}.positions": positions}
 
-    # ---------- tuner --------------------------------------------------------
-    @classmethod
-    def search_space(cls) -> dict[str, Any]:
-        """Defer to :func:`config.search_space`."""
 
-        return _cfg_search_space()
+# --------------------------------------------------------------------------- #
+# Pure helpers                                                                #
+# --------------------------------------------------------------------------- #
+def _pos_state_to_dict(st: PosState) -> dict:
+    return {
+        "entry_date": st.entry_date,
+        "entry_price": st.entry_price,
+        "atr_at_entry": st.atr_at_entry,
+        "highest_high": st.highest_high,
+        "pyramid_count": st.pyramid_count,
+        "shares_initial": st.shares_initial,
+    }
 
-    # ---------- internals ----------------------------------------------------
-    def _entry_signal(
-        self, sym: str, asof: date, ctx: Context
-    ) -> tuple[Optional[Signal], float]:
-        """Evaluate the entry gates for one symbol. Return (signal | None, ER)."""
 
-        df = self._history(sym, asof, ctx)
-        if df is None or len(df) < self._min_history():
-            return None, 0.0
+def _symbol_history(
+    bars: pd.DataFrame,
+    sym: str,
+    asof: date,
+) -> Optional[pd.DataFrame]:
+    """Return per-symbol OHLCV history up to ``asof``."""
+    if bars is None or getattr(bars, "empty", True):
+        return None
 
-        # ------- indicators -------------------------------------------------
-        close = df["close"].astype("float64")
-        high = df["high"].astype("float64")
-        low = df["low"].astype("float64")
-
-        kama_series = kama(
-            close,
-            er_period=self._p["kama_er_period"],
-            fast=self._p["kama_fast"],
-            slow=self._p["kama_slow"],
-        )
-        if pd.isna(kama_series.iloc[-1]):
-            return None, 0.0
-
-        # Donchian using bars up to and *excluding* today, so we compare
-        # today's close to yesterday's channel (no same-bar lookahead).
-        donch = donchian(high.shift(1), low.shift(1), period=int(self._p["donchian_period"]))
-        donch_upper = donch["upper"].iloc[-1]
-        if pd.isna(donch_upper):
-            return None, 0.0
-
-        sma_trend = sma(close, period=int(self._p["trend_sma_period"]))
-        sma_last = sma_trend.iloc[-1]
-        if pd.isna(sma_last):
-            return None, 0.0
-        sma_lookback = 10
-        if len(sma_trend) > sma_lookback:
-            sma_prev = sma_trend.iloc[-1 - sma_lookback]
-            sma_rising = (not pd.isna(sma_prev)) and float(sma_last) > float(sma_prev)
-        else:
-            sma_rising = False
-
-        atr_series = atr(high, low, close, period=int(self._p["atr_period"]))
-        atr_last = atr_series.iloc[-1]
-        if pd.isna(atr_last) or float(atr_last) <= 0:
-            return None, 0.0
-
-        # Efficiency ratio over the same window as KAMA.
-        er = _efficiency_ratio(close, int(self._p["kama_er_period"]))
-
-        # ------- gates ------------------------------------------------------
-        c_last = float(close.iloc[-1])
-        kama_last = float(kama_series.iloc[-1])
-
-        # 1. Price above KAMA
-        if c_last <= kama_last:
-            return None, er
-        # 2. Donchian breakout
-        if c_last <= float(donch_upper):
-            return None, er
-        # 3. ER gate — THE FIX.
-        if er < float(self._p["er_min_trend"]):
-            return None, er
-        # 4. Secular trend filter.
-        if c_last <= float(sma_last):
-            return None, er
-        if not sma_rising:
-            return None, er
-        # 5. Volume surge (optional).
-        if bool(self._p["volume_surge_enabled"]):
-            vol_sma = (
-                df["volume"]
-                .astype("float64")
-                .rolling(int(self._p["volume_sma_period"]))
-                .mean()
-            )
-            if pd.isna(vol_sma.iloc[-1]) or vol_sma.iloc[-1] <= 0:
-                return None, er
-            if float(df["volume"].iloc[-1]) < float(
-                self._p["volume_surge_min"]
-            ) * float(vol_sma.iloc[-1]):
-                return None, er
-        # 6. Earnings window (graceful degradation).
-        if self._has_earnings_soon(sym, asof, ctx):
-            return None, er
-
-        # ------- sizing: volatility-parity, 1% risk per trade --------------
-        stop_distance = float(self._p["chandelier_atr_mult"]) * float(atr_last)
-        if stop_distance <= 0:
-            return None, er
-        risk_dollars = float(self._p["risk_per_trade"]) * float(ctx.equity)
-        shares = int(risk_dollars // stop_distance)
-
-        # Cap by max_allocation.
-        max_notional = float(self._p["max_allocation"]) * float(ctx.equity)
-        cap_shares = int(max_notional // c_last) if c_last > 0 else 0
-        shares = min(shares, cap_shares)
-        if shares <= 0:
-            return None, er
-
-        sig = Signal(
-            symbol=sym,
-            quantity=shares,
-            order_type=OrderType.MOO,
-            asof=asof,
-            tag=f"entry er={er:.2f}",
-        )
-        return sig, er
-
-    # -- history ------------------------------------------------------------
-    def _history(
-        self, sym: str, asof: date, ctx: Context
-    ) -> Optional[pd.DataFrame]:
-        """Pull the indicator-window history for one symbol up to ``asof``.
-
-        We fetch the *entire* historical window once per symbol on the first
-        call and then slice it on each subsequent ``asof``. This avoids the
-        N^2 HTTP load that would otherwise hit the provider with one fetch
-        per (symbol, session) pair. Returns ``None`` on provider failure or
-        insufficient data.
-        """
-
-        cache = cache_of(ctx)
-        full_cache: dict[str, Optional[pd.DataFrame]] = cache.setdefault(
-            "_bars_full", {}
-        )
-
-        full = full_cache.get(sym)
-        if full is None and sym not in full_cache:
-            # Fetch a generous upper-bound window.
-            lookback = int(self._p["trend_sma_period"]) + 90
-            fetch_start = asof - timedelta(days=int(lookback * 1.8))
-            fetch_end = asof + timedelta(days=2)
-            try:
-                df = ctx.bar_provider.bars([sym], fetch_start, fetch_end, tf="1D")
-            except Exception:  # pragma: no cover - provider surface varies
-                full_cache[sym] = None
-                return None
-            if df is None or len(df) == 0:
-                full_cache[sym] = None
-                return None
-            full = self._normalise_bars(df, sym)
-            full_cache[sym] = full
-
-        if full is None or full.empty:
-            return None
-
-        asof_ts = pd.Timestamp(asof).tz_localize("UTC")
-        # Keep bars whose timestamp is on or before end-of-day asof.
-        cutoff = asof_ts + pd.Timedelta(hours=23, minutes=59)
-        sliced = full[full.index <= cutoff]
-
-        # If the last cached bar is behind asof, refetch (live backtests or
-        # forward-walk tests). We refetch at most once per symbol per 30-day
-        # window to stay cheap.
-        last_cached = full.index.max() if not full.empty else None
-        if last_cached is None or (asof_ts - last_cached) > pd.Timedelta(days=30):
-            try:
-                fetch_end = asof_ts + pd.Timedelta(days=2)
-                fetch_start = (last_cached or (asof_ts - pd.Timedelta(days=60)))
-                extra = ctx.bar_provider.bars(
-                    [sym], fetch_start.date(), fetch_end.date(), tf="1D"
-                )
-                extra_df = self._normalise_bars(extra, sym)
-                if extra_df is not None and not extra_df.empty:
-                    full = pd.concat([full, extra_df])
-                    full = full[~full.index.duplicated(keep="last")].sort_index()
-                    full_cache[sym] = full
-                    sliced = full[full.index <= cutoff]
-            except Exception:
-                pass
-
-        if sliced is None or sliced.empty:
-            return None
-        return sliced
-
-    @staticmethod
-    def _normalise_bars(df: Any, sym: str) -> Optional[pd.DataFrame]:
-        """Turn a raw provider DataFrame into the indicator-ready shape."""
-
-        if df is None:
-            return None
-        df = pd.DataFrame(df)
-        if df.empty:
-            return None
-        cols = {c.lower(): c for c in df.columns}
-        sym_col = cols.get("symbol") or cols.get("ticker")
-        if sym_col is not None:
-            df = df[df[sym_col] == sym]
-        if df.empty:
-            return None
-        ts_col = cols.get("timestamp") or cols.get("date") or cols.get("ts")
-        if ts_col is None:
-            return None
-        df = df.copy()
-        df["_ts"] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
-        df = df.dropna(subset=["_ts"])
-        df = df.sort_values("_ts").drop_duplicates("_ts", keep="last")
-        df = df.rename(
-            columns={
-                cols.get("open", "open"): "open",
-                cols.get("high", "high"): "high",
-                cols.get("low", "low"): "low",
-                cols.get("close", "close"): "close",
-                cols.get("volume", "volume"): "volume",
-            }
-        )
-        for c in ("open", "high", "low", "close", "volume"):
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c], errors="coerce")
-        df = df.dropna(subset=["open", "high", "low", "close"])
-        df = df.set_index("_ts")
-        return df
-
-    def _min_history(self) -> int:
-        # Need enough bars for the 200-SMA plus a little slack.
-        return int(self._p["trend_sma_period"]) + 15
-
-    # -- earnings gate ------------------------------------------------------
-    def _has_earnings_soon(
-        self, sym: str, asof: date, ctx: Context
-    ) -> bool:
-        """Return True if ``sym`` reports within ``earnings_skip_days`` days.
-
-        Degrades to False if the provider is unavailable / raises.
-        """
-
-        provider = getattr(ctx, "earnings_provider", None)
-        if provider is None or not hasattr(provider, "calendar"):
-            return False
-        days = int(self._p["earnings_skip_days"])
-        start = asof - timedelta(days=days)
-        end = asof + timedelta(days=days)
+    idx_names = tuple(bars.index.names or ())
+    if "symbol" in idx_names and "date" in idx_names:
         try:
-            cal = provider.calendar(start, end, symbols=[sym])
-        except Exception:
-            return False
-        if cal is None:
-            return False
-        try:
-            df = pd.DataFrame(cal)
-        except Exception:
-            return False
-        return not df.empty
+            sub = bars.xs(sym, level="symbol")
+        except KeyError:
+            return None
+        sub = sub.reset_index().rename(columns={"date": "ts"})
+    else:
+        frame = bars.copy()
+        if "ts" not in frame.columns and "ts_date" in frame.columns:
+            frame = frame.rename(columns={"ts_date": "ts"})
+        if "symbol" not in frame.columns:
+            return None
+        sub = frame[frame["symbol"].astype(str).str.upper() == sym.upper()]
+        if sub.empty:
+            return None
+
+    required = {"open", "high", "low", "close", "volume", "ts"}
+    if not required.issubset(set(sub.columns)):
+        return None
+
+    sub["ts"] = pd.to_datetime(sub["ts"], errors="coerce")
+    sub = sub.dropna(subset=["ts", "close"]).sort_values("ts").reset_index(drop=True)
+    cutoff = pd.Timestamp(asof)
+    sub = sub[pd.to_datetime(sub["ts"]).dt.date <= asof]
+    return sub if not sub.empty else None
 
 
-# ---------------------------------------------------------------------------
-# Efficiency Ratio helper (standalone; not in indicators library currently)
-# ---------------------------------------------------------------------------
+def _evaluate_entry(
+    bars: pd.DataFrame,
+    earnings: Optional[pd.DataFrame],
+    sym: str,
+    asof: date,
+    params: KamaBreakoutParams,
+    equity: float,
+) -> Optional[tuple[str, float, int, float]]:
+    """Return (symbol, ER, shares, atr_value) if the entry gate passes."""
+    hist = _symbol_history(bars, sym, asof)
+    if hist is None or len(hist) < params.trend_sma_period + 15:
+        return None
+
+    close = hist["close"].astype("float64")
+    high = hist["high"].astype("float64")
+    low = hist["low"].astype("float64")
+
+    kama_series = kama(
+        close,
+        er_period=params.kama_er_period,
+        fast=params.kama_fast,
+        slow=params.kama_slow,
+    )
+    if pd.isna(kama_series.iloc[-1]):
+        return None
+
+    donch = donchian(high.shift(1), low.shift(1), period=params.donchian_period)
+    donch_upper = donch["upper"].iloc[-1]
+    if pd.isna(donch_upper):
+        return None
+
+    sma_trend = sma(close, period=params.trend_sma_period)
+    sma_last = sma_trend.iloc[-1]
+    if pd.isna(sma_last):
+        return None
+    sma_lookback = 10
+    if len(sma_trend) > sma_lookback:
+        sma_prev = sma_trend.iloc[-1 - sma_lookback]
+        sma_rising = not pd.isna(sma_prev) and float(sma_last) > float(sma_prev)
+    else:
+        sma_rising = False
+
+    atr_series = atr(high, low, close, period=params.atr_period)
+    atr_last = atr_series.iloc[-1]
+    if pd.isna(atr_last) or float(atr_last) <= 0:
+        return None
+
+    er = _efficiency_ratio(close, params.kama_er_period)
+
+    c_last = float(close.iloc[-1])
+    kama_last = float(kama_series.iloc[-1])
+
+    if c_last <= kama_last:
+        return None
+    if c_last <= float(donch_upper):
+        return None
+    if er < params.er_min_trend:
+        return None
+    if c_last <= float(sma_last) or not sma_rising:
+        return None
+
+    if params.volume_surge_enabled:
+        vol_sma = hist["volume"].astype("float64").rolling(params.volume_sma_period).mean()
+        if pd.isna(vol_sma.iloc[-1]) or vol_sma.iloc[-1] <= 0:
+            return None
+        if float(hist["volume"].iloc[-1]) < params.volume_surge_min * float(vol_sma.iloc[-1]):
+            return None
+
+    if params.earnings_skip_days > 0 and _has_earnings_soon(
+        earnings, sym, asof, params.earnings_skip_days,
+    ):
+        return None
+
+    atr_val = float(atr_last)
+    stop_distance = params.chandelier_atr_mult * atr_val
+    if stop_distance <= 0:
+        return None
+    risk_dollars = params.risk_per_trade * equity
+    shares = int(risk_dollars // stop_distance)
+
+    max_notional = params.max_allocation * equity
+    cap_shares = int(max_notional // c_last) if c_last > 0 else 0
+    shares = min(shares, cap_shares)
+    if shares <= 0:
+        return None
+
+    return (sym, er, shares, atr_val)
+
+
 def _efficiency_ratio(close: pd.Series, period: int) -> float:
-    """Kaufman's Efficiency Ratio at the last bar.
-
-    ER = |close_t - close_{t-N}| / sum(|Δclose|)   over the same N bars.
-    Returns 0.0 when the denominator is zero (flat market) or when there
-    aren't enough bars.
-    """
-
+    """Kaufman's Efficiency Ratio at the last bar."""
     if period <= 0 or len(close) <= period:
         return 0.0
     vals = close.astype("float64").to_numpy()
@@ -646,4 +374,31 @@ def _efficiency_ratio(close: pd.Series, period: int) -> float:
     return change / vol
 
 
-__all__ = ["KamaBreakout"]
+def _has_earnings_soon(
+    earnings: Optional[pd.DataFrame],
+    sym: str,
+    asof: date,
+    skip_days: int,
+) -> bool:
+    if earnings is None or getattr(earnings, "empty", True):
+        return False
+    if "symbol" not in earnings.columns:
+        return False
+    date_col = next(
+        (c for c in ("date", "report_date", "ts") if c in earnings.columns),
+        None,
+    )
+    if date_col is None:
+        return False
+    start = asof - timedelta(days=skip_days)
+    end = asof + timedelta(days=skip_days)
+    frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
+    mask = (
+        (earnings["symbol"].astype(str).str.upper() == sym.upper())
+        & (frame_dates >= start)
+        & (frame_dates <= end)
+    )
+    return bool(mask.any())
+
+
+__all__ = ["KamaBreakoutStrategy"]
