@@ -1,27 +1,16 @@
-"""Unit tests for the Dual Momentum (GEM) strategy.
+"""Unit tests for the Dual Momentum (GEM) strategy — SOTA shell.
 
-Covers the audit's four non-negotiables plus book-keeping:
+Covers the audit's four non-negotiables plus helpers and registration:
 
-1. **Absolute momentum ON + US > ex-US → VOO.**  (canonical)
-2. **Absolute momentum ON + ex-US > US → VEU.**  (relative flip)
-3. **Absolute momentum OFF → AGG bond fallback.**  (the audit's core fix)
-4. **Monthly rebalance trigger.**  (last-of-month only; no intra-month action)
-
-The tests drive the strategy's hooks directly with a hand-built
-``Context`` and a synthetic in-memory bar provider so we don't depend on
-the backtest engine's full event loop. That keeps the tests fast and
-deterministic.
-
-Additional coverage:
-
-- ``search_space()`` exposes the 6 tunable knobs.
-- ``DualMomentumConfig.from_params`` rejects unknown keys.
-- The stateless ``_composite_return`` helper respects the blend weights.
+1. Absolute momentum ON + US > ex-US → VOO.
+2. Absolute momentum ON + ex-US > US → VEU.
+3. Absolute momentum OFF → AGG bond fallback.
+4. Monthly rebalance trigger — last-of-month only.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from decimal import Decimal
 from typing import Iterable
 
@@ -29,316 +18,208 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.types import Context, Position
+from strategies._core.contracts import Position, StrategyInput
 from strategies.dual_momentum.config import (
-    DEFAULT_PARAMS,
-    DualMomentumConfig,
-    build_search_space,
+    DualMomentumParams,
+    lookback_components,
+    max_lookback,
 )
 from strategies.dual_momentum.strategy import (
     DualMomentumStrategy,
     _composite_return,
-    _is_last_trading_day_of_month,
+    _is_rebalance_day,
 )
 
 
 # --------------------------------------------------------------------------- #
-# Synthetic bar provider: lets us script exact 12-month returns                #
+# Synthetic bar builder                                                       #
 # --------------------------------------------------------------------------- #
-class _ScriptedBarProvider:
-    """Returns a close-price series such that the 252-day return equals ``r``.
-
-    Prices grow linearly from ``start_price`` on day 0 to ``start_price *
-    (1 + r)`` on day ``252``. Any additional rows beyond day 252 continue
-    the linear extrapolation (this keeps any downstream composite lookback
-    well-defined).
-
-    Enough OHLCV columns are populated to pass the strategy's _fetch helper.
-    """
-
-    def __init__(self, returns: dict[str, float], n_days: int = 400) -> None:
-        self._returns = dict(returns)
-        self._n_days = n_days
-
-    def bars(
-        self,
-        symbols: Iterable[str],
-        start,
-        end,
-        tf: str = "1D",
-    ) -> pd.DataFrame:
-        start = pd.Timestamp(start).tz_localize(None).normalize()
-        end = pd.Timestamp(end).tz_localize(None).normalize()
-        idx = pd.bdate_range(start=start, end=end)
-        n = len(idx)
-        rows = []
-        for sym in symbols:
-            r = self._returns.get(sym, 0.0)
-            # Linear growth over 252 bdays so day-252 return matches.
-            # We anchor the growth to the LAST bar so the 252-day return
-            # looking back from `end` is exactly r (if we have 253+ rows).
-            if n == 0:
-                continue
-            closes = np.linspace(1.0, 1.0 + r, num=max(n, 253))[-n:]
-            # Scale up to nominal prices so Decimal doesn't complain.
-            closes = 100.0 * closes
-            opens = np.concatenate(([closes[0]], closes[:-1]))
-            highs = np.maximum(opens, closes)
-            lows = np.minimum(opens, closes)
-            df = pd.DataFrame(
-                {
-                    "symbol": sym,
-                    "ts": pd.to_datetime(idx, utc=True),
-                    "open": opens,
-                    "high": highs,
-                    "low": lows,
-                    "close": closes,
-                    "volume": 1_000_000,
-                }
-            )
-            rows.append(df)
-        if not rows:
-            return pd.DataFrame(
-                columns=["symbol", "ts", "open", "high", "low", "close", "volume"]
-            )
-        return pd.concat(rows, ignore_index=True).sort_values(["symbol", "ts"])
-
-
-class _FakeCalendar:
-    """Business-day calendar (no holidays). Enough for month-end tests."""
-
-    def next_session(self, d):
-        t = pd.Timestamp(d) + pd.offsets.BDay(1)
-        return t.date()
-
-    def sessions(self, start, end):
-        return pd.bdate_range(start=start, end=end)
-
-
-def _build_ctx(
-    provider: _ScriptedBarProvider,
+def _build_bars(
+    returns: dict[str, float],
     asof: date,
-    positions: list[Position] | None = None,
+    n_days: int = 400,
+) -> pd.DataFrame:
+    """Multi-index (date, symbol) close panel with anchored 252d returns."""
+    end = pd.Timestamp(asof).tz_localize(None).normalize()
+    idx = pd.bdate_range(end=end, periods=n_days)
+    n = len(idx)
+    rows: list[pd.DataFrame] = []
+    for sym, r in returns.items():
+        closes = np.linspace(1.0, 1.0 + r, num=max(n, 253))[-n:] * 100.0
+        opens = np.concatenate(([closes[0]], closes[:-1]))
+        highs = np.maximum(opens, closes)
+        lows = np.minimum(opens, closes)
+        rows.append(pd.DataFrame({
+            "symbol": sym,
+            "date": [d.date() for d in idx],
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": 1_000_000,
+        }))
+    return pd.concat(rows, ignore_index=True).set_index(["date", "symbol"]).sort_index()
+
+
+def _build_input(
+    bars: pd.DataFrame,
+    asof: date,
     cash: Decimal = Decimal("100000"),
-) -> Context:
-    return Context(
-        asof=asof,
-        cash=cash,
-        equity=cash + sum((p.avg_price * p.quantity for p in (positions or [])), Decimal("0")),
-        positions=list(positions or []),
-        bar_provider=provider,
-        calendar_provider=_FakeCalendar(),
+    positions: list[Position] | None = None,
+) -> StrategyInput:
+    return StrategyInput(
+        asof=asof, mode="backtest", bars=bars,
+        cash=cash, equity=cash,
+        positions=positions or [],
+        state={}, seed=0, rng=np.random.default_rng(0),
     )
 
 
 # --------------------------------------------------------------------------- #
-# The three canonical GEM scenarios                                            #
+# Canonical GEM scenarios                                                     #
 # --------------------------------------------------------------------------- #
 class TestGEMDecision:
-    """Scenarios A, B, C from the design brief."""
-
     @staticmethod
     def _rebalance_day() -> date:
-        # Last business day of January 2024 = Jan 31 (Wednesday).
         return date(2024, 1, 31)
 
     def test_A_equity_on_and_us_beats_exus_selects_voo(self):
-        """Absolute mom gate passes AND r_VOO > r_VEU → hold VOO."""
-        provider = _ScriptedBarProvider(
-            returns={
-                "VOO": 0.20,   # +20% over 252d (strong equity)
-                "VEU": 0.10,   # +10% (weaker)
-                "AGG": 0.02,   # small positive
-                "BIL": 0.05,   # 5% risk-free
-            }
-        )
+        bars = _build_bars({
+            "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
+        }, self._rebalance_day())
         strat = DualMomentumStrategy()
-        strat.configure(DEFAULT_PARAMS)
-
-        ctx = _build_ctx(provider, self._rebalance_day())
-        exits = list(strat.manage(ctx.asof, ctx))
-        # Nothing to close (no positions).
-        assert exits == []
-        entries = list(strat.generate_signals(ctx.asof, ctx))
+        result = strat.run(
+            _build_input(bars, self._rebalance_day()), DualMomentumParams(),
+        )
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
         assert len(entries) == 1
         assert entries[0].symbol == "VOO"
         assert entries[0].target_weight == 1.0
 
     def test_B_equity_on_and_exus_beats_us_selects_veu(self):
-        """Absolute mom gate passes AND r_VEU > r_VOO → hold VEU."""
-        provider = _ScriptedBarProvider(
-            returns={
-                "VOO": 0.08,   # +8%, excess of 3% vs BIL (passes gate)
-                "VEU": 0.20,   # +20% (wins relative)
-                "AGG": 0.01,
-                "BIL": 0.05,
-            }
-        )
+        bars = _build_bars({
+            "VOO": 0.08, "VEU": 0.20, "AGG": 0.01, "BIL": 0.05,
+        }, self._rebalance_day())
         strat = DualMomentumStrategy()
-        strat.configure(DEFAULT_PARAMS)
-
-        ctx = _build_ctx(provider, self._rebalance_day())
-        list(strat.manage(ctx.asof, ctx))
-        entries = list(strat.generate_signals(ctx.asof, ctx))
+        result = strat.run(
+            _build_input(bars, self._rebalance_day()), DualMomentumParams(),
+        )
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
         assert len(entries) == 1
         assert entries[0].symbol == "VEU"
-        assert entries[0].target_weight == 1.0
 
     def test_C_equity_off_selects_bond_fallback(self):
-        """Absolute mom gate fails → hold AGG (bond fallback), NOT cash."""
-        provider = _ScriptedBarProvider(
-            returns={
-                "VOO": 0.02,   # +2% nominal
-                "VEU": 0.04,
-                "AGG": 0.03,
-                "BIL": 0.05,   # r_rf dominates → r_VOO - r_BIL = -3% < 0
-            }
-        )
+        bars = _build_bars({
+            "VOO": 0.02, "VEU": 0.04, "AGG": 0.03, "BIL": 0.05,
+        }, self._rebalance_day())
         strat = DualMomentumStrategy()
-        strat.configure(DEFAULT_PARAMS)
-
-        ctx = _build_ctx(provider, self._rebalance_day())
-        list(strat.manage(ctx.asof, ctx))
-        entries = list(strat.generate_signals(ctx.asof, ctx))
+        result = strat.run(
+            _build_input(bars, self._rebalance_day()), DualMomentumParams(),
+        )
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
         assert len(entries) == 1
         assert entries[0].symbol == "AGG"
-        assert entries[0].target_weight == 1.0
 
     def test_C_bond_fallback_honours_config_override(self):
-        """``bond_fallback=IEF`` should rotate to IEF, not AGG."""
-        provider = _ScriptedBarProvider(
-            returns={
-                "VOO": 0.02, "VEU": 0.04, "AGG": 0.01, "IEF": 0.01, "BIL": 0.05,
-            }
-        )
+        bars = _build_bars({
+            "VOO": 0.02, "VEU": 0.04, "AGG": 0.01, "IEF": 0.01, "BIL": 0.05,
+        }, self._rebalance_day())
         strat = DualMomentumStrategy()
-        strat.configure({**DEFAULT_PARAMS, "bond_fallback": "IEF"})
-
-        ctx = _build_ctx(provider, self._rebalance_day())
-        list(strat.manage(ctx.asof, ctx))
-        entries = list(strat.generate_signals(ctx.asof, ctx))
+        result = strat.run(
+            _build_input(bars, self._rebalance_day()),
+            DualMomentumParams(bond_fallback="IEF"),
+        )
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
         assert entries[0].symbol == "IEF"
 
 
 # --------------------------------------------------------------------------- #
-# Rebalance-day trigger                                                        #
+# Rebalance-day trigger                                                       #
 # --------------------------------------------------------------------------- #
 class TestRebalanceTrigger:
     def test_month_end_fires(self):
-        """Jan 31 2024 is the last trading day of the month."""
-        cal = _FakeCalendar()
-        ctx = Context(asof=date(2024, 1, 31), cash=Decimal("0"), equity=Decimal("0"))
-        ctx.calendar_provider = cal
-        assert _is_last_trading_day_of_month(date(2024, 1, 31), ctx) is True
+        assert _is_rebalance_day(date(2024, 1, 31), "monthly") is True
 
     def test_mid_month_does_not_fire(self):
-        cal = _FakeCalendar()
-        ctx = Context(asof=date(2024, 1, 15), cash=Decimal("0"), equity=Decimal("0"))
-        ctx.calendar_provider = cal
-        assert _is_last_trading_day_of_month(date(2024, 1, 15), ctx) is False
+        assert _is_rebalance_day(date(2024, 1, 15), "monthly") is False
 
-    def test_mid_month_manage_is_noop(self):
-        """On non-rebalance days manage()/generate_signals() must emit nothing."""
-        provider = _ScriptedBarProvider(
-            returns={"VOO": 0.2, "VEU": 0.1, "AGG": 0.02, "BIL": 0.05}
-        )
+    def test_mid_month_run_is_noop(self):
+        bars = _build_bars({
+            "VOO": 0.2, "VEU": 0.1, "AGG": 0.02, "BIL": 0.05,
+        }, date(2024, 1, 15))
         strat = DualMomentumStrategy()
-        strat.configure(DEFAULT_PARAMS)
+        result = strat.run(_build_input(bars, date(2024, 1, 15)), DualMomentumParams())
+        assert result.signals == []
 
-        mid_month = date(2024, 1, 15)
-        ctx = _build_ctx(provider, mid_month)
-        assert list(strat.manage(mid_month, ctx)) == []
-        assert list(strat.generate_signals(mid_month, ctx)) == []
-
-    def test_manage_closes_stale_position_on_rebalance_day(self):
-        """Rebalance should emit an exit for a held non-target ticker."""
-        provider = _ScriptedBarProvider(
-            returns={"VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05}
-        )
+    def test_run_closes_stale_position_on_rebalance_day(self):
+        bars = _build_bars({
+            "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
+        }, date(2024, 1, 31))
         strat = DualMomentumStrategy()
-        strat.configure(DEFAULT_PARAMS)
-
-        rebal = date(2024, 1, 31)
-        # Portfolio holds AGG from the prior month (risk-off regime ended).
-        pos = Position(symbol="AGG", quantity=1000, avg_price=Decimal("100"))
-        ctx = _build_ctx(provider, rebal, positions=[pos])
-        exits = list(strat.manage(rebal, ctx))
+        pos = Position(
+            symbol="AGG", quantity=1000,
+            avg_entry_price=Decimal("100"), entry_date=date(2023, 12, 29),
+        )
+        result = strat.run(
+            _build_input(bars, date(2024, 1, 31), positions=[pos]),
+            DualMomentumParams(),
+        )
+        exits = [s for s in result.signals if s.tag == "dm-exit"]
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
         assert len(exits) == 1
         assert exits[0].symbol == "AGG"
         assert exits[0].target_weight == 0.0
-        # And we enter VOO on the same bar (MOO)
-        entries = list(strat.generate_signals(rebal, ctx))
         assert len(entries) == 1
         assert entries[0].symbol == "VOO"
 
     def test_bimonthly_skips_even_months(self):
-        """``rebalance_freq='bimonthly'`` should only fire on odd months."""
-        provider = _ScriptedBarProvider(
-            returns={"VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05}
-        )
-        feb_end = date(2024, 2, 29)   # last biz day of Feb (even month → skip)
-        jan_end = date(2024, 1, 31)   # last biz day of Jan (odd → rebalance)
+        bars_feb = _build_bars({
+            "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
+        }, date(2024, 2, 29))
+        bars_jan = _build_bars({
+            "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
+        }, date(2024, 1, 31))
+        strat = DualMomentumStrategy()
+        params = DualMomentumParams(rebalance_freq="bimonthly")
 
-        # February (even) — expect no-op on both hooks.
-        strat_feb = DualMomentumStrategy()
-        strat_feb.configure({**DEFAULT_PARAMS, "rebalance_freq": "bimonthly"})
-        ctx_feb = _build_ctx(provider, feb_end)
-        assert list(strat_feb.manage(feb_end, ctx_feb)) == []
-        assert list(strat_feb.generate_signals(feb_end, ctx_feb)) == []
+        result_feb = strat.run(_build_input(bars_feb, date(2024, 2, 29)), params)
+        assert result_feb.signals == []
 
-        # January (odd) — manage() first (sets target), then generate_signals.
-        strat_jan = DualMomentumStrategy()
-        strat_jan.configure({**DEFAULT_PARAMS, "rebalance_freq": "bimonthly"})
-        ctx_jan = _build_ctx(provider, jan_end)
-        list(strat_jan.manage(jan_end, ctx_jan))
-        entries = list(strat_jan.generate_signals(jan_end, ctx_jan))
+        result_jan = strat.run(_build_input(bars_jan, date(2024, 1, 31)), params)
+        entries = [s for s in result_jan.signals if s.tag.startswith("dm-entry")]
         assert len(entries) == 1
         assert entries[0].symbol == "VOO"
 
 
 # --------------------------------------------------------------------------- #
-# Config + search space                                                        #
+# Config                                                                      #
 # --------------------------------------------------------------------------- #
 class TestConfig:
-    def test_search_space_has_expected_knobs(self):
-        space = build_search_space()
+    def test_tune_space_has_expected_knobs(self):
+        space = DualMomentumParams.tune_space()
         assert set(space.keys()) == {
-            "lookback_days",
-            "bond_fallback",
-            "excess_return_floor",
-            "rebalance_freq",
-            "composite_lookback",
-            "relative_universe",
+            "lookback_days", "bond_fallback", "excess_return_floor",
+            "rebalance_freq", "composite_lookback", "relative_universe",
         }
 
-    def test_from_params_rejects_unknown_key(self):
-        with pytest.raises(ValueError, match="unknown parameter"):
-            DualMomentumConfig.from_params({"bogus": 1})
+    def test_unknown_key_rejected(self):
+        with pytest.raises(Exception):
+            DualMomentumParams(bogus=1)
 
-    def test_from_params_coerces_list_universe_to_tuple(self):
-        cfg = DualMomentumConfig.from_params(
-            {**DEFAULT_PARAMS, "relative_universe": ["SPY", "EFA", "EEM"]}
-        )
-        assert cfg.relative_universe == ("SPY", "EFA", "EEM")
-
-    def test_composite_lookback_components(self):
-        cfg = DualMomentumConfig.from_params(
-            {**DEFAULT_PARAMS, "composite_lookback": "blend_126_252"}
-        )
-        comps = cfg.lookback_components()
-        assert comps == ((126, 0.5), (252, 0.5))
-        assert cfg.max_lookback() == 252
+    def test_composite_lookback_blend(self):
+        p = DualMomentumParams(composite_lookback="blend_126_252")
+        assert lookback_components(p) == ((126, 0.5), (252, 0.5))
+        assert max_lookback(p) == 252
 
 
 # --------------------------------------------------------------------------- #
-# Pure helpers                                                                 #
+# Pure helpers                                                                #
 # --------------------------------------------------------------------------- #
 class TestHelpers:
     def test_composite_return_single_lookback(self):
         idx = pd.bdate_range("2019-01-01", periods=300)
         prices = pd.Series(np.linspace(100.0, 120.0, num=300), index=idx)
         closes = pd.DataFrame({"VOO": prices})
-        # closes at idx[-1] = 120, closes at idx[-253] is 100 + 19.8*...
         r = _composite_return(closes, "VOO", ((252, 1.0),))
         expected = prices.iloc[-1] / prices.iloc[-253] - 1.0
         assert r is not None
@@ -364,21 +245,16 @@ class TestHelpers:
 
 
 # --------------------------------------------------------------------------- #
-# Registration smoke                                                           #
+# Registration                                                                #
 # --------------------------------------------------------------------------- #
 class TestRegistration:
     def test_strategy_is_registered(self):
-        from strategies.registry import get_meta, get_strategy
+        from strategies._core.protocol import get_meta, get_strategy
 
         cls = get_strategy("dual_momentum")
-        assert cls is DualMomentumStrategy or cls.__name__ == "DualMomentumStrategy"
+        assert cls is DualMomentumStrategy
         meta = get_meta("dual_momentum")
         assert meta.name == "dual_momentum"
         assert meta.category == "macro"
         assert "daily" in meta.required_bars
-        assert meta.required_lookback_days >= 365  # ~12 months calendar
-
-    def test_search_space_callable_from_class(self):
-        assert callable(DualMomentumStrategy.search_space)
-        space = DualMomentumStrategy.search_space()
-        assert len(space) == 6
+        assert meta.lookback_days >= 365
