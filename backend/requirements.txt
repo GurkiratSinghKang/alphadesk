@@ -53,7 +53,12 @@ polygon-api-client>=1.14.0
 alpaca-py>=0.33.0
 
 # Claude AI
-anthropic>=0.40.0
+# B-86: upper-bound the SDK to the currently-validated minor. Minor
+# bumps (0.40 → 0.41) can change client signatures or response shapes
+# silently; we want CI to break on the next ``pip install`` rather than
+# production to break on the next deploy. Bump the ceiling as part of a
+# deliberate SDK-upgrade PR.
+anthropic>=0.40.0,<0.41.0
 
 # Parquet cache for data providers
 pyarrow>=17.0.0
