@@ -889,7 +889,6 @@ async def _build_stub_detail(symbol: str) -> EarningsDetail:
         strike_ladder=None,
         claude_structured=None,
         claude_full_research=None,
-        historical_earnings=None,
         iv_term_structure=None,
         skew=None,
         news=[],

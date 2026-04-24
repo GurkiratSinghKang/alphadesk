@@ -22,9 +22,6 @@ import type {
   ClaudeStructured,
   ClaudeFullResearch,
   ComparableSetup,
-  HistQuarter,
-  HistoricalStats,
-  HistoricalBlock,
   IVTermPoint,
   SkewBlock,
   LadderRow,
@@ -1902,25 +1899,9 @@ interface RawClaudeFullResearch {
   generated_at: string;
 }
 
-interface RawHistQuarter {
-  report_date: string;
-  surprise_pct: number | null;
-  next_day_move_pct: number;
-  five_day_move_pct: number;
-}
-
-interface RawHistoricalStats {
-  avg_abs_move_pct: number;
-  wins: number;
-  losses: number;
-  surprise_beat_rate: number;
-  iv_vs_hist_vol_points: number | null;
-}
-
-interface RawHistoricalBlock {
-  quarters: RawHistQuarter[];
-  stats: RawHistoricalStats;
-}
+// B-63: RawHistQuarter / RawHistoricalStats / RawHistoricalBlock removed —
+// EarningsDetail no longer carries `historical_earnings`. See companion
+// note in the mapper section.
 
 interface RawIVTermPoint {
   expiry: string;
@@ -1969,7 +1950,6 @@ interface RawEarningsDetail {
   strike_ladder: RawStrikeLadder | null;
   claude_structured: RawClaudeStructured | null;
   claude_full_research: RawClaudeFullResearch | null;
-  historical_earnings: RawHistoricalBlock | null;
   iv_term_structure: RawIVTermPoint[] | null;
   skew: RawSkewBlock | null;
   news: RawEarningsNewsArticle[];
@@ -2087,31 +2067,11 @@ function mapMetrics(raw: RawEarningsMetricsBlock): EarningsMetricsBlock {
   };
 }
 
-function mapHistQuarter(raw: RawHistQuarter): HistQuarter {
-  return {
-    reportDate: raw.report_date,
-    surprisePct: raw.surprise_pct,
-    nextDayMovePct: raw.next_day_move_pct,
-    fiveDayMovePct: raw.five_day_move_pct,
-  };
-}
-
-function mapHistoricalStats(raw: RawHistoricalStats): HistoricalStats {
-  return {
-    avgAbsMovePct: raw.avg_abs_move_pct,
-    wins: raw.wins,
-    losses: raw.losses,
-    surpriseBeatRate: raw.surprise_beat_rate,
-    ivVsHistVolPoints: raw.iv_vs_hist_vol_points,
-  };
-}
-
-function mapHistoricalBlock(raw: RawHistoricalBlock): HistoricalBlock {
-  return {
-    quarters: raw.quarters.map(mapHistQuarter),
-    stats: mapHistoricalStats(raw.stats),
-  };
-}
+// B-63: mapHistQuarter / mapHistoricalStats / mapHistoricalBlock removed —
+// the backend dropped `historical_earnings` from EarningsDetail (the upstream
+// loader was a stub). The HistoricalMoves component + its types/tests stay
+// in tree as scaffolding; restore the mappers here when the FMP-surprises
+// join lands as the follow-up B-63 PR.
 
 function mapIVTermPoint(raw: RawIVTermPoint): IVTermPoint {
   return { expiry: raw.expiry, dte: raw.dte, atmIv: raw.atm_iv };
