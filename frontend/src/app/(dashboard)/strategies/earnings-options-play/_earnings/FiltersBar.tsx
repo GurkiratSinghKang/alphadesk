@@ -62,7 +62,7 @@ export default function FiltersBar({ filters, onChange }: FiltersBarProps) {
           step={5}
           value={ivRank}
           onChange={(e) => onChange({ ...filters, min_iv_rank: Number(e.target.value) })}
-          className="w-32"
+          className="w-full md:w-32 max-w-full"
         />
         <span className="font-mono text-[13px] tabular-nums">{ivRank}</span>
       </label>
