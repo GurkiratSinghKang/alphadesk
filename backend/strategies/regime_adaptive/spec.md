@@ -267,3 +267,27 @@ the TrendUp allocation more than the regime machinery itself.
 
 See `config.py::RegimeAdaptiveConfig`. Source of truth for defaults and
 the Optuna `search_space()`.
+
+
+## Migration note (2026-04-24 SOTA shell)
+
+This strategy was migrated from the legacy `generate_signals(asof, ctx)` /
+`manage(asof, ctx)` API to the unified `run(input, params) → StrategyResult`
+pure-function contract. Academic rationale unchanged; only the shell
+changed. See [`docs/STRATEGIES.md`](../../../docs/STRATEGIES.md) for the
+new protocol reference and
+[`docs/superpowers/plans/2026-04-22-strategy-sota-foundation.md`](../../../docs/superpowers/plans/2026-04-22-strategy-sota-foundation.md)
+for the migration design.
+
+Key behavioral notes:
+
+- Parameters are now a Pydantic `<Name>Params(StrategyParams)` model
+  (typed, validated, JSON-Schema-exportable). Import from
+  `strategies.<name>.config`.
+- Reproducibility metadata (`git_sha`, `param_hash`, `snapshot_root`,
+  `seed`, `run_at`, `strategy_name`, `runner_version`) is attached to
+  every `BacktestResult`.
+- Invoke the strategy CLI via `python -m strategies.<name> <subcommand>`.
+- Per-run state lives on `input.state` and flows back through
+  `StrategyResult.state_update` + the optional `on_fill` return dict;
+  no instance mutation.
