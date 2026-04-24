@@ -392,6 +392,11 @@ async def _run_structured_and_cache(
         client = ClaudeClient()
         raw = await client.complete(
             system=prompt["system"], user=prompt["user"], model=MODEL_STRUCTURED,
+            context={
+                "symbol": symbol,
+                "endpoint": "earnings.claude_structured",
+                "cache_key": key,
+            },
         )
         parsed = parse_structured_response(raw)
         payload = {
@@ -798,7 +803,11 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     )
     client = ClaudeClient()
     raw = await client.complete(
-        system=prompt["system"], user=prompt["user"], model=MODEL_FULL
+        system=prompt["system"], user=prompt["user"], model=MODEL_FULL,
+        context={
+            "symbol": symbol,
+            "endpoint": "earnings.full_research",
+        },
     )
     parsed = parse_full_response(raw)
     payload = {
