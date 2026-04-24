@@ -418,24 +418,21 @@ def _latest_prices(providers: ProviderBundle, symbols: list[str]) -> dict[str, f
 def _build_all_strategies() -> list[type[UnifiedStrategyRunner]]:
     """Return runner classes for every autonomous strategy on the new registry.
 
-    The legacy adapter walked the pre-Phase-2 registry
-    (``strategies.registry.list_strategies``) which included 13 entries.
-    The new registry (``strategies._core.protocol.list_strategies``) only
-    contains strategies that have been fully migrated to the new
-    ``Strategy`` ABC. During Phase 2 that is just ``pead``; the other 12
-    still live in the legacy registry and will be migrated in Phase 3
-    (plan Task 19+).
-
-    Strategies with ``kind != "autonomous"`` (research-only, e.g.
-    ``earnings-options-play``) are excluded — the daily pipeline only
-    schedules autonomous strategies.
+    Walks the new registry (``strategies._core.protocol``) which, post-Phase-3,
+    contains all 13 migrated strategies. Strategies with
+    ``kind != "autonomous"`` (research-only, e.g. ``earnings-options-play``,
+    ``vrp_harvest``, ``earnings_vol``, ``vwap``, ``orb``) are excluded — the
+    daily pipeline only schedules autonomous strategies.
     """
-    # Ensure pead is registered. The import registers the class via
-    # @register_strategy at module-load time.
+    # Fire every strategy package's @register_strategy side effect.
+    # ``load_all()`` walks ``backend/strategies/`` and imports every
+    # subpackage; failures in any individual strategy are logged and
+    # skipped so a single broken package doesn't orphan the whole pipeline.
     try:
-        import strategies.pead  # noqa: F401
+        from strategies.registry import load_all
+        load_all()
     except Exception:
-        logger.exception("strategy_runner: failed to import strategies.pead")
+        logger.exception("strategy_runner: load_all() failed")
 
     classes: list[type[UnifiedStrategyRunner]] = []
     for meta in list_strategies():
