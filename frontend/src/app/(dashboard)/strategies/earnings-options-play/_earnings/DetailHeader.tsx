@@ -23,6 +23,7 @@ export default function DetailHeader({
   const change = quote?.change ?? null;
   const changePct = quote?.change_pct ?? null;
   const isNeg = (change ?? 0) < 0;
+  const freshness = getFreshness(generated_at);
 
   return (
     <header
@@ -50,8 +51,34 @@ export default function DetailHeader({
         )}
       </div>
       <div className="text-right">
-        <div className="t-num-hero">
-          {quote ? quote.last.toFixed(2) : "—"}
+        <div className="flex items-center justify-end gap-2">
+          {freshness && (
+            <span
+              data-slot="freshness-pill"
+              title={generated_at}
+              aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
+              className={
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[10px] uppercase tracking-wide " +
+                (freshness.kind === "live"
+                  ? "border-[color:var(--profit)] text-[color:var(--profit)]"
+                  : "border-[color:var(--border)] u-muted")
+              }
+            >
+              <span
+                aria-hidden="true"
+                className={
+                  "h-1.5 w-1.5 rounded-full " +
+                  (freshness.kind === "live"
+                    ? "bg-[color:var(--profit)]"
+                    : "bg-[color:var(--fg-muted)]")
+                }
+              />
+              {freshness.kind === "live" ? "LIVE" : `DELAYED ${freshness.age}`}
+            </span>
+          )}
+          <div className="t-num-hero">
+            {quote ? quote.last.toFixed(2) : "—"}
+          </div>
         </div>
         <div className={"t-mono text-[13px] " + (isNeg ? "u-loss" : "u-profit")}>
           {change == null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(2)} · ${((changePct ?? 0) * 100).toFixed(2)}%`}
@@ -59,6 +86,19 @@ export default function DetailHeader({
       </div>
     </header>
   );
+}
+
+/**
+ * Convert a generated_at timestamp into a LIVE/DELAYED pill descriptor.
+ * <30s old reads as live; otherwise shows the short relative age.
+ */
+function getFreshness(iso: string | undefined): { kind: "live" | "delayed"; age: string } | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  const ageSec = (Date.now() - then) / 1000;
+  if (ageSec < 30) return { kind: "live", age: "just now" };
+  return { kind: "delayed", age: fmtRelativeTime(iso) };
 }
 
 function formatReportDate(iso: string): string {
