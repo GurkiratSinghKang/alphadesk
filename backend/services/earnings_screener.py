@@ -162,6 +162,7 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     a dedicated profile endpoint if needed; the aggregator already
     tolerates empty/placeholder values.
     """
+    from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
 
     today = date.today()
@@ -173,7 +174,11 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         start, end = today, today + timedelta(days=14)
 
     def _load() -> list[dict]:
-        with FMPEarningsProvider() as provider:
+        # Timeout operator-tunable via ``settings.EARNINGS_FMP_TIMEOUT_S``
+        # (B-85). Default 5.0s balances provider flakiness vs UI p95.
+        with FMPEarningsProvider(
+            timeout=settings.EARNINGS_FMP_TIMEOUT_S
+        ) as provider:
             df = provider.calendar(start=start, end=end)
         if df is None or df.empty:
             return []
@@ -381,6 +386,7 @@ async def _run_structured_and_cache(
     symbol: str, context: dict, cache: Any, key: str
 ) -> None:
     from agents.claude_client import ClaudeClient
+    from core.config import settings
     from services.earnings_prompts import (
         MODEL_STRUCTURED,
         build_structured_prompt,
@@ -399,7 +405,13 @@ async def _run_structured_and_cache(
             "model": MODEL_STRUCTURED,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-        await cache.set(key, payload, ttl_seconds=4 * 3600)
+        # TTL operator-tunable via
+        # ``settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS`` (B-85).
+        await cache.set(
+            key,
+            payload,
+            ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
+        )
     except Exception as e:
         log.warning("Claude structured failed for %s: %s", symbol, e)
 
@@ -598,9 +610,12 @@ async def list_upcoming(
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where
-    # many mega caps report in parallel.
+    # many mega caps report in parallel. Operator-tunable via
+    # ``settings.EARNINGS_CALENDAR_MAX_ROWS`` (B-85).
+    from core.config import settings
+
     raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
-    MAX_ROWS = 8
+    MAX_ROWS = settings.EARNINGS_CALENDAR_MAX_ROWS
     if len(raw_rows) > MAX_ROWS:
         log.info(
             "earnings calendar: %d rows → capped to %d (window=%s)",
@@ -610,8 +625,9 @@ async def list_upcoming(
 
     # Cap concurrency so we don't open 60 parallel Alpaca+FMP+Claude flights
     # at once — Alpaca's rate limit is ~200 req/min across the whole backend
-    # and other endpoints need headroom.
-    hydrate_sem = asyncio.Semaphore(10)
+    # and other endpoints need headroom. Operator-tunable via
+    # ``settings.EARNINGS_HYDRATE_CONCURRENCY`` (B-85).
+    hydrate_sem = asyncio.Semaphore(settings.EARNINGS_HYDRATE_CONCURRENCY)
 
     async def safe_hydrate(row: dict) -> dict | None:
         async with hydrate_sem:
