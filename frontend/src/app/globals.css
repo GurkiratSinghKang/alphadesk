@@ -187,6 +187,11 @@
     outline: 2px solid var(--ring, #60a5fa);
     outline-offset: 2px;
   }
+  /* B-87 — WCAG 2.2 SC 1.4.11 (Non-text contrast): the focus ring uses
+     --brand (#c9a66b, gold-500) on the page background (#0b0a09, ink-050).
+     Measured contrast = 8.62:1 on --bg, 7.58:1 on --bg-card, 8.23:1 on
+     --bg-elev-1. All surfaces exceed the 3:1 minimum for non-text UI
+     components by a wide margin — safe to keep --brand as the ring color. */
   :focus-visible {
     outline: 2px solid var(--brand);
     outline-offset: 2px;
