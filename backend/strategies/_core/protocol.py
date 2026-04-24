@@ -99,6 +99,14 @@ class StrategyMeta(BaseModel):
     lookback_days: int = 250
     required_bars: tuple[Literal["daily", "1min", "5min", "1h"], ...] = ("daily",)
     min_universe_size: int = 1
+    paper_only: bool = False
+    """When True, DailyPipelineRunner blocks this strategy from live mode.
+
+    The strategy still backtests and paper-trades normally; only live-mode
+    signal emission is suppressed. Use for strategies whose OOS track record
+    hasn't crossed the bar for production capital (see audit procedure in
+    docs/STRATEGIES.md).
+    """
     params_model: type[StrategyParams] | None = None
     """Set by @register_strategy from the class's PARAMS_MODEL attribute."""
 

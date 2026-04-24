@@ -55,6 +55,19 @@ class DailyPipelineRunner:
             from datetime import date as _date
             asof = _date.today()
 
+        # meta.paper_only = True blocks live-mode emission; the strategy
+        # still runs in backtest/paper modes. The runner returns an empty
+        # result with a warning so the MasterAgent sees the block reason.
+        if self._strategy.META.paper_only:
+            return StrategyResult(
+                signals=[], state_update={},
+                diagnostics={"paper_only_blocked": True},
+                warnings=[
+                    f"{self._strategy.META.name} has meta.paper_only=True — "
+                    "skipped live-mode emission"
+                ],
+            )
+
         state = await self._state_store.load(self._strategy.META.name)
         symbols = self._strategy.universe(asof, state)
         bars = self._providers.bars.fetch_window(
