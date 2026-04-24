@@ -47,6 +47,45 @@ describe("Earnings Options Play page", () => {
     expect(region?.getAttribute("role")).toBe("status");
   });
 
+  it("rejects invalid min_iv_rank from URL rather than coercing NaN (B-58)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?min_iv_rank=abc", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    // The mock was called with filters — min_iv_rank should be 50 (default),
+    // not NaN (which would coerce to the string "NaN" downstream).
+    const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
+    expect(firstCall?.min_iv_rank).toBe(50);
+    expect(Number.isNaN(firstCall?.min_iv_rank as number)).toBe(false);
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("rejects out-of-range min_iv_rank (B-58)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?min_iv_rank=250", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
+    expect(firstCall?.min_iv_rank).toBe(50);
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
   it("uses replaceState on first mount and pushState on subsequent changes (B-39)", async () => {
     vi.mocked(api.getEarningsCalendar).mockResolvedValue({
       earnings: [

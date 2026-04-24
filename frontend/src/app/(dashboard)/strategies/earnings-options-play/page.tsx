@@ -170,17 +170,38 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   if (typeof window === "undefined") return { window: "both", min_iv_rank: 50, sort: "date" };
   const p = new URLSearchParams(window.location.search);
   const out: EarningsCalendarFilters = {};
+
+  // B-58: validate every param strictly. If the URL value is missing or
+  // invalid, leave the field undefined so the defaults apply via the
+  // spread below — no silent coercion of "abc" to NaN → fallback 50.
   const win = p.get("window");
   if (win === "current" || win === "next" || win === "both") out.window = win;
-  const minIvRank = p.get("min_iv_rank");
-  if (minIvRank !== null) out.min_iv_rank = Number(minIvRank);
+
+  const rawIv = p.get("min_iv_rank");
+  if (rawIv != null) {
+    const n = Number(rawIv);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) out.min_iv_rank = n;
+  }
+
   const mc = p.get("market_cap");
-  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) out.market_cap = mc as EarningsCalendarFilters["market_cap"];
+  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) {
+    out.market_cap = mc as EarningsCalendarFilters["market_cap"];
+  }
+
   const ba = p.get("bmo_amc");
-  if (ba && ["bmo", "amc", "both"].includes(ba)) out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
-  if (p.get("watchlist_only") === "true") out.watchlist_only = true;
+  if (ba && ["bmo", "amc", "both"].includes(ba)) {
+    out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
+  }
+
+  const wl = p.get("watchlist_only");
+  if (wl === "true") out.watchlist_only = true;
+  else if (wl === "false") out.watchlist_only = false;
+
   const sort = p.get("sort");
-  if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) out.sort = sort as EarningsCalendarFilters["sort"];
+  if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) {
+    out.sort = sort as EarningsCalendarFilters["sort"];
+  }
+
   return { window: "both", min_iv_rank: 50, sort: "date", ...out };
 }
 
