@@ -19,6 +19,22 @@ from typing import Any, Mapping, Sequence
 log = logging.getLogger(__name__)
 
 
+def _log_ctx(**kwargs: Any) -> dict[str, Any]:
+    """Return an ``extra`` dict for log calls, filtering out ``None`` values.
+
+    Wave B-67: the module previously emitted %-formatted log lines with no
+    structured metadata. Log aggregators (Loki, CloudWatch) can't filter on
+    free-form text, so oncall couldn't grep for a specific symbol or
+    endpoint. This helper builds a JsonFormatter-compatible extras dict
+    with a fixed ``event="earnings"`` anchor field plus whatever contextual
+    keys the caller passes (``symbol``, ``endpoint``, ``window``, etc.).
+
+    ``None`` values are dropped so an optional field (e.g. ``symbol`` at
+    the calendar-level failure site) doesn't emit a noisy ``symbol: null``.
+    """
+    return {"event": "earnings", **{k: v for k, v in kwargs.items() if v is not None}}
+
+
 # ─── Pure helpers ────────────────────────────────────────────
 
 def compute_expected_move_from_straddle(
@@ -216,7 +232,16 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     try:
         return await asyncio.to_thread(_load)
     except Exception as e:
-        log.warning("FMP upcoming fetch failed for window=%s: %s", window, e)
+        log.warning(
+            "FMP upcoming fetch failed for window=%s: %s",
+            window,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._fmp_upcoming",
+                window=window,
+                error=str(e),
+            ),
+        )
         raise
 
 
@@ -248,7 +273,16 @@ async def _load_quote(symbol: str) -> dict | None:
             "change_pct": float(q.changePct),
         }
     except Exception as e:
-        log.warning("quote load failed for %s: %s", symbol, e)
+        log.warning(
+            "quote load failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_quote",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
         return None
 
 
@@ -301,7 +335,16 @@ async def _load_metrics(
             "days_to_expiry": days_to_expiry,
         }
     except Exception as e:
-        log.warning("metrics load failed for %s: %s", symbol, e)
+        log.warning(
+            "metrics load failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_metrics",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
         return None
 
 
@@ -413,7 +456,16 @@ async def _run_structured_and_cache(
             ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
         )
     except Exception as e:
-        log.warning("Claude structured failed for %s: %s", symbol, e)
+        log.warning(
+            "Claude structured failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_claude_structured",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
 
 
 async def _load_historical(symbol: str) -> dict | None:
@@ -654,7 +706,16 @@ async def list_upcoming(
             )
             rows.append(CalendarRow(**row_payload))
         except Exception as e:
-            log.warning("row validation failed: %s — %s", e, h)
+            log.warning(
+                "row validation failed: %s — %s",
+                e,
+                h,
+                extra=_log_ctx(
+                    endpoint="earnings.list_upcoming",
+                    symbol=(h or {}).get("symbol"),
+                    error=str(e),
+                ),
+            )
             partial = True
 
     if bmo_amc != "both":
