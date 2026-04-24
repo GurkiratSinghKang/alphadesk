@@ -64,7 +64,7 @@ export default function EarningsDetailPanel({
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         report_date={detail.report_date} report_time={detail.report_time}
-        quote={detail.quote}
+        quote={detail.quote} generated_at={detail.generated_at}
       />
       <MetricsStrip metrics={detail.metrics} />
 

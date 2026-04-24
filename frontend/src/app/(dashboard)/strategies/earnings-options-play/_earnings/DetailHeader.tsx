@@ -1,4 +1,5 @@
 import type { EarningsReportTime } from "@/types";
+import { fmtRelativeTime } from "@/lib/time";
 
 export interface DetailHeaderProps {
   symbol: string;
@@ -7,10 +8,13 @@ export interface DetailHeaderProps {
   report_date: string;
   report_time: EarningsReportTime;
   quote: { last: number; change: number; change_pct: number } | null;
+  /** ISO datetime of the most-recent detail snapshot. Surfaces as the
+   *  "Updated 5 m ago" label in the header. */
+  generated_at?: string;
 }
 
 export default function DetailHeader({
-  symbol, company, sector, report_date, report_time, quote,
+  symbol, company, sector, report_date, report_time, quote, generated_at,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
   const changePct = quote?.change_pct ?? null;
@@ -27,6 +31,15 @@ export default function DetailHeader({
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
         <p className="t-meta mt-1">{sector} · Reports {formatReportDate(report_date)} · {report_time}</p>
+        {generated_at && (
+          <p
+            data-slot="detail-updated"
+            className="t-meta mt-0.5 u-muted"
+            title={generated_at}
+          >
+            Updated {fmtRelativeTime(generated_at)}
+          </p>
+        )}
       </div>
       <div className="text-right">
         <div className="t-num-hero">
