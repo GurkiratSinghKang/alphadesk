@@ -76,6 +76,7 @@ export default function EarningsDetailPanel({
             <ClaudeThesisCard
               structured={detail.claude_structured} full={detail.claude_full_research}
               running={runningFull} onRunFull={onRunFullResearch}
+              symbol={detail.symbol}
             />
             <NewsFeed news={detail.news} />
           </div>
@@ -91,6 +92,7 @@ export default function EarningsDetailPanel({
           <ClaudeThesisCard
             structured={detail.claude_structured} full={detail.claude_full_research}
             running={runningFull} onRunFull={onRunFullResearch}
+            symbol={detail.symbol}
           />
           <StrikeLadder ladder={detail.strike_ladder} />
           <HistoricalMoves historical={detail.historical_earnings} />
