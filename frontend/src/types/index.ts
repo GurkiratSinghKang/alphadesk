@@ -414,3 +414,112 @@ export interface EarningsCalendarFilters {
   watchlist_only?: boolean;
   sort?: "date" | "iv_rank" | "yield" | "claude_confidence";
 }
+
+// ─── Strategy SOTA Foundation types ───────────────────────────
+// Mirror of backend/strategies/_core/contracts.py — keep in sync when
+// backend contracts evolve. These are the shapes a BacktestRunner /
+// SignalRunner returns; the existing `Signal` above (analysis UI) is
+// unrelated and must not be renamed.
+
+export type CoreOrderType =
+  | "MKT"
+  | "LMT"
+  | "STP"
+  | "STP_LMT"
+  | "MOO"
+  | "MOC";
+
+export type CoreTimeInForce = "DAY" | "GTC" | "IOC" | "FOK";
+
+export type OptionSide = "buy" | "sell";
+
+export type StrategyKind = "autonomous" | "research";
+
+export type StrategyCategory =
+  | "equity"
+  | "options"
+  | "pairs"
+  | "macro"
+  | "intraday"
+  | "smoke";
+
+/** One leg of a multi-leg options order. */
+export interface OptionLeg {
+  occSymbol: string;              // OCC option symbol, e.g. NVDA260425C00205000
+  side: OptionSide;
+  quantity: number;
+  limitPrice?: number | null;
+}
+
+/**
+ * An order intent emitted by a backend strategy on a single bar.
+ * Named `OrderSignal` to avoid clashing with the existing analysis-UI
+ * `Signal` type above.
+ */
+export interface OrderSignal {
+  symbol: string;
+  asof: string;                   // ISO date
+  orderType: CoreOrderType;
+  timeInForce: CoreTimeInForce;
+  targetWeight?: number | null;
+  quantity?: number | null;
+  limitPrice?: number | null;
+  stopPrice?: number | null;
+  tag?: string;
+  legs?: OptionLeg[] | null;
+}
+
+/** Reproducibility metadata stamped on every BacktestResult. */
+export interface ReproMeta {
+  gitSha: string;
+  paramHash: string;
+  snapshotRoot: string;
+  seed: number;
+  runAt: string;                  // ISO datetime
+  strategyName: string;
+  runnerVersion: string;
+}
+
+/** One closed round-trip trade (or an open position at backtest end). */
+export interface BacktestTrade {
+  symbol: string;
+  entryDate: string;
+  exitDate?: string | null;
+  entryPrice: string;             // Decimal serialised as string
+  exitPrice?: string | null;
+  quantity: number;
+  pnl?: string | null;
+  tag?: string;
+}
+
+/** Aggregated result of a BacktestRunner.run(). */
+export interface BacktestResult {
+  equityCurve: Array<{
+    date: string;
+    cash: number;
+    positionsValue?: number;
+    equity: number;
+    drawdown: number;
+  }>;
+  dailyReturns: Array<{ date: string; value: number }>;
+  trades: BacktestTrade[];
+  signalsEmitted: OrderSignal[];
+  metrics: Record<string, number>;
+  params: Record<string, unknown>;
+  start: string;
+  end: string;
+  repro: ReproMeta;
+  warningsByAsof: Record<string, string[]>;
+}
+
+/** Strategy metadata surfaced from the _core.protocol registry. */
+export interface StrategyMetaInfo {
+  name: string;
+  category: StrategyCategory;
+  description: string;
+  kind: StrategyKind;
+  lookbackDays: number;
+  requiredBars: string[];
+  minUniverseSize: number;
+  paperOnly: boolean;
+}
