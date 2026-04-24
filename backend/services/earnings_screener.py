@@ -554,13 +554,25 @@ async def _hydrate_row(row: dict, *, min_iv_rank: float = 0) -> dict | None:
     threshold filter. Raises on truly unrecoverable errors (caller catches).
     """
     symbol = row["symbol"]
-    quote_task = asyncio.create_task(_load_quote(symbol))
-    metrics_task = asyncio.create_task(
-        _load_metrics(symbol, report_date=date.fromisoformat(row["report_date"]))
+    # B-35: gather with return_exceptions=True gives us clean per-task
+    # exception handling and concise result-unpacking. The previous
+    # wait/result sequence re-raised either task's exception without
+    # distinguishing the source, and required manual Task plumbing.
+    quote_result, metrics_result = await asyncio.gather(
+        _load_quote(symbol),
+        _load_metrics(symbol, report_date=date.fromisoformat(row["report_date"])),
+        return_exceptions=True,
     )
-    await asyncio.wait([quote_task, metrics_task], return_when=asyncio.ALL_COMPLETED)
-    quote = quote_task.result()
-    metrics = metrics_task.result()
+    if isinstance(quote_result, Exception):
+        log.warning("quote task raised for %s: %s", symbol, quote_result)
+        quote = None
+    else:
+        quote = quote_result
+    if isinstance(metrics_result, Exception):
+        log.warning("metrics task raised for %s: %s", symbol, metrics_result)
+        metrics = None
+    else:
+        metrics = metrics_result
     iv_rank = metrics.get("iv_rank") if metrics else None
     if iv_rank is not None and iv_rank < min_iv_rank:
         return None

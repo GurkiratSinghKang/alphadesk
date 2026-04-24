@@ -365,6 +365,48 @@ async def test_list_upcoming_filters_stale_earnings():
 
 
 @pytest.mark.asyncio
+async def test_hydrate_row_continues_when_quote_raises():
+    """B-35 regression: _hydrate_row must not propagate a single task's
+    exception; it should log and substitute None for the failed block so
+    the caller still gets partial data."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=3)).isoformat()
+    row = {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+           "report_date": future, "report_time": "AMC"}
+
+    with patch.object(svc, "_load_quote", AsyncMock(side_effect=RuntimeError("polygon down"))), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value={"iv_rank": 70, "expected_move_pct": 0.05})):
+        result = await svc._hydrate_row(row, min_iv_rank=0)
+
+    assert result is not None
+    assert result["symbol"] == "NVDA"
+    assert result["price"] is None  # quote failure -> None
+    assert result["iv_rank"] == 70
+
+
+@pytest.mark.asyncio
+async def test_hydrate_row_continues_when_metrics_raises():
+    """B-35 regression: symmetrical test — metrics task raising must not
+    prevent the row from returning with quote data intact."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=3)).isoformat()
+    row = {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+           "report_date": future, "report_time": "AMC"}
+
+    with patch.object(svc, "_load_quote",
+                      AsyncMock(return_value={"last": 200.0, "change": 1.0, "change_pct": 0.5})), \
+         patch.object(svc, "_load_metrics", AsyncMock(side_effect=RuntimeError("alpaca down"))):
+        result = await svc._hydrate_row(row, min_iv_rank=0)
+
+    assert result is not None
+    assert result["symbol"] == "NVDA"
+    assert result["price"] == 200.0
+    assert result["iv_rank"] is None
+
+
+@pytest.mark.asyncio
 async def test_load_strike_ladder_handles_empty_expirations():
     """B-42 regression: a non-optionable symbol can return a chain whose
     `expirations` list is empty. Previously `chain.expirations[0]` would
