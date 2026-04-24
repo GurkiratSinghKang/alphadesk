@@ -37,6 +37,23 @@ export default function EarningsDetailPanel({
     if (detail?.symbol) detailHeaderRef.current?.focus();
   }, [detail?.symbol]);
 
+  // Escape clears the selection — dispatches a custom event the parent
+  // page listens for. Ignored while focus is inside a text input so
+  // users can clear filters without losing the detail view (B-61).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const tag = (document.activeElement?.tagName ?? "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // TODO: parent page.tsx should listen for this event and clear
+      // selectedSymbol. If the listener isn't wired yet this is a
+      // harmless no-op.
+      document.dispatchEvent(new CustomEvent("alphadesk:earnings-clear-selection"));
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   if (error) {
     return (
       <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
