@@ -1,8 +1,19 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
 import { render, waitFor, act, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import EarningsOptionsPlayPage from "@/app/(dashboard)/strategies/earnings-options-play/page";
 import * as api from "@/lib/api";
+
+// B-97: page uses useQuery; tests need a QueryClientProvider. retry=false
+// so failures surface immediately (no hanging retries mid-waitFor).
+function withQueryClient(children: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
 
 describe("Earnings Options Play page", () => {
   it("fetches calendar on mount and auto-selects first symbol", async () => {
@@ -25,10 +36,12 @@ describe("Earnings Options Play page", () => {
       generated_at: new Date().toISOString(), partial: false,
     });
 
-    const { container } = render(<EarningsOptionsPlayPage />);
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA");
+      // getEarningsDetail now takes (symbol, { signal }) per B-97. Assert on the
+      // symbol arg; ignore the options bag.
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
       expect(container.textContent).toContain("NVDA");
       expect(container.textContent).toContain("TSLA");
     });
@@ -48,9 +61,9 @@ describe("Earnings Options Play page", () => {
       ],
       generated_at: new Date().toISOString(), partial: false,
     });
-    render(<EarningsOptionsPlayPage />);
+    render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA", expect.anything());
     });
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
@@ -94,7 +107,7 @@ describe("Earnings Options Play — full flow", () => {
     };
     vi.mocked(api.getEarningsDetail).mockResolvedValue(fullNvdaDetail);
 
-    const { container } = render(<EarningsOptionsPlayPage />);
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
       expect(container.querySelector('[data-slot="claude-thesis"]')?.textContent).toMatch(/NEUTRAL-BULL/);
       expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
@@ -109,7 +122,15 @@ describe("Earnings Options Play — full flow", () => {
       analyst_consensus_delta: "", what_would_change_my_mind: "",
       confidence: 0.7, model: "claude-opus-4-7", generated_at: new Date().toISOString(),
     });
-    const btn = container.querySelector('[data-slot="claude-thesis"] button') as HTMLButtonElement;
+    // Wait for the thesis card button to appear, then click. Under react-query
+    // (B-97) the detail panel may momentarily re-render between the first
+    // waitFor resolving and the next synchronous querySelector, so poll for
+    // the button to be present.
+    const btn = await waitFor(() => {
+      const el = container.querySelector('[data-slot="claude-thesis"] button') as HTMLButtonElement | null;
+      if (!el) throw new Error("thesis button not rendered yet");
+      return el;
+    });
     fireEvent.click(btn);
     await waitFor(() => {
       expect(api.postEarningsFullResearch).toHaveBeenCalledWith("NVDA");

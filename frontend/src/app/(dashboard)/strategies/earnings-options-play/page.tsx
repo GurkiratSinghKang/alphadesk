@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
   getEarningsCalendar,
@@ -8,7 +9,6 @@ import {
   postEarningsFullResearch,
 } from "@/lib/api";
 import type {
-  CalendarResponse,
   EarningsDetail,
   EarningsCalendarFilters,
 } from "@/types";
@@ -23,15 +23,14 @@ import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
  * Layout C (Bloomberg): left calendar sidebar + right persistent detail panel.
  * URL state: ?symbol=NVDA&window=both&min_iv_rank=50&sort=date — refresh
  * preserves selection and filters.
+ *
+ * Data layer (B-97): react-query owns calendar + detail + full-research.
+ * Auto stale-while-revalidate, one retry on transient 5xx, AbortSignal-based
+ * cancellation when filters/symbol change. The page only owns UI state
+ * (`filters`, `selectedSymbol`) plus the URL sync side-effect.
  */
 export default function EarningsOptionsPlayPage() {
-  const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
-  const [calendarError, setCalendarError] = useState<string | null>(null);
-  const [loadingCalendar, setLoadingCalendar] = useState(true);
-
-  const [detail, setDetail] = useState<EarningsDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState<EarningsCalendarFilters>(() =>
     readFiltersFromURL(),
@@ -42,81 +41,65 @@ export default function EarningsOptionsPlayPage() {
     return params.get("symbol");
   });
 
-  const [runningFull, setRunningFull] = useState(false);
+  // ── Calendar ─────────────────────────────────────────────
+  const calendarQuery = useQuery({
+    queryKey: ["earnings-calendar", filters],
+    queryFn: ({ signal }) => getEarningsCalendar(filters, { signal }),
+  });
+  const calendar = calendarQuery.data ?? null;
+  const loadingCalendar = calendarQuery.isLoading;
+  const calendarError = calendarQuery.error
+    ? (calendarQuery.error as Error).message
+    : null;
 
-  // ── Fetch calendar whenever filters change ───────────────
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingCalendar(true);
-    setCalendarError(null);
-    getEarningsCalendar(filters)
-      .then((resp) => {
-        if (cancelled) return;
-        setCalendar(resp);
-        // Auto-select first symbol if none selected, or selected no longer in list
-        if (resp.earnings.length > 0) {
-          const stillValid = selectedSymbol && resp.earnings.some((r) => r.symbol === selectedSymbol);
-          if (!stillValid) {
-            setSelectedSymbol(resp.earnings[0].symbol);
-          }
-        } else {
-          setSelectedSymbol(null);
-        }
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setCalendarError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingCalendar(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(filters)]);
+  // ── Detail ───────────────────────────────────────────────
+  const detailQuery = useQuery({
+    queryKey: ["earnings-detail", selectedSymbol],
+    queryFn: ({ signal }) => getEarningsDetail(selectedSymbol!, { signal }),
+    enabled: !!selectedSymbol,
+  });
+  const detail = selectedSymbol ? detailQuery.data ?? null : null;
+  const loadingDetail = !!selectedSymbol && detailQuery.isLoading;
+  const detailError = detailQuery.error ? (detailQuery.error as Error).message : null;
 
-  // ── Fetch detail when selectedSymbol changes ─────────────
+  // ── Auto-select first symbol when calendar loads ─────────
+  // Runs post-fetch (separate from the query) to keep the query function
+  // pure. If current selection is not in the fresh list, fall back to row 0.
   useEffect(() => {
-    if (!selectedSymbol) {
-      setDetail(null);
+    if (!calendar) return;
+    if (calendar.earnings.length === 0) {
+      if (selectedSymbol !== null) setSelectedSymbol(null);
       return;
     }
-    let cancelled = false;
-    setLoadingDetail(true);
-    setDetailError(null);
-    getEarningsDetail(selectedSymbol)
-      .then((d) => {
-        if (!cancelled) setDetail(d);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setDetailError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDetail(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSymbol]);
+    const stillValid =
+      selectedSymbol && calendar.earnings.some((r) => r.symbol === selectedSymbol);
+    if (!stillValid) {
+      setSelectedSymbol(calendar.earnings[0].symbol);
+    }
+  }, [calendar, selectedSymbol]);
+
+  // ── Full research (on-demand Claude Opus note) ───────────
+  const fullResearchMutation = useMutation({
+    mutationFn: (symbol: string) => postEarningsFullResearch(symbol),
+    onSuccess: (full) => {
+      if (!selectedSymbol) return;
+      queryClient.setQueryData(
+        ["earnings-detail", selectedSymbol],
+        (prev: EarningsDetail | undefined) =>
+          prev ? { ...prev, claude_full_research: full } : prev,
+      );
+    },
+  });
+  const runningFull = fullResearchMutation.isPending;
+  const runFull = useCallback(() => {
+    if (!selectedSymbol) return;
+    fullResearchMutation.mutate(selectedSymbol);
+  }, [selectedSymbol, fullResearchMutation]);
 
   // ── Sync state to URL ────────────────────────────────────
   useEffect(() => {
     syncURL({ symbol: selectedSymbol, ...filters });
   }, [selectedSymbol, filters]);
-
-  // ── Full research mutation ───────────────────────────────
-  const runFull = useCallback(async () => {
-    if (!selectedSymbol) return;
-    setRunningFull(true);
-    try {
-      const full = await postEarningsFullResearch(selectedSymbol);
-      setDetail((prev) =>
-        prev ? { ...prev, claude_full_research: full } : prev,
-      );
-    } finally {
-      setRunningFull(false);
-    }
-  }, [selectedSymbol]);
 
   const actions = (
     <span className="t-meta tabular-nums text-[color:var(--fg-muted)]">
