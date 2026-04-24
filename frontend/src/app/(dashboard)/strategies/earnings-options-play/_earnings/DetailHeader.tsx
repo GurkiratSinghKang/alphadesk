@@ -7,7 +7,8 @@ export interface DetailHeaderProps {
   symbol: string;
   company: string;
   sector: string;
-  report_date: string;
+  // Nullable for stub-detail responses — see B-41 in earnings_screener.py.
+  report_date: string | null;
   report_time: EarningsReportTime;
   quote: { last: number; change: number; change_pct: number } | null;
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
@@ -45,7 +46,7 @@ export default function DetailHeader({
         >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
-        <p className="t-meta mt-1">{sector} · Reports {formatReportDate(report_date)} · {report_time}</p>
+        <p className="t-meta mt-1">{sector} · Reports {report_date ? formatReportDate(report_date) : "—"} · {report_time}</p>
         {generated_at && (
           <p
             data-slot="detail-updated"

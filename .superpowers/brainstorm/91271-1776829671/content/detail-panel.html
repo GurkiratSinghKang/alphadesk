@@ -1,0 +1,232 @@
+<h2>Question 5: Arrangement of the detail panel?</h2>
+<p class="subtitle">Same sections in both — the choice is stacked-scroll vs two-column dashboard.</p>
+
+<style>
+  .panel { background: #0b0c0d; border: 1px solid #1f2124; border-radius: 6px; padding: 14px; font-family: ui-monospace, monospace; font-size: 10.5px; color: #c7c7c0; }
+  .panel h4 { color: #e8e2d0; font-family: 'Source Serif Pro', Georgia, serif; font-style: italic; font-weight: 500; font-size: 18px; margin: 0 0 4px 0; letter-spacing: -0.01em; }
+  .panel h5 { color: #c2a96a; font-family: 'Source Serif Pro', Georgia, serif; font-style: italic; font-weight: 500; font-size: 13px; margin: 12px 0 4px 0; }
+  .panel .sec-label { color: #8a7f66; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; display:block; margin-bottom: 3px; }
+  .panel .mut { color: #6f6a5e; }
+  .panel .pos { color: #9bc08a; }
+  .panel .neg { color: #d48a7a; }
+  .panel .warn { color: #c2a96a; }
+  .panel .cell { display:flex; flex-direction:column; gap:1px; min-width: 60px; }
+  .panel .cell span:first-child { color:#6f6a5e; font-size:8.5px; letter-spacing:0.08em; text-transform:uppercase; }
+  .panel .strip { display:flex; gap:14px; flex-wrap:wrap; padding:8px 0; border-top:1px solid #1f2124; border-bottom:1px solid #1f2124; }
+  .panel .thesis-card { background:#10110f; border-left:2px solid #c2a96a; padding:10px 12px; margin-top:8px; border-radius:2px; }
+  .panel .ladder { border-top:1px solid #1f2124; }
+  .panel .ladder .hrow { display:flex; gap:8px; padding:3px 0; font-size:9.5px; color:#6f6a5e; border-bottom:1px solid #1a1c1e; }
+  .panel .ladder .drow { display:flex; gap:8px; padding:4px 0; font-size:10px; border-bottom:1px solid #141516; }
+  .panel .ladder .drow span { min-width:42px; }
+  .panel .news li { list-style:none; padding:3px 0; font-size:10px; color:#b0aa9a; border-bottom:1px dotted #1a1c1e; }
+  .panel .hmove { display:flex; gap:4px; align-items:flex-end; height:44px; padding:6px 0; }
+  .panel .hbar { width:20px; background:#9bc08a; opacity:0.7; }
+  .panel .hbar.neg { background:#d48a7a; }
+  .panel .trade-row { display:flex; gap:6px; margin-top:10px; border-top:1px solid #1f2124; padding-top:10px; }
+  .panel .trade-btn { flex:1; padding:6px 8px; background:#1a1814; border:1px solid #3a3428; border-radius:3px; text-align:center; font-size:10px; color:#c2a96a; cursor:pointer; }
+  .panel .full-btn { display:inline-block; margin-top:6px; padding:3px 8px; background:#1a1814; border:1px solid #2a2820; border-radius:2px; font-size:9px; color:#c2a96a; }
+</style>
+
+<div class="cards">
+
+  <!-- V1: Stacked, scrollable -->
+  <div class="card" data-choice="stacked" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#050606; max-height:720px; overflow:hidden;">
+      <div class="panel" style="border:none; border-radius:0; padding:16px;">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <div>
+            <span class="sec-label">§ EARNINGS · OPTIONS PLAY</span>
+            <h4>Nvidia · NVDA</h4>
+            <div class="mut" style="font-size:9.5px;">Semiconductors · Reports Wed Apr 23 · AMC</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:ui-monospace; font-size:20px; color:#e8e2d0;">201.70</div>
+            <div class="neg" style="font-size:10px;">-1.42 · -0.70%</div>
+          </div>
+        </div>
+
+        <!-- Metrics strip -->
+        <div class="strip">
+          <div class="cell"><span>IV RANK</span><span class="warn">78</span></div>
+          <div class="cell"><span>IV %ILE</span><span>82</span></div>
+          <div class="cell"><span>HV 20</span><span>42.1%</span></div>
+          <div class="cell"><span>HV/IV</span><span>0.71</span></div>
+          <div class="cell"><span>EXP MOVE</span><span class="warn">±6.4%</span></div>
+          <div class="cell"><span>DTE</span><span>3</span></div>
+        </div>
+
+        <!-- Claude thesis card -->
+        <div class="thesis-card">
+          <span class="sec-label" style="color:#c2a96a;">◇ CLAUDE · STRUCTURED</span>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+            <div><span class="warn" style="font-size:13px; font-weight:600;">NEUTRAL-BULL</span> <span class="mut" style="font-size:10px;">· conf 62%</span></div>
+            <div class="mut" style="font-size:9.5px;">est. move: +4% / -5%</div>
+          </div>
+          <p style="font-size:10.5px; color:#c7c7c0; margin:6px 0;">IV rank is elevated but historical earnings moves avg ±5.2% — IV is over-pricing. Beat expected, but post-print drift typically fades. Premium-selling setup favored.</p>
+          <div class="mut" style="font-size:9.5px;">Catalysts: data-center guide, Blackwell ramp · Risks: CN export pivot, guide miss</div>
+          <div class="mut" style="font-size:9.5px;">Play: <span class="warn">short strangle</span> (IV rank &gt; 75 bucket)</div>
+          <span class="full-btn">▸ Run full research note</span>
+        </div>
+
+        <!-- Strike ladder -->
+        <h5>Strike ladder · nearest expiry after earnings (Apr 25)</h5>
+        <div class="ladder">
+          <div class="hrow">
+            <span style="min-width:42px;">STRIKE</span><span style="min-width:36px;">Δ</span><span style="min-width:40px;">MID</span><span style="min-width:34px;">IV</span><span style="min-width:36px;">YLD</span><span style="min-width:34px;">POP</span><span style="min-width:42px; text-align:right;">SIDE</span>
+          </div>
+          <div class="drow"><span>195.0</span><span>-.30</span><span>3.40</span><span>81%</span><span class="pos">1.7%</span><span>68%</span><span class="mut" style="text-align:right;">put 30Δ</span></div>
+          <div class="drow"><span>200.0</span><span>-.50</span><span>5.60</span><span>79%</span><span class="pos">2.8%</span><span>50%</span><span class="mut" style="text-align:right;">put ATM</span></div>
+          <div class="drow"><span>205.0</span><span>+.50</span><span>6.20</span><span>78%</span><span class="pos">3.1%</span><span>50%</span><span class="mut" style="text-align:right;">call ATM</span></div>
+          <div class="drow"><span>210.0</span><span>+.30</span><span>3.80</span><span>80%</span><span class="pos">1.9%</span><span>68%</span><span class="mut" style="text-align:right;">call 30Δ</span></div>
+        </div>
+
+        <!-- Historical -->
+        <h5>Historical earnings · last 8 qtrs</h5>
+        <div style="display:flex; gap:14px; align-items:flex-end;">
+          <div class="hmove">
+            <div class="hbar" style="height:60%;" title="+4.2%"></div>
+            <div class="hbar neg" style="height:80%;"></div>
+            <div class="hbar" style="height:40%;"></div>
+            <div class="hbar" style="height:90%;"></div>
+            <div class="hbar neg" style="height:50%;"></div>
+            <div class="hbar" style="height:70%;"></div>
+            <div class="hbar" style="height:30%;"></div>
+            <div class="hbar neg" style="height:45%;"></div>
+          </div>
+          <div style="font-size:10px;">
+            <div>avg |move|: <span class="warn">±5.2%</span></div>
+            <div>direction: <span class="pos">5W / 3L</span></div>
+            <div>surprise beat rate: <span class="pos">87%</span></div>
+            <div class="mut">IV is over-pricing by ~1.2 vol pts</div>
+          </div>
+        </div>
+
+        <!-- IV term + skew -->
+        <h5>IV term structure · put/call skew</h5>
+        <div style="display:flex; gap:14px;">
+          <div style="flex:1; height:50px; background:linear-gradient(90deg, #2a2015 0%, #3a2a15 40%, #2a2015 100%); position:relative; border-radius:2px;">
+            <span class="mut" style="position:absolute; bottom:2px; left:4px; font-size:8.5px;">weekly → monthly term structure</span>
+          </div>
+          <div style="flex:1; height:50px; background:#1a1815; position:relative; border-radius:2px;">
+            <span class="mut" style="position:absolute; bottom:2px; left:4px; font-size:8.5px;">25Δ put IV &gt; 25Δ call IV · skew +3.2</span>
+          </div>
+        </div>
+
+        <!-- News -->
+        <h5>News · NVDA · filtered</h5>
+        <ul class="news">
+          <li>Nvidia's Blackwell GPU ramp said on track for Q2 — Reuters, 2h ago</li>
+          <li>China export pivot: RTX 5000D clears — Bloomberg, 5h ago</li>
+          <li>Analysts hike PTs ahead of print — Barron's, 1d ago</li>
+        </ul>
+
+        <!-- Trade buttons -->
+        <div class="trade-row">
+          <div class="trade-btn">▸ Sell short call 205c</div>
+          <div class="trade-btn">▸ Sell short put 195p</div>
+          <div class="trade-btn">▸ Sell strangle 195/210</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>V1 · Stacked + scroll</h3>
+      <p>Single column, sections flow top-to-bottom: header → metrics strip → Claude card → strike ladder → historical → IV term/skew → news → trade row. Natural reading order, forgiving at any width. You scroll.</p>
+    </div>
+  </div>
+
+  <!-- V2: Two-column dashboard -->
+  <div class="card" data-choice="twocol" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#050606; max-height:720px; overflow:hidden;">
+      <div class="panel" style="border:none; border-radius:0; padding:16px;">
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <div>
+            <span class="sec-label">§ EARNINGS · OPTIONS PLAY</span>
+            <h4>Nvidia · NVDA</h4>
+            <div class="mut" style="font-size:9.5px;">Semiconductors · Reports Wed Apr 23 · AMC</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:ui-monospace; font-size:20px; color:#e8e2d0;">201.70</div>
+            <div class="neg" style="font-size:10px;">-1.42 · -0.70%</div>
+          </div>
+        </div>
+
+        <!-- Metrics strip full width -->
+        <div class="strip">
+          <div class="cell"><span>IV RANK</span><span class="warn">78</span></div>
+          <div class="cell"><span>IV %ILE</span><span>82</span></div>
+          <div class="cell"><span>HV/IV</span><span>0.71</span></div>
+          <div class="cell"><span>EXP MV</span><span class="warn">±6.4%</span></div>
+          <div class="cell"><span>HIST |MV|</span><span>±5.2%</span></div>
+          <div class="cell"><span>BEAT %</span><span class="pos">87</span></div>
+          <div class="cell"><span>DTE</span><span>3</span></div>
+        </div>
+
+        <!-- Two columns -->
+        <div style="display:flex; gap:14px; margin-top:10px;">
+          <!-- Left column: thesis + news -->
+          <div style="flex:1; min-width:0;">
+            <div class="thesis-card">
+              <span class="sec-label" style="color:#c2a96a;">◇ CLAUDE · STRUCTURED</span>
+              <div style="margin-top:4px;"><span class="warn" style="font-size:12px; font-weight:600;">NEUTRAL-BULL</span> <span class="mut" style="font-size:9.5px;">· 62%</span></div>
+              <p style="font-size:10px; color:#c7c7c0; margin:6px 0;">IV elevated vs realized — premium overpriced. Beat expected, post-print drift fades. Premium-selling setup favored.</p>
+              <div class="mut" style="font-size:9.5px;">Play: <span class="warn">short strangle</span></div>
+              <span class="full-btn">▸ Full research</span>
+            </div>
+            <h5>News</h5>
+            <ul class="news">
+              <li>Blackwell ramp on track — Reuters 2h</li>
+              <li>China export pivot — Bloomberg 5h</li>
+              <li>Analysts hike PTs — Barron's 1d</li>
+            </ul>
+          </div>
+          <!-- Right column: options lab + historical -->
+          <div style="flex:1.1; min-width:0;">
+            <h5 style="margin-top:0;">Strike ladder · Apr 25</h5>
+            <div class="ladder">
+              <div class="hrow"><span style="min-width:38px;">K</span><span style="min-width:30px;">Δ</span><span style="min-width:36px;">MID</span><span style="min-width:34px;">YLD</span><span style="min-width:30px;">POP</span></div>
+              <div class="drow"><span>195p</span><span>-.30</span><span>3.40</span><span class="pos">1.7%</span><span>68%</span></div>
+              <div class="drow"><span>200p</span><span>-.50</span><span>5.60</span><span class="pos">2.8%</span><span>50%</span></div>
+              <div class="drow"><span>205c</span><span>+.50</span><span>6.20</span><span class="pos">3.1%</span><span>50%</span></div>
+              <div class="drow"><span>210c</span><span>+.30</span><span>3.80</span><span class="pos">1.9%</span><span>68%</span></div>
+            </div>
+            <h5>Historical · 8q</h5>
+            <div style="display:flex; gap:8px;">
+              <div class="hmove" style="padding:0;">
+                <div class="hbar" style="width:10px; height:60%;"></div>
+                <div class="hbar neg" style="width:10px; height:80%;"></div>
+                <div class="hbar" style="width:10px; height:40%;"></div>
+                <div class="hbar" style="width:10px; height:90%;"></div>
+                <div class="hbar neg" style="width:10px; height:50%;"></div>
+                <div class="hbar" style="width:10px; height:70%;"></div>
+                <div class="hbar" style="width:10px; height:30%;"></div>
+                <div class="hbar neg" style="width:10px; height:45%;"></div>
+              </div>
+              <div style="font-size:9.5px;">±5.2% avg · 5W/3L<br>IV over ~1.2 vol</div>
+            </div>
+            <h5>IV term · skew</h5>
+            <div style="display:flex; gap:6px;">
+              <div style="flex:1; height:32px; background:linear-gradient(90deg, #2a2015 0%, #3a2a15 40%, #2a2015 100%); border-radius:2px;"></div>
+              <div style="flex:1; height:32px; background:#1a1815; border-radius:2px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="trade-row">
+          <div class="trade-btn">▸ Short call 205c</div>
+          <div class="trade-btn">▸ Short put 195p</div>
+          <div class="trade-btn">▸ Strangle 195/210</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>V2 · Two-column dashboard</h3>
+      <p>Header + metrics strip full-width at top. Below: left column holds thesis + news; right column holds strike ladder + historical + IV term. Everything visible without scrolling on a typical desktop. More Bloomberg-y.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:18px;">Both show identical sections — only the arrangement differs. V1 is friendlier at narrower widths; V2 maximizes above-the-fold info on desktop.</p>

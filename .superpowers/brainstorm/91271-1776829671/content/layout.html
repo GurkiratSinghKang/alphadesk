@@ -1,0 +1,127 @@
+<h2>Question 3: Main screener layout?</h2>
+<p class="subtitle">How the list of this-week/next-week earnings renders, and how you drill into one.</p>
+
+<style>
+  .mini { background: #0b0c0d; border: 1px solid #1f2124; border-radius: 6px; padding: 14px; font-family: ui-monospace, monospace; font-size: 11px; color: #c7c7c0; }
+  .mini h4 { color: #e8e2d0; font-family: 'Source Serif Pro', Georgia, serif; font-style: italic; font-weight: 500; font-size: 18px; margin: 0 0 6px 0; }
+  .mini .sec-label { color: #8a7f66; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 4px; display:block; }
+  .mini .row { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid #1a1c1e; font-size: 10.5px; }
+  .mini .row:first-child { border-top: none; }
+  .mini .cell-sym { color: #e8e2d0; font-weight: 600; min-width: 42px; }
+  .mini .cell-mut { color: #6f6a5e; }
+  .mini .cell-pos { color: #9bc08a; }
+  .mini .cell-neg { color: #d48a7a; }
+  .mini .day-head { color: #c2a96a; font-style: italic; font-family: 'Source Serif Pro', Georgia, serif; font-size: 13px; padding: 10px 0 4px 0; border-bottom: 1px solid #2a2420; }
+  .mini .sidebar { border-right: 1px solid #1f2124; padding-right: 10px; }
+  .mini .drawer { background: #131414; border-top: 1px dashed #2a2820; padding: 8px 0; margin-top: 4px; color: #8a7f66; font-size: 10px; }
+  .mini .detail-panel { background: #0e0f10; border: 1px solid #1f2124; padding: 10px; border-radius: 4px; }
+  .flex-row { display: flex; gap: 8px; }
+  .flex-col { display: flex; flex-direction: column; gap: 2px; }
+</style>
+
+<div class="cards">
+
+  <!-- LAYOUT A: Classic dense table, separate detail page -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#050606;">
+      <div class="mini" style="border:none; border-radius:0; padding:16px;">
+        <span class="sec-label">§ EARNINGS · OPTIONS PLAY</span>
+        <h4>This week · next week</h4>
+        <div style="color:#6f6a5e; font-size:10px; margin-bottom:10px;">24 earnings · 8 high-IV · sort by premium yield</div>
+
+        <div class="row" style="border-top:1px solid #1f2124; color:#6f6a5e; font-size:9.5px;">
+          <span style="min-width:42px;">SYM</span>
+          <span style="min-width:44px;">DATE</span>
+          <span style="min-width:28px;">PX</span>
+          <span style="min-width:34px;">SC YLD</span>
+          <span style="min-width:34px;">SP YLD</span>
+          <span style="min-width:30px;">EXP M</span>
+          <span style="min-width:30px;">IV R</span>
+          <span style="min-width:34px;">HIST</span>
+        </div>
+        <div class="row"><span class="cell-sym">NVDA</span><span class="cell-mut">04-23 AMC</span><span>201.7</span><span class="cell-pos">3.1%</span><span class="cell-pos">2.8%</span><span>±6.4%</span><span>78</span><span>±5.2%</span></div>
+        <div class="row"><span class="cell-sym">TSLA</span><span class="cell-mut">04-23 AMC</span><span>392.4</span><span class="cell-pos">4.2%</span><span class="cell-pos">3.9%</span><span>±8.1%</span><span>84</span><span>±7.8%</span></div>
+        <div class="row"><span class="cell-sym">META</span><span class="cell-mut">04-24 AMC</span><span>672.4</span><span class="cell-pos">2.6%</span><span class="cell-pos">2.4%</span><span>±5.8%</span><span>71</span><span>±4.9%</span></div>
+        <div class="row"><span class="cell-sym">GOOGL</span><span class="cell-mut">04-24 AMC</span><span>338.0</span><span class="cell-pos">2.1%</span><span class="cell-pos">1.9%</span><span>±4.2%</span><span>66</span><span>±3.8%</span></div>
+        <div class="row"><span class="cell-sym">AMZN</span><span class="cell-mut">04-29 AMC</span><span>254.3</span><span class="cell-pos">2.8%</span><span class="cell-pos">2.5%</span><span>±5.1%</span><span>69</span><span>±4.6%</span></div>
+        <div style="color:#6f6a5e; text-align:center; padding-top:8px; font-size:10px;">click row → /strategies/earnings-options-play/NVDA</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Dense table + separate detail page</h3>
+      <p>Full-width 11-column sortable grid. Click a row to jump to a deep detail page (URL: .../NVDA). Feels like optionalpha / Barchart scanners. Max info density; best for power users who want to scan quickly.</p>
+    </div>
+  </div>
+
+  <!-- LAYOUT B: Day-grouped table with inline row expansion -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#050606;">
+      <div class="mini" style="border:none; border-radius:0; padding:16px;">
+        <span class="sec-label">§ EARNINGS · OPTIONS PLAY</span>
+        <h4>This week · next week</h4>
+        <div style="color:#6f6a5e; font-size:10px; margin-bottom:6px;">24 earnings · filter · IV rank ≥ 50</div>
+
+        <div class="day-head">Wed Apr 23 · 4 reporting</div>
+        <div class="row"><span class="cell-sym">NVDA</span><span class="cell-mut">AMC</span><span>201.7</span><span class="cell-pos">3.1%</span><span class="cell-pos">2.8%</span><span>±6.4%</span><span>IVR 78</span></div>
+        <div class="drawer" style="border-left:2px solid #c2a96a; padding-left:8px; margin-left:0;">
+          ▾ expanded: strike ladder · skew · IV term · Claude thesis · news · historical moves chart
+        </div>
+        <div class="row"><span class="cell-sym">TSLA</span><span class="cell-mut">AMC</span><span>392.4</span><span class="cell-pos">4.2%</span><span class="cell-pos">3.9%</span><span>±8.1%</span><span>IVR 84</span></div>
+
+        <div class="day-head">Thu Apr 24 · 6 reporting</div>
+        <div class="row"><span class="cell-sym">META</span><span class="cell-mut">AMC</span><span>672.4</span><span class="cell-pos">2.6%</span><span class="cell-pos">2.4%</span><span>±5.8%</span><span>IVR 71</span></div>
+        <div class="row"><span class="cell-sym">GOOGL</span><span class="cell-mut">AMC</span><span>338.0</span><span class="cell-pos">2.1%</span><span class="cell-pos">1.9%</span><span>±4.2%</span><span>IVR 66</span></div>
+
+        <div style="color:#6f6a5e; text-align:center; padding-top:8px; font-size:10px;">click row → drawer opens in-place, URL stays put</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Day-grouped with in-row drawer</h3>
+      <p>Earnings grouped under date headers (like a calendar). Click a row, a drawer slides open beneath showing the full options lab for that symbol. Never leave the page. Better for "scanning by day, drilling on one" flow.</p>
+    </div>
+  </div>
+
+  <!-- LAYOUT C: Split sidebar + persistent right detail panel -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#050606;">
+      <div class="mini" style="border:none; border-radius:0; padding:16px; display:flex; gap:10px;">
+        <div class="sidebar" style="flex: 0 0 130px;">
+          <span class="sec-label" style="font-size:8px;">§ CALENDAR</span>
+          <div class="day-head" style="font-size:11px; padding:6px 0 2px;">Wed 04-23</div>
+          <div style="padding:3px 4px; background:#1a1815; border-left:2px solid #c2a96a; border-radius:2px;"><span class="cell-sym">NVDA</span> <span style="color:#9bc08a; font-size:9px;">+78</span></div>
+          <div style="padding:3px 4px;"><span class="cell-sym">TSLA</span> <span style="color:#9bc08a; font-size:9px;">+84</span></div>
+          <div class="day-head" style="font-size:11px; padding:6px 0 2px;">Thu 04-24</div>
+          <div style="padding:3px 4px;"><span class="cell-sym">META</span> <span style="color:#9bc08a; font-size:9px;">+71</span></div>
+          <div style="padding:3px 4px;"><span class="cell-sym">GOOGL</span> <span style="color:#9bc08a; font-size:9px;">+66</span></div>
+          <div style="padding:3px 4px;"><span class="cell-sym">AMZN</span> <span style="color:#9bc08a; font-size:9px;">+69</span></div>
+          <div class="day-head" style="font-size:11px; padding:6px 0 2px;">Next wk</div>
+          <div style="padding:3px 4px;"><span class="cell-sym">AAPL</span> <span style="color:#9bc08a; font-size:9px;">+58</span></div>
+        </div>
+        <div class="detail-panel" style="flex:1;">
+          <h4 style="font-size:14px; margin-bottom:2px;">Nvidia · NVDA</h4>
+          <div style="color:#6f6a5e; font-size:9.5px; margin-bottom:8px;">Reports Wed Apr 23 · AMC · 201.70</div>
+          <div class="flex-row" style="margin-bottom:6px;">
+            <div class="flex-col"><span style="color:#6f6a5e; font-size:8.5px;">SC YIELD</span><span class="cell-pos">3.1%</span></div>
+            <div class="flex-col"><span style="color:#6f6a5e; font-size:8.5px;">SP YIELD</span><span class="cell-pos">2.8%</span></div>
+            <div class="flex-col"><span style="color:#6f6a5e; font-size:8.5px;">IV RANK</span><span>78</span></div>
+            <div class="flex-col"><span style="color:#6f6a5e; font-size:8.5px;">EXP MV</span><span>±6.4%</span></div>
+          </div>
+          <div style="color:#6f6a5e; font-size:9px; border-top:1px solid #1f2124; padding-top:6px;">
+            ◇ Claude · thesis + direction<br>
+            ◇ Strike ladder (ATM / 30Δ / 15Δ)<br>
+            ◇ Historical move chart (8 qtrs)<br>
+            ◇ News feed<br>
+            ◇ IV term structure + skew
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Calendar sidebar + persistent detail pane</h3>
+      <p>Left: compact vertical calendar. Right: whichever symbol you clicked stays there showing the full analysis. Feels like Bloomberg / a trading IDE. Great for "compare 3 stocks quickly" but sacrifices horizontal screen real estate on the sidebar.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;">Click the layout you want, or tell me in the terminal if you'd like a mix.</p>

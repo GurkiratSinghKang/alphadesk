@@ -399,7 +399,9 @@ export interface EarningsDetail {
   symbol: string;
   company: string;
   sector: string;
-  report_date: string;
+  // Nullable for stub-detail responses when the symbol isn't on the
+  // current FMP calendar slice and has no known next-report date (B-41).
+  report_date: string | null;
   report_time: EarningsReportTime;
   quote: { last: number; change: number; change_pct: number } | null;
   metrics: EarningsMetricsBlock | null;
