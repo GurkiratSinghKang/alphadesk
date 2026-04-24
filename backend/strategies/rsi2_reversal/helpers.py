@@ -1,256 +1,103 @@
-"""Data / indicator helpers for the rsi2_reversal strategy.
+"""Data / indicator helpers for the rsi2_reversal strategy — SOTA shell.
 
-Kept separate from :mod:`.strategy` so the main module stays compact and
-reviewable. Per-run state lives on ``ctx.state``. Indicator values (which
-are a pure function of the bar history) are additionally cached at
-process scope so the tuner's Optuna trials don't recompute the same
-indicator series from scratch — a ~5x speedup for ``ConnorsRSI``, which
-has O(n·p) cost in its percentile-rank component.
+Bars flow through ``input.bars``; earnings through ``input.earnings``.
+Indicator computations are kept pure so they can be shared with tests.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from datetime import date, timedelta
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 
 from indicators.momentum import connors_rsi, rsi
 from indicators.trend import sma
-from strategies.base import Context, cache_of
 
 
 # --------------------------------------------------------------------------- #
-# Namespace keys                                                              #
+# Bar-panel slicing                                                           #
 # --------------------------------------------------------------------------- #
-_NS = "rsi2_reversal"
-_LONG_HIST_KEY = f"{_NS}.long_hist"
-_IND_KEY = f"{_NS}.ind"
-_EARNINGS_KEY = f"{_NS}.earnings"
-
-_MIN_TRADING_BARS = 250
-
-
-# --------------------------------------------------------------------------- #
-# Process-wide indicator cache                                                #
-# --------------------------------------------------------------------------- #
-# Keyed by (symbol, data_identity, param_sig). ``data_identity`` is the
-# id() of the underlying DataFrame so we never serve stale results.
-# The cache is bounded to a few hundred entries worth of numpy arrays — at
-# a couple of kB per entry this is well below 50 MB total and keeps the
-# tuner trial rate high.
-_PROC_IND_CACHE: dict[tuple, dict[str, np.ndarray]] = {}
-_PROC_IND_MAX = 8192
-
-
-def _trim_process_cache() -> None:
-    if len(_PROC_IND_CACHE) > _PROC_IND_MAX:
-        # Simple FIFO eviction: drop the oldest half. Python dict keeps
-        # insertion order, so iterating gives us the oldest entries first.
-        to_drop = len(_PROC_IND_CACHE) - (_PROC_IND_MAX // 2)
-        keys = list(_PROC_IND_CACHE.keys())[:to_drop]
-        for k in keys:
-            _PROC_IND_CACHE.pop(k, None)
-
-
-# --------------------------------------------------------------------------- #
-# Bar provider adapter                                                        #
-# --------------------------------------------------------------------------- #
-def fetch_bars(
-    ctx: Context,
-    symbols: list[str],
-    start: date,
-    end: date,
-) -> Optional[pd.DataFrame]:
-    """Fetch daily bars and normalise the frame to a canonical shape."""
-
-    provider = getattr(ctx, "bar_provider", None)
-    if provider is None:
-        return None
-    df = provider.bars(symbols, start, end, tf="1D")
-    if df is None:
-        return None
-    df = pd.DataFrame(df)
-    if df.empty:
-        return df
-
-    cols = {c.lower(): c for c in df.columns}
-    sym_col = cols.get("symbol") or cols.get("ticker")
-    ts_col = cols.get("ts") or cols.get("timestamp") or cols.get("date")
-    if sym_col is None or ts_col is None:
+def flat_bars(bars: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """Normalise ``input.bars`` to a flat DataFrame with symbol + ts columns."""
+    if bars is None or getattr(bars, "empty", True):
         return None
 
-    out = pd.DataFrame(
-        {
-            "symbol": df[sym_col].astype(str).str.upper(),
-            "ts": pd.to_datetime(df[ts_col], utc=True, errors="coerce"),
-            "open": pd.to_numeric(df[cols.get("open", "open")], errors="coerce"),
-            "high": pd.to_numeric(df[cols.get("high", "high")], errors="coerce"),
-            "low": pd.to_numeric(df[cols.get("low", "low")], errors="coerce"),
-            "close": pd.to_numeric(df[cols.get("close", "close")], errors="coerce"),
-            "volume": pd.to_numeric(
-                df[cols.get("volume", "volume")] if "volume" in cols else 0,
-                errors="coerce",
-            ).fillna(0.0),
-        }
-    )
-    out = out.dropna(subset=["ts", "close"]).reset_index(drop=True)
-    out["ts_date"] = out["ts"].dt.tz_convert("UTC").dt.date
-    return out
+    idx_names = tuple(bars.index.names or ())
+    if "symbol" in idx_names and "date" in idx_names:
+        frame = bars.reset_index().rename(columns={"date": "ts"})
+    else:
+        frame = bars.copy()
+        if "ts" not in frame.columns and "ts_date" in frame.columns:
+            frame = frame.rename(columns={"ts_date": "ts"})
+
+    if "symbol" not in frame.columns or "close" not in frame.columns or "ts" not in frame.columns:
+        return None
+
+    ts = pd.to_datetime(frame["ts"], utc=True, errors="coerce")
+    # Accept either tz-aware or tz-naive; normalize to UTC date.
+    try:
+        ts = ts.dt.tz_convert("UTC")
+    except (TypeError, AttributeError):
+        pass
+    frame["ts"] = ts
+    frame["ts_date"] = ts.dt.date
+    frame["symbol"] = frame["symbol"].astype(str).str.upper()
+    return frame.dropna(subset=["ts", "close"]).sort_values(["symbol", "ts"], ignore_index=True)
 
 
-# --------------------------------------------------------------------------- #
-# Symbol history cache                                                        #
-# --------------------------------------------------------------------------- #
 def symbol_history(
-    ctx: Context,
+    flat: Optional[pd.DataFrame],
     sym: str,
     asof: date,
-    lookback_days: int,
 ) -> Optional[pd.DataFrame]:
-    """Return the bar history up to and including ``asof`` for ``sym``.
-
-    Keeps a single long series per symbol in ``ctx.state`` and slices by
-    ``asof`` on every call. When the slice extends past what we have
-    cached we fetch a wider window once and update the cache in-place.
-    """
-
-    cache = cache_of(ctx)
-    long_hist: dict[str, pd.DataFrame] = cache.setdefault(_LONG_HIST_KEY, {})
-    whole = long_hist.get(sym)
-    needs_fetch = (
-        whole is None or whole.empty or whole["ts_date"].iloc[-1] < asof
-    )
-    if needs_fetch:
-        start = asof - timedelta(days=lookback_days + 60)
-        fetch_end = asof + timedelta(days=400)
-        df = fetch_bars(ctx, [sym], start, fetch_end)
-        if df is None or df.empty:
-            return None
-        sub = df[df["symbol"] == sym].copy()
-        if sub.empty:
-            return None
-        sub = sub.sort_values("ts", ignore_index=True)
-        long_hist[sym] = sub
-        whole = sub
-
-    cur = whole[whole["ts_date"] <= asof]
-    if cur.empty:
+    """Return the per-symbol bar history up to and including ``asof``."""
+    if flat is None or flat.empty:
         return None
-    return cur
+    sub = flat[flat["symbol"] == sym.upper()]
+    sub = sub[sub["ts_date"] <= asof]
+    return sub.reset_index(drop=True) if not sub.empty else None
 
 
 # --------------------------------------------------------------------------- #
-# Indicator cache                                                             #
+# Indicators                                                                  #
 # --------------------------------------------------------------------------- #
-def indicators_for(
-    ctx: Context, sym: str, bars: pd.DataFrame, params: dict[str, Any]
-) -> Optional[dict[str, np.ndarray]]:
-    """Return RSI / CRSI / SMA arrays for ``sym`` up to the last bar in
-    ``bars``. Indicators are computed once over the full long-history cache
-    and sliced per-bar. We cache at both ctx scope (per-run) and process
-    scope (across tuner trials), keyed by the parameter tuple + a
-    content-hash of the bar history so trials with different data or
-    parameters never receive stale results.
-    """
-
-    cache = cache_of(ctx)
-    long_hist: dict[str, pd.DataFrame] = cache.get(_LONG_HIST_KEY, {})
-    whole = long_hist.get(sym)
-    if whole is None or whole.empty:
-        return None
-    # Content hash: (symbol, first-ts, last-ts, n) — matches across tuner
-    # trials provided the underlying bar data doesn't change.
-    data_id = (sym, whole["ts"].iloc[0], whole["ts"].iloc[-1], len(whole))
-    rsi_sig = ("rsi", data_id, int(params["rsi_period"]))
-    crsi_sig = (
-        "crsi",
-        data_id,
-        int(params["crsi_rsi_period"]),
-        int(params["crsi_streak_period"]),
-        int(params["crsi_pct_rank_period"]),
-    )
-    sma_trend_sig = ("sma", data_id, int(params["trend_sma_period"]))
-    sma_exit_sig = ("sma", data_id, int(params["exit_sma_period"]))
-    ts_dates_sig = ("ts_dates", data_id)
-
-    closes: Optional[pd.Series] = None
-    if rsi_sig not in _PROC_IND_CACHE:
-        if closes is None:
-            closes = whole["close"].astype(float)
-        if len(closes) < _MIN_TRADING_BARS:
-            return None
-        _PROC_IND_CACHE[rsi_sig] = rsi(
-            closes, period=int(params["rsi_period"]), smoothing="wilder"
-        ).to_numpy()
-    if crsi_sig not in _PROC_IND_CACHE:
-        if closes is None:
-            closes = whole["close"].astype(float)
-        if len(closes) < _MIN_TRADING_BARS:
-            return None
-        _PROC_IND_CACHE[crsi_sig] = connors_rsi(
-            closes,
-            rsi_period=int(params["crsi_rsi_period"]),
-            streak_period=int(params["crsi_streak_period"]),
-            pct_rank_period=int(params["crsi_pct_rank_period"]),
-        ).to_numpy()
-    if sma_trend_sig not in _PROC_IND_CACHE:
-        if closes is None:
-            closes = whole["close"].astype(float)
-        _PROC_IND_CACHE[sma_trend_sig] = sma(
-            closes, int(params["trend_sma_period"])
-        ).to_numpy()
-    if sma_exit_sig not in _PROC_IND_CACHE:
-        if closes is None:
-            closes = whole["close"].astype(float)
-        _PROC_IND_CACHE[sma_exit_sig] = sma(
-            closes, int(params["exit_sma_period"])
-        ).to_numpy()
-    if ts_dates_sig not in _PROC_IND_CACHE:
-        _PROC_IND_CACHE[ts_dates_sig] = whole["ts_date"].to_numpy()
-    _trim_process_cache()
-
-    data = {
-        "rsi": _PROC_IND_CACHE[rsi_sig],
-        "crsi": _PROC_IND_CACHE[crsi_sig],
-        "sma_trend": _PROC_IND_CACHE[sma_trend_sig],
-        "sma_exit": _PROC_IND_CACHE[sma_exit_sig],
-        "ts_dates": _PROC_IND_CACHE[ts_dates_sig],
-    }
-
-    last_date = bars["ts_date"].iloc[-1]
-    idx = int(np.searchsorted(data["ts_dates"], last_date, side="right")) - 1
-    if idx < 0:
-        return None
-    return {
-        "rsi": data["rsi"][: idx + 1],
-        "crsi": data["crsi"][: idx + 1],
-        "sma_trend": data["sma_trend"][: idx + 1],
-        "sma_exit": data["sma_exit"][: idx + 1],
-    }
-
-
-def indicator_at(
-    ctx: Context,
-    sym: str,
-    asof: date,
-    kind: str,
-    period: int,
-    lookback_days: int,
-) -> Optional[float]:
-    """Return the latest value of a scalar indicator on ``sym``."""
-
-    bars = symbol_history(ctx, sym, asof, lookback_days)
+def indicators_for(bars: pd.DataFrame, params) -> Optional[dict[str, np.ndarray]]:
+    """Compute RSI / CRSI / SMA arrays for the given per-symbol ``bars``."""
     if bars is None or bars.empty:
         return None
     closes = bars["close"].astype(float)
-    if kind == "rsi2":
-        s = rsi(closes, period=period, smoothing="wilder")
-    elif kind == "sma":
-        s = sma(closes, period)
-    else:
+    if len(closes) < max(
+        params.trend_sma_period,
+        params.exit_sma_period,
+        params.rsi_period + 1,
+        params.crsi_pct_rank_period,
+    ):
         return None
+
+    rsi_arr = rsi(closes, period=int(params.rsi_period), smoothing="wilder").to_numpy()
+    crsi_arr = connors_rsi(
+        closes,
+        rsi_period=int(params.crsi_rsi_period),
+        streak_period=int(params.crsi_streak_period),
+        pct_rank_period=int(params.crsi_pct_rank_period),
+    ).to_numpy()
+    sma_trend_arr = sma(closes, int(params.trend_sma_period)).to_numpy()
+    sma_exit_arr = sma(closes, int(params.exit_sma_period)).to_numpy()
+    return {
+        "rsi": rsi_arr,
+        "crsi": crsi_arr,
+        "sma_trend": sma_trend_arr,
+        "sma_exit": sma_exit_arr,
+    }
+
+
+def rsi_of_series(closes: pd.Series, period: int) -> Optional[float]:
+    """Return the latest RSI value for the series, or None if not computable."""
+    if closes.empty or len(closes) < period + 1:
+        return None
+    s = rsi(closes.astype(float), period=period, smoothing="wilder")
     if s.empty or pd.isna(s.iloc[-1]):
         return None
     return float(s.iloc[-1])
@@ -260,114 +107,61 @@ def indicator_at(
 # Earnings                                                                    #
 # --------------------------------------------------------------------------- #
 def has_upcoming_earnings(
-    ctx: Context, sym: str, asof: date, window_days: int
+    earnings: Optional[pd.DataFrame],
+    sym: str,
+    asof: date,
+    window_days: int,
 ) -> bool:
-    """Return True iff ``sym`` has scheduled earnings within ``window_days``
-    trading days of ``asof``. Degrades to False when no provider is wired.
-
-    The earnings calendar is cached per-process under ``ctx.state``. Rather
-    than pinning the cache to a fixed window centred on the first ``asof``
-    we observe, we track the cached date-range and extend it (in 1-year
-    increments) whenever ``asof`` advances past the upper bound — the same
-    pattern used by :func:`PEADStrategy._study_window`. This is the fix
-    for the multi-year-backtest staleness bug where earnings beyond the
-    first-asof + 1 year were silently missing and the earnings-skip gate
-    was bypassed entirely after year 2.
-    """
-
-    provider = getattr(ctx, "earnings_provider", None)
-    if provider is None:
+    """True iff ``sym`` has scheduled earnings within ``window_days`` of ``asof``."""
+    if earnings is None or getattr(earnings, "empty", True):
         return False
-    cache = cache_of(ctx)
-    meta: Optional[dict[str, Any]] = cache.get(_EARNINGS_KEY)
-
-    # Horizon we need today: enough headroom past ``asof`` for the gate
-    # check below. Pad by `window_days * 2` calendar days plus a safety
-    # margin so consecutive sessions don't each trigger a refetch.
-    needed_end = asof + timedelta(days=max(window_days * 2, 30) + 30)
-
-    def _empty_meta() -> dict[str, Any]:
-        return {"data": {}, "start": None, "end": None}
-
-    def _fetch_range(start: date, end: date) -> dict[str, list[date]]:
-        out: dict[str, list[date]] = {}
-        try:
-            df = provider.calendar(start, end)
-        except Exception:
-            return out
-        if df is None or df.empty:
-            return out
-        for _, row in df.iterrows():
-            s = str(row.get("symbol", "")).upper()
-            d_raw = row.get("date", row.get("asof", None))
-            if not s or d_raw is None:
-                continue
-            try:
-                d_val = pd.Timestamp(d_raw).date()
-            except Exception:
-                continue
-            out.setdefault(s, []).append(d_val)
-        return out
-
-    if meta is None:
-        # First fetch: anchor a 2-year span around ``asof`` and extend
-        # forward as the backtest advances.
-        start = date(asof.year - 1, 1, 1)
-        end = max(date(asof.year + 1, 12, 31), needed_end)
-        data = _fetch_range(start, end)
-        meta = {"data": data, "start": start, "end": end}
-        cache[_EARNINGS_KEY] = meta
-    else:
-        # Extend forward when the backtest walks past the cached window.
-        if meta.get("end") is None or asof > meta["end"] - timedelta(days=30):
-            cur_end = meta["end"] or asof
-            new_end = max(needed_end, asof + timedelta(days=365))
-            extra = _fetch_range(cur_end + timedelta(days=1), new_end)
-            for s, ds in extra.items():
-                meta["data"].setdefault(s, []).extend(ds)
-            meta["end"] = new_end
-        # Extend backward if the backtest walked behind the cached window
-        # (rare but possible in tuner trial reuse).
-        if meta.get("start") is None or asof < meta["start"]:
-            cur_start = meta["start"] or asof
-            new_start = min(asof, asof - timedelta(days=365))
-            extra = _fetch_range(new_start, cur_start - timedelta(days=1))
-            for s, ds in extra.items():
-                meta["data"].setdefault(s, []).extend(ds)
-            meta["start"] = new_start
-
-    dates = meta["data"].get(sym, [])
-    if not dates:
+    if "symbol" not in earnings.columns:
         return False
-    horizon_end = asof + timedelta(days=window_days * 2)  # cal→trading fudge
-    for d_val in dates:
-        if asof <= d_val <= horizon_end:
-            return True
-    return False
+    date_col = next(
+        (c for c in ("date", "report_date", "ts") if c in earnings.columns),
+        None,
+    )
+    if date_col is None:
+        return False
+    horizon = asof + timedelta(days=window_days * 2)
+    frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
+    mask = (
+        (earnings["symbol"].astype(str).str.upper() == sym.upper())
+        & (frame_dates >= asof)
+        & (frame_dates <= horizon)
+    )
+    return bool(mask.any())
 
 
 # --------------------------------------------------------------------------- #
 # Misc                                                                        #
 # --------------------------------------------------------------------------- #
-def trading_days_between(
-    start: Optional[datetime | date], end: date
-) -> int:
-    """Business-day count between two dates (inclusive). Approximates
-    trading days; adequate for a time-stop rule."""
-
+def trading_days_between(start: Optional[date], end: date) -> int:
+    """Business-day count between two dates (inclusive of ``end``)."""
     if start is None:
         return 0
-    s = start.date() if isinstance(start, datetime) else start
-    if s > end:
+    if start > end:
         return 0
-    return int(len(pd.bdate_range(start=s, end=end))) - 1
+    return int(len(pd.bdate_range(start=start, end=end))) - 1
+
+
+def adv_dollar_mean(bars: pd.DataFrame, lookback_bars: int = 90) -> Optional[float]:
+    """90-day dollar ADV for a per-symbol bar history."""
+    if bars is None or bars.empty:
+        return None
+    tail = bars.tail(lookback_bars)
+    if tail.empty:
+        return None
+    dollar_vol = tail["close"].astype(float) * tail["volume"].astype(float)
+    return float(dollar_vol.mean()) if len(dollar_vol) else None
 
 
 __all__ = [
-    "fetch_bars",
+    "flat_bars",
     "symbol_history",
     "indicators_for",
-    "indicator_at",
+    "rsi_of_series",
     "has_upcoming_earnings",
     "trading_days_between",
+    "adv_dollar_mean",
 ]
