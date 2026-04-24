@@ -35,6 +35,33 @@ describe("FiltersBar", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ min_iv_rank: 70 }));
   });
 
+  it("calls onSettleRef when IV-rank slider settles (B-56)", () => {
+    const onSettleRef = vi.fn();
+    const { container } = render(
+      <FiltersBar
+        filters={{ window: "both", min_iv_rank: 50, sort: "date" }}
+        onChange={() => {}}
+        onSettleRef={onSettleRef}
+      />,
+    );
+    const slider = container.querySelector('input[type="range"][name="min_iv_rank"]') as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    fireEvent.pointerUp(slider);
+    expect(onSettleRef).toHaveBeenCalled();
+    fireEvent.blur(slider);
+    expect(onSettleRef.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("is a no-op when onSettleRef is absent (B-56 back-compat)", () => {
+    const { container } = render(
+      <FiltersBar filters={{ window: "both", min_iv_rank: 50, sort: "date" }} onChange={() => {}} />,
+    );
+    const slider = container.querySelector('input[type="range"][name="min_iv_rank"]') as HTMLInputElement;
+    // Should not throw.
+    expect(() => fireEvent.pointerUp(slider)).not.toThrow();
+    expect(() => fireEvent.blur(slider)).not.toThrow();
+  });
+
   it("shows a sort-direction indicator next to the active sort (B-9)", () => {
     const { container, rerender } = render(
       <FiltersBar filters={{ window: "both", min_iv_rank: 50, sort: "date" }} onChange={() => {}} />,

@@ -6,6 +6,10 @@ import { cn } from "@/lib/utils";
 export interface FiltersBarProps {
   filters: EarningsCalendarFilters;
   onChange: (next: EarningsCalendarFilters) => void;
+  // B-56: called once the IV-rank slider settles (pointerup / keyup /
+  // blur) so the parent page can hand focus off to a more-useful target
+  // (typically the first sidebar row). Absent = no-op (back-compat).
+  onSettleRef?: () => void;
 }
 
 type WindowOption = { key: "current" | "next" | "both"; label: string };
@@ -35,7 +39,7 @@ const SORT_DIRECTION: Record<SortOption["key"], { arrow: string; aria: string }>
   claude_confidence: { arrow: "\u2193", aria: "descending (highest first)" },
 };
 
-export default function FiltersBar({ filters, onChange }: FiltersBarProps) {
+export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBarProps) {
   const ivRank = filters.min_iv_rank ?? 50;
   const sortKey = (filters.sort ?? "date") as SortOption["key"];
   const sortDir = SORT_DIRECTION[sortKey];
@@ -76,6 +80,16 @@ export default function FiltersBar({ filters, onChange }: FiltersBarProps) {
           step={5}
           value={ivRank}
           onChange={(e) => onChange({ ...filters, min_iv_rank: Number(e.target.value) })}
+          // B-56: once the user stops dragging/typing the slider, let
+          // the parent page move focus somewhere more useful (a filter
+          // change re-renders the sidebar, which used to eat focus).
+          onPointerUp={() => onSettleRef?.()}
+          onKeyUp={(e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+              onSettleRef?.();
+            }
+          }}
+          onBlur={() => onSettleRef?.()}
           className="w-32"
         />
         <span className="font-mono text-[13px] tabular-nums">{ivRank}</span>
