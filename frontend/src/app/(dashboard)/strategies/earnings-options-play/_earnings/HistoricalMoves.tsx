@@ -23,7 +23,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
         <span className="t-label u-muted">· last {historical.quarters.length}q</span>
       </h3>
       <div className="mt-2 flex items-end gap-3">
-        <div className="flex h-[48px] items-end gap-1">
+        <div className="relative flex h-[48px] items-end gap-1 pr-10">
           {historical.quarters.map((q) => {
             const pct = q.next_day_move_pct;
             const h = Math.max(6, (Math.abs(pct) / maxAbs) * 44);
@@ -39,6 +39,18 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
               />
             );
           })}
+          {/* Dashed gridline + right-aligned label at the max absolute move
+              so users can calibrate bar heights at a glance (B-104). */}
+          <div
+            data-slot="hist-axis-max"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end"
+          >
+            <div className="absolute inset-x-0 top-0 border-t border-dashed border-[color:var(--border)]" />
+            <span className="relative z-10 bg-[color:var(--bg-card)] px-1 t-mono text-[10px] u-muted leading-none">
+              ±{(maxAbs * 100).toFixed(1)}%
+            </span>
+          </div>
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 t-mono text-[11.5px]">
           <dt className="t-label u-muted">AVG |MV|</dt>

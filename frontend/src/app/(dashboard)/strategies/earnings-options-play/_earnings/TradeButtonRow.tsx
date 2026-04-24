@@ -30,7 +30,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
         <Link
           data-slot="trade-button-short-call"
           href={buildSingleLegURL({ symbol, row: atmCall, expiry: ladder.expiry })}
-          className="rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand hover:border-[color:var(--brand)]"
+          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
           ▸ Short call {Math.round(atmCall.strike)}c
         </Link>
@@ -39,7 +39,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
         <Link
           data-slot="trade-button-short-put"
           href={buildSingleLegURL({ symbol, row: atmPut, expiry: ladder.expiry })}
-          className="rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand hover:border-[color:var(--brand)]"
+          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
           ▸ Short put {Math.round(atmPut.strike)}p
         </Link>
@@ -48,7 +48,7 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
         <Link
           data-slot="trade-button-strangle"
           href={buildStrangleURL({ symbol, put: farPut, call: farCall, expiry: ladder.expiry })}
-          className="rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand hover:border-[color:var(--brand)]"
+          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
         >
           ▸ Sell strangle {Math.round(farPut.strike)}/{Math.round(farCall.strike)}
         </Link>
