@@ -33,7 +33,12 @@ export default function DetailHeader({
     >
       <div>
         <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
+        {/* B-56 headingRef + tabIndex={-1}: parent moves focus here after a
+            filter-driven symbol change so SR users land on the new symbol.
+            B-90 id: the parent <section aria-labelledby="detail-header-title">
+            uses it to name the detail region. */}
         <h2
+          id="detail-header-title"
           ref={headingRef}
           tabIndex={-1}
           className="t-display-section italic mt-1 outline-none"

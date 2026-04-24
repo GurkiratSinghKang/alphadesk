@@ -20,26 +20,36 @@ export default function NewsFeed({ news }: NewsFeedProps) {
         News <span className="t-label u-muted">· filtered</span>
       </h3>
       <ul className="mt-1 space-y-0.5">
-        {news.slice(0, 10).map((a, i) => (
-          <li
-            key={a.url ?? i}
-            className="border-b border-dotted border-[color:var(--border)] py-1"
-          >
-            <a
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="t-mono text-[12.5px] hover:u-brand"
+        {news.slice(0, 10).map((a, i) => {
+          const rel = fmtRelative(a.published_at);
+          return (
+            <li
+              key={a.url ?? i}
+              className="border-b border-dotted border-[color:var(--border)] py-1"
             >
-              {a.title}
-            </a>
-            <span className="ml-2 t-mono text-[11px] u-muted">
-              — {a.source} · {fmtRelative(a.published_at)}
-            </span>
-          </li>
-        ))}
+              {/* B-95 — `title` surfaces source + time on hover for sighted
+                  users. The trailing metadata span is aria-hidden so the
+                  link's accessible name is just the headline, not
+                  "Headline — Source · 3h ago". */}
+              <a
+                href={a.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`${a.source} — ${rel}`}
+                className="t-mono text-[12.5px] hover:u-brand"
+              >
+                {a.title}
+              </a>
+              <span
+                aria-hidden="true"
+                className="ml-2 t-mono text-[11px] u-muted"
+              >
+                — {a.source} · {rel}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 }
-

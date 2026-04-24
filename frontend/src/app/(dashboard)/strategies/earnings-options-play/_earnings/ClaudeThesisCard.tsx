@@ -8,9 +8,16 @@ export interface ClaudeThesisCardProps {
   full: ClaudeFullResearch | null;
   running: boolean;
   onRunFull: () => void;
+  /**
+   * B-94 — SR context. When set, the research-run button's accessible
+   * name includes the symbol so users jumping between cards always hear
+   * which ticker the action applies to. Optional so the old prop shape
+   * stays backwards-compatible.
+   */
+  symbol?: string;
 }
 
-export default function ClaudeThesisCard({ structured, full, running, onRunFull }: ClaudeThesisCardProps) {
+export default function ClaudeThesisCard({ structured, full, running, onRunFull, symbol }: ClaudeThesisCardProps) {
   if (!structured) {
     return (
       <section
@@ -90,8 +97,23 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull 
             type="button"
             onClick={onRunFull}
             disabled={running}
-            aria-label={running ? "Generating full research" : "Run full research"}
-            className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] disabled:opacity-50"
+            /* B-94 — drop the aria-label when it would merely duplicate the
+               visible text; when a `symbol` is provided, use it to
+               disambiguate between panels (e.g. "Run full research for
+               NVDA"). Otherwise the button's own text content supplies
+               the accessible name by default. */
+            aria-label={
+              symbol
+                ? running
+                  ? `Generating full research for ${symbol}`
+                  : `Run full research for ${symbol}`
+                : undefined
+            }
+            /* B-57 min-h-[44px]: iPad touch target.
+               B-88 hover:text-gold-300 lifts the CTA text from --brand
+               (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
+               AAA) so the hover state reads distinctly brighter. */
+            className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
           >
             {running ? "▸ Generating full research…" : "▸ Run full research"}
           </button>

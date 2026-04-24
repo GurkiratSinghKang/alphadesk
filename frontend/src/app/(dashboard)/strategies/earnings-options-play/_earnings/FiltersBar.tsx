@@ -90,7 +90,9 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
             }
           }}
           onBlur={() => onSettleRef?.()}
-          className="w-32"
+          // B-96: full-width on small viewports (usable at 200% zoom),
+          // clamps to 128px on md+ screens.
+          className="w-full md:w-32 max-w-full"
         />
         <span className="font-mono text-[13px] tabular-nums">{ivRank}</span>
       </label>

@@ -33,6 +33,13 @@ export interface DashboardPageLayoutProps {
   /** Page body. */
   children: React.ReactNode;
   className?: string;
+  /**
+   * B-89 — Accessible name for the page region. Screen readers announce this
+   * when the user enters the page content. Falls back to `title` if omitted.
+   * Prefer a short noun phrase (e.g. "Earnings options play") over the
+   * editorial title ("This week · next week") so SR users get context.
+   */
+  pageLabel?: string;
 }
 
 export default function DashboardPageLayout({
@@ -41,10 +48,19 @@ export default function DashboardPageLayout({
   actions,
   children,
   className,
+  pageLabel,
 }: DashboardPageLayoutProps) {
   return (
+    /* B-89 — WCAG 2.4.1 / 4.1.2: give the page content an accessible
+       named landmark. The parent `(dashboard)/layout.tsx` already renders
+       the single `<main id="main-content">`, so wrapping here in another
+       `<main>` would produce nested mains (SC 4.1.2 violation). Instead we
+       emit `role="region"` with an aria-label — this adds a named landmark
+       the screen-reader rotor can jump to without duplicating `<main>`. */
     <div
       data-slot="dashboard-page-layout"
+      role="region"
+      aria-label={pageLabel ?? title}
       className={cn(
         // Viewport audit r5 #2: the previous 1280px cap wasted 33-50% of the
         // viewport on 1920+/ultrawide monitors (common for quant research).

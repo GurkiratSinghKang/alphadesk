@@ -87,8 +87,13 @@ export default function EarningsDetailPanel({
   const missingFields = extractMissingFields(detail);
 
   return (
+    /* B-90 — aria-labelledby points at DetailHeader's <h2
+       id="detail-header-title">. Only set here in the success branch,
+       since the empty/loading/error branches don't render DetailHeader
+       and the id would dangle. */
     <section
       data-slot="earnings-detail-panel"
+      aria-labelledby="detail-header-title"
       className="rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4"
     >
       {detail.partial && (
@@ -127,6 +132,7 @@ export default function EarningsDetailPanel({
             <ClaudeThesisCard
               structured={detail.claude_structured} full={detail.claude_full_research}
               running={runningFull} onRunFull={onRunFullResearch}
+              symbol={detail.symbol}
             />
             <NewsFeed news={detail.news} />
           </div>
@@ -141,6 +147,7 @@ export default function EarningsDetailPanel({
           <ClaudeThesisCard
             structured={detail.claude_structured} full={detail.claude_full_research}
             running={runningFull} onRunFull={onRunFullResearch}
+            symbol={detail.symbol}
           />
           <StrikeLadder ladder={detail.strike_ladder} />
           <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
