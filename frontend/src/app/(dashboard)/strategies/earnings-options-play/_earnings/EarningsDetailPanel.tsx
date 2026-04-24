@@ -7,7 +7,9 @@ import DetailHeader from "./DetailHeader";
 import MetricsStrip from "./MetricsStrip";
 import ClaudeThesisCard from "./ClaudeThesisCard";
 import StrikeLadder from "./StrikeLadder";
-import HistoricalMoves from "./HistoricalMoves";
+// B-63: HistoricalMoves removed — backend loader was stubbed and the
+// `historical_earnings` field is gone from EarningsDetail. Restore when
+// the FMP surprises join lands.
 import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
 import TradeButtonRow from "./TradeButtonRow";
@@ -74,10 +76,9 @@ export default function EarningsDetailPanel({
             />
             <NewsFeed news={detail.news} />
           </div>
-          {/* Right column: ladder + historical + term/skew */}
+          {/* Right column: ladder + term/skew */}
           <div className="min-w-0 space-y-3">
             <StrikeLadder ladder={detail.strike_ladder} />
-            <HistoricalMoves historical={detail.historical_earnings} />
             <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
           </div>
         </div>
@@ -88,7 +89,6 @@ export default function EarningsDetailPanel({
             running={runningFull} onRunFull={onRunFullResearch}
           />
           <StrikeLadder ladder={detail.strike_ladder} />
-          <HistoricalMoves historical={detail.historical_earnings} />
           <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
           <NewsFeed news={detail.news} />
         </div>

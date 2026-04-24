@@ -187,7 +187,9 @@ class EarningsDetail(BaseModel):
     strike_ladder: StrikeLadder | None = None
     claude_structured: ClaudeStructured | None = None
     claude_full_research: ClaudeFullResearch | None = None
-    historical_earnings: HistoricalBlock | None = None
+    # B-63: `historical_earnings` removed — the upstream loader was a stub
+    # that always returned None. Restore once the FMP surprises join is
+    # wired in a dedicated follow-up.
     iv_term_structure: list[IVTermPoint] | None = None
     skew: SkewBlock | None = None
     news: list[NewsArticle] = Field(default_factory=list)

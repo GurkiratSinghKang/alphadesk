@@ -274,6 +274,7 @@ async def test_get_detail_merges_all_blocks():
         "hist_avg_abs_move_pct": 0.052, "beat_rate": 0.87,
         "days_to_earnings": 1, "days_to_expiry": 3,
     }
+    future_date = (date.today() + timedelta(days=1)).isoformat()
     with patch.object(
          svc, "_load_quote",
          AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
@@ -281,7 +282,6 @@ async def test_get_detail_merges_all_blocks():
          patch.object(svc, "_load_metrics", AsyncMock(return_value=metrics)), \
          patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
-         patch.object(svc, "_load_historical", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_news", AsyncMock(return_value=[])), \
@@ -289,7 +289,7 @@ async def test_get_detail_merges_all_blocks():
              svc, "_load_earnings_meta",
              AsyncMock(return_value={
                  "company": "Nvidia", "sector": "Semis",
-                 "report_date": "2026-04-23", "report_time": "AMC",
+                 "report_date": future_date, "report_time": "AMC",
              }),
          ):
         detail = await svc.get_detail("NVDA")
@@ -687,6 +687,7 @@ async def test_get_detail_news_failure_marks_partial():
     so a Newsdata outage would silently succeed the response."""
     from services import earnings_screener as svc
 
+    future_date = (date.today() + timedelta(days=1)).isoformat()
     with patch.object(
          svc, "_load_quote",
          AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
@@ -694,7 +695,6 @@ async def test_get_detail_news_failure_marks_partial():
          patch.object(svc, "_load_metrics", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
-         patch.object(svc, "_load_historical", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_news", AsyncMock(side_effect=RuntimeError("newsdata 503"))), \
@@ -702,7 +702,7 @@ async def test_get_detail_news_failure_marks_partial():
              svc, "_load_earnings_meta",
              AsyncMock(return_value={
                  "company": "Nvidia", "sector": "Semis",
-                 "report_date": "2026-04-23", "report_time": "AMC",
+                 "report_date": future_date, "report_time": "AMC",
              }),
          ):
         detail = await svc.get_detail("NVDA")
@@ -731,11 +731,12 @@ async def test_run_full_research_calls_opus_and_caches():
     fake_client = AsyncMock()
     fake_client.complete = AsyncMock(return_value=fake_claude_raw)
 
+    future_date = (date.today() + timedelta(days=1)).isoformat()
     with patch.object(
          svc, "_load_earnings_meta",
          AsyncMock(return_value={
              "company": "Nvidia", "sector": "Semis",
-             "report_date": "2026-04-23", "report_time": "AMC",
+             "report_date": future_date, "report_time": "AMC",
          }),
          ), \
          patch.object(
@@ -746,16 +747,6 @@ async def test_run_full_research_calls_opus_and_caches():
              svc, "_load_metrics",
              AsyncMock(return_value={
                  "iv_rank": 78, "iv_percentile": 82, "expected_move_pct": 0.064,
-             }),
-         ), \
-         patch.object(
-             svc, "_load_historical",
-             AsyncMock(return_value={
-                 "quarters": [],
-                 "stats": {
-                     "avg_abs_move_pct": 0.05, "wins": 4, "losses": 4,
-                     "surprise_beat_rate": 0.5, "iv_vs_hist_vol_points": 1.2,
-                 },
              }),
          ), \
          patch.object(svc, "_load_news", AsyncMock(return_value=[])), \

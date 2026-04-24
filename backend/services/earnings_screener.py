@@ -78,7 +78,6 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
     ClaudeFullResearch,
     ClaudeStructured,
     EarningsDetail,
-    HistoricalBlock,
     IVTermPoint,
     MetricsBlock,
     NewsArticle,
@@ -437,18 +436,6 @@ async def _run_structured_and_cache(
         log.warning("Claude structured failed for %s: %s", symbol, e)
 
 
-async def _load_historical(symbol: str) -> dict | None:
-    """Pull last 8 earnings surprises + post-earnings moves.
-
-    Stubbed to ``None`` for the initial ship: FMP surprises + daily bars
-    can be joined here in a follow-up, mirroring
-    :mod:`strategies.pead.data`. Returning ``None`` keeps the UI rendering
-    em-dashes for this block without failing the whole detail fetch.
-    """
-    log.info("historical load for %s not yet implemented — returning None", symbol)
-    return None
-
-
 async def _load_iv_term(symbol: str) -> list[dict] | None:
     from api.routes.options import get_options_chain
 
@@ -749,7 +736,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     if not meta:
         raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
 
-    quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t, hist_t = (
+    quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t = (
         await asyncio.gather(
             _load_quote(symbol),
             _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
@@ -757,7 +744,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
             _load_news(symbol),
             _load_iv_term(symbol),
             _load_skew(symbol),
-            _load_historical(symbol),
             return_exceptions=True,
         )
     )
@@ -765,7 +751,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     # (upstream intentionally absent) are NOT partial — only exceptions are.
     partial = any(
         isinstance(x, Exception)
-        for x in [quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t, hist_t]
+        for x in [quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t]
     )
 
     quote = quote_t if isinstance(quote_t, dict) else None
@@ -774,7 +760,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
     news = news_t if isinstance(news_t, list) else []
     iv_term = iv_term_t if isinstance(iv_term_t, list) else None
     skew = skew_t if isinstance(skew_t, dict) else None
-    hist = hist_t if isinstance(hist_t, dict) else None
 
     claude_ctx = {
         "symbol": symbol,
@@ -787,9 +772,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "iv_percentile": metrics.get("iv_percentile", 0) if metrics else 0,
         "hv_20": metrics.get("hv_20", 0) if metrics else 0,
         "expected_move_pct": metrics.get("expected_move_pct", 0) if metrics else 0,
-        # Pass None (not 0) when historical is unavailable so the prompt omits
-        # the line instead of lying to Claude that |move| is literally 0%.
-        "hist_avg_abs_move_pct": (hist.get("stats", {}).get("avg_abs_move_pct") if hist else None),
+        # B-63: historical block was stubbed + removed from the response.
+        # Pass None so the prompt omits the line rather than lying to
+        # Claude that realized vol is 0%.
+        "hist_avg_abs_move_pct": None,
         "recent_beats_misses": [],
         "headlines": [n["title"] for n in news],
         "market_regime": "Unknown",  # wire once regime service is exposed
@@ -811,7 +797,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
         strike_ladder=StrikeLadder(**ladder) if ladder else None,
         claude_structured=ClaudeStructured(**claude) if claude else None,
         claude_full_research=None,
-        historical_earnings=HistoricalBlock(**hist) if hist else None,
         iv_term_structure=[IVTermPoint(**p) for p in iv_term] if iv_term else None,
         skew=SkewBlock(**skew) if skew else None,
         news=[NewsArticle(**n) for n in news],
@@ -844,10 +829,9 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     if cached:
         return ClaudeFullResearch(**cached)
 
-    quote, metrics, hist, news = await asyncio.gather(
+    quote, metrics, news = await asyncio.gather(
         _load_quote(symbol),
         _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
-        _load_historical(symbol),
         _load_news(symbol),
         return_exceptions=True,
     )
@@ -861,7 +845,9 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
         iv_rank=metrics.get("iv_rank", 0) if isinstance(metrics, dict) else 0,
         iv_percentile=metrics.get("iv_percentile", 0) if isinstance(metrics, dict) else 0,
         expected_move_pct=metrics.get("expected_move_pct", 0) if isinstance(metrics, dict) else 0,
-        historical_quarters=hist.get("quarters", []) if isinstance(hist, dict) else [],
+        # B-63: historical data loader removed; quarters list is empty
+        # until the FMP surprises join lands in a follow-up.
+        historical_quarters=[],
         headlines=[n["title"] for n in news] if isinstance(news, list) else [],
         market_regime="Unknown",  # wire once regime service is exposed
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists

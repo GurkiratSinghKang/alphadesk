@@ -403,7 +403,8 @@ export interface EarningsDetail {
   strike_ladder: StrikeLadder | null;
   claude_structured: ClaudeStructured | null;
   claude_full_research: ClaudeFullResearch | null;
-  historical_earnings: HistoricalBlock | null;
+  // B-63: `historical_earnings` removed — backend loader was a stub; the
+  // FMP surprises join will return as a dedicated follow-up PR.
   iv_term_structure: IVTermPoint[] | null;
   skew: SkewBlock | null;
   news: EarningsNewsArticle[];
