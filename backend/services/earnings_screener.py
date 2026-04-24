@@ -19,6 +19,22 @@ from typing import Any, Mapping, Sequence
 log = logging.getLogger(__name__)
 
 
+def _log_ctx(**kwargs: Any) -> dict[str, Any]:
+    """Return an ``extra`` dict for log calls, filtering out ``None`` values.
+
+    Wave B-67: the module previously emitted %-formatted log lines with no
+    structured metadata. Log aggregators (Loki, CloudWatch) can't filter on
+    free-form text, so oncall couldn't grep for a specific symbol or
+    endpoint. This helper builds a JsonFormatter-compatible extras dict
+    with a fixed ``event="earnings"`` anchor field plus whatever contextual
+    keys the caller passes (``symbol``, ``endpoint``, ``window``, etc.).
+
+    ``None`` values are dropped so an optional field (e.g. ``symbol`` at
+    the calendar-level failure site) doesn't emit a noisy ``symbol: null``.
+    """
+    return {"event": "earnings", **{k: v for k, v in kwargs.items() if v is not None}}
+
+
 # ─── Pure helpers ────────────────────────────────────────────
 
 def compute_expected_move_from_straddle(
@@ -161,6 +177,7 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     a dedicated profile endpoint if needed; the aggregator already
     tolerates empty/placeholder values.
     """
+    from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
 
     today = date.today()
@@ -172,7 +189,11 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         start, end = today, today + timedelta(days=14)
 
     def _load() -> list[dict]:
-        with FMPEarningsProvider() as provider:
+        # Timeout operator-tunable via ``settings.EARNINGS_FMP_TIMEOUT_S``
+        # (B-85). Default 5.0s balances provider flakiness vs UI p95.
+        with FMPEarningsProvider(
+            timeout=settings.EARNINGS_FMP_TIMEOUT_S
+        ) as provider:
             df = provider.calendar(start=start, end=end)
         if df is None or df.empty:
             return []
@@ -233,7 +254,16 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         log.warning("FMP upcoming fetch timed out for window=%s", window)
         raise
     except Exception as e:
-        log.warning("FMP upcoming fetch failed for window=%s: %s", window, e)
+        log.warning(
+            "FMP upcoming fetch failed for window=%s: %s",
+            window,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._fmp_upcoming",
+                window=window,
+                error=str(e),
+            ),
+        )
         raise
 
 
@@ -274,7 +304,20 @@ async def _load_quote(symbol: str, client_host: str | None = None) -> dict | Non
             "change_pct": float(q.changePct),
         }
     except Exception as e:
-        log.warning("quote load failed for %s: %s", symbol, e)
+        # B-69: demoted to DEBUG. During an Alpaca outage this was
+        # emitting one WARN per symbol (800+ over a 5-min outage); the
+        # real alerting signal is the single summary WARN at the end of
+        # ``list_upcoming``.
+        log.debug(
+            "quote load failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_quote",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
         return None
 
 
@@ -328,7 +371,19 @@ async def _load_metrics(
             "days_to_expiry": days_to_expiry,
         }
     except Exception as e:
-        log.warning("metrics load failed for %s: %s", symbol, e)
+        # B-69: demoted to DEBUG — a provider outage would otherwise emit
+        # one WARN per symbol in the hydrate loop. The single aggregated
+        # WARN at the end of ``list_upcoming`` is the real oncall signal.
+        log.debug(
+            "metrics load failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_metrics",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
         return None
 
 
@@ -413,6 +468,7 @@ async def _run_structured_and_cache(
     symbol: str, context: dict, cache: Any, key: str
 ) -> None:
     from agents.claude_client import ClaudeClient
+    from core.config import settings
     from services.earnings_prompts import (
         MODEL_STRUCTURED,
         build_structured_prompt,
@@ -436,9 +492,27 @@ async def _run_structured_and_cache(
             "model": MODEL_STRUCTURED,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-        await cache.set(key, payload, ttl_seconds=4 * 3600)
+        # TTL operator-tunable via
+        # ``settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS`` (B-85).
+        await cache.set(
+            key,
+            payload,
+            ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
+        )
     except Exception as e:
-        log.warning("Claude structured failed for %s: %s", symbol, e)
+        # B-69: demoted to DEBUG — an Anthropic outage would otherwise
+        # emit one WARN per symbol as N structured calls fail in the
+        # background. The hydration-failures summary covers it.
+        log.debug(
+            "Claude structured failed for %s: %s",
+            symbol,
+            e,
+            extra=_log_ctx(
+                endpoint="earnings._load_claude_structured",
+                symbol=symbol,
+                error=str(e),
+            ),
+        )
 
 
 async def _load_iv_term(symbol: str) -> list[dict] | None:
@@ -653,9 +727,12 @@ async def list_upcoming(
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where
-    # many mega caps report in parallel.
+    # many mega caps report in parallel. Operator-tunable via
+    # ``settings.EARNINGS_CALENDAR_MAX_ROWS`` (B-85).
+    from core.config import settings
+
     raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
-    MAX_ROWS = 8
+    MAX_ROWS = settings.EARNINGS_CALENDAR_MAX_ROWS
     if len(raw_rows) > MAX_ROWS:
         log.info(
             "earnings calendar: %d rows → capped to %d (window=%s)",
@@ -665,8 +742,16 @@ async def list_upcoming(
 
     # Cap concurrency so we don't open 60 parallel Alpaca+FMP+Claude flights
     # at once — Alpaca's rate limit is ~200 req/min across the whole backend
-    # and other endpoints need headroom.
-    hydrate_sem = asyncio.Semaphore(10)
+    # and other endpoints need headroom. Operator-tunable via
+    # ``settings.EARNINGS_HYDRATE_CONCURRENCY`` (B-85).
+    hydrate_sem = asyncio.Semaphore(settings.EARNINGS_HYDRATE_CONCURRENCY)
+
+    # B-69: collect per-symbol hydration failures into a list and emit ONE
+    # summary WARN after the loop. Previously an Alpaca 5-min outage
+    # emitted 800+ WARN lines here (one per symbol per refresh); downstream
+    # log budgets treated that as a flood and rate-limited the bucket,
+    # hiding the real alert.
+    hydration_failures: list[str] = []
 
     async def safe_hydrate(row: dict) -> dict | None:
         async with hydrate_sem:
@@ -675,12 +760,39 @@ async def list_upcoming(
                     row, min_iv_rank=min_iv_rank, client_host=client_host,
                 )
             except Exception as e:
-                log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
+                # Keep per-symbol detail at DEBUG for local reproduction,
+                # but only one aggregated WARN hits production log streams.
+                sym = row.get("symbol") or "?"
+                log.debug(
+                    "hydrate failed for %s: %s",
+                    sym,
+                    e,
+                    extra=_log_ctx(
+                        endpoint="earnings.safe_hydrate",
+                        symbol=sym,
+                        error=str(e),
+                    ),
+                )
+                hydration_failures.append(sym)
                 nonlocal partial
                 partial = True
                 return row  # keep symbol visible with null fields
 
     hydrated = await asyncio.gather(*[safe_hydrate(r) for r in raw_rows])
+
+    if hydration_failures:
+        log.warning(
+            "earnings.hydration.failures count=%d %s",
+            len(hydration_failures),
+            hydration_failures,
+            extra=_log_ctx(
+                endpoint="earnings.list_upcoming",
+                stage="hydration_summary",
+                window=window,
+                failure_count=len(hydration_failures),
+                failed_symbols=hydration_failures,
+            ),
+        )
     rows: list[CalendarRow] = []
     # B-81: surface row-validation failures instead of silently dropping.
     validation_errors: list[dict] = []
@@ -697,7 +809,16 @@ async def list_upcoming(
             )
             rows.append(CalendarRow(**row_payload))
         except Exception as e:
-            log.warning("row validation failed: %s — %s", e, h)
+            log.warning(
+                "row validation failed: %s — %s",
+                e,
+                h,
+                extra=_log_ctx(
+                    endpoint="earnings.list_upcoming",
+                    symbol=(h or {}).get("symbol"),
+                    error=str(e),
+                ),
+            )
             partial = True
             validation_errors.append({
                 "symbol": h.get("symbol") if isinstance(h, dict) else None,

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -25,12 +27,45 @@ async def get_calendar(
     # see the caller instead of loopback.
     # B-66: `market_cap` query param removed — curated-universe filter is
     # always applied now. Frontend callers need to drop the param too.
+    # B-68: emit structured request-boundary logs so Loki / CloudWatch can
+    # compute p50/p95 latency, rows-returned distribution, and partial rate
+    # without a full metrics library. ``request_id`` short-form so it's
+    # greppable in oneliners. The request-id middleware in main.py sets a
+    # proper X-Request-ID ContextVar that JsonFormatter picks up
+    # automatically; this local id is the structured-log correlation key
+    # in case the call is invoked outside a request (tests, bg tasks).
     client_host = request.client.host if request.client else None
-    return await earnings_screener.list_upcoming(
+    request_id = uuid.uuid4().hex[:8]
+    t0 = time.perf_counter()
+    logger.info(
+        "calendar.request.start",
+        extra={
+            "event": "calendar",
+            "stage": "start",
+            "request_id": request_id,
+            "window": window,
+            "bmo_amc": bmo_amc,
+            "sort": sort,
+            "min_iv_rank": min_iv_rank,
+        },
+    )
+    r = await earnings_screener.list_upcoming(
         window=window, min_iv_rank=min_iv_rank,
         bmo_amc=bmo_amc, watchlist_only=watchlist_only, sort=sort,
         client_host=client_host,
     )
+    logger.info(
+        "calendar.request.end",
+        extra={
+            "event": "calendar",
+            "stage": "end",
+            "request_id": request_id,
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "rows_returned": len(r.earnings),
+            "partial": r.partial,
+        },
+    )
+    return r
 
 
 @router.get("/{symbol}/detail", response_model=EarningsDetail)

@@ -124,6 +124,28 @@ class Settings(BaseSettings):
     MARKET_RL_UNAUTH_PER_MIN: int = 600
     MARKET_RL_AUTH_PER_MIN: int = 1200
 
+    # --- Earnings screener knobs (Wave B-85) ---
+    # Hard cap on how many calendar rows the /earnings/calendar endpoint
+    # hydrates and returns. At the curated-universe default this is rarely
+    # binding (≤10 tradeable names per week typical), but protects us on
+    # weeks where many mega caps report in parallel — each row fans out to
+    # Alpaca chain + IV + Claude, so uncapped parallelism eats the
+    # provider budgets fast.
+    EARNINGS_CALENDAR_MAX_ROWS: int = 8
+    # Per-request concurrency cap on per-symbol hydration fan-out. Alpaca's
+    # rate limit is ~200 req/min across the whole backend, so 10 in-flight
+    # hydrations keeps headroom for the rest of the app.
+    EARNINGS_HYDRATE_CONCURRENCY: int = 10
+    # TTL (hours) for the cached Claude structured verdict per
+    # symbol+report_date. 4h is short enough that the verdict refreshes
+    # intra-day as news breaks, long enough that screener scrolls don't
+    # re-prompt Claude on every tab-focus.
+    EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS: int = 4
+    # Timeout (seconds) for the upstream FMP earnings-calendar fetch.
+    # Below 5s FMP returns 504s during earnings-heavy windows; above 5s
+    # the /earnings/calendar p95 degrades visibly on the UI side.
+    EARNINGS_FMP_TIMEOUT_S: float = 5.0
+
     # --- Compliance (Wave 2H — persona 76 P76-7) ---
     # Operator-owned deny-list. Populated either inline (comma-separated) or
     # via a file path. Both sources union together at ``core.compliance``

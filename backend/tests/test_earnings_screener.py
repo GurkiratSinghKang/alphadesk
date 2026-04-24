@@ -670,6 +670,9 @@ async def test_fmp_upcoming_dedups_symbol_and_date():
     ])
 
     class _FakeProvider:
+        # B-85: the provider now accepts timeout kwarg; accept-and-ignore here.
+        def __init__(self, *args, **kwargs):
+            pass
         def __enter__(self):
             return self
         def __exit__(self, *exc):
@@ -712,6 +715,9 @@ async def test_fmp_upcoming_accepts_share_class_tickers():
     ])
 
     class _FakeProvider:
+        # B-85: provider now accepts timeout kwarg; accept-and-ignore here.
+        def __init__(self, *args, **kwargs):
+            pass
         def __enter__(self):
             return self
         def __exit__(self, *exc):
