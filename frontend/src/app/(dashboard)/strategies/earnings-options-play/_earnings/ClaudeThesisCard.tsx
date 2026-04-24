@@ -68,7 +68,10 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull 
             onClick={onRunFull}
             disabled={running}
             aria-label={running ? "Generating full research" : "Run full research"}
-            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-1 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] disabled:opacity-50"
+            /* B-88 — hover:text-gold-300 lifts the CTA text from --brand
+               (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
+               AAA) so the hover state reads distinctly brighter. */
+            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-1 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
           >
             {running ? "▸ Generating full research…" : "▸ Run full research"}
           </button>
