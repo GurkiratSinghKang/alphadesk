@@ -1,40 +1,31 @@
-"""Data and ranking helpers for ``momentum_quality``.
+"""Pure numerical helpers for momentum_quality — SOTA shell.
 
-Kept separate from ``strategy.py`` so the main module stays under the
-500-line cap and so the pure numerical utilities (_rank_01, the
-close-panel fetch, the fscore cache bucket) can be tested in isolation.
+All data now flows through ``StrategyInput`` DataFrames (``input.bars``,
+``input.fundamentals``, ``input.earnings``); no provider access. These
+helpers work on those frames directly.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import Any, Iterable, Optional
+from typing import Optional
 
 import numpy as np
 import pandas as pd
-
-from strategies.base import Context, cache_of
 
 
 log = logging.getLogger("alphadesk.strategies.momentum_quality.helpers")
 
 
+HALT_THRESHOLD_BARS = 5
+
+
 # --------------------------------------------------------------------------- #
 # Rebalance calendar                                                          #
 # --------------------------------------------------------------------------- #
-def is_last_trading_day_of_month(asof: date, ctx: Context) -> bool:
-    """True iff ``asof`` is the last trading session of its month."""
-
-    cal = getattr(ctx, "calendar_provider", None)
-    try:
-        if cal is not None and hasattr(cal, "next_session"):
-            nxt = cal.next_session(asof)
-            nxt_d = nxt if isinstance(nxt, date) else pd.Timestamp(nxt).date()
-            return nxt_d.month != asof.month
-    except Exception:
-        pass
-
+def is_last_trading_day_of_month(asof: date) -> bool:
+    """True iff ``asof`` is the last Mon-Fri in its calendar month."""
     probe = asof + timedelta(days=1)
     for _ in range(7):
         if probe.month != asof.month:
@@ -45,138 +36,84 @@ def is_last_trading_day_of_month(asof: date, ctx: Context) -> bool:
     return asof.weekday() < 5
 
 
+def is_rebalance_day(asof: date, freq: str) -> bool:
+    if not is_last_trading_day_of_month(asof):
+        return False
+    if freq == "monthly":
+        return True
+    if freq == "bimonthly":
+        return asof.month % 2 == 1
+    if freq == "quarterly":
+        return asof.month in (3, 6, 9, 12)
+    raise AssertionError(f"unexpected rebalance_freq {freq!r}")
+
+
 # --------------------------------------------------------------------------- #
 # Close panel                                                                 #
 # --------------------------------------------------------------------------- #
-def fetch_close_panel(
-    ctx: Context,
-    symbols: list[str],
-    start: date,
-    end: date,
-    asof: Optional[date] = None,
-    drop_halted: bool = True,
+def close_panel_from_bars(
+    bars: pd.DataFrame,
+    asof: date,
 ) -> Optional[pd.DataFrame]:
-    """Return a wide DataFrame of close prices, index = UTC session ts.
-
-    ``asof`` — if supplied, the halt-detection slice uses only bars on or
-    before ``asof``. The returned panel itself is NOT truncated (callers
-    still do their own ``panel.index <= asof`` slice for signal math); we
-    only need ``asof`` to prevent halt classification from peeking at
-    bars past the rebalance date. See :func:`_drop_halted_symbols`.
-
-    ``drop_halted`` — when False, returns the raw ffilled panel without
-    the halt filter. Callers that cache the panel across multiple
-    rebalances (see :meth:`MomentumQualityStrategy._get_close_panel`)
-    pass False so they can re-apply halt classification fresh per-call
-    against the current ``asof`` — otherwise a symbol halted in month 1
-    and resumed by month 6 stays dropped for the entire cache window.
-    """
-
-    provider = getattr(ctx, "bar_provider", None)
-    if provider is None:
+    """Pivot ``input.bars`` into a wide (date × symbol) close panel."""
+    if bars is None or getattr(bars, "empty", True):
         return None
 
-    try:
-        df = provider.bars(symbols, start, end, tf="1D")
-    except Exception as exc:
-        log.warning("mq: bar_provider.bars failed: %s", exc)
-        return None
-    if df is None:
-        return None
-    df = pd.DataFrame(df)
-    if df.empty:
+    idx_names = tuple(bars.index.names or ())
+    if "symbol" in idx_names and "date" in idx_names:
+        frame = bars.reset_index().rename(columns={"date": "ts"})
+    else:
+        frame = bars.copy()
+        if "ts" not in frame.columns and "ts_date" in frame.columns:
+            frame = frame.rename(columns={"ts_date": "ts"})
+
+    if "symbol" not in frame.columns or "close" not in frame.columns or "ts" not in frame.columns:
         return None
 
-    cols = {c.lower(): c for c in df.columns}
-    sym_c = cols.get("symbol") or cols.get("ticker")
-    ts_c = cols.get("ts") or cols.get("timestamp") or cols.get("date")
-    close_c = cols.get("close")
-    if not (sym_c and ts_c and close_c):
-        return None
-
-    long = df[[sym_c, ts_c, close_c]].copy()
-    long.columns = ["symbol", "ts", "close"]
-    long["ts"] = (
-        pd.to_datetime(long["ts"], utc=True)
-        .dt.tz_convert("UTC")
-        .dt.normalize()
+    frame["ts"] = (
+        pd.to_datetime(frame["ts"], utc=True, errors="coerce")
+        .dt.tz_convert("UTC").dt.normalize()
     )
-    long = long.dropna(subset=["close"])
+    frame = frame.dropna(subset=["ts", "close"])
+    if frame.empty:
+        return None
+
     wide = (
-        long.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
+        frame.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
         .sort_index()
+        .ffill()
     )
-    wide = wide.ffill()
-    if not drop_halted:
-        return wide
-    return _drop_halted_symbols(wide, asof=asof)
-
-
-# --------------------------------------------------------------------------- #
-# Halt detection (cross-cutting fix #10)                                      #
-# --------------------------------------------------------------------------- #
-# Number of identical trailing closes that flag a symbol as halted. Five
-# is a deliberately conservative threshold: legitimate flat-tape sessions
-# (e.g. holiday-eve early closes for a single ticker) rarely exceed 3-4
-# zero-return days in a row.
-HALT_THRESHOLD_BARS = 5
+    wide = _drop_halted_symbols(wide, asof=asof)
+    if wide is None or wide.empty:
+        return None
+    cutoff = pd.Timestamp(asof, tz="UTC")
+    return wide[wide.index <= cutoff]
 
 
 def _drop_halted_symbols(
     wide: pd.DataFrame,
     asof: Optional[date] = None,
 ) -> pd.DataFrame:
-    """Drop symbols whose trailing closes are flat for >= HALT_THRESHOLD_BARS.
-
-    After ``ffill()`` a halted symbol presents as a long run of identical
-    closes. Strategies that consume this panel (momentum, vol, RSI) treat
-    such names as tradable with zero-vol / zero-return readings, which
-    sizing formulas can blow up on. Audit P0 #10 (cross-cutting):
-    explicitly drop halted symbols from the panel and warn so operators
-    notice. Halts that resolve will reappear once real prints arrive.
-
-    Look-ahead fix (P0-8): ``fetch_close_panel`` extends ~400 calendar
-    days past ``asof`` so the cached panel can serve later rebalances
-    without a re-fetch. If we take the tail of the FULL panel, halt
-    classification for a 2023-01-31 rebalance uses bars near 2024-03-06
-    -- a silent look-ahead. When ``asof`` is supplied, the halt scan
-    uses only bars on or before ``asof``; the returned panel itself
-    still spans the full fetched window so the cache can serve later
-    rebalances. The panel index is tz-aware UTC (normalised in
-    :func:`fetch_close_panel`); we promote ``asof`` to a tz-aware
-    Timestamp and, if the index is tz-naive (e.g. a synthetic test
-    provider), strip tz from the key before slicing.
-    """
-
+    """Drop symbols whose trailing closes are flat for ≥ HALT_THRESHOLD_BARS."""
     if wide is None or wide.empty:
         return wide
 
-    # Build the window used for halt classification. When ``asof`` is
-    # supplied, bound it so we cannot peek at bars beyond the rebalance
-    # date. We return the original (wider) panel so the cache keeps its
-    # forward-looking bars for subsequent rebalances -- the only effect
-    # is narrowing the halt-detection window.
     if asof is not None:
         key = pd.Timestamp(asof)
         idx_tz = getattr(wide.index, "tz", None)
         if idx_tz is not None:
-            # Panel index is tz-aware (normal path). Promote ``asof`` to
-            # that tz; guard against already-tz-aware Timestamps.
             if key.tzinfo is None:
                 key = key.tz_localize(idx_tz)
             else:
                 key = key.tz_convert(idx_tz)
         else:
-            # Panel index is tz-naive (tests / non-UTC providers). Drop
-            # tz from ``asof`` so the comparison doesn't raise.
             if key.tzinfo is not None:
                 key = key.tz_convert("UTC").tz_localize(None)
         scan = wide.loc[:key]
     else:
         scan = wide
 
-    n = len(scan.index)
-    if n < HALT_THRESHOLD_BARS + 1:
+    if len(scan.index) < HALT_THRESHOLD_BARS + 1:
         return wide
     tail = scan.tail(HALT_THRESHOLD_BARS + 1)
     flat: list[str] = []
@@ -184,109 +121,125 @@ def _drop_halted_symbols(
         vals = tail[col].dropna().values
         if len(vals) < HALT_THRESHOLD_BARS + 1:
             continue
-        # All bars in the tail equal? Treat as halted.
         if np.all(vals == vals[0]):
             flat.append(str(col))
     if flat:
         log.warning(
             "mq: dropping %d halted symbols (>=%d identical trailing closes): %s",
-            len(flat),
-            HALT_THRESHOLD_BARS,
-            ",".join(sorted(flat)),
+            len(flat), HALT_THRESHOLD_BARS, ",".join(sorted(flat)),
         )
         wide = wide.drop(columns=flat)
     return wide
 
 
 # --------------------------------------------------------------------------- #
-# F-score fetch / cache                                                       #
+# Momentum                                                                    #
 # --------------------------------------------------------------------------- #
-def fscore_bucket(asof: date) -> int:
-    """Coarse cache-bucket key: year*12 + month — refresh at most 12x/yr."""
+def compute_momentum(
+    panel: pd.DataFrame,
+    symbols: list[str],
+    lookback_days: int,
+    skip_days: int,
+) -> dict[str, float]:
+    """Compute the 12-1 (or equivalent) momentum return per symbol."""
+    mom: dict[str, float] = {}
+    for sym in symbols:
+        if sym not in panel.columns:
+            continue
+        series = panel[sym].dropna()
+        min_bars = lookback_days + skip_days + 2
+        if len(series) < min_bars:
+            continue
+        end_val = (
+            float(series.iloc[-(skip_days + 1)])
+            if skip_days > 0 else float(series.iloc[-1])
+        )
+        start_idx = -(lookback_days + skip_days + 1)
+        if -start_idx > len(series):
+            continue
+        start_val = float(series.iloc[start_idx])
+        if start_val <= 0:
+            continue
+        mom[sym] = end_val / start_val - 1.0
+    return mom
 
-    return asof.year * 12 + asof.month
 
-
+# --------------------------------------------------------------------------- #
+# F-scores                                                                    #
+# --------------------------------------------------------------------------- #
 def get_fscores(
-    ctx: Context,
+    fundamentals: Optional[pd.DataFrame],
     symbols: list[str],
     asof: date,
-    ns: str,
 ) -> dict[str, Optional[int]]:
-    """Fetch / cache Piotroski F-scores on ``ctx.state[ns + ".fscores"]``."""
+    """Return per-symbol Piotroski F-score from input.fundamentals.
 
-    cache = cache_of(ctx)
-    key = f"{ns}.fscores"
-    meta = cache.get(key)
-    bucket = fscore_bucket(asof)
+    Expected columns: ``symbol``, ``date`` or ``asof``, ``f_score``. Picks the
+    latest row with ``date <= asof``. If the frame is missing or has no
+    ``f_score`` column, assumes F=9 for every symbol so the filter is a no-op
+    (matches the legacy provider-missing fallback).
+    """
+    if fundamentals is None or getattr(fundamentals, "empty", True):
+        return {s: 9 for s in symbols}
+    if "f_score" not in fundamentals.columns or "symbol" not in fundamentals.columns:
+        return {s: 9 for s in symbols}
 
-    need = (meta is None or meta.get("bucket") != bucket)
+    frame = fundamentals
+    date_col = next(
+        (c for c in ("date", "asof", "ts", "report_date") if c in frame.columns),
+        None,
+    )
+    if date_col is not None:
+        cutoff = pd.to_datetime(asof)
+        frame_dates = pd.to_datetime(frame[date_col], errors="coerce")
+        frame = frame[frame_dates <= cutoff]
 
-    if need:
-        provider = getattr(ctx, "fundamentals_provider", None)
-        scores: dict[str, Optional[int]] = {}
-        if provider is None or not hasattr(provider, "piotroski_f"):
-            log.warning(
-                "mq: no fundamentals_provider; skipping F-score filter (F=9 default)"
-            )
-            for s in symbols:
-                scores[s] = 9
-        else:
-            for sym in symbols:
-                try:
-                    v = provider.piotroski_f(sym, asof)
-                    scores[sym] = int(v) if v is not None else None
-                except Exception as exc:
-                    log.debug("mq: piotroski_f(%s, %s) → %s", sym, asof, exc)
-                    scores[sym] = None
-        cache[key] = {"bucket": bucket, "data": scores}
-        meta = cache[key]
+    if frame.empty:
+        return {s: None for s in symbols}
 
-    existing = dict(meta.get("data", {}))
-    missing = [s for s in symbols if s not in existing]
-    if missing:
-        provider = getattr(ctx, "fundamentals_provider", None)
-        for sym in missing:
-            try:
-                if provider is not None:
-                    v = provider.piotroski_f(sym, asof)
-                    existing[sym] = int(v) if v is not None else None
-                else:
-                    existing[sym] = 9
-            except Exception:
-                existing[sym] = None
-        cache[key] = {"bucket": bucket, "data": existing}
-    return existing
+    out: dict[str, Optional[int]] = {}
+    for sym in symbols:
+        sub = frame[frame["symbol"].astype(str).str.upper() == sym.upper()]
+        if sub.empty:
+            out[sym] = None
+            continue
+        val = sub["f_score"].iloc[-1]
+        try:
+            out[sym] = int(val) if pd.notna(val) else None
+        except (TypeError, ValueError):
+            out[sym] = None
+    return out
 
 
 # --------------------------------------------------------------------------- #
 # Earnings filter                                                             #
 # --------------------------------------------------------------------------- #
 def earnings_blocked(
-    ctx: Context,
+    earnings: Optional[pd.DataFrame],
     symbols: list[str],
     asof: date,
     skip_days: int,
 ) -> set[str]:
-    """Return symbols whose earnings fall within [asof, asof + skip_days]."""
-
-    provider = getattr(ctx, "earnings_provider", None)
-    if provider is None or not hasattr(provider, "calendar"):
+    """Return symbols with earnings in ``[asof, asof+skip_days]``."""
+    if earnings is None or getattr(earnings, "empty", True):
+        return set()
+    if "symbol" not in earnings.columns:
         return set()
 
-    start = asof
+    date_col = next(
+        (c for c in ("date", "report_date", "ts") if c in earnings.columns),
+        None,
+    )
+    if date_col is None:
+        return set()
+
     end = asof + timedelta(days=skip_days)
-    try:
-        df = provider.calendar(start, end, symbols=symbols)
-    except Exception as exc:
-        log.debug("mq: earnings.calendar failed: %s", exc)
+    frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
+    mask = (frame_dates >= asof) & (frame_dates <= end)
+    sub = earnings[mask]
+    if sub.empty:
         return set()
-    if df is None or getattr(df, "empty", True):
-        return set()
-    try:
-        return set(df["symbol"].astype(str).str.upper().tolist())
-    except Exception:
-        return set()
+    return set(sub["symbol"].astype(str).str.upper().tolist())
 
 
 # --------------------------------------------------------------------------- #
@@ -294,7 +247,6 @@ def earnings_blocked(
 # --------------------------------------------------------------------------- #
 def rank_01(values: np.ndarray) -> np.ndarray:
     """Cross-sectional percentile rank in [0, 1]. Ties share average rank."""
-
     n = len(values)
     if n == 0:
         return values
@@ -318,11 +270,10 @@ def rank_01(values: np.ndarray) -> np.ndarray:
 
 
 __all__ = [
-    "is_last_trading_day_of_month",
-    "fetch_close_panel",
-    "_drop_halted_symbols",
-    "fscore_bucket",
-    "get_fscores",
-    "earnings_blocked",
+    "HALT_THRESHOLD_BARS",
+    "is_last_trading_day_of_month", "is_rebalance_day",
+    "close_panel_from_bars", "_drop_halted_symbols",
+    "compute_momentum",
+    "get_fscores", "earnings_blocked",
     "rank_01",
 ]
