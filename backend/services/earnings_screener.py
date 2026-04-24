@@ -185,11 +185,15 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             symbol_str = str(symbol)
             # FMP returns GLOBAL earnings — foreign exchanges (.L, .TO, .V,
             # .CN, .PA, etc.) and OTC pink sheets that Alpaca can't quote.
-            # Filter to plain US-listed tickers only: 1-5 uppercase letters
-            # with no suffix. Anything with a dot (exchange suffix) or
-            # longer than 5 chars (typically 5-letter pinks like XTRRF)
-            # gets dropped — saves ~400 pointless 404s per calendar fetch.
-            if "." in symbol_str or len(symbol_str) > 5 or not symbol_str.isalpha():
+            # Filter to plain US-listed tickers: 1-5 uppercase letters,
+            # allowing a single-letter share-class suffix after a dot
+            # (e.g. BRK.B, BRK.A, RDS.A). Anything longer than 5 chars
+            # (typically 5-letter pinks like XTRRF) gets dropped —
+            # saves ~400 pointless 404s per calendar fetch. We permit `.`
+            # and strip it before checking isalpha() so legit share-class
+            # tickers aren't filtered out alongside foreign suffixes, which
+            # are caught separately via the curated universe filter.
+            if len(symbol_str) > 5 or not symbol_str.replace(".", "").isalpha():
                 continue
             report_date_val = item.get("date")
             if report_date_val is None:

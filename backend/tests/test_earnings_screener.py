@@ -298,6 +298,54 @@ async def test_get_detail_merges_all_blocks():
 
 
 @pytest.mark.asyncio
+async def test_fmp_upcoming_accepts_share_class_tickers():
+    """B-44 regression: symbols like BRK.B / BRK.A / RDS.A must survive the
+    pre-filter. Previously the filter used `not isalpha()` which rejects
+    any string containing a dot, dropping legitimate Berkshire / Shell
+    share-class tickers alongside foreign exchange suffixes."""
+    import pandas as pd
+
+    from services import earnings_screener as svc
+
+    df = pd.DataFrame([
+        {"symbol": "BRK.B", "date": date(2026, 4, 23),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "amc"},
+        {"symbol": "RDS.A", "date": date(2026, 4, 23),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "bmo"},
+        {"symbol": "NVDA", "date": date(2026, 4, 23),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "amc"},
+        # 6-letter pink sheet must still be filtered
+        {"symbol": "XTRRFF", "date": date(2026, 4, 23),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "amc"},
+    ])
+
+    class _FakeProvider:
+        def __enter__(self):
+            return self
+        def __exit__(self, *exc):
+            return None
+        def calendar(self, start, end):
+            return df
+
+    with patch.object(
+        svc, "_fmp_upcoming", svc._fmp_upcoming
+    ), patch(
+        "data.providers.fmp_earnings.FMPEarningsProvider", _FakeProvider
+    ):
+        rows = await svc._fmp_upcoming("both")
+
+    symbols = {r["symbol"] for r in rows}
+    assert "BRK.B" in symbols
+    assert "RDS.A" in symbols
+    assert "NVDA" in symbols
+    assert "XTRRFF" not in symbols
+
+
+@pytest.mark.asyncio
 async def test_get_detail_news_failure_marks_partial():
     """B-34 regression: when the news gather task raises, `partial` must be
     True. Previously `news_t` was missing from the partial-flag computation
