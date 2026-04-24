@@ -110,6 +110,23 @@ export default function EarningsOptionsPlayPage() {
     syncURL({ symbol: selectedSymbol, ...filters }, mode);
   }, [selectedSymbol, filters]);
 
+  // ── B-98: popstate listener — browser back/forward re-reads state
+  // from the URL. Without this, history entries pushed by B-39 would
+  // only affect the address bar; the page state would be stale.
+  useEffect(() => {
+    function onPopState() {
+      if (typeof window === "undefined") return;
+      // Suppress the next sync effect's push (it's now catching up to
+      // the user's navigation, not initiating a new entry).
+      firstSyncRef.current = true;
+      setFilters(readFiltersFromURL());
+      const params = new URLSearchParams(window.location.search);
+      setSelectedSymbol(params.get("symbol"));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // ── B-60: j/k and ArrowUp/ArrowDown shortcuts from useKeyboardShortcuts
   // dispatch these window-level events; we advance selection through the
   // currently-loaded calendar. Use a ref so the handlers always see the
