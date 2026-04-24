@@ -52,4 +52,45 @@ describe("EarningsCalendarSidebar", () => {
     );
     expect(container.textContent).toMatch(/no earnings|empty/i);
   });
+
+  it("opens in a new tab on Cmd/Ctrl-click instead of onSelect (B-40)", () => {
+    const onSelect = vi.fn();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const originalSearch = window.location.search;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...window.location, pathname: "/strategies/earnings-options-play", search: "?window=both&sort=iv_rank" },
+    });
+
+    const { getByText } = render(
+      <EarningsCalendarSidebar rows={rows} loading={false} error={null} selected={null} onSelect={onSelect} />,
+    );
+    fireEvent.click(getByText("TSLA"), { metaKey: true });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining("symbol=TSLA"),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    const url = openSpy.mock.calls[0][0] as string;
+    expect(url).toContain("sort=iv_rank");
+
+    openSpy.mockRestore();
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...window.location, search: originalSearch },
+    });
+  });
+
+  it("Ctrl-click also opens in a new tab (B-40)", () => {
+    const onSelect = vi.fn();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { getByText } = render(
+      <EarningsCalendarSidebar rows={rows} loading={false} error={null} selected={null} onSelect={onSelect} />,
+    );
+    fireEvent.click(getByText("NVDA"), { ctrlKey: true });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
 });
