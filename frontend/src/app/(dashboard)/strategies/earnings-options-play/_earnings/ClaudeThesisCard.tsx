@@ -12,17 +12,36 @@ export interface ClaudeThesisCardProps {
 export default function ClaudeThesisCard({ structured, full, running, onRunFull }: ClaudeThesisCardProps) {
   if (!structured) {
     return (
-      <section data-slot="claude-thesis" className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3">
+      <section
+        data-slot="claude-thesis"
+        aria-busy={true}
+        className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
+      >
         <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
-        <p className="mt-2 t-mono text-[13px] u-muted">
-          Analysis pending — come back in a moment, or retry.
-        </p>
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-2 flex items-center gap-2"
+        >
+          <span className="flex items-center gap-1" aria-hidden="true">
+            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:150ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:300ms]" />
+          </span>
+          <span className="t-mono text-[13px] u-muted">
+            Analyzing (typically 30 s)… Analysis pending — come back in a moment.
+          </span>
+        </div>
       </section>
     );
   }
 
   return (
-    <section data-slot="claude-thesis" className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3">
+    <section
+      data-slot="claude-thesis"
+      aria-busy={false}
+      className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
+    >
       <div className="flex items-center justify-between">
         <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
         <span className="t-meta">{structured.model}</span>
