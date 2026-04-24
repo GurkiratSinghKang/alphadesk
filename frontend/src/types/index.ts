@@ -272,6 +272,11 @@ export interface CalendarResponse {
   generated_at: string;
   partial: boolean;
   error?: string | null;
+  /**
+   * Per-row Pydantic validation failures encountered during hydration.
+   * Empty array is the happy path. Each entry is `{ symbol, error }`.
+   */
+  validation_errors: Array<{ symbol: string | null; error: string }>;
 }
 
 export interface LadderRow {

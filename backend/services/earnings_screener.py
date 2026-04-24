@@ -648,6 +648,8 @@ async def list_upcoming(
 
     hydrated = await asyncio.gather(*[safe_hydrate(r) for r in raw_rows])
     rows: list[CalendarRow] = []
+    # B-81: surface row-validation failures instead of silently dropping.
+    validation_errors: list[dict] = []
     for h in hydrated:
         if h is None:
             continue  # filtered by min_iv_rank
@@ -663,6 +665,10 @@ async def list_upcoming(
         except Exception as e:
             log.warning("row validation failed: %s — %s", e, h)
             partial = True
+            validation_errors.append({
+                "symbol": h.get("symbol") if isinstance(h, dict) else None,
+                "error": str(e),
+            })
 
     if bmo_amc != "both":
         wanted = bmo_amc.upper()
@@ -692,6 +698,7 @@ async def list_upcoming(
         earnings=rows,
         generated_at=datetime.now(timezone.utc),
         partial=partial,
+        validation_errors=validation_errors,
     )
 
 

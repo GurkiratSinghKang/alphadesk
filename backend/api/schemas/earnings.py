@@ -47,6 +47,12 @@ class CalendarResponse(BaseModel):
     generated_at: datetime
     partial: bool = False
     error: str | None = None
+    # B-81: Each entry describes a single row that failed Pydantic
+    # validation during hydration. Keeping them surfaced in the response
+    # (instead of silently swallowing the exception and toggling
+    # `partial`) lets the frontend show a "N symbols had schema issues"
+    # debug badge without re-fetching.
+    validation_errors: list[dict] = Field(default_factory=list)
 
 
 # ─── Detail blocks ───────────────────────────────────────────

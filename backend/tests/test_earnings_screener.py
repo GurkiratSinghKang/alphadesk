@@ -303,6 +303,39 @@ async def test_get_detail_merges_all_blocks():
 
 
 @pytest.mark.asyncio
+async def test_list_upcoming_surfaces_validation_errors():
+    """B-81 regression: when CalendarRow(**payload) validation fails, the
+    error must be surfaced via `validation_errors` on the response instead
+    of silently swallowed. `partial` still flips true."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "GOOD", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+        {"symbol": "BAD", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+    ]
+
+    async def hydrate(row, *, min_iv_rank: float = 0):
+        if row["symbol"] == "BAD":
+            # Return a payload that violates the schema (report_time invalid).
+            return {**row, "report_time": "NOPE", "price": 100.0, "iv_rank": 70}
+        return {**row, "price": 100.0, "iv_rank": 70}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    symbols = [r.symbol for r in resp.earnings]
+    assert symbols == ["GOOD"]
+    assert resp.partial is True
+    assert len(resp.validation_errors) == 1
+    assert resp.validation_errors[0]["symbol"] == "BAD"
+    assert "error" in resp.validation_errors[0]
+
+
+@pytest.mark.asyncio
 async def test_list_upcoming_filters_stale_earnings():
     """B-43 regression: rows with `days_until < 0` (report already happened)
     must not render in the calendar. FMP's window can return past dates on
