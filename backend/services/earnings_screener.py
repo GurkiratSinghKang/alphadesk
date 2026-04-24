@@ -215,28 +215,11 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         raise
 
 
-class _StubRequest:
-    """Minimal Request-shaped object so we can call `api.routes.market.get_quote`
-    without a real FastAPI request context. The rate-limiter only reads
-    ``request.client.host`` and ``request.headers``."""
-
-    class _Client:
-        host = "127.0.0.1"
-
-    def __init__(self) -> None:
-        self.client = self._Client()
-        self.headers: dict[str, str] = {}
-
-
-class _StubResponse:
-    headers: dict[str, str] = {}
-
-
 async def _load_quote(symbol: str) -> dict | None:
-    from api.routes.market import get_quote  # existing helper
+    from services.market import fetch_quote
 
     try:
-        q = await get_quote(symbol, _StubRequest(), _StubResponse())  # type: ignore[arg-type]
+        q = await fetch_quote(symbol)
         return {
             "last": float(q.last),
             "change": float(q.change),
@@ -260,11 +243,11 @@ async def _load_metrics(
     report_date: date | None = None,
     expiry: date | None = None,
 ) -> dict | None:
-    from api.routes.options import get_iv_analysis, get_options_chain
+    from services.options import fetch_chain, fetch_iv_analysis
 
     try:
-        iv = await get_iv_analysis(symbol)
-        chain = await get_options_chain(symbol, expiry=expiry)
+        iv = await fetch_iv_analysis(symbol)
+        chain = await fetch_chain(symbol, expiry=expiry)
         underlying = chain.spot_price
         calls = _filter_chain(chain, "call")
         puts = _filter_chain(chain, "put")
@@ -302,10 +285,10 @@ async def _load_metrics(
 
 async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
     """Pull ATM / 30Δ / 15Δ rows (both sides) from the OPRA chain."""
-    from api.routes.options import get_options_chain
+    from services.options import fetch_chain
 
     try:
-        chain = await get_options_chain(symbol, expiry=expiry)
+        chain = await fetch_chain(symbol, expiry=expiry)
         underlying = chain.spot_price
         calls = _filter_chain(chain, "call")
         puts = _filter_chain(chain, "put")
@@ -417,15 +400,15 @@ async def _load_historical(symbol: str) -> dict | None:
 
 
 async def _load_iv_term(symbol: str) -> list[dict] | None:
-    from api.routes.options import get_options_chain
+    from services.options import fetch_chain
 
     try:
         today = date.today()
-        first_chain = await get_options_chain(symbol)
+        first_chain = await fetch_chain(symbol)
         term: list[dict] = []
         for exp in first_chain.expirations[:6]:
             exp_date = exp if isinstance(exp, date) else date.fromisoformat(str(exp))
-            exp_chain = await get_options_chain(symbol, expiry=exp_date)
+            exp_chain = await fetch_chain(symbol, expiry=exp_date)
             calls = _filter_chain(exp_chain, "call")
             atm = min(
                 calls,
@@ -445,10 +428,10 @@ async def _load_iv_term(symbol: str) -> list[dict] | None:
 
 
 async def _load_skew(symbol: str) -> dict | None:
-    from api.routes.options import get_options_chain
+    from services.options import fetch_chain
 
     try:
-        chain = await get_options_chain(symbol)
+        chain = await fetch_chain(symbol)
         calls = _filter_chain(chain, "call")
         puts = _filter_chain(chain, "put")
         put_25d = min(
@@ -499,10 +482,10 @@ def _parse_news_datetime(raw: str) -> datetime:
 
 
 async def _load_news(symbol: str) -> list[dict]:
-    from api.routes.news import get_symbol_news
+    from services.news import fetch_symbol_news
 
     try:
-        resp = await get_symbol_news(symbol, limit=10)
+        resp = await fetch_symbol_news(symbol, limit=10)
         return [
             {
                 "title": a.title,
