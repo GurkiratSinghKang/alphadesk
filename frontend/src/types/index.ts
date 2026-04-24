@@ -415,7 +415,7 @@ export interface EarningsDetail {
 export interface EarningsCalendarFilters {
   window?: "current" | "next" | "both";
   min_iv_rank?: number;
-  market_cap?: "mega" | "large" | "mid" | "small" | "all";
+  // B-66: `market_cap` removed — curated-universe filter always applies.
   bmo_amc?: "bmo" | "amc" | "both";
   watchlist_only?: boolean;
   sort?: "date" | "iv_rank" | "yield" | "claude_confidence";

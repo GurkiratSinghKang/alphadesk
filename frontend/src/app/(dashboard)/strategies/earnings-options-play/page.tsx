@@ -164,8 +164,7 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   if (win === "current" || win === "next" || win === "both") out.window = win;
   const minIvRank = p.get("min_iv_rank");
   if (minIvRank !== null) out.min_iv_rank = Number(minIvRank);
-  const mc = p.get("market_cap");
-  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) out.market_cap = mc as EarningsCalendarFilters["market_cap"];
+  // B-66: market_cap param dropped — curated-universe filter is always on.
   const ba = p.get("bmo_amc");
   if (ba && ["bmo", "amc", "both"].includes(ba)) out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
   if (p.get("watchlist_only") === "true") out.watchlist_only = true;
@@ -180,7 +179,7 @@ function syncURL(state: { symbol: string | null } & EarningsCalendarFilters) {
   if (state.symbol) p.set("symbol", state.symbol);
   if (state.window) p.set("window", state.window);
   if (state.min_iv_rank !== undefined) p.set("min_iv_rank", String(state.min_iv_rank));
-  if (state.market_cap && state.market_cap !== "all") p.set("market_cap", state.market_cap);
+  // B-66: market_cap removed from URL sync.
   if (state.bmo_amc && state.bmo_amc !== "both") p.set("bmo_amc", state.bmo_amc);
   if (state.watchlist_only) p.set("watchlist_only", "true");
   if (state.sort && state.sort !== "date") p.set("sort", state.sort);

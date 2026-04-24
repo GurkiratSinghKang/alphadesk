@@ -108,8 +108,8 @@ _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 #
 # Anything NOT in this set gets filtered out of the earnings screener even
 # if FMP lists it — an upcoming earning for an illiquid Russell-2000 name
-# rarely offers a tradeable options setup. Users who want the full list
-# can pass ?market_cap=all to bypass this filter.
+# rarely offers a tradeable options setup. B-66: filter is now
+# unconditional (formerly gated on a vestigial `market_cap` query param).
 CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
     # Mega caps / SP100
     "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
@@ -608,7 +608,6 @@ async def list_upcoming(
     *,
     window: str = "both",
     min_iv_rank: float = 0,
-    market_cap: str = "all",
     bmo_amc: str = "both",
     watchlist_only: bool = False,
     sort: str = "date",
@@ -632,18 +631,18 @@ async def list_upcoming(
             error="earnings calendar unavailable",
         )
 
-    # Default shortlist behavior: restrict to the curated optionable
-    # universe (mega + liquid large caps + momentum names) so the screener
-    # is a *decision tool* showing ~5-10 names the user can actually
-    # evaluate, not a feed of ~60 Russell-2000 names with thin option
-    # chains. Users who want the long list pass market_cap="all".
-    if market_cap != "all":
-        before_count = len(raw_rows)
-        raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
-        log.info(
-            "earnings calendar: curated universe kept %d/%d rows (window=%s, market_cap=%s)",
-            len(raw_rows), before_count, window, market_cap,
-        )
+    # B-66: always restrict to the curated optionable universe. The former
+    # `market_cap` query param was a vestigial no-op — the "all" default
+    # bypassed the filter entirely, which defeated the point of having a
+    # curated universe in the first place. Filter unconditionally so the
+    # screener is always a *decision tool* showing ~5-10 names the user can
+    # evaluate, not a feed of ~60 Russell-2000 names with thin chains.
+    before_count = len(raw_rows)
+    raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
+    log.info(
+        "earnings calendar: curated universe kept %d/%d rows (window=%s)",
+        len(raw_rows), before_count, window,
+    )
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where

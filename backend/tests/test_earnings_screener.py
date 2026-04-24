@@ -211,12 +211,12 @@ async def test_list_upcoming_filters_by_iv_rank():
 
     future = (date.today() + timedelta(days=1)).isoformat()
     fake_earnings = [
-        {"symbol": "A", "company": "A", "sector": "x",
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "x",
          "report_date": future, "report_time": "AMC"},
-        {"symbol": "B", "company": "B", "sector": "x",
+        {"symbol": "TSLA", "company": "Tesla", "sector": "x",
          "report_date": future, "report_time": "AMC"},
     ]
-    hydrated = {"A": {"iv_rank": 80}, "B": {"iv_rank": 30}}
+    hydrated = {"NVDA": {"iv_rank": 80}, "TSLA": {"iv_rank": 30}}
 
     async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
         iv = hydrated[row["symbol"]]["iv_rank"]
@@ -228,7 +228,7 @@ async def test_list_upcoming_filters_by_iv_rank():
          patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
         resp = await svc.list_upcoming(window="both", min_iv_rank=50)
     symbols = [r.symbol for r in resp.earnings]
-    assert symbols == ["A"]
+    assert symbols == ["NVDA"]
 
 
 @pytest.mark.asyncio
@@ -303,6 +303,33 @@ async def test_get_detail_merges_all_blocks():
 
 
 @pytest.mark.asyncio
+async def test_list_upcoming_always_applies_curated_universe_filter():
+    """B-66 regression: the curated-universe filter must always apply,
+    regardless of call args — the former `market_cap` no-op toggle is
+    gone. Tickers outside the curated set are filtered out."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+        {"symbol": "ZZZZZ", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+    ]
+
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+        return {**row, "price": 100.0, "iv_rank": 70.0}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    symbols = [r.symbol for r in resp.earnings]
+    assert "NVDA" in symbols
+    assert "ZZZZZ" not in symbols
+
+
+@pytest.mark.asyncio
 async def test_list_upcoming_surfaces_validation_errors():
     """B-81 regression: when CalendarRow(**payload) validation fails, the
     error must be surfaced via `validation_errors` on the response instead
@@ -311,14 +338,14 @@ async def test_list_upcoming_surfaces_validation_errors():
 
     future = (date.today() + timedelta(days=2)).isoformat()
     fake_earnings = [
-        {"symbol": "GOOD", "company": "x", "sector": "x",
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "x",
          "report_date": future, "report_time": "AMC"},
-        {"symbol": "BAD", "company": "x", "sector": "x",
+        {"symbol": "TSLA", "company": "Tesla", "sector": "x",
          "report_date": future, "report_time": "AMC"},
     ]
 
     async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
-        if row["symbol"] == "BAD":
+        if row["symbol"] == "TSLA":
             # Return a payload that violates the schema (report_time invalid).
             return {**row, "report_time": "NOPE", "price": 100.0, "iv_rank": 70}
         return {**row, "price": 100.0, "iv_rank": 70}
@@ -328,10 +355,10 @@ async def test_list_upcoming_surfaces_validation_errors():
         resp = await svc.list_upcoming(window="both", min_iv_rank=0)
 
     symbols = [r.symbol for r in resp.earnings]
-    assert symbols == ["GOOD"]
+    assert symbols == ["NVDA"]
     assert resp.partial is True
     assert len(resp.validation_errors) == 1
-    assert resp.validation_errors[0]["symbol"] == "BAD"
+    assert resp.validation_errors[0]["symbol"] == "TSLA"
     assert "error" in resp.validation_errors[0]
 
 
@@ -345,10 +372,11 @@ async def test_list_upcoming_filters_stale_earnings():
     today = date.today()
     past_date = (today - timedelta(days=3)).isoformat()
     future_date = (today + timedelta(days=2)).isoformat()
+    # Use curated-universe symbols so B-66's always-on filter lets them through.
     fake_earnings = [
-        {"symbol": "STAL", "company": "Stale", "sector": "x",
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "x",
          "report_date": past_date, "report_time": "AMC"},
-        {"symbol": "FRSH", "company": "Fresh", "sector": "x",
+        {"symbol": "TSLA", "company": "Tesla", "sector": "x",
          "report_date": future_date, "report_time": "AMC"},
     ]
 
@@ -360,8 +388,8 @@ async def test_list_upcoming_filters_stale_earnings():
         resp = await svc.list_upcoming(window="both", min_iv_rank=0)
 
     symbols = [r.symbol for r in resp.earnings]
-    assert "FRSH" in symbols
-    assert "STAL" not in symbols
+    assert "TSLA" in symbols  # future date — kept
+    assert "NVDA" not in symbols  # past date — stale, filtered
 
 
 @pytest.mark.asyncio
