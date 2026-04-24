@@ -34,6 +34,19 @@ describe("Earnings Options Play page", () => {
     });
   });
 
+  it("announces calendar count via aria-live region (B-37)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).not.toBeNull();
+    expect(region?.getAttribute("role")).toBe("status");
+  });
+
   it("reads ?symbol= from URL on mount to restore selection", async () => {
     // Mock window.location to simulate ?symbol=TSLA
     const original = window.location;

@@ -119,7 +119,11 @@ export default function EarningsOptionsPlayPage() {
   }, [selectedSymbol]);
 
   const actions = (
-    <span className="t-meta tabular-nums text-[color:var(--fg-muted)]">
+    <span
+      role="status"
+      aria-live="polite"
+      className="t-meta tabular-nums text-[color:var(--fg-muted)]"
+    >
       {calendar
         ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}`
         : "Loading…"}
