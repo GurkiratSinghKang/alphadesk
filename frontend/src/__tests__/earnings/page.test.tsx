@@ -68,6 +68,42 @@ describe("Earnings Options Play page", () => {
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
 
+  it("advances selection on alphadesk:earnings-select-next/prev (B-60)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "META", company: "Meta", sector: "Tech", report_date: "2026-04-24", report_time: "AMC", days_until: 2, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA");
+    });
+    // Next → TSLA
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+    });
+    // Next → META
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("META");
+    });
+    // Prev → TSLA (wraps back)
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-prev"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+    });
+  });
+
   it("rejects out-of-range min_iv_rank (B-58)", async () => {
     const original = window.location;
     Object.defineProperty(window, "location", {

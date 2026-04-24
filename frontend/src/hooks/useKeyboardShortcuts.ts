@@ -260,9 +260,21 @@ export function useKeyboardShortcuts() {
         case "refresh:page":
           window.dispatchEvent(new CustomEvent("alphadesk:refresh"));
           break;
-        /* ─── Watchlist j/k — fallback to market store cycling ─── */
+        /* ─── Watchlist j/k — route-aware: on the earnings-options-play
+         * page the keys cycle the calendar sidebar instead of the global
+         * watchlist. Every other route falls back to market-store
+         * cycling. (B-60)
+         */
         case "watchlist:next":
         case "watchlist:prev": {
+          if (pathname?.startsWith("/strategies/earnings-options-play")) {
+            const eventName =
+              actionId === "watchlist:next"
+                ? "alphadesk:earnings-select-next"
+                : "alphadesk:earnings-select-prev";
+            window.dispatchEvent(new CustomEvent(eventName));
+            break;
+          }
           const { watchlist, selectedSymbol, setSelectedSymbol } = useMarketStore.getState();
           if (watchlist.length === 0) break;
           const currentIdx = watchlist.indexOf(selectedSymbol);
@@ -304,6 +316,28 @@ export function useKeyboardShortcuts() {
     function onKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
+        return;
+      }
+
+      // B-60: on the earnings-options-play page, ArrowDown/ArrowUp cycle
+      // the calendar sidebar. (j/k are handled by the existing binding
+      // dispatch which now routes to custom events on this route.) We
+      // intercept here because arrow keys aren't in DEFAULT_BINDINGS.
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+        pathname?.startsWith("/strategies/earnings-options-play")
+      ) {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent(
+            e.key === "ArrowDown"
+              ? "alphadesk:earnings-select-next"
+              : "alphadesk:earnings-select-prev",
+          ),
+        );
         return;
       }
 
@@ -361,7 +395,7 @@ export function useKeyboardShortcuts() {
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [handleAction]);
+  }, [handleAction, pathname]);
 
   return { overlayOpen, setOverlayOpen };
 }

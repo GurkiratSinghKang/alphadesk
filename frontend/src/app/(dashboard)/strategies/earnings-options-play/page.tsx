@@ -110,6 +110,34 @@ export default function EarningsOptionsPlayPage() {
     syncURL({ symbol: selectedSymbol, ...filters }, mode);
   }, [selectedSymbol, filters]);
 
+  // ── B-60: j/k and ArrowUp/ArrowDown shortcuts from useKeyboardShortcuts
+  // dispatch these window-level events; we advance selection through the
+  // currently-loaded calendar. Use a ref so the handlers always see the
+  // latest rows without re-binding on every fetch.
+  const rowsRef = useRef(calendar?.earnings ?? []);
+  rowsRef.current = calendar?.earnings ?? [];
+  const selectedRef = useRef(selectedSymbol);
+  selectedRef.current = selectedSymbol;
+
+  useEffect(() => {
+    function step(dir: 1 | -1) {
+      const rows = rowsRef.current;
+      if (rows.length === 0) return;
+      const currentIdx = rows.findIndex((r) => r.symbol === selectedRef.current);
+      const base = currentIdx === -1 ? 0 : currentIdx;
+      const nextIdx = (base + dir + rows.length) % rows.length;
+      setSelectedSymbol(rows[nextIdx].symbol);
+    }
+    const next = () => step(1);
+    const prev = () => step(-1);
+    window.addEventListener("alphadesk:earnings-select-next", next);
+    window.addEventListener("alphadesk:earnings-select-prev", prev);
+    return () => {
+      window.removeEventListener("alphadesk:earnings-select-next", next);
+      window.removeEventListener("alphadesk:earnings-select-prev", prev);
+    };
+  }, []);
+
   // ── Full research mutation ───────────────────────────────
   const runFull = useCallback(async () => {
     if (!selectedSymbol) return;
