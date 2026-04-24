@@ -200,6 +200,10 @@ export default function EarningsOptionsPlayPage() {
           error={calendarError}
           selected={selectedSymbol}
           onSelect={setSelectedSymbol}
+          filters={filters}
+          // B-107: restore defaults from the empty-state "Loosen a filter"
+          // CTA. Matches the initial state in readFiltersFromURL.
+          onResetFilters={() => setFilters({ window: "both", min_iv_rank: 50, sort: "date" })}
         />
         <EarningsDetailPanel
           detail={detail}

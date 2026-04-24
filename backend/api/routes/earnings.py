@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from api.routes._rate_limit import check_full_research_rate
 from api.schemas.earnings import CalendarResponse, EarningsDetail, ClaudeFullResearch
+from core.http import client_ip
 from services import earnings_screener
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,8 @@ async def get_calendar(
     watchlist_only: bool = False,
     sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence)$"),
 ) -> CalendarResponse:
-    # B-33: propagate the real client IP so per-IP rate limiters downstream
-    # see the caller instead of loopback.
+    # B-33: propagate the real client IP (XFF-aware, so per-IP rate limiters
+    # downstream see the caller — not Caddy's address).
     # B-66: `market_cap` query param removed — curated-universe filter is
     # always applied now. Frontend callers need to drop the param too.
     # B-68: emit structured request-boundary logs so Loki / CloudWatch can
@@ -43,7 +44,7 @@ async def get_calendar(
     # proper X-Request-ID ContextVar that JsonFormatter picks up
     # automatically; this local id is the structured-log correlation key
     # in case the call is invoked outside a request (tests, bg tasks).
-    client_host = request.client.host if request.client else None
+    client_host = client_ip(request)
     request_id = uuid.uuid4().hex[:8]
     t0 = time.perf_counter()
     logger.info(
@@ -95,9 +96,10 @@ async def post_full_research(
     # Per-IP rate limit (B-50) — /full-research invokes Opus and costs
     # real money; 5 calls per 10 min is the cap. Runs BEFORE the service
     # so a stream of requests from a stuck client can't queue up Claude
-    # calls waiting on the shared client lock.
-    client_host = request.client.host if request.client else "unknown"
-    await check_full_research_rate(client_host)
+    # calls waiting on the shared client lock. XFF-aware IP resolution
+    # matters — otherwise Caddy's address buckets every user together
+    # and the cap is useless in production.
+    await check_full_research_rate(client_ip(request))
     try:
         return await earnings_screener.run_full_research(symbol.upper())
     except ValueError as e:

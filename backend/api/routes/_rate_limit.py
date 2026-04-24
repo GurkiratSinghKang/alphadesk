@@ -38,6 +38,12 @@ async def check_full_research_rate(client_host: str) -> None:
     Uses an in-process deque-per-IP; good enough for a single-worker deploy.
     For multi-worker deploys we'd swap the backing store to Redis — see
     B-50 follow-up.
+
+    Keyspace hygiene: every call evicts the callers' own expired entries.
+    When a caller's deque empties, we drop the dict key too so the
+    ``_history`` dict can't grow unboundedly across scanner/botnet IPs
+    (simplify-review follow-up — at 1M unique IPs the un-pruned dict
+    would sit around 200 MB RSS).
     """
     now = time.monotonic()
     cutoff = now - _BUCKET_WINDOW_S
@@ -59,6 +65,16 @@ async def check_full_research_rate(client_host: str) -> None:
                 headers={"Retry-After": str(retry_after)},
             )
         bucket.append(now)
+        # If *another* caller's bucket is empty after their own eviction
+        # sweep (or this caller's bucket was empty and the append above
+        # just seeded it — ignored here), they'd linger in ``_history``
+        # forever. Periodic pruning: every time the current caller's
+        # bucket crosses the max threshold, drop any empty buckets in
+        # the dict. O(n) per prune, bounded by how often we hit the cap.
+        if len(bucket) == _BUCKET_MAX:
+            empty_keys = [k for k, q in _history.items() if not q]
+            for k in empty_keys:
+                del _history[k]
 
 
 def _reset_for_tests() -> None:

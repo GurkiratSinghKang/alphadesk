@@ -21,14 +21,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from main import app  # FastAPI app instance lives in backend/main.py
-from core.auth import require_auth
 
-
-async def _fake_user() -> str:
-    return "test_user"
-
-
-app.dependency_overrides[require_auth] = _fake_user
+# Auth override is installed by conftest.py's session-scoped autouse fixture.
 client = TestClient(app)
 
 

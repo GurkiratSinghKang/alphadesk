@@ -15,16 +15,7 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("alphadesk.audit")
 
 
-def _client_ip(req: Request) -> str:
-    """Best-effort resolve the caller's IP.
-
-    Prefers X-Forwarded-For (we trust Caddy per ProxyHeadersMiddleware
-    trusted_hosts in main.py). Falls back to request.client.host.
-    """
-    xff = req.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[0].strip() or "unknown"
-    return req.client.host if req.client else "unknown"
+from core.http import client_ip as _client_ip  # backwards-compatible alias
 
 
 def _is_browser_client(req: Request) -> bool:

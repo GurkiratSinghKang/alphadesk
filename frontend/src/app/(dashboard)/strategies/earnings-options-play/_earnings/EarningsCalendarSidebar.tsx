@@ -19,6 +19,11 @@ export interface EarningsCalendarSidebarProps {
   // B-107: pass the active filter set so the empty-state can name the
   // restricting filter (e.g. "… with IV rank ≥ 80").
   filters?: EarningsCalendarFilters;
+  // B-107: parent hands in a reset callback so the empty-state "Loosen a
+  // filter" button can restore defaults. Previously a window-scoped
+  // CustomEvent that no-one listened to — the button was a no-op in prod
+  // (simplify review). Omit to hide the button entirely.
+  onResetFilters?: () => void;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -32,7 +37,7 @@ function buildSymbolDeeplink(sym: string): string {
 }
 
 export default function EarningsCalendarSidebar({
-  rows, loading, error, selected, onSelect, firstRowRef, filters,
+  rows, loading, error, selected, onSelect, firstRowRef, filters, onResetFilters,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -56,25 +61,26 @@ export default function EarningsCalendarSidebar({
   }
 
   if (!loading && rows.length === 0) {
-    // B-107: name the restricting filter + offer a one-click reset via
-    // a custom event the parent listens for.
+    // B-107: name the restricting filter + (if the parent provided a
+    // reset callback) offer a one-click way out of the empty state.
     const emptyMessage = buildEmptyStateMessage(filters);
     return (
       <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
         <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">
-          {emptyMessage}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("alphadesk:earnings-reset-filters"));
-              }
-            }}
-            className="underline decoration-dotted text-[color:var(--fg-accent)] hover:text-[color:var(--fg-base)]"
-            data-slot="reset-filters-link"
-          >
-            Loosen a filter
-          </button>.
+          {emptyMessage}
+          {onResetFilters && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={onResetFilters}
+                className="underline decoration-dotted text-[color:var(--fg-accent)] hover:text-[color:var(--fg-base)]"
+                data-slot="reset-filters-link"
+              >
+                Loosen a filter
+              </button>.
+            </>
+          )}
         </p>
       </aside>
     );

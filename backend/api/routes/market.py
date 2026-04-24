@@ -33,27 +33,7 @@ router = APIRouter()
 # Errors are logged so the operator can correlate on post-mortem.
 
 
-def _client_ip(request: Request) -> str:
-    """Extract the client IP for rate-limit keying.
-
-    Honours the trusted-proxy header ``X-Forwarded-For`` set by Caddy (we
-    control the edge so spoofing requires bypassing Caddy). Falls back to
-    the direct connection address — covers tests and the dev-runner path
-    where no proxy is in front of uvicorn.
-
-    Returns the raw first XFF hop; an attacker who spoofs the header
-    at the edge still only shifts their bucket onto whatever IP they
-    lie about, they don't bypass the cap.
-    """
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        # ``X-Forwarded-For: client, proxy1, proxy2`` — take the first hop.
-        first = xff.split(",", 1)[0].strip()
-        if first:
-            return first
-    if request.client is not None:
-        return request.client.host or "unknown"
-    return "unknown"
+from core.http import client_ip as _client_ip  # backwards-compatible alias
 
 
 def _is_authed(request: Request) -> bool:

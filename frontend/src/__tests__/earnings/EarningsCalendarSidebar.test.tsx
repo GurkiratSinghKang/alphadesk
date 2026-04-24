@@ -76,6 +76,7 @@ describe("EarningsCalendarSidebar", () => {
   });
 
   it("names the restricting filter in the empty state and offers a reset link (B-107)", () => {
+    const onResetFilters = vi.fn();
     const { container, getByRole } = render(
       <EarningsCalendarSidebar
         rows={[]}
@@ -84,19 +85,29 @@ describe("EarningsCalendarSidebar", () => {
         selected={null}
         onSelect={() => {}}
         filters={{ window: "current", min_iv_rank: 80, sort: "iv_rank" }}
+        onResetFilters={onResetFilters}
       />,
     );
     expect(container.textContent).toMatch(/current week/i);
     expect(container.textContent).toMatch(/IV rank/i);
     expect(container.textContent).toContain("80");
 
-    const events: Event[] = [];
-    const handler = (e: Event) => { events.push(e); };
-    window.addEventListener("alphadesk:earnings-reset-filters", handler);
     fireEvent.click(getByRole("button", { name: /loosen/i }));
-    window.removeEventListener("alphadesk:earnings-reset-filters", handler);
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe("alphadesk:earnings-reset-filters");
+    expect(onResetFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the reset button when onResetFilters is not provided (B-107)", () => {
+    const { queryByRole } = render(
+      <EarningsCalendarSidebar
+        rows={[]}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        filters={{ window: "current", min_iv_rank: 80 }}
+      />,
+    );
+    expect(queryByRole("button", { name: /loosen/i })).toBeNull();
   });
 
   it("opens in a new tab on Cmd/Ctrl-click instead of onSelect (B-40)", () => {

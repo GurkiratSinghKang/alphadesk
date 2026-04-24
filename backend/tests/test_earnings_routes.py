@@ -1,5 +1,8 @@
 """Route contract tests — these check request → response shape and wiring.
-The aggregator is mocked; pure HTTP plumbing is what we're verifying here."""
+The aggregator is mocked; pure HTTP plumbing is what we're verifying here.
+
+Auth override + TestClient are provided by conftest.py (see simplify review —
+three files used to duplicate this harness)."""
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -7,15 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app  # FastAPI app instance lives in backend/main.py
-from core.auth import require_auth
 
-
-async def _fake_user() -> str:
-    return "test_user"
-
-
-# Override auth for the whole test module — no JWT machinery needed here.
-app.dependency_overrides[require_auth] = _fake_user
 
 client = TestClient(app)
 
