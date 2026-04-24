@@ -64,3 +64,42 @@ def test_pricing_known_models():
     assert _estimate_cost_usd("claude-sonnet-4-7", 1_000_000, 1_000_000) == pytest.approx(18.00)
     # Opus: 15 + 75
     assert _estimate_cost_usd("claude-opus-4-7", 1_000_000, 1_000_000) == pytest.approx(90.00)
+
+
+# ─── B-30 timeout tests ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_complete_raises_claude_timeout_on_deadline(caplog):
+    """Hung Anthropic → ClaudeTimeoutError after the configured deadline,
+    not the SDK's 600s default. Semaphore must be released (next caller
+    can proceed)."""
+    import asyncio as _aio
+    from agents import claude_client
+
+    async def _hang(*_a, **_k):
+        await _aio.sleep(5)  # longer than our 0.1s test deadline
+
+    with patch.object(claude_client.settings, "ANTHROPIC_API_KEY") as key_attr:
+        key_attr.get_secret_value.return_value = "sk-test"
+        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
+            mock_anthropic.return_value.messages.create = _hang
+            client = claude_client.ClaudeClient()
+            with caplog.at_level(logging.WARNING, logger="agents.claude_client"):
+                with pytest.raises(claude_client.ClaudeTimeoutError):
+                    await client.complete(
+                        system="sys", user="usr", model="opus",
+                        timeout=0.1,
+                        context={"symbol": "NVDA"},
+                    )
+
+    timeout_events = [r for r in caplog.records if getattr(r, "status", None) == "timeout"]
+    assert len(timeout_events) == 1
+    assert timeout_events[0].symbol == "NVDA"
+    assert timeout_events[0].timeout_s == 0.1
+
+
+def test_claude_timeout_is_subclass_of_timeouterror():
+    """Existing broad try/except TimeoutError handlers keep working."""
+    from agents.claude_client import ClaudeTimeoutError
+    assert issubclass(ClaudeTimeoutError, TimeoutError)
