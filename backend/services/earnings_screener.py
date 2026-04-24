@@ -217,8 +217,8 @@ async def _fmp_upcoming(window: str) -> list[dict]:
 
 class _StubRequest:
     """Minimal Request-shaped object so we can call `api.routes.market.get_quote`
-    without a real FastAPI request context. The rate-limiter only reads
-    ``request.client.host`` and ``request.headers``."""
+    without a real FastAPI request context. The rate-limiter reads
+    ``request.client.host``, ``request.headers``, and ``request.cookies``."""
 
     class _Client:
         host = "127.0.0.1"
@@ -226,6 +226,7 @@ class _StubRequest:
     def __init__(self) -> None:
         self.client = self._Client()
         self.headers: dict[str, str] = {}
+        self.cookies: dict[str, str] = {}
 
 
 class _StubResponse:
