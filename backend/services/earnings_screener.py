@@ -273,7 +273,11 @@ async def _load_quote(symbol: str) -> dict | None:
             "change_pct": float(q.changePct),
         }
     except Exception as e:
-        log.warning(
+        # B-69: demoted to DEBUG. During an Alpaca outage this was
+        # emitting one WARN per symbol (800+ over a 5-min outage); the
+        # real alerting signal is the single summary WARN at the end of
+        # ``list_upcoming``.
+        log.debug(
             "quote load failed for %s: %s",
             symbol,
             e,
@@ -335,7 +339,10 @@ async def _load_metrics(
             "days_to_expiry": days_to_expiry,
         }
     except Exception as e:
-        log.warning(
+        # B-69: demoted to DEBUG — a provider outage would otherwise emit
+        # one WARN per symbol in the hydrate loop. The single aggregated
+        # WARN at the end of ``list_upcoming`` is the real oncall signal.
+        log.debug(
             "metrics load failed for %s: %s",
             symbol,
             e,
@@ -456,7 +463,10 @@ async def _run_structured_and_cache(
             ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
         )
     except Exception as e:
-        log.warning(
+        # B-69: demoted to DEBUG — an Anthropic outage would otherwise
+        # emit one WARN per symbol as N structured calls fail in the
+        # background. The hydration-failures summary covers it.
+        log.debug(
             "Claude structured failed for %s: %s",
             symbol,
             e,
@@ -681,17 +691,51 @@ async def list_upcoming(
     # ``settings.EARNINGS_HYDRATE_CONCURRENCY`` (B-85).
     hydrate_sem = asyncio.Semaphore(settings.EARNINGS_HYDRATE_CONCURRENCY)
 
+    # B-69: collect per-symbol hydration failures into a list and emit ONE
+    # summary WARN after the loop. Previously an Alpaca 5-min outage
+    # emitted 800+ WARN lines here (one per symbol per refresh); downstream
+    # log budgets treated that as a flood and rate-limited the bucket,
+    # hiding the real alert.
+    hydration_failures: list[str] = []
+
     async def safe_hydrate(row: dict) -> dict | None:
         async with hydrate_sem:
             try:
                 return await _hydrate_row(row, min_iv_rank=min_iv_rank)
             except Exception as e:
-                log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
+                # Keep per-symbol detail at DEBUG for local reproduction,
+                # but only one aggregated WARN hits production log streams.
+                sym = row.get("symbol") or "?"
+                log.debug(
+                    "hydrate failed for %s: %s",
+                    sym,
+                    e,
+                    extra=_log_ctx(
+                        endpoint="earnings.safe_hydrate",
+                        symbol=sym,
+                        error=str(e),
+                    ),
+                )
+                hydration_failures.append(sym)
                 nonlocal partial
                 partial = True
                 return row  # keep symbol visible with null fields
 
     hydrated = await asyncio.gather(*[safe_hydrate(r) for r in raw_rows])
+
+    if hydration_failures:
+        log.warning(
+            "earnings.hydration.failures count=%d %s",
+            len(hydration_failures),
+            hydration_failures,
+            extra=_log_ctx(
+                endpoint="earnings.list_upcoming",
+                stage="hydration_summary",
+                window=window,
+                failure_count=len(hydration_failures),
+                failed_symbols=hydration_failures,
+            ),
+        )
     rows: list[CalendarRow] = []
     for h in hydrated:
         if h is None:
