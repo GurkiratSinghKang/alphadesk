@@ -391,7 +391,13 @@ button, a, [role="button"], input, select, .transition-colors, .transition-all {
   transition-duration: 150ms;
 }
 
-/* Respect user motion preferences (WCAG 2.1 AA) */
+/* Respect user motion preferences (WCAG 2.1 AA).
+   B-91 — verified this block disables the four motion vectors WCAG 2.3.3
+   requires: animation-duration, animation-iteration-count,
+   transition-duration, and scroll-behavior. Applied to * + ::before +
+   ::after so pseudo-element animations (marquee tape, card-enter stagger)
+   are also neutralised. Do not narrow the selector — specificity needs to
+   beat component-level transitions like .num-transition (line 358). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
