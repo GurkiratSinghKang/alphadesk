@@ -1,8 +1,10 @@
 """Earnings Options Play — research-kind registration.
 
-This strategy is a UI-only decision-support screener — the engine never
-calls `generate_signals`. Registered only so /strategies surfaces it in the
-Research section, and so the backend earnings router can resolve
-`earnings-options-play` as a known strategy id.
+UI-only decision-support screener; engine never invokes it. Registered so
+``get_strategy("earnings-options-play")`` succeeds and the route-id
+surfaces in the /strategies rail.
 """
-from . import strategy  # noqa: F401 — decorator side-effect
+
+from .strategy import EarningsOptionsPlay
+
+__all__ = ["EarningsOptionsPlay"]
