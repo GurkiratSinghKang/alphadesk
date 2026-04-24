@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import type { RefObject } from "react";
 import type { CalendarRow } from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
@@ -11,6 +12,10 @@ export interface EarningsCalendarSidebarProps {
   error: string | null;
   selected: string | null;
   onSelect: (symbol: string) => void;
+  // B-56: parent can pass a ref that the sidebar will attach to the first
+  // row's button so focus can be programmatically restored after a
+  // filter-triggered refetch.
+  firstRowRef?: RefObject<HTMLButtonElement | null>;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -24,9 +29,12 @@ function buildSymbolDeeplink(sym: string): string {
 }
 
 export default function EarningsCalendarSidebar({
-  rows, loading, error, selected, onSelect,
+  rows, loading, error, selected, onSelect, firstRowRef,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
+  // B-56: first row across all day groups gets the shared ref so the
+  // parent page can restore focus after a filter refetch.
+  const firstSymbol = grouped[0]?.rows[0]?.symbol ?? null;
 
   if (error) {
     return (
@@ -67,6 +75,7 @@ export default function EarningsCalendarSidebar({
             {dayRows.map((r) => (
               <li key={r.symbol}>
                 <button
+                  ref={r.symbol === firstSymbol ? firstRowRef : undefined}
                   type="button"
                   onClick={(e) => {
                     // B-40: ⌘/Ctrl-click or middle-click opens the symbol
