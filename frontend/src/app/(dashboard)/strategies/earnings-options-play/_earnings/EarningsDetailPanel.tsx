@@ -175,15 +175,27 @@ function extractMissingFields(detail: EarningsDetail): string[] | null {
  * without a ResizeObserver setup we use window width as a proxy) is wider
  * than `px`. Panel-width comes out close to viewport-width minus 280px
  * sidebar, so viewport >= 1480 ≈ panel >= 1200.
+ *
+ * Resize handler is debounced (150 ms) so dragging a window edge across
+ * the 1280 px breakpoint doesn't thrash React into re-laying out the
+ * two-column grid dozens of times per second.
  */
 function useIsWide(panelThresholdPx: number): boolean {
   const [wide, setWide] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const viewportThreshold = panelThresholdPx + 300; // +sidebar+gutters
     const check = () => setWide(window.innerWidth >= viewportThreshold);
     check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    const onResize = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(check, 150);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, [panelThresholdPx]);
   return wide;
 }
