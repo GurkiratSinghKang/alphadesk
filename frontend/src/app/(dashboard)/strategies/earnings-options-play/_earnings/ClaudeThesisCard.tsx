@@ -87,7 +87,7 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull 
             onClick={onRunFull}
             disabled={running}
             aria-label={running ? "Generating full research" : "Run full research"}
-            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-1 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] disabled:opacity-50"
+            className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] disabled:opacity-50"
           >
             {running ? "▸ Generating full research…" : "▸ Run full research"}
           </button>
