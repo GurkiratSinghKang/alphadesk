@@ -23,20 +23,24 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
           · expiry {ladder.expiry} · underlying {ladder.underlying_price.toFixed(2)}
         </span>
       </h3>
-      <div className="mt-1">
-        <div className="t-ladder-row t-ladder-row--head">
-          <span>STRIKE</span>
-          <span>Δ</span>
-          <span>MID</span>
-          <span>IV</span>
-          <span>YLD</span>
-          <span>POP</span>
-          <span className="text-right">SIDE</span>
-        </div>
-        {ladder.rows.map((r) => (
-          <LadderDataRow key={`${r.side}-${r.bucket}-${r.strike}`} row={r} />
-        ))}
-      </div>
+      <table className="mt-1 w-full table-auto border-separate border-spacing-0 t-mono text-[12.5px] tabular-nums">
+        <thead>
+          <tr className="t-ladder-row t-ladder-row--head">
+            <th scope="col" className="text-left font-normal">STRIKE</th>
+            <th scope="col" className="text-left font-normal">Δ</th>
+            <th scope="col" className="text-left font-normal">MID</th>
+            <th scope="col" className="text-left font-normal">IV</th>
+            <th scope="col" className="text-left font-normal">YLD</th>
+            <th scope="col" className="text-left font-normal">POP</th>
+            <th scope="col" className="text-right font-normal">SIDE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ladder.rows.map((r) => (
+            <LadderDataRow key={`${r.side}-${r.bucket}-${r.strike}`} row={r} />
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -48,23 +52,23 @@ function LadderDataRow({ row }: { row: LadderRow }) {
   // quotes which aren't real two-sided markets.
   const wideSpread = isWideSpread(row.bid, row.ask);
   const midCell = wideSpread ? (
-    <span className="u-loss" title="Wide bid/ask spread — liquidity risk">
+    <td className="u-loss" title="Wide bid/ask spread — liquidity risk">
       {row.mid.toFixed(2)}
       <span className="ml-1" aria-label="wide spread" role="img">⚠</span>
-    </span>
+    </td>
   ) : (
-    <span>{row.mid.toFixed(2)}</span>
+    <td>{row.mid.toFixed(2)}</td>
   );
   return (
-    <div className="t-ladder-row t-ladder-row--data">
-      <span>{row.strike.toFixed(0)}</span>
-      <span>{row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)}</span>
+    <tr className="t-ladder-row t-ladder-row--data">
+      <th scope="row" className="text-left font-normal">{row.strike.toFixed(0)}</th>
+      <td>{row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)}</td>
       {midCell}
-      <span>{(row.iv * 100).toFixed(0)}%</span>
-      <span className="u-profit">{yieldStr}</span>
-      <span>{(row.pop * 100).toFixed(0)}%</span>
-      <span className="text-right u-dim">{sideLabel}</span>
-    </div>
+      <td>{(row.iv * 100).toFixed(0)}%</td>
+      <td className="u-profit">{yieldStr}</td>
+      <td>{(row.pop * 100).toFixed(0)}%</td>
+      <td className="text-right u-dim">{sideLabel}</td>
+    </tr>
   );
 }
 
