@@ -23,8 +23,22 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "claude_confidence", label: "Claude confidence" },
 ];
 
+// B-9: data model has no explicit sort direction yet — label each sort
+// key with the natural default ("date" is chronological ascending, every
+// other key is highest-first descending). Renders as a unicode arrow
+// next to the Sort label so the user has visual confirmation of what
+// "first" means for the active sort.
+const SORT_DIRECTION: Record<SortOption["key"], { arrow: string; aria: string }> = {
+  date:              { arrow: "\u2191", aria: "ascending (earliest first)" },
+  iv_rank:           { arrow: "\u2193", aria: "descending (highest first)" },
+  yield:             { arrow: "\u2193", aria: "descending (highest first)" },
+  claude_confidence: { arrow: "\u2193", aria: "descending (highest first)" },
+};
+
 export default function FiltersBar({ filters, onChange }: FiltersBarProps) {
   const ivRank = filters.min_iv_rank ?? 50;
+  const sortKey = (filters.sort ?? "date") as SortOption["key"];
+  const sortDir = SORT_DIRECTION[sortKey];
 
   return (
     <div
@@ -103,6 +117,14 @@ export default function FiltersBar({ filters, onChange }: FiltersBarProps) {
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
+        {/* B-9: visual confirmation of the applied sort direction. */}
+        <span
+          data-slot="sort-direction-indicator"
+          aria-label={`Sort direction: ${sortDir.aria}`}
+          className="font-mono text-[13px] tabular-nums text-[color:var(--fg-muted)]"
+        >
+          {sortDir.arrow}
+        </span>
       </label>
     </div>
   );

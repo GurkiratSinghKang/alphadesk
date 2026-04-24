@@ -34,4 +34,20 @@ describe("FiltersBar", () => {
     fireEvent.change(slider, { target: { value: "70" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ min_iv_rank: 70 }));
   });
+
+  it("shows a sort-direction indicator next to the active sort (B-9)", () => {
+    const { container, rerender } = render(
+      <FiltersBar filters={{ window: "both", min_iv_rank: 50, sort: "date" }} onChange={() => {}} />,
+    );
+    const ind = container.querySelector('[data-slot="sort-direction-indicator"]');
+    expect(ind).not.toBeNull();
+    // date defaults to ascending
+    expect(ind?.textContent).toBe("\u2191");
+
+    rerender(
+      <FiltersBar filters={{ window: "both", min_iv_rank: 50, sort: "iv_rank" }} onChange={() => {}} />,
+    );
+    const ind2 = container.querySelector('[data-slot="sort-direction-indicator"]');
+    expect(ind2?.textContent).toBe("\u2193");
+  });
 });
