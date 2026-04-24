@@ -59,7 +59,7 @@ export default function EarningsDetailPanel({
     >
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
-        report_date={detail.report_date} report_time={detail.report_time}
+        reportDate={detail.reportDate} reportTime={detail.reportTime}
         quote={detail.quote}
       />
       <MetricsStrip metrics={detail.metrics} />
@@ -69,32 +69,32 @@ export default function EarningsDetailPanel({
           {/* Left column: thesis + news */}
           <div className="min-w-0 space-y-3">
             <ClaudeThesisCard
-              structured={detail.claude_structured} full={detail.claude_full_research}
+              structured={detail.claudeStructured} full={detail.claudeFullResearch}
               running={runningFull} onRunFull={onRunFullResearch}
             />
             <NewsFeed news={detail.news} />
           </div>
           {/* Right column: ladder + historical + term/skew */}
           <div className="min-w-0 space-y-3">
-            <StrikeLadder ladder={detail.strike_ladder} />
-            <HistoricalMoves historical={detail.historical_earnings} />
-            <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
+            <StrikeLadder ladder={detail.strikeLadder} />
+            <HistoricalMoves historical={detail.historicalEarnings} />
+            <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           </div>
         </div>
       ) : (
         <div className="mt-4 space-y-4">
           <ClaudeThesisCard
-            structured={detail.claude_structured} full={detail.claude_full_research}
+            structured={detail.claudeStructured} full={detail.claudeFullResearch}
             running={runningFull} onRunFull={onRunFullResearch}
           />
-          <StrikeLadder ladder={detail.strike_ladder} />
-          <HistoricalMoves historical={detail.historical_earnings} />
-          <IVTermSkew term={detail.iv_term_structure} skew={detail.skew} />
+          <StrikeLadder ladder={detail.strikeLadder} />
+          <HistoricalMoves historical={detail.historicalEarnings} />
+          <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           <NewsFeed news={detail.news} />
         </div>
       )}
 
-      <TradeButtonRow symbol={detail.symbol} ladder={detail.strike_ladder} />
+      <TradeButtonRow symbol={detail.symbol} ladder={detail.strikeLadder} />
 
       {detail.partial && (
         <p className="mt-3 font-mono text-[11px] text-[color:var(--fg-muted)]">

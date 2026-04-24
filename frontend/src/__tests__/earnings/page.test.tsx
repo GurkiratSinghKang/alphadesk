@@ -9,20 +9,20 @@ describe("Earnings Options Play page", () => {
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
       earnings: [
         { symbol: "NVDA", company: "Nvidia", sector: "Semis",
-          report_date: "2026-04-23", report_time: "AMC", days_until: 1,
-          price: 201.7, change: -1.4, change_pct: -0.007, iv_rank: 78,
-          premium_yield_call_atm: 0.031, premium_yield_put_atm: 0.028,
-          expected_move_pct: 0.064, hist_avg_abs_move_pct: 0.052,
-          claude_verdict: "neutral-bull", claude_confidence: 0.62,
-          top_setup: "short strangle" },
+          reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+          price: 201.7, change: -1.4, changePct: -0.007, ivRank: 78,
+          premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
+          expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
+          claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
+          topSetup: "short strangle" },
         { symbol: "TSLA", company: "Tesla", sector: "Auto",
-          report_date: "2026-04-23", report_time: "AMC", days_until: 1,
-          price: 392, change: -8.2, change_pct: -0.02, iv_rank: 84,
-          premium_yield_call_atm: 0.042, premium_yield_put_atm: 0.039,
-          expected_move_pct: 0.081, hist_avg_abs_move_pct: 0.078,
-          claude_verdict: "neutral", claude_confidence: 0.55, top_setup: "iron condor" },
+          reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+          price: 392, change: -8.2, changePct: -0.02, ivRank: 84,
+          premiumYieldCallAtm: 0.042, premiumYieldPutAtm: 0.039,
+          expectedMovePct: 0.081, histAvgAbsMovePct: 0.078,
+          claudeVerdict: "neutral", claudeConfidence: 0.55, topSetup: "iron condor" },
       ],
-      generated_at: new Date().toISOString(), partial: false,
+      generatedAt: new Date().toISOString(), partial: false,
     });
 
     const { container } = render(<EarningsOptionsPlayPage />);
@@ -43,10 +43,10 @@ describe("Earnings Options Play page", () => {
     });
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
       earnings: [
-        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
-        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1, price: null, change: null, changePct: null, ivRank: null, premiumYieldCallAtm: null, premiumYieldPutAtm: null, expectedMovePct: null, histAvgAbsMovePct: null, claudeVerdict: null, claudeConfidence: null, topSetup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1, price: null, change: null, changePct: null, ivRank: null, premiumYieldCallAtm: null, premiumYieldPutAtm: null, expectedMovePct: null, histAvgAbsMovePct: null, claudeVerdict: null, claudeConfidence: null, topSetup: null },
       ],
-      generated_at: new Date().toISOString(), partial: false,
+      generatedAt: new Date().toISOString(), partial: false,
     });
     render(<EarningsOptionsPlayPage />);
     await waitFor(() => {
@@ -61,36 +61,36 @@ describe("Earnings Options Play — full flow", () => {
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
       earnings: [{
         symbol: "NVDA", company: "Nvidia", sector: "Semis",
-        report_date: "2026-04-23", report_time: "AMC", days_until: 1,
-        price: 201.7, change: -1.4, change_pct: -0.007, iv_rank: 78,
-        premium_yield_call_atm: 0.031, premium_yield_put_atm: 0.028,
-        expected_move_pct: 0.064, hist_avg_abs_move_pct: 0.052,
-        claude_verdict: "neutral-bull", claude_confidence: 0.62,
-        top_setup: "short strangle",
-      }], generated_at: new Date().toISOString(), partial: false,
+        reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+        price: 201.7, change: -1.4, changePct: -0.007, ivRank: 78,
+        premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
+        expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
+        claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
+        topSetup: "short strangle",
+      }], generatedAt: new Date().toISOString(), partial: false,
     });
     const fullNvdaDetail: import("@/types").EarningsDetail = {
       symbol: "NVDA", company: "Nvidia", sector: "Semis",
-      report_date: "2026-04-23", report_time: "AMC",
-      quote: { last: 201.7, change: -1.4, change_pct: -0.007 },
-      metrics: null, strike_ladder: {
-        expiry: "2026-04-25", underlying_price: 201.7,
+      reportDate: "2026-04-23", reportTime: "AMC",
+      quote: { last: 201.7, change: -1.4, changePct: -0.007 },
+      metrics: null, strikeLadder: {
+        expiry: "2026-04-25", underlyingPrice: 201.7,
         rows: [
-          { strike: 205, side: "call", bucket: "ATM", delta: 0.5, bid: 6.1, ask: 6.3, mid: 6.2, iv: 0.78, yield_pct: 0.031, pop: 0.5, theta: -0.29, gamma: 0.021, vega: 0.41, oi: 1800, volume: 700 },
-          { strike: 200, side: "put", bucket: "ATM", delta: -0.5, bid: 5.5, ask: 5.7, mid: 5.6, iv: 0.79, yield_pct: 0.028, pop: 0.5, theta: -0.3, gamma: 0.022, vega: 0.4, oi: 2000, volume: 900 },
-          { strike: 210, side: "call", bucket: "30Δ", delta: 0.3, bid: 3.7, ask: 3.9, mid: 3.8, iv: 0.8, yield_pct: 0.019, pop: 0.68, theta: -0.23, gamma: 0.017, vega: 0.32, oi: 1200, volume: 400 },
-          { strike: 195, side: "put", bucket: "30Δ", delta: -0.3, bid: 3.3, ask: 3.5, mid: 3.4, iv: 0.81, yield_pct: 0.017, pop: 0.68, theta: -0.22, gamma: 0.018, vega: 0.31, oi: 1000, volume: 500 },
+          { strike: 205, side: "call", bucket: "ATM", delta: 0.5, bid: 6.1, ask: 6.3, mid: 6.2, iv: 0.78, yieldPct: 0.031, pop: 0.5, theta: -0.29, gamma: 0.021, vega: 0.41, oi: 1800, volume: 700 },
+          { strike: 200, side: "put", bucket: "ATM", delta: -0.5, bid: 5.5, ask: 5.7, mid: 5.6, iv: 0.79, yieldPct: 0.028, pop: 0.5, theta: -0.3, gamma: 0.022, vega: 0.4, oi: 2000, volume: 900 },
+          { strike: 210, side: "call", bucket: "30Δ", delta: 0.3, bid: 3.7, ask: 3.9, mid: 3.8, iv: 0.8, yieldPct: 0.019, pop: 0.68, theta: -0.23, gamma: 0.017, vega: 0.32, oi: 1200, volume: 400 },
+          { strike: 195, side: "put", bucket: "30Δ", delta: -0.3, bid: 3.3, ask: 3.5, mid: 3.4, iv: 0.81, yieldPct: 0.017, pop: 0.68, theta: -0.22, gamma: 0.018, vega: 0.31, oi: 1000, volume: 500 },
         ],
       },
-      claude_structured: {
-        verdict: "neutral-bull", direction_magnitude: { bull_case_pct: 0.04, bear_case_pct: -0.05 },
+      claudeStructured: {
+        verdict: "neutral-bull", directionMagnitude: { bullCasePct: 0.04, bearCasePct: -0.05 },
         thesis: "IV overpriced.", catalysts: ["Blackwell"], risks: ["Guide miss"],
-        suggested_play: "short strangle", suggested_play_reason: "IVR>75", confidence: 0.62,
-        model: "claude-opus-4-7", generated_at: new Date().toISOString(),
+        suggestedPlay: "short strangle", suggestedPlayReason: "IVR>75", confidence: 0.62,
+        model: "claude-opus-4-7", generatedAt: new Date().toISOString(),
       },
-      claude_full_research: null, historical_earnings: null,
-      iv_term_structure: null, skew: null, news: [], partial: false,
-      generated_at: new Date().toISOString(),
+      claudeFullResearch: null, historicalEarnings: null,
+      ivTermStructure: null, skew: null, news: [], partial: false,
+      generatedAt: new Date().toISOString(),
     };
     vi.mocked(api.getEarningsDetail).mockResolvedValue(fullNvdaDetail);
 
@@ -104,10 +104,10 @@ describe("Earnings Options Play — full flow", () => {
 
     // Fire the "Run full research" flow
     vi.mocked(api.postEarningsFullResearch).mockResolvedValueOnce({
-      thesis_paragraph: "Full paragraph.", comparable_setups: [],
-      post_earnings_drift_playbook: "", sector_backdrop: "",
-      analyst_consensus_delta: "", what_would_change_my_mind: "",
-      confidence: 0.7, model: "claude-opus-4-7", generated_at: new Date().toISOString(),
+      thesisParagraph: "Full paragraph.", comparableSetups: [],
+      postEarningsDriftPlaybook: "", sectorBackdrop: "",
+      analystConsensusDelta: "", whatWouldChangeMyMind: "",
+      confidence: 0.7, model: "claude-opus-4-7", generatedAt: new Date().toISOString(),
     });
     const btn = container.querySelector('[data-slot="claude-thesis"] button') as HTMLButtonElement;
     fireEvent.click(btn);

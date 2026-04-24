@@ -19,14 +19,14 @@ export default function MetricsStrip({ metrics }: MetricsStripProps) {
       data-slot="metrics-strip"
       className="flex flex-wrap items-start gap-x-6 gap-y-2 border-b border-[color:var(--border)] py-2"
     >
-      <Cell label="IV RANK" value={fmtInt(metrics.iv_rank)} accent={!!(metrics.iv_rank && metrics.iv_rank > 70)} />
-      <Cell label="IV %ILE" value={fmtInt(metrics.iv_percentile)} />
-      <Cell label="HV 20" value={fmtPct(metrics.hv_20)} />
-      <Cell label="HV / IV" value={fmtRatio(metrics.hv_iv_ratio)} />
-      <Cell label="EXP MOVE" value={fmtPctSigned(metrics.expected_move_pct)} accent />
-      <Cell label="HIST |MV|" value={fmtPctSigned(metrics.hist_avg_abs_move_pct)} />
-      <Cell label="BEAT %" value={fmtInt(metrics.beat_rate != null ? metrics.beat_rate * 100 : null)} />
-      <Cell label="DTE" value={metrics.days_to_expiry == null ? DASH : String(metrics.days_to_expiry)} />
+      <Cell label="IV RANK" value={fmtInt(metrics.ivRank)} accent={!!(metrics.ivRank && metrics.ivRank > 70)} />
+      <Cell label="IV %ILE" value={fmtInt(metrics.ivPercentile)} />
+      <Cell label="HV 20" value={fmtPct(metrics.hv20)} />
+      <Cell label="HV / IV" value={fmtRatio(metrics.hvIvRatio)} />
+      <Cell label="EXP MOVE" value={fmtPctSigned(metrics.expectedMovePct)} accent />
+      <Cell label="HIST |MV|" value={fmtPctSigned(metrics.histAvgAbsMovePct)} />
+      <Cell label="BEAT %" value={fmtInt(metrics.beatRate != null ? metrics.beatRate * 100 : null)} />
+      <Cell label="DTE" value={metrics.daysToExpiry == null ? DASH : String(metrics.daysToExpiry)} />
     </div>
   );
 }

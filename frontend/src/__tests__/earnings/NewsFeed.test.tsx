@@ -7,8 +7,8 @@ describe("NewsFeed", () => {
   it("renders article titles, sources, and published time", () => {
     const { container } = render(
       <NewsFeed news={[
-        { title: "Blackwell ramp on track", source: "Reuters", published_at: new Date().toISOString(), url: "https://example.com/a" },
-        { title: "China export pivot", source: "Bloomberg", published_at: new Date(Date.now() - 5 * 3600_000).toISOString(), url: "https://example.com/b" },
+        { title: "Blackwell ramp on track", source: "Reuters", publishedAt: new Date().toISOString(), url: "https://example.com/a" },
+        { title: "China export pivot", source: "Bloomberg", publishedAt: new Date(Date.now() - 5 * 3600_000).toISOString(), url: "https://example.com/b" },
       ]} />,
     );
     expect(container.textContent).toContain("Blackwell ramp on track");

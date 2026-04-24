@@ -20,7 +20,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
       <h3 className="t-display-section italic text-[13px] mt-4">
         Strike ladder{" "}
         <span className="t-label">
-          · expiry {ladder.expiry} · underlying {ladder.underlying_price.toFixed(2)}
+          · expiry {ladder.expiry} · underlying {ladder.underlyingPrice.toFixed(2)}
         </span>
       </h3>
       <div className="mt-1">
@@ -43,7 +43,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
 
 function LadderDataRow({ row }: { row: LadderRow }) {
   const sideLabel = `${row.side} ${row.bucket}`;
-  const yieldStr = `${(row.yield_pct * 100).toFixed(1)}%`;
+  const yieldStr = `${(row.yieldPct * 100).toFixed(1)}%`;
   return (
     <div className="t-ladder-row t-ladder-row--data">
       <span>{row.strike.toFixed(0)}</span>

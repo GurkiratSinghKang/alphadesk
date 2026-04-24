@@ -11,9 +11,24 @@ import type {
   ScreenerResult,
   TimeFrame,
   CalendarResponse,
+  CalendarRow,
   EarningsDetail,
   EarningsCalendarFilters,
+  EarningsReportTime,
+  EarningsTopSetup,
+  EarningsVerdict,
+  EarningsMetricsBlock,
+  EarningsNewsArticle,
+  ClaudeStructured,
   ClaudeFullResearch,
+  ComparableSetup,
+  HistQuarter,
+  HistoricalStats,
+  HistoricalBlock,
+  IVTermPoint,
+  SkewBlock,
+  LadderRow,
+  StrikeLadder,
 } from "@/types";
 
 // ─── Base Fetch ──────────────────────────────────────────────
@@ -1793,6 +1808,354 @@ export interface PipelinePerformance {
   worstTrade: { symbol: string; pnl: number } | null;
 }
 
+// ─── Earnings API mappers ────────────────────────────────────
+//
+// The backend serves this surface in snake_case (Python convention). The
+// frontend types (see `@/types`) are camelCase, matching the rest of the
+// codebase. Every earnings endpoint runs its raw payload through one of the
+// mappers below so the shape is camelCased at the transport boundary — no
+// snake_case leaks downstream into components or tests.
+
+interface RawCalendarRow {
+  symbol: string;
+  company: string;
+  sector: string;
+  report_date: string;
+  report_time: EarningsReportTime;
+  days_until: number;
+  price: number | null;
+  change: number | null;
+  change_pct: number | null;
+  iv_rank: number | null;
+  premium_yield_call_atm: number | null;
+  premium_yield_put_atm: number | null;
+  expected_move_pct: number | null;
+  hist_avg_abs_move_pct: number | null;
+  claude_verdict: EarningsVerdict | null;
+  claude_confidence: number | null;
+  top_setup: EarningsTopSetup | null;
+}
+
+interface RawCalendarResponse {
+  earnings: RawCalendarRow[];
+  generated_at: string;
+  partial: boolean;
+  error?: string | null;
+}
+
+interface RawLadderRow {
+  strike: number;
+  side: LadderRow["side"];
+  bucket: LadderRow["bucket"];
+  delta: number;
+  bid: number;
+  ask: number;
+  mid: number;
+  iv: number;
+  yield_pct: number;
+  pop: number;
+  theta: number;
+  gamma: number;
+  vega: number;
+  oi: number;
+  volume: number;
+}
+
+interface RawStrikeLadder {
+  expiry: string;
+  underlying_price: number;
+  rows: RawLadderRow[];
+}
+
+interface RawComparableSetup {
+  report_date: string;
+  iv_rank: number;
+  setup: string;
+  outcome: string;
+  similarity_score: number;
+}
+
+interface RawClaudeStructured {
+  verdict: EarningsVerdict;
+  direction_magnitude: { bull_case_pct: number; bear_case_pct: number };
+  thesis: string;
+  catalysts: string[];
+  risks: string[];
+  suggested_play: EarningsTopSetup;
+  suggested_play_reason: string;
+  confidence: number;
+  model: string;
+  generated_at: string;
+}
+
+interface RawClaudeFullResearch {
+  thesis_paragraph: string;
+  comparable_setups: RawComparableSetup[];
+  post_earnings_drift_playbook: string;
+  sector_backdrop: string;
+  analyst_consensus_delta: string;
+  what_would_change_my_mind: string;
+  confidence: number;
+  model: string;
+  generated_at: string;
+}
+
+interface RawHistQuarter {
+  report_date: string;
+  surprise_pct: number | null;
+  next_day_move_pct: number;
+  five_day_move_pct: number;
+}
+
+interface RawHistoricalStats {
+  avg_abs_move_pct: number;
+  wins: number;
+  losses: number;
+  surprise_beat_rate: number;
+  iv_vs_hist_vol_points: number | null;
+}
+
+interface RawHistoricalBlock {
+  quarters: RawHistQuarter[];
+  stats: RawHistoricalStats;
+}
+
+interface RawIVTermPoint {
+  expiry: string;
+  dte: number;
+  atm_iv: number;
+}
+
+interface RawSkewBlock {
+  put_iv_25d: number | null;
+  call_iv_25d: number | null;
+  skew_points: number | null;
+  interpretation: SkewBlock["interpretation"];
+}
+
+interface RawEarningsMetricsBlock {
+  iv_rank: number | null;
+  iv_percentile: number | null;
+  current_iv: number | null;
+  hv_20: number | null;
+  hv_50: number | null;
+  hv_100: number | null;
+  hv_iv_ratio: number | null;
+  expected_move_pct: number | null;
+  expected_move_dollars: number | null;
+  hist_avg_abs_move_pct: number | null;
+  beat_rate: number | null;
+  days_to_earnings: number | null;
+  days_to_expiry: number | null;
+}
+
+interface RawEarningsNewsArticle {
+  title: string;
+  source: string;
+  published_at: string;
+  url: string;
+}
+
+interface RawEarningsDetail {
+  symbol: string;
+  company: string;
+  sector: string;
+  report_date: string;
+  report_time: EarningsReportTime;
+  quote: { last: number; change: number; change_pct: number } | null;
+  metrics: RawEarningsMetricsBlock | null;
+  strike_ladder: RawStrikeLadder | null;
+  claude_structured: RawClaudeStructured | null;
+  claude_full_research: RawClaudeFullResearch | null;
+  historical_earnings: RawHistoricalBlock | null;
+  iv_term_structure: RawIVTermPoint[] | null;
+  skew: RawSkewBlock | null;
+  news: RawEarningsNewsArticle[];
+  partial: boolean;
+  generated_at: string;
+}
+
+function mapCalendarRow(r: RawCalendarRow): CalendarRow {
+  return {
+    symbol: r.symbol,
+    company: r.company,
+    sector: r.sector,
+    reportDate: r.report_date,
+    reportTime: r.report_time,
+    daysUntil: r.days_until,
+    price: r.price,
+    change: r.change,
+    changePct: r.change_pct,
+    ivRank: r.iv_rank,
+    premiumYieldCallAtm: r.premium_yield_call_atm,
+    premiumYieldPutAtm: r.premium_yield_put_atm,
+    expectedMovePct: r.expected_move_pct,
+    histAvgAbsMovePct: r.hist_avg_abs_move_pct,
+    claudeVerdict: r.claude_verdict,
+    claudeConfidence: r.claude_confidence,
+    topSetup: r.top_setup,
+  };
+}
+
+function mapLadderRow(r: RawLadderRow): LadderRow {
+  return {
+    strike: r.strike,
+    side: r.side,
+    bucket: r.bucket,
+    delta: r.delta,
+    bid: r.bid,
+    ask: r.ask,
+    mid: r.mid,
+    iv: r.iv,
+    yieldPct: r.yield_pct,
+    pop: r.pop,
+    theta: r.theta,
+    gamma: r.gamma,
+    vega: r.vega,
+    oi: r.oi,
+    volume: r.volume,
+  };
+}
+
+function mapStrikeLadder(raw: RawStrikeLadder): StrikeLadder {
+  return {
+    expiry: raw.expiry,
+    underlyingPrice: raw.underlying_price,
+    rows: raw.rows.map(mapLadderRow),
+  };
+}
+
+function mapClaudeStructured(raw: RawClaudeStructured): ClaudeStructured {
+  return {
+    verdict: raw.verdict,
+    directionMagnitude: {
+      bullCasePct: raw.direction_magnitude.bull_case_pct,
+      bearCasePct: raw.direction_magnitude.bear_case_pct,
+    },
+    thesis: raw.thesis,
+    catalysts: raw.catalysts,
+    risks: raw.risks,
+    suggestedPlay: raw.suggested_play,
+    suggestedPlayReason: raw.suggested_play_reason,
+    confidence: raw.confidence,
+    model: raw.model,
+    generatedAt: raw.generated_at,
+  };
+}
+
+function mapComparableSetup(raw: RawComparableSetup): ComparableSetup {
+  return {
+    reportDate: raw.report_date,
+    ivRank: raw.iv_rank,
+    setup: raw.setup,
+    outcome: raw.outcome,
+    similarityScore: raw.similarity_score,
+  };
+}
+
+function mapClaudeFullResearch(raw: RawClaudeFullResearch): ClaudeFullResearch {
+  return {
+    thesisParagraph: raw.thesis_paragraph,
+    comparableSetups: raw.comparable_setups.map(mapComparableSetup),
+    postEarningsDriftPlaybook: raw.post_earnings_drift_playbook,
+    sectorBackdrop: raw.sector_backdrop,
+    analystConsensusDelta: raw.analyst_consensus_delta,
+    whatWouldChangeMyMind: raw.what_would_change_my_mind,
+    confidence: raw.confidence,
+    model: raw.model,
+    generatedAt: raw.generated_at,
+  };
+}
+
+function mapMetrics(raw: RawEarningsMetricsBlock): EarningsMetricsBlock {
+  return {
+    ivRank: raw.iv_rank,
+    ivPercentile: raw.iv_percentile,
+    currentIv: raw.current_iv,
+    hv20: raw.hv_20,
+    hv50: raw.hv_50,
+    hv100: raw.hv_100,
+    hvIvRatio: raw.hv_iv_ratio,
+    expectedMovePct: raw.expected_move_pct,
+    expectedMoveDollars: raw.expected_move_dollars,
+    histAvgAbsMovePct: raw.hist_avg_abs_move_pct,
+    beatRate: raw.beat_rate,
+    daysToEarnings: raw.days_to_earnings,
+    daysToExpiry: raw.days_to_expiry,
+  };
+}
+
+function mapHistQuarter(raw: RawHistQuarter): HistQuarter {
+  return {
+    reportDate: raw.report_date,
+    surprisePct: raw.surprise_pct,
+    nextDayMovePct: raw.next_day_move_pct,
+    fiveDayMovePct: raw.five_day_move_pct,
+  };
+}
+
+function mapHistoricalStats(raw: RawHistoricalStats): HistoricalStats {
+  return {
+    avgAbsMovePct: raw.avg_abs_move_pct,
+    wins: raw.wins,
+    losses: raw.losses,
+    surpriseBeatRate: raw.surprise_beat_rate,
+    ivVsHistVolPoints: raw.iv_vs_hist_vol_points,
+  };
+}
+
+function mapHistoricalBlock(raw: RawHistoricalBlock): HistoricalBlock {
+  return {
+    quarters: raw.quarters.map(mapHistQuarter),
+    stats: mapHistoricalStats(raw.stats),
+  };
+}
+
+function mapIVTermPoint(raw: RawIVTermPoint): IVTermPoint {
+  return { expiry: raw.expiry, dte: raw.dte, atmIv: raw.atm_iv };
+}
+
+function mapSkew(raw: RawSkewBlock): SkewBlock {
+  return {
+    putIv25d: raw.put_iv_25d,
+    callIv25d: raw.call_iv_25d,
+    skewPoints: raw.skew_points,
+    interpretation: raw.interpretation,
+  };
+}
+
+function mapNewsArticle(raw: RawEarningsNewsArticle): EarningsNewsArticle {
+  return {
+    title: raw.title,
+    source: raw.source,
+    publishedAt: raw.published_at,
+    url: raw.url,
+  };
+}
+
+function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
+  return {
+    symbol: raw.symbol,
+    company: raw.company,
+    sector: raw.sector,
+    reportDate: raw.report_date,
+    reportTime: raw.report_time,
+    quote: raw.quote
+      ? { last: raw.quote.last, change: raw.quote.change, changePct: raw.quote.change_pct }
+      : null,
+    metrics: raw.metrics ? mapMetrics(raw.metrics) : null,
+    strikeLadder: raw.strike_ladder ? mapStrikeLadder(raw.strike_ladder) : null,
+    claudeStructured: raw.claude_structured ? mapClaudeStructured(raw.claude_structured) : null,
+    claudeFullResearch: raw.claude_full_research ? mapClaudeFullResearch(raw.claude_full_research) : null,
+    historicalEarnings: raw.historical_earnings ? mapHistoricalBlock(raw.historical_earnings) : null,
+    ivTermStructure: raw.iv_term_structure ? raw.iv_term_structure.map(mapIVTermPoint) : null,
+    skew: raw.skew ? mapSkew(raw.skew) : null,
+    news: (raw.news ?? []).map(mapNewsArticle),
+    partial: raw.partial,
+    generatedAt: raw.generated_at,
+  };
+}
+
 /**
  * Fetch the earnings-options-play calendar for the screener.
  * Backend: GET /api/v1/earnings/calendar
@@ -1802,13 +2165,21 @@ export async function getEarningsCalendar(
 ): Promise<CalendarResponse> {
   const params = new URLSearchParams();
   if (filters.window) params.set("window", filters.window);
-  if (filters.min_iv_rank !== undefined) params.set("min_iv_rank", String(filters.min_iv_rank));
-  if (filters.market_cap) params.set("market_cap", filters.market_cap);
-  if (filters.bmo_amc) params.set("bmo_amc", filters.bmo_amc);
-  if (filters.watchlist_only) params.set("watchlist_only", "true");
+  if (filters.minIvRank !== undefined) params.set("min_iv_rank", String(filters.minIvRank));
+  if (filters.marketCap) params.set("market_cap", filters.marketCap);
+  if (filters.bmoAmc) params.set("bmo_amc", filters.bmoAmc);
+  if (filters.watchlistOnly) params.set("watchlist_only", "true");
   if (filters.sort) params.set("sort", filters.sort);
   const query = params.toString();
-  return apiFetch<CalendarResponse>(`/api/v1/earnings/calendar${query ? `?${query}` : ""}`);
+  const raw = await apiFetch<RawCalendarResponse>(
+    `/api/v1/earnings/calendar${query ? `?${query}` : ""}`,
+  );
+  return {
+    earnings: (raw.earnings ?? []).map(mapCalendarRow),
+    generatedAt: raw.generated_at,
+    partial: raw.partial,
+    error: raw.error ?? null,
+  };
 }
 
 /**
@@ -1816,7 +2187,10 @@ export async function getEarningsCalendar(
  * Backend: GET /api/v1/earnings/{symbol}/detail
  */
 export async function getEarningsDetail(symbol: string): Promise<EarningsDetail> {
-  return apiFetch<EarningsDetail>(`/api/v1/earnings/${encodeURIComponent(symbol)}/detail`);
+  const raw = await apiFetch<RawEarningsDetail>(
+    `/api/v1/earnings/${encodeURIComponent(symbol)}/detail`,
+  );
+  return mapEarningsDetail(raw);
 }
 
 /**
@@ -1825,10 +2199,11 @@ export async function getEarningsDetail(symbol: string): Promise<EarningsDetail>
  * Rate-limited per user (~30/5min via backend middleware).
  */
 export async function postEarningsFullResearch(symbol: string): Promise<ClaudeFullResearch> {
-  return apiFetch<ClaudeFullResearch>(
+  const raw = await apiFetch<RawClaudeFullResearch>(
     `/api/v1/earnings/${encodeURIComponent(symbol)}/full-research`,
     { method: "POST", timeoutMs: 60_000 },
   );
+  return mapClaudeFullResearch(raw);
 }
 
 export async function getPipelinePositions(): Promise<{ positions: PipelinePosition[]; performance: PipelinePerformance }> {

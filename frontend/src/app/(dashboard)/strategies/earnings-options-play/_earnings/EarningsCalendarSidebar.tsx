@@ -68,11 +68,11 @@ export default function EarningsCalendarSidebar({
                 >
                   <span>
                     <span className="font-semibold text-[color:var(--fg-base)]">{r.symbol}</span>
-                    <span className="ml-1 text-[10px] text-[color:var(--fg-muted)]">{r.report_time}</span>
+                    <span className="ml-1 text-[10px] text-[color:var(--fg-muted)]">{r.reportTime}</span>
                   </span>
-                  {r.iv_rank != null && (
+                  {r.ivRank != null && (
                     <span className="text-[11px] tabular-nums text-[color:var(--fg-pos)]">
-                      {Math.round(r.iv_rank)}
+                      {Math.round(r.ivRank)}
                     </span>
                   )}
                 </button>
@@ -88,8 +88,8 @@ export default function EarningsCalendarSidebar({
 function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: CalendarRow[] }[] {
   const map = new Map<string, CalendarRow[]>();
   for (const r of rows) {
-    if (!map.has(r.report_date)) map.set(r.report_date, []);
-    map.get(r.report_date)!.push(r);
+    if (!map.has(r.reportDate)) map.set(r.reportDate, []);
+    map.get(r.reportDate)!.push(r);
   }
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))

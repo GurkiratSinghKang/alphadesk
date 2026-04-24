@@ -4,16 +4,16 @@ export interface DetailHeaderProps {
   symbol: string;
   company: string;
   sector: string;
-  report_date: string;
-  report_time: EarningsReportTime;
-  quote: { last: number; change: number; change_pct: number } | null;
+  reportDate: string;
+  reportTime: EarningsReportTime;
+  quote: { last: number; change: number; changePct: number } | null;
 }
 
 export default function DetailHeader({
-  symbol, company, sector, report_date, report_time, quote,
+  symbol, company, sector, reportDate, reportTime, quote,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
-  const changePct = quote?.change_pct ?? null;
+  const changePct = quote?.changePct ?? null;
   const isNeg = (change ?? 0) < 0;
 
   return (
@@ -26,7 +26,7 @@ export default function DetailHeader({
         <h2 className="t-display-section italic mt-1">
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
-        <p className="t-meta mt-1">{sector} · Reports {formatReportDate(report_date)} · {report_time}</p>
+        <p className="t-meta mt-1">{sector} · Reports {formatReportDate(reportDate)} · {reportTime}</p>
       </div>
       <div className="text-right">
         <div className="t-num-hero">

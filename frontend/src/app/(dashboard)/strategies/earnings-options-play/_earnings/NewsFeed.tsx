@@ -33,7 +33,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
               {a.title}
             </a>
             <span className="ml-2 t-mono text-[11px] u-muted">
-              — {a.source} · {relativeTime(a.published_at)}
+              — {a.source} · {relativeTime(a.publishedAt)}
             </span>
           </li>
         ))}

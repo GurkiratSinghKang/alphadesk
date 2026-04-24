@@ -6,12 +6,12 @@ import type { EarningsDetail } from "@/types";
 
 const detail: EarningsDetail = {
   symbol: "NVDA", company: "Nvidia", sector: "Semis",
-  report_date: "2026-04-23", report_time: "AMC",
-  quote: { last: 201.7, change: -1.4, change_pct: -0.007 },
-  metrics: { iv_rank: 78, iv_percentile: 82, current_iv: 0.79, hv_20: 0.42, hv_50: null, hv_100: null, hv_iv_ratio: 0.71, expected_move_pct: 0.064, expected_move_dollars: 12.8, hist_avg_abs_move_pct: 0.052, beat_rate: 0.87, days_to_earnings: 1, days_to_expiry: 3 },
-  strike_ladder: null, claude_structured: null, claude_full_research: null,
-  historical_earnings: null, iv_term_structure: null, skew: null,
-  news: [], partial: false, generated_at: new Date().toISOString(),
+  reportDate: "2026-04-23", reportTime: "AMC",
+  quote: { last: 201.7, change: -1.4, changePct: -0.007 },
+  metrics: { ivRank: 78, ivPercentile: 82, currentIv: 0.79, hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71, expectedMovePct: 0.064, expectedMoveDollars: 12.8, histAvgAbsMovePct: 0.052, beatRate: 0.87, daysToEarnings: 1, daysToExpiry: 3 },
+  strikeLadder: null, claudeStructured: null, claudeFullResearch: null,
+  historicalEarnings: null, ivTermStructure: null, skew: null,
+  news: [], partial: false, generatedAt: new Date().toISOString(),
 };
 
 describe("EarningsDetailPanel", () => {

@@ -6,15 +6,15 @@ import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
 
 const structured: ClaudeStructured = {
   verdict: "neutral-bull",
-  direction_magnitude: { bull_case_pct: 0.04, bear_case_pct: -0.05 },
+  directionMagnitude: { bullCasePct: 0.04, bearCasePct: -0.05 },
   thesis: "IV rank is elevated but historical moves average ±5.2% — IV is over-pricing.",
   catalysts: ["Blackwell ramp", "data-center guide"],
   risks: ["CN export pivot", "guide miss"],
-  suggested_play: "short strangle",
-  suggested_play_reason: "IVR > 75 favors premium selling",
+  suggestedPlay: "short strangle",
+  suggestedPlayReason: "IVR > 75 favors premium selling",
   confidence: 0.62,
   model: "claude-opus-4-7",
-  generated_at: new Date().toISOString(),
+  generatedAt: new Date().toISOString(),
 };
 
 describe("ClaudeThesisCard", () => {
@@ -49,17 +49,17 @@ describe("ClaudeThesisCard", () => {
 
   it("renders full-research sections when available", () => {
     const full: ClaudeFullResearch = {
-      thesis_paragraph: "Full paragraph content.",
-      comparable_setups: [
-        { report_date: "2025-02-21", iv_rank: 76, setup: "short strangle", outcome: "+$120", similarity_score: 0.89 },
+      thesisParagraph: "Full paragraph content.",
+      comparableSetups: [
+        { reportDate: "2025-02-21", ivRank: 76, setup: "short strangle", outcome: "+$120", similarityScore: 0.89 },
       ],
-      post_earnings_drift_playbook: "Drift expectations…",
-      sector_backdrop: "Semis weak…",
-      analyst_consensus_delta: "PT hikes…",
-      what_would_change_my_mind: "A guide miss…",
+      postEarningsDriftPlaybook: "Drift expectations…",
+      sectorBackdrop: "Semis weak…",
+      analystConsensusDelta: "PT hikes…",
+      whatWouldChangeMyMind: "A guide miss…",
       confidence: 0.68,
       model: "claude-opus-4-7",
-      generated_at: new Date().toISOString(),
+      generatedAt: new Date().toISOString(),
     };
     const { container } = render(
       <ClaudeThesisCard structured={structured} full={full} running={false} onRunFull={() => {}} />,
