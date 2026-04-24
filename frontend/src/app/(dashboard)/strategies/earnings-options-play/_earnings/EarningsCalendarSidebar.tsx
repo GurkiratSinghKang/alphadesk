@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { RefObject } from "react";
-import type { CalendarRow } from "@/types";
+import type { CalendarRow, EarningsCalendarFilters } from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
 
@@ -16,6 +16,9 @@ export interface EarningsCalendarSidebarProps {
   // row's button so focus can be programmatically restored after a
   // filter-triggered refetch.
   firstRowRef?: RefObject<HTMLButtonElement | null>;
+  // B-107: pass the active filter set so the empty-state can name the
+  // restricting filter (e.g. "… with IV rank ≥ 80").
+  filters?: EarningsCalendarFilters;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -29,7 +32,7 @@ function buildSymbolDeeplink(sym: string): string {
 }
 
 export default function EarningsCalendarSidebar({
-  rows, loading, error, selected, onSelect, firstRowRef,
+  rows, loading, error, selected, onSelect, firstRowRef, filters,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -53,9 +56,26 @@ export default function EarningsCalendarSidebar({
   }
 
   if (!loading && rows.length === 0) {
+    // B-107: name the restricting filter + offer a one-click reset via
+    // a custom event the parent listens for.
+    const emptyMessage = buildEmptyStateMessage(filters);
     return (
       <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">No earnings match — loosen filters.</p>
+        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">
+          {emptyMessage}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("alphadesk:earnings-reset-filters"));
+              }
+            }}
+            className="underline decoration-dotted text-[color:var(--fg-accent)] hover:text-[color:var(--fg-base)]"
+            data-slot="reset-filters-link"
+          >
+            Loosen a filter
+          </button>.
+        </p>
       </aside>
     );
   }
@@ -149,4 +169,27 @@ function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: 
 function formatDateLabel(iso: string): string {
   // Locale-aware — e.g. en-US "Fri 04/24", de-DE "Fr., 24.04." — via Intl.
   return fmtDate(iso, { weekday: "short", month: "2-digit", day: "2-digit" });
+}
+
+// B-107: compose a human sentence that names the currently-restricting
+// filters so the user knows which knob to loosen. Falls back to a
+// generic message when `filters` wasn't passed.
+function buildEmptyStateMessage(filters: EarningsCalendarFilters | undefined): string {
+  if (!filters) return "No earnings match —";
+  const windowKey = filters.window ?? "both";
+  const windowLabel =
+    windowKey === "current" ? "the current week"
+    : windowKey === "next"  ? "the next week"
+    : "the current/next week";
+  const parts: string[] = [`No earnings in ${windowLabel}`];
+  if (filters.min_iv_rank != null && filters.min_iv_rank > 0) {
+    parts.push(`with IV rank \u2265 ${filters.min_iv_rank}`);
+  }
+  if (filters.bmo_amc && filters.bmo_amc !== "both") {
+    parts.push(`reporting ${filters.bmo_amc.toUpperCase()}`);
+  }
+  if (filters.watchlist_only) {
+    parts.push("on your watchlist");
+  }
+  return `${parts.join(" ")} \u00b7`;
 }
