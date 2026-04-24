@@ -298,6 +298,45 @@ async def test_get_detail_merges_all_blocks():
 
 
 @pytest.mark.asyncio
+async def test_load_strike_ladder_handles_empty_expirations():
+    """B-42 regression: a non-optionable symbol can return a chain whose
+    `expirations` list is empty. Previously `chain.expirations[0]` would
+    IndexError; the guard must fall back to the passed-in expiry kwarg or
+    today's date."""
+    from services import earnings_screener as svc
+
+    class _Contract:
+        strike = 100.0
+        bid = 1.0
+        ask = 1.2
+        last = 1.1
+        iv = 0.3
+        delta = 0.5
+        theta = -0.1
+        gamma = 0.01
+        vega = 0.2
+        open_interest = 10
+        volume = 5
+        option_type = "call"
+
+    class _FakeChain:
+        spot_price = 100.0
+        expirations: list = []
+        contracts: list = []
+
+    async def fake_chain(symbol, expiry=None):
+        return _FakeChain()
+
+    with patch("api.routes.options.get_options_chain", fake_chain):
+        result = await svc._load_strike_ladder("NOOPT", expiry=None)
+
+    # No rows since no contracts, but expiry must not raise — should be today.
+    assert result is not None
+    assert result["expiry"] == date.today()
+    assert result["rows"] == []
+
+
+@pytest.mark.asyncio
 async def test_fmp_upcoming_accepts_share_class_tickers():
     """B-44 regression: symbols like BRK.B / BRK.A / RDS.A must survive the
     pre-filter. Previously the filter used `not isalpha()` which rejects
