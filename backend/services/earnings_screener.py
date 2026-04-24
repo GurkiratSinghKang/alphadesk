@@ -210,7 +210,19 @@ async def _fmp_upcoming(window: str) -> list[dict]:
                 ),
                 "report_time": _REPORT_TIME_MAP.get(report_time_raw, "DMT"),
             })
-        return out
+        # B-45: FMP occasionally returns duplicate rows for the same
+        # (symbol, report_date) — once as the preliminary listing and
+        # again after an update. Dedup preserving first-seen order so
+        # downstream hydration doesn't do redundant Alpaca calls.
+        seen: set[tuple[str, str]] = set()
+        deduped: list[dict] = []
+        for r in out:
+            k = (r["symbol"], r["report_date"])
+            if k in seen:
+                continue
+            seen.add(k)
+            deduped.append(r)
+        return deduped
 
     try:
         return await asyncio.to_thread(_load)

@@ -371,6 +371,43 @@ async def test_load_strike_ladder_handles_empty_expirations():
 
 
 @pytest.mark.asyncio
+async def test_fmp_upcoming_dedups_symbol_and_date():
+    """B-45 regression: FMP's calendar occasionally returns the same
+    (symbol, report_date) twice (prelim + updated). `_fmp_upcoming` must
+    dedup so downstream hydration doesn't do redundant Alpaca calls."""
+    import pandas as pd
+
+    from services import earnings_screener as svc
+
+    df = pd.DataFrame([
+        {"symbol": "NVDA", "date": date(2026, 4, 30),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "amc"},
+        {"symbol": "NVDA", "date": date(2026, 4, 30),  # duplicate
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "amc"},
+        {"symbol": "TSLA", "date": date(2026, 4, 30),
+         "eps_actual": None, "eps_estimated": 1.0, "revenue_actual": None,
+         "revenue_estimated": 100.0, "last_updated": None, "announcement_when": "bmo"},
+    ])
+
+    class _FakeProvider:
+        def __enter__(self):
+            return self
+        def __exit__(self, *exc):
+            return None
+        def calendar(self, start, end):
+            return df
+
+    with patch("data.providers.fmp_earnings.FMPEarningsProvider", _FakeProvider):
+        rows = await svc._fmp_upcoming("both")
+
+    pairs = [(r["symbol"], r["report_date"]) for r in rows]
+    assert pairs.count(("NVDA", "2026-04-30")) == 1
+    assert pairs.count(("TSLA", "2026-04-30")) == 1
+
+
+@pytest.mark.asyncio
 async def test_fmp_upcoming_accepts_share_class_tickers():
     """B-44 regression: symbols like BRK.B / BRK.A / RDS.A must survive the
     pre-filter. Previously the filter used `not isalpha()` which rejects
