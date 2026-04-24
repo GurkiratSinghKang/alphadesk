@@ -149,6 +149,20 @@ export default function EarningsDetailPanel({
       )}
 
       <TradeButtonRow symbol={detail.symbol} ladder={detail.strike_ladder} />
+
+      <p
+        data-slot="data-disclaimer"
+        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-[10.5px] u-muted"
+      >
+        Data from FMP + Alpaca. IV rank may be delayed.{" "}
+        <a
+          href="/help/earnings-data"
+          className="underline decoration-dotted hover:u-brand"
+        >
+          Learn more
+        </a>
+        .
+      </p>
     </section>
   );
 }
