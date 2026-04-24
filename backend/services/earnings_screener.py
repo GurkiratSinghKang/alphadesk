@@ -570,7 +570,14 @@ async def list_upcoming(
     watchlist_only: bool = False,
     sort: str = "date",
 ) -> CalendarResponse:
-    """Fan out over FMP + per-symbol hydrators, return one calendar response."""
+    """Fan out over FMP + per-symbol hydrators, return one calendar response.
+
+    ``market_cap`` is currently a no-op — the curated universe
+    (mega + deeply-liquid large caps only) is always applied. The
+    parameter is retained on the signature for API back-compat and as
+    a hook for reintroducing real tier-based filtering (mega / large /
+    mid / small) once ticker-level market-cap data is wired in.
+    """
     partial = False
     try:
         raw_rows = await _fmp_upcoming(window)

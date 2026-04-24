@@ -7,7 +7,7 @@ tests can swap in fakes easily.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Protocol
 
 import pandas as pd
@@ -71,13 +71,12 @@ class _AlpacaBarAdapter:
     frame, so we convert here.
     """
 
-    def __init__(self, inner: "AlpacaBarProvider"):  # type: ignore[name-defined]  # noqa: F821
+    def __init__(self, inner: "AlpacaBarProvider"):
         self._inner = inner
 
     def fetch_window(
         self, symbols: list[str], asof: date, lookback_days: int
     ) -> pd.DataFrame:
-        from datetime import timedelta
         start = asof - timedelta(days=lookback_days)
         frame = self._inner.bars(symbols, start, asof, tf="1D")
         if frame is None or getattr(frame, "empty", True):
@@ -105,18 +104,15 @@ class _FMPEarningsAdapter:
     """Bridge ``FMPEarningsProvider.calendar(start, end, symbols)`` to the
     ``fetch_window`` protocol."""
 
-    def __init__(self, inner: "FMPEarningsProvider"):  # type: ignore[name-defined]  # noqa: F821
+    def __init__(self, inner: "FMPEarningsProvider"):
         self._inner = inner
 
     def fetch_window(
         self, symbols: list[str], asof: date, lookback_days: int
     ) -> pd.DataFrame:
-        from datetime import timedelta
-        # For earnings, we typically want both backward (history for SUE
-        # computation) AND forward (upcoming events within dte_target).
-        # Caller's lookback_days covers the backward window; extend forward
-        # by a conservative 60 days so strategies that check upcoming
-        # events see them.
+        # Caller's lookback_days covers the backward window (history for
+        # SUE computation); we extend forward by a conservative 60 days so
+        # strategies that check upcoming events within dte_target see them.
         start = asof - timedelta(days=lookback_days)
         end = asof + timedelta(days=60)
         try:
