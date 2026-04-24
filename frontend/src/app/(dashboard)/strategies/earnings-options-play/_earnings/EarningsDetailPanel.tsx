@@ -33,14 +33,18 @@ export default function EarningsDetailPanel({
   if (error) {
     return (
       <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
-        <p className="font-mono text-[13px] text-[color:var(--fg-neg)]">Error · {error}</p>
+        <div role="alert">
+          <p className="font-mono text-[13px] text-[color:var(--fg-neg)]">Error · {error}</p>
+        </div>
       </section>
     );
   }
   if (loading && !detail) {
     return (
       <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading detail…</p>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading detail…</p>
+        </div>
       </section>
     );
   }
