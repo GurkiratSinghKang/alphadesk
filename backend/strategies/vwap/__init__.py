@@ -1,10 +1,10 @@
 """vwap strategy package.
 
 Importing this module fires the ``@register_strategy`` decorator on
-:class:`VWAPSessionStrategy`, registering it under ``"vwap"`` in the strategy
-registry.
+:class:`VWAPStrategy`, registering it under ``"vwap"`` in the
+``strategies._core.protocol`` registry.
 """
 
-from .strategy import VWAPSessionStrategy
+from .strategy import VWAPStrategy
 
-__all__ = ["VWAPSessionStrategy"]
+__all__ = ["VWAPStrategy"]
