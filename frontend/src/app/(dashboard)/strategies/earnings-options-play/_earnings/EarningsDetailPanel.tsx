@@ -53,8 +53,13 @@ export default function EarningsDetailPanel({
   }
 
   return (
+    /* B-90 — aria-labelledby points at DetailHeader's <h2
+       id="detail-header-title">. Only set here in the success branch,
+       since the empty/loading/error branches don't render DetailHeader
+       and the id would dangle. */
     <section
       data-slot="earnings-detail-panel"
+      aria-labelledby="detail-header-title"
       className="rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4"
     >
       <DetailHeader

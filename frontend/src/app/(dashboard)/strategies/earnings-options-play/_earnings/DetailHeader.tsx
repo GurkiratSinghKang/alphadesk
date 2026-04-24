@@ -23,7 +23,10 @@ export default function DetailHeader({
     >
       <div>
         <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
-        <h2 className="t-display-section italic mt-1">
+        {/* B-90 — id referenced by the parent <section
+            aria-labelledby="detail-header-title"> so SR users get a proper
+            accessible name for the detail region. */}
+        <h2 id="detail-header-title" className="t-display-section italic mt-1">
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
         <p className="t-meta mt-1">{sector} · Reports {formatReportDate(report_date)} · {report_time}</p>
