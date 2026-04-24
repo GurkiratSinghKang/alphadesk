@@ -59,9 +59,12 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull 
         &nbsp;/&nbsp;
         {(structured.direction_magnitude.bear_case_pct * 100).toFixed(1)}%
       </p>
-      <p className="mt-2 t-mono text-[13px] leading-relaxed">
+      <div
+        data-slot="claude-thesis-text"
+        className="mt-2 whitespace-pre-wrap font-sans text-[13px] leading-relaxed"
+      >
         {structured.thesis}
-      </p>
+      </div>
       {structured.catalysts.length > 0 && (
         <p className="mt-2 t-mono text-[11.5px] u-muted">
           <span className="u-profit">Catalysts:</span> {structured.catalysts.join(" · ")}
