@@ -181,10 +181,14 @@ export default function EarningsOptionsPlayPage() {
     </span>
   );
 
+  // B-102: title reflects the active window filter so the header updates
+  // as users toggle between current / next / both.
+  const title = titleForWindow(filters.window);
+
   return (
     <DashboardPageLayout
       eyebrow="§ EARNINGS · OPTIONS PLAY"
-      title="This week · next week"
+      title={title}
       actions={actions}
     >
       <FiltersBar filters={filters} onChange={setFilters} />
@@ -207,6 +211,20 @@ export default function EarningsOptionsPlayPage() {
       </div>
     </DashboardPageLayout>
   );
+}
+
+// ─── Presentation helpers ────────────────────────────────────
+
+function titleForWindow(win: EarningsCalendarFilters["window"]): string {
+  switch (win) {
+    case "current":
+      return "This week's earnings";
+    case "next":
+      return "Next week's earnings";
+    case "both":
+    default:
+      return "This + next week's earnings";
+  }
 }
 
 // ─── URL sync helpers ────────────────────────────────────────

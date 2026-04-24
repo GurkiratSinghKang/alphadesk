@@ -68,6 +68,55 @@ describe("Earnings Options Play page", () => {
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
 
+  it("title reflects active window filter (B-102)", async () => {
+    const original = window.location;
+    // Start with window=current
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=current", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/this week/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("title shows 'Next week' for window=next (B-102)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=next", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/next week/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("title shows 'This + next week' for window=both (B-102)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=both", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/this \+ next/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
   it("re-reads URL state on popstate (B-98)", async () => {
     const original = window.location;
     Object.defineProperty(window, "location", {
