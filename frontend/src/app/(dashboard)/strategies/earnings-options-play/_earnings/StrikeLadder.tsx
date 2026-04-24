@@ -1,4 +1,5 @@
 import type { StrikeLadder as LadderShape, LadderRow } from "@/types";
+import { fmtCurrency, fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface StrikeLadderProps {
   ladder: LadderShape | null;
@@ -20,7 +21,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
       <h3 className="t-display-section italic text-[13px] mt-4">
         Strike ladder{" "}
         <span className="t-label">
-          · expiry {ladder.expiry} · underlying {ladder.underlying_price.toFixed(2)}
+          · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlying_price, "USD")}
         </span>
       </h3>
       <div className="mt-1">
@@ -43,15 +44,20 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
 
 function LadderDataRow({ row }: { row: LadderRow }) {
   const sideLabel = `${row.side} ${row.bucket}`;
-  const yieldStr = `${(row.yield_pct * 100).toFixed(1)}%`;
   return (
     <div className="t-ladder-row t-ladder-row--data">
-      <span>{row.strike.toFixed(0)}</span>
-      <span>{row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)}</span>
-      <span>{row.mid.toFixed(2)}</span>
-      <span>{(row.iv * 100).toFixed(0)}%</span>
-      <span className="u-profit">{yieldStr}</span>
-      <span>{(row.pop * 100).toFixed(0)}%</span>
+      <span>{fmtNumber(row.strike, { maximumFractionDigits: 0 })}</span>
+      <span>
+        {fmtNumber(row.delta, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+          signDisplay: "always",
+        })}
+      </span>
+      <span>{fmtCurrency(row.mid, "USD")}</span>
+      <span>{fmtPct(row.iv, 0)}</span>
+      <span className="u-profit">{fmtPct(row.yield_pct, 1)}</span>
+      <span>{fmtPct(row.pop, 0)}</span>
       <span className="text-right u-dim">{sideLabel}</span>
     </div>
   );

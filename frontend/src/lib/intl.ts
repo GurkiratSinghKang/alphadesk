@@ -78,13 +78,20 @@ export function fmtNumber(n: number, opts?: Intl.NumberFormatOptions): string {
 /**
  * Locale-aware percentage. Accepts a ratio (0.055 → "5.50%" in en-US,
  * "5,50 %" in de-DE). `digits` controls both min and max fraction digits
- * so output length stays stable.
+ * so output length stays stable. `opts` forwards any additional
+ * `Intl.NumberFormat` options — most commonly `signDisplay: "always"`
+ * for symmetric +/- pairs like bull/bear case estimates.
  */
-export function fmtPct(n: number, digits = 2): string {
+export function fmtPct(
+  n: number,
+  digits = 2,
+  opts?: Intl.NumberFormatOptions,
+): string {
   return new Intl.NumberFormat(getUserLocale(), {
     style: "percent",
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
+    ...opts,
   }).format(n);
 }
 

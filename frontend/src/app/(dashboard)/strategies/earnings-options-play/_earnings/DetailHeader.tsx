@@ -1,5 +1,5 @@
 import type { EarningsReportTime } from "@/types";
-import { fmtDate } from "@/lib/intl";
+import { fmtCurrency, fmtDate, fmtPct } from "@/lib/intl";
 
 export interface DetailHeaderProps {
   symbol: string;
@@ -31,10 +31,12 @@ export default function DetailHeader({
       </div>
       <div className="text-right">
         <div className="t-num-hero">
-          {quote ? quote.last.toFixed(2) : "—"}
+          {quote ? fmtCurrency(quote.last, "USD") : "—"}
         </div>
         <div className={"t-mono text-[13px] " + (isNeg ? "u-loss" : "u-profit")}>
-          {change == null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(2)} · ${((changePct ?? 0) * 100).toFixed(2)}%`}
+          {change == null
+            ? "—"
+            : `${fmtCurrency(change, "USD", { signDisplay: "always" })} · ${fmtPct(changePct ?? 0, 2)}`}
         </div>
       </div>
     </header>

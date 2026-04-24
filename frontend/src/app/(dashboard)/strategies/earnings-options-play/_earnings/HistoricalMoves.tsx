@@ -1,5 +1,5 @@
 import type { HistoricalBlock } from "@/types";
-import { fmtDate } from "@/lib/intl";
+import { fmtDate, fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface HistoricalMovesProps {
   historical: HistoricalBlock | null;
@@ -34,7 +34,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
                 key={q.report_date}
                 data-slot="hist-bar"
                 data-sign={sign}
-                title={`${fmtDate(q.report_date, { year: "numeric", month: "short", day: "numeric" })}: ${(pct * 100).toFixed(1)}%`}
+                title={`${fmtDate(q.report_date, { year: "numeric", month: "short", day: "numeric" })}: ${fmtPct(pct, 1)}`}
                 className={"w-4 rounded-sm " + (sign === "pos" ? "bg-[color:var(--profit)]" : "bg-[color:var(--loss)]")}
                 style={{ height: `${h}px`, opacity: 0.7 }}
               />
@@ -43,17 +43,17 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 t-mono text-[11.5px]">
           <dt className="t-label u-muted">AVG |MV|</dt>
-          <dd className="u-brand">±{(historical.stats.avg_abs_move_pct * 100).toFixed(1)}%</dd>
+          <dd className="u-brand">±{fmtPct(Math.abs(historical.stats.avg_abs_move_pct), 1)}</dd>
           <dt className="t-label u-muted">W / L</dt>
           <dd className="u-profit">{historical.stats.wins}W / {historical.stats.losses}L</dd>
           <dt className="t-label u-muted">BEAT RATE</dt>
-          <dd>{(historical.stats.surprise_beat_rate * 100).toFixed(0)}%</dd>
+          <dd>{fmtPct(historical.stats.surprise_beat_rate, 0)}</dd>
           {historical.stats.iv_vs_hist_vol_points != null && (
             <>
               <dt className="t-label u-muted">IV vs HV</dt>
               <dd className="u-muted">
                 {historical.stats.iv_vs_hist_vol_points > 0 ? "over" : "under"}-pricing{" "}
-                {Math.abs(historical.stats.iv_vs_hist_vol_points).toFixed(1)} vol pts
+                {fmtNumber(Math.abs(historical.stats.iv_vs_hist_vol_points), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} vol pts
               </dd>
             </>
           )}
