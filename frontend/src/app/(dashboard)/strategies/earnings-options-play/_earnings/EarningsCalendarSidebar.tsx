@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { CalendarRow } from "@/types";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/intl";
 
 export interface EarningsCalendarSidebarProps {
   rows: CalendarRow[];
@@ -97,8 +98,6 @@ function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: 
 }
 
 function formatDateLabel(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
-  const day = d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
-  const mmdd = iso.slice(5); // MM-DD
-  return `${day} ${mmdd}`;
+  // Locale-aware — e.g. en-US "Fri 04/24", de-DE "Fr., 24.04." — via Intl.
+  return fmtDate(iso, { weekday: "short", month: "2-digit", day: "2-digit" });
 }

@@ -1,4 +1,5 @@
 import type { EarningsReportTime } from "@/types";
+import { fmtDate } from "@/lib/intl";
 
 export interface DetailHeaderProps {
   symbol: string;
@@ -41,6 +42,6 @@ export default function DetailHeader({
 }
 
 function formatReportDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  // Locale-aware via Intl — formats in the viewer's timezone and locale.
+  return fmtDate(iso, { weekday: "short", month: "short", day: "numeric" });
 }

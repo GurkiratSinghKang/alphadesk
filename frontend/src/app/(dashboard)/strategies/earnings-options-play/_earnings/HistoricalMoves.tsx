@@ -1,4 +1,5 @@
 import type { HistoricalBlock } from "@/types";
+import { fmtDate } from "@/lib/intl";
 
 export interface HistoricalMovesProps {
   historical: HistoricalBlock | null;
@@ -33,7 +34,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
                 key={q.report_date}
                 data-slot="hist-bar"
                 data-sign={sign}
-                title={`${q.report_date}: ${(pct * 100).toFixed(1)}%`}
+                title={`${fmtDate(q.report_date, { year: "numeric", month: "short", day: "numeric" })}: ${(pct * 100).toFixed(1)}%`}
                 className={"w-4 rounded-sm " + (sign === "pos" ? "bg-[color:var(--profit)]" : "bg-[color:var(--loss)]")}
                 style={{ height: `${h}px`, opacity: 0.7 }}
               />

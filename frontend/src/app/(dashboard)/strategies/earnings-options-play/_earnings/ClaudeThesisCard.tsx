@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
+import { fmtDate } from "@/lib/intl";
 
 export interface ClaudeThesisCardProps {
   structured: ClaudeStructured | null;
@@ -89,7 +90,7 @@ function FullResearchBlock({ full }: { full: ClaudeFullResearch }) {
           <ul className="mt-1 space-y-1 t-mono text-[11.5px]">
             {full.comparable_setups.map((c, i) => (
               <li key={i} className="u-muted">
-                <span className="">{c.report_date}</span> · IVR {c.iv_rank.toFixed(0)} · {c.setup} →{" "}
+                <span className="">{fmtDate(c.report_date, { year: "numeric", month: "short", day: "numeric" })}</span> · IVR {c.iv_rank.toFixed(0)} · {c.setup} →{" "}
                 <span className="u-brand">{c.outcome}</span>
               </li>
             ))}

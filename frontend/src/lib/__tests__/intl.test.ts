@@ -169,6 +169,19 @@ describe("intl — fmtDate honors timezone across midnight", () => {
     expect(out).toContain("24");
     expect(out).toContain("04");
   });
+
+  it("bare YYYY-MM-DD stays on the same calendar day regardless of viewer timezone", () => {
+    // Pure dates (earnings report_date etc.) are business days, not a
+    // wall-clock time. They should not shift to the previous day for a
+    // US/Pacific viewer or to the next day for a Tokyo viewer.
+    stubLocale("en-US", "America/Los_Angeles");
+    const la = fmtDate("2026-04-23", { year: "numeric", month: "2-digit", day: "2-digit" });
+    expect(la).toContain("23");
+
+    stubLocale("en-US", "Asia/Tokyo");
+    const tk = fmtDate("2026-04-23", { year: "numeric", month: "2-digit", day: "2-digit" });
+    expect(tk).toContain("23");
+  });
 });
 
 describe("intl — fmtDateTime", () => {

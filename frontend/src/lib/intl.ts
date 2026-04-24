@@ -32,17 +32,23 @@ export function getUserTimezone(): string {
 }
 
 /**
- * Format an ISO date string (either "YYYY-MM-DD" or full ISO datetime)
- * per the user's locale + timezone. Bare dates ("YYYY-MM-DD") are
- * anchored to UTC midnight so the label doesn't shift by one day for
- * users east/west of UTC before the final locale conversion.
+ * Format an ISO date string per the user's locale.
+ *
+ * Bare calendar dates ("YYYY-MM-DD") are *stable business days* — an
+ * earnings report date of "2026-04-23" means April 23rd no matter where
+ * the viewer lives, so we format those in UTC with the same UTC anchor,
+ * avoiding a west-of-UTC shift to the 22nd. Full ISO datetimes are a
+ * point in time and get converted to the viewer's zone so "reports at
+ * 4:30 pm ET" displays correctly for someone in Tokyo.
  */
 export function fmtDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
-  const d = new Date(iso.length === 10 ? iso + "T00:00:00Z" : iso);
+  const isBareDate = iso.length === 10;
+  const d = new Date(isBareDate ? iso + "T00:00:00Z" : iso);
+  const timeZone = isBareDate ? "UTC" : getUserTimezone();
   return new Intl.DateTimeFormat(getUserLocale(), {
     month: "short",
     day: "numeric",
-    timeZone: getUserTimezone(),
+    timeZone,
     ...opts,
   }).format(d);
 }

@@ -17,8 +17,11 @@ describe("EarningsCalendarSidebar", () => {
     );
     const groups = container.querySelectorAll('[data-slot="day-group"]');
     expect(groups.length).toBeGreaterThanOrEqual(2);
-    expect(container.textContent).toMatch(/04-23|Apr 23/i);
-    expect(container.textContent).toMatch(/04-24|Apr 24/i);
+    // Label format migrated to locale-aware Intl (fmtDate):
+    // en-US → "Thu, 04/23". Accept 04-23/04/23/Apr 23 so the test doesn't
+    // pin to one separator style.
+    expect(container.textContent).toMatch(/04.23|Apr 23/i);
+    expect(container.textContent).toMatch(/04.24|Apr 24/i);
   });
 
   it("calls onSelect when a symbol row is clicked", () => {
