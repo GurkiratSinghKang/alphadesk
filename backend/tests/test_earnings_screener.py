@@ -417,83 +417,15 @@ async def test_list_upcoming_filters_stale_earnings():
     assert "NVDA" not in symbols  # past date — stale, filtered
 
 
-@pytest.mark.asyncio
-async def test_stub_request_uses_provided_client_host():
-    """B-33 regression: the _StubRequest used inside _load_quote must carry
-    the caller's real IP when supplied, so the per-IP rate limiter in
-    /quotes/{symbol} counts against the user (not loopback)."""
-    from services import earnings_screener as svc
-
-    captured = {}
-
-    class _Q:
-        last = 100.0
-        change = 1.0
-        changePct = 0.5
-
-    async def fake_get_quote(symbol, request, response):
-        captured["host"] = request.client.host
-        return _Q()
-
-    with patch("api.routes.market.get_quote", fake_get_quote):
-        out = await svc._load_quote("NVDA", client_host="203.0.113.7")
-
-    assert out == {"last": 100.0, "change": 1.0, "change_pct": 0.5}
-    assert captured["host"] == "203.0.113.7"
-
-
-@pytest.mark.asyncio
-async def test_stub_request_default_is_loopback():
-    """B-33: when no client_host is supplied, fall back to 127.0.0.1
-    (preserves prior behavior for tests / internal jobs)."""
-    from services import earnings_screener as svc
-
-    captured = {}
-
-    class _Q:
-        last = 100.0
-        change = 1.0
-        changePct = 0.5
-
-    async def fake_get_quote(symbol, request, response):
-        captured["host"] = request.client.host
-        return _Q()
-
-    with patch("api.routes.market.get_quote", fake_get_quote):
-        await svc._load_quote("NVDA")
-
-    assert captured["host"] == "127.0.0.1"
-
-
-@pytest.mark.asyncio
-async def test_list_upcoming_threads_client_host_to_load_quote():
-    """B-33 end-to-end: the client_host arg on list_upcoming reaches
-    _load_quote through the safe_hydrate -> _hydrate_row chain."""
-    from services import earnings_screener as svc
-
-    future = (date.today() + timedelta(days=3)).isoformat()
-    fake_earnings = [
-        {"symbol": "NVDA", "company": "x", "sector": "x",
-         "report_date": future, "report_time": "AMC"},
-    ]
-    captured: list[str | None] = []
-
-    async def spy_load_quote(symbol, client_host=None):
-        captured.append(client_host)
-        return {"last": 100.0, "change": 0.0, "change_pct": 0.0}
-
-    async def spy_load_metrics(symbol, report_date=None, expiry=None, client_host=None):
-        return {"iv_rank": 70, "expected_move_pct": 0.05}
-
-    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
-         patch.object(svc, "_load_quote", spy_load_quote), \
-         patch.object(svc, "_load_metrics", spy_load_metrics):
-        resp = await svc.list_upcoming(
-            window="both", min_iv_rank=0, client_host="198.51.100.42",
-        )
-
-    assert resp.earnings[0].symbol == "NVDA"
-    assert captured == ["198.51.100.42"]
+# B-62: the _StubRequest pattern that B-33 stitched together is gone —
+# `services.earnings_screener._load_quote` now calls
+# `services.market.fetch_quote` directly, no FastAPI request faking. Per-IP
+# rate-limit accounting moved into the route layer where it belongs (see
+# `core.http.client_ip` consumers in `api.routes.market`). The three
+# tests previously here (test_stub_request_uses_provided_client_host,
+# test_stub_request_default_is_loopback,
+# test_list_upcoming_threads_client_host_to_load_quote) were pinning the
+# old pattern and were deleted with the stubs.
 
 
 @pytest.mark.asyncio
@@ -568,7 +500,9 @@ async def test_load_strike_ladder_handles_empty_expirations():
     async def fake_chain(symbol, expiry=None):
         return _FakeChain()
 
-    with patch("api.routes.options.get_options_chain", fake_chain):
+    # B-62: services.earnings_screener now calls services.options.fetch_chain
+    # directly (no route-handler stub). Patch target moves accordingly.
+    with patch("services.options.fetch_chain", fake_chain):
         result = await svc._load_strike_ladder("NOOPT", expiry=None)
 
     # No rows since no contracts, but expiry must not raise — should be today.
