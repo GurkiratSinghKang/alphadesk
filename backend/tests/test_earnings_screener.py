@@ -298,6 +298,37 @@ async def test_get_detail_merges_all_blocks():
 
 
 @pytest.mark.asyncio
+async def test_get_detail_news_failure_marks_partial():
+    """B-34 regression: when the news gather task raises, `partial` must be
+    True. Previously `news_t` was missing from the partial-flag computation
+    so a Newsdata outage would silently succeed the response."""
+    from services import earnings_screener as svc
+
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_historical", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_news", AsyncMock(side_effect=RuntimeError("newsdata 503"))), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Nvidia", "sector": "Semis",
+                 "report_date": "2026-04-23", "report_time": "AMC",
+             }),
+         ):
+        detail = await svc.get_detail("NVDA")
+
+    assert detail.partial is True
+    assert detail.news == []
+
+
+@pytest.mark.asyncio
 async def test_run_full_research_calls_opus_and_caches():
     """run_full_research builds the richer prompt, calls Claude Opus, parses
     response, and caches 24h. Also verifies the parsed shape is a valid

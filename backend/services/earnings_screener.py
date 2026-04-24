@@ -688,7 +688,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     # (upstream intentionally absent) are NOT partial — only exceptions are.
     partial = any(
         isinstance(x, Exception)
-        for x in [quote_t, metrics_t, ladder_t, iv_term_t, skew_t, hist_t]
+        for x in [quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t, hist_t]
     )
 
     quote = quote_t if isinstance(quote_t, dict) else None
