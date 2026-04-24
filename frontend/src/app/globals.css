@@ -322,6 +322,19 @@ header {
     white-space: nowrap;
     border-width: 0;
   }
+
+  /* B-92 — Colorblind-safe glyph affordances (DEFERRED).
+     Tritanopia users cannot reliably distinguish gold (--brand) from
+     chartreuse (--profit). To fix without touching every business-logic
+     call-site, we ship the CSS rules here gated behind a body class
+     (`.ft-colorblind-safe`). A future preference toggle can flip that
+     class to add ↑/↓/◇ glyphs next to every colored utility usage in one
+     stroke. Do NOT add a UI toggle in this bug — scope deferred. When
+     ready, wire a checkbox in Settings › Accessibility to toggle
+     document.body.classList on `ft-colorblind-safe`. */
+  body.ft-colorblind-safe .u-profit::before { content: "↑ "; }
+  body.ft-colorblind-safe .u-loss::before   { content: "↓ "; }
+  body.ft-colorblind-safe .u-brand::before  { content: "◇ "; }
 }
 
 /* ─── Animations (kept from prior globals, retuned to new tokens) ── */
