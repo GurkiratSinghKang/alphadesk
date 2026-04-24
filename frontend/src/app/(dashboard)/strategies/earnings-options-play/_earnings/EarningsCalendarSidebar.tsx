@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import type { CalendarRow } from "@/types";
+import type { RefObject } from "react";
+import type { CalendarRow, EarningsCalendarFilters } from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
 
@@ -11,6 +12,13 @@ export interface EarningsCalendarSidebarProps {
   error: string | null;
   selected: string | null;
   onSelect: (symbol: string) => void;
+  // B-56: parent can pass a ref that the sidebar will attach to the first
+  // row's button so focus can be programmatically restored after a
+  // filter-triggered refetch.
+  firstRowRef?: RefObject<HTMLButtonElement | null>;
+  // B-107: pass the active filter set so the empty-state can name the
+  // restricting filter (e.g. "… with IV rank ≥ 80").
+  filters?: EarningsCalendarFilters;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -24,9 +32,12 @@ function buildSymbolDeeplink(sym: string): string {
 }
 
 export default function EarningsCalendarSidebar({
-  rows, loading, error, selected, onSelect,
+  rows, loading, error, selected, onSelect, firstRowRef, filters,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
+  // B-56: first row across all day groups gets the shared ref so the
+  // parent page can restore focus after a filter refetch.
+  const firstSymbol = grouped[0]?.rows[0]?.symbol ?? null;
 
   if (error) {
     return (
@@ -45,19 +56,45 @@ export default function EarningsCalendarSidebar({
   }
 
   if (!loading && rows.length === 0) {
+    // B-107: name the restricting filter + offer a one-click reset via
+    // a custom event the parent listens for.
+    const emptyMessage = buildEmptyStateMessage(filters);
     return (
       <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">No earnings match — loosen filters.</p>
+        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">
+          {emptyMessage}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("alphadesk:earnings-reset-filters"));
+              }
+            }}
+            className="underline decoration-dotted text-[color:var(--fg-accent)] hover:text-[color:var(--fg-base)]"
+            data-slot="reset-filters-link"
+          >
+            Loosen a filter
+          </button>.
+        </p>
       </aside>
     );
   }
+
+  // B-108: summary row above the day groups names the active window and
+  // the total number of reporting symbols (pluralized via fmtPlural).
+  const windowLabel =
+    (filters?.window ?? "both") === "current" ? "This week"
+    : (filters?.window ?? "both") === "next"  ? "Next week"
+    : "This + next week";
 
   return (
     <aside
       data-slot="earnings-calendar-sidebar"
       className="self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3"
     >
-      <p className="t-label mb-2 text-[color:var(--fg-muted)]">§ CALENDAR</p>
+      <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
+        § CALENDAR <span className="text-[color:var(--fg-muted)]">· {windowLabel} · {fmtPlural(rows.length, "report")}</span>
+      </p>
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
           <h3 className="t-display-section italic text-[13px] pb-1 border-b border-[color:var(--fg-border)]">
@@ -67,6 +104,7 @@ export default function EarningsCalendarSidebar({
             {dayRows.map((r) => (
               <li key={r.symbol}>
                 <button
+                  ref={r.symbol === firstSymbol ? firstRowRef : undefined}
                   type="button"
                   onClick={(e) => {
                     // B-40: ⌘/Ctrl-click or middle-click opens the symbol
@@ -97,9 +135,11 @@ export default function EarningsCalendarSidebar({
                   }}
                   title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
                   aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
+                  aria-label={`Select ${r.symbol} · reports ${fmtDate(r.report_date, { weekday: "long", month: "long", day: "numeric" })}${r.iv_rank != null ? ' · IV rank ' + Math.round(r.iv_rank) : ''}`}
                   data-selected={r.symbol === selected}
                   className={cn(
-                    "flex w-full items-center justify-between rounded px-2 py-1 font-mono text-[12.5px] text-left transition-colors",
+                    // B-57: px-3/py-2 ensures ≥44 px touch target on iPad.
+                    "flex w-full items-center justify-between rounded px-3 py-2 font-mono text-[12.5px] text-left transition-colors",
                     r.symbol === selected
                       ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                       : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -138,4 +178,27 @@ function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: 
 function formatDateLabel(iso: string): string {
   // Locale-aware — e.g. en-US "Fri 04/24", de-DE "Fr., 24.04." — via Intl.
   return fmtDate(iso, { weekday: "short", month: "2-digit", day: "2-digit" });
+}
+
+// B-107: compose a human sentence that names the currently-restricting
+// filters so the user knows which knob to loosen. Falls back to a
+// generic message when `filters` wasn't passed.
+function buildEmptyStateMessage(filters: EarningsCalendarFilters | undefined): string {
+  if (!filters) return "No earnings match —";
+  const windowKey = filters.window ?? "both";
+  const windowLabel =
+    windowKey === "current" ? "the current week"
+    : windowKey === "next"  ? "the next week"
+    : "the current/next week";
+  const parts: string[] = [`No earnings in ${windowLabel}`];
+  if (filters.min_iv_rank != null && filters.min_iv_rank > 0) {
+    parts.push(`with IV rank \u2265 ${filters.min_iv_rank}`);
+  }
+  if (filters.bmo_amc && filters.bmo_amc !== "both") {
+    parts.push(`reporting ${filters.bmo_amc.toUpperCase()}`);
+  }
+  if (filters.watchlist_only) {
+    parts.push("on your watchlist");
+  }
+  return `${parts.join(" ")} \u00b7`;
 }
