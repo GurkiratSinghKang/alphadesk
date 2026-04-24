@@ -97,6 +97,7 @@ export default function EarningsCalendarSidebar({
                   }}
                   title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
                   aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
+                  aria-label={`Select ${r.symbol} · reports ${fmtDate(r.report_date, { weekday: "long", month: "long", day: "numeric" })}${r.iv_rank != null ? ' · IV rank ' + Math.round(r.iv_rank) : ''}`}
                   data-selected={r.symbol === selected}
                   className={cn(
                     "flex w-full items-center justify-between rounded px-2 py-1 font-mono text-[12.5px] text-left transition-colors",
