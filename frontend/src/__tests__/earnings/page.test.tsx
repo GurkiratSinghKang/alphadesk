@@ -293,7 +293,7 @@ describe("Earnings Options Play — full flow", () => {
         suggested_play: "short strangle", suggested_play_reason: "IVR>75", confidence: 0.62,
         model: "claude-opus-4-7", generated_at: new Date().toISOString(),
       },
-      claude_full_research: null, historical_earnings: null,
+      claude_full_research: null,
       iv_term_structure: null, skew: null, news: [], partial: false,
       generated_at: new Date().toISOString(),
     };

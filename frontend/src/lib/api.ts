@@ -1803,7 +1803,8 @@ export async function getEarningsCalendar(
   const params = new URLSearchParams();
   if (filters.window) params.set("window", filters.window);
   if (filters.min_iv_rank !== undefined) params.set("min_iv_rank", String(filters.min_iv_rank));
-  if (filters.market_cap) params.set("market_cap", filters.market_cap);
+  // B-66: market_cap dropped — backend now unconditionally applies the
+  // curated-universe filter.
   if (filters.bmo_amc) params.set("bmo_amc", filters.bmo_amc);
   if (filters.watchlist_only) params.set("watchlist_only", "true");
   if (filters.sort) params.set("sort", filters.sort);

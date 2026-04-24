@@ -16,8 +16,6 @@ from api.schemas.earnings import (
     StrikeLadder,
     ClaudeStructured,
     ClaudeFullResearch,
-    HistoricalBlock,
-    HistQuarter,
     IVTermPoint,
     SkewBlock,
     MetricsBlock,

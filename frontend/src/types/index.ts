@@ -272,6 +272,14 @@ export interface CalendarResponse {
   generated_at: string;
   partial: boolean;
   error?: string | null;
+  /**
+   * Per-row Pydantic validation failures encountered during hydration.
+   * Empty array is the happy path. Each entry is `{ symbol, error }`.
+   * Optional on the wire (field is default_factory=list on the backend) so
+   * older clients and test fixtures that pre-date the field don't need to
+   * thread an empty array through every invocation.
+   */
+  validation_errors?: Array<{ symbol: string | null; error: string }>;
 }
 
 export interface LadderRow {
@@ -398,7 +406,8 @@ export interface EarningsDetail {
   strike_ladder: StrikeLadder | null;
   claude_structured: ClaudeStructured | null;
   claude_full_research: ClaudeFullResearch | null;
-  historical_earnings: HistoricalBlock | null;
+  // B-63: `historical_earnings` removed — backend loader was a stub; the
+  // FMP surprises join will return as a dedicated follow-up PR.
   iv_term_structure: IVTermPoint[] | null;
   skew: SkewBlock | null;
   news: EarningsNewsArticle[];
@@ -409,7 +418,7 @@ export interface EarningsDetail {
 export interface EarningsCalendarFilters {
   window?: "current" | "next" | "both";
   min_iv_rank?: number;
-  market_cap?: "mega" | "large" | "mid" | "small" | "all";
+  // B-66: `market_cap` removed — curated-universe filter always applies.
   bmo_amc?: "bmo" | "amc" | "both";
   watchlist_only?: boolean;
   sort?: "date" | "iv_rank" | "yield" | "claude_confidence";

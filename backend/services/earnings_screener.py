@@ -78,7 +78,6 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
     ClaudeFullResearch,
     ClaudeStructured,
     EarningsDetail,
-    HistoricalBlock,
     IVTermPoint,
     MetricsBlock,
     NewsArticle,
@@ -111,9 +110,9 @@ _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 #   • Foreign ADRs with thin US options chains (kept BABA/TSM/ASML — the
 #     three whose US chains are actually deep; dropped JD/PDD/NTES/BIDU).
 #
-# Anything NOT in this set is filtered out of the earnings screener, even
-# for ``market_cap=all`` — the screener is a decision aid, not a firehose.
-# If a user wants the full FMP feed they can hit the raw provider directly.
+# B-66: the filter is now unconditional (formerly gated on a vestigial
+# `market_cap` query param that never did anything). If a user wants the
+# full FMP feed they can hit the raw provider directly.
 CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
     # Mega caps (SP100 + top 30 outside) — $100B+
     "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
@@ -185,11 +184,15 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             symbol_str = str(symbol)
             # FMP returns GLOBAL earnings — foreign exchanges (.L, .TO, .V,
             # .CN, .PA, etc.) and OTC pink sheets that Alpaca can't quote.
-            # Filter to plain US-listed tickers only: 1-5 uppercase letters
-            # with no suffix. Anything with a dot (exchange suffix) or
-            # longer than 5 chars (typically 5-letter pinks like XTRRF)
-            # gets dropped — saves ~400 pointless 404s per calendar fetch.
-            if "." in symbol_str or len(symbol_str) > 5 or not symbol_str.isalpha():
+            # Filter to plain US-listed tickers: 1-5 uppercase letters,
+            # allowing a single-letter share-class suffix after a dot
+            # (e.g. BRK.B, BRK.A, RDS.A). Anything longer than 5 chars
+            # (typically 5-letter pinks like XTRRF) gets dropped —
+            # saves ~400 pointless 404s per calendar fetch. We permit `.`
+            # and strip it before checking isalpha() so legit share-class
+            # tickers aren't filtered out alongside foreign suffixes, which
+            # are caught separately via the curated universe filter.
+            if len(symbol_str) > 5 or not symbol_str.replace(".", "").isalpha():
                 continue
             report_date_val = item.get("date")
             if report_date_val is None:
@@ -206,10 +209,29 @@ async def _fmp_upcoming(window: str) -> list[dict]:
                 ),
                 "report_time": _REPORT_TIME_MAP.get(report_time_raw, "DMT"),
             })
-        return out
+        # B-45: FMP occasionally returns duplicate rows for the same
+        # (symbol, report_date) — once as the preliminary listing and
+        # again after an update. Dedup preserving first-seen order so
+        # downstream hydration doesn't do redundant Alpaca calls.
+        seen: set[tuple[str, str]] = set()
+        deduped: list[dict] = []
+        for r in out:
+            k = (r["symbol"], r["report_date"])
+            if k in seen:
+                continue
+            seen.add(k)
+            deduped.append(r)
+        return deduped
 
     try:
-        return await asyncio.to_thread(_load)
+        # B-80: cap the worker-thread wait so a stalled FMP call can't
+        # starve the asyncio thread pool. 5s is generous vs. the typical
+        # <1s response; on timeout we re-raise so the outer catch marks
+        # the response partial with an empty calendar.
+        return await asyncio.wait_for(asyncio.to_thread(_load), timeout=5.0)
+    except asyncio.TimeoutError:
+        log.warning("FMP upcoming fetch timed out for window=%s", window)
+        raise
     except Exception as e:
         log.warning("FMP upcoming fetch failed for window=%s: %s", window, e)
         raise
@@ -218,13 +240,20 @@ async def _fmp_upcoming(window: str) -> list[dict]:
 class _StubRequest:
     """Minimal Request-shaped object so we can call `api.routes.market.get_quote`
     without a real FastAPI request context. The rate-limiter only reads
-    ``request.client.host`` and ``request.headers``."""
+    ``request.client.host`` and ``request.headers``.
+
+    B-33: Accept a ``client_host`` kwarg so hydration paths can propagate
+    the real user's IP instead of always spoofing ``127.0.0.1`` (which
+    bypassed the per-IP rate limiter). Default ``None`` falls back to
+    loopback for callers without a request (internal jobs, tests).
+    """
 
     class _Client:
-        host = "127.0.0.1"
+        def __init__(self, host: str = "127.0.0.1") -> None:
+            self.host = host
 
-    def __init__(self) -> None:
-        self.client = self._Client()
+    def __init__(self, client_host: str | None = None) -> None:
+        self.client = self._Client(host=client_host or "127.0.0.1")
         self.headers: dict[str, str] = {}
 
 
@@ -232,11 +261,13 @@ class _StubResponse:
     headers: dict[str, str] = {}
 
 
-async def _load_quote(symbol: str) -> dict | None:
+async def _load_quote(symbol: str, client_host: str | None = None) -> dict | None:
     from api.routes.market import get_quote  # existing helper
 
     try:
-        q = await get_quote(symbol, _StubRequest(), _StubResponse())  # type: ignore[arg-type]
+        q = await get_quote(
+            symbol, _StubRequest(client_host=client_host), _StubResponse(),
+        )  # type: ignore[arg-type]
         return {
             "last": float(q.last),
             "change": float(q.change),
@@ -259,6 +290,7 @@ async def _load_metrics(
     symbol: str,
     report_date: date | None = None,
     expiry: date | None = None,
+    client_host: str | None = None,  # B-33 — accepted for API parity; unused today
 ) -> dict | None:
     from api.routes.options import get_iv_analysis, get_options_chain
 
@@ -409,18 +441,6 @@ async def _run_structured_and_cache(
         log.warning("Claude structured failed for %s: %s", symbol, e)
 
 
-async def _load_historical(symbol: str) -> dict | None:
-    """Pull last 8 earnings surprises + post-earnings moves.
-
-    Stubbed to ``None`` for the initial ship: FMP surprises + daily bars
-    can be joined here in a follow-up, mirroring
-    :mod:`strategies.pead.data`. Returning ``None`` keeps the UI rendering
-    em-dashes for this block without failing the whole detail fetch.
-    """
-    log.info("historical load for %s not yet implemented — returning None", symbol)
-    return None
-
-
 async def _load_iv_term(symbol: str) -> list[dict] | None:
     from api.routes.options import get_options_chain
 
@@ -529,20 +549,43 @@ async def _load_earnings_meta(symbol: str) -> dict | None:
     return next((r for r in rows if r["symbol"] == symbol), None)
 
 
-async def _hydrate_row(row: dict, *, min_iv_rank: float = 0) -> dict | None:
+async def _hydrate_row(
+    row: dict,
+    *,
+    min_iv_rank: float = 0,
+    client_host: str | None = None,
+) -> dict | None:
     """Enrich one FMP row with price, IV rank, expected move, and days-until.
 
     Returns the enriched dict or ``None`` when ``iv_rank`` is below the
     threshold filter. Raises on truly unrecoverable errors (caller catches).
+    ``client_host`` is threaded through to ``_load_quote`` so per-IP rate
+    limits kick in on the real user's IP instead of loopback (B-33).
     """
     symbol = row["symbol"]
-    quote_task = asyncio.create_task(_load_quote(symbol))
-    metrics_task = asyncio.create_task(
-        _load_metrics(symbol, report_date=date.fromisoformat(row["report_date"]))
+    # B-35: gather with return_exceptions=True gives us clean per-task
+    # exception handling and concise result-unpacking. The previous
+    # wait/result sequence re-raised either task's exception without
+    # distinguishing the source, and required manual Task plumbing.
+    quote_result, metrics_result = await asyncio.gather(
+        _load_quote(symbol, client_host=client_host),
+        _load_metrics(
+            symbol,
+            report_date=date.fromisoformat(row["report_date"]),
+            client_host=client_host,
+        ),
+        return_exceptions=True,
     )
-    await asyncio.wait([quote_task, metrics_task], return_when=asyncio.ALL_COMPLETED)
-    quote = quote_task.result()
-    metrics = metrics_task.result()
+    if isinstance(quote_result, Exception):
+        log.warning("quote task raised for %s: %s", symbol, quote_result)
+        quote = None
+    else:
+        quote = quote_result
+    if isinstance(metrics_result, Exception):
+        log.warning("metrics task raised for %s: %s", symbol, metrics_result)
+        metrics = None
+    else:
+        metrics = metrics_result
     iv_rank = metrics.get("iv_rank") if metrics else None
     if iv_rank is not None and iv_rank < min_iv_rank:
         return None
@@ -570,18 +613,16 @@ async def list_upcoming(
     *,
     window: str = "both",
     min_iv_rank: float = 0,
-    market_cap: str = "all",
     bmo_amc: str = "both",
     watchlist_only: bool = False,
     sort: str = "date",
+    client_host: str | None = None,
 ) -> CalendarResponse:
     """Fan out over FMP + per-symbol hydrators, return one calendar response.
 
-    ``market_cap`` is currently a no-op — the curated universe
-    (mega + deeply-liquid large caps only) is always applied. The
-    parameter is retained on the signature for API back-compat and as
-    a hook for reintroducing real tier-based filtering (mega / large /
-    mid / small) once ticker-level market-cap data is wired in.
+    ``client_host`` is the caller's IP (passed from the FastAPI route) so
+    downstream per-IP rate limiters see the real user instead of loopback
+    (B-33).
     """
     partial = False
     try:
@@ -595,17 +636,19 @@ async def list_upcoming(
             error="earnings calendar unavailable",
         )
 
-    # Always restrict to the curated optionable universe (mega + deeply-
-    # liquid large caps). The ``market_cap`` parameter is preserved for
-    # API back-compat but no longer opens an escape hatch — the screener
-    # is a decision tool showing names the user can actually evaluate,
-    # not a Russell-2000 firehose with thin options chains. Low-cap,
-    # meme, and foreign-ADR-with-shallow-chain names are out regardless.
+    # B-66: always restrict to the curated optionable universe (mega +
+    # deeply-liquid large caps). The former `market_cap` query param was
+    # a vestigial no-op — the "all" default bypassed the filter entirely,
+    # which defeated the point of having a curated universe in the first
+    # place. Filter unconditionally so the screener is always a *decision
+    # tool* showing ~5-10 names the user can evaluate, not a feed of ~60
+    # Russell-2000 names with thin options chains. Low-cap, meme, and
+    # foreign-ADR-with-shallow-chain names are out regardless.
     before_count = len(raw_rows)
     raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
     log.info(
-        "earnings calendar: curated universe kept %d/%d rows (window=%s, market_cap=%s)",
-        len(raw_rows), before_count, window, market_cap,
+        "earnings calendar: curated universe kept %d/%d rows (window=%s)",
+        len(raw_rows), before_count, window,
     )
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
@@ -628,7 +671,9 @@ async def list_upcoming(
     async def safe_hydrate(row: dict) -> dict | None:
         async with hydrate_sem:
             try:
-                return await _hydrate_row(row, min_iv_rank=min_iv_rank)
+                return await _hydrate_row(
+                    row, min_iv_rank=min_iv_rank, client_host=client_host,
+                )
             except Exception as e:
                 log.warning("hydrate failed for %s: %s", row.get("symbol"), e)
                 nonlocal partial
@@ -637,6 +682,8 @@ async def list_upcoming(
 
     hydrated = await asyncio.gather(*[safe_hydrate(r) for r in raw_rows])
     rows: list[CalendarRow] = []
+    # B-81: surface row-validation failures instead of silently dropping.
+    validation_errors: list[dict] = []
     for h in hydrated:
         if h is None:
             continue  # filtered by min_iv_rank
@@ -652,10 +699,20 @@ async def list_upcoming(
         except Exception as e:
             log.warning("row validation failed: %s — %s", e, h)
             partial = True
+            validation_errors.append({
+                "symbol": h.get("symbol") if isinstance(h, dict) else None,
+                "error": str(e),
+            })
 
     if bmo_amc != "both":
         wanted = bmo_amc.upper()
         rows = [r for r in rows if r.report_time == wanted]
+
+    # B-43: drop stale earnings. FMP's window query can return rows whose
+    # report_date already passed (timezone races around midnight, or an
+    # upstream cache bug). Rendering them in the calendar is misleading —
+    # a negative `days_until` looks like a typo.
+    rows = [r for r in rows if (r.days_until or 0) >= 0]
 
     if sort == "date":
         rows.sort(key=lambda r: (r.report_date, r.symbol))
@@ -675,6 +732,7 @@ async def list_upcoming(
         earnings=rows,
         generated_at=datetime.now(timezone.utc),
         partial=partial,
+        validation_errors=validation_errors,
     )
 
 
@@ -684,7 +742,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     if not meta:
         raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
 
-    quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t, hist_t = (
+    quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t = (
         await asyncio.gather(
             _load_quote(symbol),
             _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
@@ -692,7 +750,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
             _load_news(symbol),
             _load_iv_term(symbol),
             _load_skew(symbol),
-            _load_historical(symbol),
             return_exceptions=True,
         )
     )
@@ -700,7 +757,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     # (upstream intentionally absent) are NOT partial — only exceptions are.
     partial = any(
         isinstance(x, Exception)
-        for x in [quote_t, metrics_t, ladder_t, iv_term_t, skew_t, hist_t]
+        for x in [quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t]
     )
 
     quote = quote_t if isinstance(quote_t, dict) else None
@@ -709,7 +766,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
     news = news_t if isinstance(news_t, list) else []
     iv_term = iv_term_t if isinstance(iv_term_t, list) else None
     skew = skew_t if isinstance(skew_t, dict) else None
-    hist = hist_t if isinstance(hist_t, dict) else None
 
     claude_ctx = {
         "symbol": symbol,
@@ -722,9 +778,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "iv_percentile": metrics.get("iv_percentile", 0) if metrics else 0,
         "hv_20": metrics.get("hv_20", 0) if metrics else 0,
         "expected_move_pct": metrics.get("expected_move_pct", 0) if metrics else 0,
-        # Pass None (not 0) when historical is unavailable so the prompt omits
-        # the line instead of lying to Claude that |move| is literally 0%.
-        "hist_avg_abs_move_pct": (hist.get("stats", {}).get("avg_abs_move_pct") if hist else None),
+        # B-63: historical block was stubbed + removed from the response.
+        # Pass None so the prompt omits the line rather than lying to
+        # Claude that realized vol is 0%.
+        "hist_avg_abs_move_pct": None,
         "recent_beats_misses": [],
         "headlines": [n["title"] for n in news],
         "market_regime": "Unknown",  # wire once regime service is exposed
@@ -746,7 +803,6 @@ async def get_detail(symbol: str) -> EarningsDetail:
         strike_ladder=StrikeLadder(**ladder) if ladder else None,
         claude_structured=ClaudeStructured(**claude) if claude else None,
         claude_full_research=None,
-        historical_earnings=HistoricalBlock(**hist) if hist else None,
         iv_term_structure=[IVTermPoint(**p) for p in iv_term] if iv_term else None,
         skew=SkewBlock(**skew) if skew else None,
         news=[NewsArticle(**n) for n in news],
@@ -779,10 +835,9 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     if cached:
         return ClaudeFullResearch(**cached)
 
-    quote, metrics, hist, news = await asyncio.gather(
+    quote, metrics, news = await asyncio.gather(
         _load_quote(symbol),
         _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
-        _load_historical(symbol),
         _load_news(symbol),
         return_exceptions=True,
     )
@@ -796,7 +851,9 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
         iv_rank=metrics.get("iv_rank", 0) if isinstance(metrics, dict) else 0,
         iv_percentile=metrics.get("iv_percentile", 0) if isinstance(metrics, dict) else 0,
         expected_move_pct=metrics.get("expected_move_pct", 0) if isinstance(metrics, dict) else 0,
-        historical_quarters=hist.get("quarters", []) if isinstance(hist, dict) else [],
+        # B-63: historical data loader removed; quarters list is empty
+        # until the FMP surprises join lands in a follow-up.
+        historical_quarters=[],
         headlines=[n["title"] for n in news] if isinstance(news, list) else [],
         market_regime="Unknown",  # wire once regime service is exposed
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists

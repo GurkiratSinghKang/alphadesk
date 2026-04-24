@@ -240,15 +240,12 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   const win = p.get("window");
   if (win === "current" || win === "next" || win === "both") out.window = win;
 
+  // B-58 + B-66: strict range validation for min_iv_rank; market_cap
+  // dropped entirely (curated-universe filter is always on now).
   const rawIv = p.get("min_iv_rank");
   if (rawIv != null) {
     const n = Number(rawIv);
     if (Number.isFinite(n) && n >= 0 && n <= 100) out.min_iv_rank = n;
-  }
-
-  const mc = p.get("market_cap");
-  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) {
-    out.market_cap = mc as EarningsCalendarFilters["market_cap"];
   }
 
   const ba = p.get("bmo_amc");
@@ -277,7 +274,7 @@ function syncURL(
   if (state.symbol) p.set("symbol", state.symbol);
   if (state.window) p.set("window", state.window);
   if (state.min_iv_rank !== undefined) p.set("min_iv_rank", String(state.min_iv_rank));
-  if (state.market_cap && state.market_cap !== "all") p.set("market_cap", state.market_cap);
+  // B-66: market_cap removed from URL sync.
   if (state.bmo_amc && state.bmo_amc !== "both") p.set("bmo_amc", state.bmo_amc);
   if (state.watchlist_only) p.set("watchlist_only", "true");
   if (state.sort && state.sort !== "date") p.set("sort", state.sort);

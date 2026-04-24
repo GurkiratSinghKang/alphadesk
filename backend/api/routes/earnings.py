@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from api.schemas.earnings import CalendarResponse, EarningsDetail, ClaudeFullResearch
 from services import earnings_screener
@@ -14,16 +14,22 @@ router = APIRouter(prefix="/earnings", tags=["earnings"])
 
 @router.get("/calendar", response_model=CalendarResponse)
 async def get_calendar(
+    request: Request,
     window: str = Query("both", pattern="^(current|next|both)$"),
     min_iv_rank: float = Query(0, ge=0, le=100),
-    market_cap: str = Query("all", pattern="^(mega|large|mid|small|all)$"),
     bmo_amc: str = Query("both", pattern="^(bmo|amc|both)$"),
     watchlist_only: bool = False,
     sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence)$"),
 ) -> CalendarResponse:
+    # B-33: propagate the real client IP so per-IP rate limiters downstream
+    # see the caller instead of loopback.
+    # B-66: `market_cap` query param removed — curated-universe filter is
+    # always applied now. Frontend callers need to drop the param too.
+    client_host = request.client.host if request.client else None
     return await earnings_screener.list_upcoming(
-        window=window, min_iv_rank=min_iv_rank, market_cap=market_cap,
+        window=window, min_iv_rank=min_iv_rank,
         bmo_amc=bmo_amc, watchlist_only=watchlist_only, sort=sort,
+        client_host=client_host,
     )
 
 

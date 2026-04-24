@@ -10,7 +10,7 @@ const detail: EarningsDetail = {
   quote: { last: 201.7, change: -1.4, change_pct: -0.007 },
   metrics: { iv_rank: 78, iv_percentile: 82, current_iv: 0.79, hv_20: 0.42, hv_50: null, hv_100: null, hv_iv_ratio: 0.71, expected_move_pct: 0.064, expected_move_dollars: 12.8, hist_avg_abs_move_pct: 0.052, beat_rate: 0.87, days_to_earnings: 1, days_to_expiry: 3 },
   strike_ladder: null, claude_structured: null, claude_full_research: null,
-  historical_earnings: null, iv_term_structure: null, skew: null,
+  iv_term_structure: null, skew: null,
   news: [], partial: false, generated_at: new Date().toISOString(),
 };
 
@@ -23,7 +23,8 @@ describe("EarningsDetailPanel", () => {
     expect(container.querySelector('[data-slot="metrics-strip"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="claude-thesis"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
-    expect(container.querySelector('[data-slot="historical-moves"]')).not.toBeNull();
+    // B-63: historical-moves panel removed along with the stubbed backend
+    // loader; restore this assertion when the FMP surprises join lands.
     expect(container.querySelector('[data-slot="news-feed"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="trade-button-row"]')).not.toBeNull();
   });

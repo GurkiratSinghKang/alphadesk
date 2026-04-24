@@ -116,7 +116,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
       report_date: "2026-04-23", report_time: "AMC",
       quote: null, metrics: null, strike_ladder: null,
       claude_structured: null, claude_full_research: null,
-      historical_earnings: null, iv_term_structure: null, skew: null,
+      iv_term_structure: null, skew: null,
       news: [], partial: false,
       generated_at: new Date().toISOString(),
     }),
