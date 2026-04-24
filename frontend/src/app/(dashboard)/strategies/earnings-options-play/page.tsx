@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
   getEarningsCalendar,
@@ -100,9 +100,60 @@ export default function EarningsOptionsPlayPage() {
   }, [selectedSymbol]);
 
   // ── Sync state to URL ────────────────────────────────────
+  // First run normalizes the URL on mount (replaceState — avoid polluting
+  // history with a no-op redirect). Subsequent runs are user-initiated
+  // selection/filter changes and use pushState so the back-button works.
+  const firstSyncRef = useRef(true);
   useEffect(() => {
-    syncURL({ symbol: selectedSymbol, ...filters });
+    const mode: "replace" | "push" = firstSyncRef.current ? "replace" : "push";
+    firstSyncRef.current = false;
+    syncURL({ symbol: selectedSymbol, ...filters }, mode);
   }, [selectedSymbol, filters]);
+
+  // ── B-98: popstate listener — browser back/forward re-reads state
+  // from the URL. Without this, history entries pushed by B-39 would
+  // only affect the address bar; the page state would be stale.
+  useEffect(() => {
+    function onPopState() {
+      if (typeof window === "undefined") return;
+      // Suppress the next sync effect's push (it's now catching up to
+      // the user's navigation, not initiating a new entry).
+      firstSyncRef.current = true;
+      setFilters(readFiltersFromURL());
+      const params = new URLSearchParams(window.location.search);
+      setSelectedSymbol(params.get("symbol"));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // ── B-60: j/k and ArrowUp/ArrowDown shortcuts from useKeyboardShortcuts
+  // dispatch these window-level events; we advance selection through the
+  // currently-loaded calendar. Use a ref so the handlers always see the
+  // latest rows without re-binding on every fetch.
+  const rowsRef = useRef(calendar?.earnings ?? []);
+  rowsRef.current = calendar?.earnings ?? [];
+  const selectedRef = useRef(selectedSymbol);
+  selectedRef.current = selectedSymbol;
+
+  useEffect(() => {
+    function step(dir: 1 | -1) {
+      const rows = rowsRef.current;
+      if (rows.length === 0) return;
+      const currentIdx = rows.findIndex((r) => r.symbol === selectedRef.current);
+      const base = currentIdx === -1 ? 0 : currentIdx;
+      const nextIdx = (base + dir + rows.length) % rows.length;
+      setSelectedSymbol(rows[nextIdx].symbol);
+    }
+    const next = () => step(1);
+    const prev = () => step(-1);
+    window.addEventListener("alphadesk:earnings-select-next", next);
+    window.addEventListener("alphadesk:earnings-select-prev", prev);
+    return () => {
+      window.removeEventListener("alphadesk:earnings-select-next", next);
+      window.removeEventListener("alphadesk:earnings-select-prev", prev);
+    };
+  }, []);
 
   // ── Full research mutation ───────────────────────────────
   const runFull = useCallback(async () => {
@@ -119,17 +170,25 @@ export default function EarningsOptionsPlayPage() {
   }, [selectedSymbol]);
 
   const actions = (
-    <span className="t-meta tabular-nums text-[color:var(--fg-muted)]">
+    <span
+      role="status"
+      aria-live="polite"
+      className="t-meta tabular-nums text-[color:var(--fg-muted)]"
+    >
       {calendar
         ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}`
         : "Loading…"}
     </span>
   );
 
+  // B-102: title reflects the active window filter so the header updates
+  // as users toggle between current / next / both.
+  const title = titleForWindow(filters.window);
+
   return (
     <DashboardPageLayout
       eyebrow="§ EARNINGS · OPTIONS PLAY"
-      title="This week · next week"
+      title={title}
       actions={actions}
     >
       <FiltersBar filters={filters} onChange={setFilters} />
@@ -154,27 +213,65 @@ export default function EarningsOptionsPlayPage() {
   );
 }
 
+// ─── Presentation helpers ────────────────────────────────────
+
+function titleForWindow(win: EarningsCalendarFilters["window"]): string {
+  switch (win) {
+    case "current":
+      return "This week's earnings";
+    case "next":
+      return "Next week's earnings";
+    case "both":
+    default:
+      return "This + next week's earnings";
+  }
+}
+
 // ─── URL sync helpers ────────────────────────────────────────
 
 function readFiltersFromURL(): EarningsCalendarFilters {
   if (typeof window === "undefined") return { window: "both", min_iv_rank: 50, sort: "date" };
   const p = new URLSearchParams(window.location.search);
   const out: EarningsCalendarFilters = {};
+
+  // B-58: validate every param strictly. If the URL value is missing or
+  // invalid, leave the field undefined so the defaults apply via the
+  // spread below — no silent coercion of "abc" to NaN → fallback 50.
   const win = p.get("window");
   if (win === "current" || win === "next" || win === "both") out.window = win;
-  const minIvRank = p.get("min_iv_rank");
-  if (minIvRank !== null) out.min_iv_rank = Number(minIvRank);
+
+  const rawIv = p.get("min_iv_rank");
+  if (rawIv != null) {
+    const n = Number(rawIv);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) out.min_iv_rank = n;
+  }
+
   const mc = p.get("market_cap");
-  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) out.market_cap = mc as EarningsCalendarFilters["market_cap"];
+  if (mc && ["mega", "large", "mid", "small", "all"].includes(mc)) {
+    out.market_cap = mc as EarningsCalendarFilters["market_cap"];
+  }
+
   const ba = p.get("bmo_amc");
-  if (ba && ["bmo", "amc", "both"].includes(ba)) out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
-  if (p.get("watchlist_only") === "true") out.watchlist_only = true;
+  if (ba && ["bmo", "amc", "both"].includes(ba)) {
+    out.bmo_amc = ba as EarningsCalendarFilters["bmo_amc"];
+  }
+
+  const wl = p.get("watchlist_only");
+  if (wl === "true") out.watchlist_only = true;
+  else if (wl === "false") out.watchlist_only = false;
+
   const sort = p.get("sort");
-  if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) out.sort = sort as EarningsCalendarFilters["sort"];
+  if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) {
+    out.sort = sort as EarningsCalendarFilters["sort"];
+  }
+
   return { window: "both", min_iv_rank: 50, sort: "date", ...out };
 }
 
-function syncURL(state: { symbol: string | null } & EarningsCalendarFilters) {
+function syncURL(
+  state: { symbol: string | null } & EarningsCalendarFilters,
+  mode: "replace" | "push" = "replace",
+) {
   if (typeof window === "undefined") return;
   const p = new URLSearchParams();
   if (state.symbol) p.set("symbol", state.symbol);
@@ -185,5 +282,12 @@ function syncURL(state: { symbol: string | null } & EarningsCalendarFilters) {
   if (state.watchlist_only) p.set("watchlist_only", "true");
   if (state.sort && state.sort !== "date") p.set("sort", state.sort);
   const newUrl = `${window.location.pathname}?${p.toString()}`;
-  window.history.replaceState({}, "", newUrl);
+  // B-39: only the initial mount-normalization should replaceState.
+  // Every subsequent (user-driven) change pushState so the back-button
+  // walks through filter/selection changes.
+  if (mode === "push" && newUrl !== `${window.location.pathname}${window.location.search}`) {
+    window.history.pushState({}, "", newUrl);
+  } else {
+    window.history.replaceState({}, "", newUrl);
+  }
 }

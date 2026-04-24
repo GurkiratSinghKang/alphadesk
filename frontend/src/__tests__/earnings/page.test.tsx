@@ -34,6 +34,211 @@ describe("Earnings Options Play page", () => {
     });
   });
 
+  it("announces calendar count via aria-live region (B-37)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).not.toBeNull();
+    expect(region?.getAttribute("role")).toBe("status");
+  });
+
+  it("rejects invalid min_iv_rank from URL rather than coercing NaN (B-58)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?min_iv_rank=abc", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    // The mock was called with filters — min_iv_rank should be 50 (default),
+    // not NaN (which would coerce to the string "NaN" downstream).
+    const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
+    expect(firstCall?.min_iv_rank).toBe(50);
+    expect(Number.isNaN(firstCall?.min_iv_rank as number)).toBe(false);
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("title reflects active window filter (B-102)", async () => {
+    const original = window.location;
+    // Start with window=current
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=current", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/this week/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("title shows 'Next week' for window=next (B-102)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=next", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/next week/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("title shows 'This + next week' for window=both (B-102)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?window=both", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.querySelector("h1")?.textContent).toMatch(/this \+ next/i);
+    });
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("re-reads URL state on popstate (B-98)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?symbol=NVDA", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA");
+    });
+
+    // Simulate the browser back-button moving URL to TSLA.
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?symbol=TSLA", pathname: "/strategies/earnings-options-play" },
+    });
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+    });
+
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("advances selection on alphadesk:earnings-select-next/prev (B-60)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "META", company: "Meta", sector: "Tech", report_date: "2026-04-24", report_time: "AMC", days_until: 2, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA");
+    });
+    // Next → TSLA
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+    });
+    // Next → META
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("META");
+    });
+    // Prev → TSLA (wraps back)
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-prev"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA");
+    });
+  });
+
+  it("rejects out-of-range min_iv_rank (B-58)", async () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?min_iv_rank=250", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [], generated_at: new Date().toISOString(), partial: false,
+    });
+    render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
+    expect(firstCall?.min_iv_rank).toBe(50);
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("uses replaceState on first mount and pushState on subsequent changes (B-39)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    const pushSpy = vi.spyOn(window.history, "pushState");
+    const replaceSpy = vi.spyOn(window.history, "replaceState");
+    pushSpy.mockClear();
+    replaceSpy.mockClear();
+
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.textContent).toContain("TSLA");
+    });
+
+    // Initial sync → replaceState, zero pushes.
+    expect(replaceSpy).toHaveBeenCalled();
+    const pushesAfterMount = pushSpy.mock.calls.length;
+
+    // User-initiated change → pushState.
+    const tslaBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("TSLA"),
+    ) as HTMLButtonElement;
+    fireEvent.click(tslaBtn);
+    await waitFor(() => {
+      expect(pushSpy.mock.calls.length).toBeGreaterThan(pushesAfterMount);
+    });
+
+    pushSpy.mockRestore();
+    replaceSpy.mockRestore();
+  });
+
   it("reads ?symbol= from URL on mount to restore selection", async () => {
     // Mock window.location to simulate ?symbol=TSLA
     const original = window.location;

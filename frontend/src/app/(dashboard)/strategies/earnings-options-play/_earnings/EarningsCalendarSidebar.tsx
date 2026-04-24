@@ -12,6 +12,16 @@ export interface EarningsCalendarSidebarProps {
   onSelect: (symbol: string) => void;
 }
 
+// B-40: build a same-route deeplink that carries the currently-active
+// query string but overrides (or sets) `symbol=<sym>`. Called at click
+// time because query string mutates as the user changes filters.
+function buildSymbolDeeplink(sym: string): string {
+  if (typeof window === "undefined") return `?symbol=${encodeURIComponent(sym)}`;
+  const params = new URLSearchParams(window.location.search);
+  params.set("symbol", sym);
+  return `${window.location.pathname}?${params.toString()}`;
+}
+
 export default function EarningsCalendarSidebar({
   rows, loading, error, selected, onSelect,
 }: EarningsCalendarSidebarProps) {
@@ -57,7 +67,35 @@ export default function EarningsCalendarSidebar({
               <li key={r.symbol}>
                 <button
                   type="button"
-                  onClick={() => onSelect(r.symbol)}
+                  onClick={(e) => {
+                    // B-40: ⌘/Ctrl-click or middle-click opens the symbol
+                    // in a new tab with the current filter query string,
+                    // matching browser conventions for anchors.
+                    if (e.metaKey || e.ctrlKey || e.button === 1) {
+                      e.preventDefault();
+                      window.open(
+                        buildSymbolDeeplink(r.symbol),
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                      return;
+                    }
+                    onSelect(r.symbol);
+                  }}
+                  onAuxClick={(e) => {
+                    // Middle-click (button===1) fires auxclick, not click,
+                    // in modern browsers — handle it here too.
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      window.open(
+                        buildSymbolDeeplink(r.symbol),
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }
+                  }}
+                  title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
+                  aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
                   data-selected={r.symbol === selected}
                   className={cn(
                     "flex w-full items-center justify-between rounded px-2 py-1 font-mono text-[12.5px] text-left transition-colors",
