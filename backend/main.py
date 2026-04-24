@@ -497,3 +497,99 @@ async def readyz() -> JSONResponse:
     else:
         result["status"] = "degraded"
     return JSONResponse(status_code=status_code, content=result)
+
+
+# ─── /readyz-full ─ deep health probe (B-31) ─────────────────────────
+#
+# `/readyz` is the load-balancer probe — fast, local deps only, 503 drops
+# the container out of rotation. Pulling it out because Anthropic had a
+# 5-min hiccup would be the wrong trade-off. `/readyz-full` is the
+# monitoring-dashboard probe — it additionally queries FMP and Anthropic
+# with short timeouts and reports a per-dependency status. It stays HTTP
+# 200 on external failures (external outages shouldn't drop the container)
+# but the response body shows each external as "down" or "degraded".
+#
+# A 30-second in-process TTL cache keeps oncall curl loops from hammering
+# the paid upstreams (FMP in particular is rate-limited by tier).
+_READYZ_FULL_CACHE: dict[str, Any] = {"result": None, "expires_at": 0.0}
+_READYZ_FULL_TTL_S = 30.0
+
+
+async def _probe_fmp() -> dict[str, Any]:
+    """Cheap FMP health probe. Returns {"status": "ok|down|skipped", "latency_ms": ...}."""
+    import time
+    from core.config import settings
+    key = settings.FMP_API_KEY.get_secret_value() if settings.FMP_API_KEY else ""
+    if not key:
+        return {"status": "skipped", "reason": "FMP_API_KEY not configured"}
+    try:
+        import httpx
+        t0 = time.perf_counter()
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            # /earnings-calendar limited to a one-day window; tiny response.
+            r = await client.get(
+                "https://financialmodelingprep.com/api/v3/quote/AAPL",
+                params={"apikey": key},
+            )
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        if r.status_code == 200:
+            return {"status": "ok", "latency_ms": latency_ms}
+        return {
+            "status": "degraded", "latency_ms": latency_ms,
+            "reason": f"HTTP {r.status_code}",
+        }
+    except Exception as e:
+        return {"status": "down", "reason": f"{type(e).__name__}: {e}"}
+
+
+async def _probe_anthropic() -> dict[str, Any]:
+    """Cheap Anthropic health probe via /models (no token billing)."""
+    import time
+    from core.config import settings
+    key = settings.ANTHROPIC_API_KEY.get_secret_value() if settings.ANTHROPIC_API_KEY else ""
+    if not key:
+        return {"status": "skipped", "reason": "ANTHROPIC_API_KEY not configured"}
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=key)
+        t0 = time.perf_counter()
+        await asyncio.wait_for(client.models.list(limit=1), timeout=2.0)
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        return {"status": "ok", "latency_ms": latency_ms}
+    except asyncio.TimeoutError:
+        return {"status": "degraded", "reason": "timeout > 2s"}
+    except Exception as e:
+        return {"status": "down", "reason": f"{type(e).__name__}: {e}"}
+
+
+@app.get("/readyz-full", tags=["Health"])
+async def readyz_full() -> JSONResponse:
+    """Deep readiness probe including external paid APIs (FMP, Anthropic).
+
+    Unlike ``/readyz``, external failures never trigger 503 — the
+    container keeps serving traffic while operators monitor the response
+    body for upstream health. Results are cached for 30 s to respect
+    upstream rate limits when oncall curl-loops during an incident.
+    """
+    import time
+
+    now = time.time()
+    cached = _READYZ_FULL_CACHE.get("result")
+    if cached is not None and now < _READYZ_FULL_CACHE.get("expires_at", 0):
+        return JSONResponse(status_code=200, content=cached)
+
+    fmp, anthropic_r = await asyncio.gather(
+        _probe_fmp(), _probe_anthropic(),
+    )
+    result = {
+        "status": "ok",
+        "fmp": fmp,
+        "anthropic": anthropic_r,
+        "cached_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+    }
+    if any(d.get("status") == "down" for d in (fmp, anthropic_r)):
+        result["status"] = "degraded"
+
+    _READYZ_FULL_CACHE["result"] = result
+    _READYZ_FULL_CACHE["expires_at"] = now + _READYZ_FULL_TTL_S
+    return JSONResponse(status_code=200, content=result)
