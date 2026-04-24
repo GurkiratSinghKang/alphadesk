@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EarningsDetail } from "@/types";
 
 import DetailHeader from "./DetailHeader";
@@ -29,6 +29,13 @@ export default function EarningsDetailPanel({
   detail, loading, error, runningFull, onRunFullResearch,
 }: EarningsDetailPanelProps) {
   const isWide = useIsWide(1200);
+  // Move keyboard focus to the header H2 whenever the selected symbol
+  // changes, so tabbing through the page lands on the new ticker after
+  // filter-triggered refetches (B-56).
+  const detailHeaderRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (detail?.symbol) detailHeaderRef.current?.focus();
+  }, [detail?.symbol]);
 
   if (error) {
     return (
@@ -90,6 +97,7 @@ export default function EarningsDetailPanel({
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         report_date={detail.report_date} report_time={detail.report_time}
         quote={detail.quote} generated_at={detail.generated_at}
+        headingRef={detailHeaderRef}
       />
       <MetricsStrip metrics={detail.metrics} />
 

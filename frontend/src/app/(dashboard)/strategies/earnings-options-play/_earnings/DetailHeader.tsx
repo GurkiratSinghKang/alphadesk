@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import type { EarningsReportTime } from "@/types";
 import { fmtRelativeTime } from "@/lib/time";
 
@@ -11,10 +12,13 @@ export interface DetailHeaderProps {
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
    *  "Updated 5 m ago" label in the header. */
   generated_at?: string;
+  /** Ref to the H2 heading so the parent panel can move focus here
+   *  after a filter-triggered symbol change (B-56). */
+  headingRef?: Ref<HTMLHeadingElement>;
 }
 
 export default function DetailHeader({
-  symbol, company, sector, report_date, report_time, quote, generated_at,
+  symbol, company, sector, report_date, report_time, quote, generated_at, headingRef,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
   const changePct = quote?.change_pct ?? null;
@@ -27,7 +31,11 @@ export default function DetailHeader({
     >
       <div>
         <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
-        <h2 className="t-display-section italic mt-1">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="t-display-section italic mt-1 outline-none"
+        >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
         <p className="t-meta mt-1">{sector} · Reports {formatReportDate(report_date)} · {report_time}</p>
