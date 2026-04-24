@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
   getEarningsCalendar,
@@ -100,8 +100,14 @@ export default function EarningsOptionsPlayPage() {
   }, [selectedSymbol]);
 
   // ── Sync state to URL ────────────────────────────────────
+  // First run normalizes the URL on mount (replaceState — avoid polluting
+  // history with a no-op redirect). Subsequent runs are user-initiated
+  // selection/filter changes and use pushState so the back-button works.
+  const firstSyncRef = useRef(true);
   useEffect(() => {
-    syncURL({ symbol: selectedSymbol, ...filters });
+    const mode: "replace" | "push" = firstSyncRef.current ? "replace" : "push";
+    firstSyncRef.current = false;
+    syncURL({ symbol: selectedSymbol, ...filters }, mode);
   }, [selectedSymbol, filters]);
 
   // ── Full research mutation ───────────────────────────────
@@ -178,7 +184,10 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   return { window: "both", min_iv_rank: 50, sort: "date", ...out };
 }
 
-function syncURL(state: { symbol: string | null } & EarningsCalendarFilters) {
+function syncURL(
+  state: { symbol: string | null } & EarningsCalendarFilters,
+  mode: "replace" | "push" = "replace",
+) {
   if (typeof window === "undefined") return;
   const p = new URLSearchParams();
   if (state.symbol) p.set("symbol", state.symbol);
@@ -189,5 +198,12 @@ function syncURL(state: { symbol: string | null } & EarningsCalendarFilters) {
   if (state.watchlist_only) p.set("watchlist_only", "true");
   if (state.sort && state.sort !== "date") p.set("sort", state.sort);
   const newUrl = `${window.location.pathname}?${p.toString()}`;
-  window.history.replaceState({}, "", newUrl);
+  // B-39: only the initial mount-normalization should replaceState.
+  // Every subsequent (user-driven) change pushState so the back-button
+  // walks through filter/selection changes.
+  if (mode === "push" && newUrl !== `${window.location.pathname}${window.location.search}`) {
+    window.history.pushState({}, "", newUrl);
+  } else {
+    window.history.replaceState({}, "", newUrl);
+  }
 }

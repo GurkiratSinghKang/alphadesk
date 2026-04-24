@@ -47,6 +47,41 @@ describe("Earnings Options Play page", () => {
     expect(region?.getAttribute("role")).toBe("status");
   });
 
+  it("uses replaceState on first mount and pushState on subsequent changes (B-39)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+        { symbol: "TSLA", company: "Tesla", sector: "Auto", report_date: "2026-04-23", report_time: "AMC", days_until: 1, price: null, change: null, change_pct: null, iv_rank: null, premium_yield_call_atm: null, premium_yield_put_atm: null, expected_move_pct: null, hist_avg_abs_move_pct: null, claude_verdict: null, claude_confidence: null, top_setup: null },
+      ],
+      generated_at: new Date().toISOString(), partial: false,
+    });
+    const pushSpy = vi.spyOn(window.history, "pushState");
+    const replaceSpy = vi.spyOn(window.history, "replaceState");
+    pushSpy.mockClear();
+    replaceSpy.mockClear();
+
+    const { container } = render(<EarningsOptionsPlayPage />);
+    await waitFor(() => {
+      expect(container.textContent).toContain("TSLA");
+    });
+
+    // Initial sync → replaceState, zero pushes.
+    expect(replaceSpy).toHaveBeenCalled();
+    const pushesAfterMount = pushSpy.mock.calls.length;
+
+    // User-initiated change → pushState.
+    const tslaBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("TSLA"),
+    ) as HTMLButtonElement;
+    fireEvent.click(tslaBtn);
+    await waitFor(() => {
+      expect(pushSpy.mock.calls.length).toBeGreaterThan(pushesAfterMount);
+    });
+
+    pushSpy.mockRestore();
+    replaceSpy.mockRestore();
+  });
+
   it("reads ?symbol= from URL on mount to restore selection", async () => {
     // Mock window.location to simulate ?symbol=TSLA
     const original = window.location;
