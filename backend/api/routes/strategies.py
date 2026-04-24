@@ -801,14 +801,19 @@ def _reload_oos_metrics() -> dict[str, dict[str, Any]]:
         if _get_meta is not None:
             try:
                 meta = _get_meta(reg_name)
+                # New StrategyMeta renamed required_lookback_days -> lookback_days
+                # and dropped supports_shorts / supports_options. Derive the
+                # legacy shape from the category for back-compat with the
+                # catalogue renderer.
+                cat = meta.category
                 meta_dict = {
-                    "category": meta.category,
+                    "category": cat,
                     "description": meta.description,
                     "required_bars": list(meta.required_bars),
-                    "required_lookback_days": meta.required_lookback_days,
+                    "required_lookback_days": meta.lookback_days,
                     "min_universe_size": meta.min_universe_size,
-                    "supports_shorts": meta.supports_shorts,
-                    "supports_options": meta.supports_options,
+                    "supports_shorts": cat in ("pairs", "macro"),
+                    "supports_options": cat == "options",
                 }
             except KeyError:
                 meta_dict = None
