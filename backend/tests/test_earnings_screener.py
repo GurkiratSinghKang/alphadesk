@@ -370,6 +370,48 @@ async def test_load_strike_ladder_handles_empty_expirations():
     assert result["rows"] == []
 
 
+def test_fmp_earnings_empty_dataframe_preserves_dtypes():
+    """B-82 regression: when FMP returns no rows, the empty DataFrame must
+    carry the same per-column dtypes as the populated frame (float64 for
+    numerics, str for text). Previously an empty `{c: []}` dict produced
+    `object` dtypes everywhere, which broke downstream `.isin()` + concat
+    operations against a populated frame."""
+    import pandas as pd
+
+    from data.providers.fmp_earnings import (
+        _CALENDAR_COLS,
+        _CALENDAR_DTYPES,
+        _SURPRISE_COLS,
+        _SURPRISE_DTYPES,
+    )
+
+    # Reconstruct the empty-frame produced by the fallback branch.
+    empty_cal = pd.DataFrame({c: pd.Series(dtype=_CALENDAR_DTYPES[c]) for c in _CALENDAR_COLS})
+    empty_surp = pd.DataFrame({c: pd.Series(dtype=_SURPRISE_DTYPES[c]) for c in _SURPRISE_COLS})
+
+    # Calendar
+    assert list(empty_cal.columns) == _CALENDAR_COLS
+    assert len(empty_cal) == 0
+    for col in ("eps_actual", "eps_estimated", "revenue_actual", "revenue_estimated"):
+        assert str(empty_cal[col].dtype) == "float64"
+    # Surprises
+    assert list(empty_surp.columns) == _SURPRISE_COLS
+    assert len(empty_surp) == 0
+    for col in ("surprise", "surprise_pct", "sue"):
+        assert str(empty_surp[col].dtype) == "float64"
+
+    # And the empty frame must be concat-compatible with the populated shape
+    populated = pd.DataFrame([{
+        "symbol": "AAPL", "date": date(2026, 5, 1),
+        "eps_actual": 1.1, "eps_estimated": 1.0,
+        "revenue_actual": 100.0, "revenue_estimated": 95.0,
+        "last_updated": date(2026, 4, 20), "announcement_when": "amc",
+    }])
+    combined = pd.concat([empty_cal, populated], ignore_index=True)
+    assert len(combined) == 1
+    assert str(combined["eps_actual"].dtype) == "float64"
+
+
 @pytest.mark.asyncio
 async def test_fmp_upcoming_dedups_symbol_and_date():
     """B-45 regression: FMP's calendar occasionally returns the same

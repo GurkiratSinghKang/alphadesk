@@ -21,6 +21,31 @@ _SURPRISE_COLS = [
     "surprise", "surprise_pct", "sue",
     "revenue_actual", "revenue_estimated",
 ]
+# B-82: Explicit dtypes for the empty-frame fallback. Matches the dtypes
+# of the populated frame (float64 for numbers, str for text, object for
+# python date objects) so downstream pandas operations (concat, sort,
+# `isin`) behave identically whether or not FMP returned rows.
+_CALENDAR_DTYPES: dict[str, Any] = {
+    "symbol": "str",
+    "date": "object",
+    "eps_actual": "float64",
+    "eps_estimated": "float64",
+    "revenue_actual": "float64",
+    "revenue_estimated": "float64",
+    "last_updated": "object",
+    "announcement_when": "str",
+}
+_SURPRISE_DTYPES: dict[str, Any] = {
+    "symbol": "str",
+    "date": "object",
+    "eps_actual": "float64",
+    "eps_estimated": "float64",
+    "surprise": "float64",
+    "surprise_pct": "float64",
+    "sue": "float64",
+    "revenue_actual": "float64",
+    "revenue_estimated": "float64",
+}
 
 
 class FMPEarningsProvider:
@@ -54,7 +79,7 @@ class FMPEarningsProvider:
     def _calendar_cached(self, start: str, end: str) -> pd.DataFrame:
         data = self._http.get("/earnings-calendar", {"from": start, "to": end})
         if not data:
-            return pd.DataFrame({c: [] for c in _CALENDAR_COLS})
+            return pd.DataFrame({c: pd.Series(dtype=_CALENDAR_DTYPES[c]) for c in _CALENDAR_COLS})
         rows = [
             {
                 "symbol": item.get("symbol"),
@@ -87,7 +112,7 @@ class FMPEarningsProvider:
     def _surprises_cached(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         data = self._http.get("/earnings", {"symbol": symbol, "limit": 160})
         if not data:
-            return pd.DataFrame({c: [] for c in _SURPRISE_COLS})
+            return pd.DataFrame({c: pd.Series(dtype=_SURPRISE_DTYPES[c]) for c in _SURPRISE_COLS})
 
         rows = [
             {
