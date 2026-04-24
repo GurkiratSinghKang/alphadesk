@@ -225,7 +225,14 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         return deduped
 
     try:
-        return await asyncio.to_thread(_load)
+        # B-80: cap the worker-thread wait so a stalled FMP call can't
+        # starve the asyncio thread pool. 5s is generous vs. the typical
+        # <1s response; on timeout we re-raise so the outer catch marks
+        # the response partial with an empty calendar.
+        return await asyncio.wait_for(asyncio.to_thread(_load), timeout=5.0)
+    except asyncio.TimeoutError:
+        log.warning("FMP upcoming fetch timed out for window=%s", window)
+        raise
     except Exception as e:
         log.warning("FMP upcoming fetch failed for window=%s: %s", window, e)
         raise

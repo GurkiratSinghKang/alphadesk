@@ -370,6 +370,35 @@ async def test_load_strike_ladder_handles_empty_expirations():
     assert result["rows"] == []
 
 
+@pytest.mark.asyncio
+async def test_fmp_upcoming_times_out_on_stall():
+    """B-80 regression: a stalled FMP `to_thread` call must not block the
+    asyncio thread pool forever. `_fmp_upcoming` wraps the call in
+    `asyncio.wait_for(...)`; on timeout the caller sees
+    `asyncio.TimeoutError` (and the outer `list_upcoming` catch marks
+    the response partial)."""
+    import asyncio as _asyncio
+
+    from services import earnings_screener as svc
+
+    # Replace to_thread with a coroutine that sleeps forever, so wait_for
+    # can cancel it cleanly without blocking a real thread.
+    async def forever(fn):
+        await _asyncio.sleep(3600)
+        return []
+
+    # Patch wait_for to a tight bound so the test is quick.
+    original_wait_for = _asyncio.wait_for
+
+    async def short_wait_for(coro, timeout):
+        return await original_wait_for(coro, timeout=0.05)
+
+    with patch("services.earnings_screener.asyncio.to_thread", forever), \
+         patch("services.earnings_screener.asyncio.wait_for", short_wait_for):
+        with pytest.raises(_asyncio.TimeoutError):
+            await svc._fmp_upcoming("both")
+
+
 def test_fmp_earnings_empty_dataframe_preserves_dtypes():
     """B-82 regression: when FMP returns no rows, the empty DataFrame must
     carry the same per-column dtypes as the populated frame (float64 for
