@@ -1,11 +1,10 @@
 """ORB (Opening Range Breakout) strategy package.
 
 Importing this module fires the ``@register_strategy`` decorator on
-:class:`ORBStrategy`, registering it under ``"orb"`` in the strategy
-registry. The decorator is wrapped with ``_safe_register`` so double-loading
-under the canonical + legacy module paths is tolerated.
+:class:`ORBStrategy`, registering it under ``"orb"`` in the
+``strategies._core.protocol`` registry.
 """
 
-from .strategy import ORBStrategy, OrbDayResult
+from .strategy import ORBStrategy
 
-__all__ = ["ORBStrategy", "OrbDayResult"]
+__all__ = ["ORBStrategy"]
