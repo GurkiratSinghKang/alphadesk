@@ -62,11 +62,34 @@ from services.earnings_screener import (
 
 def test_curated_universe_core_names_present():
     """The curated universe is what users glance over to make trade decisions —
-    regression guard for the staples. Any removal from this set is a
-    deliberate product decision and should show up as a failing test."""
+    regression guard for the high-market-cap staples. Any removal from this
+    set is a deliberate product decision and should show up as a failing test.
+    """
+    # Mega caps — removing any of these would mean the screener stops
+    # surfacing earnings for the most-traded US single-names.
     must_have = {"AAPL", "MSFT", "NVDA", "TSLA", "META", "GOOGL", "AMZN",
-                 "AVGO", "JPM", "NFLX", "AMD", "PLTR", "SMCI", "COIN"}
+                 "AVGO", "JPM", "NFLX", "AMD", "COIN", "PLTR"}
     assert must_have.issubset(CURATED_OPTIONABLE_UNIVERSE)
+
+
+def test_curated_universe_excludes_sub_25b_meme_names():
+    """The universe was tightened (2026-04) to cut meme / low-cap names
+    whose options chains are too thin for reliable execution. Regression
+    guard against accidental re-additions."""
+    must_not_have = {
+        "GME", "AMC", "BB", "BBIG",                    # meme
+        "PTON", "BYND", "LCID", "RIVN", "NIO", "XPEV", # sub-$15B
+        "AFRM", "SOFI", "HOOD", "DKNG",                # fintech sub-$20B
+        "MARA", "RIOT",                                # crypto-miner micro
+        "ROKU", "U",                                   # sub-$15B growth
+        "SNAP", "PINS",                                # sub-$25B social
+        "FSLY", "ZM", "DOCU", "TWLO",                  # thin chains
+        "JD", "PDD", "NTES", "BIDU",                   # foreign ADRs (shallow US chains)
+    }
+    assert must_not_have.isdisjoint(CURATED_OPTIONABLE_UNIVERSE), (
+        f"low-cap / shallow-chain names leaked back in: "
+        f"{must_not_have & CURATED_OPTIONABLE_UNIVERSE}"
+    )
 
 
 def test_curated_universe_excludes_foreign_and_pinks():
@@ -204,16 +227,18 @@ async def test_list_upcoming_happy_path():
 
 @pytest.mark.asyncio
 async def test_list_upcoming_filters_by_iv_rank():
-    """min_iv_rank excludes rows under the threshold."""
+    """min_iv_rank excludes rows under the threshold. Both symbols must
+    be in the curated universe — the always-on curated filter runs
+    before iv_rank hydration."""
     from services import earnings_screener as svc
 
     fake_earnings = [
-        {"symbol": "A", "company": "A", "sector": "x",
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
          "report_date": "2026-04-23", "report_time": "AMC"},
-        {"symbol": "B", "company": "B", "sector": "x",
+        {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
          "report_date": "2026-04-23", "report_time": "AMC"},
     ]
-    hydrated = {"A": {"iv_rank": 80}, "B": {"iv_rank": 30}}
+    hydrated = {"NVDA": {"iv_rank": 80}, "TSLA": {"iv_rank": 30}}
 
     async def hydrate(row, *, min_iv_rank: float = 0):
         iv = hydrated[row["symbol"]]["iv_rank"]
@@ -225,7 +250,7 @@ async def test_list_upcoming_filters_by_iv_rank():
          patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
         resp = await svc.list_upcoming(window="both", min_iv_rank=50)
     symbols = [r.symbol for r in resp.earnings]
-    assert symbols == ["A"]
+    assert symbols == ["NVDA"]
 
 
 @pytest.mark.asyncio

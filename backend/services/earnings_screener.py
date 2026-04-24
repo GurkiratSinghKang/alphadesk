@@ -94,25 +94,28 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
 _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 
 
-# Curated universe of liquid, Claude-analyzable, options-heavy US names.
-# Philosophy: the user glances over a short list and decides whether to
-# sell a call or a put. That workflow needs names with (a) deep options
-# chains so the strike ladder / yield / POP numbers are meaningful, (b)
-# enough news + analyst coverage that Claude's thesis has real substance,
-# and (c) a recognizable single-business story (not obscure micro-caps or
-# weird conglomerates where "direction" is noise).
+# Curated universe of high-market-cap, deeply-liquid, options-heavy US names.
 #
-# Roughly tiered:
-#   • S&P 100-equivalent mega caps — always tradeable
-#   • Liquid large caps outside SP100 — semis, cloud, consumer, banks
-#   • High-beta momentum names — tradeable when reporting because IV is rich
+# Rules for inclusion (all three must hold):
+#   1. Market cap ≥ $25B at the time of vetting (mega + liquid large caps).
+#   2. Weekly or monthly options listed with ≥ 10k contract OI on the
+#      front-month straddle (deep enough to absorb multi-leg fills).
+#   3. Single-name business story — a Claude thesis has substance to work
+#      against (not thematic ETFs or SPACs or inverse/leveraged derivatives).
 #
-# Anything NOT in this set gets filtered out of the earnings screener even
-# if FMP lists it — an upcoming earning for an illiquid Russell-2000 name
-# rarely offers a tradeable options setup. Users who want the full list
-# can pass ?market_cap=all to bypass this filter.
+# Explicitly excluded even if they're earnings-cycle liquid:
+#   • Sub-$20B meme / retail names (GME, AMC, BB, BBIG, PTON, BYND, LCID,
+#     NIO, XPEV, RIVN, AFRM, SOFI, HOOD, DKNG, MARA, RIOT, ROKU, U,
+#     OKTA-ish, SNAP, PINS, DASH, FSLY, ZM, DOCU, TWLO) — spreads are wide
+#     relative to premium and Claude can't consistently read the tape.
+#   • Foreign ADRs with thin US options chains (kept BABA/TSM/ASML — the
+#     three whose US chains are actually deep; dropped JD/PDD/NTES/BIDU).
+#
+# Anything NOT in this set is filtered out of the earnings screener, even
+# for ``market_cap=all`` — the screener is a decision aid, not a firehose.
+# If a user wants the full FMP feed they can hit the raw provider directly.
 CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
-    # Mega caps / SP100
+    # Mega caps (SP100 + top 30 outside) — $100B+
     "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
     "BRK.B", "AVGO", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
     "COST", "HD", "PG", "JNJ", "NFLX", "BAC", "CRM", "ABBV", "CVX",
@@ -125,16 +128,13 @@ CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
     "UBER", "BSX", "MU", "SBUX", "FI", "BX", "AMT", "KLAC", "MDLZ",
     "ADI", "CVS", "SO", "GEV", "ZTS", "CI", "MO", "CL", "DUK",
     "BMY", "WM", "ICE", "SNPS", "APH", "SHW", "PYPL", "CME",
-    # High-flyers / retail favorites — rich IV into earnings
-    "PLTR", "SMCI", "SNOW", "COIN", "SHOP", "ABNB", "CVNA", "RBLX",
-    "HOOD", "DKNG", "MARA", "RIOT", "ROKU", "U", "NET", "CRWD",
-    "ZS", "OKTA", "MDB", "DDOG", "SQ", "SOFI", "PINS", "SNAP",
-    "DASH", "AFRM", "RIVN", "LCID", "NIO", "XPEV", "BYND", "PTON",
-    "GME", "BB", "BBIG", "AMC",
-    # Other well-known optionable large caps
-    "BA", "F", "GM", "DIS", "NKE", "SPOT", "ZM", "DOCU", "FSLY",
-    "TWLO", "TEAM", "ANET", "MRVL", "LRCX", "WDAY", "FTNT", "CDNS",
-    "ASML", "TSM", "BABA", "JD", "PDD", "NTES", "BIDU",
+    # Liquid large caps with deep options ($25B–$100B)
+    "BA", "F", "GM", "DIS", "NKE", "SPOT", "TEAM", "ANET", "MRVL",
+    "LRCX", "WDAY", "FTNT", "CDNS", "PLTR", "SNOW", "COIN", "SHOP",
+    "ABNB", "CRWD", "DDOG", "SQ", "DASH", "CVNA", "RBLX", "NET",
+    "MDB", "ZS",
+    # Foreign ADRs with deep US options chains
+    "ASML", "TSM", "BABA",
 })
 
 
@@ -583,18 +583,18 @@ async def list_upcoming(
             error="earnings calendar unavailable",
         )
 
-    # Default shortlist behavior: restrict to the curated optionable
-    # universe (mega + liquid large caps + momentum names) so the screener
-    # is a *decision tool* showing ~5-10 names the user can actually
-    # evaluate, not a feed of ~60 Russell-2000 names with thin option
-    # chains. Users who want the long list pass market_cap="all".
-    if market_cap != "all":
-        before_count = len(raw_rows)
-        raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
-        log.info(
-            "earnings calendar: curated universe kept %d/%d rows (window=%s, market_cap=%s)",
-            len(raw_rows), before_count, window, market_cap,
-        )
+    # Always restrict to the curated optionable universe (mega + deeply-
+    # liquid large caps). The ``market_cap`` parameter is preserved for
+    # API back-compat but no longer opens an escape hatch — the screener
+    # is a decision tool showing names the user can actually evaluate,
+    # not a Russell-2000 firehose with thin options chains. Low-cap,
+    # meme, and foreign-ADR-with-shallow-chain names are out regardless.
+    before_count = len(raw_rows)
+    raw_rows = [r for r in raw_rows if _in_curated_universe(r.get("symbol", ""))]
+    log.info(
+        "earnings calendar: curated universe kept %d/%d rows (window=%s, market_cap=%s)",
+        len(raw_rows), before_count, window, market_cap,
+    )
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where

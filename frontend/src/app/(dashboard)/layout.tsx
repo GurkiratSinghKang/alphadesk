@@ -158,7 +158,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <TopBar />
       {tickerTapeOn && <TickerTape />}
       <StatusStrip />
-      <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
+      {/* Non-desk routes use natural document body scroll (simplest, matches
+          browser mouse-wheel defaults). The previous `overflow-y-auto` here
+          combined with `overscroll-behavior: contain` in globals.css blocked
+          wheel events from reaching the body when <main> had no internal
+          overflow (common case: short page), so the page appeared unscrollable.
+          Flex-1 still gives <main> the remaining column height. */}
+      <main id="main-content" role="main" className="flex-1" tabIndex={-1}>
         {children}
       </main>
       {/* BUG-037: use the shared build version env so this footer and the
