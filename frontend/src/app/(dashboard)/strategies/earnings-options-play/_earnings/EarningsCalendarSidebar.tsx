@@ -109,7 +109,8 @@ export default function EarningsCalendarSidebar({
                   aria-label={`Select ${r.symbol} · reports ${fmtDate(r.report_date, { weekday: "long", month: "long", day: "numeric" })}${r.iv_rank != null ? ' · IV rank ' + Math.round(r.iv_rank) : ''}`}
                   data-selected={r.symbol === selected}
                   className={cn(
-                    "flex w-full items-center justify-between rounded px-2 py-1 font-mono text-[12.5px] text-left transition-colors",
+                    // B-57: px-3/py-2 ensures ≥44 px touch target on iPad.
+                    "flex w-full items-center justify-between rounded px-3 py-2 font-mono text-[12.5px] text-left transition-colors",
                     r.symbol === selected
                       ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                       : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
