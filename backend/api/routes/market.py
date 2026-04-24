@@ -289,10 +289,14 @@ def _demo_quote(symbol: str) -> Quote:
     bid = round(last - spread / 2, 2)
     ask = round(last + spread / 2, 2)
     volume = rng.randint(5_000_000, 50_000_000)
-    # Compute realistic change data from base price
+    # Compute realistic change data from base price.
+    # B-117: guard against pathological sub-penny `prev_close` that would
+    # make `change / prev_close` overflow. Bands prev_close to [0.01, +∞).
     prev_close = round(base * (1 + rng.uniform(-0.01, 0.005)), 2)
+    if prev_close < 0.01:
+        prev_close = 0.01
     change = round(last - prev_close, 2)
-    change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+    change_pct = round((change / prev_close) * 100, 2) if prev_close >= 0.01 else 0.0
     day_open = round(prev_close * (1 + rng.uniform(-0.003, 0.003)), 2)
     day_high = round(max(last, day_open) * (1 + abs(rng.gauss(0, 0.005))), 2)
     day_low = round(min(last, day_open) * (1 - abs(rng.gauss(0, 0.005))), 2)

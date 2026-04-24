@@ -257,9 +257,19 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
             if strike_max and strike > strike_max:
                 continue
 
-            moneyness = abs(math.log(spot / strike)) if strike > 0 else 0
-            # IV smile: increase IV further OTM
-            smile_adj = base_iv * (1 + 1.5 * moneyness)
+            # B-118: clamp strike to >= $0.01 before log to avoid underflow
+            # on microcap / sub-penny prices that produce nonsensical
+            # moneyness values and explode the smile adjustment.
+            if strike <= 0.01:
+                moneyness = 999.0  # sentinel so smile_adj falls to safe zero below
+            elif spot <= 0:
+                moneyness = 0.0
+            else:
+                moneyness = abs(math.log(spot / strike))
+            # IV smile: increase IV further OTM. Cap smile_adj at 3 × base_iv
+            # to prevent the sentinel / extreme-OTM case from producing
+            # runaway values that poison downstream Greek math.
+            smile_adj = min(base_iv * (1 + 1.5 * moneyness), base_iv * 3.0)
             iv = round(smile_adj + rng.uniform(-0.02, 0.02), 4)
 
             for otype in [OptionType.CALL, OptionType.PUT]:
