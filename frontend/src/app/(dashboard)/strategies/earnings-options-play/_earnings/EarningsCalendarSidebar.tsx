@@ -80,12 +80,21 @@ export default function EarningsCalendarSidebar({
     );
   }
 
+  // B-108: summary row above the day groups names the active window and
+  // the total number of reporting symbols (pluralized via fmtPlural).
+  const windowLabel =
+    (filters?.window ?? "both") === "current" ? "This week"
+    : (filters?.window ?? "both") === "next"  ? "Next week"
+    : "This + next week";
+
   return (
     <aside
       data-slot="earnings-calendar-sidebar"
       className="self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3"
     >
-      <p className="t-label mb-2 text-[color:var(--fg-muted)]">§ CALENDAR</p>
+      <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
+        § CALENDAR <span className="text-[color:var(--fg-muted)]">· {windowLabel} · {fmtPlural(rows.length, "report")}</span>
+      </p>
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
           <h3 className="t-display-section italic text-[13px] pb-1 border-b border-[color:var(--fg-border)]">

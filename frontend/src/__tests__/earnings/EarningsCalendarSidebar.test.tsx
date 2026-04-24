@@ -56,6 +56,25 @@ describe("EarningsCalendarSidebar", () => {
     expect(container.textContent).toMatch(/no earnings|empty/i);
   });
 
+  it("renders the § CALENDAR summary with window label + N reporting count (B-108)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        filters={{ window: "current", min_iv_rank: 50, sort: "date" }}
+      />,
+    );
+    const summary = container.querySelector('[data-slot="calendar-summary"]');
+    expect(summary).not.toBeNull();
+    expect(summary?.textContent).toContain("§ CALENDAR");
+    expect(summary?.textContent).toMatch(/this week/i);
+    // 3 rows in fixture → pluralized "reports"
+    expect(summary?.textContent).toMatch(/3\s+reports/i);
+  });
+
   it("names the restricting filter in the empty state and offers a reset link (B-107)", () => {
     const { container, getByRole } = render(
       <EarningsCalendarSidebar
