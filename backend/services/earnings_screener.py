@@ -524,6 +524,35 @@ async def _load_earnings_meta(symbol: str) -> dict | None:
     return next((r for r in rows if r["symbol"] == symbol), None)
 
 
+async def _fetch_next_earnings_date(symbol: str) -> date | None:
+    """Query FMP's per-symbol ``/earnings`` endpoint for the next scheduled
+    report date. Returns ``None`` if FMP has no future record, or on any
+    upstream failure — callers treat ``None`` as "unknown report date".
+
+    This is the fallback path for symbols that aren't on FMP's 2-week
+    calendar slice used by :func:`_load_earnings_meta`. See B-41.
+    """
+    from data.providers.fmp_earnings import FMPEarningsProvider
+
+    def _load() -> date | None:
+        try:
+            with FMPEarningsProvider() as provider:
+                consensus = provider.consensus(symbol, asof=date.today())
+        except Exception as e:
+            log.warning("FMP consensus lookup failed for %s: %s", symbol, e)
+            return None
+        nxt = consensus.get("next_earnings_date") if consensus else None
+        if isinstance(nxt, date):
+            return nxt
+        return None
+
+    try:
+        return await asyncio.to_thread(_load)
+    except Exception as e:
+        log.warning("FMP consensus offload failed for %s: %s", symbol, e)
+        return None
+
+
 async def _hydrate_row(row: dict, *, min_iv_rank: float = 0) -> dict | None:
     """Enrich one FMP row with price, IV rank, expected move, and days-until.
 
@@ -666,11 +695,53 @@ async def list_upcoming(
     )
 
 
+async def _build_stub_detail(symbol: str) -> EarningsDetail:
+    """B-41 fallback: produce a minimal 200 response for any symbol that
+    isn't on the current FMP calendar slice.
+
+    Contract: live quote if available, ``report_date`` from FMP consensus
+    (``None`` if FMP has no record), and empty Claude/options blocks.
+    No Claude call is made on the stub path — users land on this panel
+    from a watchlist deep-link and shouldn't pay for structured analysis
+    until the symbol actually reports."""
+    quote_task = asyncio.create_task(_load_quote(symbol))
+    report_date_task = asyncio.create_task(_fetch_next_earnings_date(symbol))
+    quote, report_date_val = await asyncio.gather(
+        quote_task, report_date_task, return_exceptions=False
+    )
+    return EarningsDetail(
+        symbol=symbol,
+        company=symbol,  # no FMP /profile lookup in the stub path
+        sector="",
+        report_date=report_date_val,
+        report_time="DMT",
+        quote=QuoteBlock(**quote) if isinstance(quote, dict) else None,
+        metrics=None,
+        strike_ladder=None,
+        claude_structured=None,
+        claude_full_research=None,
+        historical_earnings=None,
+        iv_term_structure=None,
+        skew=None,
+        news=[],
+        partial=False,
+        generated_at=datetime.now(timezone.utc),
+    )
+
+
 async def get_detail(symbol: str) -> EarningsDetail:
-    """Fan out to every provider, merge into one detail response."""
+    """Fan out to every provider, merge into one detail response.
+
+    When ``symbol`` isn't on the current 2-week FMP calendar (typical for
+    a watchlist deep-link to a symbol reporting next quarter), fall back
+    to a **stub detail**: quote + metrics surfaced from live providers,
+    ``report_date`` sourced from FMP consensus if available, and Claude/
+    options fields left empty. This keeps the /detail endpoint a 200 for
+    any well-formed symbol instead of 404-ing the UI. See B-41.
+    """
     meta = await _load_earnings_meta(symbol)
     if not meta:
-        raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
+        return await _build_stub_detail(symbol)
 
     quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t, hist_t = (
         await asyncio.gather(

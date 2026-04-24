@@ -174,7 +174,10 @@ class EarningsDetail(BaseModel):
     symbol: str
     company: str
     sector: str
-    report_date: date
+    # ``report_date`` is nullable to support stub-detail responses for
+    # symbols that aren't on FMP's current calendar (e.g. a watchlist
+    # deep-link for a symbol reporting next quarter). See B-41.
+    report_date: date | None = None
     report_time: ReportTime
     quote: QuoteBlock | None = None
     metrics: MetricsBlock | None = None

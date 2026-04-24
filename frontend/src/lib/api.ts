@@ -141,14 +141,16 @@ function parseRetryAfter(header: string | null): number | null {
   if (!header) return null;
   const trimmed = header.trim();
   if (!trimmed) return null;
-  // delta-seconds form
+  // delta-seconds form. Clamp negative values to 0 so a malformed
+  // ``Retry-After: -5`` header doesn't schedule a retry at t=now and
+  // hammer the server (B-83).
   const asInt = Number(trimmed);
-  if (Number.isFinite(asInt) && asInt >= 0) return Math.floor(asInt);
+  if (Number.isFinite(asInt)) return Math.max(0, Math.floor(asInt));
   // HTTP-date form — Date.parse returns NaN for bad input
   const dateMs = Date.parse(trimmed);
   if (!Number.isFinite(dateMs)) return null;
   const diffSec = Math.ceil((dateMs - Date.now()) / 1000);
-  return diffSec > 0 ? diffSec : 0;
+  return Math.max(0, diffSec);
 }
 
 /**
