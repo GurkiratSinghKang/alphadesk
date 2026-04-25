@@ -4575,3 +4575,143 @@ async def reconcile_on_boot() -> None:
             "reconcile: failed to persist last_success_ts (non-fatal)",
             exc_info=True,
         )
+
+    # J-9 (Round-6) — position drift report on boot. Compares the
+    # broker's open positions against the local Trade ledger and logs
+    # a WARN for every drift it spots.
+    try:
+        await reconcile_positions_on_boot()
+    except Exception:
+        logger.warning(
+            "reconcile_positions_on_boot raised (non-fatal)",
+            exc_info=True,
+        )
+
+
+async def reconcile_positions_on_boot() -> dict[str, Any]:
+    """J-9 (Round-6) — broker vs ledger position drift report on boot.
+
+    Fetches Alpaca's ``/v2/positions`` and compares against open Trade
+    rows from the local ledger. WARN-logs every drift case:
+
+      * Broker holds a position with no matching open Trade row.
+      * Local Trade row is open/submitted but broker has flatted.
+      * Both sides agree on the symbol but disagree on the qty.
+
+    Returns a count dict so callers (tests, ops scripts) can assert
+    against the result. Best-effort: a broker / DB outage leaves the
+    count buckets at 0 and the function returns without raising.
+    """
+    result = {
+        "matched": 0,
+        "drift_qty": 0,
+        "drift_orphan_local": 0,   # local has open, broker doesn't
+        "drift_orphan_broker": 0,  # broker has, local doesn't
+    }
+    if _alpaca_keys_empty():
+        logger.debug("reconcile_positions_on_boot: keys missing — skip")
+        return result
+
+    from core.config import settings as _s
+
+    # Broker side — fetch every open position.
+    broker_positions: dict[str, float] = {}
+    try:
+        headers = {
+            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{_s.ALPACA_BASE_URL}/v2/positions",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                for p in resp.json() or []:
+                    sym = p.get("symbol")
+                    if not sym:
+                        continue
+                    try:
+                        broker_positions[sym] = float(p.get("qty", 0) or 0)
+                    except (TypeError, ValueError):
+                        continue
+    except Exception:
+        logger.warning(
+            "reconcile_positions_on_boot: broker fetch failed (non-fatal)",
+            exc_info=True,
+        )
+        return result
+
+    # Local side — sum open Trade rows per symbol.
+    local_positions: dict[str, float] = {}
+    if not _s.SKIP_DB_INIT:
+        try:
+            from sqlalchemy import select
+            from core.database import _get_session_factory
+            from data.storage.models import Trade
+
+            factory = _get_session_factory()
+            async with factory() as db:
+                q = select(Trade).where(
+                    Trade.status.in_(["submitted", "open", "filled", "partial"])
+                )
+                rows = (await db.execute(q)).scalars().all()
+                for t in rows:
+                    if not t.symbol:
+                        continue
+                    try:
+                        # Prefer filled_qty when populated (J-17),
+                        # else fall back to leg qty.
+                        if getattr(t, "filled_qty", None) is not None:
+                            qty = float(t.filled_qty)
+                        else:
+                            leg = (t.legs or [{}])[0]
+                            qty = float(leg.get("qty", 0) or 0) if isinstance(leg, dict) else 0.0
+                        # Sign by trade_kind / side
+                        if (
+                            getattr(t, "trade_kind", None) == "short_open"
+                            or t.side == "short"
+                        ):
+                            qty = -qty
+                        local_positions[t.symbol] = local_positions.get(t.symbol, 0.0) + qty
+                    except Exception:
+                        continue
+        except Exception:
+            logger.warning(
+                "reconcile_positions_on_boot: ledger fetch failed (non-fatal)",
+                exc_info=True,
+            )
+            return result
+
+    # Walk the union of both sides and classify drift.
+    union_symbols = set(broker_positions.keys()) | set(local_positions.keys())
+    for sym in union_symbols:
+        broker_qty = broker_positions.get(sym, 0.0)
+        local_qty = local_positions.get(sym, 0.0)
+        if broker_qty == 0 and local_qty != 0:
+            result["drift_orphan_local"] += 1
+            logger.warning(
+                "reconcile_positions_on_boot: drift — symbol=%s broker=0 local=%.4f",
+                sym, local_qty,
+            )
+        elif broker_qty != 0 and local_qty == 0:
+            result["drift_orphan_broker"] += 1
+            logger.warning(
+                "reconcile_positions_on_boot: drift — symbol=%s broker=%.4f local=0",
+                sym, broker_qty,
+            )
+        elif abs(broker_qty - local_qty) > 1e-6:
+            result["drift_qty"] += 1
+            logger.warning(
+                "reconcile_positions_on_boot: drift — symbol=%s broker=%.4f local=%.4f",
+                sym, broker_qty, local_qty,
+            )
+        else:
+            result["matched"] += 1
+    logger.info(
+        "reconcile_positions_on_boot: matched=%d drift_qty=%d "
+        "drift_orphan_local=%d drift_orphan_broker=%d",
+        result["matched"], result["drift_qty"],
+        result["drift_orphan_local"], result["drift_orphan_broker"],
+    )
+    return result
