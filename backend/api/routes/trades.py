@@ -2476,6 +2476,226 @@ async def _get_account_equity() -> float:
     return 0.0
 
 
+async def _get_account_equity_and_buying_power() -> tuple[float, float]:
+    """J-6 — fetch (equity, buying_power) in a single round-trip.
+
+    The buying-power preflight needs both numbers but ``_get_account_equity``
+    only returns equity. Returns ``(0.0, 0.0)`` on broker failure so
+    the caller fails closed on the relevant gates.
+    """
+    if _alpaca_keys_empty():
+        return 0.0, 0.0
+    try:
+        from core.config import settings as _s
+        headers = {
+            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{_s.ALPACA_BASE_URL}/v2/account",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return (
+                    float(data.get("equity", 0) or 0),
+                    float(data.get("buying_power", 0) or 0),
+                )
+    except Exception:
+        logger.warning(
+            "Failed to fetch Alpaca account for buying-power preflight",
+            exc_info=True,
+        )
+    return 0.0, 0.0
+
+
+async def _get_realized_pnl_today() -> float:
+    """J-3 — realized P&L for trades closed today (ET).
+
+    Extracted from ``portfolio.py::get_portfolio_summary`` so the
+    daily-loss gate can short-circuit BEFORE the broker submit. Reads
+    the trade ledger via the same SQL aggregate the dashboard uses, so
+    the two views can never disagree. Returns 0.0 on DB failure.
+    """
+    try:
+        from core.config import settings
+        if settings.SKIP_DB_INIT:
+            return 0.0
+        from sqlalchemy import text
+        from core.database import _get_session_factory
+
+        factory = _get_session_factory()
+        async with factory() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(pnl), 0) AS total
+                      FROM trade_ledger
+                     WHERE status = 'closed'
+                       AND exit_time >= date_trunc(
+                             'day', NOW() AT TIME ZONE 'America/New_York'
+                           )
+                    """
+                )
+            )
+            total = result.scalar()
+        return round(float(total or 0), 2)
+    except Exception:
+        logger.debug(
+            "_get_realized_pnl_today: SQL aggregate failed; returning 0.0",
+            exc_info=True,
+        )
+        return 0.0
+
+
+# J-3 — daily loss limit (FIX-2 owns config; hardcoded for now).
+# TODO(FIX-2): expose this via core.config so it's tunable per-deployment.
+DAILY_LOSS_LIMIT_FRACTION = 0.05
+
+
+async def _daily_loss_check(
+    equity: float,
+) -> tuple[bool, str, float]:
+    """J-3 — refuse new orders when today's realised loss is ≥ 5% of equity.
+
+    Returns ``(passed, reason, realized_pnl_today)``. ``passed`` is
+    True when ``abs(realized_pnl) <= equity * 0.05`` OR when equity is
+    zero (broker unreachable — the aggregate gate's other layers will
+    fail-closed in that case).
+    """
+    if equity <= 0:
+        return True, "skipped_no_equity", 0.0
+    realized = await _get_realized_pnl_today()
+    limit = equity * DAILY_LOSS_LIMIT_FRACTION
+    if abs(realized) > limit:
+        return (
+            False,
+            (
+                f"Daily loss limit reached: realised P&L ${realized:,.2f} "
+                f"vs cap ${limit:,.2f} (5% of equity). New orders blocked "
+                f"until tomorrow's session."
+            ),
+            realized,
+        )
+    return True, "passed", realized
+
+
+# J-7 — quote staleness gate. Reject when the limit price was anchored
+# on a quote older than this many seconds.
+QUOTE_STALENESS_MAX_SECONDS = 30
+# J-7 — and reject when the limit price diverges from the current quote
+# by more than this fraction (50bps default).
+QUOTE_PRICE_DRIFT_MAX_FRACTION = 0.005
+
+
+async def _quote_staleness_check(
+    request: CreateOrderRequest,
+) -> tuple[bool, str]:
+    """J-7 — reject limit orders anchored on stale quotes.
+
+    Skipped when caller didn't forward ``quote_at_fill_ts``. When set:
+      1. quote_at_fill_ts more than 30s old → reject.
+      2. Limit price diverges from current quote by > 0.5% → reject.
+    """
+    if request.quote_at_fill_ts is None:
+        return True, "skipped_no_ts"
+    ts = float(request.quote_at_fill_ts)
+    age_seconds = max(0.0, datetime.now(timezone.utc).timestamp() - ts)
+    if age_seconds > QUOTE_STALENESS_MAX_SECONDS:
+        return False, (
+            f"Quote staleness: snapshot is {age_seconds:.1f}s old (cap "
+            f"{QUOTE_STALENESS_MAX_SECONDS}s). Re-fetch the quote and resubmit."
+        )
+
+    # Drift check — only on legs with a limit price.
+    for leg in request.legs:
+        if not leg.limit_price:
+            continue
+        current = await _get_current_price(leg.symbol)
+        if current <= 0:
+            continue
+        limit = float(leg.limit_price)
+        drift = abs(limit - current) / current
+        if drift > QUOTE_PRICE_DRIFT_MAX_FRACTION:
+            return False, (
+                f"Quote drift: limit ${limit:.4f} on {leg.symbol} diverges "
+                f"{drift * 100:.2f}% from current ${current:.4f} (cap "
+                f"{QUOTE_PRICE_DRIFT_MAX_FRACTION * 100:.2f}%). Re-quote first."
+            )
+    return True, "passed"
+
+
+# J-11 — symbol halt / tradability cache TTL.
+_SYMBOL_TRADABLE_CACHE_TTL = 60
+
+
+async def _check_symbol_tradable(symbol: str) -> tuple[bool, str]:
+    """J-11 — refuse orders on symbols flagged halted / non-tradable.
+
+    Calls Alpaca ``/v2/assets/{symbol}`` and rejects when ``status !=
+    "active"`` or ``tradable`` is False. Result is cached in Redis for
+    60 seconds. FAILS OPEN on broker failure so the order proceeds and
+    Alpaca rejects bad symbols with its own 422.
+    """
+    if not symbol:
+        return True, "passed"
+    upper = symbol.upper()
+
+    # Cache hit?
+    try:
+        from core.redis import cache_get
+        cached = await cache_get(f"symbol_tradable:{upper}")
+        if isinstance(cached, dict) and "tradable" in cached:
+            if cached["tradable"]:
+                return True, "passed"
+            return False, cached.get("reason", "Symbol not tradable")
+    except Exception:
+        logger.debug("symbol_tradable cache read failed", exc_info=True)
+
+    if _alpaca_keys_empty():
+        return True, "skipped_no_keys"
+
+    try:
+        from core.config import settings as _s
+        headers = {
+            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(
+                f"{_s.ALPACA_BASE_URL}/v2/assets/{upper}",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                body = resp.json()
+                tradable = bool(body.get("tradable", True))
+                status = (body.get("status") or "active").lower()
+                halted = not tradable or status != "active"
+                reason = (
+                    f"Symbol {upper} flagged status={status} tradable={tradable}"
+                    if halted else "passed"
+                )
+                try:
+                    from core.redis import cache_set
+                    await cache_set(
+                        f"symbol_tradable:{upper}",
+                        {"tradable": not halted, "reason": reason},
+                        ttl_seconds=_SYMBOL_TRADABLE_CACHE_TTL,
+                    )
+                except Exception:
+                    logger.debug("symbol_tradable cache write failed", exc_info=True)
+                if halted:
+                    return False, reason
+                return True, "passed"
+    except Exception:
+        logger.debug(
+            "_check_symbol_tradable: broker probe failed for %s — fail-open",
+            upper, exc_info=True,
+        )
+    return True, "skipped_broker_unavailable"
+
+
 async def _get_open_position_count_and_sector_exposure() -> tuple[int, dict[str, float], float]:
     """Return (position_count, {sector: exposure_usd}, equity_usd) from Alpaca.
 
@@ -2585,6 +2805,21 @@ async def _aggregate_risk_check(
         if not wash_ok:
             return False, wash_reason
 
+    # J-11 (Round-6): symbol halt / tradability check. Cheap (60s
+    # Redis cache) so it runs early — a halted symbol takes priority
+    # over the more expensive notional / equity calls below.
+    for leg in request.legs:
+        tradable_ok, tradable_reason = await _check_symbol_tradable(leg.symbol)
+        if not tradable_ok:
+            return False, tradable_reason
+
+    # J-7 (Round-6): quote-staleness gate. Skipped when caller didn't
+    # forward a ``quote_at_fill_ts``; otherwise rejects stale snapshots
+    # and limit prices that diverge >50bps from the live quote.
+    quote_ok, quote_reason = await _quote_staleness_check(request)
+    if not quote_ok:
+        return False, quote_reason
+
     # Today's gross notional
     incoming = await _compute_order_notional(request)
     todays_gross = await _get_todays_gross_notional()
@@ -2594,6 +2829,49 @@ async def _aggregate_risk_check(
             f"(cap ${DAILY_GROSS_NOTIONAL_CAP:,.0f}). Today already deployed "
             f"${todays_gross:,.0f}."
         )
+
+    # J-6 (Round-6): buying-power preflight. Fetched once and reused
+    # for the daily-loss gate below.
+    bp_equity, buying_power = await _get_account_equity_and_buying_power()
+    first_leg_for_bp = request.legs[0]
+    if bp_equity > 0:
+        if first_leg_for_bp.side == OrderSide.BUY:
+            if buying_power > 0 and incoming > buying_power:
+                return False, (
+                    f"Buying-power preflight: order notional ${incoming:,.0f} "
+                    f"exceeds available buying power ${buying_power:,.0f}."
+                )
+        else:
+            margin_cap = bp_equity * 2.0
+            if incoming > margin_cap:
+                return False, (
+                    f"Margin preflight: short/sell notional ${incoming:,.0f} "
+                    f"exceeds 2× equity (${margin_cap:,.0f}). Reduce size."
+                )
+
+    # J-3 (Round-6): daily-loss circuit breaker. Refuses NEW orders
+    # once today's realised loss is ≥ 5% of equity.
+    daily_ok, daily_reason, realized_pnl_today = await _daily_loss_check(bp_equity)
+    if not daily_ok:
+        try:
+            from core.audit import write_audit
+            from core.logging import REQUEST_ID
+
+            rid = REQUEST_ID.get()
+            await write_audit(
+                "daily_loss_limit_rejected",
+                username=username,
+                ip=None,
+                request_id=rid if rid and rid != "-" else None,
+                details={
+                    "realized_pnl_today": realized_pnl_today,
+                    "equity": bp_equity,
+                    "limit_fraction": DAILY_LOSS_LIMIT_FRACTION,
+                },
+            )
+        except Exception:
+            logger.debug("daily_loss audit persistence failed", exc_info=True)
+        return False, daily_reason
 
     # Wave 2H P76-3: closing-auction throttle. After 15:45 ET, non-auction
     # strategies share a 10%-of-daily-cap ceiling on rolling 15-min
