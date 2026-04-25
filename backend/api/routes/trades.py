@@ -404,6 +404,54 @@ class CreateOrderRequest(BaseModel):
         # field a hostile string lands in.
         return _sanitize_user_text(v)
 
+    @field_validator("combo_type")
+    @classmethod
+    def sanitize_combo_type(cls, v: str | None) -> str | None:
+        """L-12 (Round-6) — restrict ``combo_type`` to a fixed literal set.
+
+        Previously the field was unrestricted free text up to 32 chars
+        which let a hostile caller stash a CSV-injection prefix or a
+        SQL-shape payload in the column. The string is also load-bearing
+        for the notional calculator (J-2) — an unknown value silently
+        falls through to the per-leg path, which is the wrong default
+        for a defined-risk spread. Restrict to the four shapes the
+        notional logic recognises.
+        """
+        if v is None:
+            return None
+        normalised = v.strip().lower()
+        if normalised == "":
+            return None
+        if not re.fullmatch(r"(iron_condor|vertical_spread|strangle|covered_call)", normalised):
+            raise ValueError(
+                "combo_type must be one of: iron_condor, vertical_spread, "
+                "strangle, covered_call"
+            )
+        return normalised
+
+    @field_validator("combo_correlation_id")
+    @classmethod
+    def sanitize_combo_correlation_id(cls, v: str | None) -> str | None:
+        """L-12 — combo_correlation_id MUST be a UUID4 hex/dashed.
+
+        The id stitches multi-leg orders together when the broker lacks
+        native combo support; downstream code uses it as a Redis hash
+        key. Reject anything that isn't a UUID so an attacker can't
+        inject a colon-prefixed pattern that escapes the namespace.
+        """
+        if v is None:
+            return None
+        candidate = v.strip()
+        if candidate == "":
+            return None
+        try:
+            _uuid.UUID(candidate)
+        except (ValueError, AttributeError):
+            raise ValueError(
+                "combo_correlation_id must be a valid UUID4 string"
+            )
+        return candidate
+
 
 class OrderResponse(BaseModel):
     id: str
@@ -2190,11 +2238,46 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
     same number (persona-16 P0-4 — previously the per-order cap and the
     "daily gross" idea disagreed on what counted as notional for a leg
     whose limit_price was None).
+
+    J-2 (Round-6) — combo notional is a DEFINED-RISK envelope, not a
+    naked-leg sum. Iron condors and verticals risk only the spread
+    WIDTH (per share, × 100 contract multiplier × qty), regardless of
+    how expensive the individual legs price. Treating each leg
+    independently over-states the risk by 5-30× and was the dominant
+    reason well-sized spreads tripped the per-order cap.
+
+    Combo rules:
+      * ``iron_condor``      : width × qty × 100
+      * ``vertical_spread``  : width × qty × 100
+      * ``strangle``         : max(naked_call_notional, naked_put_notional)
+
+    For all other shapes (single equity leg, single options leg, no
+    combo_type set), notional sums per-leg with the standard contract
+    multiplier (× 100 for options legs, × 1 for equity).
     """
+    combo = (request.combo_type or "").strip().lower()
+
+    # --- Combo: defined-risk spreads ---------------------------------
+    if combo in ("iron_condor", "vertical_spread"):
+        width = _combo_spread_width(request)
+        qty = float(request.legs[0].qty) if request.legs else 0.0
+        return abs(width) * qty * 100.0
+
+    if combo == "strangle":
+        return _combo_strangle_max_notional(request)
+
+    # --- Default: per-leg sum with contract multiplier ---------------
     total = 0.0
     for leg in request.legs:
+        # Options legs use the 100-contract multiplier.
+        is_option = (
+            (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+            or _parse_occ_symbol(leg.symbol) is not None
+        )
+        multiplier = 100.0 if is_option else 1.0
+
         if leg.limit_price:
-            total += float(leg.limit_price) * float(leg.qty)
+            total += float(leg.limit_price) * float(leg.qty) * multiplier
         else:
             price = await _get_current_price(leg.symbol)
             if price <= 0:
@@ -2202,8 +2285,64 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
                     status_code=400,
                     detail=f"Cannot determine price for {leg.symbol}. Use a limit order.",
                 )
-            total += float(price) * float(leg.qty)
+            total += float(price) * float(leg.qty) * multiplier
     return total
+
+
+def _combo_spread_width(request: CreateOrderRequest) -> float:
+    """J-2 — width of a defined-risk spread (iron_condor / vertical_spread).
+
+    Vertical: |strike_buy - strike_sell| of the two legs.
+    Iron condor: max(call_spread_width, put_spread_width) so a skewed
+    condor still gets a conservative envelope. Returns 0.0 if any
+    leg's strike can't be parsed.
+    """
+    strikes_by_side: dict[str, list[float]] = {"C": [], "P": []}
+    all_strikes: list[float] = []
+    for leg in request.legs:
+        parsed = _parse_occ_symbol(leg.symbol)
+        if parsed is None:
+            return 0.0
+        side_letter = "C" if parsed["call_put"] == "call" else "P"
+        strike = float(parsed["strike"])
+        strikes_by_side[side_letter].append(strike)
+        all_strikes.append(strike)
+
+    # Vertical: 2 legs.
+    if len(request.legs) == 2 and len(all_strikes) == 2:
+        return abs(all_strikes[0] - all_strikes[1])
+
+    # Iron condor: 2 calls + 2 puts.
+    if (
+        len(request.legs) == 4
+        and len(strikes_by_side["C"]) == 2
+        and len(strikes_by_side["P"]) == 2
+    ):
+        call_width = abs(strikes_by_side["C"][0] - strikes_by_side["C"][1])
+        put_width = abs(strikes_by_side["P"][0] - strikes_by_side["P"][1])
+        return max(call_width, put_width)
+
+    return 0.0
+
+
+def _combo_strangle_max_notional(request: CreateOrderRequest) -> float:
+    """J-2 — conservative strangle envelope: max(naked_call, naked_put).
+
+    A strangle is short undefined-risk on each side, but for risk-cap
+    purposes we use the larger naked-side notional rather than the sum.
+    """
+    notionals: dict[str, float] = {"C": 0.0, "P": 0.0}
+    for leg in request.legs:
+        parsed = _parse_occ_symbol(leg.symbol)
+        if parsed is None:
+            continue
+        side_letter = "C" if parsed["call_put"] == "call" else "P"
+        if leg.limit_price:
+            leg_notional = float(leg.limit_price) * float(leg.qty) * 100.0
+        else:
+            leg_notional = 0.0
+        notionals[side_letter] += leg_notional
+    return max(notionals["C"], notionals["P"])
 
 
 async def _get_todays_gross_notional() -> float:
