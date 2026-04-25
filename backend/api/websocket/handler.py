@@ -108,12 +108,19 @@ class ConnectionManager:
     def active_count(self) -> int:
         return len(self._connections)
 
-    async def register(self, ws: WebSocket, user_id: str = "default") -> bool:
+    async def register(self, ws: WebSocket, user_id: str) -> bool:
         """Register an already-accepted WebSocket connection.
 
         ``user_id`` is pinned per-connection so the trade_updates stream
         subscription can address ``trade_updates:{user_id}`` without having
         to re-read the auth token on every subscribe frame.
+
+        Round-7 / O-4: ``user_id`` is now required (no ``"default"``
+        fallback). The auth bootstrap rejects connections whose JWT
+        lacks a subject before this method is reached, so callers
+        always have a real user_id; making it explicit prevents a
+        future caller from accidentally landing on the cross-tenant
+        sentinel.
 
         Round 7 Fix 1 (P127): enforces two caps ahead of the dict insert.
         Returns ``True`` on success; ``False`` on rejection (caller is
