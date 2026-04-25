@@ -947,11 +947,18 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
   }, [trades, taxYear]);
 
   const classified = useMemo(() => {
-    // Round-5 F-9 — wash-sale detection. Walk all closed losses and
-    // mark the loss disallowed when the SAME symbol re-opened within
-    // [exit_date, exit_date + 30 days]. We use ALL trades (across all
-    // tax years) for the lookup because a December close + January
-    // re-buy spans tax years; restricting to taxTrades would miss it.
+    // Round-5 F-9 / J-12 (round-6) — wash-sale detection. Walk all
+    // closed losses and mark the loss disallowed when the SAME symbol
+    // re-opened within the IRS §1091 wash-sale window of
+    // [exit_date - 30 days, exit_date + 30 days]. The loss is
+    // disallowed if the substantially-identical security was bought
+    // EITHER before OR after the loss-realising sale — the previous
+    // implementation only checked forward 30 days, missing the common
+    // "buy → buy more → sell loss" pattern.
+    //
+    // We use ALL trades (across all tax years) for the lookup because
+    // a December close + January re-buy spans tax years; restricting
+    // to taxTrades would miss it.
     //
     // This is best-effort: it does not yet handle "substantially
     // identical" securities (a related call/put or ETF substitution),
@@ -982,10 +989,14 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       // a leap-year lookup.
       const isLongTerm = holdingDays > 365;
 
-      // Round-5 F-9 — wash-sale flag. Only losses qualify.
+      // Round-5 F-9 / J-12 (round-6) — wash-sale flag. Only losses
+      // qualify. The IRS window is symmetric: ±30 calendar days around
+      // the loss-realising exit. The loop now iterates all opens — both
+      // before and after the exit — and flips the flag on the first hit.
       let washSaleLossDisallowed = false;
       if ((t.pnl ?? 0) < 0 && t.exit_time) {
         const exitTs = exitMid;
+        const windowStart = exitTs - 30 * 86_400_000;
         const windowEnd = exitTs + 30 * 86_400_000;
         for (const o of allOpens) {
           if (o.symbol !== t.symbol) continue;
@@ -994,7 +1005,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
           if (o.entry_time === t.entry_time) continue;
           const op = etDateParts(o.entry_time);
           const opMid = Date.UTC(op.y, op.m - 1, op.d);
-          if (opMid >= exitTs && opMid <= windowEnd) {
+          if (opMid >= windowStart && opMid <= windowEnd) {
             washSaleLossDisallowed = true;
             break;
           }
