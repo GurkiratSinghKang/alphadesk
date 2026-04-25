@@ -12,6 +12,24 @@ import httpx
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _reset_singleton():
+    """Drain the shared singleton between tests so a transport-mocked
+    client from one test doesn't leak into another (or into other test
+    files that import the same module).
+
+    We blunt-reset the module-global to ``None`` rather than calling
+    ``aclose()`` — closing requires an event loop, but pytest fixtures
+    that wrap async tests don't have one available at fixture setup
+    time. The leaked socket-pool resource is microscopic at test scale
+    and the AsyncClient's __del__ handles eventual cleanup.
+    """
+    from data.providers import _fmp_http
+    _fmp_http._ASYNC_CLIENT = None
+    yield
+    _fmp_http._ASYNC_CLIENT = None
+
+
 @pytest.mark.asyncio
 async def test_get_async_client_returns_singleton():
     """Two calls to get_async_client() return the same instance."""
@@ -46,6 +64,13 @@ async def test_close_async_client_idempotent():
 @pytest.mark.asyncio
 async def test_afetch_injects_apikey_and_returns_json(monkeypatch):
     """afetch() must add ``apikey`` and parse JSON."""
+    # Re-set FMP key in settings — other test suites may have cleared
+    # the value via monkeypatch.
+    from pydantic import SecretStr
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "FMP_API_KEY", SecretStr("fake-key-for-test"))
+
     from data.providers import _fmp_http
 
     # Reset client state for a clean transport mock.
@@ -79,6 +104,11 @@ async def test_afetch_injects_apikey_and_returns_json(monkeypatch):
 @pytest.mark.asyncio
 async def test_afetch_raises_on_error_message_body(monkeypatch):
     """A 200 with ``{"Error Message": "..."}`` body must raise."""
+    from pydantic import SecretStr
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "FMP_API_KEY", SecretStr("fake-key-for-test"))
+
     from data.providers import _fmp_http
 
     if _fmp_http._ASYNC_CLIENT is not None:

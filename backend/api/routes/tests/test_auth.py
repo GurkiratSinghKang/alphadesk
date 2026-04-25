@@ -381,18 +381,26 @@ def test_jwt_decode_accepts_token_with_small_clock_drift(fake_redis, test_jwt_en
     Simulates a Tor-routed client whose system clock is running slightly
     ahead of the server. Without leeway, its tokens 401 immediately on the
     first authenticated request.
+
+    Round-6 L-5: token now also carries iat/iss/aud claims so it
+    passes the new validation gate.
     """
     import jwt as jwt_lib
-    from core.auth import ALGORITHM, decode_token
+    from core.auth import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, decode_token
     from core.config import settings
 
     # Mint a token with exp=now-30s. Well inside the 60s leeway, should
     # decode.
-    past = datetime.now(timezone.utc) - timedelta(seconds=30)
+    now = datetime.now(timezone.utc)
+    past = now - timedelta(seconds=30)
     token = jwt_lib.encode(
         {
             "sub": _TEST_USERNAME,
             "exp": past,
+            "iat": now - timedelta(minutes=5),
+            "nbf": now - timedelta(minutes=5),
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
             "type": "access",
             "jti": "test-jti-1",
             "pv": 1,
@@ -436,12 +444,20 @@ def test_jwt_decode_rejects_token_past_leeway(fake_redis, test_jwt_env):
 
 
 def test_access_token_embeds_pv_and_epoch(fake_redis, test_jwt_env):
+    """Round-6 L-5: pass audience+issuer to jwt.decode so the validator
+    doesn't trip on the new aud claim."""
     import jwt as jwt_lib
-    from core.auth import ALGORITHM, create_access_token
+    from core.auth import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, create_access_token
     from core.config import settings
 
     token = create_access_token(_TEST_USERNAME, password_version=7, session_epoch=13)
-    payload = jwt_lib.decode(token, settings.jwt_secret_value, algorithms=[ALGORITHM])
+    payload = jwt_lib.decode(
+        token,
+        settings.jwt_secret_value,
+        algorithms=[ALGORITHM],
+        audience=JWT_AUDIENCE,
+        issuer=JWT_ISSUER,
+    )
     assert payload["pv"] == 7
     assert payload["epoch"] == 13
     assert payload["sub"] == _TEST_USERNAME

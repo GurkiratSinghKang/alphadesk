@@ -554,22 +554,25 @@ async def test_claude_call_log_includes_user_id(monkeypatch, caplog):
     assert getattr(matched[0], "endpoint", None) == "earnings.detail"
 
 
-def test_livez_returns_git_sha(authed_client):
-    """H-8: /livez must surface git_sha so an oncall doing curl-loops
-    can tell which build is responding."""
+def test_livez_returns_status(authed_client):
+    """Round-6 L-14 superseded H-8: /livez no longer leaks git_sha to
+    public callers. Authenticated callers can still read git_sha via
+    /readyz-full. The deploy-correlation use case is satisfied by
+    GIT_SHA in JSON log records (see test_logging_includes_git_sha)."""
     r = authed_client.get("/livez")
     assert r.status_code == 200
     body = r.json()
-    assert "status" in body
-    assert "git_sha" in body
+    assert body == {"status": "ok"}
+    assert "git_sha" not in body
 
 
-def test_health_returns_git_sha(authed_client):
-    """H-8: /health (back-compat alias) also surfaces git_sha."""
+def test_health_returns_status(authed_client):
+    """Round-6 L-14: /health (back-compat alias) also strips git_sha."""
     r = authed_client.get("/health")
     assert r.status_code == 200
     body = r.json()
-    assert "git_sha" in body
+    assert body == {"status": "ok"}
+    assert "git_sha" not in body
 
 
 def test_logging_includes_git_sha():
