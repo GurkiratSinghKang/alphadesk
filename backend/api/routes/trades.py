@@ -359,6 +359,19 @@ def _sanitize_user_text(v: str | None) -> str | None:
     return cleaned or None
 
 
+class BracketSpec(BaseModel):
+    """J-14 (Round-6) — bracket exit spec attached to a manual order.
+
+    When present on ``CreateOrderRequest``, the submit path wraps the
+    order in an ``order_class=bracket`` envelope so Alpaca atomically
+    arms a stop-loss and take-profit OCO around the entry. Both legs
+    are required; partial brackets (one-sided) should be expressed as
+    a child STOP / LIMIT order on a separate POST.
+    """
+    stop_loss: float = Field(..., gt=0, description="Stop-loss trigger price")
+    take_profit: float = Field(..., gt=0, description="Take-profit limit price")
+
+
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
     time_in_force: TimeInForce = TimeInForce.DAY
@@ -388,6 +401,28 @@ class CreateOrderRequest(BaseModel):
     allow_closing_auction: bool = Field(
         False,
         description="True when the originating strategy is sized for the MOC/MOL auction.",
+    )
+    # J-7 (Round-6) — quote staleness gate. When the caller has a
+    # specific quote-snapshot timestamp it built the price decision on,
+    # forwarding it lets the risk gate refuse the order if the limit
+    # was anchored to a >30s-stale tick. Optional unix-seconds float;
+    # missing means "no staleness check" so legacy callers continue to
+    # work.
+    quote_at_fill_ts: float | None = Field(
+        None,
+        description="Unix-seconds timestamp of the quote snapshot the limit price is anchored on.",
+    )
+    # J-10 (Round-6) — explicit extended-hours opt-in. The market-hours
+    # gate now applies to ALL order types (not just MARKET). Limit
+    # orders that intentionally rest outside RTH must set this True.
+    extended_hours: bool = Field(
+        False,
+        description="True when the order is intended to rest in extended hours.",
+    )
+    # J-14 (Round-6) — bracket exit attached to entry.
+    bracket: BracketSpec | None = Field(
+        None,
+        description="Optional bracket exit (stop_loss + take_profit) submitted with entry.",
     )
 
     @field_validator("notes")
@@ -923,31 +958,37 @@ async def create_order(
         except Exception:
             logger.debug("Redis unavailable for Idempotency-Key lookup", exc_info=True)
 
-    # Reject market orders outside regular trading hours (session-aware:
-    # uses USMarketCalendar so US holidays and early-close afternoons are
-    # rejected correctly — previously a market order on MLK day, Good Friday,
-    # Christmas Eve after 13:00 ET, etc. would pass the gate and be rejected
-    # by Alpaca with a confusing error).
-    if any(leg.order_type == OrderType.MARKET for leg in payload.legs):
+    # J-10 (Round-6) — the gate now applies to ALL order types
+    # (market / limit / stop / stop_limit). A limit order placed on a
+    # holiday weekend would previously sit in Alpaca's queue all
+    # weekend then evaluate against Monday's open at the configured
+    # GTC. Limit orders that DO want to rest in extended hours can opt
+    # in by setting ``extended_hours=True`` on the request.
+    if not payload.extended_hours:
         et_now = datetime.now(ZoneInfo("America/New_York"))
         try:
             from data.calendar import USMarketCalendar
             _cal = USMarketCalendar()
             if not _cal.is_trading_day(et_now.date()):
                 raise HTTPException(
-                    status_code=400,
-                    detail="Market is closed (US holiday or weekend). Market orders can only be placed on trading days.",
+                    status_code=422,
+                    detail=(
+                        "Market is closed (US holiday or weekend). Set "
+                        "extended_hours=True to rest the order through to "
+                        "the next session."
+                    ),
                 )
             open_utc, close_utc = _cal.session_hours(et_now.date())
             open_et = open_utc.astimezone(ZoneInfo("America/New_York"))
             close_et = close_utc.astimezone(ZoneInfo("America/New_York"))
             if et_now < open_et or et_now >= close_et:
                 raise HTTPException(
-                    status_code=400,
+                    status_code=422,
                     detail=(
-                        "Market orders can only be placed during regular trading "
-                        f"hours ({open_et.strftime('%H:%M')} – "
-                        f"{close_et.strftime('%H:%M')} ET)."
+                        "Outside regular trading hours "
+                        f"({open_et.strftime('%H:%M')} – "
+                        f"{close_et.strftime('%H:%M')} ET). Set "
+                        "extended_hours=True to opt into extended hours."
                     ),
                 )
         except HTTPException:
@@ -967,8 +1008,11 @@ async def create_order(
                 or et_now.hour >= 16
             ):
                 raise HTTPException(
-                    status_code=400,
-                    detail="Market orders can only be placed during regular trading hours (9:30 AM - 4:00 PM ET)",
+                    status_code=422,
+                    detail=(
+                        "Orders can only be placed during regular trading "
+                        "hours (9:30 AM - 4:00 PM ET) unless extended_hours=True."
+                    ),
                 )
 
     from core.config import settings
@@ -3665,6 +3709,20 @@ async def _submit_to_broker(
             body["stop_price"] = str(leg.stop_price)
         if client_order_id:
             body["client_order_id"] = client_order_id
+        # J-10 (Round-6) — extended-hours flag passes through. Alpaca
+        # only accepts ``extended_hours=true`` on LIMIT-style orders;
+        # quietly drop on others.
+        if request.extended_hours and leg.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
+            body["extended_hours"] = True
+        # J-14 (Round-6) — bracket envelope. Wrap the entry in
+        # ``order_class=bracket`` so Alpaca atomically arms the
+        # stop_loss / take_profit OCO. The API requires
+        # ``stop_loss.stop_price`` AND ``take_profit.limit_price`` as
+        # the canonical shape.
+        if request.bracket is not None:
+            body["order_class"] = "bracket"
+            body["stop_loss"] = {"stop_price": str(request.bracket.stop_loss)}
+            body["take_profit"] = {"limit_price": str(request.bracket.take_profit)}
     else:
         # Multi-leg order (options combo) (BUG-027)
         body = {
@@ -3685,6 +3743,9 @@ async def _submit_to_broker(
         }
         if client_order_id:
             body["client_order_id"] = client_order_id
+        # J-10 (Round-6) — extended-hours forwarding for mleg too.
+        if request.extended_hours:
+            body["extended_hours"] = True
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
