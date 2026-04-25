@@ -57,3 +57,44 @@ def authed_client() -> TestClient:
     from main import app  # deferred — see _auth_override
 
     return TestClient(app)
+
+
+# ───────────────────── Earnings cache isolation ─────────────────────
+# Round-4 CLUSTER 5 added a 5-min Redis cache for ``_fmp_upcoming``
+# results. In CI Redis is shared across the whole pytest run, so a
+# fixture that mocks the upstream FMP provider to return one set of
+# rows seeds the cache, then a SECOND test using a different fixture
+# pulls the FIRST test's data via cache hit. The symptom is e.g.
+# ``test_fmp_upcoming_accepts_share_class_tickers`` seeing NVDA/TSLA
+# (from the prior dedup test) instead of BRK.B/RDS.A.
+#
+# The defensive thing is to swap ``services.earnings_screener.get_cache``
+# for a no-op shim that never returns hits. Tests still execute the
+# cache-miss code path (the same one production hits on cold start) and
+# can't bleed state into each other. Only flips the symbol the screener
+# imports — production code is untouched.
+
+class _NoopCache:
+    async def get(self, key, **kwargs):  # noqa: ANN001, ARG002
+        return None
+
+    async def set(self, key, value, **kwargs):  # noqa: ANN001, ARG002
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_earnings_fmp_cache(monkeypatch):
+    monkeypatch.setattr(
+        "services.earnings_screener.get_cache",
+        lambda: _NoopCache(),
+        raising=False,
+    )
+    # Also clear the per-window asyncio.Lock dict so locks created in a
+    # prior test (potentially against a different event loop) don't
+    # raise ``RuntimeError: <Lock... is bound to a different loop>``.
+    try:
+        from services import earnings_screener as svc  # type: ignore[import-not-found]
+        svc._FMP_UPCOMING_LOCKS.clear()
+    except Exception:  # pragma: no cover — defensive
+        pass
+    yield
