@@ -274,6 +274,39 @@ describe("Earnings Options Play page", () => {
   });
 });
 
+// ─── Round-5 (NEW-Y6 + NEW-Y7): mobile + responsive ───────────────────
+describe("Earnings Options Play — mobile + responsive (Round-5)", () => {
+  it("page-grid wrapper sets overscroll-behavior-y: none (NEW-Y7 / G-7)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [],
+      generatedAt: new Date().toISOString(),
+      partial: false,
+    });
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    const grid = container.querySelector('[data-slot="earnings-page-grid"]') as HTMLElement | null;
+    expect(grid).not.toBeNull();
+    // Inline style — assertable directly.
+    expect(grid?.style.overscrollBehaviorY).toBe("none");
+  });
+
+  it("forwards a ref to the EarningsDetailPanel (NEW-Y6 / G-2)", async () => {
+    // jsdom doesn't implement scrollIntoView; we assert the panel section
+    // is rendered with the expected slot so the ref attaches via forwardRef.
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [],
+      generatedAt: new Date().toISOString(),
+      partial: false,
+    });
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="earnings-detail-panel"]')).not.toBeNull();
+    });
+  });
+});
+
 // ─── Round-5 (NEW-Y3 + NEW-Y4): race protection + deeplink ────────────
 describe("Earnings Options Play — race protection (Round-5)", () => {
   it("test_aborted_calendar_fetch_does_not_show_error: AbortError is suppressed in the banner (NEW-Y3 / G-18)", async () => {

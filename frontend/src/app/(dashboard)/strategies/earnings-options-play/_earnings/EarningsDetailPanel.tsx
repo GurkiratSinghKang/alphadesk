@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import type { EarningsDetail, EarningsErrorCode } from "@/types";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
@@ -47,17 +47,26 @@ export interface EarningsDetailPanelProps {
  *    code-specific copy (CLUSTER D/12).
  *  - Pass `selectionSource` to DetailHeader so pointer clicks don't
  *    trigger H2 autofocus (B-NEW-4).
+ *
+ * Round-5 (NEW-Y6 / G-2): now `forwardRef` so the page can scroll the
+ * panel into view on mobile after a sidebar selection. The ref is
+ * forwarded to whichever outer `<section>` actually renders (error /
+ * loading / empty / success). Passing `null` is a no-op.
  */
-export default function EarningsDetailPanel({
-  detail,
-  loading,
-  refetching = false,
-  error,
-  runningFull,
-  fullResearchError = null,
-  onRunFullResearch,
-  selectionSource = null,
-}: EarningsDetailPanelProps) {
+const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
+  function EarningsDetailPanel(
+    {
+      detail,
+      loading,
+      refetching = false,
+      error,
+      runningFull,
+      fullResearchError = null,
+      onRunFullResearch,
+      selectionSource = null,
+    },
+    ref,
+  ) {
   const isWide = useIsWide(1200);
 
   // Escape clears the selection — dispatches a custom event the parent
@@ -79,7 +88,11 @@ export default function EarningsDetailPanel({
 
   if (error) {
     return (
-      <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
+      <section
+        ref={ref}
+        data-slot="earnings-detail-panel"
+        className="rounded border border-[color:var(--fg-border)] p-4"
+      >
         <div role="alert">
           <p className="font-mono text-[13px] text-[color:var(--fg-neg)]">Error · {error}</p>
         </div>
@@ -89,6 +102,7 @@ export default function EarningsDetailPanel({
   if (loading && !detail) {
     return (
       <section
+        ref={ref}
         data-slot="earnings-detail-panel"
         aria-busy="true"
         className="rounded border border-[color:var(--fg-border)] p-4"
@@ -101,7 +115,11 @@ export default function EarningsDetailPanel({
   }
   if (!detail) {
     return (
-      <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
+      <section
+        ref={ref}
+        data-slot="earnings-detail-panel"
+        className="rounded border border-[color:var(--fg-border)] p-4"
+      >
         <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Select a symbol from the sidebar.</p>
       </section>
     );
@@ -125,6 +143,7 @@ export default function EarningsDetailPanel({
        since the empty/loading/error branches don't render DetailHeader
        and the id would dangle. */
     <section
+      ref={ref}
       data-slot="earnings-detail-panel"
       data-refetching={refetching || undefined}
       aria-busy={refetching || undefined}
@@ -213,7 +232,10 @@ export default function EarningsDetailPanel({
       </p>
     </section>
   );
-}
+  },
+);
+
+export default EarningsDetailPanel;
 
 /**
  * Round-5 (NEW-Y8): exported so tests can verify the copy strings without

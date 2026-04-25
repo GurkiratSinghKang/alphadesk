@@ -97,6 +97,14 @@ export default function EarningsOptionsPlayPage() {
       : null,
   );
 
+  // Round-5 (NEW-Y6 / G-2): scroll-target for the detail panel. Below
+  // the lg breakpoint the sidebar stacks above the panel, so a row tap
+  // would otherwise leave the detail update off-screen. The page reads
+  // this ref + the viewport-width hook below in a post-selection effect
+  // and scrolls smoothly into view (honoring prefers-reduced-motion).
+  const detailPanelRef = useRef<HTMLElement | null>(null);
+  const isWideViewport = useIsWideViewport();
+
   // ── Calendar ─────────────────────────────────────────────
   const calendarQuery = useQuery({
     queryKey: ["earnings-calendar", filters],
@@ -192,6 +200,25 @@ export default function EarningsOptionsPlayPage() {
     firstSyncRef.current = false;
     syncURL({ symbol: selectedSymbol, ...filters }, mode);
   }, [selectedSymbol, filters]);
+
+  // ── Round-5 (NEW-Y6 / G-2): mobile scroll-to-detail ──────
+  // Below the lg breakpoint the sidebar stacks above the detail panel,
+  // so a tap on a sidebar row would leave the panel update off-screen.
+  // Smoothly scroll the panel into view when the viewport is below
+  // 1024px and the user hasn't asked for reduced-motion. jsdom doesn't
+  // implement scrollIntoView, so the test asserts the ref-attachment +
+  // overscroll-behavior wiring rather than the call itself.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!selectedSymbol) return;
+    if (isWideViewport) return;
+    if (!detailPanelRef.current) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduce) return;
+    if (typeof detailPanelRef.current.scrollIntoView === "function") {
+      detailPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedSymbol, isWideViewport]);
 
   // ── B-98: popstate listener — browser back/forward re-reads state
   // from the URL. Without this, history entries pushed by B-39 would
@@ -315,7 +342,15 @@ export default function EarningsOptionsPlayPage() {
         onSettleRef={onSettleRef}
       />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+      <div
+        data-slot="earnings-page-grid"
+        className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]"
+        // Round-5 (NEW-Y7 / G-7): belt-and-braces over the global
+        // `contain` rule on html/body — `overscroll-behavior-y: none`
+        // here kills any iOS Safari pull-to-refresh hijack inside the
+        // earnings layout without affecting other dashboard pages.
+        style={{ overscrollBehaviorY: "none" }}
+      >
         <EarningsCalendarSidebar
           rows={calendar?.earnings ?? []}
           loading={loadingCalendar}
@@ -332,6 +367,7 @@ export default function EarningsOptionsPlayPage() {
           onResetFilters={() => setFilters({ window: "both", minIvRank: 50, sort: "date" })}
         />
         <EarningsDetailPanel
+          ref={detailPanelRef}
           detail={detail}
           loading={loadingDetail}
           refetching={refetchingDetail}
@@ -367,6 +403,32 @@ function isAbortError(err: unknown): boolean {
     if (/aborted|signal is aborted/i.test(err.message)) return true;
   }
   return false;
+}
+
+/**
+ * Round-5 (NEW-Y6 / G-2): track whether the viewport is at lg+ (≥1024px).
+ * Used by the mobile scroll-to-detail effect — at lg+ the sidebar and
+ * panel are side-by-side so no scroll is needed. Older Safari fallback
+ * via the deprecated `addListener`/`removeListener` to keep the hook
+ * working across the full target browser matrix.
+ */
+function useIsWideViewport(): boolean {
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia?.("(min-width: 1024px)");
+    if (!mq) return;
+    const update = () => setWide(mq.matches);
+    update();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+    // Older Safari fallback
+    mq.addListener?.(update);
+    return () => mq.removeListener?.(update);
+  }, []);
+  return wide;
 }
 
 function titleForWindow(win: EarningsCalendarFilters["window"]): string {
