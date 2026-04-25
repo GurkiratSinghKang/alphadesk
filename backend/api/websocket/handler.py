@@ -71,6 +71,16 @@ _MAX_WS_CONNECTIONS_PER_USER = 5
 # "auth failed" (4001 — kick to /login).
 _WS_POLICY_VIOLATION_CLOSE_CODE = 4008
 
+# Round-7 / O-2: per-frame size cap on inbound WebSocket text. Without
+# this an attacker can send a single 100MB JSON frame and force the
+# server to materialise the whole string before ``orjson.loads`` even
+# fails. uvicorn's ``--ws-max-size`` is process-wide and defaults to
+# 16 MiB; that is *far* too generous for our protocol (every legitimate
+# inbound frame is a small action dict — subscribe, unsubscribe, ping,
+# auth — well under 1 KB). 64 KB is the smallest cap that still lets us
+# accept a worst-case auth frame with a chunky JWT.
+_WS_MAX_FRAME_BYTES = 64 * 1024
+
 
 class ConnectionManager:
     """Manages WebSocket connections and channel subscriptions.
@@ -181,7 +191,12 @@ class ConnectionManager:
         logger.info("WebSocket client disconnected (%d active)", count)
 
     def _get_user_id(self, ws: WebSocket) -> str:
-        return self._user_ids.get(ws, "default")
+        # Round-7 / O-4: ``"default"`` is no longer a valid sentinel — the
+        # auth path rejects unknown subjects, so any registered socket has
+        # a real user_id. Returning empty string for the unregistered case
+        # keeps callers from accidentally cross-tenant matching against a
+        # well-known string.
+        return self._user_ids.get(ws, "")
 
     def get_cursor(self, ws: WebSocket, channel: str) -> str | None:
         """Return the last delivered stream ID for (ws, channel), or None."""
@@ -291,10 +306,17 @@ class ConnectionManager:
         )
 
         async with self._lock:
+            # Round-7 / O-4: skip any registered ws that somehow has no
+            # captured user_id. The auth path now refuses to register
+            # anyone without a JWT subject, but a defensive filter here
+            # guarantees a ws with no resolved user_id can NEVER receive
+            # another user's per-user payload (the previous fallback to
+            # ``"default"`` would have matched a spoofed
+            # ``_user_id="default"`` envelope).
             targets = [
-                (ws, self._user_ids.get(ws, "default"))
+                (ws, self._user_ids[ws])
                 for ws, channels in self._connections.items()
-                if channel in channels
+                if channel in channels and ws in self._user_ids
             ]
 
         # Apply the per-user filter for trade_updates so one tenant never
@@ -642,7 +664,22 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             current_epoch = await get_session_epoch(user)
             return token_pv >= current_pv and token_epoch >= current_epoch
 
-        resolved_user_id = "default"
+        # Round-7 / O-4: ``resolved_user_id`` MUST come from the verified
+        # JWT — never from a string fallback. The previous code initialised
+        # it to ``"default"`` and re-fell-back to ``"default"`` whenever
+        # ``payload.get("sub") or payload.get("username")`` was empty,
+        # which would happen for any token issued without a ``sub`` claim
+        # (older test tokens, mis-issued provider tokens). All such users
+        # then shared a single ``"default"`` channel partition and saw each
+        # other's trade fills. Treat a missing subject as an auth failure.
+        def _user_from_payload(payload: dict[str, Any]) -> str | None:
+            sub = payload.get("sub") or payload.get("username")
+            if not sub:
+                return None
+            sub = str(sub).strip()
+            return sub or None
+
+        resolved_user_id: str | None = None
         try:
             # Try cookie-based auth first (from HttpOnly cookies in handshake)
             cookie_token = ws.cookies.get("access_token")
@@ -653,7 +690,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await ws.close(code=1008, reason="Token revoked")
                     return
                 # Capture username/sub for per-user stream scoping (Wave C).
-                resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                resolved_user_id = _user_from_payload(payload)
+                if resolved_user_id is None:
+                    await ws.close(code=4001, reason="Token missing subject")
+                    return
                 if not await _check_pv_epoch(payload, resolved_user_id):
                     await ws.close(code=4001, reason="Session invalidated")
                     return
@@ -663,6 +703,11 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 # Fall back to message-based auth. Timeout extended in Wave 2I
                 # Fix 6 (P83-5) for Tor / VPN RTT — see _WS_AUTH_TIMEOUT_SECONDS.
                 raw = await asyncio.wait_for(ws.receive_text(), timeout=_WS_AUTH_TIMEOUT_SECONDS)
+                # Round-7 / O-2: cap the auth-frame size before parsing so a
+                # 100MB JWT-shaped string can't OOM the server pre-decode.
+                if len(raw) > _WS_MAX_FRAME_BYTES:
+                    await ws.close(code=1009, reason="Auth frame too large")
+                    return
                 msg = orjson.loads(raw)
                 if msg.get("action") != "auth" or not msg.get("token"):
                     await ws.send_text(orjson.dumps({"error": "First message must be auth"}).decode())
@@ -673,7 +718,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 if jti and await is_token_revoked(jti):
                     await ws.close(code=1008, reason="Token revoked")
                     return
-                resolved_user_id = str(payload.get("sub") or payload.get("username") or "default")
+                resolved_user_id = _user_from_payload(payload)
+                if resolved_user_id is None:
+                    await ws.close(code=4001, reason="Token missing subject")
+                    return
                 if not await _check_pv_epoch(payload, resolved_user_id):
                     await ws.close(code=4001, reason="Session invalidated")
                     return
@@ -707,6 +755,14 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
         while True:
             raw = await ws.receive_text()
+            # Round-7 / O-2: enforce per-frame size cap before parsing.
+            if len(raw) > _WS_MAX_FRAME_BYTES:
+                logger.info(
+                    "websocket: closed user=%s for oversized frame (%d > %d)",
+                    resolved_user_id, len(raw), _WS_MAX_FRAME_BYTES,
+                )
+                await ws.close(code=1009, reason="Frame too large")
+                return
             try:
                 msg = orjson.loads(raw)
             except Exception:

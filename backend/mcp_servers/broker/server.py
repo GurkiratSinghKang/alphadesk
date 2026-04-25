@@ -131,11 +131,24 @@ class BrokerServer(BaseMCPServer):
         # the manual-order path uses. Restricted-symbol deny-list,
         # daily-gross / position-count / sector caps, daily-loss
         # circuit breaker, buying-power preflight, symbol-halt check.
+        #
+        # Round-7 / O-7: the previous version wrapped the gate in
+        # ``try/except Exception: pass``. Any failure inside the gate
+        # (Redis down, ledger DB error, code regression in the risk
+        # pipeline, even a typo) silently fell through to the broker
+        # POST — i.e. the "safety net" was a fail-open hatch that was
+        # WORSE than no gate at all (operators thought there was a gate,
+        # but a single transient error opened the floodgates). We now
+        # fail closed: any error here returns ``rejected_by_risk_error``
+        # and refuses to submit the order. The agent gets a clear
+        # message and can retry / surface the incident; an LLM cannot
+        # accidentally bypass the gate by triggering a downstream
+        # exception.
+        from api.routes._risk_pipeline import (
+            build_request_from_webhook,
+            run_aggregate_risk_check,
+        )
         try:
-            from api.routes._risk_pipeline import (
-                build_request_from_webhook,
-                run_aggregate_risk_check,
-            )
             risk_request = await build_request_from_webhook(
                 ticker=symbol,
                 side=side,
@@ -146,18 +159,32 @@ class BrokerServer(BaseMCPServer):
             passed, reason = await run_aggregate_risk_check(
                 risk_request, username=None,
             )
-            if not passed:
-                return {
-                    "error": f"Risk gate rejection: {reason}",
-                    "order_id": None,
-                    "status": "rejected_by_risk",
-                    "symbol": symbol,
-                    "qty": str(qty),
-                    "side": side,
-                    "type": order_type,
-                }
-        except Exception:
-            pass
+        except Exception as exc:
+            self.logger.exception(
+                "mcp.broker.submit_order: risk gate raised — failing closed",
+            )
+            return {
+                "error": (
+                    f"Risk gate unavailable ({type(exc).__name__}); "
+                    "order refused to fail closed."
+                ),
+                "order_id": None,
+                "status": "rejected_by_risk_error",
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": order_type,
+            }
+        if not passed:
+            return {
+                "error": f"Risk gate rejection: {reason}",
+                "order_id": None,
+                "status": "rejected_by_risk",
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": order_type,
+            }
 
         body: dict[str, Any] = {
             "symbol": symbol,

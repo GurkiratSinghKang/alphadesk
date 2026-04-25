@@ -104,20 +104,24 @@
         # and Caddy forced ``'unsafe-inline'`` for scripts so cached HTML
         # worked.
         #
-        # Round-6 L-2: drop ``'unsafe-inline'`` from script-src. The
-        # layout has been rebuilt with the web-vitals listeners as a
-        # regular React component (frontend/src/components/layout/
-        # WebVitalsReporter.tsx); no inline ``<script>`` ships from
-        # layout.tsx anymore. ``'unsafe-inline'`` for scripts is the
-        # single biggest XSS mitigation regression in any CSP — removing
-        # it is the goal of L-2. ``style-src`` retains ``'unsafe-inline'``
-        # for now because TradingChart.tsx and TickerStrip.tsx still ship
-        # JSX-emitted ``<style>`` blocks for chart-watermark hides;
-        # per-build SHA-256 hashes for those blocks is a follow-up
-        # (FIX-4 owns layout.tsx). ``base-uri 'self'``,
-        # ``form-action 'self'``, ``object-src 'none'``, and
-        # ``upgrade-insecure-requests`` close gaps left implicit.
-        >Content-Security-Policy "default-src 'self'; script-src 'self' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+        # Round-6 L-2 attempted to drop ``'unsafe-inline'`` from
+        # script-src by rebuilding layout with WebVitalsReporter.tsx as
+        # a regular React component. INCIDENT 2026-04-24 — the strict
+        # CSP shipped before the matching frontend image was actually
+        # deployed (compose pulled the new tag but the runtime
+        # container was never recreated, a recurring class of
+        # mixed-state deploys for this stack). Old layout's inline
+        # bootstrap scripts were CSP-blocked → page never hydrated in
+        # browsers (curl returned 200; Chrome saw a blank page).
+        # Hot-fix: revert ``'unsafe-inline'`` for both script-src and
+        # style-src until the deploy script reliably swaps the
+        # frontend container. Reintroducing the strict CSP is gated on
+        # M-2 (deploy.yml smoke test repair) plus a confirmed image
+        # swap step. ``base-uri 'self'``, ``form-action 'self'``,
+        # ``object-src 'none'``, and ``upgrade-insecure-requests``
+        # remain in place — those close gaps left implicit and don't
+        # depend on the frontend build.
+        >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the
@@ -164,6 +168,14 @@
         reverse_proxy backend:8000
     }
     handle /readyz {
+        reverse_proxy backend:8000
+    }
+    # M-3 (Round-7): /readyz-full is the deep readiness probe — DB +
+    # Redis + Alpaca round-trip — exposed by backend/main.py for the
+    # deploy.yml smoke test. Without this handle block Caddy would
+    # route the request to the frontend (default handler) and the
+    # smoke test would interpret a Next.js 404 as a deploy failure.
+    handle /readyz-full {
         reverse_proxy backend:8000
     }
     handle /health {

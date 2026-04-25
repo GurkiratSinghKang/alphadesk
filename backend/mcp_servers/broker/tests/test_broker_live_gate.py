@@ -138,6 +138,15 @@ async def test_submit_order_allows_manual_explicit_strategy_on_live(
     REQUIRES a non-empty ``strategy``; the happy-path here passes
     ``"manual"`` (a non-denylisted identifier) so the gate evaluates
     normally and the order reaches the broker.
+
+    Round-7 / O-7: the previous version of this test relied on the
+    fail-open ``except Exception: pass`` around the risk gate — a
+    market order without limit_price made the notional pre-computation
+    raise HTTPException, the bare-except swallowed it, and the order
+    sailed through. We now fail closed (any gate error rejects the
+    order). To exercise the broker happy-path we mock the risk-gate
+    entry point so the test is about "does the gate pass-through
+    submit to Alpaca" rather than about the gate's own internals.
     """
     class _OKResponse:
         def raise_for_status(self) -> None:
@@ -186,12 +195,56 @@ async def test_submit_order_allows_manual_explicit_strategy_on_live(
         raising=False,
     )
 
+    # Stub the risk gate so we test the broker path, not the gate.
+    # Returning ``(True, "passed")`` mirrors the real gate's success shape.
+    from api.routes import _risk_pipeline
+
+    async def _fake_pass(*_args: Any, **_kwargs: Any) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.setattr(_risk_pipeline, "run_aggregate_risk_check", _fake_pass)
+
     # Manual / discretionary order — explicit 'manual' strategy.
     result = await broker_server.submit_order(
         symbol="AAPL", qty=10, side="buy", strategy="manual",
     )
     assert result["order_id"] == "broker-1"
     assert result["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_submit_order_fails_closed_when_risk_gate_raises(
+    live_armed: None, broker_server: Any, monkeypatch: pytest.MonkeyPatch,
+    trap_httpx: dict[str, bool],
+) -> None:
+    """Round-7 / O-7: any exception from the aggregate risk gate must
+    reject the order rather than fall through to Alpaca.
+
+    Prior behaviour: ``try/except Exception: pass`` around the gate.
+    A transient Redis hiccup, a typo in the risk pipeline, or a real
+    rejection that surfaced as HTTPException all triggered the same
+    silent pass-through; the order then submitted to live capital
+    despite the operator believing the gate was guarding it.
+
+    We patch the gate to raise unconditionally and assert the broker
+    HTTP path is never reached and the response carries the
+    ``rejected_by_risk_error`` sentinel so callers can distinguish a
+    gate-internal failure from a normal denial.
+    """
+    from api.routes import _risk_pipeline
+
+    async def _explode(*_args: Any, **_kwargs: Any) -> tuple[bool, str]:
+        raise RuntimeError("simulated risk-gate dependency failure")
+
+    monkeypatch.setattr(_risk_pipeline, "run_aggregate_risk_check", _explode)
+
+    result = await broker_server.submit_order(
+        symbol="AAPL", qty=10, side="buy", strategy="manual",
+    )
+    assert result["order_id"] is None
+    assert result["status"] == "rejected_by_risk_error"
+    assert "fail closed" in result["error"]
+    assert trap_httpx["http_called"] is False
 
 
 @pytest.mark.asyncio

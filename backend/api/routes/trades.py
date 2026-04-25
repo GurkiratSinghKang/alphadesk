@@ -2490,15 +2490,27 @@ def _combo_spread_width(request: CreateOrderRequest) -> float:
 
     Vertical: |strike_buy - strike_sell| of the two legs.
     Iron condor: max(call_spread_width, put_spread_width) so a skewed
-    condor still gets a conservative envelope. Returns 0.0 if any
-    leg's strike can't be parsed.
+    condor still gets a conservative envelope.
+
+    Round-7 / M-6: a previous version returned ``0.0`` when any leg's
+    strike couldn't be parsed. That collapsed the order's notional cap
+    to zero and let unparseable-OCC combos sail past the per-order
+    envelope. We now fail closed: an unparseable leg or an unrecognised
+    leg shape (neither vertical nor iron condor) raises 400 so the
+    caller fixes the request rather than silently bypassing the gate.
     """
     strikes_by_side: dict[str, list[float]] = {"C": [], "P": []}
     all_strikes: list[float] = []
     for leg in request.legs:
         parsed = _parse_occ_symbol(leg.symbol)
         if parsed is None:
-            return 0.0
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Combo leg {leg.symbol!r} is not a valid OCC option symbol; "
+                    "spread notional cannot be computed."
+                ),
+            )
         side_letter = "C" if parsed["call_put"] == "call" else "P"
         strike = float(parsed["strike"])
         strikes_by_side[side_letter].append(strike)
@@ -2518,7 +2530,13 @@ def _combo_spread_width(request: CreateOrderRequest) -> float:
         put_width = abs(strikes_by_side["P"][0] - strikes_by_side["P"][1])
         return max(call_width, put_width)
 
-    return 0.0
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Spread combo must be a 2-leg vertical or 4-leg iron condor "
+            f"(got {len(request.legs)} leg(s))."
+        ),
+    )
 
 
 def _combo_strangle_max_notional(request: CreateOrderRequest) -> float:
@@ -2526,17 +2544,35 @@ def _combo_strangle_max_notional(request: CreateOrderRequest) -> float:
 
     A strangle is short undefined-risk on each side, but for risk-cap
     purposes we use the larger naked-side notional rather than the sum.
+
+    Round-7 / M-5: any leg without ``limit_price`` previously contributed
+    zero to its side's notional, which let strangles slip past the cap by
+    sending market orders (no limit). We now fail closed — strangles
+    must declare ``limit_price`` for every leg so the envelope is
+    well-defined. If you want a market-priced strangle, fetch the quote
+    upstream and pass it as ``limit_price``.
     """
     notionals: dict[str, float] = {"C": 0.0, "P": 0.0}
     for leg in request.legs:
         parsed = _parse_occ_symbol(leg.symbol)
         if parsed is None:
-            continue
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Strangle leg {leg.symbol!r} is not a valid OCC option symbol."
+                ),
+            )
         side_letter = "C" if parsed["call_put"] == "call" else "P"
-        if leg.limit_price:
-            leg_notional = float(leg.limit_price) * float(leg.qty) * 100.0
-        else:
-            leg_notional = 0.0
+        if not leg.limit_price:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Strangle leg {leg.symbol!r} requires limit_price; "
+                    "market-priced strangles are blocked because their notional "
+                    "cap can't be computed deterministically."
+                ),
+            )
+        leg_notional = float(leg.limit_price) * float(leg.qty) * 100.0
         notionals[side_letter] += leg_notional
     return max(notionals["C"], notionals["P"])
 
@@ -2712,20 +2748,26 @@ async def _daily_loss_check(
     """J-3 — refuse new orders when today's realised loss is ≥ 5% of equity.
 
     Returns ``(passed, reason, realized_pnl_today)``. ``passed`` is
-    True when ``abs(realized_pnl) <= equity * 0.05`` OR when equity is
+    True when ``realized_pnl >= -equity * 0.05`` OR when equity is
     zero (broker unreachable — the aggregate gate's other layers will
     fail-closed in that case).
+
+    Round-7 / M-4 (J-3 follow-up): the previous version used
+    ``abs(realized) > limit`` which blocked new orders after a +5%
+    profitable day too — gains are not "loss." The threshold compares
+    the (signed) realised PnL against the negative cap so only true
+    drawdowns trip the gate.
     """
     if equity <= 0:
         return True, "skipped_no_equity", 0.0
     realized = await _get_realized_pnl_today()
     limit = equity * DAILY_LOSS_LIMIT_FRACTION
-    if abs(realized) > limit:
+    if realized < -limit:
         return (
             False,
             (
                 f"Daily loss limit reached: realised P&L ${realized:,.2f} "
-                f"vs cap ${limit:,.2f} (5% of equity). New orders blocked "
+                f"vs cap −${limit:,.2f} (5% of equity). New orders blocked "
                 f"until tomorrow's session."
             ),
             realized,

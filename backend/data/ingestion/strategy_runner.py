@@ -34,7 +34,7 @@ from typing import Any
 
 import numpy as np
 
-from strategies._core.contracts import StrategyInput, StrategyParams
+from strategies._core.contracts import Position, StrategyInput, StrategyParams
 from strategies._core.protocol import Strategy, StrategyMeta, get_strategy, list_strategies
 from strategies._core.providers import ProviderBundle, default_provider_bundle
 from strategies._core.runners.pipeline_runner import DailyPipelineRunner, StateStore
@@ -67,6 +67,57 @@ def _get_state_store() -> StateStore:
     if _STATE_STORE is None:
         _STATE_STORE = StateStore()
     return _STATE_STORE
+
+
+# --------------------------------------------------------------------------- #
+# Live positions provider                                                     #
+# --------------------------------------------------------------------------- #
+# Round-7 / O-1: ``DailyPipelineRunner`` requires a ``positions_provider`` in
+# live mode (Round-6 / I-13 guard). This module previously constructed the
+# runner with three positional args, leaving ``positions_provider=None``, which
+# made ``run_today`` raise ``RuntimeError`` — a bare ``except Exception`` then
+# swallowed it and every autonomous strategy returned 0 signals. The trade
+# ledger is the canonical source for entry_date (Alpaca's positions endpoint
+# does not expose it), so we read open positions from there and translate to
+# the ``Position`` contract the runner expects.
+
+async def _live_positions_for(asof: date) -> list[Position]:
+    """Snapshot of open ledger positions as ``Position`` models.
+
+    Uses ``TradeLedger.async_get_open_positions`` so the SQLite read happens
+    off the event loop. ``asof`` is accepted for the runner contract but not
+    used here — the ledger view is "now"; the strategies that condition on
+    holding-period compare ``entry_date`` to ``input.asof`` themselves.
+    """
+    from data.ingestion.trade_ledger import TradeLedger
+
+    ledger = TradeLedger()
+    rows = await ledger.async_get_open_positions()
+    out: list[Position] = []
+    for row in rows:
+        try:
+            symbol = str(row["symbol"])
+            shares = int(row["shares"])
+            side = str(row.get("side") or "long").lower()
+            qty = -shares if side == "short" else shares
+            entry_price = Decimal(str(row["entry_price"]))
+            entry_time = str(row.get("entry_time") or "")
+            entry_date = (
+                date.fromisoformat(entry_time[:10]) if entry_time else asof
+            )
+            tag = str(row.get("strategy") or "")[:256]
+            out.append(
+                Position(
+                    symbol=symbol, quantity=qty, avg_entry_price=entry_price,
+                    entry_date=entry_date, tag=tag,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "strategy_runner: skipping malformed open position %r",
+                row, exc_info=True,
+            )
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -250,7 +301,10 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             )
             return empty
 
-        runner = DailyPipelineRunner(strategy, providers, _get_state_store())
+        runner = DailyPipelineRunner(
+            strategy, providers, _get_state_store(),
+            positions_provider=_live_positions_for,
+        )
         try:
             result = await runner.run_today(params)
         except Exception:
