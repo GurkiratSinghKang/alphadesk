@@ -215,14 +215,28 @@ export default function EarningsDetailPanel({
   );
 }
 
-const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
+/**
+ * Round-5 (NEW-Y8): exported so tests can verify the copy strings without
+ * re-rendering the whole detail panel. Round-5 split `news_unavailable`
+ * into a cooldown variant + a hard-error variant; we surface the
+ * distinction so users know whether to retry or check logs. Unknown
+ * codes pass through verbatim — we don't suppress new codes shipped
+ * before this map is updated.
+ */
+export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
   stub_detail: "Limited data — next earnings >2 weeks out",
   news_unavailable: "News feed temporarily unavailable",
+  // Round-5: hard error from the news provider (vs. cooldown).
+  news_error: "News feed unavailable — see logs",
   chain_demo:
     "⚠ Options chain showing synthetic data — broker connection unavailable",
   iv_unavailable: "IV history unavailable",
+  // Round-5: only some expiries came back from the IV term-structure call.
+  iv_term_partial: "IV term structure data partially missing",
   metrics_unavailable: "Metrics partially unavailable",
   hv_unavailable: "Historical volatility unavailable",
+  // Round-5: Claude budget tripped or upstream raised — thesis temp. unavailable.
+  claude_unavailable: "AI thesis temporarily unavailable",
 };
 
 /**

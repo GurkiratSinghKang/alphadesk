@@ -452,14 +452,24 @@ export interface EarningsNewsArticle {
  * Round-4: backend tags partial-data responses with an enumerated list
  * of degraded-path codes so the UI can surface a precise banner. Open
  * union — UI maps unknown codes to a generic message.
+ *
+ * Round-5 (NEW-Y8): backend now distinguishes a transient "news cooldown"
+ * (`news_unavailable`) from a hard upstream error (`news_error`); also
+ * surfaces `claude_unavailable` when the budget tripped, and
+ * `iv_term_partial` when only some expiries returned. New codes added
+ * verbatim — UI's ERROR_CODE_COPY map renders friendly labels;
+ * unknown-but-string codes still pass through raw.
  */
 export type EarningsErrorCode =
   | "stub_detail"
   | "news_unavailable"
+  | "news_error"
   | "chain_demo"
   | "iv_unavailable"
+  | "iv_term_partial"
   | "metrics_unavailable"
-  | "hv_unavailable";
+  | "hv_unavailable"
+  | "claude_unavailable";
 
 export interface EarningsDetail {
   symbol: string;

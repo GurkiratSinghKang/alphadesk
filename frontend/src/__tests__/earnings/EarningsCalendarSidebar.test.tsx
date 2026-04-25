@@ -1,7 +1,9 @@
 import "../setup-mocks";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
-import EarningsCalendarSidebar from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/EarningsCalendarSidebar";
+import EarningsCalendarSidebar, {
+  buildEmptyStateMessage,
+} from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/EarningsCalendarSidebar";
 import type { CalendarRow } from "@/types";
 
 const rows: CalendarRow[] = [
@@ -169,7 +171,7 @@ describe("EarningsCalendarSidebar", () => {
     expect(summary?.textContent).toMatch(/3\s+reports/i);
   });
 
-  it("renders weekend-aware empty state when meta.reason === weekend_no_reports (CLUSTER A/3)", () => {
+  it("renders weekend-aware empty state when meta.reason === weekend_no_reports (CLUSTER A/3 / NEW-Y2)", () => {
     const { container } = render(
       <EarningsCalendarSidebar
         rows={[]}
@@ -180,7 +182,11 @@ describe("EarningsCalendarSidebar", () => {
         metaReason="weekend_no_reports"
       />,
     );
-    expect(container.textContent).toMatch(/Saturday/i);
+    // Round-5 (NEW-Y2 / E-7): the message now includes the *actual*
+    // weekday rather than hard-coding "Saturday". The day-aware variants
+    // are exercised by the buildEmptyStateMessage describe block below.
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+    expect(container.textContent).toContain(today);
     expect(container.textContent).toMatch(/Markets reopen Monday/i);
   });
 
@@ -216,5 +222,133 @@ describe("EarningsCalendarSidebar", () => {
     expect(ref.current).not.toBeNull();
     // First row in our fixture is NVDA on 04-23 (sorted ASC).
     expect(ref.current?.textContent).toContain("NVDA");
+  });
+
+  // ── Round-5 (NEW-Y1): reportState rendering — E-2 / E-12 ────────
+  it("test_today_done_rows_dimmed: dims today_done + past rows and labels them '(reported)'", () => {
+    const reportedRows: CalendarRow[] = [
+      { ...rows[0], symbol: "NVDA", reportState: "today_done" },
+      { ...rows[1], symbol: "TSLA", reportState: "upcoming" },
+      { ...rows[2], symbol: "META", reportState: "past" },
+    ];
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={reportedRows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    const done = container.querySelector('button[data-report-state="today_done"]');
+    const past = container.querySelector('button[data-report-state="past"]');
+    const upcoming = container.querySelector('button[data-report-state="upcoming"]');
+    expect(done).not.toBeNull();
+    expect(past).not.toBeNull();
+    expect(upcoming).not.toBeNull();
+    expect(done?.className).toContain("opacity-60");
+    expect(past?.className).toContain("opacity-60");
+    expect(upcoming?.className).not.toContain("opacity-60");
+    expect(done?.getAttribute("aria-label")).toContain("(reported)");
+    expect(past?.getAttribute("aria-label")).toContain("(reported)");
+    expect(upcoming?.getAttribute("aria-label")).not.toContain("(reported)");
+  });
+
+  it("renders a TODAY pill on today_pre rows but not today_done (NEW-Y1)", () => {
+    const mixed: CalendarRow[] = [
+      { ...rows[0], symbol: "NVDA", reportState: "today_pre" },
+      { ...rows[1], symbol: "TSLA", reportState: "today_done" },
+    ];
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={mixed}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    const pills = container.querySelectorAll('[data-slot="today-pill"]');
+    expect(pills.length).toBe(1);
+    const preBtn = container.querySelector('button[data-report-state="today_pre"]');
+    expect(preBtn?.querySelector('[data-slot="today-pill"]')).not.toBeNull();
+  });
+
+  it("treats absent reportState as 'upcoming' — no dim, no pill (NEW-Y1)", () => {
+    const noState: CalendarRow[] = [{ ...rows[0], reportState: undefined }];
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={noState}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    const btn = container.querySelector("button[data-report-state]");
+    expect(btn?.getAttribute("data-report-state")).toBe("upcoming");
+    expect(btn?.className).not.toContain("opacity-60");
+    expect(btn?.querySelector('[data-slot="today-pill"]')).toBeNull();
+  });
+});
+
+// ── Round-5 (NEW-Y2 / E-7): weekend-aware empty-state copy ─────────
+describe("buildEmptyStateMessage — weekend day-aware", () => {
+  const realDate = global.Date;
+  afterEach(() => {
+    global.Date = realDate;
+  });
+
+  it("test_weekend_empty_state_uses_actual_day: emits 'Sunday' on a Sunday, not 'Saturday'", () => {
+    // 2026-04-26 is a Sunday in en-US locale.
+    const sundayMs = new Date("2026-04-26T15:00:00Z").getTime();
+    const SundayDate = class extends realDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(sundayMs);
+          return;
+        }
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore — pass-through for parameterized constructions
+        super(...args);
+      }
+      static now() {
+        return sundayMs;
+      }
+    } as unknown as DateConstructor;
+    global.Date = SundayDate;
+    const msg = buildEmptyStateMessage({
+      reason: "weekend_no_reports",
+      windowLabel: null,
+      filters: undefined,
+    });
+    expect(msg).toContain("Sunday");
+    expect(msg).not.toContain("Saturday");
+    expect(msg).toMatch(/markets reopen monday/i);
+  });
+
+  it("emits 'Saturday' on a Saturday (NEW-Y2)", () => {
+    const saturdayMs = new Date("2026-04-25T15:00:00Z").getTime();
+    const SaturdayDate = class extends realDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(saturdayMs);
+          return;
+        }
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        super(...args);
+      }
+      static now() {
+        return saturdayMs;
+      }
+    } as unknown as DateConstructor;
+    global.Date = SaturdayDate;
+    const msg = buildEmptyStateMessage({
+      reason: "weekend_no_reports",
+      windowLabel: null,
+      filters: undefined,
+    });
+    expect(msg).toContain("Saturday");
   });
 });

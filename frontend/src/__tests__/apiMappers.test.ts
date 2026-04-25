@@ -43,6 +43,7 @@ import {
   getPipelineRun,
   getPipelinePositions,
   mapPipelineRun,
+  mapEarningsDetail,
 } from '@/lib/api';
 
 // ─── Mock setup ──────────────────────────────────────────────────────────────
@@ -224,6 +225,67 @@ describe('mapPipelineRun', () => {
     const raw = { errors: ['fetch failed', 'order rejected'] };
     const result = mapPipelineRun(raw);
     expect(result.errors).toEqual(['fetch failed', 'order rejected']);
+  });
+});
+
+// ─── mapEarningsDetail (Round-5 NEW-Y9 / E-15: client-side sort) ───────────────
+//
+// `mapEarningsDetail` only inspects `error_codes` materially — the rest of
+// the payload is shallow-copied through. Round-5 sorts codes alphabetically
+// and silently drops non-string entries so the partial-data banner stays
+// stable across race-affected backend responses.
+
+describe('mapEarningsDetail', () => {
+  // Bare-minimum stub for the rest of the EarningsDetail wire shape — the
+  // mapper only touches `error_codes`, so the rest can be vacuous.
+  const baseRaw = {
+    symbol: 'NVDA', company: 'Nvidia', sector: 'Semis',
+    report_date: '2026-04-23', report_time: 'AMC' as const,
+    quote: null, metrics: null, strike_ladder: null,
+    claude_structured: null, claude_full_research: null,
+    iv_term_structure: null, skew: null,
+    news: [], partial: false,
+    generated_at: '2026-04-23T15:00:00Z',
+  };
+
+  it('defaults missing error_codes to an empty array', () => {
+    const out = mapEarningsDetail({ ...baseRaw });
+    expect(out.errorCodes).toEqual([]);
+  });
+
+  it('sorts error_codes alphabetically for stable banner rendering', () => {
+    const out = mapEarningsDetail({
+      ...baseRaw,
+      error_codes: ['news_unavailable', 'claude_unavailable', 'iv_term_partial'],
+    });
+    expect(out.errorCodes).toEqual([
+      'claude_unavailable',
+      'iv_term_partial',
+      'news_unavailable',
+    ]);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = ['c', 'a', 'b'];
+    mapEarningsDetail({ ...baseRaw, error_codes: input });
+    expect(input).toEqual(['c', 'a', 'b']);
+  });
+
+  it('drops non-string entries silently from a wonky backend payload', () => {
+    const out = mapEarningsDetail({
+      ...baseRaw,
+      // simulate weird shapes — number, null, plain object
+      error_codes: ['news_unavailable', 42, null, { code: 'x' }, 'a_code'] as unknown as string[],
+    });
+    expect(out.errorCodes).toEqual(['a_code', 'news_unavailable']);
+  });
+
+  it('passes unknown-but-string codes through (UI renders them raw)', () => {
+    const out = mapEarningsDetail({
+      ...baseRaw,
+      error_codes: ['some_brand_new_code', 'iv_unavailable'] as unknown as string[],
+    });
+    expect(out.errorCodes).toEqual(['iv_unavailable', 'some_brand_new_code']);
   });
 });
 

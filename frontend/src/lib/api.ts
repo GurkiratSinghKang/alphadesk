@@ -13,6 +13,7 @@ import type {
   CalendarResponse,
   CalendarRow,
   EarningsDetail,
+  EarningsErrorCode,
   EarningsCalendarFilters,
   EarningsReportTime,
   EarningsTopSetup,
@@ -2041,8 +2042,13 @@ interface RawEarningsDetail {
   news: RawEarningsNewsArticle[];
   partial: boolean;
   generated_at: string;
-  /** Round-4: per-payload degraded-path codes for precise UI banner. */
-  error_codes?: import("@/types").EarningsErrorCode[];
+  /**
+   * Round-4: per-payload degraded-path codes for precise UI banner.
+   * Round-5 (NEW-Y9): typed `unknown` so the mapper can defensively
+   * filter non-string entries from a wonky backend payload without
+   * forcing a cast at the call site.
+   */
+  error_codes?: unknown;
 }
 
 function mapCalendarRow(r: RawCalendarRow): CalendarRow {
@@ -2187,7 +2193,24 @@ function mapNewsArticle(raw: RawEarningsNewsArticle): EarningsNewsArticle {
   };
 }
 
-function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
+/**
+ * Map the wire-shape detail payload into the UI's `EarningsDetail`.
+ *
+ * Round-5 (NEW-Y9 / E-15): `errorCodes` is sorted alphabetically
+ * client-side. The backend may emit them in race-dependent order (multiple
+ * `await` points, gather()) — sorting client-side keeps the partial-data
+ * banner stable as the user re-fetches the same symbol. Non-string
+ * entries are silently dropped; unknown-but-string codes pass through so
+ * the UI can render new codes raw before the literal union is updated.
+ *
+ * Exported so the apiMappers test can exercise the sort + filter logic
+ * without going through `apiFetch`.
+ */
+export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
+  const rawCodes: unknown = raw.error_codes;
+  const codes = Array.isArray(rawCodes)
+    ? rawCodes.filter((v): v is string => typeof v === "string")
+    : [];
   return {
     symbol: raw.symbol,
     company: raw.company,
@@ -2206,8 +2229,10 @@ function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     news: (raw.news ?? []).map(mapNewsArticle),
     partial: raw.partial,
     generatedAt: raw.generated_at,
-    // Round-4: degraded-path codes for the partial-data banner.
-    errorCodes: raw.error_codes ?? [],
+    // Round-5 (NEW-Y9 / E-15): copy + sort so the banner stays stable
+    // across re-fetches even if backend gather()s the providers in a
+    // different order. `slice()` so we don't mutate the wire payload.
+    errorCodes: codes.slice().sort() as EarningsErrorCode[],
   };
 }
 

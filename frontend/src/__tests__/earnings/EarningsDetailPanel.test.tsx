@@ -1,7 +1,9 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
-import EarningsDetailPanel from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/EarningsDetailPanel";
+import EarningsDetailPanel, {
+  ERROR_CODE_COPY,
+} from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/EarningsDetailPanel";
 import type { EarningsDetail } from "@/types";
 
 const detail: EarningsDetail = {
@@ -107,5 +109,34 @@ describe("EarningsDetailPanel", () => {
     const panel = container.querySelector('[data-slot="earnings-detail-panel"]');
     expect(panel?.getAttribute("aria-busy")).toBe("true");
     expect(panel?.className).toMatch(/opacity-70/);
+  });
+
+  // ── Round-5 (NEW-Y8): ERROR_CODE_COPY map ────────────────────
+  it("ERROR_CODE_COPY covers Round-5 new codes: claude_unavailable, news_error, iv_term_partial", () => {
+    expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/AI thesis.*temporarily unavailable/i);
+    expect(ERROR_CODE_COPY.news_error).toMatch(/see logs/i);
+    expect(ERROR_CODE_COPY.iv_term_partial).toMatch(/term structure/i);
+  });
+
+  it("renders the new error_codes copy in the partial-data banner (NEW-Y8)", () => {
+    const partialDetail: EarningsDetail = {
+      ...detail,
+      partial: true,
+      errorCodes: ["claude_unavailable", "iv_term_partial", "news_error"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={partialDetail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const banner = container.querySelector('[data-slot="partial-data-banner"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain(ERROR_CODE_COPY.claude_unavailable);
+    expect(banner?.textContent).toContain(ERROR_CODE_COPY.iv_term_partial);
+    expect(banner?.textContent).toContain(ERROR_CODE_COPY.news_error);
   });
 });
