@@ -120,6 +120,8 @@ def app_with_trades(
 
 
 def _single_leg_payload(strategy: str | None = None) -> dict:
+    # J-10 (Round-6): opt into extended_hours so the RTH gate doesn't
+    # reject these unit tests outside market hours.
     body: dict[str, Any] = {
         "legs": [
             {
@@ -132,6 +134,7 @@ def _single_leg_payload(strategy: str | None = None) -> dict:
             },
         ],
         "time_in_force": "day",
+        "extended_hours": True,
     }
     if strategy is not None:
         body["strategy"] = strategy
@@ -166,6 +169,7 @@ def _iron_condor_payload(strategy: str | None = "earnings-options-play") -> dict
         ],
         "time_in_force": "day",
         "combo_type": "iron_condor",
+        "extended_hours": True,
     }
     if strategy is not None:
         body["strategy"] = strategy

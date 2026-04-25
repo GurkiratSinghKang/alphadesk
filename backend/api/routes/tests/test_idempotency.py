@@ -146,7 +146,11 @@ def app_with_trades(
 
 
 def _payload(symbol: str = "AAPL", qty: int = 10) -> dict:
-    """Minimal manual-order payload (no strategy → bypasses the live-gate)."""
+    """Minimal manual-order payload (no strategy → bypasses the live-gate).
+
+    J-10 (Round-6): opt into ``extended_hours=True`` so the new RTH
+    gate doesn't reject these unit tests outside market hours.
+    """
     return {
         "legs": [
             {
@@ -160,6 +164,7 @@ def _payload(symbol: str = "AAPL", qty: int = 10) -> dict:
         ],
         "time_in_force": "day",
         "notes": "idempotency test",
+        "extended_hours": True,
     }
 
 

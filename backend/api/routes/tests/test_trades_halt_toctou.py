@@ -140,6 +140,12 @@ def _payload() -> dict:
         ],
         "time_in_force": "day",
         "notes": "halt toctou test",
+        # J-10 (Round-6): the market-hours gate now applies to all
+        # order types unless ``extended_hours=True``. The TOCTOU
+        # tests don't care about hours — they assert against the
+        # halt re-check just before broker submit. Opting into
+        # extended hours keeps the test focused on TOCTOU.
+        "extended_hours": True,
     }
 
 

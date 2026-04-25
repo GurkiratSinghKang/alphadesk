@@ -1204,11 +1204,53 @@ async def create_order(
     # Wave 2H P76-3: once the order lands, add its notional to the
     # rolling 15-min closing-auction counter so subsequent orders in the
     # same window see an accurate tally.
+    submitted_notional = 0.0
     try:
         submitted_notional = await _compute_order_notional(payload)
         await _record_closing_auction_notional(submitted_notional)
     except Exception:
         logger.debug("Closing-auction post-submit recording failed", exc_info=True)
+
+    # J-5 (Round-6) — durable audit trail on every successful order
+    # submit. Records acting user, IP, request_id, and order details
+    # so a regulator can reconstruct WHO submitted WHAT, WHEN, FROM
+    # WHERE long after the container has rotated.
+    try:
+        from core.audit import write_audit
+        from core.logging import REQUEST_ID
+
+        rid = REQUEST_ID.get()
+        await write_audit(
+            "order_submit",
+            username=username,
+            ip=_client_ip_for_audit(http_request),
+            request_id=rid if rid and rid != "-" else None,
+            details={
+                "symbol": payload.legs[0].symbol if payload.legs else None,
+                "side": (
+                    payload.legs[0].side.value if payload.legs else None
+                ),
+                "qty": (
+                    float(payload.legs[0].qty) if payload.legs else None
+                ),
+                "order_type": (
+                    payload.legs[0].order_type.value
+                    if payload.legs else None
+                ),
+                "limit_price": (
+                    float(payload.legs[0].limit_price)
+                    if payload.legs and payload.legs[0].limit_price
+                    else None
+                ),
+                "strategy": payload.strategy,
+                "combo_type": payload.combo_type,
+                "client_order_id": client_order_id,
+                "broker_order_id": order_id,
+                "notional": submitted_notional,
+            },
+        )
+    except Exception:
+        logger.debug("order_submit audit persistence failed", exc_info=True)
 
     # Persist trade record (best-effort).
     # persona-65 F1/F2: we persist the client_order_id inside each leg's JSON
@@ -1481,6 +1523,7 @@ async def list_orders(
 @router.delete("/orders/{order_id}", status_code=204, response_model=None)
 async def cancel_order(
     order_id: str,
+    http_request: Request,
     username: str = Depends(require_auth),
 ) -> None:
     """Cancel a pending order by ID.
@@ -1497,10 +1540,19 @@ async def cancel_order(
 
     Wave 2H (persona-76 P76-2): each successful cancel bumps a per-user
     minute-bucket Redis counter so ``_evaluate_cancel_rate`` can surface a
-    warning when the rolling 5-min cancel ratio exceeds 70%. Unauthenticated
-    callers (previously allowed) now go through ``require_auth`` because
-    the counter has to be scoped to the user; an anonymous cancel lane
-    would be a trivial bypass.
+    warning when the rolling 5-min cancel ratio exceeds 70%.
+
+    L-13 (Round-6) — ownership check. Look up the local Trade row by
+    broker_order_id; if its client_order_id encodes a different
+    username, refuse 403. Fails open when no row exists yet.
+
+    J-18 (Round-6) — on a successful cancel, scan and delete every
+    ``idem:orders:*:{username}`` Redis key whose cached response
+    references this broker_order_id. Without this, a retry of the
+    original submit would deserialise the cached response and re-emit
+    the (now-cancelled) broker_order_id.
+
+    J-5 (Round-6) — every successful cancel writes an audit_log row.
     """
     if _alpaca_keys_empty():
         raise HTTPException(
@@ -1515,6 +1567,11 @@ async def cancel_order(
         "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
     }
+
+    # L-13 — ownership check. Look up the local Trade row by
+    # broker_order_id. If its client_order_id encodes a different
+    # username, refuse 403.
+    await _enforce_cancel_ownership(order_id, username)
 
     # Pre-flight GET — Alpaca's DELETE returns 422 / 200 / 204 depending on
     # the order's life-cycle state and we can't reliably distinguish
@@ -1555,6 +1612,101 @@ async def cancel_order(
     # already succeeded and a missed counter is a monitoring miss, not a
     # correctness miss.
     await _record_cancel_for_rate(username)
+
+    # J-18 (Round-6) — clear cached idempotent responses for THIS
+    # user that referenced the cancelled broker_order_id.
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is not None:
+            cursor = 0
+            match_pattern = f"idem:orders:*:{username}"
+            while True:
+                cursor, keys = await redis.scan(
+                    cursor=cursor, match=match_pattern, count=200,
+                )
+                for key in keys:
+                    key_str = key.decode() if isinstance(key, (bytes, bytearray)) else key
+                    try:
+                        cached = await redis.get(key_str)
+                        if not cached:
+                            continue
+                        raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+                        if order_id in raw:
+                            await redis.delete(key_str)
+                    except Exception:
+                        continue
+                if cursor == 0:
+                    break
+    except Exception:
+        logger.debug(
+            "cancel_order: idem cache cleanup failed", exc_info=True,
+        )
+
+    # J-5 (Round-6) — durable audit trail.
+    try:
+        from core.audit import write_audit
+        from core.logging import REQUEST_ID
+
+        rid = REQUEST_ID.get()
+        await write_audit(
+            "order_cancel",
+            username=username,
+            ip=_client_ip_for_audit(http_request),
+            request_id=rid if rid and rid != "-" else None,
+            details={"broker_order_id": order_id},
+        )
+    except Exception:
+        logger.debug("order_cancel audit persistence failed", exc_info=True)
+
+
+async def _enforce_cancel_ownership(order_id: str, username: str) -> None:
+    """L-13 — ensure the caller owns the order they're cancelling.
+
+    Looks up ``Trade.broker_order_id == order_id``. If a row exists
+    AND a username can be derived from the client_order_id, require
+    a match. FAILS OPEN when no row / no username can be derived:
+    pre-J-5 orders won't have an audit attribution and we don't want
+    to lock those out from cancel.
+    """
+    try:
+        from core.config import settings as _s
+        if _s.SKIP_DB_INIT:
+            return
+        from sqlalchemy import select
+        from core.database import _get_session_factory
+        from data.storage.models import Trade
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            q = select(Trade).where(Trade.broker_order_id == order_id)
+            row = (await db.execute(q)).scalar_one_or_none()
+        if row is None:
+            return
+        coid = row.client_order_id or ""
+        if not coid:
+            return
+        # client_order_id encoding: ``manual_<user>_<hex>`` or
+        # ``<user>_<idem>``. Extract the leading owner slug.
+        if coid.startswith("manual_"):
+            tail = coid[len("manual_"):]
+            owner = tail.rsplit("_", 1)[0] if "_" in tail else None
+        else:
+            owner = coid.split("_", 1)[0] if "_" in coid else None
+        if not owner:
+            return
+        if owner != username:
+            raise HTTPException(
+                status_code=403,
+                detail="Order owned by a different user",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.debug(
+            "_enforce_cancel_ownership: ownership probe failed — fail-open",
+            exc_info=True,
+        )
 
 
 @router.get("/positions", response_model=list[PositionResponse])

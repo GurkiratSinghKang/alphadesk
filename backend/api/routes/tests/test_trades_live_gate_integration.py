@@ -151,6 +151,12 @@ def _valid_orb_order_payload() -> dict:
 
     ``orb`` is on ``STRATEGY_LIVE_DISABLED`` in ``core.config``; the gate
     MUST refuse this exact payload with 422 when the environment is live.
+
+    J-10 (Round-6): the market-hours gate now applies to all order
+    types unless ``extended_hours=True``. These integration tests run
+    on CI / dev machines at arbitrary hours and must exercise the
+    live-strategy gate independent of the calendar gate, so they opt
+    into extended hours.
     """
     return {
         "legs": [
@@ -166,6 +172,7 @@ def _valid_orb_order_payload() -> dict:
         "time_in_force": "day",
         "strategy": "orb",
         "notes": "integration test",
+        "extended_hours": True,
     }
 
 
