@@ -198,7 +198,11 @@ def test_entry_emits_two_legs_with_opposite_signs() -> None:
     assert len(entry_sigs) == 2
     weights = [sig.target_weight for sig in entry_sigs]
     assert weights[0] * weights[1] < 0
-    assert result.state_update["pairs_trading.positions"].get("AAPL-MSFT") is not None
+    # Round-6 / I-4: entries are intent-only on emission — they live in
+    # state.pending until on_fill confirms both legs landed. The confirmed
+    # positions ledger (state.positions) is empty at this point.
+    assert result.state_update["pairs_trading.pending"].get("AAPL-MSFT") is not None
+    assert result.state_update["pairs_trading.positions"] == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -305,3 +309,90 @@ def test_kalman_hedge_ratio_tracks_drift() -> None:
     assert late > mid
     assert 0.9 < mid < 1.2
     assert late > 1.15
+
+
+# --------------------------------------------------------------------------- #
+# on_fill — pending → confirmed promotion (Round-6 / I-4)                     #
+# --------------------------------------------------------------------------- #
+def test_on_fill_promotes_pending_to_positions_after_both_legs() -> None:
+    """``on_fill`` must move an intent from state.pending to state.positions
+    only after BOTH legs of the pair fill — partials wait."""
+    from decimal import Decimal as _Decimal
+
+    from strategies._core.contracts import Fill
+    from strategies.pairs_trading.strategy import OpenPosition, PairsTradingStrategy
+
+    asof = date(2025, 6, 1)
+    intent = OpenPosition(
+        pair_id="AAPL-MSFT", y="AAPL", x="MSFT", beta=1.1,
+        direction=+1, entry_z=-2.5, entry_date=asof,
+        long_sym="AAPL", short_sym="MSFT",
+        long_weight=0.1, short_weight=-0.11,
+    )
+    state = {
+        "pairs_trading.positions": {},
+        "pairs_trading.pending": {"AAPL-MSFT": intent},
+    }
+    strat = PairsTradingStrategy()
+
+    # Fill leg 1 (y) — still pending.
+    fill_y = Fill(
+        symbol="AAPL", asof=asof, quantity=10, price=_Decimal("150"),
+        signal_tag="pairs-entry-AAPL-MSFT-dir+1-y",
+    )
+    update = strat.on_fill(fill_y, state)
+    assert update["pairs_trading.positions"] == {}
+    assert "AAPL-MSFT" in update["pairs_trading.pending"]
+    state.update(update)
+
+    # Fill leg 2 (x) — now confirmed.
+    fill_x = Fill(
+        symbol="MSFT", asof=asof, quantity=-9, price=_Decimal("330"),
+        signal_tag="pairs-entry-AAPL-MSFT-dir+1-x",
+    )
+    update = strat.on_fill(fill_x, state)
+    assert "AAPL-MSFT" in update["pairs_trading.positions"]
+    assert update["pairs_trading.pending"] == {}
+
+
+def test_on_fill_exit_drops_position() -> None:
+    """An exit fill must clear the pair from the confirmed positions ledger."""
+    from decimal import Decimal as _Decimal
+
+    from strategies._core.contracts import Fill
+    from strategies.pairs_trading.strategy import OpenPosition, PairsTradingStrategy
+
+    asof = date(2025, 6, 1)
+    pos = OpenPosition(
+        pair_id="AAPL-MSFT", y="AAPL", x="MSFT", beta=1.1,
+        direction=+1, entry_z=-2.5, entry_date=asof - timedelta(days=10),
+        long_sym="AAPL", short_sym="MSFT",
+        long_weight=0.1, short_weight=-0.11,
+    )
+    state = {
+        "pairs_trading.positions": {"AAPL-MSFT": pos},
+        "pairs_trading.pending": {},
+    }
+    strat = PairsTradingStrategy()
+    fill = Fill(
+        symbol="AAPL", asof=asof, quantity=-10, price=_Decimal("160"),
+        signal_tag="pairs-exit-mean-revert-AAPL-MSFT-y",
+    )
+    update = strat.on_fill(fill, state)
+    assert update["pairs_trading.positions"] == {}
+
+
+def test_active_pair_frozen_model_rejects_mutation() -> None:
+    """ActivePair / OpenPosition must be frozen Pydantic models (Round-6 / I-19)."""
+    from pydantic import ValidationError as _ValidationError
+
+    ap = ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=1.0, screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=date(2025, 1, 1), last_watchdog_date=date(2025, 1, 1),
+    )
+    with pytest.raises((_ValidationError, ValueError, AttributeError, TypeError)):
+        ap.last_watchdog_date = date(2025, 6, 1)  # type: ignore[misc]
+    bumped = ap.model_copy(update={"last_watchdog_date": date(2025, 6, 1)})
+    assert bumped.last_watchdog_date == date(2025, 6, 1)
+    assert ap.last_watchdog_date == date(2025, 1, 1)  # original unchanged
