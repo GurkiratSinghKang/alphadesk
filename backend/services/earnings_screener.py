@@ -579,10 +579,16 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
             expiry
             or (chain.expirations[0] if chain.expirations else market_today())
         )
+        # Round-5 Cluster A E-1: thread the underlying chain's demo flag
+        # through to the wire schema. ``getattr`` defends against test
+        # mocks that don't set the attribute — old fixtures pre-dating
+        # the OptionChain.is_demo addition shouldn't 500 the route just
+        # because they passed a stub object.
         return {
             "expiry": resolved_expiry,
             "underlying_price": underlying,
             "rows": rows,
+            "is_demo": bool(getattr(chain, "is_demo", False)),
         }
     except Exception as e:
         log.warning("strike ladder load failed for %s: %s", symbol, e)
@@ -595,7 +601,30 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
 # of ~150 names, that's a real burn on a cache reset. The dict maps
 # `f"{symbol}:{report_date}"` -> the in-flight Task; subsequent callers
 # `await` the same Task instead of creating a new one.
+#
+# Round-5 Cluster B G-11/E-4: the dedup map below is now guarded by an
+# asyncio.Lock for the get-or-create sequence, and the done-callback
+# identity-compares the dict's current value against the completing
+# task before popping. Without the lock, two coroutines could both see
+# ``existing is None`` and both create tasks; without the identity
+# check, a successor task could be wiped from the dict by its
+# predecessor's cleanup callback.
 _inflight_structured: dict[str, asyncio.Task[dict | None]] = {}
+_INFLIGHT_LOCK: asyncio.Lock | None = None
+
+
+def _get_inflight_lock() -> asyncio.Lock:
+    """Return the module-level lock, creating it lazily.
+
+    asyncio.Lock binds to the running event loop on instantiation, so we
+    can't safely instantiate at module-import time (test runners spin up
+    fresh loops per session). Lazy creation keeps the first construction
+    inside the running loop.
+    """
+    global _INFLIGHT_LOCK
+    if _INFLIGHT_LOCK is None:
+        _INFLIGHT_LOCK = asyncio.Lock()
+    return _INFLIGHT_LOCK
 
 
 async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
@@ -608,6 +637,14 @@ async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
     also a cost vector: N concurrent requests for the same symbol on a
     cold cache each spawned an independent task. Now we de-dup via
     :data:`_inflight_structured` and await the result.
+
+    Round-5 Cluster B G-11/E-4: the get-or-create sequence is gated by
+    ``_INFLIGHT_LOCK`` so two coroutines racing on a cold cache can't
+    both observe ``existing is None`` and both spawn a paid Claude call.
+    The done-callback also identity-compares ``_inflight_structured[k]``
+    against the completing task before popping — covers the case where
+    a successor task replaces ours in the dict and our done-callback
+    would otherwise wipe it on cleanup.
     """
     from core.cache import get_cache
 
@@ -618,13 +655,22 @@ async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
         return cached
 
     inflight_key = f"{symbol}:{context['report_date']}"
-    task = _inflight_structured.get(inflight_key)
-    if task is None or task.done():
-        task = asyncio.create_task(_run_structured_and_cache(symbol, context, cache, key))
-        _inflight_structured[inflight_key] = task
-        # Pop from the registry once finished so the next cold-cache hit
-        # gets a fresh task. Done-callback runs in the loop's context.
-        task.add_done_callback(lambda t, k=inflight_key: _inflight_structured.pop(k, None))
+    lock = _get_inflight_lock()
+    async with lock:
+        task = _inflight_structured.get(inflight_key)
+        if task is None or task.done():
+            task = asyncio.create_task(
+                _run_structured_and_cache(symbol, context, cache, key)
+            )
+            _inflight_structured[inflight_key] = task
+
+            def _done(t: asyncio.Task, k: str = inflight_key) -> None:
+                # Identity-compare so we never wipe a successor task
+                # that replaced us in the dict (Round-5 G-11/E-4).
+                if _inflight_structured.get(k) is t:
+                    _inflight_structured.pop(k, None)
+
+            task.add_done_callback(_done)
     try:
         return await task
     except Exception:
@@ -739,42 +785,81 @@ def _sanitize_prompt_context(context: dict) -> dict:
     return out
 
 
-async def _load_iv_term(symbol: str) -> list[dict] | None:
+async def _load_iv_term(symbol: str) -> tuple[list[dict] | None, bool]:
     """Build ATM-IV term structure across the first six expirations.
+
+    Returns ``(points, is_partial)``. ``is_partial=True`` signals that
+    more than half of the per-expiration fetches failed — the caller
+    appends ``"iv_term_partial"`` to ``error_codes`` and surfaces a
+    partial flag to the UI rather than letting a 1-point chart look
+    like a flat term structure.
 
     Round-4 CLUSTER 5 #17: previously this awaited each expiration chain
     fetch sequentially — six round-trips per symbol on the detail page.
     With the per-symbol cache TTL of 30s, the second-and-onwards fetches
     were usually warm but cold-cache loads were slow. ``asyncio.gather``
     parallelises so cold-cache p95 falls from ~1.5s to ~250ms.
+
+    Round-5 fixes:
+      * E-10 — only six round trips total. Previously we fetched
+        ``first_chain`` unfiltered, then re-fetched expiration[0] inside
+        the parallel gather, doubling the first leg.
+      * E-11 — track failure_count and propagate a partial signal.
+        ``gather(return_exceptions=True)`` was silently swallowing
+        per-expiration failures; 5/6 failing returned a 1-point
+        chart with ``partial=False`` (a lie).
     """
     from services.options import fetch_chain
 
     try:
         today = market_today()
         first_chain = await fetch_chain(symbol)
-        expirations = first_chain.expirations[:6]
+        expirations = list(first_chain.expirations[:6])
         if not expirations:
-            return None
-        chains = await asyncio.gather(
-            *(
-                fetch_chain(
-                    symbol,
-                    expiry=(
-                        e if isinstance(e, date) else date.fromisoformat(str(e))
-                    ),
-                )
-                for e in expirations
-            ),
-            return_exceptions=True,
+            return (None, False)
+
+        # E-10: reuse first_chain for expirations[0] — fetch only the rest
+        # in parallel. With six expirations this is 1 + 5 round trips, not
+        # 1 + 6.
+        first_exp = expirations[0]
+        first_exp_date = (
+            first_exp if isinstance(first_exp, date)
+            else date.fromisoformat(str(first_exp))
         )
-        term: list[dict] = []
-        for exp, exp_chain in zip(expirations, chains):
-            if isinstance(exp_chain, Exception):
+
+        rest_results: list = []
+        if len(expirations) > 1:
+            rest_results = await asyncio.gather(
+                *(
+                    fetch_chain(
+                        symbol,
+                        expiry=(
+                            e if isinstance(e, date)
+                            else date.fromisoformat(str(e))
+                        ),
+                    )
+                    for e in expirations[1:]
+                ),
+                return_exceptions=True,
+            )
+
+        # Pair each expiration with its chain (first reused; rest gathered).
+        chains: list[tuple[date, Any]] = [(first_exp_date, first_chain)]
+        failure_count = 0
+        for exp, ch in zip(expirations[1:], rest_results):
+            if isinstance(ch, Exception):
+                failure_count += 1
+                log.warning(
+                    "iv term per-expiry fetch failed for %s: %s", symbol, ch,
+                )
                 continue
             exp_date = (
                 exp if isinstance(exp, date) else date.fromisoformat(str(exp))
             )
+            chains.append((exp_date, ch))
+
+        term: list[dict] = []
+        for exp_date, exp_chain in chains:
             calls = _filter_chain(exp_chain, "call")
             atm = min(
                 calls,
@@ -787,10 +872,16 @@ async def _load_iv_term(symbol: str) -> list[dict] | None:
                     "dte": (exp_date - today).days,
                     "atm_iv": atm.iv,
                 })
-        return term or None
+
+        # E-11 threshold: more than half of the per-expiration fetches
+        # failed → tell the caller. Counted against expirations[1:] since
+        # the first leg is reused from the unfiltered fetch.
+        rest_total = max(0, len(expirations) - 1)
+        is_partial = rest_total > 0 and failure_count > rest_total // 2
+        return (term or None, is_partial)
     except Exception as e:
         log.warning("iv term load failed for %s: %s", symbol, _scrub_fmp_error(str(e)))
-        return None
+        return (None, True)
 
 
 async def _load_skew(symbol: str) -> dict | None:
@@ -1021,6 +1112,11 @@ async def list_upcoming(
     downstream per-IP rate limiters see the real user instead of loopback
     (B-33).
     """
+    # Settings are pulled here at the top of the function so the
+    # watchlist filter (Round-5 G-15) and the row-cap / concurrency
+    # knobs all see the same instance.
+    from core.config import settings
+
     partial = False
     # Round-4 CLUSTER 1 #4: compute "today" once and pass through. The
     # window dates are also resolved once at the top so they can land in
@@ -1058,12 +1154,37 @@ async def list_upcoming(
         len(raw_rows), before_count, window,
     )
 
+    # Round-5 Cluster A G-15: ``watchlist_only`` was a complete no-op.
+    # Apply the filter using ``settings.WATCHLIST_DEFAULT_SYMBOLS`` until
+    # the per-user watchlist concept is plumbed through the auth context.
+    # TODO: thread user's watchlist from auth context once available; for
+    # now use settings.WATCHLIST_DEFAULT_SYMBOLS so the flag is at least
+    # operational instead of silently ignored.
+    if watchlist_only:
+        watch_raw = (settings.WATCHLIST_DEFAULT_SYMBOLS or "").strip()
+        if watch_raw:
+            watchlist = {
+                s.strip().upper() for s in watch_raw.split(",") if s.strip()
+            }
+            before = len(raw_rows)
+            raw_rows = [
+                r for r in raw_rows
+                if r.get("symbol", "").upper() in watchlist
+            ]
+            log.info(
+                "earnings calendar: watchlist filter kept %d/%d (size=%d)",
+                len(raw_rows), before, len(watchlist),
+            )
+        else:
+            log.info(
+                "earnings calendar: watchlist_only=True but "
+                "WATCHLIST_DEFAULT_SYMBOLS is empty — no rows filtered",
+            )
+
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where
     # many mega caps report in parallel. Operator-tunable via
     # ``settings.EARNINGS_CALENDAR_MAX_ROWS`` (B-85).
-    from core.config import settings
-
     raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
     MAX_ROWS = settings.EARNINGS_CALENDAR_MAX_ROWS
     if len(raw_rows) > MAX_ROWS:
@@ -1307,7 +1428,17 @@ async def get_detail(symbol: str) -> EarningsDetail:
     quote = quote_t if isinstance(quote_t, dict) else None
     metrics = metrics_t if isinstance(metrics_t, dict) else None
     ladder = ladder_t if isinstance(ladder_t, dict) else None
-    iv_term = iv_term_t if isinstance(iv_term_t, list) else None
+    # Round-5 Cluster C E-11: _load_iv_term now returns a (points, is_partial)
+    # tuple so a majority-failed gather can surface "iv_term_partial" in
+    # error_codes. An exception thrown directly by gather still arrives as
+    # the exception itself (not the tuple), so guard accordingly.
+    iv_term: list[dict] | None = None
+    iv_term_is_partial = False
+    if isinstance(iv_term_t, tuple) and len(iv_term_t) == 2:
+        iv_term, iv_term_is_partial = iv_term_t
+    elif isinstance(iv_term_t, list):
+        # Defensive: tests / mocks may still return a bare list.
+        iv_term = iv_term_t
     skew = skew_t if isinstance(skew_t, dict) else None
 
     error_codes: list[str] = []
@@ -1321,6 +1452,19 @@ async def get_detail(symbol: str) -> EarningsDetail:
 
     if news_unavailable:
         error_codes.append("news_unavailable")
+
+    # Round-5 Cluster A E-1: surface chain-demo state through error_codes
+    # so the frontend banner can fire even when other blocks are healthy.
+    # The demo flag comes from OptionChain.is_demo via _load_strike_ladder.
+    if ladder is not None and ladder.get("is_demo"):
+        error_codes.append("chain_demo")
+
+    # Round-5 Cluster C E-11: majority-failed IV term gather signals
+    # iv_term_partial so the UI can flag a partial term-structure chart
+    # rather than rendering the misleading 1-point line that gather()
+    # silently produced before.
+    if iv_term_is_partial:
+        error_codes.append("iv_term_partial")
 
     # Round-4 CLUSTER 3 #11: metrics missing or hv_20/iv_rank None tells
     # the frontend that the historical-vol pipeline isn't backing this
@@ -1345,6 +1489,11 @@ async def get_detail(symbol: str) -> EarningsDetail:
         or "metrics_unavailable" in error_codes
         or "hv_unavailable" in error_codes
         or "iv_unavailable" in error_codes
+        # Round-5 Cluster A E-1: chain_demo flips partial — UI surfaces the
+        # synthetic-data warning rather than treating BSM rows as live OPRA.
+        or "chain_demo" in error_codes
+        # Round-5 Cluster C E-11: iv_term_partial flips partial too.
+        or "iv_term_partial" in error_codes
     )
 
     claude_ctx = {
@@ -1374,6 +1523,14 @@ async def get_detail(symbol: str) -> EarningsDetail:
             symbol, _scrub_fmp_error(str(e)),
         )
         claude = None
+
+    # Round-5 Cluster A E-3: when Claude is absent (outage / parse error /
+    # cache miss with the create_task still warming up), tell the UI so it
+    # can render a "thesis pending" state instead of silently swallowing
+    # the gap. Always flip partial when this fires.
+    if claude is None:
+        error_codes.append("claude_unavailable")
+        partial = True
 
     return EarningsDetail(
         symbol=symbol,

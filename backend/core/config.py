@@ -146,6 +146,38 @@ class Settings(BaseSettings):
     # the /earnings/calendar p95 degrades visibly on the UI side.
     EARNINGS_FMP_TIMEOUT_S: float = 5.0
 
+    # --- Round-5 Cluster A G-15: earnings watchlist filter ---
+    # Comma-separated list of tickers that the earnings calendar
+    # ``watchlist_only=true`` flag uses as the filter set. This is a
+    # placeholder until per-user watchlists are threaded through the auth
+    # context — when that lands, the screener will read the user's
+    # personal list instead. Sensible default of mega caps so the flag
+    # has visible behaviour out of the box.
+    WATCHLIST_DEFAULT_SYMBOLS: str = "AAPL,MSFT,NVDA,TSLA,GOOGL,META,AMZN"
+
+    # --- Round-5 Cluster D H-2: Claude spend kill-switch ---
+    # Per-day USD ceiling on cross-user Claude spend. Tracked in Redis
+    # under ``claude:spend:{utc_date}``; per-call estimates are added
+    # before the request fires and reconciled against the actual cost
+    # afterwards. When ``current_spend`` exceeds the budget AND the
+    # kill-switch is enabled, the next call raises ``ClaudeBudgetExceeded``
+    # instead of going to Anthropic. Operators can halt the gate at any
+    # time by writing a sentinel value into the day key
+    # (``SET claude:spend:{date} 999999``) — see notes in
+    # :mod:`agents.claude_client`.
+    CLAUDE_DAILY_BUDGET_USD: float = 100.0
+    CLAUDE_BUDGET_KILL_SWITCH_ENABLED: bool = True
+
+    # --- Round-5 Cluster E E-6: test-mode FMP cache bypass ---
+    # When True, ``services.earnings_screener._fmp_upcoming`` skips its
+    # per-window dedup lock + cache. Set to True from
+    # ``backend/tests/conftest.py`` so concurrent test runs don't share a
+    # stale cached response. Replaces the previous PYTEST_CURRENT_TEST
+    # env-var heuristic — the env-var could leak into prod (e.g. someone
+    # sourcing a dev .env), and a quiet behaviour change in prod is much
+    # worse than a noisier explicit setting.
+    SKIP_EARNINGS_FMP_CACHE: bool = False
+
     # --- Compliance (Wave 2H — persona 76 P76-7) ---
     # Operator-owned deny-list. Populated either inline (comma-separated) or
     # via a file path. Both sources union together at ``core.compliance``

@@ -134,6 +134,11 @@ class StrikeLadder(BaseModel):
     expiry: date
     underlying_price: float
     rows: list[LadderRow]
+    # Round-5 Cluster A E-1: surface the underlying chain's demo flag so
+    # the frontend can render its DEMO DATA badge. Defaults False so
+    # real-chain responses don't change shape; the screener fills this in
+    # from ``OptionChain.is_demo`` whenever the demo fallback fired.
+    is_demo: bool = False
 
 
 class ClaudeStructured(BaseModel):
