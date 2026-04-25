@@ -274,6 +274,70 @@ describe("Earnings Options Play page", () => {
   });
 });
 
+// ─── Round-5 (NEW-Y3 + NEW-Y4): race protection + deeplink ────────────
+describe("Earnings Options Play — race protection (Round-5)", () => {
+  it("test_aborted_calendar_fetch_does_not_show_error: AbortError is suppressed in the banner (NEW-Y3 / G-18)", async () => {
+    const abort = new DOMException("aborted", "AbortError");
+    vi.mocked(api.getEarningsCalendar).mockRejectedValueOnce(abort);
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    // Sidebar must NOT render the red Error banner — abort filters out.
+    expect(container.textContent).not.toMatch(/error · aborted/i);
+  });
+
+  it("non-abort errors still surface as errors (NEW-Y3)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockRejectedValueOnce(
+      new Error("provider blew up"),
+    );
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/provider blew up/i);
+    });
+  });
+
+  it("test_url_supplied_symbol_not_in_calendar_keeps_selection: deeplink survives auto-select (NEW-Y4 / G-19)", async () => {
+    // Clear mock-call history so prior-test calls don't leak into our
+    // toHaveBeenCalledWith / not.toHaveBeenCalledWith assertions.
+    vi.mocked(api.getEarningsDetail).mockClear();
+    vi.mocked(api.getEarningsCalendar).mockClear();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: {
+        ...original,
+        search: "?symbol=ABCD",
+        pathname: "/strategies/earnings-options-play",
+      },
+    });
+    // Calendar comes back without ABCD — deeplink should still pin the
+    // selection so the detail fetcher serves the off-calendar stub.
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [
+        {
+          symbol: "NVDA", company: "Nvidia", sector: "Semis",
+          reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+          price: null, change: null, changePct: null, ivRank: null,
+          premiumYieldCallAtm: null, premiumYieldPutAtm: null,
+          expectedMovePct: null, histAvgAbsMovePct: null,
+          claudeVerdict: null, claudeConfidence: null, topSetup: null,
+        },
+      ],
+      generatedAt: new Date().toISOString(),
+      partial: false,
+    });
+    render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("ABCD", expect.anything());
+    });
+    // Confirm we did NOT silently switch to NVDA.
+    expect(api.getEarningsDetail).not.toHaveBeenCalledWith("NVDA", expect.anything());
+    Object.defineProperty(window, "location", { writable: true, value: original });
+    window.history.replaceState({}, "", "/");
+  });
+});
+
 describe("Earnings Options Play — round-4 fixes", () => {
   it("Esc dispatches clear-selection event and the page resets selectedSymbol (B-NEW-2)", async () => {
     vi.mocked(api.getEarningsCalendar).mockResolvedValue({

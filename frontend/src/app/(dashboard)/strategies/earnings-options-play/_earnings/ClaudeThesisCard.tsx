@@ -130,6 +130,13 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
   // "tick" into two effects (instead of one effect that re-creates the
   // interval on every state change) keeps the cadence stable across
   // re-renders.
+  //
+  // Round-5 (NEW-Y5 / E-8): dep on `[error, initialRetry]` rather than
+  // `[initialRetry]`. Without `error` in the deps a duplicate retryAfter
+  // value (user mashes the button twice → backend returns 429 with the
+  // same 30s) wouldn't restart the visible timer because `initialRetry`
+  // didn't change. Each new RateLimitError instance now retriggers the
+  // effect — the visible countdown restarts at the fresh retryAfter.
   useEffect(() => {
     setRetrySec(initialRetry);
     if (initialRetry <= 0) return;
@@ -143,7 +150,7 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [initialRetry]);
+  }, [error, initialRetry]);
 
   const buttonDisabled = running || retrySec > 0;
 

@@ -126,4 +126,57 @@ describe("ClaudeThesisCard", () => {
     const alert = container.querySelector('[role="alert"]');
     expect(alert?.textContent).toMatch(/network down/i);
   });
+
+  // ── Round-5 (NEW-Y5 / E-8): countdown restart on duplicate retryAfter ──
+  it("test_rate_limit_countdown_restarts_on_repeat_429: same retryAfter restarts the visible timer", () => {
+    vi.useFakeTimers();
+    try {
+      const first = new RateLimitError(
+        "/api/v1/earnings/NVDA/full-research",
+        30,
+      );
+      const { container, rerender } = render(
+        <ClaudeThesisCard
+          structured={structured}
+          full={null}
+          running={false}
+          error={first}
+          onRunFull={() => {}}
+        />,
+      );
+      let alert = container.querySelector('[role="alert"]');
+      expect(alert?.textContent).toMatch(/try again in 30s/i);
+
+      // Tick 10s of the first countdown.
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      alert = container.querySelector('[role="alert"]');
+      expect(alert?.textContent).toMatch(/try again in 20s/i);
+
+      // User mashes the button — backend returns 429 with the same
+      // retry-after value (30s). A NEW RateLimitError instance arrives.
+      // Round-5 (NEW-Y5): dep `[error, initialRetry]` triggers a fresh
+      // countdown even though `initialRetry` is unchanged.
+      const second = new RateLimitError(
+        "/api/v1/earnings/NVDA/full-research",
+        30,
+      );
+      rerender(
+        <ClaudeThesisCard
+          structured={structured}
+          full={null}
+          running={false}
+          error={second}
+          onRunFull={() => {}}
+        />,
+      );
+      alert = container.querySelector('[role="alert"]');
+      // Without the [error, initialRetry] dep fix, this would still show
+      // "try again in 20s" because the effect didn't re-run.
+      expect(alert?.textContent).toMatch(/try again in 30s/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
