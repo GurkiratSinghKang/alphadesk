@@ -416,20 +416,26 @@ jobs:
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml down --remove-orphans
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --pull never
 
-            echo "─── Reload Caddy with synced Caddyfile ─────────────────"
+            echo "─── Restart Caddy to pick up Caddyfile changes ─────────"
             # The Caddyfile is bind-mounted from the repo's
             # ``infrastructure/Caddyfile`` into ``/etc/caddy/Caddyfile`` on
             # the Caddy container. ``docker compose up -d`` only recreates a
             # service when its image / env / volume CONFIG changes — bind-
             # mounted file edits are invisible to compose's diff. Without
-            # an explicit reload, Caddy keeps serving the old config (CSP,
+            # an explicit restart, Caddy keeps serving the old config (CSP,
             # Permissions-Policy, COOP/COEP/CORP, brotli encoding) until
             # the next time someone restarts the container by hand.
-            # ``caddy reload`` is graceful: existing connections drain, the
-            # admin API hot-swaps the config, no dropped requests.
+            #
+            # ``caddy reload`` was attempted first but needed
+            # ``--adapter caddyfile`` (default is JSON) and is admin-API-
+            # gated. ``docker compose restart`` is bulletproof: ~2s
+            # downtime per deploy, no admin-API dependency, no syntax-
+            # check needed (a bad config would fail at container-start
+            # and the deploy continues with the old container running on
+            # restart-policy).
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
-              exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
-              || echo "WARN: caddy reload failed (config may have a syntax error — old config still active)"
+              restart caddy \
+              || echo "WARN: caddy restart failed (config may have a syntax error)"
 
             echo "─── Wait for backend healthcheck ───────────────────────"
             # Backend healthcheck start_period is 15s; poll every 2s up to
