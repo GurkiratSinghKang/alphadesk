@@ -3637,7 +3637,29 @@ async def resume_trading(
 # Price Alerts — Redis-persisted, real-time trigger checking
 # ---------------------------------------------------------------------------
 
-ALERTS_REDIS_KEY = "price_alerts"
+# J-13 (Round-6) — per-user alert namespacing.
+#
+# Before this fix every alert lived under a single global Redis hash
+# (``price_alerts``). Two consequences:
+#   * Any authenticated user could DELETE another user's alert by id.
+#   * The list endpoint returned every alert for every user.
+#
+# Per-user keys: ``price_alerts:{username}``. The per-symbol scanner
+# iterates all per-user keys via ``SCAN MATCH "price_alerts:*"``.
+ALERTS_REDIS_KEY_PREFIX = "price_alerts"
+LEGACY_ALERTS_REDIS_KEY = "price_alerts"
+# Back-compat alias — pre-J-13 callers reach for ``ALERTS_REDIS_KEY``.
+ALERTS_REDIS_KEY = LEGACY_ALERTS_REDIS_KEY
+
+
+def _alerts_key_for_user(username: str | None) -> str:
+    """Return the Redis hash key for ``username``'s alerts.
+
+    Falls back to the legacy global key when ``username`` is None.
+    """
+    if not username:
+        return LEGACY_ALERTS_REDIS_KEY
+    return f"{ALERTS_REDIS_KEY_PREFIX}:{username}"
 
 
 class CreateAlertRequest(BaseModel):
@@ -3700,21 +3722,62 @@ class CreateAlertRequest(BaseModel):
     )
 
 
-async def _get_all_alerts() -> list[dict]:
-    """Retrieve all price alerts from Redis hash."""
+async def _get_all_alerts(username: str | None = None) -> list[dict]:
+    """Retrieve price alerts from Redis hash.
+
+    J-13 — when ``username`` is set, returns only that user's alerts
+    (per-user key namespace). When ``username`` is None (background
+    scanner / position-close cleanup), iterates every per-user key
+    via SCAN and merges in the legacy global hash.
+    """
     from core.redis import get_redis
     try:
         r = await get_redis()
-        raw = await r.hgetall(ALERTS_REDIS_KEY)
+
+        if username:
+            raw = await r.hgetall(_alerts_key_for_user(username))
+            alerts: list[dict] = []
+            for _id, data in raw.items():
+                try:
+                    alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
+                    alerts.append(alert)
+                except Exception:
+                    logger.debug("Skipping malformed alert in Redis", exc_info=True)
+            alerts.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+            return alerts
+
+        # No username — scan all per-user buckets + merge legacy.
         alerts = []
-        for _id, data in raw.items():
-            try:
-                alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
-                alerts.append(alert)
-            except Exception:
-                logger.debug("Skipping malformed alert in Redis", exc_info=True)
-                continue
-        # Sort by created_at descending
+        cursor = 0
+        match_pattern = f"{ALERTS_REDIS_KEY_PREFIX}:*"
+        while True:
+            cursor, keys = await r.scan(cursor=cursor, match=match_pattern, count=200)
+            for key in keys:
+                key_str = key.decode() if isinstance(key, (bytes, bytearray)) else key
+                if key_str == LEGACY_ALERTS_REDIS_KEY:
+                    continue
+                raw = await r.hgetall(key_str)
+                for _id, data in raw.items():
+                    try:
+                        alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
+                        alerts.append(alert)
+                    except Exception:
+                        logger.debug("Skipping malformed alert in Redis", exc_info=True)
+            if cursor == 0:
+                break
+
+        # Legacy hash merge.
+        try:
+            legacy_raw = await r.hgetall(LEGACY_ALERTS_REDIS_KEY)
+            for _id, data in legacy_raw.items():
+                try:
+                    alert = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
+                    alerts.append(alert)
+                except Exception:
+                    continue
+        except Exception:
+            logger.debug("Legacy alerts hash unreadable", exc_info=True)
+
         alerts.sort(key=lambda a: a.get("created_at", ""), reverse=True)
         return alerts
     except Exception:
@@ -3722,22 +3785,45 @@ async def _get_all_alerts() -> list[dict]:
         return []
 
 
-async def _save_alert(alert: dict) -> None:
-    """Save a single alert to Redis hash."""
+async def _save_alert(alert: dict, username: str | None = None) -> None:
+    """Save a single alert. J-13: writes to per-user key when given."""
     from core.redis import get_redis
     try:
         r = await get_redis()
-        await r.hset(ALERTS_REDIS_KEY, alert["id"], json.dumps(alert))
+        target_user = username or alert.get("username")
+        key = _alerts_key_for_user(target_user) if target_user else LEGACY_ALERTS_REDIS_KEY
+        await r.hset(key, alert["id"], json.dumps(alert))
     except Exception:
         logger.warning("Failed to save alert to Redis", exc_info=True)
 
 
-async def _delete_alert_from_redis(alert_id: str) -> bool:
-    """Delete a single alert from Redis hash. Returns True if deleted."""
+async def _delete_alert_from_redis(alert_id: str, username: str | None = None) -> bool:
+    """Delete a single alert. J-13: when ``username`` set, only checks that
+    user's namespace. Otherwise scans all per-user + legacy keys."""
     from core.redis import get_redis
     try:
         r = await get_redis()
-        removed = await r.hdel(ALERTS_REDIS_KEY, alert_id)
+        if username:
+            removed = await r.hdel(_alerts_key_for_user(username), alert_id)
+            if removed > 0:
+                return True
+            removed = await r.hdel(LEGACY_ALERTS_REDIS_KEY, alert_id)
+            return removed > 0
+
+        cursor = 0
+        match_pattern = f"{ALERTS_REDIS_KEY_PREFIX}:*"
+        while True:
+            cursor, keys = await r.scan(cursor=cursor, match=match_pattern, count=200)
+            for key in keys:
+                key_str = key.decode() if isinstance(key, (bytes, bytearray)) else key
+                if key_str == LEGACY_ALERTS_REDIS_KEY:
+                    continue
+                removed = await r.hdel(key_str, alert_id)
+                if removed > 0:
+                    return True
+            if cursor == 0:
+                break
+        removed = await r.hdel(LEGACY_ALERTS_REDIS_KEY, alert_id)
         return removed > 0
     except Exception:
         logger.warning("Failed to delete alert from Redis", exc_info=True)
@@ -3754,21 +3840,31 @@ async def list_alerts(
 ):
     """List price alerts, optionally filtered by symbol.
 
-    Paginated: use ``limit`` (default 100, max 500) and ``offset`` (max 1000).
-    The total number of matching alerts is returned in the ``X-Total-Count``
-    response header so clients can compute page counts.
-
-    persona-9 #5: ``offset`` is bounded above as well as below — previously
-    ``offset=-5`` returned the tail (negative slice) and ``offset=10**9``
-    returned an empty page silently.
+    J-13 (Round-6): only the caller's own alerts are returned. Per-user
+    Redis namespace ``price_alerts:{username}`` plus a fall-through into
+    the legacy global hash for alerts that pre-date this change and
+    happen to belong to the caller.
     """
-    alerts = await _get_all_alerts()
+    own_alerts = await _get_all_alerts(username=username)
+
+    # Legacy global hash: include alerts whose ``username`` matches the
+    # caller. Alerts with no username field are NOT surfaced.
+    try:
+        legacy_all = await _get_all_alerts(username=None)
+        for a in legacy_all:
+            if a.get("username") == username and not any(
+                x.get("id") == a.get("id") for x in own_alerts
+            ):
+                own_alerts.append(a)
+    except Exception:
+        logger.debug("Legacy alerts merge skipped", exc_info=True)
+
     if symbol:
-        alerts = [a for a in alerts if a["symbol"] == symbol.upper()]
-    total = len(alerts)
-    alerts = alerts[offset : offset + limit]
+        own_alerts = [a for a in own_alerts if a["symbol"] == symbol.upper()]
+    total = len(own_alerts)
+    own_alerts = own_alerts[offset : offset + limit]
     response.headers["X-Total-Count"] = str(total)
-    return alerts
+    return own_alerts
 
 
 @router.post("/alerts", status_code=201)
@@ -3852,7 +3948,8 @@ async def create_alert(
 
     # Dedup check against the live alert set.
     try:
-        existing = await _get_all_alerts()
+        # J-13 — dedup only against THIS user's alerts.
+        existing = await _get_all_alerts(username=username)
         for a in existing:
             if a.get("triggered"):
                 continue
@@ -3887,11 +3984,13 @@ async def create_alert(
         # Round-5 F-8 — position correlation + expiry.
         "position_id": body.position_id,
         "expires_at": expires_at.isoformat() if expires_at else None,
+        # J-13 (Round-6) — owning-user attribution.
+        "username": username,
         "triggered": False,
         "triggered_at": None,
         "created_at": datetime.now(ZoneInfo("America/New_York")).isoformat(),
     }
-    await _save_alert(alert)
+    await _save_alert(alert, username=username)
     logger.info(
         "Price alert created: %s %s $%.2f (reference=%s ref_price=%s)",
         alert["symbol"], alert["condition"], alert["price"],
@@ -3947,8 +4046,13 @@ async def _resolve_reference_price(symbol: str, reference: str) -> float:
 
 @router.delete("/alerts/{alert_id}")
 async def delete_alert(alert_id: str, username: str = Depends(require_auth)):
-    """Delete a price alert by ID."""
-    deleted = await _delete_alert_from_redis(alert_id)
+    """Delete a price alert by ID.
+
+    J-13 (Round-6): scoped to the caller's per-user namespace. If the
+    alert lives in another user's bucket, this returns 404 (not 403)
+    so the existence of the alert isn't disclosed.
+    """
+    deleted = await _delete_alert_from_redis(alert_id, username=username)
     if not deleted:
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"ok": True}
