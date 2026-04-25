@@ -436,6 +436,12 @@ async def add_request_id(request: Request, call_next):
 
 
 # --- Health ---
+# Round-6 L-14: /livez and /readyz are PUBLIC (load-balancer probes
+# can't authenticate), so we strip ``git_sha`` from their JSON.
+# Leaking the deploy SHA gives an unauthenticated attacker a ground-
+# truth signal of which version is running, narrowing the
+# vulnerability window for any version-specific CVE. The SHA still
+# lives behind /readyz-full, which is now gated by ``require_auth``.
 @app.get("/livez", tags=["Health"])
 async def livez() -> dict:
     """Liveness probe — process is up and accepting requests.
@@ -444,12 +450,10 @@ async def livez() -> dict:
     No dependency checks: any failure here means the Python process itself
     is wedged, and a restart is the correct recovery.
 
-    Round-5 Cluster D H-8: surface ``git_sha`` so an oncall doing
-    curl-loops can tell which build is responding without shelling
-    into the container.
+    Round-6 L-14: ``git_sha`` removed from this public endpoint.
+    Authenticated callers can still get the SHA via /readyz-full.
     """
-    from core.logging import GIT_SHA
-    return {"status": "ok", "git_sha": GIT_SHA}
+    return {"status": "ok"}
 
 
 @app.get("/health", tags=["Health"])
@@ -458,9 +462,10 @@ async def health_check() -> dict:
 
     docker-compose.prod.yml has a healthcheck pointed at /health; keep it
     working until every deployment switches to /livez.
+
+    Round-6 L-14: ``git_sha`` removed (see /livez).
     """
-    from core.logging import GIT_SHA
-    return {"status": "ok", "git_sha": GIT_SHA}
+    return {"status": "ok"}
 
 
 @app.get("/readyz", tags=["Health"])
@@ -603,7 +608,7 @@ async def _probe_anthropic() -> dict[str, Any]:
         return {"status": "down", "reason": f"{type(e).__name__}: {e}"}
 
 
-@app.get("/readyz-full", tags=["Health"])
+@app.get("/readyz-full", tags=["Health"], dependencies=[Depends(require_auth)])
 async def readyz_full() -> JSONResponse:
     """Deep readiness probe — DB + Redis + Claude spend + dict sizes.
 
@@ -617,6 +622,12 @@ async def readyz_full() -> JSONResponse:
     External dependencies (FMP, Anthropic) are best-effort — failures
     flag the response degraded but never trigger a 503 (upstream
     outages shouldn't drop the container out of LB rotation).
+
+    Round-6 L-14: now gated by ``require_auth``. The body exposes
+    Claude spend (operational secret), in-flight dict sizes (capacity
+    signal an attacker could time DoS bursts against), and git_sha
+    (vulnerability triage signal). None of those should be on a
+    public endpoint.
     """
     now = _time.monotonic()
     age = now - _READYZ_FULL_CACHE["ts"]

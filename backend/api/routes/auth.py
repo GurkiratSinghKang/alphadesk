@@ -649,6 +649,52 @@ async def refresh(request: RefreshRequest, req: Request):
         await _audit("refresh", user=username, ip=client_ip, result="failure", reason="revoked", req=req)
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
+    # Round-6 L-15: refresh-token race. Two concurrent /refresh calls
+    # using the SAME refresh token (e.g. a tab that wakes up after a
+    # network blip + an in-flight request that re-tries) used to BOTH
+    # succeed — they both passed the revocation check, both revoked
+    # the old token (idempotent), and both minted a fresh pair. The
+    # second response set new cookies that overwrote the first, but
+    # the first response had already been delivered to the client,
+    # leaving them with a refresh token whose pv/epoch counters were
+    # already obsoleted by the second call's mint.
+    #
+    # SET NX EX: the first caller takes the in-progress lock keyed on
+    # the OLD jti and proceeds; concurrent callers see the lock held
+    # and 401 with ``concurrent_refresh``. The 10s TTL is generous —
+    # /refresh completes well under a second; 10s covers a stalled
+    # Redis round-trip without persisting the lock past the natural
+    # request lifetime.
+    if jti:
+        try:
+            from core.redis import get_redis as _get_redis
+
+            r = await _get_redis()
+            lock_key = f"refresh_in_progress:{jti}"
+            # ``set(..., nx=True, ex=10)`` returns truthy iff the key
+            # didn't exist; falsy means another caller is mid-refresh.
+            acquired = await r.set(lock_key, "1", nx=True, ex=10)
+            if not acquired:
+                await _audit(
+                    "refresh", user=username, ip=client_ip,
+                    result="failure", reason="concurrent_refresh", req=req,
+                )
+                raise HTTPException(
+                    status_code=401, detail="Concurrent refresh in progress",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # Redis blip: log but don't block the refresh. The
+            # double-revoke risk during an outage is small (Redis being
+            # down ALREADY blocks revoke_token below from persisting,
+            # which surfaces a 503), and refusing every refresh during
+            # a Redis hiccup would log everyone out.
+            logger.warning(
+                "refresh: race-lock SET failed — proceeding without lock",
+                exc_info=True,
+            )
+
     # Wave 2I: refuse refresh tokens minted before the latest password change
     # or logout-all. Matches ``require_auth``'s check for access tokens.
     token_pv = int(payload.get("pv", 1))
