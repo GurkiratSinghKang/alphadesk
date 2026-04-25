@@ -127,11 +127,18 @@
         -Via
     }
 
-    # Compression — Round-6 K-3: brotli first, gzip fallback. zstd
-    # dropped (<1% client adoption). Brotli reaches ~20% better
-    # compression than gzip on JSON / .js, moving p95 First Byte for
-    # the dashboard down measurably on slow connections.
-    encode br gzip
+    # Compression — gzip only.
+    # K-3 attempted ``encode br gzip`` for ~20% better compression on
+    # JS/JSON, but ``caddy:2-alpine`` does NOT include the brotli
+    # encoder module: ``module not registered: http.encoders.br`` →
+    # Caddy crash-loops on startup. Discovered during the Round-6
+    # deploy that finally forced a Caddy restart (every prior deploy
+    # silently kept the old config because bind-mount changes don't
+    # trigger ``compose up`` to recreate the container, so the broken
+    # config never reached a started container). To enable brotli we
+    # need a custom Caddy build with ``github.com/dunglas/caddy-cbrotli``
+    # baked in — tracked as a follow-up. For now: gzip-only.
+    encode gzip
 
     handle /api/* {
         # Propagate / mint a request id at the edge so Caddy's JSON access log
