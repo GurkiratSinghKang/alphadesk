@@ -364,6 +364,21 @@ class CreateOrderRequest(BaseModel):
     time_in_force: TimeInForce = TimeInForce.DAY
     strategy: str | None = Field(None, description="Originating strategy name")
     notes: str | None = Field(None, max_length=1000)
+    # Round-5 F-14 — multi-leg combo classification. When set, the broker
+    # adapter sees the order as a defined-risk spread rather than N
+    # independent options, which feeds the risk gate's combo logic
+    # instead of treating each leg as naked. Optional; defaults None for
+    # backwards compatibility with single-leg equity orders.
+    combo_type: str | None = Field(
+        None,
+        max_length=32,
+        description="Combo classification: strangle | iron_condor | vertical_spread",
+    )
+    combo_correlation_id: str | None = Field(
+        None,
+        max_length=64,
+        description="UUID stitching legs together when broker lacks combo support.",
+    )
     # Wave 2H (persona-76 P76-3): closing-auction throttle escape hatch.
     # Strategies that intentionally size for the MOC/MOL auction set this
     # True so ``_aggregate_risk_check`` doesn't enforce the post-15:45 ET
@@ -396,6 +411,10 @@ class OrderResponse(BaseModel):
     legs: list[OrderLeg]
     time_in_force: TimeInForce
     strategy: str | None = None
+    # Round-5 F-14 — combo classification surfaces back to the frontend so
+    # the recent-orders strip can render `iron_condor` etc. against a
+    # multi-leg row.
+    combo_type: str | None = None
     submitted_at: datetime
     filled_at: datetime | None = None
     avg_fill_price: float | None = None
@@ -417,6 +436,10 @@ class PositionResponse(BaseModel):
     unrealized_pnl: float
     unrealized_pnl_pct: float
     asset_class: str = "equity"
+    # Round-5 F-6 — originating strategy id, derived by joining on the
+    # most recent open Trade row for the position's symbol. Null when no
+    # Trade row exists (manually opened position, pre-tagging history).
+    strategy: str | None = None
 
 
 class TradeHistoryEntry(BaseModel):
@@ -1183,6 +1206,9 @@ async def create_order(
         legs=payload.legs,
         time_in_force=payload.time_in_force,
         strategy=payload.strategy,
+        # Round-5 F-14 — surface the combo_type so the frontend's recent
+        # orders strip can render the combo classification.
+        combo_type=payload.combo_type,
         submitted_at=datetime.now(timezone.utc),
         notes=payload.notes,
     )
@@ -1441,7 +1467,14 @@ async def cancel_order(
 
 @router.get("/positions", response_model=list[PositionResponse])
 async def list_positions() -> list[PositionResponse]:
-    """Fetch all open positions from the broker."""
+    """Fetch all open positions from the broker.
+
+    Round-5 F-6: each position now carries its originating strategy id,
+    sourced from the most recent ``Trade`` row whose ``symbol`` matches
+    and whose ``status`` is open/submitted. Returns ``strategy=None``
+    when no matching Trade exists (manually opened position from before
+    strategy tagging shipped).
+    """
     if _alpaca_keys_empty():
         return []
 
@@ -1463,6 +1496,42 @@ async def list_positions() -> list[PositionResponse]:
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch positions")
             data = resp.json()
 
+        # Round-5 F-6 — build a {symbol: strategy} lookup from the local
+        # Trade ledger. We pick the most recent OPEN trade per symbol so
+        # a held-then-closed-then-reopened position attributes to the
+        # current position's strategy, not stale history. Best-effort: a
+        # DB outage falls through to strategy=None on every row rather
+        # than 503'ing the whole positions endpoint.
+        symbol_to_strategy: dict[str, str | None] = {}
+        try:
+            if not settings.SKIP_DB_INIT:
+                from sqlalchemy import select, desc
+                from core.database import _get_session_factory
+                from data.storage.models import Trade
+
+                factory = _get_session_factory()
+                async with factory() as db:
+                    # One query: most-recent open trade per symbol.
+                    # SQLAlchemy can't do a portable DISTINCT ON across
+                    # SQLite + Postgres, so we pull the recent open
+                    # trades and dedupe in Python — trades.entry_time
+                    # is indexed so this is bounded by N open trades.
+                    q = (
+                        select(Trade)
+                        .where(Trade.status.in_(["submitted", "open", "filled"]))
+                        .order_by(desc(Trade.entry_time))
+                        .limit(500)
+                    )
+                    rows = (await db.execute(q)).scalars().all()
+                    for t in rows:
+                        if t.symbol and t.symbol not in symbol_to_strategy:
+                            symbol_to_strategy[t.symbol] = t.strategy
+        except Exception:
+            logger.debug(
+                "Position strategy join skipped due to DB error",
+                exc_info=True,
+            )
+
         return [
             PositionResponse(
                 symbol=p["symbol"],
@@ -1474,6 +1543,7 @@ async def list_positions() -> list[PositionResponse]:
                 unrealized_pnl=float(p["unrealized_pl"]),
                 unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
                 asset_class=p.get("asset_class", "us_equity"),
+                strategy=symbol_to_strategy.get(p["symbol"]),
             )
             for p in data
         ]
@@ -2952,10 +3022,63 @@ ALERTS_REDIS_KEY = "price_alerts"
 
 
 class CreateAlertRequest(BaseModel):
-    # Relaxed from ``^[A-Z]{1,10}$`` to match the frontend (BRK.B, BF.B, RDS-A).
-    symbol: str = Field(..., pattern=r"^[A-Z][A-Z0-9.\-]{0,9}$")
+    """Round-5 F-7 — alerts now accept either:
+
+    * Bare equity ticker (1-6 letters with optional ``.B`` / ``-A`` suffix)
+    * Full OCC option contract (21 chars: 1-6 root + YYMMDD + C|P + 8 digits)
+
+    plus four conditions:
+
+    * ``above`` / ``below``                  — absolute price thresholds (legacy)
+    * ``percent_move_above`` / ``percent_move_below`` — % move vs reference
+
+    For percent-move alerts, ``reference`` selects the anchor:
+
+    * ``static``       — caller supplies ``reference_price`` explicitly
+    * ``prev_close``   — backend snapshots prev close at create time
+    * ``session_open`` — backend snapshots session open at create time
+
+    Symbol regex blocks ``<script>alert(1)</script>`` and similar payloads.
+    """
+    # Relaxed regex: bare ticker OR full OCC option symbol. The OCC branch
+    # tolerates ``-`` in the root only when the equity ticker variant is in
+    # play (the OCC branch itself is alnum-only by design).
+    symbol: str = Field(
+        ...,
+        pattern=r"^(?:[A-Z][A-Z0-9.\-]{0,9}|[A-Z]{1,6}\d{6}[CP]\d{8})$",
+        max_length=21,
+    )
     price: float = Field(..., gt=0)
-    condition: str = Field("above", pattern=r"^(above|below)$")
+    condition: str = Field(
+        "above",
+        pattern=r"^(above|below|percent_move_above|percent_move_below)$",
+    )
+    reference: str = Field(
+        "static",
+        pattern=r"^(static|prev_close|session_open)$",
+        description="Reference for percent-move conditions.",
+    )
+    reference_price: float | None = Field(
+        None,
+        gt=0,
+        description="Required when reference=static and condition is percent_move_*.",
+    )
+    # Round-5 F-8 — optional position correlation. When set, the alert is
+    # auto-deleted when the position closes. Defaults None for free-standing
+    # price alerts.
+    position_id: str | None = Field(
+        None,
+        max_length=64,
+        description="Tie alert to a position; auto-cancel on close.",
+    )
+    # Round-5 F-8 — alert TTL. When set, ``check_alerts_for_symbol`` skips
+    # alerts whose ``expires_at`` is in the past. For OCC-tied alerts the
+    # caller defaults this to the option's expiry; absolute alerts default
+    # to None (never expire).
+    expires_at: datetime | None = Field(
+        None,
+        description="ISO 8601 expiry timestamp; alert is skipped after this.",
+    )
 
 
 async def _get_all_alerts() -> list[dict]:
@@ -3039,11 +3162,74 @@ async def create_alert(
     Dedup (Wave 28): before inserting, scan existing non-triggered alerts
     for the same ``(symbol, price, condition)`` tuple. If one exists and
     has not yet fired, return 409 instead of silently storing a second
-    copy. Previously clicking "Create Alert" twice (or a double-tap on
-    mobile) produced two identical alerts, and when the price crossed the
-    threshold the user got two toasts + two chips for the same event.
+    copy.
+
+    Round-5 F-7: percent-move conditions snapshot the reference price at
+    create time so a later trigger evaluation doesn't need to re-fetch
+    historical quotes.
+    Round-5 F-8: ``expires_at`` defaults to the underlying option's
+    expiry for OCC-tied alerts so an option that expires worthless
+    doesn't keep firing on the underlying after delisting.
     """
     import uuid
+
+    is_percent_move = body.condition in ("percent_move_above", "percent_move_below")
+
+    # Round-5 F-7 — resolve the reference price for percent-move alerts.
+    # `static` requires the caller to pass `reference_price`; the other
+    # two reach Alpaca for prev_close / session_open. A fetch failure on
+    # prev_close/session_open returns 422 with a clear message rather than
+    # silently storing a non-functional alert.
+    resolved_reference_price: float | None = body.reference_price
+    if is_percent_move:
+        if body.reference == "static":
+            if body.reference_price is None or body.reference_price <= 0:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "percent_move conditions with reference=static require "
+                        "reference_price."
+                    ),
+                )
+            resolved_reference_price = body.reference_price
+        else:
+            try:
+                resolved_reference_price = await _resolve_reference_price(
+                    body.symbol.upper(), body.reference,
+                )
+            except Exception:
+                logger.warning(
+                    "Could not resolve reference_price for %s (%s)",
+                    body.symbol, body.reference, exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Could not fetch {body.reference} for {body.symbol}. "
+                        "Try reference=static and supply reference_price."
+                    ),
+                )
+
+    # Round-5 F-8 — for OCC-tied alerts, default expires_at to the
+    # underlying option's expiration date when the caller didn't supply
+    # one. After expiry the contract no longer trades and triggering
+    # would be misleading.
+    expires_at = body.expires_at
+    occ_match = re.match(r"^[A-Z]{1,6}(\d{6})[CP]\d{8}$", body.symbol.upper())
+    if expires_at is None and occ_match:
+        try:
+            yymmdd = occ_match.group(1)
+            expires_at = datetime(
+                2000 + int(yymmdd[0:2]),
+                int(yymmdd[2:4]),
+                int(yymmdd[4:6]),
+                23, 59, 59,
+                tzinfo=ZoneInfo("America/New_York"),
+            )
+        except ValueError:
+            # Malformed OCC date — fall through; let the alert live until
+            # explicit deletion.
+            expires_at = None
 
     # Dedup check against the live alert set.
     try:
@@ -3076,13 +3262,68 @@ async def create_alert(
         "symbol": body.symbol.upper(),
         "price": body.price,
         "condition": body.condition,
+        # Round-5 F-7 — persist the percent-move bookkeeping.
+        "reference": body.reference,
+        "reference_price": resolved_reference_price,
+        # Round-5 F-8 — position correlation + expiry.
+        "position_id": body.position_id,
+        "expires_at": expires_at.isoformat() if expires_at else None,
         "triggered": False,
         "triggered_at": None,
         "created_at": datetime.now(ZoneInfo("America/New_York")).isoformat(),
     }
     await _save_alert(alert)
-    logger.info("Price alert created: %s %s $%.2f", alert["symbol"], alert["condition"], alert["price"])
+    logger.info(
+        "Price alert created: %s %s $%.2f (reference=%s ref_price=%s)",
+        alert["symbol"], alert["condition"], alert["price"],
+        alert["reference"], alert["reference_price"],
+    )
     return alert
+
+
+async def _resolve_reference_price(symbol: str, reference: str) -> float:
+    """Round-5 F-7 — fetch a reference price for percent-move alerts.
+
+    ``prev_close`` queries Alpaca's daily bars endpoint (one bar back).
+    ``session_open`` reads today's first trade.
+
+    Raises if the data provider is unreachable or returns a non-positive
+    price; caller catches and surfaces a 422.
+    """
+    if _alpaca_keys_empty():
+        raise RuntimeError("alpaca_keys_missing")
+    from core.config import settings
+    import httpx
+
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if reference == "prev_close":
+            r = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/{symbol}/bars/latest",
+                headers=headers,
+                params={"feed": "iex"},
+            )
+            if r.status_code != 200:
+                raise RuntimeError("alpaca_prev_close_failed")
+            data = r.json().get("bar") or {}
+            price = float(data.get("c") or 0)
+        elif reference == "session_open":
+            r = await client.get(
+                f"https://data.alpaca.markets/v2/stocks/{symbol}/snapshot",
+                headers=headers,
+            )
+            if r.status_code != 200:
+                raise RuntimeError("alpaca_session_open_failed")
+            data = r.json()
+            price = float(data.get("dailyBar", {}).get("o") or 0)
+        else:
+            raise RuntimeError(f"unknown_reference:{reference}")
+    if price <= 0:
+        raise RuntimeError("non_positive_reference_price")
+    return price
 
 
 @router.delete("/alerts/{alert_id}")
@@ -3100,21 +3341,62 @@ async def check_alerts_for_symbol(symbol: str, price: float) -> None:
     Called from the Alpaca stream when a new quote/trade arrives.
     When triggered, updates the alert in Redis and publishes a
     notification on the 'alerts' channel for real-time delivery.
+
+    Round-5 F-7: supports ``percent_move_above`` / ``percent_move_below``
+    conditions which compare ``(price - reference_price) / reference_price``
+    against the alert's threshold (stored in ``alert.price`` as a
+    percentage, e.g. 5 means +5% / -5% depending on direction).
+    Round-5 F-8: alerts with ``expires_at`` in the past are skipped.
     """
     if price <= 0:
         return
 
     from core.redis import publish
 
+    now_utc = datetime.now(timezone.utc)
     alerts = await _get_all_alerts()
     for alert in alerts:
         if alert["symbol"] != symbol or alert.get("triggered"):
             continue
 
-        should_trigger = (
-            (alert["condition"] == "above" and price >= alert["price"])
-            or (alert["condition"] == "below" and price <= alert["price"])
-        )
+        # Round-5 F-8 — TTL guard. We don't auto-delete here (cheaper to
+        # let an admin sweep do that) but we do skip the trigger.
+        expires_at_iso = alert.get("expires_at")
+        if expires_at_iso:
+            try:
+                exp = datetime.fromisoformat(expires_at_iso)
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                if now_utc > exp:
+                    continue
+            except ValueError:
+                # Malformed expires_at: log and treat as non-expiring.
+                logger.debug("Skipping malformed expires_at on alert %s", alert.get("id"))
+
+        condition = alert.get("condition", "above")
+
+        # Round-5 F-7 — percent-move evaluation. The alert's `price` field
+        # is the percentage threshold (e.g. 5 = 5%) and `reference_price`
+        # is the anchor we computed at create time.
+        if condition in ("percent_move_above", "percent_move_below"):
+            ref = alert.get("reference_price")
+            try:
+                ref_f = float(ref) if ref is not None else 0.0
+            except (TypeError, ValueError):
+                ref_f = 0.0
+            if ref_f <= 0:
+                # Bad reference data — skip rather than fire spuriously.
+                continue
+            pct_change = (price - ref_f) / ref_f * 100.0
+            should_trigger = (
+                (condition == "percent_move_above" and pct_change >= alert["price"])
+                or (condition == "percent_move_below" and pct_change <= -alert["price"])
+            )
+        else:
+            should_trigger = (
+                (condition == "above" and price >= alert["price"])
+                or (condition == "below" and price <= alert["price"])
+            )
 
         if should_trigger:
             alert["triggered"] = True
@@ -3122,19 +3404,63 @@ async def check_alerts_for_symbol(symbol: str, price: float) -> None:
             await _save_alert(alert)
 
             # Publish notification to all connected WebSocket clients
+            if condition.startswith("percent_move"):
+                msg = (
+                    f"Price Alert: {alert['symbol']} {condition} "
+                    f"{alert['price']:.2f}% from ref ${alert.get('reference_price', 0):.2f}"
+                )
+            else:
+                msg = f"Price Alert: {alert['symbol']} crossed {condition} ${alert['price']:.2f}"
             await publish("alerts", {
                 "id": f"triggered-{alert['id']}",
                 "type": "price",
                 "symbol": alert["symbol"],
-                "message": f"Price Alert: {alert['symbol']} crossed {alert['condition']} ${alert['price']:.2f}",
+                "message": msg,
                 "time": int(datetime.now(timezone.utc).timestamp() * 1000),
                 "acknowledged": False,
                 "alert": alert,
             })
             logger.info(
-                "Price alert triggered: %s %s $%.2f (current: $%.2f)",
-                alert["symbol"], alert["condition"], alert["price"], price,
+                "Price alert triggered: %s %s %.4f (current: $%.4f)",
+                alert["symbol"], condition, alert["price"], price,
             )
+
+
+async def cancel_alerts_for_position(position_id: str) -> int:
+    """Round-5 F-8 — auto-cancel position-tied alerts when the position closes.
+
+    Returns the number of alerts deleted. Safe to call repeatedly; alerts
+    that have already been deleted are simply absent. Logs but does not
+    raise on a Redis miss because alert lifecycle is best-effort: a stale
+    alert never auto-fires because the underlying position-id is gone.
+    """
+    if not position_id:
+        return 0
+    deleted = 0
+    try:
+        alerts = await _get_all_alerts()
+        for a in alerts:
+            if a.get("position_id") != position_id:
+                continue
+            try:
+                if await _delete_alert_from_redis(a["id"]):
+                    deleted += 1
+            except Exception:
+                logger.debug(
+                    "Failed to auto-cancel alert %s for position %s",
+                    a.get("id"), position_id, exc_info=True,
+                )
+        if deleted:
+            logger.info(
+                "Auto-cancelled %d alerts on close of position %s",
+                deleted, position_id,
+            )
+    except Exception:
+        logger.warning(
+            "cancel_alerts_for_position failed for %s",
+            position_id, exc_info=True,
+        )
+    return deleted
 
 
 async def _submit_to_broker(

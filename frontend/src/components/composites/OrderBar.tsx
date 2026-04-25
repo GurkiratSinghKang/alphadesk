@@ -85,7 +85,25 @@ export default function OrderBar({
   }, [strategies, strategyId]);
 
   const [side, setSide] = React.useState<OrderSide>(defaults?.side ?? "buy");
-  const [symbolValue, setSymbolValue] = React.useState<string>(symbol);
+  // Round-5 F-2 — when an earnings deep-link pre-stages an OCC option
+  // contract, the parent passes `defaults.symbol = OCC` so the OrderBar
+  // submits the *option*, not the equity ticker the desk is on. The
+  // explicit override wins; if no override is supplied we fall back to
+  // the parent's `symbol` prop (current desk selection).
+  const [symbolValue, setSymbolValue] = React.useState<string>(
+    defaults?.symbol ?? symbol
+  );
+  // Round-5 F-2 — adopt a late-arriving `defaults.symbol` (e.g. after
+  // the trade page parses ?contract= in a useEffect on first mount).
+  // The `lastDefaultSymbolRef` guards against re-running on every
+  // unrelated parent re-render.
+  const lastDefaultSymbolRef = React.useRef<string | undefined>(defaults?.symbol);
+  React.useEffect(() => {
+    if (defaults?.symbol && defaults.symbol !== lastDefaultSymbolRef.current) {
+      lastDefaultSymbolRef.current = defaults.symbol;
+      setSymbolValue(defaults.symbol);
+    }
+  }, [defaults?.symbol]);
   // NEW-BUG fix: the previous unconditional `setSymbolValue(symbol)` ran
   // on every parent `symbol` prop change — including the quote-tick driven
   // re-renders on the desk. A user who was mid-edit in the Symbol field
@@ -122,6 +140,42 @@ export default function OrderBar({
     defaults?.price != null ? String(defaults.price) : ""
   );
   const [stop, setStop] = React.useState<string>(defaults?.stop ?? "");
+
+  // Round-5 F-2 — adopt late-arriving deep-link defaults for side / qty
+  // / type / price too. Each guard tracks the last applied value via a
+  // ref so we don't fight the user's edits — once they manually change
+  // a field, the next defaults change is the only thing that resyncs.
+  const lastDefaultSideRef = React.useRef<OrderSide | undefined>(defaults?.side);
+  React.useEffect(() => {
+    if (defaults?.side && defaults.side !== lastDefaultSideRef.current) {
+      lastDefaultSideRef.current = defaults.side;
+      setSide(defaults.side);
+    }
+  }, [defaults?.side]);
+
+  const lastDefaultQtyRef = React.useRef<number | undefined>(defaults?.quantity);
+  React.useEffect(() => {
+    if (defaults?.quantity != null && defaults.quantity !== lastDefaultQtyRef.current) {
+      lastDefaultQtyRef.current = defaults.quantity;
+      setQuantity(String(defaults.quantity));
+    }
+  }, [defaults?.quantity]);
+
+  const lastDefaultTypeRef = React.useRef<OrderTypeOption | undefined>(defaults?.type);
+  React.useEffect(() => {
+    if (defaults?.type && defaults.type !== lastDefaultTypeRef.current) {
+      lastDefaultTypeRef.current = defaults.type;
+      setType(defaults.type);
+    }
+  }, [defaults?.type]);
+
+  const lastDefaultPriceRef = React.useRef<number | undefined>(defaults?.price);
+  React.useEffect(() => {
+    if (defaults?.price != null && defaults.price !== lastDefaultPriceRef.current) {
+      lastDefaultPriceRef.current = defaults.price;
+      setPrice(String(defaults.price));
+    }
+  }, [defaults?.price]);
 
   // persona-99 #2 — Sell confirmation on mobile. At 375px the Buy/Sell
   // buttons are shoulder-to-shoulder; a mis-tap on Sell is catastrophic.

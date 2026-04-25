@@ -1158,6 +1158,26 @@ export interface PlaceOrderPayload {
   trail_price?: number;
   trail_percent?: number;
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
+  /**
+   * Round-5 F-1 — originating strategy tag. Threaded onto the backend
+   * `CreateOrderRequest.strategy` field so the trade ledger and
+   * `/reports/strategy-performance` correctly attribute the position.
+   */
+  strategy?: string;
+  /**
+   * Round-5 F-14 — combo classification ("strangle" | "iron_condor" |
+   * "vertical_spread"). The backend records this on the broker's
+   * client_order_id metadata so the risk gate can recognise a
+   * defined-risk spread instead of treating each leg as naked.
+   */
+  combo_type?: string;
+  /**
+   * Round-5 F-14 — combo correlation ID. Present when multiple legs of
+   * the same combo are submitted as separate orders (single-leg fallback
+   * for brokers without combo support); allows downstream reconciliation
+   * to stitch them back into one combo.
+   */
+  combo_correlation_id?: string;
 }
 
 export interface PlaceOrderOptions {
@@ -1208,12 +1228,22 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
       ? crypto.randomUUID()
       : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`);
 
+  // Round-5 F-1 / F-14 — forward strategy + combo metadata so the
+  // backend `CreateOrderRequest.strategy` field is populated and the
+  // ledger row carries the originating strategy + combo type. We omit
+  // these keys when undefined to keep existing single-leg equity flows
+  // wire-byte-identical (no backend schema churn).
+  const reqBody: Record<string, unknown> = { legs, time_in_force: "day" };
+  if (payload.strategy) reqBody.strategy = payload.strategy;
+  if (payload.combo_type) reqBody.combo_type = payload.combo_type;
+  if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
+
   return apiFetch<Order>(`/api/v1/trades/orders`, {
     method: "POST",
     headers: {
       "Idempotency-Key": idempKey,
     },
-    body: JSON.stringify({ legs, time_in_force: "day" }),
+    body: JSON.stringify(reqBody),
   });
 }
 
@@ -1245,6 +1275,11 @@ export async function getOrders(status?: string): Promise<Order[]> {
         quantity: (l.qty as number) ?? 0,
         price: (l.limit_price as number) ?? undefined,
       })),
+      // Round-5 F-1 / F-13 — surface the originating strategy so the
+      // /trade page's recent-orders strip and /reports can render the
+      // attribution column. Backend already returns `strategy` on
+      // OrderResponse (see backend/api/routes/trades.py:398).
+      strategy: (o.strategy as string) ?? null,
       filledAt: (o.filled_at as string) ?? undefined,
       createdAt: (o.submitted_at as string) ?? new Date().toISOString(),
     };
@@ -1263,6 +1298,9 @@ export async function getPositions(): Promise<Position[]> {
     unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,
     marketValue: (p.market_value as number) ?? (p.marketValue as number) ?? 0,
     side: (p.side as "long" | "short") ?? undefined,
+    // Round-5 F-6 — strategy attribution. The backend joins on the
+    // latest fill's `strategy` column and returns a string or null.
+    strategy: (p.strategy as string) ?? null,
   }));
 }
 
@@ -1396,14 +1434,32 @@ export async function getMarketNews() {
 
 // ─── Alerts ────────────────────────────────────────────────
 
+/**
+ * Round-5 F-7: alerts now support percent-move conditions in addition
+ * to absolute-price thresholds. ``price`` carries either a $ threshold
+ * (above/below) or a % threshold (percent_move_*).
+ */
+export type PriceAlertCondition =
+  | "above"
+  | "below"
+  | "percent_move_above"
+  | "percent_move_below";
+export type PriceAlertReference = "static" | "prev_close" | "session_open";
+
 export interface PriceAlert {
   id: string;
   symbol: string;
   price: number;
-  condition: "above" | "below";
+  condition: PriceAlertCondition;
   triggered: boolean;
   triggered_at: string | null;
   created_at: string;
+  /** Round-5 F-7 — percent-move bookkeeping. */
+  reference?: PriceAlertReference | null;
+  reference_price?: number | null;
+  /** Round-5 F-8 — auto-cancel on close + optional TTL. */
+  position_id?: string | null;
+  expires_at?: string | null;
 }
 
 export function getPriceAlerts(symbol?: string): Promise<PriceAlert[]> {
@@ -1411,10 +1467,27 @@ export function getPriceAlerts(symbol?: string): Promise<PriceAlert[]> {
   return apiFetch<PriceAlert[]>(`/api/v1/trades/alerts${qs}`);
 }
 
-export function createPriceAlert(symbol: string, price: number, condition: "above" | "below") {
+export interface CreatePriceAlertExtra {
+  reference?: PriceAlertReference;
+  reference_price?: number;
+  position_id?: string;
+  expires_at?: string;
+}
+
+export function createPriceAlert(
+  symbol: string,
+  price: number,
+  condition: PriceAlertCondition,
+  extra: CreatePriceAlertExtra = {},
+) {
+  const body: Record<string, unknown> = { symbol, price, condition };
+  if (extra.reference) body.reference = extra.reference;
+  if (extra.reference_price != null) body.reference_price = extra.reference_price;
+  if (extra.position_id) body.position_id = extra.position_id;
+  if (extra.expires_at) body.expires_at = extra.expires_at;
   return apiFetch<PriceAlert>(`/api/v1/trades/alerts`, {
     method: "POST",
-    body: JSON.stringify({ symbol, price, condition }),
+    body: JSON.stringify(body),
   });
 }
 

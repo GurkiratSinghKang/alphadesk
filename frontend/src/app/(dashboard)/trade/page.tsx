@@ -12,9 +12,21 @@
  * Layout (single-column, scrolls): heading → chart → order bar →
  * pre-staged contract(s) → recent orders.
  *
- * Query-param pre-fill (Task 22/23):
- *   Single-leg:  /trade?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1
- *   Multi-leg:   /trade?symbol=NVDA&legs=NVDA260425P00195000:sell:1,NVDA260425C00210000:sell:1
+ * Query-param pre-fill (Task 22/23, Round-5 F-1 / F-2 / F-3 / F-14):
+ *   Single-leg:
+ *     /trade?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1
+ *           &limit=1.42&strategy=earnings-options-play
+ *
+ *   Multi-leg (canonical syntax — Round-5 F-3):
+ *     /trade?symbol=NVDA&legs=OCC:side:qty[:limit][,OCC:side:qty[:limit]…]
+ *           &strategy=earnings-options-play&combo_type=strangle
+ *
+ *   Backwards-compat: legs missing the `:limit` slot still parse — limit
+ *   ends up undefined and the OrderBar shows blank in that field.
+ *
+ *   Examples:
+ *     legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32   (NEW — limits)
+ *     legs=NVDA260424P00200000:sell:1,NVDA260424C00220000:sell:1             (OLD — still works)
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -84,6 +96,13 @@ interface ActiveContract {
   strike: number;
   orderSide: "buy" | "sell";
   qty: number;
+  /**
+   * Round-5 F-3 — optional limit price parsed from `?limit=` (single-leg)
+   * or the `:limit` slot in `?legs=` (multi-leg). Undefined when the URL
+   * came from a context with no available mid (e.g. options chain
+   * unavailable on the source page).
+   */
+  limitPrice?: number;
 }
 
 interface ActiveLeg {
@@ -94,6 +113,7 @@ interface ActiveLeg {
   strike: number;
   orderSide: "buy" | "sell";
   qty: number;
+  limitPrice?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,14 +142,26 @@ export default function TradePage() {
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
   const strategyOptions = useMemo(() => toStrategyOptions(rail), [rail]);
 
-  // ─── Query-param pre-fill (Task 22 / 23) ────────────────────────────────────
+  // ─── Query-param pre-fill (Task 22 / 23, Round-5 F-1 / F-2 / F-3) ──────────
   const [activeContract, setActiveContract] = useState<ActiveContract | null>(null);
   const [activeLegs, setActiveLegs] = useState<ActiveLeg[]>([]);
+  // Strategy tag from URL — flows through to placeOrder so /reports
+  // attributes the trade. Round-5 F-1.
+  const [urlStrategy, setUrlStrategy] = useState<string | null>(null);
+  // Combo classification — `strangle` | `iron_condor` | `vertical_spread`.
+  // Set by the earnings deep-link; surfaced to the broker so the risk gate
+  // recognises a defined-risk spread. Round-5 F-14.
+  const [comboType, setComboType] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const contractOcc = params.get("contract");
     const legsParam = params.get("legs");
+    const strategyParam = params.get("strategy");
+    const comboParam = params.get("combo_type");
+
+    if (strategyParam) setUrlStrategy(strategyParam);
+    if (comboParam) setComboType(comboParam);
 
     if (contractOcc) {
       // Single-leg deep-link.
@@ -138,20 +170,29 @@ export default function TradePage() {
         const rawSide = params.get("side") ?? "buy";
         const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
         const qty = parseInt(params.get("qty") ?? "1", 10) || 1;
-        setActiveContract({ occ: contractOcc, ...parsed, orderSide, qty });
+        // Round-5 F-3 — `?limit=` populates the OrderBar's price field.
+        const rawLimit = params.get("limit");
+        const lim = rawLimit ? parseFloat(rawLimit) : NaN;
+        const limitPrice = Number.isFinite(lim) && lim > 0 ? lim : undefined;
+        setActiveContract({ occ: contractOcc, ...parsed, orderSide, qty, limitPrice });
       }
     } else if (legsParam) {
-      // Multi-leg deep-link: comma-separated CONTRACT:side:qty triplets.
+      // Multi-leg deep-link: comma-separated CONTRACT:side:qty[:limit] tuples.
+      // Round-5 F-3: the optional `:limit` 4th field carries the per-leg
+      // mid price so each pre-staged leg shows a sensible default. The
+      // 3-field form (no `:limit`) keeps parsing for backwards-compat.
       const legs: ActiveLeg[] = [];
       for (const raw of legsParam.split(",")) {
         const parts = raw.split(":");
         if (parts.length < 1) continue;
-        const [occ, rawSide, rawQty] = parts;
+        const [occ, rawSide, rawQty, rawLimit] = parts;
         const parsed = parseOccSymbol(occ);
         if (!parsed) continue;
         const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
         const qty = parseInt(rawQty ?? "1", 10) || 1;
-        legs.push({ occ, ...parsed, orderSide, qty });
+        const lim = rawLimit ? parseFloat(rawLimit) : NaN;
+        const limitPrice = Number.isFinite(lim) && lim > 0 ? lim : undefined;
+        legs.push({ occ, ...parsed, orderSide, qty, limitPrice });
       }
       if (legs.length > 0) setActiveLegs(legs);
     }
@@ -208,8 +249,12 @@ export default function TradePage() {
       toast({ type: "error", message: msg });
       setOrderError(msg);
     };
-    if (!sym || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) {
-      fail("Enter a valid symbol (1–10 letters/digits)");
+    // Symbol can be a bare equity ticker OR a full OCC option contract
+    // (1-6 letters + 6 digits + C/P + 8 digits). The previous regex
+    // capped at 10 chars and rejected the 21-char OCC form, which broke
+    // single-leg option deep-links from the earnings page.
+    if (!sym || !(/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym) || /^[A-Z]{1,6}\d{6}[CP]\d{8}$/.test(sym))) {
+      fail("Enter a valid symbol (1–10 letters/digits or full OCC contract)");
       return;
     }
     if (!isValidOrderQty(qty)) {
@@ -227,6 +272,12 @@ export default function TradePage() {
     }
     setSubmitting(true);
     try {
+      // Round-5 F-14: when multi-leg legs are pre-staged from a deep-link,
+      // submit them as one combo order with `legs[]` populated rather
+      // than dropping them on the floor. The OrderBar's symbol/qty
+      // become the first leg's by convention but the canonical legs
+      // array is what reaches the broker.
+      const hasLegs = activeLegs.length > 0;
       const placed = await placeOrder({
         symbol: sym,
         side: order.side,
@@ -234,11 +285,28 @@ export default function TradePage() {
         quantity: qty,
         price: order.price,
         stop_price: stopNum,
+        // Round-5 F-1: thread the URL's strategy tag through to the
+        // backend `CreateOrderRequest.strategy` field.
+        strategy: urlStrategy ?? undefined,
+        // Round-5 F-14: forward combo metadata when present.
+        combo_type: comboType ?? undefined,
+        ...(hasLegs
+          ? {
+              legs: activeLegs.map((leg) => ({
+                symbol: leg.occ,
+                side: leg.orderSide,
+                quantity: leg.qty,
+                price: leg.limitPrice,
+              })),
+            }
+          : {}),
       });
       usePortfolioStore.getState().addOrder(placed);
       toast({
         type: "success",
-        message: `${order.side.toUpperCase()} ${qty} ${sym} staged — ${placed.status ?? "pending"}`,
+        message: hasLegs
+          ? `${activeLegs.length}-leg combo staged — ${placed.status ?? "pending"}`
+          : `${order.side.toUpperCase()} ${qty} ${sym} staged — ${placed.status ?? "pending"}`,
       });
       setResetTick((t) => t + 1);
       // Refresh recent orders strip immediately.
@@ -254,6 +322,49 @@ export default function TradePage() {
       setSubmitting(false);
     }
   }
+
+  // Round-5 F-2: when a single contract is pre-staged from a deep-link,
+  // hand its OCC symbol + side + qty + limit through to the OrderBar as
+  // defaults so clicking "Place order" actually places THAT contract,
+  // not the equity ticker the desk happens to be on.
+  // Multi-leg combos likewise pre-fill the OrderBar with the FIRST leg
+  // and rely on `activeLegs` to carry the remaining legs through to the
+  // submit path.
+  const orderBarDefaults = useMemo(() => {
+    if (activeContract) {
+      return {
+        ...ORDER_BAR_DEFAULTS,
+        strategyId: rail[0]?.id ?? "",
+        symbol: activeContract.occ,
+        side: activeContract.orderSide,
+        quantity: activeContract.qty,
+        type:
+          activeContract.limitPrice != null
+            ? ("limit" as const)
+            : ORDER_BAR_DEFAULTS.type,
+        price: activeContract.limitPrice,
+      };
+    }
+    if (activeLegs.length > 0) {
+      const first = activeLegs[0];
+      return {
+        ...ORDER_BAR_DEFAULTS,
+        strategyId: rail[0]?.id ?? "",
+        symbol: first.occ,
+        side: first.orderSide,
+        quantity: first.qty,
+        type:
+          first.limitPrice != null
+            ? ("limit" as const)
+            : ORDER_BAR_DEFAULTS.type,
+        price: first.limitPrice,
+      };
+    }
+    return {
+      ...ORDER_BAR_DEFAULTS,
+      strategyId: rail[0]?.id ?? "",
+    };
+  }, [activeContract, activeLegs, rail]);
 
   // Viewport audit r5 #9: 100vh jumps on iOS Safari when the address bar
   // collapses — use dvh for the dynamic-viewport unit (Safari 15.4+).
@@ -273,6 +384,23 @@ export default function TradePage() {
           <h1 className="t-display-section">
             Trade <span className="not-italic text-fg-muted">· {symbol.ticker}</span>
           </h1>
+          {urlStrategy && (
+            // Round-5 F-1 — render the originating strategy as a small
+            // chip so the user (and the test) can see the deep-link's
+            // attribution before submission.
+            <span
+              data-slot="trade-strategy-tag"
+              className="mt-1 inline-flex items-center gap-1 self-start rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-2 py-0.5 font-mono text-[11px] text-fg-muted"
+            >
+              strategy: <span className="text-fg">{urlStrategy}</span>
+              {comboType && (
+                <>
+                  <span aria-hidden> · </span>
+                  combo: <span className="text-fg">{comboType}</span>
+                </>
+              )}
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -303,13 +431,17 @@ export default function TradePage() {
           onSubmit={handleSubmit}
           submitting={submitting}
           errorMessage={orderError}
-          // BUG-006 — single shared defaults source; was previously
-          // { quantity: 100, type: "limit" } which disagreed with the
-          // desk (`/`) defaults and confused users.
-          defaults={{
-            ...ORDER_BAR_DEFAULTS,
-            strategyId: rail[0]?.id ?? "",
-          }}
+          // Round-5 F-2: when a deep-link pre-stages a contract or combo,
+          // bind the OrderBar to the option's OCC symbol + side + qty +
+          // limit so clicking Place actually places the option order. The
+          // single-leg "Pre-staged contract" panel below is informational
+          // only — the form is the source of truth.
+          defaults={orderBarDefaults}
+          submitLabel={
+            activeLegs.length > 0
+              ? `Place ${activeLegs.length}-leg combo`
+              : "Place order"
+          }
         />
       </section>
 
@@ -345,6 +477,11 @@ export default function TradePage() {
             >
               {activeContract.orderSide} &times; {activeContract.qty}
             </span>
+            {activeContract.limitPrice != null && (
+              <span data-slot="active-contract-limit" className="text-fg-muted">
+                @ ${activeContract.limitPrice.toFixed(2)}
+              </span>
+            )}
           </div>
         </section>
       )}
@@ -355,10 +492,18 @@ export default function TradePage() {
           className="rounded-lg border border-border bg-[var(--surface)] p-4"
           aria-label="Pre-staged multi-leg order"
         >
-          <h2 className="t-display-section mb-3">Pre-staged combo order</h2>
+          <h2 className="t-display-section mb-3">
+            Pre-staged combo order
+            {comboType && (
+              <span className="ml-2 not-italic font-mono text-[12px] text-fg-muted">
+                · {comboType}
+              </span>
+            )}
+          </h2>
           <p className="text-xs text-muted-foreground mb-2">
-            Multi-leg combos may need to be submitted per-leg if the broker
-            backend does not support combo orders. Review each leg before placing.
+            All {activeLegs.length} legs are submitted as one combo order
+            via the broker&rsquo;s combo lane. Click <em>Place</em> above to
+            stage the entire combo at once.
           </p>
           <div data-slot="active-legs" className="flex flex-col gap-2">
             {activeLegs.map((leg, i) => (
@@ -385,6 +530,11 @@ export default function TradePage() {
                 >
                   {leg.orderSide} &times; {leg.qty}
                 </span>
+                {leg.limitPrice != null && (
+                  <span data-slot="active-leg-limit" className="text-fg-muted">
+                    @ ${leg.limitPrice.toFixed(2)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -430,6 +580,10 @@ export default function TradePage() {
                   <th scope="col" className="py-2 px-2 t-label">Side</th>
                   <th scope="col" className="py-2 px-2 t-label">Qty</th>
                   <th scope="col" className="py-2 px-2 t-label">Type</th>
+                  {/* Round-5 F-13 — Strategy column. Maps to
+                      `order.strategy` (forwarded by the backend after
+                      F-1 lands). Empty (em-dash) when null. */}
+                  <th scope="col" className="py-2 px-2 t-label">Strategy</th>
                   <th scope="col" className="py-2 px-2 t-label">Status</th>
                 </tr>
               </thead>
@@ -457,6 +611,9 @@ export default function TradePage() {
                     <td className="py-2 px-2 t-num-md text-foreground">{o.quantity}</td>
                     <td className="py-2 px-2 text-muted-foreground capitalize">
                       {o.type.replace("_", " ")}
+                    </td>
+                    <td className="py-2 px-2 font-mono text-[11px] text-foreground">
+                      {o.strategy ?? "—"}
                     </td>
                     <td className="py-2 px-2">
                       {/* Status pill — legibility upgrade. Raw status

@@ -60,6 +60,13 @@ _STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
     "kama-breakout": "kama_breakout",
     "orb": "orb",
     "vwap-strategy": "vwap",
+    # Round-5 F-1 — earnings-options-play deep-link strategy. The
+    # frontend's TradeButtonRow tags every trade-button URL with this id
+    # so reports/strategy-performance attributes correctly. Registered
+    # here so the live-trading allowlist accepts the value; it lives in
+    # STRATEGY_PAPER_ONLY (see core/config.py) as belt-and-suspenders
+    # since the page is research-only.
+    "earnings-options-play": "earnings_options_play",
     # Discretionary/manual order marker — explicit, gated-allowed.
     # Wave 5β required MCP callers to pass a non-None strategy; "manual"
     # is the canonical label for operator-submitted trades outside any

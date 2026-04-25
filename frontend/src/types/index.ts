@@ -43,6 +43,13 @@ export interface Position {
   side?: "long" | "short";
   sector?: string;
   greeks?: PositionGreeks;
+  /**
+   * Round-5 F-6 — originating strategy id (e.g. "earnings-options-play").
+   * Null when the position was opened manually or before strategy
+   * tagging existed. Surfaced on the /reports Current Positions table
+   * so closed-trade attribution and open-position attribution agree.
+   */
+  strategy?: string | null;
 }
 
 export type OrderSide = "buy" | "sell";
@@ -80,6 +87,12 @@ export interface Order {
   legs?: OrderLeg[];
   filledAt?: string;
   createdAt: string;
+  /**
+   * Round-5 F-1 / F-13 — originating strategy id. Null on manual orders
+   * placed before strategy threading existed. Backend returns this on
+   * `OrderResponse.strategy` (see backend/api/routes/trades.py:398).
+   */
+  strategy?: string | null;
 }
 
 export interface PortfolioSummary {

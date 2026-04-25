@@ -2,10 +2,27 @@ import Link from "next/link";
 import type { StrikeLadder, LadderRow } from "@/types";
 import { fmtNumber } from "@/lib/intl";
 
+/**
+ * TradeButtonRow — earnings → /trade deep-link builder.
+ *
+ * Round-5 F-1, F-3: every link now includes:
+ *   · `strategy=earnings-options-play`  — flows through to placeOrder so
+ *      reports/strategy-performance attributes the trade correctly.
+ *   · `limit` price (= row.mid)        — encoded into the leg syntax so
+ *      the OrderBar pre-fills with a sane mid quote rather than blank.
+ *
+ * Canonical leg syntax (F-3):
+ *   ?legs=OCC:side:qty[:limit][,OCC:side:qty[:limit]…]
+ *
+ * Old 3-field tuples (`OCC:side:qty`) keep parsing — `limit` is optional.
+ */
+
 export interface TradeButtonRowProps {
   symbol: string;
   ladder: StrikeLadder | null;
 }
+
+const STRATEGY_TAG = "earnings-options-play";
 
 export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) {
   if (!ladder || ladder.rows.length === 0) {
@@ -73,18 +90,29 @@ function occSymbol(symbol: string, expiry: string, side: "call" | "put", strike:
   return `${symbol}${yymmdd}${side_char}${strike_padded}`;
 }
 
-function buildSingleLegURL(opts: { symbol: string; row: LadderRow; expiry: string }): string {
+function fmtMid(mid: number): string {
+  // 2-decimal price truncation keeps the URL short and aligned with how
+  // option prices quote on US exchanges. 0 stays 0 (parser distinguishes
+  // missing from explicit 0).
+  if (!Number.isFinite(mid) || mid <= 0) return "";
+  return mid.toFixed(2);
+}
+
+export function buildSingleLegURL(opts: { symbol: string; row: LadderRow; expiry: string }): string {
   const contract = occSymbol(opts.symbol, opts.expiry, opts.row.side, opts.row.strike);
   const params = new URLSearchParams({
     symbol: opts.symbol,
     contract,
     side: "sell",
     qty: "1",
+    strategy: STRATEGY_TAG,
   });
+  const lim = fmtMid(opts.row.mid);
+  if (lim) params.set("limit", lim);
   return `/trade?${params.toString()}`;
 }
 
-function buildStrangleURL(opts: {
+export function buildStrangleURL(opts: {
   symbol: string;
   put: LadderRow;
   call: LadderRow;
@@ -92,7 +120,17 @@ function buildStrangleURL(opts: {
 }): string {
   const putContract = occSymbol(opts.symbol, opts.expiry, "put", opts.put.strike);
   const callContract = occSymbol(opts.symbol, opts.expiry, "call", opts.call.strike);
-  const legs = `${putContract}:sell:1,${callContract}:sell:1`;
-  const params = new URLSearchParams({ symbol: opts.symbol, legs });
+  const putLim = fmtMid(opts.put.mid);
+  const callLim = fmtMid(opts.call.mid);
+  // Canonical leg syntax: OCC:side:qty[:limit] — limit is optional.
+  const putLeg = putLim ? `${putContract}:sell:1:${putLim}` : `${putContract}:sell:1`;
+  const callLeg = callLim ? `${callContract}:sell:1:${callLim}` : `${callContract}:sell:1`;
+  const legs = `${putLeg},${callLeg}`;
+  const params = new URLSearchParams({
+    symbol: opts.symbol,
+    legs,
+    strategy: STRATEGY_TAG,
+    combo_type: "strangle",
+  });
   return `/trade?${params.toString()}`;
 }
