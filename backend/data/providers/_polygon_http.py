@@ -30,10 +30,15 @@ class PolygonHTTP:
         if not key:
             raise RuntimeError("POLYGON_API_KEY missing — set it in .env")
         self._api_key = key
+        # Round-6 K-10: bumped pool from (10, 20) to (50, 100) so a
+        # burst of strategy backtests / live signal scans doesn't
+        # starve on connection waits. The Polygon API tolerates the
+        # higher concurrency comfortably; the bottleneck before was
+        # our pool, not their rate limit.
         self._client = httpx.Client(
             base_url=BASE,
             timeout=timeout,
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=100),
         )
 
     def close(self) -> None:

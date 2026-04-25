@@ -78,11 +78,13 @@ class AlpacaBarProvider:
             "APCA-API-SECRET-KEY": sec,
             "Accept": "application/json",
         }
+        # Round-6 K-10: bumped pool from (10, 20) to (50, 100) so a
+        # burst of order activity + bar fetches doesn't starve.
         self._client = httpx.Client(
             base_url=_BASE,
             headers=self._headers,
             timeout=timeout,
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=100),
         )
 
     # Context manager sugar --------------------------------------------------

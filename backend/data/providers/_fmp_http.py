@@ -27,10 +27,13 @@ class FMPHTTP:
         if not key:
             raise RuntimeError("FMP_API_KEY missing — set it in .env")
         self._api_key = key
+        # Round-6 K-10: bumped pool from (10, 20) to (50, 100) so a
+        # burst of earnings hydration / strategy backtests doesn't
+        # starve on connection waits.
         self._client = httpx.Client(
             base_url=BASE,
             timeout=timeout,
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=100),
         )
 
     def close(self) -> None:
