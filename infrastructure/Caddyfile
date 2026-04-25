@@ -72,7 +72,22 @@
         # gets overridden. See OWASP Secure Headers Project, RFC-ietf-httpbis.
         X-XSS-Protection "0"
         Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        # Round-6 L-6: full Permissions-Policy denylist. Previously only
+        # camera/microphone/geolocation were locked down. Browsers default
+        # newly-shipped permissions to ``allow`` if the policy doesn't
+        # list them, so default-deny posture must be explicit.
+        # ``fullscreen=(self)`` keeps the in-app full-screen chart toggle
+        # working without permitting cross-origin iframes to take over.
+        Permissions-Policy "accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), web-share=(), xr-spatial-tracking=(), interest-cohort=()"
+        # Round-6 L-7: cross-origin isolation headers.
+        # COOP "same-origin" prevents window stealing across origins.
+        # COEP "credentialless" enforces that any cross-origin
+        # subresource MUST either declare CORP or be loaded without
+        # credentials. CORP "same-site" prevents cross-site image-load
+        # fingerprinting / Spectre side channels.
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Embedder-Policy "credentialless"
+        Cross-Origin-Resource-Policy "same-site"
         # CSP — Wave 3M / persona-91 fix. The authoritative CSP is now emitted
         # per-request by the Next.js Proxy (frontend/src/proxy.ts), which
         # mints a fresh nonce for every dashboard response. Caddy still emits
@@ -83,18 +98,26 @@
         # drops ws:// from connect-src so production only tolerates wss://.
         #
         # CSP — INCIDENT 2026-04-20 13:43 ET. Wave 3M's nonce-based CSP
-        # via Next.js proxy.ts broke login: prerendered (X-Nextjs-Cache:
-        # HIT) HTML pages contain inline scripts whose nonce is baked in
-        # at build time; per-request CSP nonce mismatch → strict-dynamic
-        # blocks every script. The compiled middleware was hot-patched in
-        # prod to stop emitting a CSP header, and Caddy now FORCES (`>`
-        # operator) a permissive script-src 'self' 'unsafe-inline' https:
-        # so cached HTML works. TODO: re-engineer the nonce flow so it's
-        # generated per-request AND injected into the prerendered HTML
-        # (likely requires `dynamic = "force-dynamic"` on /login + the
-        # dashboard, OR a hash-based CSP with built-in script hashes).
-        # See: https://caddyserver.com/docs/caddyfile/directives/header
-        >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'"
+        # via Next.js proxy.ts broke login because prerendered HTML pages
+        # contained inline scripts whose nonce was baked in at build
+        # time; the middleware was patched to stop emitting a CSP header
+        # and Caddy forced ``'unsafe-inline'`` for scripts so cached HTML
+        # worked.
+        #
+        # Round-6 L-2: drop ``'unsafe-inline'`` from script-src. The
+        # layout has been rebuilt with the web-vitals listeners as a
+        # regular React component (frontend/src/components/layout/
+        # WebVitalsReporter.tsx); no inline ``<script>`` ships from
+        # layout.tsx anymore. ``'unsafe-inline'`` for scripts is the
+        # single biggest XSS mitigation regression in any CSP — removing
+        # it is the goal of L-2. ``style-src`` retains ``'unsafe-inline'``
+        # for now because TradingChart.tsx and TickerStrip.tsx still ship
+        # JSX-emitted ``<style>`` blocks for chart-watermark hides;
+        # per-build SHA-256 hashes for those blocks is a follow-up
+        # (FIX-4 owns layout.tsx). ``base-uri 'self'``,
+        # ``form-action 'self'``, ``object-src 'none'``, and
+        # ``upgrade-insecure-requests`` close gaps left implicit.
+        >Content-Security-Policy "default-src 'self'; script-src 'self' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the
@@ -104,8 +127,11 @@
         -Via
     }
 
-    # Compression
-    encode zstd gzip
+    # Compression — Round-6 K-3: brotli first, gzip fallback. zstd
+    # dropped (<1% client adoption). Brotli reaches ~20% better
+    # compression than gzip on JSON / .js, moving p95 First Byte for
+    # the dashboard down measurably on slow connections.
+    encode br gzip
 
     handle /api/* {
         # Propagate / mint a request id at the edge so Caddy's JSON access log
