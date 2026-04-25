@@ -744,14 +744,36 @@ async def _run_structured_and_cache(
 # string or unicode line/paragraph separators that confuse the
 # tokenizer's view of message boundaries. Strip control chars, cap
 # length, and let the prompt-builder wrap each value in delimiters.
+#
+# Round-6 L-1: this function additionally STRIPS any literal
+# ``<headline>`` / ``</headline>`` / ``<company>`` / etc. substring from
+# the value — the prompt-builder wraps the cleaned scalar in those exact
+# tags, so allowing literal tag-like content through here would let an
+# attacker break out of the wrapper. Final HTML-entity escape happens in
+# ``services.earnings_prompts._escape_tags_in_untrusted``.
 _CONTROL_CHARS = re.compile(r"[\u0000-\u001f\u007f\u2028\u2029]")
+# Tag names mirror the wrappers in services.earnings_prompts.
+_PROMPT_TAG_NAMES = ("headline", "company", "sector", "market_regime")
+_LITERAL_TAG_RE = re.compile(
+    r"</?(?:" + "|".join(_PROMPT_TAG_NAMES) + r")(?:\s[^>]*)?>",
+    re.IGNORECASE,
+)
 
 
 def _sanitize_for_prompt(value: Any, *, max_len: int = 200) -> Any:
-    """Strip ASCII control chars + line/paragraph separators, truncate."""
+    """Strip ASCII control chars + line/paragraph separators, truncate.
+
+    Round-6 L-1: also escapes literal ``<headline>`` / ``</headline>``
+    (etc.) substrings inside ``value`` by replacing the angle brackets
+    with HTML entities.
+    """
     if not isinstance(value, str):
         return value
     cleaned = _CONTROL_CHARS.sub(" ", value)
+    cleaned = _LITERAL_TAG_RE.sub(
+        lambda m: m.group(0).replace("<", "&lt;").replace(">", "&gt;"),
+        cleaned,
+    )
     if len(cleaned) > max_len:
         cleaned = cleaned[: max_len - 1] + "…"
     return cleaned
