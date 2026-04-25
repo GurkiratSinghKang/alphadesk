@@ -488,6 +488,46 @@ async def _apply_event(event: dict[str, Any]) -> None:
                 if price_improvement_cents is not None and trade.price_improvement_cents is None:
                     trade.price_improvement_cents = price_improvement_cents
 
+                # J-17 (Round-6) — stamp filled_qty on partial / full
+                # fill events so downstream pipeline code can size
+                # against the actually-filled qty rather than the
+                # leg-level qty.
+                if event_name in ("fill", "partial_fill"):
+                    try:
+                        from decimal import Decimal as _Decimal
+                        fq_raw = (
+                            order.get("filled_qty")
+                            or event.get("filled_qty")
+                            or 0
+                        )
+                        fq_dec = _Decimal(str(fq_raw or 0))
+                        if fq_dec > 0 and hasattr(trade, "filled_qty"):
+                            trade.filled_qty = fq_dec
+                    except Exception:
+                        logger.debug(
+                            "filled_qty stamp failed for %s",
+                            client_order_id, exc_info=True,
+                        )
+
+                # J-4 (Round-6) — auto-cancel position-tied alerts on
+                # close. The fill that flips a position from open to
+                # flat must also tear down any alerts the trader
+                # hung off the position.
+                position_id_for_cancel: str | None = None
+                if (
+                    new_status == "filled"
+                    and getattr(trade, "trade_kind", None)
+                        in ("long_close", "short_close")
+                ):
+                    for leg in (trade.legs or []):
+                        if isinstance(leg, dict):
+                            pid = leg.get("position_id")
+                            if pid:
+                                position_id_for_cancel = str(pid)
+                                break
+                    if not position_id_for_cancel and trade.broker_order_id:
+                        position_id_for_cancel = trade.broker_order_id
+
                 # The session.commit() invokes SQLAlchemy's optimistic-
                 # locking machinery: the UPDATE WHERE includes
                 # ``version = :old_version`` and the column is
@@ -502,6 +542,28 @@ async def _apply_event(event: dict[str, Any]) -> None:
                 event_name, new_status, client_order_id, broker_order_id,
                 filled_avg_price, filled_at,
             )
+
+            # J-4 (Round-6) — fire-and-forget alert cancellation.
+            # Outside the DB transaction so a Redis hiccup can't roll
+            # back a successful fill stamp.
+            if position_id_for_cancel:
+                try:
+                    from api.routes.trades import cancel_alerts_for_position
+                    cancelled = await cancel_alerts_for_position(
+                        position_id_for_cancel
+                    )
+                    if cancelled:
+                        logger.info(
+                            "fill_reconciler: cancelled %d alerts on close "
+                            "of position %s",
+                            cancelled, position_id_for_cancel,
+                        )
+                except Exception:
+                    logger.debug(
+                        "fill_reconciler: cancel_alerts_for_position "
+                        "failed for %s",
+                        position_id_for_cancel, exc_info=True,
+                    )
             return
         except Exception:
             logger.warning(
