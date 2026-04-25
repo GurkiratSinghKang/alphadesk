@@ -5,9 +5,7 @@ import { useWs } from "@/lib/providers";
 import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useAlertsStore } from "@/stores/alerts";
-import { usePreferencesStore } from "@/stores/preferences";
 import { getSnapshot, getPositions, getOrders, getPortfolioSummary, getPortfolioGreeks } from "@/lib/api";
-import { isMarketOpen } from "@/lib/marketHours";
 import type { Quote, Alert } from "@/types";
 
 /**
@@ -62,13 +60,8 @@ export function fetchPortfolioData() {
  * - Routes incoming WS messages to the correct store via onMessage (no re-render)
  */
 export function useDataPipeline(enabled: boolean = true) {
-  const { subscribe, unsubscribe, onMessage } = useWs();
+  const { subscribe, unsubscribe, onMessage, isConnected, wsStatus } = useWs();
   const hasFetched = useRef(false);
-  // Persona-8 #1: portfolio refresh used to be a hardcoded 30s. Wire the
-  // user pref so the Settings → Data Refresh slider actually changes
-  // something. Stored as seconds in `preferences.data.refreshInterval`,
-  // clamped in the setter to [10, 300] s.
-  const refreshIntervalSec = usePreferencesStore((s) => s.data.refreshInterval);
 
   // Subscribe to WS channels on mount, unsubscribe on unmount
   useEffect(() => {
@@ -139,46 +132,34 @@ export function useDataPipeline(enabled: boolean = true) {
     };
   }, [enabled]);
 
-  // Periodic portfolio refresh — interval driven by user pref
-  // (Settings → Data Refresh). Re-arms when the pref changes so a slider
-  // tweak takes effect on the next tick instead of the next reload.
+  // K-2 (round-6): drop the 30s REST polling cycle entirely. The
+  // initial mount fetch above + WebSocket push (`portfolio` channel)
+  // are now the only paths that mutate the portfolio store under
+  // normal operation. The previous polling layer was the legacy
+  // "BUG-016 closed-session back-off" — replaced by trusting the WS
+  // stream + a single fallback refetch when WS has been down for more
+  // than 60 s.
   //
-  // BUG-016: when the market is closed the broker's portfolio values
-  // cannot change (no prints → no unrealized P&L drift), so polling adds
-  // load without surfacing new information. We therefore back off to 5×
-  // the normal cadence when the session is closed; an open session stays
-  // at the user-configured rate. Real fix (consolidated WS portfolio
-  // stream) is tracked in stores/market.ts BUG-016 TODO.
+  // Reconnect refetch: useWebSocket already calls fetchPortfolioData
+  // exactly once on a reconnecting -> open transition, so a brief WS
+  // blip auto-recovers without any timer here. This effect only fires
+  // when the WS *fails to come back* within the 60 s grace window —
+  // a rare edge but real (e.g. proxy outage, server restart that
+  // exceeds MAX_RETRIES * BASE_DELAY).
   useEffect(() => {
     if (!enabled) return;
-    const tick = () => {
-      // Re-evaluate market state on every tick so we can't get stuck in
-      // a closed-cadence after the 09:30 ET open.
-      const baseSec = Number.isFinite(refreshIntervalSec) && refreshIntervalSec >= 10
-        ? Math.min(refreshIntervalSec, 300)
-        : 30;
-      // Closed-session back-off clamped at 5 minutes — the Settings
-      // slider's hard ceiling — so nobody waits 25m for an off-hours
-      // summary refresh after opening the app on a Sunday.
-      const seconds = isMarketOpen() ? baseSec : Math.min(baseSec * 5, 300);
-      return seconds * 1000;
-    };
+    if (isConnected) return;
+    // Only the genuinely-disconnected statuses warrant a fallback poll.
+    // While we're "connecting" for the first time we let the initial
+    // mount fetch handle it.
+    if (wsStatus !== "reconnecting" && wsStatus !== "failed") return;
 
-    let cancelled = false;
-    let handle: ReturnType<typeof setTimeout> | null = null;
-    const arm = () => {
-      if (cancelled) return;
-      handle = setTimeout(() => {
-        fetchPortfolioData();
-        arm();
-      }, tick());
-    };
-    arm();
-    return () => {
-      cancelled = true;
-      if (handle) clearTimeout(handle);
-    };
-  }, [enabled, refreshIntervalSec]);
+    const handle = setTimeout(() => {
+      fetchPortfolioData();
+    }, 60_000);
+
+    return () => clearTimeout(handle);
+  }, [enabled, isConnected, wsStatus]);
 
   // Route WS messages to stores via channel callbacks (no React re-renders)
   //

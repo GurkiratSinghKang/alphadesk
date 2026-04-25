@@ -1,12 +1,10 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, useEffect, createContext, useContext, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { useState, createContext, useContext, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { useWebSocket } from "@/hooks/useWebSocket";
-import { useDataPipeline } from "@/hooks/useDataPipeline";
-import { useToast } from "@/hooks/useToast";
-import { ensureTokenRefreshScheduled } from "@/lib/api";
+import type { useWebSocket } from "@/hooks/useWebSocket";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 import ThemeController from "@/components/layout/ThemeController";
@@ -36,7 +34,12 @@ function makeQueryClient() {
 
 type WsContextValue = ReturnType<typeof useWebSocket>;
 
-const WebSocketContext = createContext<WsContextValue | null>(null);
+// K-4 (round-6): the context lives here (not in providers/WebSocketProvider.tsx)
+// so that static consumers of `useWs()` — which is most of the dashboard tree —
+// share the same module-scoped context with the dynamically-loaded
+// WebSocketProvider. Splitting the context across two modules would create
+// two distinct symbols and `useWs()` would always throw.
+export const WebSocketContext = createContext<WsContextValue | null>(null);
 
 export function useWs(): WsContextValue {
   const ctx = useContext(WebSocketContext);
@@ -44,69 +47,21 @@ export function useWs(): WsContextValue {
   return ctx;
 }
 
-function WebSocketProvider({ children }: { children: ReactNode }) {
-  const ws = useWebSocket();
-  // long-session-audit-r4 P0 #1: start the silent token-refresh scheduler
-  // once when a logged-in session mounts the dashboard. The scheduler is
-  // a no-op until `captureRefreshToken` is called (see api.ts), so we also
-  // re-arm it on the login-success event in case the dashboard is first
-  // mounted before the event fires (e.g. SSR hydration ordering).
-  // Mounted here (and not on /login) because WebSocketProvider only wraps
-  // authenticated surfaces — see <Providers> below.
-  useEffect(() => {
-    ensureTokenRefreshScheduled();
-    const onLogin = () => ensureTokenRefreshScheduled();
-    window.addEventListener("alphadesk:auth-login-success", onLogin);
-    return () => window.removeEventListener("alphadesk:auth-login-success", onLogin);
-  }, []);
-  return (
-    <WebSocketContext.Provider value={ws}>{children}</WebSocketContext.Provider>
-  );
-}
+// K-4 (round-6): dynamic-import both the WS provider and the data-pipeline
+// bridge. SSR is disabled (ssr: false) because both depend on browser-only
+// APIs (WebSocket, navigator) and on Zustand stores that hydrate from
+// localStorage. The /login route's `isLogin` early-return below means
+// these chunks don't load at all on the auth screen, recovering the
+// ~120 KB the K-4 audit measured.
+const WebSocketProvider = dynamic(
+  () => import("./providers/WebSocketProvider").then((m) => m.WebSocketProvider),
+  { ssr: false },
+);
 
-// ─── Price Alert Toast Bridge ────────────────────────────────
-
-function PriceAlertToastBridge() {
-  const { toast } = useToast();
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ message: string; symbol?: string }>).detail;
-      if (detail?.message) {
-        toast({ type: "info", message: detail.message, duration: 8000 });
-      }
-    };
-    window.addEventListener("alphadesk:price-alert", handler);
-    return () => window.removeEventListener("alphadesk:price-alert", handler);
-  }, [toast]);
-  return null;
-}
-
-// ─── Data Pipeline (routes WS + REST to stores) ─────────────
-
-function DataPipelineBridge({ children }: { children: ReactNode }) {
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    // Rehydrate all Zustand persist stores after mount
-    Promise.all([
-      import("@/stores/market").then(m => m.useMarketStore.persist.rehydrate()),
-      import("@/stores/preferences").then(m => m.usePreferencesStore.persist.rehydrate()),
-      import("@/stores/ui").then(m => m.useUIStore.persist.rehydrate()),
-      import("@/stores/notifications").then(m => m.useNotificationsStore.persist.rehydrate()),
-    ]).then(() => setHydrated(true));
-  }, []);
-
-  // Always call the hook (React rules of hooks — no conditional calls)
-  // but only activate data fetching after stores are hydrated
-  useDataPipeline(hydrated);
-
-  return (
-    <>
-      {hydrated && <PriceAlertToastBridge />}
-      {children}
-    </>
-  );
-}
+const DataPipelineBridge = dynamic(
+  () => import("./providers/DataPipelineBridge").then((m) => m.DataPipelineBridge),
+  { ssr: false },
+);
 
 // ─── Combined Provider ───────────────────────────────────────
 

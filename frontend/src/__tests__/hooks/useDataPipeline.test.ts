@@ -29,6 +29,10 @@ function simulateMessage(channel: string, event: string, data: unknown) {
 vi.mock('@/lib/providers', () => ({
   useWs: () => ({
     isConnected: true,
+    // K-2 (round-6): useDataPipeline now reads `wsStatus` to decide
+    // whether to fire a 60 s fallback poll. "open" means the WS is up,
+    // so the fallback is dormant in tests.
+    wsStatus: 'open',
     subscribe: mockSubscribe,
     unsubscribe: vi.fn(),
     lastMessage: null,
