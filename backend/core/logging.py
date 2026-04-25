@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -35,6 +36,14 @@ from typing import Any
 # Request-scoped correlation id. Set by the request-id middleware. Default to
 # "-" so background tasks and startup logs don't crash the formatter.
 REQUEST_ID: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+# Round-5 Cluster D H-8: read the deploy git SHA once at module load and
+# stamp every JSON record with it. The Dockerfile passes the value via an
+# ALPHADESK_GIT_SHA env var (built from a deploy.yml --build-arg). Falls
+# back to "unknown" so a local ``python -m main`` doesn't emit
+# ``git_sha=null`` records — "unknown" sorts cleanly in log queries.
+GIT_SHA: str = os.environ.get("ALPHADESK_GIT_SHA", "unknown")
 
 
 # Fields on LogRecord that belong to the stdlib and should never be written
@@ -90,6 +99,11 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "logger": record.name,
             "request_id": REQUEST_ID.get(),
+            # Round-5 Cluster D H-8: git_sha lets log aggregators correlate
+            # log lines with a specific deploy. The same field is exposed
+            # via /livez and /readyz-full so an oncall can tell at a glance
+            # which build a 5xx came from.
+            "git_sha": GIT_SHA,
         }
 
         # Merge any caller-supplied extras (user, path, method, event, etc.).

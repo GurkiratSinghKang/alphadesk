@@ -166,11 +166,42 @@ async def _periodic_sweep_loop() -> None:
     Run for the lifetime of the app; cancel from the lifespan shutdown
     hook. Catches and logs all exceptions so a single sweep failure
     doesn't kill the loop forever.
+
+    Round-5 Cluster D H-6/H-7: every 60th iteration emits an
+    ``ops_heartbeat`` INFO line carrying the current sizes of the
+    rate-limit dicts AND the screener's module-level dedup dicts so a
+    memory-leak pattern shows up in Loki/CloudWatch dashboards before
+    the worker hits OOM.
     """
+    iter_count = 0
     while True:
         try:
             await asyncio.sleep(_SWEEP_INTERVAL_S)
             await _periodic_sweep_once()
+            iter_count += 1
+            # Emit ops heartbeat hourly (60 iterations × 60s = ~1h).
+            if iter_count % 60 == 0:
+                try:
+                    from services.earnings_screener import (
+                        _FMP_UPCOMING_LOCKS,
+                        _inflight_structured,
+                    )
+                    fmp_locks_size = len(_FMP_UPCOMING_LOCKS)
+                    inflight_size = len(_inflight_structured)
+                except Exception:
+                    fmp_locks_size = -1
+                    inflight_size = -1
+                logger.info(
+                    "rate-limit.sweep.heartbeat",
+                    extra={
+                        "event": "ops_heartbeat",
+                        "iterations_since_last": 60,
+                        "rl_history_size": len(_history),
+                        "rl_detail_history_size": len(_detail_history),
+                        "fmp_upcoming_locks_size": fmp_locks_size,
+                        "inflight_structured_size": inflight_size,
+                    },
+                )
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001

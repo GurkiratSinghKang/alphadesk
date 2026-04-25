@@ -14,11 +14,32 @@ client instead — it:
     current (2026) API model IDs.
   * Emits a structured ``claude_call`` log line per completion with
     token counts + USD cost so SRE / finance can trace spend.
+
+# Round-5 Cluster D H-2: daily spend kill-switch
+# ----------------------------------------------
+# Per-IP rate limits cap individual abuse but do nothing about the
+# cross-user case (5 compromised JWTs × 5 IPs each). This module tracks
+# total spend in Redis under ``claude:spend:{utc_date}`` and refuses
+# new calls once the configured ceiling is breached. Costs are
+# estimated up-front (so we can refuse BEFORE paying) and reconciled
+# against actual usage afterwards.
+#
+# To halt all Claude spend immediately without redeploying:
+#   SET claude:spend:{date} 999999
+# (this sets the day's accumulator above any plausible budget so every
+# subsequent call is rejected; entry expires at end-of-day TTL)
+#
+# Disable via CLAUDE_BUDGET_KILL_SWITCH_ENABLED=False if a misbehaving
+# tracker (Redis outage etc.) is causing false positives. The cost
+# estimator is intentionally conservative so the gate errs toward
+# refusing borderline calls — false positives are an annoying dialog,
+# false negatives are an infinite Anthropic invoice.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from agents.base import _CLAUDE_SEMAPHORE
@@ -75,6 +96,78 @@ def _estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> flo
     )
 
 
+class ClaudeBudgetExceeded(RuntimeError):
+    """Raised when the daily Claude spend kill-switch refuses a call.
+
+    Round-5 Cluster D H-2. Callers catch this distinct from the generic
+    Anthropic API errors so they can surface a budget-specific UX
+    message ("Claude paused for cost; resumes at UTC midnight") instead
+    of a generic outage banner.
+    """
+
+
+def _today_spend_key() -> str:
+    """Redis key for today's accumulated Claude spend (UTC date)."""
+    return f"claude:spend:{datetime.now(timezone.utc).date().isoformat()}"
+
+
+async def _record_spend_estimate(estimate: float) -> float:
+    """INCRBYFLOAT today's spend by ``estimate`` and return the running total.
+
+    The Redis path is best-effort — a Redis outage shouldn't block real
+    Claude calls. On failure we log and return 0.0 so the caller falls
+    through to the API (the kill-switch fails open, which is the safer
+    behaviour for a paid service: errors should not silently halt
+    workflow). The kill-switch is opt-in via
+    ``settings.CLAUDE_BUDGET_KILL_SWITCH_ENABLED``.
+    """
+    try:
+        from core.redis import get_redis
+
+        r = await get_redis()
+        key = _today_spend_key()
+        new_total = await r.incrbyfloat(key, estimate)
+        # 26h TTL — covers the day with a 2h grace so a deploy near
+        # midnight can't accidentally double-count.
+        await r.expire(key, 26 * 3600)
+        return float(new_total)
+    except Exception as e:
+        logger.warning("claude budget tracker unavailable: %s", e)
+        return 0.0
+
+
+async def _reconcile_spend(estimate: float, actual: float) -> None:
+    """Subtract the estimate, add the actual cost. Both are best-effort."""
+    delta = actual - estimate
+    if abs(delta) < 1e-9:
+        return
+    try:
+        from core.redis import get_redis
+
+        r = await get_redis()
+        await r.incrbyfloat(_today_spend_key(), delta)
+    except Exception as e:
+        logger.warning("claude spend reconciliation failed: %s", e)
+
+
+async def get_today_claude_spend_usd() -> float:
+    """Return the running total of today's Claude spend in USD.
+
+    Surfaced via ``/readyz-full`` (Round-5 Cluster D H-2) so operators
+    can monitor cost without shelling into Redis.
+    """
+    try:
+        from core.redis import get_redis
+
+        r = await get_redis()
+        raw = await r.get(_today_spend_key())
+        if raw is None:
+            return 0.0
+        return float(raw)
+    except Exception:
+        return 0.0
+
+
 class ClaudeClient:
     """Minimal async Claude wrapper exposing a single ``complete()`` method."""
 
@@ -110,9 +203,59 @@ class ClaudeClient:
         server time; pass a smaller one for cheap upstream health probes.
         Exceeding the deadline raises :class:`ClaudeTimeoutError` and
         still emits a ``claude_call`` log event with ``status=timeout``.
+
+        Round-5 Cluster D H-2: when the daily Claude spend (tracked in
+        Redis under ``claude:spend:{utc_date}``) exceeds
+        ``settings.CLAUDE_DAILY_BUDGET_USD`` AND the kill-switch is
+        enabled, this raises :class:`ClaudeBudgetExceeded` BEFORE the
+        Anthropic call fires. Conservative pre-call estimate is used
+        for the gate; actual cost reconciles afterward.
         """
         resolved = _MODEL_MAP.get(model, model)
         t = _DEFAULT_TIMEOUT_S if timeout is None else float(timeout)
+
+        # Round-5 Cluster D H-2: budget kill-switch BEFORE the API call.
+        # The estimate is intentionally conservative (full max_tokens
+        # × max output rate) so the gate errs toward refusing borderline
+        # calls. Actual cost reconciles in the post-call branch below.
+        # Failures of the spend tracker (Redis outage etc.) fall open —
+        # ``_record_spend_estimate`` returns 0.0 so the gate doesn't
+        # silently halt Claude on transient Redis blips.
+        in_rate, out_rate = _MODEL_PRICING_PER_1M.get(resolved, _FALLBACK_PRICING)
+        prompt_chars = len(system) + len(user)
+        # ~4 chars/token approximation for the input estimate; output uses
+        # max_tokens as the worst-case ceiling.
+        estimated_input_tokens = max(1, prompt_chars // 4)
+        pre_estimate_usd = (
+            estimated_input_tokens * in_rate / 1_000_000
+            + max_tokens * out_rate / 1_000_000
+        )
+        running_total = await _record_spend_estimate(pre_estimate_usd)
+        if (
+            settings.CLAUDE_BUDGET_KILL_SWITCH_ENABLED
+            and running_total > settings.CLAUDE_DAILY_BUDGET_USD
+        ):
+            kill_ctx: dict[str, Any] = {
+                "event": "claude_budget_kill_switch",
+                "running_total_usd": running_total,
+                "limit_usd": settings.CLAUDE_DAILY_BUDGET_USD,
+                "model": resolved,
+            }
+            if context:
+                for k, v in context.items():
+                    kill_ctx.setdefault(k, v)
+            logger.critical(
+                "claude.budget_kill_switch.tripped",
+                extra=kill_ctx,
+            )
+            # Reverse the estimate so a sustained refusal storm can't
+            # accumulate spurious spend on top of the real number.
+            await _reconcile_spend(pre_estimate_usd, 0.0)
+            raise ClaudeBudgetExceeded(
+                f"Claude daily budget exceeded "
+                f"({running_total:.2f} > {settings.CLAUDE_DAILY_BUDGET_USD:.2f} USD)"
+            )
+
         async with _CLAUDE_SEMAPHORE:
             try:
                 resp = await asyncio.wait_for(
@@ -125,6 +268,10 @@ class ClaudeClient:
                     timeout=t,
                 )
             except asyncio.TimeoutError as exc:
+                # Round-5 H-2: reverse the pre-call estimate on timeout —
+                # we paid for input tokens (maybe) but the bill is
+                # unknown, so 0.0 is the safer accounting choice.
+                await _reconcile_spend(pre_estimate_usd, 0.0)
                 log_ctx: dict[str, Any] = {
                     "event": "claude_call",
                     "model": resolved,
@@ -150,10 +297,20 @@ class ClaudeClient:
                 raise ClaudeTimeoutError(
                     f"Claude completion exceeded {t:.1f}s deadline (model={resolved})"
                 ) from exc
+            except Exception:
+                # Round-5 H-2: any other failure — also reverse the
+                # estimate. Anthropic almost certainly didn't bill us
+                # for a 4xx/5xx; reversing the estimate keeps the
+                # accumulator honest.
+                await _reconcile_spend(pre_estimate_usd, 0.0)
+                raise
 
         input_tokens = int(getattr(resp.usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(resp.usage, "output_tokens", 0) or 0)
         cost_usd = _estimate_cost_usd(resolved, input_tokens, output_tokens)
+        # Round-5 H-2: reconcile the pre-call estimate against the actual
+        # cost. Best-effort — Redis blips don't fail the request.
+        await _reconcile_spend(pre_estimate_usd, cost_usd)
         log_ctx: dict[str, Any] = {
             "event": "claude_call",
             "model": resolved,

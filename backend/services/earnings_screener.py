@@ -311,8 +311,6 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     a dedicated profile endpoint if needed; the aggregator already
     tolerates empty/placeholder values.
     """
-    import os
-
     from core.cache import get_cache
     from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
@@ -321,12 +319,13 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     cache = get_cache()
     cache_key = _fmp_upcoming_cache_key(window, start, end)
 
-    # Skip the Redis cache under pytest — fixtures that mock the FMP
-    # provider rely on each test seeing fresh mock data, but the shared
-    # CI Redis would otherwise hand a prior test's payload back via cache
-    # hit. ``PYTEST_CURRENT_TEST`` is set by pytest itself for the
-    # duration of every test, so production is unaffected.
-    in_test = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    # Round-5 Cluster E E-6: settings flag replaces the previous
+    # ``PYTEST_CURRENT_TEST`` env-var heuristic. The env-var was risky
+    # because anyone sourcing a dev .env into prod would silently
+    # leak the cache-skip behaviour; the explicit flag at least surfaces
+    # the override on a routine settings audit. Flipped True from
+    # backend/tests/conftest.py for the test session.
+    in_test = settings.SKIP_EARNINGS_FMP_CACHE
     if not in_test:
         cached = await cache.get(cache_key)
         if isinstance(cached, list):

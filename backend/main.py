@@ -443,8 +443,13 @@ async def livez() -> dict:
     Used by docker/Kubernetes to decide whether to restart the container.
     No dependency checks: any failure here means the Python process itself
     is wedged, and a restart is the correct recovery.
+
+    Round-5 Cluster D H-8: surface ``git_sha`` so an oncall doing
+    curl-loops can tell which build is responding without shelling
+    into the container.
     """
-    return {"status": "ok"}
+    from core.logging import GIT_SHA
+    return {"status": "ok", "git_sha": GIT_SHA}
 
 
 @app.get("/health", tags=["Health"])
@@ -454,7 +459,8 @@ async def health_check() -> dict:
     docker-compose.prod.yml has a healthcheck pointed at /health; keep it
     working until every deployment switches to /livez.
     """
-    return {"status": "ok"}
+    from core.logging import GIT_SHA
+    return {"status": "ok", "git_sha": GIT_SHA}
 
 
 @app.get("/readyz", tags=["Health"])
@@ -531,39 +537,43 @@ async def readyz() -> JSONResponse:
     return JSONResponse(status_code=status_code, content=result)
 
 
-# ─── /readyz-full ─ deep health probe (B-31) ─────────────────────────
+# ─── /readyz-full ─ deep health probe (B-31 + Round-5 Cluster D) ──────
 #
 # `/readyz` is the load-balancer probe — fast, local deps only, 503 drops
 # the container out of rotation. Pulling it out because Anthropic had a
 # 5-min hiccup would be the wrong trade-off. `/readyz-full` is the
 # monitoring-dashboard probe — it additionally queries FMP and Anthropic
-# with short timeouts and reports a per-dependency status. It stays HTTP
-# 200 on external failures (external outages shouldn't drop the container)
-# but the response body shows each external as "down" or "degraded".
+# with short timeouts and reports a per-dependency status, plus today's
+# Claude spend (H-2), the current sizes of the in-memory dedup dicts
+# (H-7), and the deploy git SHA (H-8).
 #
-# A 30-second in-process TTL cache keeps oncall curl loops from hammering
-# the paid upstreams (FMP in particular is rate-limited by tier).
-_READYZ_FULL_CACHE: dict[str, Any] = {"result": None, "expires_at": 0.0}
-_READYZ_FULL_TTL_S = 30.0
+# Variable TTL (H-4): 30 s when status=ok, 5 s when degraded — so a
+# recovering system isn't masked by a stale ok-snapshot, while a healthy
+# snapshot caches long enough that a curl-loop probe doesn't pound the
+# DB / Redis / paid upstreams.
+import time as _time  # alias to avoid the ``import time`` shadowing risk
+
+_READYZ_FULL_CACHE: dict[str, Any] = {"snapshot": None, "ts": 0.0, "status": ""}
+_READYZ_FULL_TTL_OK_S = 30.0
+_READYZ_FULL_TTL_DEGRADED_S = 5.0
 
 
 async def _probe_fmp() -> dict[str, Any]:
     """Cheap FMP health probe. Returns {"status": "ok|down|skipped", "latency_ms": ...}."""
-    import time
     from core.config import settings
     key = settings.FMP_API_KEY.get_secret_value() if settings.FMP_API_KEY else ""
     if not key:
         return {"status": "skipped", "reason": "FMP_API_KEY not configured"}
     try:
         import httpx
-        t0 = time.perf_counter()
+        t0 = _time.perf_counter()
         async with httpx.AsyncClient(timeout=2.0) as client:
             # /earnings-calendar limited to a one-day window; tiny response.
             r = await client.get(
                 "https://financialmodelingprep.com/api/v3/quote/AAPL",
                 params={"apikey": key},
             )
-        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        latency_ms = round((_time.perf_counter() - t0) * 1000, 1)
         if r.status_code == 200:
             return {"status": "ok", "latency_ms": latency_ms}
         return {
@@ -576,7 +586,6 @@ async def _probe_fmp() -> dict[str, Any]:
 
 async def _probe_anthropic() -> dict[str, Any]:
     """Cheap Anthropic health probe via /models (no token billing)."""
-    import time
     from core.config import settings
     key = settings.ANTHROPIC_API_KEY.get_secret_value() if settings.ANTHROPIC_API_KEY else ""
     if not key:
@@ -584,9 +593,9 @@ async def _probe_anthropic() -> dict[str, Any]:
     try:
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=key)
-        t0 = time.perf_counter()
+        t0 = _time.perf_counter()
         await asyncio.wait_for(client.models.list(limit=1), timeout=2.0)
-        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        latency_ms = round((_time.perf_counter() - t0) * 1000, 1)
         return {"status": "ok", "latency_ms": latency_ms}
     except asyncio.TimeoutError:
         return {"status": "degraded", "reason": "timeout > 2s"}
@@ -596,32 +605,116 @@ async def _probe_anthropic() -> dict[str, Any]:
 
 @app.get("/readyz-full", tags=["Health"])
 async def readyz_full() -> JSONResponse:
-    """Deep readiness probe including external paid APIs (FMP, Anthropic).
+    """Deep readiness probe — DB + Redis + Claude spend + dict sizes.
 
-    Unlike ``/readyz``, external failures never trigger 503 — the
-    container keeps serving traffic while operators monitor the response
-    body for upstream health. Results are cached for 30 s to respect
-    upstream rate limits when oncall curl-loops during an incident.
+    Round-5 Cluster D enhancements:
+      * H-2: ``claude_spend_today_usd`` — running daily total in Redis.
+      * H-4: variable TTL — 30 s when status=ok, 5 s when degraded.
+      * H-7: ``dict_sizes`` block exposing inflight_structured len so a
+        memory leak shows up before OOM.
+      * H-8: ``git_sha`` so a curl-loop knows which deploy is live.
+
+    External dependencies (FMP, Anthropic) are best-effort — failures
+    flag the response degraded but never trigger a 503 (upstream
+    outages shouldn't drop the container out of LB rotation).
     """
-    import time
+    now = _time.monotonic()
+    age = now - _READYZ_FULL_CACHE["ts"]
+    cached_status = _READYZ_FULL_CACHE.get("status", "")
+    ttl = _READYZ_FULL_TTL_OK_S if cached_status == "ok" else _READYZ_FULL_TTL_DEGRADED_S
+    if _READYZ_FULL_CACHE["snapshot"] is not None and age < ttl:
+        snap = dict(_READYZ_FULL_CACHE["snapshot"])
+        # ``_http_status`` is internal — strip it before returning.
+        http_status = snap.pop("_http_status", 200)
+        snap["cache_age_s"] = round(age, 2)
+        return JSONResponse(status_code=http_status, content=snap)
 
-    now = time.time()
-    cached = _READYZ_FULL_CACHE.get("result")
-    if cached is not None and now < _READYZ_FULL_CACHE.get("expires_at", 0):
-        return JSONResponse(status_code=200, content=cached)
+    # ── Recompute ─────────────────────────────────────────────────
+    snapshot: dict[str, Any] = {}
+    overall_ok = True
 
-    fmp, anthropic_r = await asyncio.gather(
-        _probe_fmp(), _probe_anthropic(),
-    )
-    result = {
-        "status": "ok",
-        "fmp": fmp,
-        "anthropic": anthropic_r,
-        "cached_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
-    }
-    if any(d.get("status") == "down" for d in (fmp, anthropic_r)):
-        result["status"] = "degraded"
+    # DB — proves the connection pool is live.
+    try:
+        from sqlalchemy import text
+        from core.database import _get_engine
 
-    _READYZ_FULL_CACHE["result"] = result
-    _READYZ_FULL_CACHE["expires_at"] = now + _READYZ_FULL_TTL_S
-    return JSONResponse(status_code=200, content=result)
+        engine = _get_engine()
+
+        async def _db_ping() -> None:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_db_ping(), timeout=0.8)
+        snapshot["db"] = "ok"
+    except Exception as e:
+        overall_ok = False
+        snapshot["db"] = f"down: {type(e).__name__}"
+
+    # Redis ping.
+    try:
+        redis = await get_redis()
+        await asyncio.wait_for(redis.ping(), timeout=0.5)
+        snapshot["redis"] = "ok"
+    except Exception as e:
+        overall_ok = False
+        snapshot["redis"] = f"down: {type(e).__name__}"
+
+    # External upstream probes — flag-only (don't 503).
+    try:
+        fmp, anthropic_r = await asyncio.gather(
+            _probe_fmp(), _probe_anthropic(),
+        )
+        snapshot["fmp"] = fmp
+        snapshot["anthropic"] = anthropic_r
+    except Exception as e:
+        snapshot["fmp"] = {"status": "skipped", "reason": str(e)}
+        snapshot["anthropic"] = {"status": "skipped", "reason": str(e)}
+
+    # H-2: live Claude spend.
+    try:
+        from agents.claude_client import get_today_claude_spend_usd
+        snapshot["claude_spend_today_usd"] = round(
+            await get_today_claude_spend_usd(), 4
+        )
+    except Exception:
+        snapshot["claude_spend_today_usd"] = None
+
+    # H-7: dict size snapshot. Helps catch memory leaks before OOM.
+    try:
+        from services import earnings_screener as _es
+        snapshot["dict_sizes"] = {
+            "inflight_structured": len(_es._inflight_structured),
+            "fmp_upcoming_locks": len(_es._FMP_UPCOMING_LOCKS),
+        }
+    except Exception:
+        snapshot["dict_sizes"] = {}
+
+    # H-8: git_sha so a curl-loop monitor knows which build is live.
+    try:
+        from core.logging import GIT_SHA
+        snapshot["git_sha"] = GIT_SHA
+    except Exception:
+        snapshot["git_sha"] = "unknown"
+
+    if overall_ok:
+        # External "down" → degraded but still HTTP 200.
+        if any(
+            isinstance(snapshot.get(k), dict) and snapshot[k].get("status") == "down"
+            for k in ("fmp", "anthropic")
+        ):
+            snapshot["status"] = "degraded"
+        else:
+            snapshot["status"] = "ok"
+        snapshot["_http_status"] = 200
+    else:
+        snapshot["status"] = "degraded"
+        snapshot["_http_status"] = 503
+
+    _READYZ_FULL_CACHE["snapshot"] = dict(snapshot)
+    _READYZ_FULL_CACHE["ts"] = now
+    _READYZ_FULL_CACHE["status"] = snapshot["status"]
+
+    out = dict(snapshot)
+    http_status = out.pop("_http_status", 200)
+    out["cache_age_s"] = 0.0
+    return JSONResponse(status_code=http_status, content=out)

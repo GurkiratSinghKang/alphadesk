@@ -172,6 +172,11 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
+          # Round-5 Cluster D H-8: bake the git SHA into the image so
+          # core.logging.GIT_SHA is populated at runtime — every JSON
+          # log record then carries which deploy emitted it.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
@@ -225,6 +230,9 @@ jobs:
           tags: |
             ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ github.sha }}
             ghcr.io/${{ steps.repo.outputs.name }}-backend:latest
+          # Round-5 Cluster D H-8: bake the deploy SHA into the image.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
 
       # Sync the compose + infrastructure config to the VPS BEFORE the
       # image pull. Host's /opt/alphadesk config files were drifting from
@@ -317,6 +325,10 @@ jobs:
           BACKEND_IMAGE: ghcr.io/${{ steps.repo.outputs.name }}-backend:${{ steps.deploy_sha.outputs.sha }}
           GHCR_REPO_FRONTEND: ghcr.io/${{ steps.repo.outputs.name }}-frontend
           GHCR_REPO_BACKEND: ghcr.io/${{ steps.repo.outputs.name }}-backend
+          # Round-5 Cluster F H-10: smoke-test bearer token. Optional —
+          # missing secret skips the calendar smoke test rather than
+          # failing the deploy. Document in docs/RUNBOOK.md.
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
         run: |
           set -euo pipefail
           # Key is already in ~/.ssh/deploy_key from the sync step. known_hosts
@@ -337,7 +349,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
               -o LogLevel=ERROR \
               "deploy@${VPS_HOST}" \
-              "GHCR_TOKEN='${GHCR_TOKEN}' GHCR_USER='${GHCR_USER}' FRONTEND_IMAGE='${FRONTEND_IMAGE}' BACKEND_IMAGE='${BACKEND_IMAGE}' GHCR_REPO_FRONTEND='${GHCR_REPO_FRONTEND}' GHCR_REPO_BACKEND='${GHCR_REPO_BACKEND}' bash -s" <<'REMOTE_SCRIPT'
+              "GHCR_TOKEN='${GHCR_TOKEN}' GHCR_USER='${GHCR_USER}' FRONTEND_IMAGE='${FRONTEND_IMAGE}' BACKEND_IMAGE='${BACKEND_IMAGE}' GHCR_REPO_FRONTEND='${GHCR_REPO_FRONTEND}' GHCR_REPO_BACKEND='${GHCR_REPO_BACKEND}' SMOKE_TOKEN='${SMOKE_TOKEN:-}' bash -s" <<'REMOTE_SCRIPT'
             set -euo pipefail
             set -x
 
@@ -374,6 +386,22 @@ jobs:
             # old digest, the subsequent `up` would boot the stale image.
             docker image inspect "${FRONTEND_IMAGE}" --format 'pulled-frontend-ok: {{.Id}}'
             docker image inspect "${BACKEND_IMAGE}" --format 'pulled-backend-ok: {{.Id}}'
+
+            echo "─── Pre-swap migrations ────────────────────────────────"
+            # Round-5 Cluster F H-11: run ``alembic upgrade head`` against
+            # the existing DB using the NEW image, BEFORE the swap. If the
+            # migration fails the deploy aborts before traffic ever
+            # reaches the new container — old container keeps serving.
+            # Idempotent (no-op at head), so a redeploy after a failed
+            # migration replays cleanly. Rollback procedure documented in
+            # docs/ROLLBACK.md. The post-swap step below remains as an
+            # idempotent backstop.
+            docker run --rm \
+              --network=alphadesk_default \
+              --env-file=.env.prod \
+              "${BACKEND_IMAGE}" \
+              alembic upgrade head \
+              || { echo "FATAL: alembic migration failed — aborting before swap"; exit 1; }
 
             echo "─── down + up swap ─────────────────────────────────────"
             # `down` tears the project's entire stack down (containers +
@@ -424,14 +452,45 @@ jobs:
               exit 1
             fi
 
-            echo "─── Alembic migrations ─────────────────────────────────"
-            # Alembic upgrade head is idempotent — no-op when already at
-            # head, so rolling back to a prior image_sha doesn't
-            # downgrade. Downgrades are manual (docs/ROLLBACK.md).
+            echo "─── Alembic migrations (post-swap idempotent backstop) ─"
+            # Pre-swap migration already ran; this is a no-op when at
+            # head and acts as a backstop. Idempotent — rolling back to
+            # a prior image_sha doesn't downgrade. Downgrades are manual
+            # (docs/ROLLBACK.md).
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
 
             echo "─── Readiness check ────────────────────────────────────"
             curl -sf http://localhost:8000/readyz || { echo "FATAL: readiness check failed"; exit 1; }
+
+            echo "─── Smoke test: /readyz-full carries git_sha + spend ───"
+            # Round-5 Cluster D H-8 + H-2: confirm the image was built
+            # with --build-arg GIT_SHA so structured logs and the readyz
+            # body carry which deploy is live, and that the Claude
+            # spend tracker is initialised.
+            full=$(curl -sf http://localhost:8000/readyz-full || echo "{}")
+            echo "  $full"
+            echo "$full" | grep -q '"git_sha"' || { echo "FATAL: /readyz-full missing git_sha"; exit 1; }
+
+            echo "─── Smoke test: earnings calendar ──────────────────────"
+            # Round-5 Cluster F H-10: catch routing / schema regressions
+            # before the deploy is declared green. A missing SMOKE_TOKEN
+            # secret is non-fatal — the test is best-effort and skips
+            # rather than failing the whole deploy. Document the secret
+            # in docs/RUNBOOK.md ("Smoke test setup") so future operators
+            # can wire it up.
+            if [ -n "${SMOKE_TOKEN:-}" ]; then
+              calendar=$(curl -sf -H "Authorization: Bearer ${SMOKE_TOKEN}" \
+                "http://localhost:8000/api/v1/earnings/calendar?window=current")
+              if [ -z "$calendar" ]; then
+                echo "FATAL: /api/v1/earnings/calendar returned empty"
+                exit 1
+              fi
+              echo "$calendar" | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d.get('earnings'), list)" \
+                || { echo "FATAL: /api/v1/earnings/calendar shape regression"; exit 1; }
+              echo "  earnings calendar smoke test passed"
+            else
+              echo "  SMOKE_TOKEN secret not set — skipping calendar smoke test"
+            fi
 
             echo "─── Image-cache retention ──────────────────────────────"
             # Keep the 3 most recent SHA tags per image repo (current +

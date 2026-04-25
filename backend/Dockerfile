@@ -1,5 +1,19 @@
 FROM python:3.12-slim AS base
 
+# Round-5 Cluster D H-8: bake the deploy git SHA into the image so log
+# records (core.logging.GIT_SHA) and /livez can surface it. The deploy
+# pipeline passes this via --build-arg GIT_SHA=$(git rev-parse HEAD).
+# Falls back to "unknown" so a local ``docker build`` without the arg
+# still succeeds and produces clean log records.
+#
+# Round-5 Cluster F G-20 (note for the next maintainer): this image is
+# glibc-based (python:3.12-slim is Debian Bookworm), NOT musl/Alpine —
+# anything in the Python codebase that calls ``strftime("%-d")`` only
+# works on glibc. If the base image ever changes to alpine, audit
+# ``services.earnings_screener`` and friends for ``%-`` directives.
+ARG GIT_SHA="unknown"
+ENV ALPHADESK_GIT_SHA=$GIT_SHA
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \

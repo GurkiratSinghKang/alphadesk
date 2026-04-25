@@ -9,6 +9,7 @@ themselves at import time).
 """
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -62,11 +63,12 @@ def authed_client() -> TestClient:
 # ───────────────────── Earnings cache isolation ─────────────────────
 # Round-4 CLUSTER 5 added a 5-min Redis cache for ``_fmp_upcoming``
 # results. In CI Redis is shared across the whole pytest run; the cache
-# itself is bypassed in tests via ``PYTEST_CURRENT_TEST`` env-var guard
-# inside ``_fmp_upcoming``. This fixture additionally clears the
-# per-window ``asyncio.Lock`` dict so locks created against a prior
-# test's event loop don't raise ``RuntimeError: <Lock... is bound to a
-# different loop>`` in async tests later in the run.
+# itself is bypassed in tests via ``settings.SKIP_EARNINGS_FMP_CACHE``
+# (Round-5 Cluster E E-6 — replaces the older PYTEST_CURRENT_TEST env
+# heuristic). This fixture additionally clears the per-window
+# ``asyncio.Lock`` dict so locks created against a prior test's event
+# loop don't raise ``RuntimeError: <Lock... is bound to a different
+# loop>`` in async tests later in the run.
 
 @pytest.fixture(autouse=True)
 def _clear_earnings_locks():
@@ -76,3 +78,42 @@ def _clear_earnings_locks():
         svc._FMP_UPCOMING_LOCKS.clear()
     except Exception:  # pragma: no cover — defensive
         pass
+
+
+# Round-5 Cluster E E-6: flip the FMP-cache-bypass flag for the whole
+# pytest session so concurrent tests don't share stale FMP responses.
+# Settings-driven instead of the previous env-var heuristic; the env
+# could leak cache-skip behaviour into prod via a sourced .env.
+@pytest.fixture(autouse=True, scope="session")
+def _disable_earnings_cache_in_tests():
+    from core.config import settings
+
+    original = settings.SKIP_EARNINGS_FMP_CACHE
+    settings.SKIP_EARNINGS_FMP_CACHE = True
+    yield
+    settings.SKIP_EARNINGS_FMP_CACHE = original
+
+
+# Round-5 Cluster D H-13: best-effort reset of known module-level state
+# between tests. Anyone introducing new module-level dicts/lists MUST
+# add the dotted path here — anything that survives across tests can
+# leak shared state between concurrent fixtures and produce flaky
+# failures that appear only under specific test ordering.
+_MODULE_STATE_REGISTRY = [
+    "services.earnings_screener._inflight_structured",
+    # Add new module-level state paths here.
+]
+
+
+@pytest.fixture(autouse=True)
+def _clear_module_state():
+    yield
+    for path in _MODULE_STATE_REGISTRY:
+        try:
+            mod_path, attr = path.rsplit(".", 1)
+            mod = importlib.import_module(mod_path)
+            obj = getattr(mod, attr, None)
+            if hasattr(obj, "clear"):
+                obj.clear()
+        except Exception:
+            pass
