@@ -125,10 +125,19 @@ export default function EarningsOptionsPlayPage() {
     : null;
 
   // ── Detail ───────────────────────────────────────────────
+  // K-15 (round-6): high-cardinality query — every symbol the user
+  // hovers/clicks creates a unique cache key. The default 10-minute
+  // gcTime (set in providers.tsx) lets the cache balloon during a
+  // long research session. 60 s gcTime is plenty: if the user comes
+  // back to a symbol within the minute we still hit cache, otherwise
+  // we'd refetch anyway because earnings detail goes stale fast.
+  // Calendar query keeps the default — there are far fewer unique
+  // calendar filter combinations.
   const detailQuery = useQuery({
     queryKey: ["earnings-detail", selectedSymbol],
     queryFn: ({ signal }) => getEarningsDetail(selectedSymbol!, { signal }),
     enabled: !!selectedSymbol,
+    gcTime: 60_000,
   });
   const detail = selectedSymbol ? detailQuery.data ?? null : null;
   const loadingDetail = !!selectedSymbol && detailQuery.isLoading;

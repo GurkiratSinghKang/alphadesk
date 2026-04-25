@@ -27,7 +27,13 @@ describe("FiltersBar", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ window: "current" }));
   });
 
-  it("updates minIvRank on slider change", () => {
+  it("updates minIvRank on slider change (commits on release — K-7)", () => {
+    // K-7 (round-6): the slider is now commit-on-release, so a raw
+    // `change` event during a drag must NOT call `onChange` — that
+    // would re-key the calendar query 21 times for a 0→100 sweep.
+    // Asserting both:
+    //   1. mid-drag (`change` only) doesn't propagate to the parent
+    //   2. on release (`pointerUp`) the new value is committed
     const onChange = vi.fn();
     const { container } = render(
       <FiltersBar filters={{ window: "both", minIvRank: 50, sort: "date" }} onChange={onChange} />,
@@ -35,6 +41,8 @@ describe("FiltersBar", () => {
     const slider = container.querySelector('input[type="range"][name="minIvRank"]') as HTMLInputElement;
     expect(slider).not.toBeNull();
     fireEvent.change(slider, { target: { value: "70" } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.pointerUp(slider);
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ minIvRank: 70 }));
   });
 

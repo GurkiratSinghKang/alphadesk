@@ -104,13 +104,63 @@ export function getFreshness(
  *
  * Pass `0` (or a negative number) to disable the interval — useful in
  * tests where fake timers haven't been set up.
+ *
+ * K-8 (round-6): two production-fitness improvements:
+ *   1. The hook now subscribes to `visibilitychange` and pauses the
+ *      tick when the tab is hidden. A backgrounded dashboard with five
+ *      `useTick(15_000)` consumers used to wake every 15 s for nothing
+ *      — measurable battery / CPU on long sessions.
+ *   2. When the tracked timestamp is more than an hour old (passed via
+ *      the optional `iso` argument), `fmtRelativeTime` will return the
+ *      same "N h ago" / "N d ago" string for ~30 minutes at a time, so
+ *      a 15 s tick is wasted work. We back off to 60 s in that regime.
+ *      Components that care about sub-minute resolution (e.g. the
+ *      detail header showing "5 m ago") still get their 15 s cadence
+ *      because we evaluate the age on each render.
+ *
+ * The `iso` argument is optional — callers that don't pass it keep
+ * the old 15/30 s tick behaviour. Visibility gating still applies.
  */
-export function useTick(intervalMs: number = 30_000): number {
+export function useTick(intervalMs: number = 30_000, iso?: string | null): number {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (intervalMs <= 0) return;
-    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
+    if (typeof document === "undefined") return;
+
+    let id: ReturnType<typeof setInterval> | null = null;
+
+    const ageMs = iso ? Date.now() - new Date(iso).getTime() : 0;
+    // Once the timestamp is more than an hour old, the relative-time
+    // text only changes once per ~60 s (the rounding to "Nh"/"Nd" no
+    // longer flips at sub-minute resolution). 60 s is the floor.
+    const effectiveInterval =
+      iso && Number.isFinite(ageMs) && ageMs > 60 * 60 * 1000
+        ? Math.max(intervalMs, 60_000)
+        : intervalMs;
+
+    const start = () => {
+      if (id !== null) return;
+      id = setInterval(() => setTick((n) => n + 1), effectiveInterval);
+    };
+    const stop = () => {
+      if (id !== null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stop();
+    };
+  }, [intervalMs, iso]);
   return tick;
 }

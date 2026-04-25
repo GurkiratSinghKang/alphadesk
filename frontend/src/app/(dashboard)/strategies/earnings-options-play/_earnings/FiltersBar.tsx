@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { EarningsCalendarFilters } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -64,10 +65,32 @@ const SLIDER_THUMB_CLASSES =
 
 export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBarProps) {
   const ivRank = filters.minIvRank ?? 50;
+  // K-7 (round-6): the slider used to call `onChange` on every `onChange`
+  // event during a drag, so each notch (step=5 over 0..100 = 21 stops)
+  // mutated the parent `filters` object → re-keyed the calendar
+  // useQuery → kicked off a new HTTP request. Track the value locally
+  // for instant visual feedback during drag and only commit on release
+  // (pointerup / Arrow / Home / End / blur). The visible thumb position
+  // and label both use `localIvRank`, so the user still sees the value
+  // moving in real-time.
+  const [localIvRank, setLocalIvRank] = useState(ivRank);
+  // Keep local state in sync when parent value changes from outside
+  // (e.g. URL pop-state, filter reset). Skip when the local matches —
+  // that's our own commit cycle settling.
+  useEffect(() => {
+    setLocalIvRank((cur) => (cur === ivRank ? cur : ivRank));
+  }, [ivRank]);
   const sortKey = (filters.sort ?? "date") as SortOption["key"];
   const sortDir = SORT_DIRECTION[sortKey];
   const currentWindow = filters.window ?? "both";
   const currentTime = filters.bmoAmc ?? "both";
+
+  const commitIvRank = () => {
+    if (localIvRank !== (filters.minIvRank ?? 50)) {
+      onChange({ ...filters, minIvRank: localIvRank });
+    }
+    onSettleRef?.();
+  };
 
   return (
     <div
@@ -109,7 +132,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         })}
       </div>
 
-      {/* IV rank slider */}
+      {/* IV rank slider — K-7 (round-6): commit on release, not per-notch */}
       <label className="flex items-center gap-2">
         <span className="t-label text-[color:var(--fg-muted)]">IV RANK &ge;</span>
         <input
@@ -118,24 +141,30 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           min={0}
           max={100}
           step={5}
-          value={ivRank}
-          onChange={(e) => onChange({ ...filters, minIvRank: Number(e.target.value) })}
+          value={localIvRank}
+          // K-7: visual feedback only — does NOT call parent onChange.
+          // The parent's queryKey only updates when the user releases
+          // the slider, so dragging from 0 → 100 fires one fetch
+          // instead of 21 cancelled-and-restarted fetches.
+          onChange={(e) => setLocalIvRank(Number(e.target.value))}
           // B-56: once the user stops dragging/typing the slider, let
           // the parent page move focus somewhere more useful (a filter
           // change re-renders the sidebar, which used to eat focus).
-          onPointerUp={() => onSettleRef?.()}
+          // K-7: commitIvRank also pushes the local value up to the
+          // parent — see definition above.
+          onPointerUp={commitIvRank}
           onKeyUp={(e) => {
             if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
-              onSettleRef?.();
+              commitIvRank();
             }
           }}
-          onBlur={() => onSettleRef?.()}
+          onBlur={commitIvRank}
           // B-96: full-width on small viewports (usable at 200% zoom),
           // clamps to 128px on md+ screens.
           // Round-4 (CLUSTER E/9): 24×24 thumb classes for touch targets.
           className={cn("w-full md:w-32 max-w-full", SLIDER_THUMB_CLASSES)}
         />
-        <span className="font-mono text-[13px] tabular-nums">{ivRank}</span>
+        <span className="font-mono text-[13px] tabular-nums">{localIvRank}</span>
       </label>
 
       {/* TIME — radiogroup (CLUSTER C/7). Replaces the previous select
