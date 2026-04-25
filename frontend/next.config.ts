@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
   experimental: {
-    optimizePackageImports: ["lucide-react", "date-fns"],
+    optimizePackageImports: ["lucide-react"],
   },
   async redirects() {
     return [

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter_Tight, Newsreader, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/lib/providers";
+import WebVitalsReporter from "@/components/layout/WebVitalsReporter";
 import "./globals.css";
 
 // iOS/mobile viewport — `viewportFit: "cover"` allows the app to paint under
@@ -28,11 +29,19 @@ const interTight = Inter_Tight({
   fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
 });
 
+// K-13 (round-6): trimmed unused Newsreader weights / axes.
+//   · `axes: ["opsz"]` was loading the optical-size variation, but no
+//     selector in the codebase uses `font-variation-settings` or the
+//     `font-optical-sizing` shorthand to actually flip between display
+//     and text optical sizes. Loading the axis was paying for a font
+//     subset feature we never reach.
+//   · Both `italic` and `normal` styles are kept because both are used
+//     (search confirmed: `font-display italic` is widespread; the
+//     non-italic style backs serif headings via the design tokens).
 const newsreader = Newsreader({
   variable: "--font-display",
   subsets: ["latin"],
   style: ["italic", "normal"],
-  axes: ["opsz"],
   display: "swap",
   fallback: ["Iowan Old Style", "Times New Roman", "Georgia", "serif"],
 });
@@ -113,23 +122,14 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>
-        {/* BUG-048 — LCP / CLS were not observable on this build because
-            no web-vitals listener was attached. Install a lightweight
-            PerformanceObserver directly (no extra npm dep) that emits
-            each candidate LCP and the final CLS to the console under a
-            stable `[webvitals]` prefix; we already proxy console logs
-            to the server via the `alphadesk:client-log` channel so this
-            surfaces in our Hetzner log pipeline without extra wiring.
-            The inline script is intentionally tiny — no async imports,
-            no React — so it runs before hydration and captures the
-            *real* first paint. */}
-        <script
-          // This runs once, pre-hydration; no state to leak. `dangerouslySet`
-          // is safe because the payload is a static literal.
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(typeof PerformanceObserver!=="function")return;var po=new PerformanceObserver(function(list){try{var es=list.getEntries();for(var i=0;i<es.length;i++){var e=es[i];console.info("[webvitals] lcp",Math.round(e.startTime),e.element&&e.element.tagName);}}catch(err){}});po.observe({type:"largest-contentful-paint",buffered:true});var cls=0;var cpo=new PerformanceObserver(function(list){try{var es=list.getEntries();for(var i=0;i<es.length;i++){var e=es[i];if(!e.hadRecentInput){cls+=e.value;}}}catch(err){}});cpo.observe({type:"layout-shift",buffered:true});var report=function(){try{console.info("[webvitals] cls",cls.toFixed(4));}catch(err){}};addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")report();});addEventListener("pagehide",report);}catch(err){}})();`,
-          }}
-        />
+        {/* K-1 + K-14 (round-6): replaces the inline pre-hydration
+            PerformanceObserver script. WebVitalsReporter mounts the
+            web-vitals@4 listeners (LCP/CLS/INP/FCP/TTFB) and beacons
+            each metric to /api/v1/metrics/vitals via sendBeacon. The
+            backend endpoint is not yet wired — failures are swallowed
+            so the page never breaks while we wait for FIX-3 to add the
+            ingest route. See lib/web-vitals.ts for the TODO. */}
+        <WebVitalsReporter />
         <Providers>{children}</Providers>
       </body>
     </html>
