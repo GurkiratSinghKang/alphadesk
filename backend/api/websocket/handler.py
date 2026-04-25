@@ -541,6 +541,37 @@ async def _revalidate_jwt_loop(
         return
 
 
+def _allowed_ws_origins() -> set[str]:
+    """Return the set of Origin values the WebSocket handshake accepts.
+
+    Round-6 L-4: WebSockets do NOT participate in the CORS preflight
+    dance — once ``ws.accept()`` runs, the connection is established
+    and the browser will deliver any ambient cookies (HttpOnly
+    access_token) along with messages, EVEN IF the originating page is
+    on an attacker-controlled origin (CSWSH). Without an explicit
+    Origin allowlist, a malicious page on https://attacker.example can
+    open ``new WebSocket("wss://tradingalpha.net/ws")`` from the user's
+    browser, ride their auth cookies into the auth handshake, and
+    stream portfolio / trade data back to the attacker.
+
+    Allowlist mirrors ``main.py``'s CORS allowlist. Returning an EMPTY
+    set means the policy isn't configured — fall back to allowing
+    everything in that case so a misconfigured .env doesn't take WS
+    down. Operators who want strict enforcement set PRODUCTION_ORIGIN.
+    """
+    from core.config import settings
+
+    origins: set[str] = set()
+    if not settings.is_production:
+        origins.update({
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        })
+    if settings.PRODUCTION_ORIGIN:
+        origins.add(settings.PRODUCTION_ORIGIN)
+    return origins
+
+
 async def websocket_endpoint(ws: WebSocket) -> None:
     """Main WebSocket endpoint handler.
 
@@ -552,7 +583,32 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         {"action": "subscribe", "channel": "quotes"}
         {"action": "unsubscribe", "channel": "quotes"}
         {"action": "ping"}
+
+    Round-6 L-4: Origin is checked BEFORE ``ws.accept()`` so a
+    cross-site handshake from an attacker page is rejected with RFC
+    6455 close 1008 (policy violation) — the browser-delivered HttpOnly
+    cookies never reach the auth handshake from a non-allowlisted
+    origin.
     """
+    # Round-6 L-4: Origin allowlist enforcement. Browser WebSocket
+    # connects always carry an ``Origin`` header (RFC 6455 §10.2);
+    # non-browser clients (CLI, ws-cli probes) typically don't, and we
+    # let them through because they don't have ambient cookies that the
+    # CSWSH attack hinges on.
+    allowed_origins = _allowed_ws_origins()
+    origin = ws.headers.get("origin")
+    if allowed_origins and origin is not None and origin not in allowed_origins:
+        try:
+            await ws.close(code=1008, reason="Origin not allowed")
+        except Exception:
+            logger.debug("ws origin reject: close raised", exc_info=True)
+        logger.warning(
+            "websocket: rejected cross-origin handshake origin=%s allowlist=%s",
+            origin,
+            sorted(allowed_origins),
+        )
+        return
+
     await ws.accept()
 
     # Token retained across the lifetime of the connection so the background

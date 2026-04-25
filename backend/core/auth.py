@@ -40,6 +40,21 @@ ALGORITHM = "HS256"
 # expiry for more than a minute.
 JWT_CLOCK_SKEW_LEEWAY_SECONDS = 60
 
+# Round-6 L-5: JWT issuer + audience claims. Without these, a token
+# signed with our secret could in theory be accepted by another
+# service that shares the secret. Issuer pins the ``alphadesk`` brand
+# into every token; audience pins the API surface so a token minted
+# for an auxiliary tool can't be accepted on the user-facing API.
+JWT_ISSUER = "alphadesk"
+JWT_AUDIENCE = "alphadesk-api"
+
+# Round-6 L-5: backwards-compat window. Tokens minted before this
+# rollout (without ``iss``/``aud``) are accepted as long as their
+# ``iat`` is younger than ``LEGACY_TOKEN_GRACE_SECONDS`` (default 30
+# days — the refresh token max lifetime). After the grace window, every
+# token must carry the new claims or it 401s.
+LEGACY_TOKEN_GRACE_SECONDS = 30 * 24 * 3600
+
 
 # ---------------------------------------------------------------------------
 # Password-version and session-epoch stores (Wave 2I, Fix 1 + Fix 3).
@@ -174,12 +189,21 @@ def create_access_token(
     server-side counters. Callers that don't supply them default to 1, which
     matches the "never rotated" baseline. Production callers always pass the
     current counters from Redis.
+
+    Round-6 L-5: tokens now carry the standard registered claims
+    ``iss`` (issuer = alphadesk), ``aud`` (audience = alphadesk-api),
+    ``iat`` (issued-at), and ``nbf`` (not-before).
     """
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode(
         {
             "sub": subject,
             "exp": expire,
+            "iat": now,
+            "nbf": now,
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
             "type": "access",
             "jti": str(uuid.uuid4()),
             "pv": int(password_version),
@@ -196,11 +220,21 @@ def create_refresh_token(
     password_version: int = 1,
     session_epoch: int = 1,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    """Mint a long-lived refresh token.
+
+    Round-6 L-5: same ``iss``/``aud``/``iat``/``nbf`` claims as the
+    access token — see :func:`create_access_token` for the rationale.
+    """
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return jwt.encode(
         {
             "sub": subject,
             "exp": expire,
+            "iat": now,
+            "nbf": now,
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
             "type": "refresh",
             "jti": str(uuid.uuid4()),
             "pv": int(password_version),
@@ -218,19 +252,63 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     ±60s drift — see Fix 4 (P83-4). Without leeway, Tor users whose exit-
     node clock drifts past the server got 401 on their first authenticated
     request, because system clocks over .onion paths are NTP-starved.
+
+    Round-6 L-5: enforces ``iss``/``aud`` for tokens that carry them.
+    Tokens minted before the rollout (lacking those claims) are accepted
+    only if their ``iat`` falls inside :data:`LEGACY_TOKEN_GRACE_SECONDS`
+    of "now"; older legacy tokens 401 so an attacker who stashed a token
+    from a previous deployment can't replay it indefinitely.
     """
+    # First decode WITHOUT enforcing iss/aud so we can detect legacy
+    # tokens and fall through to the grace path. The signature, exp,
+    # and nbf are still validated.
     try:
         payload = jwt.decode(
             token,
             settings.jwt_secret_value,
             algorithms=[ALGORITHM],
             leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
+            options={"verify_aud": False, "verify_iss": False},
         )
     except InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     if payload.get("type") != expected_type:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong token type")
+
+    # Round-6 L-5: enforce iss/aud when present, allow grace window
+    # for legacy tokens.
+    issuer = payload.get("iss")
+    audience = payload.get("aud")
+    if issuer is not None or audience is not None:
+        if issuer != JWT_ISSUER:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token issuer"
+            )
+        if audience != JWT_AUDIENCE:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token audience"
+            )
+    else:
+        iat = payload.get("iat")
+        if iat is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing required claims"
+            )
+        try:
+            iat_ts = float(iat)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has invalid iat"
+            )
+        if (
+            datetime.now(timezone.utc).timestamp() - iat_ts
+            > LEGACY_TOKEN_GRACE_SECONDS
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Legacy token outside grace window — please re-login",
+            )
 
     return payload
 
