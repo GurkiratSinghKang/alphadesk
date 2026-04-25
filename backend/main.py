@@ -275,6 +275,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await close_db()
     except Exception:
         logger.warning("shutdown: close_db raised", exc_info=True)
+
+    # Round-6 K-9: drain the module-singleton FMP AsyncClient so we
+    # don't leak open keepalive connections on shutdown.
+    try:
+        from data.providers._fmp_http import close_async_client as _close_fmp_async
+        await _close_fmp_async()
+    except Exception:
+        logger.warning("shutdown: close FMP async client raised", exc_info=True)
+
     logger.info("Shutdown complete")
 
 
