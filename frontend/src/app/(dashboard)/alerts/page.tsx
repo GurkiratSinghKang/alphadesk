@@ -46,16 +46,35 @@ function formatDate(iso: string | null): string {
 // Weakly-typed validation previously accepted `<script>alert(1)</script>`
 // as a "symbol" because it was non-empty, and a negative `-50` price
 // fell through to a backend 4xx with a generic "Failed to create" toast.
-const ALERT_SYMBOL_REGEX = /^[A-Z.]{1,6}$/;
+//
+// Round-5 F-7: the regex now accepts either bare equity tickers OR full
+// 21-char OCC option symbols (e.g. NVDA260424P00200000) so users can
+// alert on a specific contract. The alternation prevents the malicious
+// payload `<script>…` from passing because none of the branches accept
+// `<` or `>`.
+const ALERT_SYMBOL_REGEX = /^(?:[A-Z][A-Z0-9.\-]{0,9}|[A-Z]{1,6}\d{6}[CP]\d{8})$/;
 const ALERT_PRICE_MAX = 1_000_000;
+
+type AlertConditionUI =
+  | "above"
+  | "below"
+  | "percent_move_above"
+  | "percent_move_below";
+
+type AlertReferenceUI = "static" | "prev_close" | "session_open";
 
 function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
   const { toast } = useToast();
   const [symbol, setSymbol] = useState("");
   const [price, setPrice] = useState("");
-  const [condition, setCondition] = useState<"above" | "below">("above");
+  const [condition, setCondition] = useState<AlertConditionUI>("above");
+  const [reference, setReference] = useState<AlertReferenceUI>("static");
+  const [referencePrice, setReferencePrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
+
+  const isPercentMove =
+    condition === "percent_move_above" || condition === "percent_move_below";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,27 +94,45 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
       return;
     }
     if (!ALERT_SYMBOL_REGEX.test(sym)) {
-      fail("Symbol must be 1–6 letters (e.g. AAPL, BRK.B)");
+      fail("Symbol must be a ticker (e.g. AAPL, BRK.B) or full OCC contract");
       return;
     }
     if (!price.trim()) {
-      fail("Price is required");
+      fail(isPercentMove ? "Percent threshold is required" : "Price is required");
       return;
     }
     if (!Number.isFinite(p) || p <= 0) {
-      fail("Price must be greater than 0");
+      fail(isPercentMove ? "Percent threshold must be greater than 0" : "Price must be greater than 0");
       return;
     }
     if (p > ALERT_PRICE_MAX) {
-      fail(`Price must be ≤ ${ALERT_PRICE_MAX.toLocaleString()}`);
+      fail(`Value must be ≤ ${ALERT_PRICE_MAX.toLocaleString()}`);
       return;
+    }
+    // Round-5 F-7 — when reference=static and condition is percent-move,
+    // the reference_price is required so the backend knows the anchor.
+    let staticRefPrice: number | undefined;
+    if (isPercentMove && reference === "static") {
+      const rp = parseFloat(referencePrice);
+      if (!referencePrice.trim() || !Number.isFinite(rp) || rp <= 0) {
+        fail("Reference price is required for static percent-move alerts");
+        return;
+      }
+      staticRefPrice = rp;
     }
     setSubmitting(true);
     try {
-      await createPriceAlert(sym, p, condition);
-      toast({ type: "success", message: `Alert created: ${sym} ${condition} $${(p ?? 0).toFixed(2)}` });
+      await createPriceAlert(sym, p, condition, {
+        reference: isPercentMove ? reference : undefined,
+        reference_price: staticRefPrice,
+      });
+      const successMsg = isPercentMove
+        ? `Alert created: ${sym} ${condition.replace("percent_move_", "")} ${p.toFixed(2)}% vs ${reference}`
+        : `Alert created: ${sym} ${condition} $${(p ?? 0).toFixed(2)}`;
+      toast({ type: "success", message: successMsg });
       setSymbol("");
       setPrice("");
+      setReferencePrice("");
       onCreated();
     } catch (err: any) {
       const msg = err?.message ?? "Failed to create alert";
@@ -122,13 +159,13 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             type="text"
             value={symbol}
             onChange={(e) => { setSymbol(e.target.value); if (fieldError) setFieldError(null); }}
-            placeholder="AAPL"
-            // BUG-042 — cap symbol length + hint the pattern so browsers
-            // with pattern-validation UI can preempt bogus input (XSS
-            // payloads etc). Runtime regex in handleSubmit is still the
-            // source of truth; this is just a UI assist.
-            maxLength={6}
-            pattern="[A-Za-z.]{1,6}"
+            placeholder="AAPL or NVDA260424P00200000"
+            // Round-5 F-7: cap at 21 chars (full OCC option contract
+            // length) so the UI no longer truncates a pasted OCC. The
+            // regex still rejects `<script>…` payloads — every branch
+            // of the alternation requires uppercase letters/digits only.
+            maxLength={21}
+            pattern="[A-Za-z0-9.\-]{1,21}"
             autoCapitalize="characters"
             spellCheck={false}
             aria-invalid={fieldError != null || undefined}
@@ -136,58 +173,42 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
             // triggers iOS Safari's auto-zoom on focus. Use text-base on
             // mobile and drop back to text-sm at md+ where the desk lives.
             // `h-10 md:h-9` keeps the 40px minimum tap target on phones.
-            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground placeholder:text-muted-foreground/50"
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm font-mono text-foreground placeholder:text-muted-foreground/50"
           />
         </div>
         <div>
-          <label htmlFor="alert-condition" className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <label htmlFor="alert-condition-select" className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Condition
           </label>
-          <div
-            role="radiogroup"
+          {/* Round-5 F-7: replaced the binary radio with a 4-option
+              <select> so the form supports percent-move conditions
+              without doubling its width. The two legacy options keep
+              their existing values; the two new ones default `reference`
+              to `static` so the user has to consciously opt into a
+              market-data-anchored alert. */}
+          <select
+            id="alert-condition-select"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value as AlertConditionUI)}
             aria-label="Alert condition"
-            className="flex gap-1 mt-1"
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground"
           >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={condition === "above"}
-              onClick={() => setCondition("above")}
-              className={cn(
-                "flex-1 rounded-md h-9 text-xs font-medium transition-colors flex items-center justify-center gap-1",
-                condition === "above"
-                  ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30"
-                  : "bg-[var(--panel)] text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <ArrowUp className="h-3 w-3" /> Above
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={condition === "below"}
-              onClick={() => setCondition("below")}
-              className={cn(
-                "flex-1 rounded-md h-9 text-xs font-medium transition-colors flex items-center justify-center gap-1",
-                condition === "below"
-                  ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30"
-                  : "bg-[var(--panel)] text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <ArrowDown className="h-3 w-3" /> Below
-            </button>
-          </div>
+            <option value="above">Above ($)</option>
+            <option value="below">Below ($)</option>
+            <option value="percent_move_above">Percent move above</option>
+            <option value="percent_move_below">Percent move below</option>
+          </select>
         </div>
         <div>
           <label htmlFor="alert-price" className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Target Price
+            {isPercentMove ? "Threshold (%)" : "Target Price"}
           </label>
           <input
             id="alert-price"
             type="number"
             value={price}
             onChange={(e) => { setPrice(e.target.value); if (fieldError) setFieldError(null); }}
-            placeholder="150.00"
+            placeholder={isPercentMove ? "5.0" : "150.00"}
             step={0.01}
             // BUG-042 — `min={0}` allowed 0; require strictly positive.
             // `0.01` is the smallest meaningful price on US equities.
@@ -213,6 +234,46 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
           </Button>
         </div>
       </div>
+      {/* Round-5 F-7: reference picker only matters for percent-move
+          alerts. Hidden when the condition is the legacy absolute-price
+          form so existing users don't see new fields appear. */}
+      {isPercentMove && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <div>
+            <label htmlFor="alert-reference" className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Reference
+            </label>
+            <select
+              id="alert-reference"
+              value={reference}
+              onChange={(e) => setReference(e.target.value as AlertReferenceUI)}
+              className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground"
+            >
+              <option value="static">Static (you supply)</option>
+              <option value="prev_close">Previous close</option>
+              <option value="session_open">Session open</option>
+            </select>
+          </div>
+          {reference === "static" && (
+            <div>
+              <label htmlFor="alert-reference-price" className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Reference Price ($)
+              </label>
+              <input
+                id="alert-reference-price"
+                type="number"
+                value={referencePrice}
+                onChange={(e) => { setReferencePrice(e.target.value); if (fieldError) setFieldError(null); }}
+                placeholder="150.00"
+                step={0.01}
+                min={0.01}
+                max={ALERT_PRICE_MAX}
+                className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
+              />
+            </div>
+          )}
+        </div>
+      )}
       {/* BUG-042 — inline error under the form so the validation reason
           stays visible even after the toast animates out. */}
       {fieldError && (
@@ -289,30 +350,44 @@ function AlertRow({
       </div>
 
       {/* Symbol — mono (alphabetic, not numeric) so tickers stay aligned
-          in the column without the tabular-nums misapplication. */}
-      <span className="w-16 shrink-0 font-mono font-semibold text-foreground">
+          in the column without the tabular-nums misapplication. OCC
+          contracts are 21 chars, so we widen the column for those. */}
+      <span
+        className={cn(
+          "shrink-0 font-mono font-semibold text-foreground",
+          alert.symbol.length > 8 ? "w-44 text-[11px]" : "w-16",
+        )}
+      >
         {alert.symbol}
       </span>
 
-      {/* Condition */}
-      <span className="w-20 shrink-0">
+      {/* Condition — Round-5 F-7: handles all four condition values. */}
+      <span className="w-32 shrink-0">
         <Badge
-          variant={alert.condition === "above" ? "default" : "destructive"}
+          variant={
+            alert.condition === "above" || alert.condition === "percent_move_above"
+              ? "default"
+              : "destructive"
+          }
           className="text-[10px] px-1.5"
         >
-          {alert.condition === "above" ? (
+          {alert.condition === "above" || alert.condition === "percent_move_above" ? (
             <ArrowUp className="h-2.5 w-2.5 mr-0.5" />
           ) : (
             <ArrowDown className="h-2.5 w-2.5 mr-0.5" />
           )}
-          {alert.condition}
+          {alert.condition.replace("percent_move_", "")}
+          {alert.condition.startsWith("percent_move") && " %"}
         </Badge>
       </span>
 
       {/* Target Price — t-num-md token so prices sit in the 16px mono
-          tabular row the rest of the polished pages use. */}
+          tabular row the rest of the polished pages use. Percent-move
+          alerts render the threshold as a percentage. */}
       <span className="w-24 shrink-0 t-num-md text-foreground">
-        ${(alert.price ?? 0).toFixed(2)}
+        {alert.condition.startsWith("percent_move")
+          ? `${(alert.price ?? 0).toFixed(2)}%`
+          : `$${(alert.price ?? 0).toFixed(2)}`}
       </span>
 
       {/* Status */}
@@ -612,7 +687,7 @@ export default function AlertsPage() {
                     eyebrow style instead of ad-hoc 10px caps styling. */}
                 <span className="w-4 shrink-0" />
                 <span className="w-16 shrink-0 t-label">Symbol</span>
-                <span className="w-20 shrink-0 t-label">Condition</span>
+                <span className="w-32 shrink-0 t-label">Condition</span>
                 <span className="w-24 shrink-0 t-label">Target</span>
                 <span className="w-20 shrink-0 t-label">Status</span>
                 <span className="flex-1 t-label">Date</span>
@@ -684,7 +759,7 @@ export default function AlertsPage() {
               <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/50">
                 <span className="w-4 shrink-0" />
                 <span className="w-16 shrink-0 t-label">Symbol</span>
-                <span className="w-20 shrink-0 t-label">Condition</span>
+                <span className="w-32 shrink-0 t-label">Condition</span>
                 <span className="w-24 shrink-0 t-label">Target</span>
                 <span className="w-20 shrink-0 t-label">Status</span>
                 <span className="flex-1 t-label">Date</span>
