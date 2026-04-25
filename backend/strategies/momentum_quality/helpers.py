@@ -78,16 +78,23 @@ def close_panel_from_bars(
     if frame.empty:
         return None
 
+    # Round-6 / I-20: truncate to ``asof`` BEFORE forward-filling. Filling
+    # first would have leaked future closes back into earlier bars on
+    # any halted name, biasing the cross-sectional momentum scoring at
+    # the right edge of every backtest.
     wide = (
         frame.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
         .sort_index()
-        .ffill()
     )
+    cutoff = pd.Timestamp(asof, tz="UTC")
+    wide = wide[wide.index <= cutoff]
+    if wide is None or wide.empty:
+        return None
+    wide = wide.ffill()
     wide = _drop_halted_symbols(wide, asof=asof)
     if wide is None or wide.empty:
         return None
-    cutoff = pd.Timestamp(asof, tz="UTC")
-    return wide[wide.index <= cutoff]
+    return wide
 
 
 def _drop_halted_symbols(

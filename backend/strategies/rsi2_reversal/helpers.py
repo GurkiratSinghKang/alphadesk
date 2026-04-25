@@ -123,7 +123,11 @@ def has_upcoming_earnings(
     )
     if date_col is None:
         return False
-    horizon = asof + timedelta(days=window_days * 2)
+    # Round-6 / I-7: previously ``window_days * 2`` overshot the actual
+    # exclusion window the caller asks for, so e.g. a 5-day pre-earnings
+    # quarantine effectively became 10 calendar days. We trust the
+    # caller's intent and use ``window_days`` directly.
+    horizon = asof + timedelta(days=window_days)
     frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
     mask = (
         (earnings["symbol"].astype(str).str.upper() == sym.upper())

@@ -76,7 +76,7 @@ class VRPHarvestStrategy(Strategy):
         diagnostics: dict[str, Any] = {}
         warnings: list[str] = []
 
-        spy_closes = _extract_underlying_closes(input.bars, params.underlying)
+        spy_closes = _extract_underlying_closes(input.bars, params.underlying, asof=input.asof)
         if spy_closes is None or len(spy_closes) < _MIN_TRADING_BARS:
             diagnostics["warmup"] = True
             return StrategyResult(
@@ -121,8 +121,18 @@ class VRPHarvestStrategy(Strategy):
 def _extract_underlying_closes(
     bars: pd.DataFrame,
     underlying: str,
+    asof: Optional[date] = None,
 ) -> Optional[pd.Series]:
-    """Return the close-price series for ``underlying`` from ``input.bars``."""
+    """Return the close-price series for ``underlying`` from ``input.bars``.
+
+    Round-6 / I-14: ``asof`` lookahead guard. The runner pre-fetches a
+    ``lookback_days`` window with ``asof`` as the right edge — but a
+    multi-strategy run can stash a wider panel into ``state`` (e.g. when
+    a sibling strategy needed a longer window) and pass the SAME bars
+    frame through ``input.bars``. Without an explicit ``asof <=`` filter
+    here, the HV computation could leak future closes into earlier bars
+    and overstate realised vol. We trim to ``asof`` defensively.
+    """
     if bars is None or getattr(bars, "empty", True):
         return None
 
@@ -145,7 +155,26 @@ def _extract_underlying_closes(
             return None
         sub = sub.sort_values(ts_col)
         closes = sub["close"].astype(float)
-    return closes.dropna() if closes is not None else None
+        # When the flat path has a ts column, also reindex by it so the
+        # asof filter below has a comparable index.
+        if closes is not None and ts_col in sub.columns:
+            ts = pd.to_datetime(sub[ts_col], utc=False, errors="coerce")
+            closes = closes.copy()
+            closes.index = ts.values
+    if closes is None:
+        return None
+    closes = closes.dropna()
+    if asof is not None and not closes.empty:
+        cutoff = pd.Timestamp(asof)
+        try:
+            closes = closes[closes.index <= cutoff]
+        except TypeError:
+            # Index type might not support direct comparison (mixed dtypes);
+            # fall back to coercing both sides.
+            idx = pd.to_datetime(pd.Series(closes.index), errors="coerce")
+            mask = idx <= cutoff
+            closes = closes[mask.values]
+    return closes
 
 
 def _hv_value(

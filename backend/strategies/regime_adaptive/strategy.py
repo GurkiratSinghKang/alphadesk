@@ -219,14 +219,21 @@ def _close_panel(
     if frame.empty:
         return None
 
+    # Round-6 / I-20: truncate to ``asof`` BEFORE forward-filling. Filling
+    # first would have leaked future closes back into earlier bars on
+    # any symbol with a stale tail, biasing the regime classifier and
+    # backtest replay. The order is: pivot → sort → truncate → ffill.
     wide = (
         frame.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
         .sort_index()
-        .ffill()
     )
-    wide = _drop_halted_symbols(wide)
     cutoff = pd.Timestamp(asof, tz="UTC")
-    return wide[wide.index <= cutoff] if wide is not None else None
+    wide = wide[wide.index <= cutoff]
+    if wide is None or wide.empty:
+        return wide
+    wide = wide.ffill()
+    wide = _drop_halted_symbols(wide)
+    return wide
 
 
 def _classify_instantaneous(

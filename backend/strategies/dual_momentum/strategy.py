@@ -180,16 +180,23 @@ def _close_panel(
     if frame.empty:
         return None
 
+    # Round-6 / I-20: truncate to ``asof`` BEFORE forward-filling. Filling
+    # first would have leaked future closes back into earlier bars on
+    # any symbol with a stale tail (e.g. ETF that paused early), biasing
+    # the GEM relative-strength signal at the right edge of every backtest.
     wide = (
         frame.pivot_table(index="ts", columns="symbol", values="close", aggfunc="last")
         .sort_index()
-        .ffill()
     )
+    cutoff = pd.Timestamp(asof, tz="UTC")
+    wide = wide[wide.index <= cutoff]
+    if wide is None or wide.empty:
+        return None
+    wide = wide.ffill()
     wide = _drop_halted_symbols(wide)
     if wide is None or wide.empty:
         return None
-    cutoff = pd.Timestamp(asof, tz="UTC")
-    return wide[wide.index <= cutoff]
+    return wide
 
 
 def _compute_target(
