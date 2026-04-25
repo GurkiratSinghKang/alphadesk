@@ -49,7 +49,7 @@ function fakeLadderRow(over: Partial<LadderRow> = {}): LadderRow {
     ask: 1.5,
     mid: 1.45,
     iv: 0.42,
-    yield_pct: 0,
+    yieldPct: 0,
     pop: 0,
     theta: -0.05,
     gamma: 0.01,
