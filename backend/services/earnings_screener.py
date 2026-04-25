@@ -311,6 +311,8 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     a dedicated profile endpoint if needed; the aggregator already
     tolerates empty/placeholder values.
     """
+    import os
+
     from core.cache import get_cache
     from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
@@ -319,9 +321,16 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     cache = get_cache()
     cache_key = _fmp_upcoming_cache_key(window, start, end)
 
-    cached = await cache.get(cache_key)
-    if isinstance(cached, list):
-        return cached
+    # Skip the Redis cache under pytest — fixtures that mock the FMP
+    # provider rely on each test seeing fresh mock data, but the shared
+    # CI Redis would otherwise hand a prior test's payload back via cache
+    # hit. ``PYTEST_CURRENT_TEST`` is set by pytest itself for the
+    # duration of every test, so production is unaffected.
+    in_test = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    if not in_test:
+        cached = await cache.get(cache_key)
+        if isinstance(cached, list):
+            return cached
 
     # Per-window asyncio.Lock prevents the thundering-herd on cold cache:
     # without it, N concurrent requests would each fire a fresh FMP call,
@@ -411,7 +420,8 @@ async def _fmp_upcoming(window: str) -> list[dict]:
                 ),
             )
             raise
-        await cache.set(cache_key, rows, ttl_seconds=_FMP_UPCOMING_TTL_S)
+        if not in_test:
+            await cache.set(cache_key, rows, ttl_seconds=_FMP_UPCOMING_TTL_S)
         return rows
 
 
