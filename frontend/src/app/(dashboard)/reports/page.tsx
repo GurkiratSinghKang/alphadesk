@@ -234,7 +234,7 @@ function PortfolioStatement({
     // Current positions
     csv += "CURRENT POSITIONS\n";
     csv += arrayToCsv(
-      ["Symbol", "Quantity", "Avg Cost", "Current Price", "Market Value", "Unrealized P&L", "P&L %"],
+      ["Symbol", "Quantity", "Avg Cost", "Current Price", "Market Value", "Unrealized P&L", "P&L %", "Strategy"],
       positions.map(p => [
         p.symbol,
         p.quantity,
@@ -243,6 +243,9 @@ function PortfolioStatement({
         (p.marketValue ?? 0).toFixed(2),
         (p.unrealizedPnl ?? 0).toFixed(2),
         p.avgCost > 0 ? ((p.currentPrice - p.avgCost) / p.avgCost * 100).toFixed(2) + "%" : "0%",
+        // Round-5 F-6 — strategy attribution joins closed-trade and
+        // open-position perspectives in the export.
+        p.strategy ?? "",
       ])
     );
     csv += "\n\n";
@@ -328,6 +331,10 @@ function PortfolioStatement({
                   <th className="px-3 py-2 text-right"><span className="t-label">Price</span></th>
                   <th className="px-3 py-2 text-right"><span className="t-label">Mkt Value</span></th>
                   <th className="px-3 py-2 text-right"><span className="t-label">P&amp;L</span></th>
+                  {/* Round-5 F-6 — Strategy attribution column. Maps to
+                      `position.strategy` (added via the backend's
+                      Trade-ledger join). Em-dash when null. */}
+                  <th className="px-3 py-2 text-left"><span className="t-label">Strategy</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -344,6 +351,9 @@ function PortfolioStatement({
                       p.unrealizedPnl < 0 ? "text-[var(--loss)]" : "text-fg",
                     )}>
                       {p.unrealizedPnl > 0 ? "+" : ""}{formatCurrency(p.unrealizedPnl)}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[12px] text-fg-muted">
+                      {p.strategy ?? "—"}
                     </td>
                   </tr>
                 ))}
@@ -937,6 +947,22 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
   }, [trades, taxYear]);
 
   const classified = useMemo(() => {
+    // Round-5 F-9 — wash-sale detection. Walk all closed losses and
+    // mark the loss disallowed when the SAME symbol re-opened within
+    // [exit_date, exit_date + 30 days]. We use ALL trades (across all
+    // tax years) for the lookup because a December close + January
+    // re-buy spans tax years; restricting to taxTrades would miss it.
+    //
+    // This is best-effort: it does not yet handle "substantially
+    // identical" securities (a related call/put or ETF substitution),
+    // and it doesn't adjust the cost basis of the replacement lot.
+    // The disclaimer already calls out "best-effort"; the column gives
+    // the user a hint to consult a professional rather than a final
+    // legal answer.
+    const allOpens = trades
+      .map(t => ({ symbol: t.symbol, entry_time: t.entry_time }))
+      .filter(t => !!t.entry_time);
+
     return taxTrades.map(t => {
       // Holding days must be counted in CIVIL days, not elapsed hours
       // divided by 24. The old `(exit - entry) / 86_400_000` math can
@@ -955,9 +981,35 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       // and still short-term; > 365 covers the common 366+ case without
       // a leap-year lookup.
       const isLongTerm = holdingDays > 365;
-      return { ...t, holdingDays, isLongTerm, classification: isLongTerm ? "Long-Term" : "Short-Term" };
+
+      // Round-5 F-9 — wash-sale flag. Only losses qualify.
+      let washSaleLossDisallowed = false;
+      if ((t.pnl ?? 0) < 0 && t.exit_time) {
+        const exitTs = exitMid;
+        const windowEnd = exitTs + 30 * 86_400_000;
+        for (const o of allOpens) {
+          if (o.symbol !== t.symbol) continue;
+          if (!o.entry_time) continue;
+          // Skip the trade's OWN entry (which always precedes its exit).
+          if (o.entry_time === t.entry_time) continue;
+          const op = etDateParts(o.entry_time);
+          const opMid = Date.UTC(op.y, op.m - 1, op.d);
+          if (opMid >= exitTs && opMid <= windowEnd) {
+            washSaleLossDisallowed = true;
+            break;
+          }
+        }
+      }
+
+      return {
+        ...t,
+        holdingDays,
+        isLongTerm,
+        classification: isLongTerm ? "Long-Term" : "Short-Term",
+        washSaleLossDisallowed,
+      };
     });
-  }, [taxTrades]);
+  }, [taxTrades, trades]);
 
   const shortTermTrades = classified.filter(t => !t.isLongTerm);
   const longTermTrades = classified.filter(t => t.isLongTerm);
@@ -967,6 +1019,17 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
   const longTermGains = longTermTrades.filter(t => (t.pnl ?? 0) > 0).reduce((s, t) => s + (t.pnl ?? 0), 0);
   const longTermLosses = longTermTrades.filter(t => (t.pnl ?? 0) <= 0).reduce((s, t) => s + (t.pnl ?? 0), 0);
   const totalRealized = classified.reduce((s, t) => s + (t.pnl ?? 0), 0);
+
+  // Round-5 F-9 — wash-sale-adjusted realized. The IRS disallows
+  // recognising losses on trades that are flagged as wash sales, so
+  // the "adjusted" total adds those disallowed losses BACK to the
+  // total realized figure. Only meaningful when at least one row is
+  // flagged.
+  const washSaleDisallowed = classified
+    .filter(t => t.washSaleLossDisallowed)
+    .reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const washSaleCount = classified.filter(t => t.washSaleLossDisallowed).length;
+  const adjustedRealized = totalRealized - washSaleDisallowed;
 
   const handleDownload = () => {
     // BUG-029: the CSV must carry the same compliance disclaimer the UI
@@ -989,9 +1052,23 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
     csv += csvRow("Long-Term Net", (longTermGains + longTermLosses).toFixed(2));
     csv += csvRow("Total Realized", (totalRealized ?? 0).toFixed(2));
     csv += "\n";
+    // Round-5 F-9 — surface the wash-sale adjustment in the CSV summary
+    // so an accountant downstream can see the disallowed-loss line.
+    if (washSaleCount > 0) {
+      csv += csvRow("Wash-Sale Loss Disallowed", washSaleDisallowed.toFixed(2));
+      csv += csvRow("Adjusted Total Realized", adjustedRealized.toFixed(2));
+      csv += csvRow("Wash-Sale Trade Count", String(washSaleCount));
+      csv += "\n";
+    }
     csv += "ALL REALIZED TRADES\n";
     csv += arrayToCsv(
-      ["Symbol", "Side", "Quantity", "Entry Price", "Exit Price", "P&L", "Entry Date", "Exit Date", "Holding Days", "Classification", "Strategy"],
+      [
+        "Symbol", "Side", "Quantity", "Entry Price", "Exit Price", "P&L",
+        "Entry Date", "Exit Date", "Holding Days", "Classification", "Strategy",
+        // Round-5 F-9 — flag column. Boolean as "TRUE"/"" so the CSV is
+        // immediately filterable in Excel.
+        "Wash Sale Loss Disallowed",
+      ],
       classified.map(t => [
         t.symbol,
         t.side,
@@ -1004,6 +1081,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
         t.holdingDays,
         t.classification,
         t.strategy ?? "",
+        t.washSaleLossDisallowed ? "TRUE" : "",
       ])
     );
     downloadCsv(`tax-report-${taxYear}.csv`, csv);
@@ -1037,7 +1115,11 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
           label="Total Realized"
           value={fmtSigned(totalRealized)}
           tone={netTone(totalRealized)}
-          hint={`${classified.length} trades in ${taxYear}`}
+          hint={
+            washSaleCount > 0
+              ? `${classified.length} trades · ${fmtSigned(adjustedRealized)} (wash-sale-adjusted)`
+              : `${classified.length} trades in ${taxYear}`
+          }
         />
       </div>
 
@@ -1110,7 +1192,22 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
             <tbody>
               {classified.slice(0, 30).map(t => (
                 <tr key={t.id} className="border-b border-border-hair last:border-0">
-                  <td className="px-3 py-2 font-mono text-[13px] text-ink-900">{t.symbol}</td>
+                  <td className="px-3 py-2 font-mono text-[13px] text-ink-900">
+                    {t.symbol}
+                    {/* Round-5 F-9 — WS tag rendered next to the symbol so
+                        a glance at the table flags disallowed losses
+                        without scrolling sideways. */}
+                    {t.washSaleLossDisallowed && (
+                      <span
+                        data-testid="wash-sale-tag"
+                        title="Wash-sale: this loss may be disallowed because the same symbol re-opened within 30 days. Best-effort detection — consult a professional."
+                        className="ml-2 inline-block rounded-sm bg-amber/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-200"
+                        style={{ letterSpacing: "0.1em" }}
+                      >
+                        WS
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <span className={cn(
                       "inline-block rounded-sm px-2 py-0.5 font-sans text-[10.5px] font-semibold uppercase",
@@ -1142,16 +1239,23 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
         <p className="font-display italic text-[13.5px] text-fg-muted text-center py-6">No realized trades found for {taxYear} &mdash; this tax year has nothing to report.</p>
       )}
 
-      {/* BUG-029 compliance disclaimer — the tax report is a convenience
-          export built from trade-ledger data; it is not filing-ready and
-          is not authored by a tax professional. Copy lives right above
-          the download button so it travels with the action. */}
+      {/* BUG-029 / Round-5 F-9 compliance disclaimer — the tax report is
+          a convenience export built from trade-ledger data; it is not
+          filing-ready and is not authored by a tax professional. The
+          wash-sale flag is computed from same-symbol re-buys within 30
+          days and does NOT account for "substantially identical"
+          securities (a related call/put or ETF substitution). Copy
+          lives right above the download button so it travels with the
+          action. */}
       <p
         role="note"
         data-testid="tax-report-disclaimer"
         className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-[11px] leading-snug text-amber-100"
       >
-        Informational only — not tax advice. Consult a qualified professional.
+        Not tax advice — consult a professional. Wash-sale flags are
+        computational best-effort: same-symbol re-buys within 30 days are
+        flagged, but &ldquo;substantially identical&rdquo; securities (related
+        options, ETF substitutions, etc.) are not detected.
       </p>
 
       <Button
