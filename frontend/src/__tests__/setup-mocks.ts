@@ -110,6 +110,13 @@ vi.mock('@/lib/api', async (importOriginal) => {
       earnings: [],
       generatedAt: new Date().toISOString(),
       partial: false,
+      // Round-4: window-honesty fields. Safely defaulted so any test
+      // that reads `calendar.windowLabel` gets a stable string instead
+      // of undefined.
+      windowStart: "2026-04-20",
+      windowEnd: "2026-04-24",
+      windowLabel: "Apr 20 – Apr 24, 2026",
+      meta: { reason: "ok" as const },
     }),
     getEarningsDetail: vi.fn().mockResolvedValue({
       symbol: "NVDA", company: "Nvidia", sector: "Semis",
@@ -118,6 +125,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
       claudeStructured: null, claudeFullResearch: null,
       ivTermStructure: null, skew: null,
       news: [], partial: false,
+      // Round-4: degraded-path codes. Empty array on the happy path.
+      errorCodes: [],
       generatedAt: new Date().toISOString(),
     }),
     postEarningsFullResearch: vi.fn().mockResolvedValue({

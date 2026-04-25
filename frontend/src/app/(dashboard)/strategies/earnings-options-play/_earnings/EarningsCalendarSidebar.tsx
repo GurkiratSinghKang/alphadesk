@@ -2,13 +2,21 @@
 
 import { useMemo } from "react";
 import type { RefObject } from "react";
-import type { CalendarRow, EarningsCalendarFilters } from "@/types";
+import type {
+  CalendarRow,
+  CalendarMetaReason,
+  EarningsCalendarFilters,
+} from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
 
 export interface EarningsCalendarSidebarProps {
   rows: CalendarRow[];
   loading: boolean;
+  /** Round-4 (CLUSTER D/10): true during a refetch when stale rows are
+   *  still on screen. Drives `aria-busy` + dim-opacity styling without
+   *  flipping back to the loading skeleton. */
+  refetching?: boolean;
   error: string | null;
   selected: string | null;
   onSelect: (symbol: string) => void;
@@ -16,13 +24,17 @@ export interface EarningsCalendarSidebarProps {
   // row's button so focus can be programmatically restored after a
   // filter-triggered refetch.
   firstRowRef?: RefObject<HTMLButtonElement | null>;
+  /** Round-4 (CLUSTER A/2): backend-rendered window label for the header
+   *  ("§ CALENDAR · Apr 27 – May 1, 2026 · 12 reports"). */
+  windowLabel?: string | null;
+  /** Round-4 (CLUSTER A/3): backend hint for empty-state copy
+   *  (weekend_no_reports, fmp_unavailable, no_curated_matches). */
+  metaReason?: CalendarMetaReason | null;
   // B-107: pass the active filter set so the empty-state can name the
   // restricting filter (e.g. "… with IV rank ≥ 80").
   filters?: EarningsCalendarFilters;
   // B-107: parent hands in a reset callback so the empty-state "Loosen a
-  // filter" button can restore defaults. Previously a window-scoped
-  // CustomEvent that no-one listened to — the button was a no-op in prod
-  // (simplify review). Omit to hide the button entirely.
+  // filter" button can restore defaults.
   onResetFilters?: () => void;
 }
 
@@ -37,7 +49,17 @@ function buildSymbolDeeplink(sym: string): string {
 }
 
 export default function EarningsCalendarSidebar({
-  rows, loading, error, selected, onSelect, firstRowRef, filters, onResetFilters,
+  rows,
+  loading,
+  refetching = false,
+  error,
+  selected,
+  onSelect,
+  firstRowRef,
+  windowLabel,
+  metaReason,
+  filters,
+  onResetFilters,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -54,16 +76,26 @@ export default function EarningsCalendarSidebar({
 
   if (loading && rows.length === 0) {
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
+      <aside
+        data-slot="earnings-calendar-sidebar"
+        aria-busy="true"
+        className="rounded border border-[color:var(--fg-border)] p-3"
+      >
         <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading earnings…</p>
       </aside>
     );
   }
 
   if (!loading && rows.length === 0) {
-    // B-107: name the restricting filter + (if the parent provided a
-    // reset callback) offer a one-click way out of the empty state.
-    const emptyMessage = buildEmptyStateMessage(filters);
+    // Round-4 (CLUSTER A/3): backend reason hints take precedence over
+    // the locally-derived "name the restricting filter" message — the
+    // weekend-no-reports case is what Persona R caught reading as a
+    // generic "no matches" screen.
+    const emptyMessage = buildEmptyStateMessage({
+      reason: metaReason ?? null,
+      windowLabel: windowLabel ?? null,
+      filters,
+    });
     return (
       <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
         <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">
@@ -86,20 +118,29 @@ export default function EarningsCalendarSidebar({
     );
   }
 
-  // B-108: summary row above the day groups names the active window and
-  // the total number of reporting symbols (pluralized via fmtPlural).
-  const windowLabel =
-    (filters?.window ?? "both") === "current" ? "This week"
-    : (filters?.window ?? "both") === "next"  ? "Next week"
-    : "This + next week";
+  // Round-4 (CLUSTER A/2): prefer the backend-rendered windowLabel for
+  // the header. Falls back to a locally-derived label if the response
+  // didn't include one (older backend or test fixture).
+  const headerLabel =
+    windowLabel ??
+    ((filters?.window ?? "both") === "current"
+      ? "This week"
+      : (filters?.window ?? "both") === "next"
+      ? "Next week"
+      : "This + next week");
 
   return (
     <aside
       data-slot="earnings-calendar-sidebar"
-      className="self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3"
+      data-refetching={refetching || undefined}
+      aria-busy={refetching || undefined}
+      className={cn(
+        "self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3 transition-opacity",
+        refetching && "opacity-70",
+      )}
     >
       <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
-        § CALENDAR <span className="text-[color:var(--fg-muted)]">· {windowLabel} · {fmtPlural(rows.length, "report")}</span>
+        § CALENDAR <span className="text-[color:var(--fg-muted)]">· {headerLabel} · {fmtPlural(rows.length, "report")}</span>
       </p>
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
@@ -186,17 +227,42 @@ function formatDateLabel(iso: string): string {
   return fmtDate(iso, { weekday: "short", month: "2-digit", day: "2-digit" });
 }
 
-// B-107: compose a human sentence that names the currently-restricting
-// filters so the user knows which knob to loosen. Falls back to a
-// generic message when `filters` wasn't passed.
-function buildEmptyStateMessage(filters: EarningsCalendarFilters | undefined): string {
+/**
+ * Compose an empty-state message. Backend `metaReason` hints take
+ * precedence (Round-4); otherwise we fall back to the previous B-107
+ * behaviour of naming whichever filters are restricting the result set.
+ */
+export function buildEmptyStateMessage({
+  reason,
+  windowLabel,
+  filters,
+}: {
+  reason: CalendarMetaReason | null;
+  windowLabel: string | null;
+  filters: EarningsCalendarFilters | undefined;
+}): string {
+  // Round-4 (CLUSTER A/3): weekend / provider-down hints come from the
+  // backend and trump the locally-derived filter narration.
+  if (reason === "weekend_no_reports") {
+    return "No earnings reports today (Saturday). Markets reopen Monday — see the rest of the week below.";
+  }
+  if (reason === "fmp_unavailable") {
+    return "Earnings calendar provider unavailable — try again in a moment.";
+  }
+  if (reason === "no_curated_matches") {
+    return windowLabel
+      ? `No curated matches for ${windowLabel} — loosen filters.`
+      : "No curated matches — loosen filters.";
+  }
+
+  // B-107 fallback: name whichever filters are restricting the set.
   if (!filters) return "No earnings match —";
   const windowKey = filters.window ?? "both";
-  const windowLabel =
+  const windowText =
     windowKey === "current" ? "the current week"
     : windowKey === "next"  ? "the next week"
     : "the current/next week";
-  const parts: string[] = [`No earnings in ${windowLabel}`];
+  const parts: string[] = [`No earnings in ${windowText}`];
   if (filters.minIvRank != null && filters.minIvRank > 0) {
     parts.push(`with IV rank \u2265 ${filters.minIvRank}`);
   }

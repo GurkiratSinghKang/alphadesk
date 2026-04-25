@@ -1,7 +1,8 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
-import { render, fireEvent } from "@testing-library/react";
+import { render, fireEvent, act } from "@testing-library/react";
 import ClaudeThesisCard from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/ClaudeThesisCard";
+import { RateLimitError } from "@/lib/api";
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
 
 const structured: ClaudeStructured = {
@@ -74,5 +75,55 @@ describe("ClaudeThesisCard", () => {
       <ClaudeThesisCard structured={null} full={null} running={false} onRunFull={() => {}} />,
     );
     expect(container.textContent).toMatch(/analysis pending|not yet|unavailable/i);
+  });
+
+  // ── Round-4 additions ─────────────────────────────────────
+
+  it("renders a live countdown when error is a RateLimitError (CLUSTER D/11)", () => {
+    vi.useFakeTimers();
+    try {
+      const err = new RateLimitError("/api/v1/earnings/NVDA/full-research", 5);
+      const { container, getByRole } = render(
+        <ClaudeThesisCard
+          structured={structured}
+          full={null}
+          running={false}
+          error={err}
+          onRunFull={() => {}}
+        />,
+      );
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert?.textContent).toMatch(/try again in 5s/i);
+      // Button is disabled while countdown > 0.
+      const btn = getByRole("button", { name: /run full research/i }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+
+      // Advance the countdown.
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(alert?.textContent).toMatch(/try again in 3s/i);
+
+      // Run it down to 0.
+      act(() => { vi.advanceTimersByTime(3500); });
+      expect(alert?.textContent).toMatch(/rate limit cleared/i);
+      expect(btn.disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders a generic alert for non-RateLimit errors (CLUSTER D/11)", () => {
+    const err = new Error("network down");
+    const { container } = render(
+      <ClaudeThesisCard
+        structured={structured}
+        full={null}
+        running={false}
+        error={err}
+        onRunFull={() => {}}
+      />,
+    );
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toMatch(/network down/i);
   });
 });

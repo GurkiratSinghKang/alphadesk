@@ -49,4 +49,63 @@ describe("EarningsDetailPanel", () => {
     );
     expect(container.textContent).toMatch(/provider down|error/i);
   });
+
+  // ── Round-4 additions ─────────────────────────────────────
+
+  it("surfaces a partial-data banner when partial=true and errorCodes has codes (CLUSTER D/12)", () => {
+    const partialDetail: EarningsDetail = {
+      ...detail,
+      partial: true,
+      errorCodes: ["chain_demo", "iv_unavailable"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={partialDetail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const banner = container.querySelector('[data-slot="partial-data-banner"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toMatch(/synthetic data/i);
+    expect(banner?.textContent).toMatch(/IV history unavailable/i);
+  });
+
+  it("renders chain_demo banner copy referencing broker connection (CLUSTER D/12)", () => {
+    const partialDetail: EarningsDetail = {
+      ...detail,
+      partial: true,
+      errorCodes: ["chain_demo"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={partialDetail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const items = container.querySelectorAll('[data-slot="partial-data-banner-item"]');
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toMatch(/broker connection unavailable/i);
+  });
+
+  it("dims and sets aria-busy when refetching=true (CLUSTER D/10)", () => {
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={detail}
+        loading={false}
+        refetching
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const panel = container.querySelector('[data-slot="earnings-detail-panel"]');
+    expect(panel?.getAttribute("aria-busy")).toBe("true");
+    expect(panel?.className).toMatch(/opacity-70/);
+  });
 });

@@ -46,4 +46,30 @@ describe("StrikeLadder", () => {
     const { container } = render(<StrikeLadder ladder={null} />);
     expect(container.textContent).toMatch(/no|unavailable|—/i);
   });
+
+  // ── Round-4 additions ──────────────────────────────────────
+
+  it("renders a DEMO DATA badge when ladder.isDemo is true (CLUSTER D/13)", () => {
+    const demoLadder: LadderShape = { ...ladder, isDemo: true };
+    const { container } = render(<StrikeLadder ladder={demoLadder} />);
+    const badge = container.querySelector('[data-slot="strike-ladder-demo-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toMatch(/DEMO DATA/i);
+  });
+
+  it("does not render DEMO DATA badge when isDemo is false / undefined", () => {
+    const { container: c1 } = render(<StrikeLadder ladder={{ ...ladder, isDemo: false }} />);
+    expect(c1.querySelector('[data-slot="strike-ladder-demo-badge"]')).toBeNull();
+    const { container: c2 } = render(<StrikeLadder ladder={ladder} />);
+    expect(c2.querySelector('[data-slot="strike-ladder-demo-badge"]')).toBeNull();
+  });
+
+  it("wraps the ladder in a scrollable region with role=region (CLUSTER E/15)", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} />);
+    const region = container.querySelector('[role="region"]');
+    expect(region).not.toBeNull();
+    expect(region?.getAttribute("aria-label")).toMatch(/scrollable/i);
+    expect(region?.getAttribute("tabIndex")).toBe("0");
+    expect(region?.className).toMatch(/overflow-x-auto/);
+  });
 });

@@ -29,11 +29,24 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
   return (
     <section data-slot="strike-ladder">
       <div className="mt-4 flex items-baseline justify-between gap-2">
-        <h3 className="t-display-section italic text-[13px]">
-          Strike ladder{" "}
-          <span className="t-label">
-            · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlyingPrice, "USD")}
+        <h3 className="t-display-section italic text-[13px] flex items-center gap-2">
+          <span>
+            Strike ladder{" "}
+            <span className="t-label">
+              · expiry {ladder.expiry} · underlying {fmtCurrency(ladder.underlyingPrice, "USD")}
+            </span>
           </span>
+          {/* Round-4 (CLUSTER D/13): demo-data badge. The wire field is
+              optional — omitted on real broker data, true when synthetic. */}
+          {ladder.isDemo && (
+            <span
+              data-slot="strike-ladder-demo-badge"
+              className="not-italic rounded border border-[color:var(--brand)] px-1.5 py-0.5 t-label u-brand"
+              title="This ladder is synthetic / demo data — broker connection unavailable."
+            >
+              ⚠ DEMO DATA
+            </span>
+          )}
         </h3>
         {hasGreeks && (
           <button
@@ -48,35 +61,47 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
           </button>
         )}
       </div>
-      <table className="mt-1 w-full table-auto border-separate border-spacing-0 t-mono text-[12.5px] tabular-nums">
-        <thead>
-          <tr className="t-ladder-row t-ladder-row--head">
-            <th scope="col" className="text-left font-normal">STRIKE</th>
-            <th scope="col" className="text-left font-normal">Δ</th>
-            <th scope="col" className="text-left font-normal">MID</th>
-            <th scope="col" className="text-left font-normal">IV</th>
-            <th scope="col" className="text-left font-normal">YLD</th>
-            <th scope="col" className="text-left font-normal">POP</th>
-            {showGreeks && (
-              <>
-                <th scope="col" className="text-left font-normal" id="ladder-greeks-cols">θ</th>
-                <th scope="col" className="text-left font-normal">γ</th>
-                <th scope="col" className="text-left font-normal">ν</th>
-              </>
-            )}
-            <th scope="col" className="text-right font-normal">SIDE</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ladder.rows.map((r) => (
-            <LadderDataRow
-              key={`${r.side}-${r.bucket}-${r.strike}`}
-              row={r}
-              showGreeks={showGreeks}
-            />
-          ))}
-        </tbody>
-      </table>
+      {/* Round-4 (CLUSTER E/15): wrap the ladder in a scrollable region
+          so narrow viewports get horizontal scroll instead of overflow
+          clip. role=region + tabIndex makes it keyboard-scrollable +
+          announceable. Sticky <thead> keeps the column labels visible
+          while scrolling within the panel column. */}
+      <div
+        role="region"
+        aria-label="Strike ladder, scrollable"
+        tabIndex={0}
+        className="mt-1 overflow-x-auto"
+      >
+        <table className="w-full table-auto border-separate border-spacing-0 t-mono text-[12.5px] tabular-nums">
+          <thead className="sticky top-0 bg-[color:var(--bg-card)] z-10">
+            <tr className="t-ladder-row t-ladder-row--head">
+              <th scope="col" className="text-left font-normal">STRIKE</th>
+              <th scope="col" className="text-left font-normal">Δ</th>
+              <th scope="col" className="text-left font-normal">MID</th>
+              <th scope="col" className="text-left font-normal">IV</th>
+              <th scope="col" className="text-left font-normal">YLD</th>
+              <th scope="col" className="text-left font-normal">POP</th>
+              {showGreeks && (
+                <>
+                  <th scope="col" className="text-left font-normal" id="ladder-greeks-cols">θ</th>
+                  <th scope="col" className="text-left font-normal">γ</th>
+                  <th scope="col" className="text-left font-normal">ν</th>
+                </>
+              )}
+              <th scope="col" className="text-right font-normal">SIDE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ladder.rows.map((r) => (
+              <LadderDataRow
+                key={`${r.side}-${r.bucket}-${r.strike}`}
+                row={r}
+                showGreeks={showGreeks}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

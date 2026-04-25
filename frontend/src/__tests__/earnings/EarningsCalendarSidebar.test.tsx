@@ -150,4 +150,71 @@ describe("EarningsCalendarSidebar", () => {
     expect(openSpy).toHaveBeenCalled();
     openSpy.mockRestore();
   });
+
+  // ── Round-4 additions ──────────────────────────────────────
+
+  it("renders the backend windowLabel in the § CALENDAR header (CLUSTER A/2)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        windowLabel="Apr 27 – May 1, 2026"
+      />,
+    );
+    const summary = container.querySelector('[data-slot="calendar-summary"]');
+    expect(summary?.textContent).toContain("Apr 27 – May 1, 2026");
+    expect(summary?.textContent).toMatch(/3\s+reports/i);
+  });
+
+  it("renders weekend-aware empty state when meta.reason === weekend_no_reports (CLUSTER A/3)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={[]}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        metaReason="weekend_no_reports"
+      />,
+    );
+    expect(container.textContent).toMatch(/Saturday/i);
+    expect(container.textContent).toMatch(/Markets reopen Monday/i);
+  });
+
+  it("dims and sets aria-busy when refetching=true (CLUSTER D/10)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        refetching
+        error={null}
+        selected="NVDA"
+        onSelect={() => {}}
+      />,
+    );
+    const aside = container.querySelector('[data-slot="earnings-calendar-sidebar"]');
+    expect(aside?.getAttribute("aria-busy")).toBe("true");
+    expect(aside?.getAttribute("data-refetching")).toBeTruthy();
+    expect(aside?.className).toMatch(/opacity-70/);
+  });
+
+  it("forwards firstRowRef to the first symbol button (B-NEW-3)", () => {
+    const ref: { current: HTMLButtonElement | null } = { current: null };
+    render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        firstRowRef={ref}
+      />,
+    );
+    expect(ref.current).not.toBeNull();
+    // First row in our fixture is NVDA on 04-23 (sorted ASC).
+    expect(ref.current?.textContent).toContain("NVDA");
+  });
 });

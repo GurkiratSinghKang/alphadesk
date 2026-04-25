@@ -247,6 +247,13 @@ export type EarningsTopSetup = "short call" | "cash-secured put" | "short strang
 export type EarningsOptionSide = "call" | "put";
 export type EarningsBucket = "15Δ" | "30Δ" | "ATM";
 
+/**
+ * Round-4 backend tags every calendar row with a state describing where
+ * the report falls relative to "now" in the NY market date — drives the
+ * UI's sticky/today highlights and per-row weekend filtering.
+ */
+export type EarningsReportState = "upcoming" | "today_pre" | "today_done" | "past";
+
 export interface CalendarRow {
   symbol: string;
   company: string;
@@ -265,6 +272,25 @@ export interface CalendarRow {
   claudeVerdict: EarningsVerdict | null;
   claudeConfidence: number | null;
   topSetup: EarningsTopSetup | null;
+  /** Round-4: state of this earnings report relative to today. Optional —
+   *  older fixtures predating the field don't need to provide it. */
+  reportState?: EarningsReportState;
+}
+
+/**
+ * Round-4: backend now reports _why_ the calendar slice came back with
+ * a particular shape so the UI can write copy that matches the actual
+ * data condition (e.g. weekend-with-no-reports).
+ */
+export type CalendarMetaReason =
+  | "ok"
+  | "no_curated_matches"
+  | "fmp_unavailable"
+  | "weekend_no_reports";
+
+export interface CalendarMeta {
+  reason?: CalendarMetaReason;
+  beforeCurated?: number;
 }
 
 export interface CalendarResponse {
@@ -280,6 +306,16 @@ export interface CalendarResponse {
    * thread an empty array through every invocation.
    */
   validation_errors?: Array<{ symbol: string | null; error: string }>;
+  /** Round-4: ISO date "YYYY-MM-DD" — start of the window in NY market
+   *  date. Optional so older fixtures don't need to thread it. */
+  windowStart?: string;
+  /** Round-4: ISO date "YYYY-MM-DD" inclusive — end of the window. */
+  windowEnd?: string;
+  /** Round-4: backend-rendered label like "Apr 27 – May 1, 2026". */
+  windowLabel?: string;
+  /** Round-4: why we got this set of rows. Optional / partial — UI only
+   *  reads it when present. */
+  meta?: CalendarMeta;
 }
 
 export interface LadderRow {
@@ -304,6 +340,10 @@ export interface StrikeLadder {
   expiry: string;
   underlyingPrice: number;
   rows: LadderRow[];
+  /** Round-4: true when the chain is synthetic / demo data — UI surfaces
+   *  a "DEMO DATA" badge in the StrikeLadder header. Optional so older
+   *  fixtures don't need it. */
+  isDemo?: boolean;
 }
 
 export interface ClaudeStructured {
@@ -395,6 +435,19 @@ export interface EarningsNewsArticle {
   url: string;
 }
 
+/**
+ * Round-4: backend tags partial-data responses with an enumerated list
+ * of degraded-path codes so the UI can surface a precise banner. Open
+ * union — UI maps unknown codes to a generic message.
+ */
+export type EarningsErrorCode =
+  | "stub_detail"
+  | "news_unavailable"
+  | "chain_demo"
+  | "iv_unavailable"
+  | "metrics_unavailable"
+  | "hv_unavailable";
+
 export interface EarningsDetail {
   symbol: string;
   company: string;
@@ -415,6 +468,12 @@ export interface EarningsDetail {
   news: EarningsNewsArticle[];
   partial: boolean;
   generatedAt: string;
+  /**
+   * Round-4: codes for known-degraded data paths so the UI can surface
+   * a precise banner. Empty array on the happy path. Optional so test
+   * fixtures pre-dating the field still type-check.
+   */
+  errorCodes?: EarningsErrorCode[];
 }
 
 export interface EarningsCalendarFilters {

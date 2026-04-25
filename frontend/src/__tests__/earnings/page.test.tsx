@@ -274,6 +274,63 @@ describe("Earnings Options Play page", () => {
   });
 });
 
+describe("Earnings Options Play — round-4 fixes", () => {
+  it("Esc dispatches clear-selection event and the page resets selectedSymbol (B-NEW-2)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis",
+          reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+          price: 201.7, change: -1.4, changePct: -0.007, ivRank: 78,
+          premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
+          expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
+          claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
+          topSetup: "short strangle" },
+      ],
+      generatedAt: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      // Auto-selected NVDA → detail panel mounted with detail-header.
+      expect(container.querySelector('[data-slot="detail-header"]')).not.toBeNull();
+    });
+
+    // Hit Esc — the panel listens for keydown and dispatches the event
+    // the page handles. The page resets selectedSymbol → empty state.
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="detail-header"]')).toBeNull();
+      expect(container.textContent).toMatch(/select a symbol/i);
+    });
+  });
+
+  it("Esc-clear is sticky: subsequent calendar refetch does not auto-rehydrate (B-NEW-2)", async () => {
+    vi.mocked(api.getEarningsCalendar).mockResolvedValue({
+      earnings: [
+        { symbol: "NVDA", company: "Nvidia", sector: "Semis",
+          reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
+          price: 201.7, change: -1.4, changePct: -0.007, ivRank: 78,
+          premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
+          expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
+          claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
+          topSetup: "short strangle" },
+      ],
+      generatedAt: new Date().toISOString(), partial: false,
+    });
+    const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="detail-header"]')).not.toBeNull();
+    });
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="detail-header"]')).toBeNull();
+    });
+  });
+});
+
 describe("Earnings Options Play — full flow", () => {
   it("end-to-end: calendar → select → detail renders → run full research → trade deep-link", async () => {
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({

@@ -4,7 +4,15 @@
  * `fmtRelativeTime` formats an ISO datetime as a short English relative
  * phrase ("5 m ago", "2 h ago", "just now") using Intl.RelativeTimeFormat
  * so it's locale-aware and falls back gracefully for bad input.
+ *
+ * Round-4 adds:
+ *   - `getFreshness` — bucket a timestamp into fresh/stale/expired.
+ *   - `useTick` — re-render hook that bumps state on a fixed cadence
+ *     so consumers can rely on `Date.now()` in their render path
+ *     without freezing the displayed timestamp.
  */
+
+import { useEffect, useState } from "react";
 
 /**
  * Returns a short relative-time string for an ISO datetime. Returns "—"
@@ -55,4 +63,54 @@ export function fmtRelativeTime(iso: string | null | undefined, now: Date = new 
   const suffix = diffSec >= 0 ? " ago" : " from now";
   const unitAbbr: Record<string, string> = { second: "s", minute: "m", hour: "h", day: "d" };
   return `${value} ${unitAbbr[unit] ?? unit}${suffix}`;
+}
+
+export type FreshnessLevel = "fresh" | "stale" | "expired";
+
+/**
+ * Bucket a timestamp into a freshness level for the detail panel pill.
+ * - fresh:   < 30s old
+ * - stale:   < 5m old
+ * - expired: ≥ 5m old (or unknown)
+ */
+export function getFreshness(
+  input: string | number | Date | null | undefined,
+  now: number = Date.now(),
+): FreshnessLevel {
+  if (input == null) return "expired";
+  let then: number;
+  if (input instanceof Date) {
+    then = input.getTime();
+  } else if (typeof input === "number") {
+    then = input;
+  } else {
+    const parsed = Date.parse(input);
+    if (!Number.isFinite(parsed)) return "expired";
+    then = parsed;
+  }
+  const diffSec = Math.max(0, (now - then) / 1000);
+  if (diffSec < 30) return "fresh";
+  if (diffSec < 300) return "stale";
+  return "expired";
+}
+
+/**
+ * Force-rerender hook: bumps a counter every `intervalMs` so consumers
+ * can rely on `Date.now()` in their render path without freezing the
+ * displayed timestamp. Used by `DetailHeader` (15s tick) and `NewsFeed`
+ * (60s tick). Don't use in components whose data doesn't decay (the
+ * MetricsStrip and StrikeLadder rerender on data refresh, not the
+ * wall clock).
+ *
+ * Pass `0` (or a negative number) to disable the interval — useful in
+ * tests where fake timers haven't been set up.
+ */
+export function useTick(intervalMs: number = 30_000): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (intervalMs <= 0) return;
+    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return tick;
 }

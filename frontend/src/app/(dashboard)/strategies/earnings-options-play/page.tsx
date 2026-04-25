@@ -18,6 +18,14 @@ import FiltersBar from "./_earnings/FiltersBar";
 import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
 
 /**
+ * Round-4: tags _why_ a selection changed so DetailHeader can decide
+ * whether to autofocus its <h2>. Pointer clicks should NOT steal focus
+ * mid-click; keyboard / URL navigations should land focus on the new
+ * symbol so SR users keep their place.
+ */
+export type SelectionSource = "pointer" | "keyboard" | "url" | null;
+
+/**
  * /strategies/earnings-options-play — research screener.
  *
  * Layout C (Bloomberg): left calendar sidebar + right persistent detail panel.
@@ -28,6 +36,17 @@ import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
  * Auto stale-while-revalidate, one retry on transient 5xx, AbortSignal-based
  * cancellation when filters/symbol change. The page only owns UI state
  * (`filters`, `selectedSymbol`) plus the URL sync side-effect.
+ *
+ * Round-4 fixes:
+ *  - Esc dispatches `alphadesk:earnings-clear-selection` from
+ *    EarningsDetailPanel — the page listens and resets `selectedSymbol`,
+ *    setting `userClearedRef` so the auto-select effect doesn't
+ *    immediately rehydrate (B-NEW-2).
+ *  - B-56 focus props (firstRowRef, onSettleRef) are wired so the
+ *    keyboard flow goes filters → list (B-NEW-3).
+ *  - DetailHeader autofocus only fires on keyboard/url selections
+ *    (B-NEW-4).
+ *  - Title uses backend windowLabel when present (CLUSTER A).
  */
 export default function EarningsOptionsPlayPage() {
   const queryClient = useQueryClient();
@@ -35,11 +54,30 @@ export default function EarningsOptionsPlayPage() {
   const [filters, setFilters] = useState<EarningsCalendarFilters>(() =>
     readFiltersFromURL(),
   );
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(() => {
+  const [selectedSymbol, setSelectedSymbolState] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
     return params.get("symbol");
   });
+
+  // Round-4 (B-NEW-4): track the source of the last selection change so
+  // DetailHeader knows whether to refocus its <h2>.
+  const lastSelectionSourceRef = useRef<SelectionSource>(null);
+  const setSelectedSymbol = useCallback(
+    (sym: string | null, source: SelectionSource = null) => {
+      lastSelectionSourceRef.current = source;
+      setSelectedSymbolState(sym);
+    },
+    [],
+  );
+
+  // Round-4 (B-NEW-2): user explicitly cleared via Esc — auto-select
+  // effect should skip the next rehydrate.
+  const userClearedRef = useRef(false);
+
+  // Round-4 (B-NEW-3 / B-56): focus restoration target for the first
+  // sidebar row.
+  const firstRowRef = useRef<HTMLButtonElement | null>(null);
 
   // ── Calendar ─────────────────────────────────────────────
   const calendarQuery = useQuery({
@@ -48,6 +86,10 @@ export default function EarningsOptionsPlayPage() {
   });
   const calendar = calendarQuery.data ?? null;
   const loadingCalendar = calendarQuery.isLoading;
+  // CLUSTER D (10): isFetching covers the refetch case (stale data on
+  // screen + a fresh request in flight). Sidebar uses this to dim itself
+  // and set aria-busy without flipping back to the loading skeleton.
+  const refetchingCalendar = calendarQuery.isFetching && !calendarQuery.isLoading;
   const calendarError = calendarQuery.error
     ? (calendarQuery.error as Error).message
     : null;
@@ -60,25 +102,34 @@ export default function EarningsOptionsPlayPage() {
   });
   const detail = selectedSymbol ? detailQuery.data ?? null : null;
   const loadingDetail = !!selectedSymbol && detailQuery.isLoading;
+  const refetchingDetail =
+    !!selectedSymbol && detailQuery.isFetching && !detailQuery.isLoading;
   const detailError = detailQuery.error ? (detailQuery.error as Error).message : null;
 
   // ── Auto-select first symbol when calendar loads ─────────
   // Runs post-fetch (separate from the query) to keep the query function
   // pure. If current selection is not in the fresh list, fall back to row 0.
+  // Round-4: skip when the user just cleared with Esc — they explicitly
+  // chose empty state, don't fight them.
   useEffect(() => {
     if (!calendar) return;
     if (calendar.earnings.length === 0) {
-      if (selectedSymbol !== null) setSelectedSymbol(null);
+      if (selectedSymbol !== null) setSelectedSymbol(null, null);
       return;
     }
+    if (userClearedRef.current) return;
     const stillValid =
       selectedSymbol && calendar.earnings.some((r) => r.symbol === selectedSymbol);
     if (!stillValid) {
-      setSelectedSymbol(calendar.earnings[0].symbol);
+      // Auto-fill is treated as a URL-equivalent selection (deeplink-y) —
+      // DetailHeader is allowed to focus the heading.
+      setSelectedSymbol(calendar.earnings[0].symbol, "url");
     }
-  }, [calendar, selectedSymbol]);
+  }, [calendar, selectedSymbol, setSelectedSymbol]);
 
   // ── Full research (on-demand Claude Opus note) ───────────
+  // CLUSTER D (11): expose the mutation error so ClaudeThesisCard can
+  // render an inline alert (and a live RateLimitError countdown).
   const fullResearchMutation = useMutation({
     mutationFn: (symbol: string) => postEarningsFullResearch(symbol),
     onSuccess: (full) => {
@@ -91,6 +142,7 @@ export default function EarningsOptionsPlayPage() {
     },
   });
   const runningFull = fullResearchMutation.isPending;
+  const fullError = fullResearchMutation.error as Error | null;
   const runFull = useCallback(() => {
     if (!selectedSymbol) return;
     fullResearchMutation.mutate(selectedSymbol);
@@ -110,6 +162,7 @@ export default function EarningsOptionsPlayPage() {
   // ── B-98: popstate listener — browser back/forward re-reads state
   // from the URL. Without this, history entries pushed by B-39 would
   // only affect the address bar; the page state would be stale.
+  // Round-4: source = "url" so DetailHeader is allowed to refocus.
   useEffect(() => {
     function onPopState() {
       if (typeof window === "undefined") return;
@@ -118,11 +171,27 @@ export default function EarningsOptionsPlayPage() {
       firstSyncRef.current = true;
       setFilters(readFiltersFromURL());
       const params = new URLSearchParams(window.location.search);
-      setSelectedSymbol(params.get("symbol"));
+      // popstate = re-engage the page; reset the "user cleared" flag.
+      userClearedRef.current = false;
+      setSelectedSymbol(params.get("symbol"), "url");
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [setSelectedSymbol]);
+
+  // Round-4 (B-NEW-2): listen for the Esc-clear event the detail panel
+  // has been dispatching since the start of the project. Set the
+  // "user cleared" flag so the auto-select effect doesn't immediately
+  // rehydrate the panel.
+  useEffect(() => {
+    const h = () => {
+      userClearedRef.current = true;
+      setSelectedSymbol(null, null);
+    };
+    document.addEventListener("alphadesk:earnings-clear-selection", h);
+    return () =>
+      document.removeEventListener("alphadesk:earnings-clear-selection", h);
+  }, [setSelectedSymbol]);
 
   // ── B-60: j/k and ArrowUp/ArrowDown shortcuts from useKeyboardShortcuts
   // dispatch these window-level events; we advance selection through the
@@ -140,7 +209,9 @@ export default function EarningsOptionsPlayPage() {
       const currentIdx = rows.findIndex((r) => r.symbol === selectedRef.current);
       const base = currentIdx === -1 ? 0 : currentIdx;
       const nextIdx = (base + dir + rows.length) % rows.length;
-      setSelectedSymbol(rows[nextIdx].symbol);
+      // Round-4 (B-NEW-4): keyboard nav allows DetailHeader to refocus.
+      userClearedRef.current = false;
+      setSelectedSymbol(rows[nextIdx].symbol, "keyboard");
     }
     const next = () => step(1);
     const prev = () => step(-1);
@@ -150,6 +221,18 @@ export default function EarningsOptionsPlayPage() {
       window.removeEventListener("alphadesk:earnings-select-next", next);
       window.removeEventListener("alphadesk:earnings-select-prev", prev);
     };
+  }, [setSelectedSymbol]);
+
+  // Round-4: source-tagging wrappers for sidebar/keyboard handlers.
+  const onSelectFromSidebar = useCallback(
+    (sym: string) => {
+      userClearedRef.current = false;
+      setSelectedSymbol(sym, "pointer");
+    },
+    [setSelectedSymbol],
+  );
+  const onSettleRef = useCallback(() => {
+    firstRowRef.current?.focus();
   }, []);
 
   const actions = (
@@ -164,9 +247,14 @@ export default function EarningsOptionsPlayPage() {
     </span>
   );
 
-  // B-102: title reflects the active window filter so the header updates
-  // as users toggle between current / next / both.
-  const title = titleForWindow(filters.window);
+  // CLUSTER A (1): prefer the backend-rendered windowLabel when present
+  // — it accounts for weekends, month rollovers, holidays, and the NY
+  // market date in a way the front-end title shouldn't reverse-engineer.
+  // Falls back to the static "this/next" label when the field is absent
+  // (older backends or test fixtures that don't thread it).
+  const title = calendar?.windowLabel
+    ? `${titleForWindow(filters.window)} · ${calendar.windowLabel}`
+    : titleForWindow(filters.window);
 
   return (
     <DashboardPageLayout
@@ -174,15 +262,23 @@ export default function EarningsOptionsPlayPage() {
       title={title}
       actions={actions}
     >
-      <FiltersBar filters={filters} onChange={setFilters} />
+      <FiltersBar
+        filters={filters}
+        onChange={setFilters}
+        onSettleRef={onSettleRef}
+      />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
         <EarningsCalendarSidebar
           rows={calendar?.earnings ?? []}
           loading={loadingCalendar}
+          refetching={refetchingCalendar}
           error={calendarError}
           selected={selectedSymbol}
-          onSelect={setSelectedSymbol}
+          onSelect={onSelectFromSidebar}
+          firstRowRef={firstRowRef}
+          windowLabel={calendar?.windowLabel ?? null}
+          metaReason={calendar?.meta?.reason ?? null}
           filters={filters}
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
@@ -191,9 +287,12 @@ export default function EarningsOptionsPlayPage() {
         <EarningsDetailPanel
           detail={detail}
           loading={loadingDetail}
+          refetching={refetchingDetail}
           error={detailError}
           runningFull={runningFull}
+          fullResearchError={fullError}
           onRunFullResearch={runFull}
+          selectionSource={lastSelectionSourceRef.current}
         />
       </div>
     </DashboardPageLayout>

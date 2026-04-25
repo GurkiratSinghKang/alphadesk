@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 export interface FiltersBarProps {
   filters: EarningsCalendarFilters;
   onChange: (next: EarningsCalendarFilters) => void;
-  // B-56: called once the IV-rank slider settles (pointerup / keyup /
-  // blur) so the parent page can hand focus off to a more-useful target
+  // B-56 / Round-4 (B-NEW-3): called once the IV-rank slider settles
+  // (pointerup / keyup / blur) or once the sort dropdown commits, so
+  // the parent page can hand focus off to a more-useful target
   // (typically the first sidebar row). Absent = no-op (back-compat).
   onSettleRef?: () => void;
 }
@@ -16,7 +17,18 @@ type WindowOption = { key: "current" | "next" | "both"; label: string };
 const WINDOW_OPTIONS: WindowOption[] = [
   { key: "current", label: "Current week" },
   { key: "next", label: "Next week" },
-  { key: "both", label: "Both" },
+  // Round-4 (CLUSTER C/8): renamed from "Both" → "Both weeks" so the
+  // label reads correctly when paired with "All hours" in TIME (no
+  // longer ambiguous between two different "Both" buttons).
+  { key: "both", label: "Both weeks" },
+];
+
+type TimeOption = { key: "bmo" | "amc" | "both"; label: string };
+const TIME_OPTIONS: TimeOption[] = [
+  { key: "bmo", label: "BMO" },
+  { key: "amc", label: "AMC" },
+  // Round-4 (CLUSTER C/8): renamed from "Both" → "All hours".
+  { key: "both", label: "All hours" },
 ];
 
 type SortOption = { key: "date" | "iv_rank" | "yield" | "claude_confidence"; label: string };
@@ -29,44 +41,72 @@ const SORT_OPTIONS: SortOption[] = [
 
 // B-9: data model has no explicit sort direction yet — label each sort
 // key with the natural default ("date" is chronological ascending, every
-// other key is highest-first descending). Renders as a unicode arrow
-// next to the Sort label so the user has visual confirmation of what
-// "first" means for the active sort.
-const SORT_DIRECTION: Record<SortOption["key"], { arrow: string; aria: string }> = {
-  date:              { arrow: "\u2191", aria: "ascending (earliest first)" },
-  iv_rank:           { arrow: "\u2193", aria: "descending (highest first)" },
-  yield:             { arrow: "\u2193", aria: "descending (highest first)" },
-  claude_confidence: { arrow: "\u2193", aria: "descending (highest first)" },
+// other key is highest-first descending).
+const SORT_DIRECTION: Record<SortOption["key"], { aria: string; dir: "asc" | "desc" }> = {
+  date:              { aria: "ascending (earliest first)",  dir: "asc"  },
+  iv_rank:           { aria: "descending (highest first)",  dir: "desc" },
+  yield:             { aria: "descending (highest first)",  dir: "desc" },
+  claude_confidence: { aria: "descending (highest first)",  dir: "desc" },
 };
+
+// Round-4 (CLUSTER E/9): 24×24 thumb meets WCAG 2.5.8 minimum (24px on
+// Android; iOS gets touch tolerance for free). Tailwind arbitrary
+// selectors for both -webkit and -moz vendor pseudo-elements.
+const SLIDER_THUMB_CLASSES =
+  "appearance-none " +
+  "[&::-webkit-slider-thumb]:appearance-none " +
+  "[&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 " +
+  "[&::-webkit-slider-thumb]:rounded-full " +
+  "[&::-webkit-slider-thumb]:bg-[color:var(--brand)] " +
+  "[&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 " +
+  "[&::-moz-range-thumb]:rounded-full " +
+  "[&::-moz-range-thumb]:bg-[color:var(--brand)]";
 
 export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBarProps) {
   const ivRank = filters.minIvRank ?? 50;
   const sortKey = (filters.sort ?? "date") as SortOption["key"];
   const sortDir = SORT_DIRECTION[sortKey];
+  const currentWindow = filters.window ?? "both";
+  const currentTime = filters.bmoAmc ?? "both";
 
   return (
     <div
       data-slot="filters-bar"
       className="flex flex-wrap items-center gap-4 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3"
     >
-      {/* Window toggles */}
-      <div className="flex items-center gap-1">
-        <span className="t-label mr-2 text-[color:var(--fg-muted)]">WINDOW</span>
-        {WINDOW_OPTIONS.map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => onChange({ ...filters, window: opt.key })}
-            className={cn(
-              "rounded border px-2 py-1 font-mono text-[12px]",
-              (filters.window ?? "both") === opt.key
-                ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
-                : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
+      {/* WINDOW — radiogroup (CLUSTER C/7) */}
+      <div
+        role="radiogroup"
+        aria-label="Earnings calendar window"
+        className="flex items-center gap-1"
+      >
+        <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
+          WINDOW
+        </span>
+        {WINDOW_OPTIONS.map((opt) => {
+          const checked = currentWindow === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              onClick={() => onChange({ ...filters, window: opt.key })}
+              className={cn(
+                "rounded border px-2 py-1 font-mono text-[12px]",
+                checked
+                  ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
+                  : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
+              )}
+            >
+              {/* Filled-bullet redundancy so we don't rely on color alone */}
+              <span aria-hidden="true" className="mr-1 inline-block">
+                {checked ? "●" : "○"}
+              </span>
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* IV rank slider */}
@@ -92,24 +132,46 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // B-96: full-width on small viewports (usable at 200% zoom),
           // clamps to 128px on md+ screens.
-          className="w-full md:w-32 max-w-full"
+          // Round-4 (CLUSTER E/9): 24×24 thumb classes for touch targets.
+          className={cn("w-full md:w-32 max-w-full", SLIDER_THUMB_CLASSES)}
         />
         <span className="font-mono text-[13px] tabular-nums">{ivRank}</span>
       </label>
 
-      {/* BMO/AMC */}
-      <label className="flex items-center gap-2">
-        <span className="t-label text-[color:var(--fg-muted)]">TIME</span>
-        <select
-          value={filters.bmoAmc ?? "both"}
-          onChange={(e) => onChange({ ...filters, bmoAmc: e.target.value as EarningsCalendarFilters["bmoAmc"] })}
-          className="rounded border border-[color:var(--fg-border)] bg-transparent px-1 py-0.5 font-mono text-[12px]"
-        >
-          <option value="both">Both</option>
-          <option value="bmo">BMO</option>
-          <option value="amc">AMC</option>
-        </select>
-      </label>
+      {/* TIME — radiogroup (CLUSTER C/7). Replaces the previous select
+          with three role=radio buttons matching the WINDOW pattern. */}
+      <div
+        role="radiogroup"
+        aria-label="Time of day"
+        className="flex items-center gap-1"
+      >
+        <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
+          TIME
+        </span>
+        {TIME_OPTIONS.map((opt) => {
+          const checked = currentTime === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              onClick={() => onChange({ ...filters, bmoAmc: opt.key })}
+              className={cn(
+                "rounded border px-2 py-1 font-mono text-[12px]",
+                checked
+                  ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
+                  : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
+              )}
+            >
+              <span aria-hidden="true" className="mr-1 inline-block">
+                {checked ? "●" : "○"}
+              </span>
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Watchlist only */}
       <label className="flex items-center gap-2">
@@ -121,27 +183,54 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         <span className="t-label text-[color:var(--fg-muted)]">WATCHLIST ONLY</span>
       </label>
 
-      {/* Sort */}
+      {/* Sort + sort-direction indicator. The triangle is now a proper
+          inline SVG with explicit currentColor + 1px outline, so the
+          marker reads at the smallest supported viewport even on themes
+          where --fg-muted has weak contrast (CLUSTER E/17). */}
       <label className="ml-auto flex items-center gap-2">
         <span className="t-label text-[color:var(--fg-muted)]">SORT</span>
         <select
           value={filters.sort ?? "date"}
-          onChange={(e) => onChange({ ...filters, sort: e.target.value as EarningsCalendarFilters["sort"] })}
+          onChange={(e) => {
+            onChange({ ...filters, sort: e.target.value as EarningsCalendarFilters["sort"] });
+            // Round-4 (B-NEW-3): committing a sort warps focus to the
+            // first sidebar row — same intent as the slider settle.
+            onSettleRef?.();
+          }}
+          onBlur={() => onSettleRef?.()}
           className="rounded border border-[color:var(--fg-border)] bg-transparent px-1 py-0.5 font-mono text-[12px]"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
-        {/* B-9: visual confirmation of the applied sort direction. */}
-        <span
-          data-slot="sort-direction-indicator"
-          aria-label={`Sort direction: ${sortDir.aria}`}
-          className="font-mono text-[13px] tabular-nums text-[color:var(--fg-muted)]"
-        >
-          {sortDir.arrow}
-        </span>
+        <SortIndicator dir={sortDir.dir} ariaLabel={`Sort direction: ${sortDir.aria}`} />
       </label>
     </div>
+  );
+}
+
+/**
+ * Sort-direction caret. Persona R flagged the previous "▼" character as
+ * invisible at 11px on dim themes — switched to a 14px SVG on
+ * `currentColor` with a 1px outline so the marker reads at the smallest
+ * supported viewport (CLUSTER E/17).
+ */
+function SortIndicator({ dir, ariaLabel }: { dir: "asc" | "desc"; ariaLabel: string }) {
+  // ASC: triangle pointing up; DESC: pointing down. We rotate via
+  // transform so we ship one path in the SVG.
+  return (
+    <svg
+      role="img"
+      aria-label={ariaLabel}
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      data-slot="sort-direction-indicator"
+      className="text-[color:var(--fg-base)]"
+      style={{ filter: "drop-shadow(0 0 1px currentColor)", transform: dir === "asc" ? "rotate(180deg)" : undefined }}
+    >
+      <path d="M3 5 L7 10 L11 5 Z" fill="currentColor" />
+    </svg>
   );
 }

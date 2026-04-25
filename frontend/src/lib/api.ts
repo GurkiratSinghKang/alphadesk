@@ -1833,6 +1833,8 @@ interface RawCalendarRow {
   claude_verdict: EarningsVerdict | null;
   claude_confidence: number | null;
   top_setup: EarningsTopSetup | null;
+  /** Round-4: backend tags state of this report relative to today. */
+  report_state?: import("@/types").EarningsReportState;
 }
 
 interface RawCalendarResponse {
@@ -1840,6 +1842,15 @@ interface RawCalendarResponse {
   generated_at: string;
   partial: boolean;
   error?: string | null;
+  /** Round-4: window honesty fields. Optional so older response shapes
+   *  still parse (UI falls back to local titles when absent). */
+  window_start?: string;
+  window_end?: string;
+  window_label?: string;
+  meta?: {
+    reason?: import("@/types").CalendarMetaReason;
+    before_curated?: number;
+  };
 }
 
 interface RawLadderRow {
@@ -1864,6 +1875,8 @@ interface RawStrikeLadder {
   expiry: string;
   underlying_price: number;
   rows: RawLadderRow[];
+  /** Round-4: true when the ladder is synthetic / demo data. */
+  is_demo?: boolean;
 }
 
 interface RawComparableSetup {
@@ -1955,6 +1968,8 @@ interface RawEarningsDetail {
   news: RawEarningsNewsArticle[];
   partial: boolean;
   generated_at: string;
+  /** Round-4: per-payload degraded-path codes for precise UI banner. */
+  error_codes?: import("@/types").EarningsErrorCode[];
 }
 
 function mapCalendarRow(r: RawCalendarRow): CalendarRow {
@@ -1976,6 +1991,8 @@ function mapCalendarRow(r: RawCalendarRow): CalendarRow {
     claudeVerdict: r.claude_verdict,
     claudeConfidence: r.claude_confidence,
     topSetup: r.top_setup,
+    // Round-4: optional report state — pass through when present.
+    ...(r.report_state !== undefined ? { reportState: r.report_state } : {}),
   };
 }
 
@@ -2004,6 +2021,8 @@ function mapStrikeLadder(raw: RawStrikeLadder): StrikeLadder {
     expiry: raw.expiry,
     underlyingPrice: raw.underlying_price,
     rows: raw.rows.map(mapLadderRow),
+    // Round-4: backend may flag synthetic / demo chain — UI badges it.
+    isDemo: raw.is_demo === true,
   };
 }
 
@@ -2114,6 +2133,8 @@ function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     news: (raw.news ?? []).map(mapNewsArticle),
     partial: raw.partial,
     generatedAt: raw.generated_at,
+    // Round-4: degraded-path codes for the partial-data banner.
+    errorCodes: raw.error_codes ?? [],
   };
 }
 
@@ -2146,6 +2167,22 @@ export async function getEarningsCalendar(
     generatedAt: raw.generated_at,
     partial: raw.partial,
     error: raw.error ?? null,
+    // Round-4: window-honesty fields. Each is optional on the wire so
+    // we pass through `undefined` when the backend hasn't emitted them
+    // (older deployments + most existing test fixtures).
+    ...(raw.window_start !== undefined ? { windowStart: raw.window_start } : {}),
+    ...(raw.window_end !== undefined ? { windowEnd: raw.window_end } : {}),
+    ...(raw.window_label !== undefined ? { windowLabel: raw.window_label } : {}),
+    ...(raw.meta !== undefined
+      ? {
+          meta: {
+            ...(raw.meta.reason !== undefined ? { reason: raw.meta.reason } : {}),
+            ...(raw.meta.before_curated !== undefined
+              ? { beforeCurated: raw.meta.before_curated }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

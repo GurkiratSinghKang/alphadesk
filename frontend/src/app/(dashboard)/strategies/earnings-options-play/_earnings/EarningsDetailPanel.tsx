@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { EarningsDetail } from "@/types";
+import type { EarningsDetail, EarningsErrorCode } from "@/types";
+import type { SelectionSource } from "../page";
+import { cn } from "@/lib/utils";
 
 import DetailHeader from "./DetailHeader";
 import MetricsStrip from "./MetricsStrip";
@@ -17,39 +19,58 @@ import TradeButtonRow from "./TradeButtonRow";
 export interface EarningsDetailPanelProps {
   detail: EarningsDetail | null;
   loading: boolean;
+  /** Round-4 (CLUSTER D/10): stale data on screen, fetching fresh data —
+   *  drives the dim opacity + aria-busy without flipping to the loading
+   *  skeleton. */
+  refetching?: boolean;
   error: string | null;
   runningFull: boolean;
+  /** Round-4 (CLUSTER D/11): error from the full-research mutation
+   *  (RateLimitError → live countdown; other errors → inline alert). */
+  fullResearchError?: Error | null;
   onRunFullResearch: () => void;
+  /** Round-4 (B-NEW-4): why the surrounding selection changed —
+   *  passed through to DetailHeader so it autofocuses on keyboard /
+   *  URL changes only, never on pointer clicks. */
+  selectionSource?: SelectionSource;
 }
 
 /**
  * V2 layout — two columns at ≥1200px panel width, collapses to V1 stacked
  * below. Sub-panels slot into consistent vertical rhythm via the editorial
  * tokens.
+ *
+ * Round-4 fixes:
+ *  - Dispatch `alphadesk:earnings-clear-selection` on Esc — the page
+ *    listens and resets selection (B-NEW-2).
+ *  - Surface `partial` + `errorCodes` as a yellow info banner with
+ *    code-specific copy (CLUSTER D/12).
+ *  - Pass `selectionSource` to DetailHeader so pointer clicks don't
+ *    trigger H2 autofocus (B-NEW-4).
  */
 export default function EarningsDetailPanel({
-  detail, loading, error, runningFull, onRunFullResearch,
+  detail,
+  loading,
+  refetching = false,
+  error,
+  runningFull,
+  fullResearchError = null,
+  onRunFullResearch,
+  selectionSource = null,
 }: EarningsDetailPanelProps) {
   const isWide = useIsWide(1200);
-  // Move keyboard focus to the header H2 whenever the selected symbol
-  // changes, so tabbing through the page lands on the new ticker after
-  // filter-triggered refetches (B-56).
-  const detailHeaderRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (detail?.symbol) detailHeaderRef.current?.focus();
-  }, [detail?.symbol]);
 
   // Escape clears the selection — dispatches a custom event the parent
   // page listens for. Ignored while focus is inside a text input so
   // users can clear filters without losing the detail view (B-61).
+  // Round-4 (B-NEW-2): the page-level listener is now wired.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      const tag = (document.activeElement?.tagName ?? "").toUpperCase();
+      const target = e.target as HTMLElement | null;
+      const tag = (target?.tagName ?? document.activeElement?.tagName ?? "").toUpperCase();
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      // TODO: parent page.tsx should listen for this event and clear
-      // selectedSymbol. If the listener isn't wired yet this is a
-      // harmless no-op.
+      if (target?.isContentEditable) return;
       document.dispatchEvent(new CustomEvent("alphadesk:earnings-clear-selection"));
     }
     document.addEventListener("keydown", onKeyDown);
@@ -67,7 +88,11 @@ export default function EarningsDetailPanel({
   }
   if (loading && !detail) {
     return (
-      <section data-slot="earnings-detail-panel" className="rounded border border-[color:var(--fg-border)] p-4">
+      <section
+        data-slot="earnings-detail-panel"
+        aria-busy="true"
+        className="rounded border border-[color:var(--fg-border)] p-4"
+      >
         <div role="status" aria-live="polite" aria-atomic="true">
           <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading detail…</p>
         </div>
@@ -82,6 +107,14 @@ export default function EarningsDetailPanel({
     );
   }
 
+  // Round-4 (CLUSTER D/12): show the per-code partial banner whenever
+  // backend tagged the response as partial AND emitted at least one
+  // errorCode. Falls back to the legacy generic banner only when partial
+  // is true but no codes are present (older backend).
+  const errorCodes = detail.errorCodes ?? [];
+  const showCodesBanner = detail.partial && errorCodes.length > 0;
+  const showLegacyBanner = detail.partial && errorCodes.length === 0;
+
   // Missing-field hints may be populated later by the backend (Agent α's
   // B-81 work). Read defensively — fall back to a generic banner.
   const missingFields = extractMissingFields(detail);
@@ -93,10 +126,16 @@ export default function EarningsDetailPanel({
        and the id would dangle. */
     <section
       data-slot="earnings-detail-panel"
+      data-refetching={refetching || undefined}
+      aria-busy={refetching || undefined}
       aria-labelledby="detail-header-title"
-      className="rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4"
+      className={cn(
+        "rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4 transition-opacity",
+        refetching && "opacity-70",
+      )}
     >
-      {detail.partial && (
+      {showCodesBanner && <PartialDataBanner codes={errorCodes} />}
+      {showLegacyBanner && (
         <div
           data-slot="partial-data-banner"
           role="status"
@@ -121,7 +160,7 @@ export default function EarningsDetailPanel({
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         reportDate={detail.reportDate} reportTime={detail.reportTime}
         quote={detail.quote} generatedAt={detail.generatedAt}
-        headingRef={detailHeaderRef}
+        selectionSource={selectionSource}
       />
       <MetricsStrip metrics={detail.metrics} />
 
@@ -131,7 +170,8 @@ export default function EarningsDetailPanel({
           <div className="min-w-0 space-y-3">
             <ClaudeThesisCard
               structured={detail.claudeStructured} full={detail.claudeFullResearch}
-              running={runningFull} onRunFull={onRunFullResearch}
+              running={runningFull} error={fullResearchError}
+              onRunFull={onRunFullResearch}
               symbol={detail.symbol}
             />
             <NewsFeed news={detail.news} />
@@ -146,7 +186,8 @@ export default function EarningsDetailPanel({
         <div className="mt-4 space-y-4">
           <ClaudeThesisCard
             structured={detail.claudeStructured} full={detail.claudeFullResearch}
-            running={runningFull} onRunFull={onRunFullResearch}
+            running={runningFull} error={fullResearchError}
+            onRunFull={onRunFullResearch}
             symbol={detail.symbol}
           />
           <StrikeLadder ladder={detail.strikeLadder} />
@@ -171,6 +212,44 @@ export default function EarningsDetailPanel({
         .
       </p>
     </section>
+  );
+}
+
+const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
+  stub_detail: "Limited data — next earnings >2 weeks out",
+  news_unavailable: "News feed temporarily unavailable",
+  chain_demo:
+    "⚠ Options chain showing synthetic data — broker connection unavailable",
+  iv_unavailable: "IV history unavailable",
+  metrics_unavailable: "Metrics partially unavailable",
+  hv_unavailable: "Historical volatility unavailable",
+};
+
+/**
+ * Round-4 (CLUSTER D/12): yellow-tint info banner above the metrics
+ * strip when one or more upstreams degraded. Distinct from the
+ * destructive red-tint error panel: this is "data is partially fine,
+ * here's what's stale".
+ */
+function PartialDataBanner({ codes }: { codes: EarningsErrorCode[] }) {
+  return (
+    <div
+      data-slot="partial-data-banner"
+      role="status"
+      aria-live="polite"
+      className="mb-3 rounded border border-[color:var(--warn,#d97706)] bg-[color:var(--warn-tint,rgba(217,119,6,0.12))] px-3 py-2"
+    >
+      <p className="font-mono text-[12px] text-[color:var(--warn,#d97706)]" aria-hidden="true">
+        ⚠ PARTIAL DATA
+      </p>
+      <ul className="mt-1 space-y-0.5 font-mono text-[11px] u-muted">
+        {codes.map((c) => (
+          <li key={c} data-slot="partial-data-banner-item">
+            {ERROR_CODE_COPY[c] ?? c}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

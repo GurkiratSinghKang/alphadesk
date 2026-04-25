@@ -1,7 +1,10 @@
-import type { Ref } from "react";
+"use client";
+
+import { useEffect, useRef } from "react";
 import type { EarningsReportTime } from "@/types";
+import type { SelectionSource } from "../page";
 import { fmtCurrency, fmtDate, fmtPct } from "@/lib/intl";
-import { fmtRelativeTime } from "@/lib/time";
+import { fmtRelativeTime, useTick } from "@/lib/time";
 
 export interface DetailHeaderProps {
   symbol: string;
@@ -14,18 +17,39 @@ export interface DetailHeaderProps {
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
    *  "Updated 5 m ago" label in the header. */
   generatedAt?: string;
-  /** Ref to the H2 heading so the parent panel can move focus here
-   *  after a filter-triggered symbol change (B-56). */
-  headingRef?: Ref<HTMLHeadingElement>;
+  /** Round-4 (B-NEW-4): whether to autofocus the heading on symbol
+   *  change. Pointer selections suppress autofocus to avoid stealing
+   *  focus mid-click; keyboard / URL selections want focus restoration. */
+  selectionSource?: SelectionSource;
 }
 
 export default function DetailHeader({
-  symbol, company, sector, reportDate, reportTime, quote, generatedAt, headingRef,
+  symbol, company, sector, reportDate, reportTime, quote, generatedAt,
+  selectionSource = null,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
   const changePct = quote?.changePct ?? null;
   const isNeg = (change ?? 0) < 0;
+
+  // Round-4 (CLUSTER E/14): 15s tick re-evaluates the freshness/relative
+  // text without refetching the detail payload. Don't tick MetricsStrip
+  // or StrikeLadder — those decay only on data refresh, not the wall
+  // clock.
+  useTick(15_000);
   const freshness = getFreshness(generatedAt);
+
+  // Round-4 (B-NEW-4): autofocus the H2 only on keyboard / URL selection
+  // sources. Pointer-driven selections shouldn't rip focus off the
+  // click target.
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  useEffect(() => {
+    if (selectionSource === "keyboard" || selectionSource === "url") {
+      headingRef.current?.focus();
+    }
+    // We _intentionally_ depend on `symbol` here — when the user navigates
+    // to a different symbol via keyboard, refocus the new heading. Pointer
+    // selections also change `symbol` but selectionSource gates the focus.
+  }, [symbol, selectionSource]);
 
   return (
     <header

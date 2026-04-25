@@ -1,12 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
+import { RateLimitError } from "@/lib/api";
 import { fmtDate, fmtNumber, fmtPct } from "@/lib/intl";
 
 export interface ClaudeThesisCardProps {
   structured: ClaudeStructured | null;
   full: ClaudeFullResearch | null;
   running: boolean;
+  /** Round-4 (CLUSTER D/11): error from the most-recent full-research
+   *  request. RateLimitError triggers a live "try again in {n}s"
+   *  countdown; other errors render inline as a generic alert. */
+  error?: Error | null;
   onRunFull: () => void;
   /**
    * B-94 — SR context. When set, the research-run button's accessible
@@ -17,7 +23,7 @@ export interface ClaudeThesisCardProps {
   symbol?: string;
 }
 
-export default function ClaudeThesisCard({ structured, full, running, onRunFull, symbol }: ClaudeThesisCardProps) {
+export default function ClaudeThesisCard({ structured, full, running, error = null, onRunFull, symbol }: ClaudeThesisCardProps) {
   if (!structured) {
     return (
       <section
@@ -31,11 +37,7 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull,
           aria-live="polite"
           className="mt-2 flex items-center gap-2"
         >
-          <span className="flex items-center gap-1" aria-hidden="true">
-            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:0ms]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:150ms]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:300ms]" />
-          </span>
+          <LoadingDots />
           <span className="t-mono text-[13px] u-muted">
             Analyzing (typically 30 s)… Analysis pending — come back in a moment.
           </span>
@@ -93,33 +95,143 @@ export default function ClaudeThesisCard({ structured, full, running, onRunFull,
         {full ? (
           <FullResearchBlock full={full} />
         ) : (
-          <button
-            type="button"
-            onClick={onRunFull}
-            disabled={running}
-            /* B-94 — drop the aria-label when it would merely duplicate the
-               visible text; when a `symbol` is provided, use it to
-               disambiguate between panels (e.g. "Run full research for
-               NVDA"). Otherwise the button's own text content supplies
-               the accessible name by default. */
-            aria-label={
-              symbol
-                ? running
-                  ? `Generating full research for ${symbol}`
-                  : `Run full research for ${symbol}`
-                : undefined
-            }
-            /* B-57 min-h-[44px]: iPad touch target.
-               B-88 hover:text-gold-300 lifts the CTA text from --brand
-               (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
-               AAA) so the hover state reads distinctly brighter. */
-            className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
-          >
-            {running ? "▸ Generating full research…" : "▸ Run full research"}
-          </button>
+          <FullResearchTrigger
+            running={running}
+            error={error}
+            onRunFull={onRunFull}
+            symbol={symbol}
+          />
         )}
       </div>
     </section>
+  );
+}
+
+interface FullResearchTriggerProps {
+  running: boolean;
+  error: Error | null;
+  onRunFull: () => void;
+  symbol?: string;
+}
+
+/**
+ * Round-4 (CLUSTER D/11): the run-full-research button + inline error
+ * surface. RateLimitError drives a live "try again in {n}s" countdown
+ * so the user can see exactly when the cooldown clears, not just that
+ * "the button is disabled".
+ */
+function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearchTriggerProps) {
+  const isRateLimit = error instanceof RateLimitError;
+  const initialRetry = isRateLimit ? error.retryAfter ?? 0 : 0;
+  const [retrySec, setRetrySec] = useState(initialRetry);
+
+  // Reset countdown whenever a new error / retry duration arrives, then
+  // run a single setInterval until we reach 0. Splitting "reset" and
+  // "tick" into two effects (instead of one effect that re-creates the
+  // interval on every state change) keeps the cadence stable across
+  // re-renders.
+  useEffect(() => {
+    setRetrySec(initialRetry);
+    if (initialRetry <= 0) return;
+    const id = setInterval(() => {
+      setRetrySec((n) => {
+        if (n <= 1) {
+          clearInterval(id);
+          return 0;
+        }
+        return n - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [initialRetry]);
+
+  const buttonDisabled = running || retrySec > 0;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onRunFull}
+        disabled={buttonDisabled}
+        /* B-94 — drop the aria-label when it would merely duplicate the
+           visible text; when a `symbol` is provided, use it to
+           disambiguate between panels (e.g. "Run full research for
+           NVDA"). Otherwise the button's own text content supplies
+           the accessible name by default. */
+        aria-label={
+          symbol
+            ? running
+              ? `Generating full research for ${symbol}`
+              : `Run full research for ${symbol}`
+            : running
+            ? "Generating full research"
+            : "Run full research"
+        }
+        /* B-57 min-h-[44px]: iPad touch target.
+           B-88 hover:text-gold-300 lifts the CTA text from --brand
+           (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
+           AAA) so the hover state reads distinctly brighter. */
+        className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
+      >
+        {running ? (
+          <>▸ Generating full research<LoadingDots inline /></>
+        ) : (
+          "▸ Run full research"
+        )}
+      </button>
+      {error && (
+        <p
+          role="alert"
+          data-slot="claude-thesis-error"
+          className="mt-2 t-mono text-[11.5px] u-loss"
+        >
+          {isRateLimit
+            ? retrySec > 0
+              ? `Rate limited — try again in ${retrySec}s`
+              : "Rate limit cleared — click to retry."
+            : `Error · ${error.message}`}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Round-4 (CLUSTER E/18): three loading dots — animated under default
+ * motion preferences, statically rendered for users with
+ * `prefers-reduced-motion: reduce` so they don't read as broken.
+ *
+ * `inline=true` makes the dots inline-flex so they sit next to button
+ * text; the default block flow renders them in a `flex` row used inside
+ * the structured-skeleton state.
+ */
+function LoadingDots({ inline = false }: { inline?: boolean }) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={
+          (inline
+            ? "motion-safe:inline-flex motion-reduce:hidden ml-1 items-center gap-1"
+            : "motion-safe:flex motion-reduce:hidden items-center gap-1") +
+          ""
+        }
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:0ms]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand)] animate-pulse [animation-delay:300ms]" />
+      </span>
+      <span
+        aria-hidden="true"
+        className={
+          inline
+            ? "motion-safe:hidden motion-reduce:inline ml-1"
+            : "motion-safe:hidden motion-reduce:flex"
+        }
+      >
+        ·&nbsp;·&nbsp;·
+      </span>
+    </>
   );
 }
 
