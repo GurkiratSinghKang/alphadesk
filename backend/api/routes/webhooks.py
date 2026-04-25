@@ -313,6 +313,12 @@ async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
     through to ``execution_agent.run`` with no gate at all. Refusing at the
     webhook boundary also avoids burning an LLM call on an order that
     cannot legally execute.
+
+    J-8 (Round-6): the aggregate risk gate (restricted-symbol, wash-trade,
+    daily-gross, position-count, sector concentration, daily-loss,
+    buying-power, quote-staleness, symbol-halt) now also runs at the
+    webhook boundary. Previously a TradingView alert that bypassed the
+    manual-order endpoint also bypassed every one of those gates.
     """
     from agents import get_agent
     from core.trading_gate import reject_if_live_forbidden
@@ -333,6 +339,42 @@ async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
             alert.ticker, alert.strategy, exc,
         )
         return {"action": "rejected_by_gate", "detail": str(exc)}
+
+    # J-8 — aggregate risk gate. Construct a synthetic
+    # CreateOrderRequest from the webhook fields and run it through
+    # the same risk pipeline manual orders use.
+    try:
+        synthetic_qty = float(alert.volume) if alert.volume else 1.0
+    except (TypeError, ValueError):
+        synthetic_qty = 1.0
+    try:
+        from api.routes._risk_pipeline import (
+            build_request_from_webhook,
+            run_aggregate_risk_check,
+        )
+        risk_request = await build_request_from_webhook(
+            ticker=alert.ticker,
+            side=alert.action,
+            qty=max(1.0, synthetic_qty),
+            limit_price=alert.price,
+            strategy=alert.strategy or "tradingview",
+        )
+        passed, reason = await run_aggregate_risk_check(
+            risk_request, username=None,
+        )
+        if not passed:
+            logger.warning(
+                "TradingView signal rejected by aggregate risk gate: "
+                "ticker=%s strategy=%s reason=%s",
+                alert.ticker, alert.strategy, reason,
+            )
+            return {"action": "rejected_by_risk", "detail": reason}
+    except Exception:
+        logger.warning(
+            "TradingView aggregate risk-gate evaluation failed; "
+            "falling through to agent path",
+            exc_info=True,
+        )
 
     execution_agent = get_agent("execution")
     if execution_agent is None:
