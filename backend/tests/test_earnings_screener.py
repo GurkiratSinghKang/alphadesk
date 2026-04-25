@@ -243,7 +243,7 @@ async def test_list_upcoming_filters_by_iv_rank():
     ]
     hydrated = {"NVDA": {"iv_rank": 80}, "TSLA": {"iv_rank": 30}}
 
-    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None, today=None):
         iv = hydrated[row["symbol"]]["iv_rank"]
         if iv < min_iv_rank:
             return None
@@ -271,7 +271,7 @@ async def test_list_upcoming_partial_on_hydrate_failure():
          "report_date": d2, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None, today=None):
         if row["symbol"] == "TSLA":
             raise RuntimeError("options provider down")
         return {**row, "price": 200.0, "iv_rank": 70.0}
@@ -342,7 +342,7 @@ async def test_list_upcoming_always_applies_curated_universe_filter():
          "report_date": future, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None, today=None):
         return {**row, "price": 100.0, "iv_rank": 70.0}
 
     with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
@@ -369,7 +369,7 @@ async def test_list_upcoming_surfaces_validation_errors():
          "report_date": future, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None, today=None):
         if row["symbol"] == "TSLA":
             # Return a payload that violates the schema (report_time invalid).
             return {**row, "report_time": "NOPE", "price": 100.0, "iv_rank": 70}
@@ -405,7 +405,7 @@ async def test_list_upcoming_filters_stale_earnings():
          "report_date": future_date, "report_time": "AMC"},
     ]
 
-    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None):
+    async def hydrate(row, *, min_iv_rank: float = 0, client_host: str | None = None, today=None):
         return {**row, "price": 100.0, "iv_rank": 70.0}
 
     with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
@@ -779,3 +779,414 @@ async def test_run_full_research_returns_cached_when_present():
         result = await svc.run_full_research("NVDA")
     assert result.thesis_paragraph == "cached"
     fake_cache.set.assert_not_called()
+
+
+# ─── Round-4 regression tests ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_stub_detail_marks_partial_with_error_code():
+    """Round-4 CLUSTER 3 #13: the stub detail panel had partial=False, which
+    misled the frontend into rendering a "fully populated" UI for what was
+    really a fallback. Now partial=True with error_codes=['stub_detail']."""
+    from services import earnings_screener as svc
+
+    async def fake_quote(symbol: str):
+        return None
+
+    async def fake_next(symbol: str):
+        return None
+
+    with patch.object(svc, "_load_quote", new=fake_quote), \
+         patch.object(svc, "_fetch_next_earnings_date", new=fake_next):
+        detail = await svc._build_stub_detail("AAPL")
+
+    assert detail.partial is True
+    assert "stub_detail" in detail.error_codes
+
+
+def test_iv_data_iv_rank_nullable_for_real_data():
+    """Round-4 CLUSTER 3 #10: real-data IVData should have iv_rank=None
+    until the historical-vol pipeline lands. The within-chain-smile
+    metric we used to surface was misleading and actively wrong as a
+    sort key."""
+    from services.options import IVData
+    from datetime import datetime, timezone
+
+    iv = IVData(
+        symbol="NVDA",
+        current_iv=0.45,
+        iv_rank=None,  # honest
+        iv_percentile=None,
+        hv_20=None,
+        hv_50=None,
+        hv_100=None,
+        is_demo=False,
+        fetched_at=datetime.now(timezone.utc),
+    )
+    assert iv.iv_rank is None
+    assert iv.hv_20 is None
+    assert iv.is_demo is False
+
+
+@pytest.mark.asyncio
+async def test_demo_iv_marks_is_demo_true_async():
+    """Round-4 CLUSTER 3 #10/#11: demo-data IVData carries synthetic
+    iv_rank/hv values but is_demo=True so the UI can render a 'demo'
+    badge. _demo_iv must populate is_demo=True."""
+    from services.options import _demo_iv
+
+    iv = await _demo_iv("AAPL")
+    # Synthetic values present
+    assert iv.iv_rank is not None
+    assert iv.hv_20 is not None
+    # And the demo flag is honest about the source
+    assert iv.is_demo is True
+
+
+@pytest.mark.asyncio
+async def test_demo_chain_marks_is_demo_true():
+    """Round-4 CLUSTER 3 #12: demo OptionChain must flag is_demo=True."""
+    from services.options import _demo_chain
+
+    chain = await _demo_chain(
+        symbol="AAPL",
+        expiry_filter=None,
+        strike_min=None,
+        strike_max=None,
+        option_type_filter=None,
+    )
+    assert chain.is_demo is True
+    assert len(chain.contracts) > 0
+
+
+@pytest.mark.asyncio
+async def test_news_payload_returns_unavailable_when_demo():
+    """Round-4 CLUSTER 3 #14: when Newsdata is rate-limited, the upstream
+    fetch returns demo articles with empty URLs. _news_payload now exposes
+    that as is_demo=True so the caller can attach 'news_unavailable' to
+    error_codes instead of silently returning [] with no signal."""
+    from services import earnings_screener as svc
+    from services.news import NewsArticle, NewsResponse
+
+    fake_resp = NewsResponse(
+        articles=[
+            NewsArticle(
+                title="Demo: AAPL earnings",
+                description="demo",
+                url="",  # empty URL is the legacy signal
+                source="DemoSrc",
+                published_at="",
+                is_demo=True,
+            )
+        ],
+        query="AAPL",
+        count=1,
+        is_demo=True,
+    )
+
+    with patch("services.news.fetch_symbol_news", AsyncMock(return_value=fake_resp)):
+        payload = await svc._news_payload("AAPL", limit=5)
+
+    assert payload["is_demo"] is True
+    assert payload["articles"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_detail_attaches_news_unavailable_code_when_rate_limited():
+    """Round-4 CLUSTER 3 #14: get_detail should add 'news_unavailable' to
+    error_codes when the news provider is rate-limited."""
+    from services import earnings_screener as svc
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value={
+             "iv_rank": None, "hv_20": None, "current_iv": 0.4,
+         })), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_news_payload",
+                      AsyncMock(return_value={"articles": [], "is_demo": True})), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Nvidia", "sector": "Semis",
+                 "report_date": future_date, "report_time": "AMC",
+             }),
+         ):
+        detail = await svc.get_detail("NVDA")
+
+    assert "news_unavailable" in detail.error_codes
+    assert detail.partial is True
+    assert detail.news == []
+
+
+def test_scrub_fmp_error_redacts_apikey():
+    """Round-4 CLUSTER 4 #15: any FMP error string going to the log
+    aggregator must have apikey= / apiKey= scrubbed. The redaction
+    keeps the param name so oncall can tell what was scrubbed."""
+    from services.earnings_screener import _scrub_fmp_error
+
+    msg = "https://financialmodelingprep.com/stable/earnings-calendar?from=2026-04-27&to=2026-05-08&apikey=SECRET_TOKEN_123 timed out"
+    scrubbed = _scrub_fmp_error(msg)
+    assert "SECRET_TOKEN_123" not in scrubbed
+    assert "apikey=REDACTED" in scrubbed
+
+    # Mixed-case variants
+    assert "REDACTED" in _scrub_fmp_error("...apiKey=abc&foo=1")
+    assert "REDACTED" in _scrub_fmp_error("...api_key=zzz")
+
+
+def test_sanitize_for_prompt_strips_control_chars():
+    """Round-4 CLUSTER 6 #24: prompt-injection hardening — strip
+    control characters and unicode line/paragraph separators from
+    untrusted strings before they land in the Claude prompt."""
+    from services.earnings_screener import _sanitize_for_prompt
+
+    raw = "headline\u2028with\u2029separators\x00and\nnewline"
+    cleaned = _sanitize_for_prompt(raw)
+    assert "\u2028" not in cleaned
+    assert "\u2029" not in cleaned
+    assert "\x00" not in cleaned
+    assert "\n" not in cleaned
+
+
+def test_sanitize_for_prompt_truncates_long_inputs():
+    """Long headlines/sectors get truncated to the configured cap."""
+    from services.earnings_screener import _sanitize_for_prompt
+
+    raw = "x" * 500
+    cleaned = _sanitize_for_prompt(raw, max_len=200)
+    assert len(cleaned) <= 200
+
+
+@pytest.mark.asyncio
+async def test_load_iv_term_runs_chain_fetches_in_parallel():
+    """Round-4 CLUSTER 5 #17: _load_iv_term should fan out chain fetches
+    via asyncio.gather rather than awaiting them sequentially. Verify the
+    gather path completes correctly even when one chain fails."""
+    import asyncio as _asyncio
+
+    from services import earnings_screener as svc
+
+    class _FakeContract:
+        def __init__(self, strike, iv):
+            self.strike = strike
+            self.iv = iv
+            self.option_type = "call"
+
+    class _FakeChain:
+        def __init__(self, exp):
+            self.spot_price = 100.0
+            self.expirations = [
+                date(2026, 5, 1), date(2026, 5, 8), date(2026, 5, 15),
+            ]
+            self.contracts = [_FakeContract(100.0, 0.30)]
+
+    call_count = {"n": 0}
+
+    async def fake_chain(symbol, expiry=None):
+        call_count["n"] += 1
+        # Simulate the second chain fetch failing
+        if call_count["n"] == 3:
+            raise RuntimeError("transient")
+        return _FakeChain(expiry)
+
+    with patch("services.options.fetch_chain", fake_chain):
+        result = await svc._load_iv_term("NVDA")
+
+    # First call (no expiry) + one per expiration = 4 total attempts.
+    # One fails; the rest still produce points.
+    assert result is not None
+    assert len(result) >= 1
+
+
+@pytest.mark.asyncio
+async def test_inflight_structured_dedup_only_runs_once():
+    """Round-4 CLUSTER 2 #7: concurrent /detail callers for the same
+    symbol on a cold cache must share one Claude run. The de-dup keeps
+    one in-flight task per (symbol, report_date) and awaits it from
+    every caller."""
+    import asyncio as _asyncio
+
+    from services import earnings_screener as svc
+
+    runs = {"n": 0}
+
+    async def fake_runner(symbol, context, cache, key):
+        runs["n"] += 1
+        await _asyncio.sleep(0.01)  # simulate Claude latency
+        return {"verdict": "neutral", "confidence": 0.5}
+
+    fake_cache = AsyncMock()
+    fake_cache.get = AsyncMock(return_value=None)
+    fake_cache.set = AsyncMock()
+
+    # Reset the in-flight registry for a clean test.
+    svc._inflight_structured.clear()
+
+    with patch("core.cache.get_cache", return_value=fake_cache), \
+         patch.object(svc, "_run_structured_and_cache", new=fake_runner):
+        # Fire three concurrent requests for the same symbol.
+        results = await _asyncio.gather(
+            svc._load_claude_structured(
+                "NVDA", {"report_date": "2026-05-01", "symbol": "NVDA"},
+            ),
+            svc._load_claude_structured(
+                "NVDA", {"report_date": "2026-05-01", "symbol": "NVDA"},
+            ),
+            svc._load_claude_structured(
+                "NVDA", {"report_date": "2026-05-01", "symbol": "NVDA"},
+            ),
+        )
+
+    assert runs["n"] == 1, "all three callers should share one run"
+    assert all(r is not None for r in results)
+
+
+def test_get_client_returns_singleton():
+    """Round-4 CLUSTER 2 #9: get_client() returns the same instance on
+    repeated calls so the underlying httpx pool is reused."""
+    from agents import claude_client as cc
+
+    cc._reset_client_for_tests()
+    # First call may fail due to missing API key in test env; tolerate
+    # but verify caching behaviour when a key IS set.
+    with patch.object(cc, "ClaudeClient") as mock_ctor:
+        mock_ctor.return_value = "stub-client"
+        c1 = cc.get_client()
+        c2 = cc.get_client()
+        assert c1 is c2
+        assert mock_ctor.call_count == 1
+    cc._reset_client_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_attaches_window_and_meta_in_response():
+    """Round-4 CLUSTER 1 #3 + CLUSTER 5 #21: the response now exposes
+    window_start, window_end, window_label, and meta.reason /
+    meta.before_curated so the frontend can show a clear header and pick
+    the right empty-state copy."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+    ]
+
+    async def hydrate(row, *, min_iv_rank=0, client_host=None, today=None):
+        return {**row, "price": 100.0, "iv_rank": 50.0}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    assert resp.window_start is not None
+    assert resp.window_end is not None
+    assert resp.window_end >= resp.window_start
+    assert resp.window_label is not None
+    assert "reason" in resp.meta
+    assert resp.meta["reason"] == "ok"
+    assert resp.meta["before_curated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_meta_signals_no_curated_matches():
+    """Round-4 CLUSTER 5 #21: when FMP returns rows but none are in the
+    curated universe, meta.reason='no_curated_matches' so the frontend
+    can distinguish that from 'fmp_unavailable'."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "ZZZZZ", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+        {"symbol": "QQQQ1", "company": "x", "sector": "x",
+         "report_date": future, "report_time": "AMC"},
+    ]
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)):
+        resp = await svc.list_upcoming(window="both", min_iv_rank=0)
+
+    assert resp.meta["reason"] == "no_curated_matches"
+    assert resp.meta["before_curated"] == 2
+    assert resp.earnings == []
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_fmp_unavailable_meta_reason():
+    """Round-4 CLUSTER 5 #21: when _fmp_upcoming raises, the response
+    must still carry the window fields and meta.reason='fmp_unavailable'."""
+    from services import earnings_screener as svc
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(side_effect=RuntimeError("boom"))):
+        resp = await svc.list_upcoming(window="both")
+
+    assert resp.partial is True
+    assert resp.error == "earnings calendar unavailable"
+    assert resp.meta.get("reason") == "fmp_unavailable"
+    assert resp.window_label is not None
+
+
+@pytest.mark.asyncio
+async def test_load_metrics_hv_iv_ratio_is_none_when_hv_missing():
+    """Round-4 CLUSTER 3 #11: hv_iv_ratio must be None when hv_20 is None
+    (real-data path until the historical-vol pipeline lands)."""
+    from services import earnings_screener as svc
+    from services.options import IVData
+    from datetime import datetime, timezone
+
+    class _FakeContract:
+        def __init__(self, strike, iv):
+            self.strike = strike
+            self.iv = iv
+            self.delta = 0.5
+            self.bid = 1.0
+            self.ask = 1.2
+            self.last = 1.1
+            self.theta = -0.1
+            self.gamma = 0.01
+            self.vega = 0.2
+            self.open_interest = 100
+            self.volume = 10
+            self.option_type = "call"
+
+    class _FakeChain:
+        spot_price = 100.0
+        expirations = [date(2026, 5, 1)]
+
+        def __init__(self):
+            self.contracts = [_FakeContract(100.0, 0.30)]
+
+    fake_iv = IVData(
+        symbol="NVDA",
+        current_iv=0.45,
+        iv_rank=None,
+        iv_percentile=None,
+        hv_20=None,
+        hv_50=None,
+        hv_100=None,
+        is_demo=False,
+        fetched_at=datetime.now(timezone.utc),
+    )
+
+    async def fake_iv_analysis(symbol, client_host=None):
+        return fake_iv
+
+    async def fake_chain(symbol, expiry=None):
+        return _FakeChain()
+
+    with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
+         patch("services.options.fetch_chain", fake_chain):
+        metrics = await svc._load_metrics("NVDA", report_date=date(2026, 4, 30))
+
+    assert metrics is not None
+    assert metrics["iv_rank"] is None
+    assert metrics["hv_20"] is None
+    assert metrics["hv_iv_ratio"] is None

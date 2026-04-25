@@ -131,12 +131,15 @@ def test_detail_accepts_dot_suffix_brk_b():
 
 
 def test_detail_accepts_dot_suffix_bf_b():
-    with patch(
-        "services.earnings_screener.get_detail",
-        AsyncMock(return_value=_stub_detail("BF.B")),
-    ):
-        r = client.get("/api/v1/earnings/BF.B/detail")
-    assert r.status_code == 200
+    """Round-4 CLUSTER 2 #6: the curated-universe gate runs BEFORE the
+    service call, so BF.B (not in our curated set) returns 404 with a
+    sensible error message. The pattern-validation test (BRK.B is in
+    the curated set) still proves dot-suffix path-params work end-to-end.
+    """
+    r = client.get("/api/v1/earnings/BF.B/detail")
+    assert r.status_code == 404
+    body = r.json()
+    assert "curated" in body.get("detail", "").lower()
 
 
 def test_full_research_accepts_plain_symbol():

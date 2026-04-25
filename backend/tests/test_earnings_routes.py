@@ -101,9 +101,87 @@ def test_detail_route_returns_stub_for_off_calendar_symbol():
     assert body["quote"]["last"] == 410.5
 
 
+# ───────────────────────── Round-4 regression tests ─────────────────────────
+
+
+def test_detail_route_404s_for_non_curated_symbol():
+    """Round-4 CLUSTER 2 #6: the /detail endpoint must reject requests
+    for symbols outside the curated universe BEFORE touching any
+    upstream provider — otherwise we'd burn FMP/Alpaca/Claude budget on
+    symbols we'll never trade. ZZZZZ is well-formed (passes the path
+    pattern) but isn't curated."""
+    r = client.get("/api/v1/earnings/ZZZZZ/detail")
+    assert r.status_code == 404
+    assert "curated" in r.json()["detail"].lower()
+
+
+def test_full_research_route_404s_for_non_curated_symbol():
+    """Round-4 CLUSTER 2 #6: same gate on /full-research — Opus is even
+    more expensive, so this is the higher-stakes version of the test."""
+    from api.routes import _rate_limit as rl
+    rl._reset_for_tests()
+    r = client.post("/api/v1/earnings/ZZZZZ/full-research")
+    assert r.status_code == 404
+    assert "curated" in r.json()["detail"].lower()
+
+
+def test_detail_route_curated_gate_runs_before_service():
+    """Round-4 CLUSTER 2 #6: even when the service layer is mocked to
+    return a successful response, the curated gate at the route must
+    block non-curated symbols. Verifies the check order."""
+    from api.schemas.earnings import EarningsDetail
+    from datetime import datetime, timezone
+
+    fake_detail = EarningsDetail(
+        symbol="X", company="X", sector="", report_date=None,
+        report_time="DMT", quote=None, metrics=None, strike_ladder=None,
+        claude_structured=None, claude_full_research=None,
+        iv_term_structure=None, skew=None, news=[],
+        partial=False, generated_at=datetime.now(timezone.utc),
+    )
+    with patch("services.earnings_screener.get_detail",
+               AsyncMock(return_value=fake_detail)) as svc_mock:
+        r = client.get("/api/v1/earnings/ZZZZZ/detail")
+    assert r.status_code == 404
+    # Service must NOT have been called — the gate ran first.
+    svc_mock.assert_not_called()
+
+
+def test_calendar_response_carries_window_label():
+    """Round-4 CLUSTER 1 #3: the calendar response now exposes
+    window_start / window_end / window_label so the frontend can render
+    a "Apr 27 - May 1, 2026" header. Verify the wire format."""
+    from api.schemas.earnings import CalendarResponse
+    from datetime import date, datetime, timezone
+
+    resp = CalendarResponse(
+        earnings=[],
+        generated_at=datetime.now(timezone.utc),
+        partial=False,
+        window_start=date(2026, 4, 27),
+        window_end=date(2026, 5, 1),
+        window_label="Apr 27 - May 1, 2026",
+        meta={"reason": "ok", "before_curated": 0},
+    )
+    with patch("services.earnings_screener.list_upcoming", AsyncMock(return_value=resp)):
+        r = client.get("/api/v1/earnings/calendar?window=current")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["window_start"] == "2026-04-27"
+    assert body["window_end"] == "2026-05-01"
+    assert body["window_label"] == "Apr 27 - May 1, 2026"
+    assert body["meta"]["reason"] == "ok"
+
+
 def test_detail_route_stub_tolerates_missing_fmp_next_date():
     """If FMP has no forward earnings record either, the stub still
-    returns 200 — just with report_date null."""
+    returns 200 — just with report_date null.
+
+    Round-4 CLUSTER 2 #6: the symbol must be in the curated universe to
+    get past the route's curated-gate check. Use BRK.B (curated) and
+    mock the per-symbol FMP lookups to return None — that exercises the
+    stub-tolerates-missing-record path without falling foul of the
+    cost-burning gate."""
     from services import earnings_screener
 
     async def fake_meta(symbol: str):
@@ -118,10 +196,10 @@ def test_detail_route_stub_tolerates_missing_fmp_next_date():
     with patch.object(earnings_screener, "_load_earnings_meta", new=fake_meta), \
          patch.object(earnings_screener, "_fetch_next_earnings_date", new=fake_next), \
          patch.object(earnings_screener, "_load_quote", new=fake_quote):
-        r = client.get("/api/v1/earnings/OBSCUR/detail")
+        r = client.get("/api/v1/earnings/BRK.B/detail")
 
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["symbol"] == "OBSCUR"
+    assert body["symbol"] == "BRK.B"
     assert body["report_date"] is None
     assert body["quote"] is None

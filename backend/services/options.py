@@ -34,6 +34,8 @@ from enum import Enum
 import httpx
 from pydantic import BaseModel, Field
 
+from core.time import market_today
+
 log = logging.getLogger(__name__)
 
 
@@ -71,18 +73,33 @@ class OptionChain(BaseModel):
     expirations: list[date]
     contracts: list[OptionContract]
     fetched_at: datetime
+    # Round-4 CLUSTER 3 #12: silent demo fallback was a data-correctness
+    # lie. The frontend now gets a flag so it can label demo chains.
+    is_demo: bool = False
 
 
 class IVData(BaseModel):
     symbol: str
-    current_iv: float
-    iv_rank: float = Field(..., description="IV rank 0-100")
-    iv_percentile: float = Field(..., description="IV percentile 0-100")
-    hv_20: float
-    hv_50: float
-    hv_100: float
+    current_iv: float | None
+    # Round-4 CLUSTER 3 #10/#11: IV rank, IV percentile, and HV figures
+    # were synthetic (within-chain smile / multipliers of current IV).
+    # All nullable so real-data responses can honestly say None when the
+    # historical-vol pipeline isn't wired. Demo data still populates them
+    # but the is_demo flag tells callers/UI to render accordingly.
+    iv_rank: float | None = Field(default=None, description="IV rank 0-100")
+    iv_percentile: float | None = Field(default=None, description="IV percentile 0-100")
+    hv_20: float | None = None
+    hv_50: float | None = None
+    hv_100: float | None = None
     iv_skew: dict[str, float] = Field(default_factory=dict, description="Strike -> IV mapping for skew")
     term_structure: dict[str, float] = Field(default_factory=dict, description="Expiry -> IV mapping")
+    # Round-4 CLUSTER 3 #10: synthetic IV data is flagged so the UI can
+    # render a "demo" badge rather than passing it off as live.
+    is_demo: bool = False
+    # Round-4 contract: actual upstream-fetch wall-clock UTC. Defaults to
+    # now() so existing callers that don't pass it stay valid; new code
+    # paths populate it explicitly.
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Greeks(BaseModel):
@@ -201,8 +218,17 @@ async def _demo_spot(symbol: str) -> float:
     return round(rng.uniform(20, 500), 2)
 
 
-def _next_friday(from_date: date) -> date:
-    """Return the next Friday on or after from_date."""
+def _next_friday(from_date: date | None = None) -> date:
+    """Return the next Friday on or after ``from_date``.
+
+    Round-4 CLUSTER 1: ``from_date`` defaults to NY market today so the
+    helper picks the right Friday even when invoked from a UTC-clocked
+    server late on a US Friday evening (UTC has crossed midnight, but
+    the NY market still considers today Friday — and the next chain
+    expiry is today, not next week).
+    """
+    if from_date is None:
+        from_date = market_today()
     days_ahead = 4 - from_date.weekday()  # Friday = 4
     if days_ahead <= 0:
         days_ahead += 7
@@ -235,7 +261,7 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
     r = 0.05
 
     # Generate 6 weekly expirations
-    today = date.today()
+    today = market_today()
     first_friday = _next_friday(today)
     expirations = [first_friday + timedelta(weeks=i) for i in range(6)]
 
@@ -326,6 +352,9 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
         expirations=sorted(set(e for e in expirations)),
         contracts=contracts,
         fetched_at=datetime.now(timezone.utc),
+        # Round-4 CLUSTER 3 #12: silent demo fallback was a data-correctness
+        # lie. Tag synthetic chains so the UI can label them.
+        is_demo=True,
     )
 
 
@@ -354,7 +383,7 @@ async def _demo_iv(symbol: str) -> IVData:
         skew[str(strike)] = round(current_iv * (1 + moneyness + rng.uniform(-0.005, 0.005)), 4)
 
     # Term structure
-    today = date.today()
+    today = market_today()
     first_friday = _next_friday(today)
     term = {}
     for w in range(6):
@@ -372,6 +401,10 @@ async def _demo_iv(symbol: str) -> IVData:
         hv_100=hv_100,
         iv_skew=skew,
         term_structure=term,
+        # Round-4 CLUSTER 3 #10/#11: synthetic IV is flagged so the UI
+        # surfaces a "demo" badge instead of presenting the value as live.
+        is_demo=True,
+        fetched_at=datetime.now(timezone.utc),
     )
 
 
@@ -563,6 +596,13 @@ async def _fetch_real_chain(
 
             bid_price = quote.get("bp", 0) or 0
             ask_price = quote.get("ap", 0) or 0
+            # Round-4 CLUSTER 5 #20: drop contracts with no real two-sided
+            # market. A zero-bid AND zero-ask contract is either an
+            # illiquid OTM strike that nobody quotes or a stale snapshot —
+            # rendering it in the strike ladder produces fake "yield" rows
+            # that aren't tradeable and pollute mid-price computations.
+            if bid_price == 0 and ask_price == 0:
+                continue
             last_price = trade.get("p", 0) or 0
             if not last_price and bid_price and ask_price:
                 last_price = round((bid_price + ask_price) / 2, 2)
@@ -601,6 +641,9 @@ async def _fetch_real_chain(
             expirations=sorted(expirations),
             contracts=contracts,
             fetched_at=datetime.now(timezone.utc),
+            # Round-4 CLUSTER 3 #12: explicit so callers can rely on this
+            # being a real-data chain.
+            is_demo=False,
         )
         _ttl_lru_set(_chain_cache, ckey, chain, time.time(), _CHAIN_CACHE_TTL)
         return chain
@@ -647,18 +690,24 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         atm_ivs = [c.iv for c in atm_contracts[:10] if c.iv > 0]
         current_iv = round(sum(atm_ivs) / len(atm_ivs), 4) if atm_ivs else round(sum(all_ivs) / len(all_ivs), 4)
 
-        # IV rank / percentile approximation from current snapshot spread
-        # (True rank needs history; we use the distribution of IVs in the chain)
-        sorted_ivs = sorted(all_ivs)
-        iv_min = sorted_ivs[0]
-        iv_max = sorted_ivs[-1]
-        iv_rank = round((current_iv - iv_min) / (iv_max - iv_min) * 100, 1) if iv_max != iv_min else 50.0
-        iv_percentile = round(sum(1 for v in sorted_ivs if v < current_iv) / len(sorted_ivs) * 100, 1)
+        # Round-4 CLUSTER 3 #10: real IV rank requires 252-day historical
+        # IV — that pipeline isn't wired yet. The previous within-chain-
+        # smile computation ranged the current IV against the spread of
+        # IVs across strikes/expiries in a single snapshot, which is NOT
+        # IV rank: a quiet stock with a wide skew would score 50, a
+        # screaming stock with a flat smile would score 100. Sort keys
+        # built on it were misleading. Until the historical-vol pipeline
+        # lands, return None so the frontend can render "—" instead of a
+        # number that lies.
+        iv_rank = None
+        iv_percentile = None
 
-        # HV approximations (without real price history, use IV as proxy)
-        hv_20 = round(current_iv * 0.85, 4)
-        hv_50 = round(current_iv * 0.90, 4)
-        hv_100 = round(current_iv * 0.92, 4)
+        # Round-4 CLUSTER 3 #11: HV figures were `current_iv * 0.85/0.90/0.92`
+        # — constants pretending to be a 20/50/100-day realised-vol
+        # series. Set to None until a real price-history pipeline lands.
+        hv_20 = None
+        hv_50 = None
+        hv_100 = None
 
         # IV skew: calls closest to nearest expiry, grouped by strike
         nearest_exp = chain.expirations[0] if chain.expirations else None
@@ -692,6 +741,10 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
             hv_100=hv_100,
             iv_skew=skew,
             term_structure=term_structure,
+            # Round-4: real IV is honest — is_demo stays False but the
+            # iv_rank/HV fields above are None until backed by real history.
+            is_demo=False,
+            fetched_at=datetime.now(timezone.utc),
         )
         _ttl_lru_set(_iv_cache, s, result, time.time(), _IV_CACHE_TTL)
         return result
@@ -797,6 +850,8 @@ async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVDa
             hv_20=round(hv_20, 4),
             hv_50=round(hv_50, 4),
             hv_100=round(hv_100, 4),
+            is_demo=False,
+            fetched_at=datetime.now(timezone.utc),
         )
     except HTTPException:
         # 404 from the demo allowlist branch must propagate.

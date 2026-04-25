@@ -175,3 +175,33 @@ class ClaudeClient:
         )
 
         return "".join(b.text for b in resp.content if hasattr(b, "text"))
+
+
+# Round-4 CLUSTER 2 #9: shared async client singleton. Each ClaudeClient
+# instance constructs a fresh anthropic.AsyncAnthropic, which carries its
+# own httpx connection pool. Constructing one per call wasted a few
+# hundred ms on TLS handshake per Claude request and meant we couldn't
+# benefit from HTTP/2 connection reuse.
+_CLIENT: ClaudeClient | None = None
+
+
+def get_client() -> ClaudeClient:
+    """Return the shared :class:`ClaudeClient`, lazily initialising on
+    first use. Safe under concurrent access — Python module globals are
+    write-protected by the GIL for simple assignment, and a duplicate
+    init in the rare race window does no harm beyond a transient extra
+    httpx pool that GC reclaims.
+    """
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = ClaudeClient()
+    return _CLIENT
+
+
+def _reset_client_for_tests() -> None:
+    """Test-only helper: clear the cached singleton between cases so a
+    pytest can patch ``ClaudeClient`` and have :func:`get_client` pick up
+    the new mock on the next call. NOT a public API.
+    """
+    global _CLIENT
+    _CLIENT = None

@@ -194,6 +194,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("Audit-log retention sweeper failed to schedule", exc_info=True)
 
+    # Round-4 CLUSTER 6 #23: slowloris-resistant rate-limit sweep.
+    # Without the periodic background sweep, the per-IP history dicts in
+    # ``api.routes._rate_limit`` only pruned themselves at saturation, so
+    # a stream of unique IPs each making one request and never coming
+    # back left empty deques accumulating in memory. Runs every 60s.
+    try:
+        from api.routes._rate_limit import start_periodic_sweep
+        start_periodic_sweep()
+        logger.info("Rate-limit periodic sweep started")
+    except Exception:
+        logger.warning("Rate-limit periodic sweep failed to start", exc_info=True)
+
     yield
 
     # Cancel audit cleanup task first — it's purely background, so
@@ -205,6 +217,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await audit_cleanup_task
         except (asyncio.CancelledError, Exception):
             pass
+
+    # Round-4 CLUSTER 6 #23: stop the rate-limit sweep loop.
+    try:
+        from api.routes._rate_limit import stop_periodic_sweep
+        await stop_periodic_sweep()
+    except Exception:
+        logger.warning("shutdown: rate-limit sweep stop raised", exc_info=True)
 
     # Stop real-time scanner
     try:
@@ -274,10 +293,18 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
-cors_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Round-4 CLUSTER 6 #25: tighten CORS in production. The localhost
+# origins are dev-only — leaving them in the prod allowlist meant any
+# operator running a malicious page on http://localhost:3000 against a
+# user's session cookie could read /api/v1/* responses (the
+# allow_credentials=True flag below makes that real). Gate on
+# settings.is_production so prod ONLY allows PRODUCTION_ORIGIN.
+cors_origins: list[str] = []
+if not settings.is_production:
+    cors_origins.extend([
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ])
 if settings.PRODUCTION_ORIGIN:
     cors_origins.append(settings.PRODUCTION_ORIGIN)
 
@@ -294,15 +321,20 @@ app.add_middleware(
 # assignment). ``trusted_hosts=["*"]`` let any client rotate X-Forwarded-For
 # to bypass per-IP rate limits; we now restrict to the private IP ranges Caddy
 # actually uses plus loopback for local dev.
+#
+# Round-4 CLUSTER 6 #22: dropped 10.0.0.0/8 and 192.168.0.0/16 from the
+# trusted-hosts list. The docker network inspect of the alphadesk
+# compose stack confirms Caddy lives on 172.18.x.x; the older 10.x and
+# 192.x entries were a "just in case" addition that broadened the
+# trust surface to any LAN client and made per-IP rate limits forgable
+# from inside the container's effective routing scope (k8s NodePort
+# IPs land on those ranges too).
 _TRUSTED_PROXY_HOSTS = [
     "127.0.0.1",
     "::1",
-    # Docker default bridge + user-defined bridges
+    # Docker default bridge + user-defined bridges. 172.16.0.0/12 covers
+    # 172.16-31, which spans every Docker / Compose user network we use.
     "172.16.0.0/12",
-    # Compose user networks sometimes land on 10.x
-    "10.0.0.0/8",
-    # docker-compose default subnet range (rare but legal)
-    "192.168.0.0/16",
 ]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
 

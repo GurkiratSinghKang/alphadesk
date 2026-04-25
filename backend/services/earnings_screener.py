@@ -13,10 +13,70 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
+from core.time import market_now, market_today
+
 log = logging.getLogger(__name__)
+
+
+# Round-4 CLUSTER 4 #15: scrub FMP API keys out of any error string we log.
+# FMP's HTTP client surfaces the URL with `apikey=...` in the message of
+# raised httpx errors; that meant every transport failure dumped our
+# secret into the structured log stream that ships to Loki. Apply the
+# scrub to every `extra={"error": str(e)}` site that pipes from upstream.
+_FMP_KEY_PATTERN = re.compile(r"(apikey|apiKey|api_key)=[^&\s\"']+", re.IGNORECASE)
+
+
+def _scrub_fmp_error(s: str) -> str:
+    """Redact ``apikey=...`` / ``apiKey=...`` / ``api_key=...`` query
+    params from a string before it lands in a log line. The replacement
+    keeps the param name so oncall can still tell what was scrubbed."""
+    if not s:
+        return s
+    return _FMP_KEY_PATTERN.sub(lambda m: f"{m.group(1)}=REDACTED", s)
+
+
+# Round-4 CLUSTER 1: report_state classification. Used at row build time
+# so the frontend can dim AMC reports that have already printed without us
+# silently filtering them out (which would make the calendar feel buggy).
+_NY_BMO_CUTOFF_HOUR = 9   # 09:30 ET — BMO companies have printed by then
+_NY_BMO_CUTOFF_MINUTE = 30
+_NY_AMC_CUTOFF_HOUR = 16  # 16:30 ET — AMC reports out shortly after close
+_NY_AMC_CUTOFF_MINUTE = 30
+
+
+def _classify_report_state(report_date: date, report_time: str) -> str:
+    """Return one of ``"upcoming" | "today_pre" | "today_done" | "past"``.
+
+    Round-4 CLUSTER 1 #5: post-09:30 ET on report day, BMO companies have
+    already printed; post-16:30 ET, AMC reports are out. Today's row stays
+    visible — the UI dims it via this state — while rows ≥ 2 days past
+    are dropped at the call site. Yesterday's row stays visible for one
+    day so a user opening the app at 08:00 ET still sees what reported
+    yesterday afternoon (otherwise it'd vanish overnight at midnight UTC,
+    which felt buggy).
+    """
+    today = market_today()
+    if report_date > today:
+        return "upcoming"
+    if report_date == today:
+        now = market_now()
+        if report_time == "AMC":
+            cutoff_h, cutoff_m = _NY_AMC_CUTOFF_HOUR, _NY_AMC_CUTOFF_MINUTE
+        else:
+            # BMO and DMT (during-market-trading / unknown) both cut over
+            # at the BMO hour — 09:30 ET. DMT's slightly imprecise but the
+            # alternative is calling everything "upcoming" until midnight,
+            # which is more wrong.
+            cutoff_h, cutoff_m = _NY_BMO_CUTOFF_HOUR, _NY_BMO_CUTOFF_MINUTE
+        if (now.hour, now.minute) < (cutoff_h, cutoff_m):
+            return "today_pre"
+        return "today_done"
+    # report_date < today
+    return "past"
 
 
 def _log_ctx(**kwargs: Any) -> dict[str, Any]:
@@ -103,6 +163,59 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
 )
 
 
+# Round-4 CLUSTER 1 #3: NY-anchored window resolution. The user-reported
+# bug ("only end-of-month dates showing") had its root here: the previous
+# implementation used UTC date.today() with naive day-7 offsets, which
+# meant a Friday-evening UTC call (Friday 20:00 ET → Saturday 01:00 UTC)
+# silently shifted the entire week forward.
+def _resolve_window_dates(window: str) -> tuple[date, date]:
+    """Return (inclusive_start, inclusive_end) for the requested window.
+
+    Anchors to NY market today and walks back to that week's Monday. On
+    weekends, anchors to the upcoming Monday (no reports drop on Sat/Sun
+    so showing "this week's" calendar with Mon-Fri of the just-finished
+    week is misleading — the user wants what's NEXT). Mon-Fri only:
+    options markets are closed Sat/Sun and FMP reports never land then.
+
+    ``window``:
+      - ``"current"`` → Mon-Fri of the active week (5 days)
+      - ``"next"``    → next week's Mon-Fri (5 days)
+      - ``"both"``    → 12 calendar days, two Mon-Fri windows together
+    """
+    today = market_today()
+    weekday = today.weekday()
+    # If we're on the weekend (Sat=5, Sun=6), advance to next week's Monday
+    # rather than backing up to the just-finished week.
+    if weekday >= 5:
+        anchor = today + timedelta(days=(7 - weekday))
+    else:
+        anchor = today
+    monday = anchor - timedelta(days=anchor.weekday())
+    if window == "current":
+        start = monday
+        end = monday + timedelta(days=4)  # Friday
+    elif window == "next":
+        start = monday + timedelta(days=7)
+        end = monday + timedelta(days=11)  # next Friday
+    else:  # both
+        start = monday
+        end = monday + timedelta(days=11)  # spans this Mon → next Fri
+    return start, end
+
+
+def _format_window_label(start: date, end: date) -> str:
+    """Locale-naive "Apr 27 – May 1, 2026"-style label for the response.
+
+    Frontend reformats per-locale; we just hand back something readable in
+    English. Same year gets one year suffix; cross-year gets both years.
+    Use a regular hyphen rather than en-dash to keep the wire payload
+    ASCII-safe (the frontend can swap to en-dash on render).
+    """
+    if start.year == end.year:
+        return f"{start.strftime('%b %-d')} - {end.strftime('%b %-d, %Y')}"
+    return f"{start.strftime('%b %-d, %Y')} - {end.strftime('%b %-d, %Y')}"
+
+
 # Map FMP's announcement_when field (lowercase amc/bmo/unknown) → our
 # ReportTime literal (BMO/AMC/DMT). "DMT" ("during market trading") is the
 # schema's neutral bucket for anything we can't confidently classify.
@@ -160,11 +273,32 @@ def _in_curated_universe(symbol: str) -> bool:
 
 # ─── Upstream adapters (thin wrappers; fan-outs call these) ──
 
+# Round-4 CLUSTER 5 #16: per-window cache + thundering-herd guard. The
+# upcoming-calendar fetch cost ~2-4 FMP calls per page-load before this;
+# with a curated universe of ~150 names and a typical user reload cadence
+# of 30s, the FMP rate limit was a real risk. Redis-backed so multiple
+# workers hit the same data; the in-process locks prevent N concurrent
+# refills on cold-cache.
+_FMP_UPCOMING_LOCKS: dict[str, asyncio.Lock] = {}
+_FMP_UPCOMING_TTL_S = 300  # 5 min
+
+
+def _fmp_upcoming_cache_key(window: str, start: date, end: date) -> str:
+    """Cache-key includes the resolved date range so a window-boundary
+    crossing (e.g. 23:55 ET → 00:05 ET) doesn't serve yesterday's data."""
+    return f"earnings:fmp:upcoming:{window}:{start.isoformat()}:{end.isoformat()}"
+
+
 async def _fmp_upcoming(window: str) -> list[dict]:
     """Return FMP earnings calendar rows for the requested window.
 
     `window`: 'current' = this week, 'next' = next week, 'both' = union.
     Wraps the existing :class:`data.providers.fmp_earnings.FMPEarningsProvider`.
+
+    Round-4 CLUSTER 1 #3: window dates are NY-anchored Mon-Fri; see
+    :func:`_resolve_window_dates`. Round-4 CLUSTER 5 #16: result is
+    cached in Redis for 5 minutes with an asyncio.Lock guard against
+    thundering-herd refills on cold cache.
 
     The provider is synchronous (returns a pandas DataFrame) so we offload
     the call to a worker thread with :func:`asyncio.to_thread`. Rows are
@@ -177,16 +311,22 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     a dedicated profile endpoint if needed; the aggregator already
     tolerates empty/placeholder values.
     """
+    from core.cache import get_cache
     from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
 
-    today = date.today()
-    if window == "current":
-        start, end = today, today + timedelta(days=7)
-    elif window == "next":
-        start, end = today + timedelta(days=7), today + timedelta(days=14)
-    else:  # both
-        start, end = today, today + timedelta(days=14)
+    start, end = _resolve_window_dates(window)
+    cache = get_cache()
+    cache_key = _fmp_upcoming_cache_key(window, start, end)
+
+    cached = await cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
+
+    # Per-window asyncio.Lock prevents the thundering-herd on cold cache:
+    # without it, N concurrent requests would each fire a fresh FMP call,
+    # blow through the rate limit, then all write the same value back.
+    lock = _FMP_UPCOMING_LOCKS.setdefault(window, asyncio.Lock())
 
     def _load() -> list[dict]:
         # Timeout operator-tunable via ``settings.EARNINGS_FMP_TIMEOUT_S``
@@ -244,27 +384,35 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             deduped.append(r)
         return deduped
 
-    try:
-        # B-80: cap the worker-thread wait so a stalled FMP call can't
-        # starve the asyncio thread pool. 5s is generous vs. the typical
-        # <1s response; on timeout we re-raise so the outer catch marks
-        # the response partial with an empty calendar.
-        return await asyncio.wait_for(asyncio.to_thread(_load), timeout=5.0)
-    except asyncio.TimeoutError:
-        log.warning("FMP upcoming fetch timed out for window=%s", window)
-        raise
-    except Exception as e:
-        log.warning(
-            "FMP upcoming fetch failed for window=%s: %s",
-            window,
-            e,
-            extra=_log_ctx(
-                endpoint="earnings._fmp_upcoming",
-                window=window,
-                error=str(e),
-            ),
-        )
-        raise
+    async with lock:
+        # Re-check after acquiring the lock — a sibling task may have
+        # populated the cache while we waited.
+        cached = await cache.get(cache_key)
+        if isinstance(cached, list):
+            return cached
+        try:
+            # B-80: cap the worker-thread wait so a stalled FMP call can't
+            # starve the asyncio thread pool. 5s is generous vs. the typical
+            # <1s response; on timeout we re-raise so the outer catch marks
+            # the response partial with an empty calendar.
+            rows = await asyncio.wait_for(asyncio.to_thread(_load), timeout=5.0)
+        except asyncio.TimeoutError:
+            log.warning("FMP upcoming fetch timed out for window=%s", window)
+            raise
+        except Exception as e:
+            log.warning(
+                "FMP upcoming fetch failed for window=%s: %s",
+                window,
+                _scrub_fmp_error(str(e)),
+                extra=_log_ctx(
+                    endpoint="earnings._fmp_upcoming",
+                    window=window,
+                    error=_scrub_fmp_error(str(e)),
+                ),
+            )
+            raise
+        await cache.set(cache_key, rows, ttl_seconds=_FMP_UPCOMING_TTL_S)
+        return rows
 
 
 async def _load_quote(symbol: str) -> dict | None:
@@ -326,9 +474,17 @@ async def _load_metrics(
                 call_mid=(atm_call.bid + atm_call.ask) / 2,
                 put_mid=(atm_put.bid + atm_put.ask) / 2,
             )
-        days_to_earnings = (report_date - date.today()).days if report_date else None
-        days_to_expiry = (expiry - date.today()).days if expiry else None
-        hv_iv_ratio = (iv.hv_20 / iv.current_iv) if iv.current_iv else None
+        today = market_today()
+        days_to_earnings = (report_date - today).days if report_date else None
+        days_to_expiry = (expiry - today).days if expiry else None
+        # Round-4 CLUSTER 3 #11: hv_iv_ratio is None whenever either input
+        # is missing. Real-data IV now returns hv_20=None until the
+        # historical-vol pipeline lands; making the ratio None is more
+        # honest than dividing whatever-we-have by current_iv.
+        if iv.hv_20 is not None and iv.current_iv:
+            hv_iv_ratio = iv.hv_20 / iv.current_iv
+        else:
+            hv_iv_ratio = None
         return {
             "iv_rank": iv.iv_rank,
             "iv_percentile": iv.iv_percentile,
@@ -351,11 +507,11 @@ async def _load_metrics(
         log.debug(
             "metrics load failed for %s: %s",
             symbol,
-            e,
+            _scrub_fmp_error(str(e)),
             extra=_log_ctx(
                 endpoint="earnings._load_metrics",
                 symbol=symbol,
-                error=str(e),
+                error=_scrub_fmp_error(str(e)),
             ),
         )
         return None
@@ -411,7 +567,7 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
                 })
         resolved_expiry = (
             expiry
-            or (chain.expirations[0] if chain.expirations else date.today())
+            or (chain.expirations[0] if chain.expirations else market_today())
         )
         return {
             "expiry": resolved_expiry,
@@ -423,9 +579,26 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
         return None
 
 
+# Round-4 CLUSTER 2 #7: in-flight task de-dup. Without this, every
+# concurrent /detail request for the same symbol on a cold cache fires
+# a fresh structured-Claude call. At ~$0.05/call and a curated universe
+# of ~150 names, that's a real burn on a cache reset. The dict maps
+# `f"{symbol}:{report_date}"` -> the in-flight Task; subsequent callers
+# `await` the same Task instead of creating a new one.
+_inflight_structured: dict[str, asyncio.Task[dict | None]] = {}
+
+
 async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
-    """Read from cache; on miss, fire-and-forget the Claude call so the UI
-    doesn't block. Returns whatever is currently cached."""
+    """Read from cache; on miss, run-and-await the Claude call (de-duped
+    across concurrent requests) so the user sees data on first load.
+
+    Round-4 CLUSTER 2 #7: previously this fired the call as a background
+    task and returned ``None`` — meaning the user got no Claude content
+    on the first detail load and had to refresh. The fire-and-forget was
+    also a cost vector: N concurrent requests for the same symbol on a
+    cold cache each spawned an independent task. Now we de-dup via
+    :data:`_inflight_structured` and await the result.
+    """
     from core.cache import get_cache
 
     cache = get_cache()
@@ -433,15 +606,30 @@ async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
     cached = await cache.get(key)
     if cached:
         return cached
-    # Cache miss — enqueue + return None so the row fills in on next refresh.
-    asyncio.create_task(_run_structured_and_cache(symbol, context, cache, key))
-    return None
+
+    inflight_key = f"{symbol}:{context['report_date']}"
+    task = _inflight_structured.get(inflight_key)
+    if task is None or task.done():
+        task = asyncio.create_task(_run_structured_and_cache(symbol, context, cache, key))
+        _inflight_structured[inflight_key] = task
+        # Pop from the registry once finished so the next cold-cache hit
+        # gets a fresh task. Done-callback runs in the loop's context.
+        task.add_done_callback(lambda t, k=inflight_key: _inflight_structured.pop(k, None))
+    try:
+        return await task
+    except Exception:
+        # The task already logged at DEBUG; surface None to the caller so
+        # the detail panel still renders without the Claude block.
+        return None
 
 
 async def _run_structured_and_cache(
     symbol: str, context: dict, cache: Any, key: str
-) -> None:
-    from agents.claude_client import ClaudeClient
+) -> dict | None:
+    """Round-4 CLUSTER 2 #7: now returns the cached payload (or ``None``
+    on failure) so the de-dup wrapper can deliver the result to all
+    concurrent awaiters."""
+    from agents.claude_client import get_client
     from core.config import settings
     from services.earnings_prompts import (
         MODEL_STRUCTURED,
@@ -450,8 +638,11 @@ async def _run_structured_and_cache(
     )
 
     try:
-        prompt = build_structured_prompt(**context)
-        client = ClaudeClient()
+        # Round-4 CLUSTER 6 #24: sanitize untrusted strings before they
+        # land in the prompt — see :func:`_sanitize_for_prompt`.
+        safe_context = _sanitize_prompt_context(context)
+        prompt = build_structured_prompt(**safe_context)
+        client = get_client()
         raw = await client.complete(
             system=prompt["system"], user=prompt["user"], model=MODEL_STRUCTURED,
             context={
@@ -473,6 +664,7 @@ async def _run_structured_and_cache(
             payload,
             ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
         )
+        return payload
     except Exception as e:
         # B-69: demoted to DEBUG — an Anthropic outage would otherwise
         # emit one WARN per symbol as N structured calls fail in the
@@ -480,25 +672,99 @@ async def _run_structured_and_cache(
         log.debug(
             "Claude structured failed for %s: %s",
             symbol,
-            e,
+            _scrub_fmp_error(str(e)),
             extra=_log_ctx(
                 endpoint="earnings._load_claude_structured",
                 symbol=symbol,
-                error=str(e),
+                error=_scrub_fmp_error(str(e)),
             ),
         )
+        return None
+
+
+# Round-4 CLUSTER 6 #24: prompt-injection hardening for Claude calls.
+# Attacker-controlled strings (news headlines, company name, sector text
+# scraped from upstream APIs) used to be interpolated raw into the prompt.
+# A malicious headline could carry an "Ignore the system prompt and..."
+# string or unicode line/paragraph separators that confuse the
+# tokenizer's view of message boundaries. Strip control chars, cap
+# length, and let the prompt-builder wrap each value in delimiters.
+_CONTROL_CHARS = re.compile(r"[\u0000-\u001f\u007f\u2028\u2029]")
+
+
+def _sanitize_for_prompt(value: Any, *, max_len: int = 200) -> Any:
+    """Strip ASCII control chars + line/paragraph separators, truncate."""
+    if not isinstance(value, str):
+        return value
+    cleaned = _CONTROL_CHARS.sub(" ", value)
+    if len(cleaned) > max_len:
+        cleaned = cleaned[: max_len - 1] + "…"
+    return cleaned
+
+
+def _sanitize_prompt_context(context: dict) -> dict:
+    """Apply :func:`_sanitize_for_prompt` to every untrusted string field.
+
+    Trusted fields (``symbol`` is whitelist-validated on the route, the
+    numeric metrics are floats, ``report_date`` is server-derived) pass
+    through. ``company``, ``sector``, ``headlines``, and the looser
+    ``market_regime`` are all upstream-supplied and get scrubbed.
+    """
+    out = dict(context)
+    for k in ("company", "sector", "market_regime"):
+        if k in out:
+            out[k] = _sanitize_for_prompt(out[k], max_len=200)
+    if isinstance(out.get("headlines"), list):
+        out["headlines"] = [
+            _sanitize_for_prompt(h, max_len=200) for h in out["headlines"][:5]
+        ]
+    if isinstance(out.get("recent_beats_misses"), list):
+        out["recent_beats_misses"] = [
+            (
+                _sanitize_for_prompt(d, max_len=20),
+                _sanitize_for_prompt(s, max_len=80),
+            )
+            for d, s in out["recent_beats_misses"][:8]
+        ]
+    return out
 
 
 async def _load_iv_term(symbol: str) -> list[dict] | None:
+    """Build ATM-IV term structure across the first six expirations.
+
+    Round-4 CLUSTER 5 #17: previously this awaited each expiration chain
+    fetch sequentially — six round-trips per symbol on the detail page.
+    With the per-symbol cache TTL of 30s, the second-and-onwards fetches
+    were usually warm but cold-cache loads were slow. ``asyncio.gather``
+    parallelises so cold-cache p95 falls from ~1.5s to ~250ms.
+    """
     from services.options import fetch_chain
 
     try:
-        today = date.today()
+        today = market_today()
         first_chain = await fetch_chain(symbol)
+        expirations = first_chain.expirations[:6]
+        if not expirations:
+            return None
+        chains = await asyncio.gather(
+            *(
+                fetch_chain(
+                    symbol,
+                    expiry=(
+                        e if isinstance(e, date) else date.fromisoformat(str(e))
+                    ),
+                )
+                for e in expirations
+            ),
+            return_exceptions=True,
+        )
         term: list[dict] = []
-        for exp in first_chain.expirations[:6]:
-            exp_date = exp if isinstance(exp, date) else date.fromisoformat(str(exp))
-            exp_chain = await fetch_chain(symbol, expiry=exp_date)
+        for exp, exp_chain in zip(expirations, chains):
+            if isinstance(exp_chain, Exception):
+                continue
+            exp_date = (
+                exp if isinstance(exp, date) else date.fromisoformat(str(exp))
+            )
             calls = _filter_chain(exp_chain, "call")
             atm = min(
                 calls,
@@ -513,7 +779,7 @@ async def _load_iv_term(symbol: str) -> list[dict] | None:
                 })
         return term or None
     except Exception as e:
-        log.warning("iv term load failed for %s: %s", symbol, e)
+        log.warning("iv term load failed for %s: %s", symbol, _scrub_fmp_error(str(e)))
         return None
 
 
@@ -572,23 +838,44 @@ def _parse_news_datetime(raw: str) -> datetime:
 
 
 async def _load_news(symbol: str) -> list[dict]:
+    """Round-4 CLUSTER 3 #14: returns ``[]`` when Newsdata is rate-limited
+    or down (the upstream service produces demo articles with empty URLs;
+    the post-filter strips them all). To distinguish a genuine empty result
+    from "news temporarily unavailable", :func:`get_detail` consults the
+    upstream's ``is_demo`` flag separately via :func:`_news_payload`.
+    """
+    payload = await _news_payload(symbol, limit=10)
+    return payload["articles"]
+
+
+async def _news_payload(symbol: str, *, limit: int = 10) -> dict:
+    """Round-4 CLUSTER 3 #14: single Newsdata fetch returning both the
+    parsed articles and an ``is_demo`` flag so callers don't have to
+    double-fetch to learn whether the empty result is real or a
+    rate-limit cooldown.
+    """
     from services.news import fetch_symbol_news
 
     try:
-        resp = await fetch_symbol_news(symbol, limit=10)
-        return [
-            {
-                "title": a.title,
-                "source": a.source,
-                "published_at": _parse_news_datetime(a.published_at),
-                "url": a.url,
-            }
-            for a in resp.articles
-            if a.url  # Schema requires a URL; drop rows with empty links
-        ]
+        resp = await fetch_symbol_news(symbol, limit=limit)
     except Exception as e:
-        log.warning("news load failed for %s: %s", symbol, e)
-        return []
+        log.warning("news load failed for %s: %s", symbol, _scrub_fmp_error(str(e)))
+        return {"articles": [], "is_demo": True}
+
+    if resp.is_demo:
+        return {"articles": [], "is_demo": True}
+
+    articles = [
+        {
+            "title": a.title,
+            "source": a.source,
+            "published_at": _parse_news_datetime(a.published_at),
+            "url": a.url,
+        }
+        for a in resp.articles
+        if a.url  # Schema requires a URL; drop rows with empty links
+    ]
+    return {"articles": articles, "is_demo": False}
 
 
 async def _load_earnings_meta(symbol: str) -> dict | None:
@@ -610,9 +897,12 @@ async def _fetch_next_earnings_date(symbol: str) -> date | None:
     def _load() -> date | None:
         try:
             with FMPEarningsProvider() as provider:
-                consensus = provider.consensus(symbol, asof=date.today())
+                consensus = provider.consensus(symbol, asof=market_today())
         except Exception as e:
-            log.warning("FMP consensus lookup failed for %s: %s", symbol, e)
+            log.warning(
+                "FMP consensus lookup failed for %s: %s",
+                symbol, _scrub_fmp_error(str(e)),
+            )
             return None
         nxt = consensus.get("next_earnings_date") if consensus else None
         if isinstance(nxt, date):
@@ -622,7 +912,10 @@ async def _fetch_next_earnings_date(symbol: str) -> date | None:
     try:
         return await asyncio.to_thread(_load)
     except Exception as e:
-        log.warning("FMP consensus offload failed for %s: %s", symbol, e)
+        log.warning(
+            "FMP consensus offload failed for %s: %s",
+            symbol, _scrub_fmp_error(str(e)),
+        )
         return None
 
 
@@ -631,6 +924,7 @@ async def _hydrate_row(
     *,
     min_iv_rank: float = 0,
     client_host: str | None = None,
+    today: date | None = None,
 ) -> dict | None:
     """Enrich one FMP row with price, IV rank, expected move, and days-until.
 
@@ -638,8 +932,16 @@ async def _hydrate_row(
     threshold filter. Raises on truly unrecoverable errors (caller catches).
     ``client_host`` is threaded through to ``_load_quote`` so per-IP rate
     limits kick in on the real user's IP instead of loopback (B-33).
+
+    Round-4 CLUSTER 1 #4: ``today`` is computed ONCE in
+    :func:`list_upcoming` and threaded through so we don't compute the
+    NY market date twice per row (here and again in the validation
+    fallback). Default :func:`market_today` keeps stand-alone calls
+    working.
     """
     symbol = row["symbol"]
+    if today is None:
+        today = market_today()
     # B-35: gather with return_exceptions=True gives us clean per-task
     # exception handling and concise result-unpacking. The previous
     # wait/result sequence re-raised either task's exception without
@@ -670,6 +972,9 @@ async def _hydrate_row(
     iv_rank = metrics.get("iv_rank") if metrics else None
     if iv_rank is not None and iv_rank < min_iv_rank:
         return None
+    report_date_obj = date.fromisoformat(row["report_date"])
+    days_until = (report_date_obj - today).days
+    report_state = _classify_report_state(report_date_obj, row.get("report_time", "DMT"))
     return {
         **row,
         "price": quote["last"] if quote else None,
@@ -683,7 +988,8 @@ async def _hydrate_row(
         "claude_verdict": None,
         "claude_confidence": None,
         "top_setup": None,
-        "days_until": (date.fromisoformat(row["report_date"]) - date.today()).days,
+        "days_until": days_until,
+        "report_state": report_state,
     }
 
 
@@ -706,15 +1012,25 @@ async def list_upcoming(
     (B-33).
     """
     partial = False
+    # Round-4 CLUSTER 1 #4: compute "today" once and pass through. The
+    # window dates are also resolved once at the top so they can land in
+    # the response payload.
+    today = market_today()
+    window_start, window_end = _resolve_window_dates(window)
+    window_label = _format_window_label(window_start, window_end)
     try:
         raw_rows = await _fmp_upcoming(window)
     except Exception as e:
-        log.error("FMP earnings calendar unavailable: %s", e)
+        log.error("FMP earnings calendar unavailable: %s", _scrub_fmp_error(str(e)))
         return CalendarResponse(
             earnings=[],
             generated_at=datetime.now(timezone.utc),
             partial=True,
             error="earnings calendar unavailable",
+            window_start=window_start,
+            window_end=window_end,
+            window_label=window_label,
+            meta={"reason": "fmp_unavailable", "before_curated": 0},
         )
 
     # B-66: always restrict to the curated optionable universe (mega +
@@ -764,7 +1080,10 @@ async def list_upcoming(
         async with hydrate_sem:
             try:
                 return await _hydrate_row(
-                    row, min_iv_rank=min_iv_rank, client_host=client_host,
+                    row,
+                    min_iv_rank=min_iv_rank,
+                    client_host=client_host,
+                    today=today,
                 )
             except Exception as e:
                 # Keep per-symbol detail at DEBUG for local reproduction,
@@ -773,11 +1092,11 @@ async def list_upcoming(
                 log.debug(
                     "hydrate failed for %s: %s",
                     sym,
-                    e,
+                    _scrub_fmp_error(str(e)),
                     extra=_log_ctx(
                         endpoint="earnings.safe_hydrate",
                         symbol=sym,
-                        error=str(e),
+                        error=_scrub_fmp_error(str(e)),
                     ),
                 )
                 hydration_failures.append(sym)
@@ -808,12 +1127,26 @@ async def list_upcoming(
             continue  # filtered by min_iv_rank
         try:
             row_payload = dict(h)
-            row_payload.setdefault(
-                "days_until",
-                (date.fromisoformat(row_payload["report_date"]) - date.today()).days
-                if isinstance(row_payload.get("report_date"), str)
-                else 0,
-            )
+            # Round-4 CLUSTER 1 #4: days_until / report_state are computed
+            # in _hydrate_row using the shared `today`. The setdefault here
+            # is a safety net for paths that bypass _hydrate_row (tests
+            # that mock it). Compute against the shared `today` so we
+            # don't re-read the clock twice.
+            if "days_until" not in row_payload and isinstance(
+                row_payload.get("report_date"), str
+            ):
+                row_payload["days_until"] = (
+                    date.fromisoformat(row_payload["report_date"]) - today
+                ).days
+            row_payload.setdefault("days_until", 0)
+            if "report_state" not in row_payload and isinstance(
+                row_payload.get("report_date"), str
+            ):
+                row_payload["report_state"] = _classify_report_state(
+                    date.fromisoformat(row_payload["report_date"]),
+                    row_payload.get("report_time", "DMT"),
+                )
+            row_payload.setdefault("report_state", "upcoming")
             rows.append(CalendarRow(**row_payload))
         except Exception as e:
             log.warning(
@@ -836,11 +1169,22 @@ async def list_upcoming(
         wanted = bmo_amc.upper()
         rows = [r for r in rows if r.report_time == wanted]
 
-    # B-43: drop stale earnings. FMP's window query can return rows whose
-    # report_date already passed (timezone races around midnight, or an
-    # upstream cache bug). Rendering them in the calendar is misleading —
-    # a negative `days_until` looks like a typo.
-    rows = [r for r in rows if (r.days_until or 0) >= 0]
+    # Round-4 CLUSTER 1 #5: visibility filter replaces the bare
+    # `days_until >= 0` check. We keep today's row visible so the user
+    # sees what's printing today (frontend dims via report_state once it
+    # crosses the BMO/AMC cutover); we drop anything 2+ days past.
+    def _is_visible(r: CalendarRow) -> bool:
+        if r.days_until is None:
+            return True  # next-window stub
+        if r.days_until > 0:
+            return True
+        if r.days_until < -1:
+            return False  # 2+ days past — definitely stale
+        # On report day or yesterday: keep visible — frontend dims via
+        # report_state.
+        return True
+
+    rows = [r for r in rows if _is_visible(r)]
 
     if sort == "date":
         rows.sort(key=lambda r: (r.report_date, r.symbol))
@@ -856,11 +1200,31 @@ async def list_upcoming(
     elif sort == "claude_confidence":
         rows.sort(key=lambda r: r.claude_confidence or 0, reverse=True)
 
+    # Round-4 CLUSTER 5 #21: empty-calendar diagnostic. The frontend
+    # uses `meta.reason` to pick the right empty-state copy:
+    #   - "ok"                   — rows present
+    #   - "weekend_no_reports"   — calendar empty because Sat/Sun
+    #   - "no_curated_matches"   — FMP returned rows but none were in
+    #                              the curated universe
+    #   - "fmp_unavailable"      — caught above on _fmp_upcoming raise
+    if rows:
+        reason = "ok"
+    elif before_count == 0 and today.weekday() >= 5:
+        reason = "weekend_no_reports"
+    elif before_count > 0:
+        reason = "no_curated_matches"
+    else:
+        reason = "ok"  # genuinely no reports this Mon-Fri
+
     return CalendarResponse(
         earnings=rows,
         generated_at=datetime.now(timezone.utc),
         partial=partial,
         validation_errors=validation_errors,
+        window_start=window_start,
+        window_end=window_end,
+        window_label=window_label,
+        meta={"reason": reason, "before_curated": before_count},
     )
 
 
@@ -892,7 +1256,13 @@ async def _build_stub_detail(symbol: str) -> EarningsDetail:
         iv_term_structure=None,
         skew=None,
         news=[],
-        partial=False,
+        # Round-4 CLUSTER 3 #13: stub detail was lying with partial=False.
+        # The whole panel is a fallback — every downstream block is
+        # absent — so it has to flag partial honestly. Frontend uses the
+        # ``stub_detail`` code to decide whether to render the "limited
+        # info — symbol not on this week's calendar" banner.
+        partial=True,
+        error_codes=["stub_detail"],
         generated_at=datetime.now(timezone.utc),
     )
 
@@ -911,30 +1281,61 @@ async def get_detail(symbol: str) -> EarningsDetail:
     if not meta:
         return await _build_stub_detail(symbol)
 
-    quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t = (
+    quote_t, metrics_t, ladder_t, news_payload_t, iv_term_t, skew_t = (
         await asyncio.gather(
             _load_quote(symbol),
             _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
             _load_strike_ladder(symbol, expiry=None),
-            _load_news(symbol),
+            _news_payload(symbol),
             _load_iv_term(symbol),
             _load_skew(symbol),
             return_exceptions=True,
         )
     )
-    # `partial` = any critical block errored. Successful ``None`` returns
-    # (upstream intentionally absent) are NOT partial — only exceptions are.
-    partial = any(
-        isinstance(x, Exception)
-        for x in [quote_t, metrics_t, ladder_t, news_t, iv_term_t, skew_t]
-    )
-
+    # Round-4 CLUSTER 3: a successful ``None`` is NOT partial (provider
+    # intentionally absent); only exceptions or news_unavailable are.
     quote = quote_t if isinstance(quote_t, dict) else None
     metrics = metrics_t if isinstance(metrics_t, dict) else None
     ladder = ladder_t if isinstance(ladder_t, dict) else None
-    news = news_t if isinstance(news_t, list) else []
     iv_term = iv_term_t if isinstance(iv_term_t, list) else None
     skew = skew_t if isinstance(skew_t, dict) else None
+
+    error_codes: list[str] = []
+    news: list[dict] = []
+    news_unavailable = False
+    if isinstance(news_payload_t, dict):
+        news = news_payload_t.get("articles", []) or []
+        news_unavailable = bool(news_payload_t.get("is_demo"))
+    else:
+        news_unavailable = True
+
+    if news_unavailable:
+        error_codes.append("news_unavailable")
+
+    # Round-4 CLUSTER 3 #11: metrics missing or hv_20/iv_rank None tells
+    # the frontend that the historical-vol pipeline isn't backing this
+    # row. Use specific codes so the UI can render distinct badges.
+    if metrics is None:
+        error_codes.append("metrics_unavailable")
+    else:
+        if metrics.get("hv_20") is None:
+            error_codes.append("hv_unavailable")
+        if metrics.get("iv_rank") is None:
+            error_codes.append("iv_unavailable")
+
+    # `partial` = any critical block errored or any data-availability
+    # signal is on. ``None`` returns (provider intentionally absent) are
+    # not partial unless they fired a code above.
+    partial = (
+        any(
+            isinstance(x, Exception)
+            for x in [quote_t, metrics_t, ladder_t, news_payload_t, iv_term_t, skew_t]
+        )
+        or news_unavailable
+        or "metrics_unavailable" in error_codes
+        or "hv_unavailable" in error_codes
+        or "iv_unavailable" in error_codes
+    )
 
     claude_ctx = {
         "symbol": symbol,
@@ -943,10 +1344,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "report_date": meta["report_date"],
         "report_time": meta["report_time"],
         "price": quote["last"] if quote else 0.0,
-        "iv_rank": metrics.get("iv_rank", 0) if metrics else 0,
-        "iv_percentile": metrics.get("iv_percentile", 0) if metrics else 0,
-        "hv_20": metrics.get("hv_20", 0) if metrics else 0,
-        "expected_move_pct": metrics.get("expected_move_pct", 0) if metrics else 0,
+        "iv_rank": metrics.get("iv_rank") or 0 if metrics else 0,
+        "iv_percentile": metrics.get("iv_percentile") or 0 if metrics else 0,
+        "hv_20": metrics.get("hv_20") or 0 if metrics else 0,
+        "expected_move_pct": metrics.get("expected_move_pct") or 0 if metrics else 0,
         # B-63: historical block was stubbed + removed from the response.
         # Pass None so the prompt omits the line rather than lying to
         # Claude that realized vol is 0%.
@@ -958,7 +1359,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)
     except Exception as e:
-        log.warning("claude structured load failed for %s: %s", symbol, e)
+        log.warning(
+            "claude structured load failed for %s: %s",
+            symbol, _scrub_fmp_error(str(e)),
+        )
         claude = None
 
     return EarningsDetail(
@@ -976,6 +1380,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         skew=SkewBlock(**skew) if skew else None,
         news=[NewsArticle(**n) for n in news],
         partial=partial,
+        error_codes=error_codes,
         generated_at=datetime.now(timezone.utc),
     )
 
@@ -986,7 +1391,7 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     Cache hit → return parsed payload straight. Cache miss → gather context,
     build the full prompt, call Claude Opus, persist, return.
     """
-    from agents.claude_client import ClaudeClient
+    from agents.claude_client import get_client
     from core.cache import get_cache
     from services.earnings_prompts import (
         MODEL_FULL,
@@ -1010,24 +1415,40 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
         _load_news(symbol),
         return_exceptions=True,
     )
+    # Round-4 CLUSTER 6 #24: scrub upstream-supplied strings before they
+    # land in the prompt. Headlines, sector, and company name are all
+    # untrusted (Newsdata + FMP free-form fields).
+    headlines = [n["title"] for n in news] if isinstance(news, list) else []
+    safe_company = _sanitize_for_prompt(meta["company"], max_len=200)
+    safe_sector = _sanitize_for_prompt(meta["sector"], max_len=200)
+    safe_headlines = [_sanitize_for_prompt(h, max_len=200) for h in headlines[:5]]
     prompt = build_full_prompt(
         symbol=symbol,
-        company=meta["company"],
-        sector=meta["sector"],
+        company=safe_company,
+        sector=safe_sector,
         report_date=meta["report_date"],
         report_time=meta["report_time"],
         price=quote["last"] if isinstance(quote, dict) else 0.0,
-        iv_rank=metrics.get("iv_rank", 0) if isinstance(metrics, dict) else 0,
-        iv_percentile=metrics.get("iv_percentile", 0) if isinstance(metrics, dict) else 0,
-        expected_move_pct=metrics.get("expected_move_pct", 0) if isinstance(metrics, dict) else 0,
+        iv_rank=(
+            metrics.get("iv_rank") or 0 if isinstance(metrics, dict) else 0
+        ),
+        iv_percentile=(
+            metrics.get("iv_percentile") or 0 if isinstance(metrics, dict) else 0
+        ),
+        expected_move_pct=(
+            metrics.get("expected_move_pct") or 0 if isinstance(metrics, dict) else 0
+        ),
         # B-63: historical data loader removed; quarters list is empty
         # until the FMP surprises join lands in a follow-up.
         historical_quarters=[],
-        headlines=[n["title"] for n in news] if isinstance(news, list) else [],
+        headlines=safe_headlines,
         market_regime="Unknown",  # wire once regime service is exposed
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists
     )
-    client = ClaudeClient()
+    # Round-4 CLUSTER 2 #9: shared singleton client. Constructing a fresh
+    # ClaudeClient per call (re-instantiates anthropic.AsyncAnthropic +
+    # its httpx connection pool) burned a few hundred ms per request.
+    client = get_client()
     raw = await client.complete(
         system=prompt["system"], user=prompt["user"], model=MODEL_FULL,
         context={

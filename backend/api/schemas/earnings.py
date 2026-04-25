@@ -8,7 +8,7 @@ Claude) fails.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,10 @@ Verdict = Literal["bullish", "neutral-bull", "neutral", "neutral-bear", "bearish
 OptionSide = Literal["call", "put"]
 Bucket = Literal["15Δ", "30Δ", "ATM"]
 TopSetup = Literal["short call", "cash-secured put", "short strangle", "iron condor"]
+# Round-4 CLUSTER 1 #5: a row's display state for the day-of report.
+# The frontend dims rows based on this; backend never filters >= today_done
+# silently — it surfaces the state so the user sees what we know.
+ReportState = Literal["upcoming", "today_pre", "today_done", "past"]
 
 
 # ─── Calendar row ────────────────────────────────────────────
@@ -29,9 +33,19 @@ class CalendarRow(BaseModel):
     report_date: date
     report_time: ReportTime
     days_until: int
+    # Round-4 CLUSTER 1 #5: report_state lets the frontend dim "already
+    # printed today" rows without us filtering them out (which would make
+    # the calendar feel buggy on report day).
+    report_state: ReportState = "upcoming"
     price: float | None = None
     change: float | None = None
     change_pct: float | None = None
+    # Round-4 CLUSTER 3 #10: iv_rank is now nullable. The within-chain-smile
+    # value computed in `services.options._fetch_real_iv` was never a real
+    # IV rank — it was the spread of IVs across a single snapshot. Until
+    # the historical-vol pipeline lands, real-data calls return None and the
+    # frontend renders "—". Demo data still produces a synthetic value but
+    # the IVData.is_demo flag tells the UI to label it accordingly.
     iv_rank: float | None = Field(default=None, ge=0, le=100)
     premium_yield_call_atm: float | None = None  # decimal
     premium_yield_put_atm: float | None = None
@@ -53,6 +67,25 @@ class CalendarResponse(BaseModel):
     # `partial`) lets the frontend show a "N symbols had schema issues"
     # debug badge without re-fetching.
     validation_errors: list[dict] = Field(default_factory=list)
+    # ── Round-4 CLUSTER 1: window semantics ──
+    # The user-reported "only end-of-month dates showing" bug had two roots:
+    # (1) the server picked windows in UTC, not NY market time, so a Friday
+    # evening call could land on Saturday in UTC and silently shift the
+    # entire week forward, and (2) the response never told the frontend
+    # which window it was looking at, so the UI couldn't surface a "showing
+    # Apr 27 - May 1" header. These three fields fix both: window_start /
+    # window_end are inclusive Mon-Fri NY-anchored dates, and window_label
+    # is a locale-naive string the frontend reformats. Defaults are filled
+    # in at the service layer; tests that build CalendarResponse directly
+    # can omit them.
+    window_start: date | None = None
+    window_end: date | None = None
+    window_label: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+    # ``meta`` keys (when populated):
+    #   reason: "ok" | "no_curated_matches" | "fmp_unavailable"
+    #           | "weekend_no_reports"
+    #   before_curated: int  (count of FMP rows before universe filter)
 
 
 # ─── Detail blocks ───────────────────────────────────────────
@@ -197,4 +230,13 @@ class EarningsDetail(BaseModel):
     skew: SkewBlock | None = None
     news: list[NewsArticle] = Field(default_factory=list)
     partial: bool = False
+    # Round-4 CLUSTER 3 #13: structured codes the frontend uses to render
+    # honest "data unavailable" badges. Codes:
+    #   "stub_detail"          — fallback panel for off-calendar symbols
+    #   "news_unavailable"     — Newsdata rate-limited or upstream down
+    #   "chain_demo"           — Alpaca chain unreachable, demo served
+    #   "iv_unavailable"       — historical IV pipeline not wired
+    #   "metrics_unavailable"  — IV/HV both null
+    #   "hv_unavailable"       — historical-vol time series missing
+    error_codes: list[str] = Field(default_factory=list)
     generated_at: datetime

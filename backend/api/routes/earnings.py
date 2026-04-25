@@ -8,10 +8,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
-from api.routes._rate_limit import check_full_research_rate
+from api.routes._rate_limit import check_detail_rate, check_full_research_rate
 from api.schemas.earnings import CalendarResponse, EarningsDetail, ClaudeFullResearch
 from core.http import client_ip
 from services import earnings_screener
+from services.earnings_screener import _in_curated_universe
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/earnings", tags=["earnings"])
@@ -81,9 +82,24 @@ async def get_calendar(
 @router.get("/{symbol}/detail", response_model=EarningsDetail)
 async def get_detail(
     symbol: Annotated[str, Path(pattern=_SYMBOL_PATTERN)],
+    request: Request,
 ) -> EarningsDetail:
+    # Round-4 CLUSTER 2 #6: gate on the curated universe BEFORE we touch
+    # any provider. A user crafting a `/api/v1/earnings/ZZZZZ/detail`
+    # request would otherwise spend FMP + Alpaca + Claude budget on a
+    # symbol we'd never trade.
+    sym = symbol.upper()
+    if not _in_curated_universe(sym):
+        raise HTTPException(
+            status_code=404,
+            detail=f"symbol {sym!r} not in curated earnings universe",
+        )
+    # Round-4 CLUSTER 2 #8: per-IP rate limit on /detail. Cheaper than
+    # /full-research but still backed by a Claude call on cold cache, so
+    # we cap at 30 / 10min per IP. XFF-aware via core.http.client_ip.
+    await check_detail_rate(client_ip(request))
     try:
-        return await earnings_screener.get_detail(symbol.upper())
+        return await earnings_screener.get_detail(sym)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -93,6 +109,15 @@ async def post_full_research(
     symbol: Annotated[str, Path(pattern=_SYMBOL_PATTERN)],
     request: Request,
 ) -> ClaudeFullResearch:
+    # Round-4 CLUSTER 2 #6: same curated-universe gate as /detail. The
+    # check fires before the rate-limiter so a request for a non-curated
+    # symbol doesn't burn a slot in the user's full-research bucket.
+    sym = symbol.upper()
+    if not _in_curated_universe(sym):
+        raise HTTPException(
+            status_code=404,
+            detail=f"symbol {sym!r} not in curated earnings universe",
+        )
     # Per-IP rate limit (B-50) — /full-research invokes Opus and costs
     # real money; 5 calls per 10 min is the cap. Runs BEFORE the service
     # so a stream of requests from a stuck client can't queue up Claude
@@ -101,6 +126,6 @@ async def post_full_research(
     # and the cap is useless in production.
     await check_full_research_rate(client_ip(request))
     try:
-        return await earnings_screener.run_full_research(symbol.upper())
+        return await earnings_screener.run_full_research(sym)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

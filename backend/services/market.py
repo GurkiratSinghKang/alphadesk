@@ -351,13 +351,28 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                     lq = ticker.get("lastQuote", {})
                     lt = ticker.get("lastTrade", {})
                     day = ticker.get("day", {})
+                    # Round-4 CLUSTER 5 #19: prefer the upstream trade
+                    # timestamp over server-side wall-clock so cached
+                    # values are honestly aged. Polygon emits ``t`` as
+                    # nanoseconds since epoch on each trade tick.
+                    trade_ts_ns = lt.get("t")
+                    if trade_ts_ns:
+                        try:
+                            ts = datetime.fromtimestamp(
+                                int(trade_ts_ns) / 1_000_000_000,
+                                tz=timezone.utc,
+                            )
+                        except (ValueError, OverflowError):
+                            ts = datetime.now(timezone.utc)
+                    else:
+                        ts = datetime.now(timezone.utc)
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("p", 0),
                         ask=lq.get("P", 0),
                         last=lt.get("p", 0),
                         volume=day.get("v", 0),
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=ts,
                     )
                     await cache_set(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
                     return quote
@@ -385,13 +400,27 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                     prev_close = prev_daily.get("c", 0)
                     change = round(last_price - prev_close, 2) if prev_close else 0
                     change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+                    # Round-4 CLUSTER 5 #19: Alpaca emits ``t`` as RFC3339
+                    # on each trade. Use it so the timestamp on the wire
+                    # reflects when the trade actually printed, not when
+                    # we built the response.
+                    trade_ts_str = lt.get("t")
+                    if trade_ts_str:
+                        try:
+                            ts = datetime.fromisoformat(
+                                str(trade_ts_str).replace("Z", "+00:00")
+                            )
+                        except ValueError:
+                            ts = datetime.now(timezone.utc)
+                    else:
+                        ts = datetime.now(timezone.utc)
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("bp", 0),
                         ask=lq.get("ap", 0),
                         last=last_price,
                         volume=int(daily.get("v", 0)),
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=ts,
                         change=change,
                         changePct=change_pct,
                         high=daily.get("h", 0),
