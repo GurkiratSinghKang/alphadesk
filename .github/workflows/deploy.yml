@@ -403,25 +403,41 @@ jobs:
             # not ``${project}_default`` when ``networks:`` is declared).
             #
             # Round-7 / M-2 (P0 — production silently skipped every swap
-            # since this step was added). ``compose run`` defaults to
-            # allocating a TTY; the ssh-piped ``bash -s`` here runs WITHOUT
-            # a TTY, so docker's TTY-attach grabs the parent stdio and the
-            # SSH transport tears the channel down the moment alembic
-            # finishes its first INFO line. The deploy reports green
-            # because the ssh exit was clean (alembic exited 0), but every
-            # subsequent step in this REMOTE_SCRIPT — down/up swap, Caddy
-            # restart, post-swap migration, readiness check, smoke
-            # tests — was silently truncated. Symptom: the BE/FE
-            # containers report "Up 6 hours" after a green deploy, the
-            # ``/readyz-full`` body is missing ``git_sha``, and only the
-            # bind-mounted Caddyfile takes effect (because Caddy's
-            # restart was hot-applied via SSH out-of-band). Adding ``-T``
-            # detaches stdin so the alembic step doesn't cannibalise the
-            # SSH channel; the post-swap ``exec`` already used ``-T``,
-            # which is why deploys with no migrations ran clean.
+            # since this step was added). The ssh entry-point is
+            # ``ssh ... bash -s <<'REMOTE_SCRIPT'`` — the entire deploy
+            # script is fed to remote bash on STDIN. ``docker compose
+            # run`` (without an explicit redirect) ATTACHES the
+            # container's stdin to the parent stdin, which is the
+            # heredoc itself. Alembic, of course, doesn't read from
+            # stdin, but as soon as compose-run inherits it the script
+            # body queued in stdin gets routed into the container and
+            # away from bash. End result: bash sees EOF the moment
+            # alembic exits, the post-alembic body of REMOTE_SCRIPT
+            # (down/up swap, Caddy restart, post-swap migration,
+            # readiness check, smoke tests) is silently dropped, and
+            # the deploy reports green even though nothing past
+            # alembic ran. Adding ``-T`` alone doesn't fix it — that
+            # only disables the TTY, leaving stdin still attached.
+            #
+            # The reliable cure is ``< /dev/null`` so compose-run sees
+            # an empty stdin and bash retains the rest of the heredoc.
+            # ``-T`` is kept as belt-and-braces; the post-swap
+            # ``compose exec -T`` already had this protection
+            # implicitly because ``exec`` defaults to attaching to the
+            # container's tty (when -T disables that) but the
+            # post-swap script was the part that never ran anyway.
+            #
+            # Symptom of the silent-skip: BE/FE containers report
+            # ``Up 6 hours`` after a green deploy; ``/readyz-full``
+            # body is missing the ``git_sha`` field; only the bind-
+            # mounted Caddyfile takes effect (and only because Caddy
+            # was explicitly restarted out-of-band). Round-7 found
+            # this by SSHing in after a "successful" deploy and
+            # observing the container creation timestamps had not
+            # advanced.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
               run --rm -T --no-deps -e PYTHONUNBUFFERED=1 backend \
-              alembic upgrade head \
+              alembic upgrade head </dev/null \
               || { echo "FATAL: alembic migration failed — aborting before swap"; exit 1; }
 
             echo "─── down + up swap ─────────────────────────────────────"
