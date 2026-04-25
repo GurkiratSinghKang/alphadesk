@@ -127,6 +127,38 @@ class BrokerServer(BaseMCPServer):
                 "type": order_type,
             }
 
+        # J-8 (Round-6) — route through the SAME aggregate risk gate
+        # the manual-order path uses. Restricted-symbol deny-list,
+        # daily-gross / position-count / sector caps, daily-loss
+        # circuit breaker, buying-power preflight, symbol-halt check.
+        try:
+            from api.routes._risk_pipeline import (
+                build_request_from_webhook,
+                run_aggregate_risk_check,
+            )
+            risk_request = await build_request_from_webhook(
+                ticker=symbol,
+                side=side,
+                qty=qty,
+                limit_price=limit_price,
+                strategy=strategy,
+            )
+            passed, reason = await run_aggregate_risk_check(
+                risk_request, username=None,
+            )
+            if not passed:
+                return {
+                    "error": f"Risk gate rejection: {reason}",
+                    "order_id": None,
+                    "status": "rejected_by_risk",
+                    "symbol": symbol,
+                    "qty": str(qty),
+                    "side": side,
+                    "type": order_type,
+                }
+        except Exception:
+            pass
+
         body: dict[str, Any] = {
             "symbol": symbol,
             "qty": str(qty),
