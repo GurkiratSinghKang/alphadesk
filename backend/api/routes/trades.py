@@ -1794,9 +1794,15 @@ async def _get_current_price(symbol: str) -> float:
 
     Checks Redis cache first, then falls back to Alpaca market data API.
     Returns 0.0 only if both sources fail.
+
+    J-15 (Round-6): cache keys are stamped uppercase by the quote-stream
+    publishers; reading with the raw caller-supplied case missed every
+    cached quote when the caller passed a lowercase ticker. Normalise
+    the lookup key here so the cache is honoured regardless of caller
+    casing.
     """
     from core.redis import cache_get
-    cached = await cache_get(f"quote:{symbol}")
+    cached = await cache_get(f"quote:{symbol.upper()}")
     if cached and cached.get("last"):
         return float(cached["last"])
 

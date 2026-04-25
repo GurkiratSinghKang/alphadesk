@@ -183,6 +183,26 @@ def _define_models() -> dict[str, Any]:
         # position state and stamps it onto the row at fill time.
         trade_kind = Column(String(16), nullable=True, index=True)
 
+        # J-17 (Round-6, persona Round-6 J) — actually-filled quantity.
+        #
+        # Until this column landed, the only authoritative qty for a
+        # trade row was the SUBMITTED qty stamped on the leg JSON at
+        # order-creation time. Partial fills updated ``status`` to
+        # ``partial`` and ``filled_avg_price`` to the volume-weighted
+        # average, but never recorded HOW MANY shares had actually
+        # filled. Downstream consumers (pipeline.py /pipeline/positions,
+        # report builders, P&L attribution) all read leg.qty and
+        # silently assumed a 100%-filled order — every partial-fill
+        # showed the wrong size in the dashboard.
+        #
+        # The fill_reconciler stamps this on every fill / partial_fill
+        # event from Alpaca's trade_updates feed; the manual-order
+        # path leaves it NULL until the first fill event arrives.
+        # Numeric(20,4) matches Alpaca's qty precision (4 decimals
+        # accommodates fractional-share orders). NULLABLE so legacy
+        # rows without a fill event keep loading.
+        filled_qty = Column(Numeric(20, 4), nullable=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }

@@ -467,6 +467,50 @@ async def pipeline_positions() -> dict[str, Any]:
     open_positions = ledger.get_open_positions()
     performance = ledger.get_performance_summary()
 
+    # J-17 (Round-6) — prefer the authoritative ``Trade.filled_qty`` on
+    # the row when present so partial-fill positions show the actual
+    # filled size rather than the leg-level submitted size. Lookup is
+    # by symbol AND open status (a closed trade for the same symbol
+    # would represent a different lifecycle).
+    if open_positions:
+        try:
+            from core.config import settings as _s
+            if not _s.SKIP_DB_INIT:
+                from sqlalchemy import select, desc
+                from core.database import _get_session_factory
+                from data.storage.models import Trade
+
+                factory = _get_session_factory()
+                async with factory() as db:
+                    q = (
+                        select(Trade)
+                        .where(Trade.status.in_(["submitted", "open", "filled", "partial"]))
+                        .order_by(desc(Trade.entry_time))
+                        .limit(500)
+                    )
+                    rows = (await db.execute(q)).scalars().all()
+                    sym_to_filled: dict[str, float] = {}
+                    for t in rows:
+                        if t.symbol and getattr(t, "filled_qty", None) is not None:
+                            try:
+                                fq = float(t.filled_qty)
+                                if fq > 0 and t.symbol not in sym_to_filled:
+                                    sym_to_filled[t.symbol] = fq
+                            except (TypeError, ValueError):
+                                continue
+                # Apply override — only when DB carries a legitimate
+                # filled_qty. Pre-J-17 rows stay None and the existing
+                # leg-level qty propagates unchanged.
+                for pos in open_positions:
+                    sym = pos.get("symbol")
+                    if sym and sym in sym_to_filled:
+                        pos["shares"] = sym_to_filled[sym]
+        except Exception:
+            logger.debug(
+                "pipeline_positions: filled_qty enrichment skipped",
+                exc_info=True,
+            )
+
     # Enrich open positions with live market prices — SAME source as
     # /trades/positions so every page shows the identical current_price.
     if open_positions:
@@ -474,6 +518,13 @@ async def pipeline_positions() -> dict[str, Any]:
         from core.config import settings
 
         broker_prices: dict[str, float] = {}
+        # J-1 (Round-6) — partial-fill drift fix. The broker's
+        # ``avg_entry_price`` reflects the volume-weighted fill price
+        # across every partial fill that landed for the position.
+        # Override the local ledger's entry_price with the broker's
+        # avg_entry_price when both exist, so Desk / Pipeline /
+        # Reports converge on the same entry basis (BUG-001).
+        broker_avg_entry: dict[str, float] = {}
         alpaca_headers = {
             "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
             "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
@@ -495,6 +546,14 @@ async def pipeline_positions() -> dict[str, Any]:
                                     broker_prices[sym] = float(bp.get("current_price", 0))
                                 except (TypeError, ValueError):
                                     pass
+                                # J-1 — capture avg_entry_price for
+                                # the partial-fill override below.
+                                try:
+                                    avg_entry = float(bp.get("avg_entry_price", 0) or 0)
+                                    if avg_entry > 0:
+                                        broker_avg_entry[sym] = avg_entry
+                                except (TypeError, ValueError):
+                                    pass
                 except Exception:
                     logger.debug("Broker /v2/positions fetch failed", exc_info=True)
 
@@ -503,6 +562,13 @@ async def pipeline_positions() -> dict[str, Any]:
                     if not symbol:
                         continue
                     current_price = broker_prices.get(symbol, 0) or 0
+
+                    # J-1 — override ledger entry_price with broker's
+                    # volume-weighted avg_entry_price when both exist.
+                    ledger_entry = pos.get("entry_price", 0)
+                    bp_avg = broker_avg_entry.get(symbol)
+                    if bp_avg and ledger_entry:
+                        pos["entry_price"] = bp_avg
                     if not current_price:
                         # Fallback for ledger-only symbols not held at broker.
                         try:
@@ -516,6 +582,8 @@ async def pipeline_positions() -> dict[str, Any]:
                             logger.debug("Failed to fetch live price for %s", symbol)
                     if current_price:
                         pos["current_price"] = current_price
+                        # Use the (possibly broker-overridden) entry_price
+                        # so P&L matches the override above.
                         entry = pos.get("entry_price", 0)
                         shares = pos.get("shares", 0)
                         # Honour position side — short P&L inverts sign.
