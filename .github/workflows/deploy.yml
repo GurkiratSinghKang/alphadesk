@@ -509,9 +509,27 @@ jobs:
             # with --build-arg GIT_SHA so structured logs and the readyz
             # body carry which deploy is live, and that the Claude
             # spend tracker is initialised.
-            full=$(curl -sf http://localhost:8000/readyz-full || echo "{}")
-            echo "  $full"
-            echo "$full" | grep -q '"git_sha"' || { echo "FATAL: /readyz-full missing git_sha"; exit 1; }
+            #
+            # Round-7 / M-2 follow-up: /readyz-full is now gated by
+            # ``require_auth`` (Round-6 L-14 — git_sha leaks were a
+            # vulnerability-triage signal that doesn't belong on a public
+            # endpoint). Reuse the SMOKE_TOKEN secret for the bearer
+            # header. If SMOKE_TOKEN isn't set we fall back to the
+            # public /readyz endpoint and skip the git_sha grep — the
+            # smoke test then checks "is the backend serving?" rather
+            # than "did the git_sha header land", matching the earnings
+            # calendar smoke's existing skip-on-no-token policy.
+            if [ -n "${SMOKE_TOKEN:-}" ]; then
+              full=$(curl -sf -H "Authorization: Bearer ${SMOKE_TOKEN}" \
+                http://localhost:8000/readyz-full || echo "{}")
+              echo "  $full"
+              echo "$full" | grep -q '"git_sha"' || { echo "FATAL: /readyz-full missing git_sha"; exit 1; }
+            else
+              echo "  SMOKE_TOKEN secret not set — falling back to public /readyz probe"
+              curl -sf http://localhost:8000/readyz >/dev/null \
+                || { echo "FATAL: /readyz probe failed"; exit 1; }
+              echo "  /readyz responded 200"
+            fi
 
             echo "─── Smoke test: earnings calendar ──────────────────────"
             # Round-5 Cluster F H-10: catch routing / schema regressions
