@@ -52,7 +52,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 
@@ -517,7 +517,7 @@ async def erase_user_data(
     body: EraseRequest,
     req: Request,
     username: str = Depends(require_auth),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """GDPR Art. 17 — right to erasure.
 
     Cascades across every user-owned table + Redis.  Retention-mandated
@@ -626,6 +626,36 @@ async def erase_user_data(
 
     redis_deleted = await _delete_username_keyed_redis_keys(username)
 
+    # Round-6 L-3: erase MUST kill every outstanding session.
+    # ``_delete_username_keyed_redis_keys`` wipes the password_version
+    # and session_epoch counters above — without bumping them first to
+    # a strictly-greater value than the tokens currently in flight, an
+    # attacker who already has a stolen access cookie can keep using it
+    # through the natural JWT lifetime even after the user typed their
+    # password to confirm the wipe.
+    #
+    # We push BOTH counters to a 1_000_000 high water mark. Every live
+    # token (whose claim sits at the current pre-erase counter, almost
+    # always 1-2 digits) becomes strictly less than the new counter, so
+    # ``require_auth`` and the WS revalidator will reject it on the
+    # next request.
+    sessions_killed = False
+    try:
+        from core.redis import get_redis
+
+        r = await get_redis()
+        # SET — not INCR — to a high water mark so a Redis crash-restore
+        # that lost the post-cleanup state can't accidentally reset to 1
+        # and re-enable old tokens.
+        await r.set(f"password_version:{username}", "1000000")
+        await r.set(f"session_epoch:{username}", "1000000")
+        sessions_killed = True
+    except Exception:
+        logger.warning(
+            "erase: failed to bump session counters — old tokens may remain valid",
+            exc_info=True,
+        )
+
     # Audit the erasure AFTER the cascade so the audit row lands on a
     # fresh post-erasure table.  The event is on its own retention tier
     # (2 years for data_export / user_erase, per the cleanup script) so
@@ -637,19 +667,31 @@ async def erase_user_data(
         result="success",
         deleted=deleted,
         redis_keys_deleted=redis_deleted,
+        sessions_killed=sessions_killed,
     )
 
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "deleted": deleted,
         "redis_keys_deleted": redis_deleted,
         "retained_events": sorted(_RETAINED_COMPLIANCE_EVENTS),
+        "sessions_killed": sessions_killed,
         "notice": (
             "Erasure completed. Rows for regulatorily-required events "
             "(SEC 17a-4) were flagged retained_for_compliance=true and "
-            "remain available via the export endpoint. Your session "
-            "cookies are still valid for the current JWT window; we "
-            "recommend /auth/logout-all to invalidate every outstanding "
-            "token."
+            "remain available via the export endpoint. All outstanding "
+            "access and refresh tokens for this user have been "
+            "invalidated; your auth cookies have been cleared by this "
+            "response. Sign in again from the login page if you intend "
+            "to keep using AlphaDesk."
         ),
     }
+
+    response = JSONResponse(content=payload)
+    # Round-6 L-3: clear the auth cookies in the same response. The
+    # access_token cookie lives at path=/ (set by the auth router); the
+    # refresh_token cookie lives at path=/api/v1/auth. ``delete_cookie``
+    # emits a Set-Cookie with ``Max-Age=0`` so the browser drops both.
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/api/v1/auth")
+    return response

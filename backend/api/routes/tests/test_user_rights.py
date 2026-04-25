@@ -324,11 +324,18 @@ async def test_erase_rejects_non_admin_username(
 async def test_erase_success_clears_redis_and_audits(
     test_env, fake_request, audit_stub, redis_stub,
 ):
-    """A valid erase deletes Redis keys keyed on the username and audits success."""
+    """A valid erase deletes Redis keys keyed on the username and audits success.
+
+    Round-6 L-3: erase now returns a JSONResponse so it can clear the
+    HttpOnly auth cookies + bump the session-kill counters before
+    returning.
+    """
     from api.routes.user import EraseRequest, erase_user_data
 
     body = EraseRequest(confirm=True, password=_TEST_PASSWORD)
-    result = await erase_user_data(body=body, req=fake_request, username=_TEST_USERNAME)
+    response = await erase_user_data(body=body, req=fake_request, username=_TEST_USERNAME)
+
+    result = json.loads(response.body.decode("utf-8"))
 
     assert result["ok"] is True
     assert "deleted" in result
@@ -336,8 +343,16 @@ async def test_erase_success_clears_redis_and_audits(
     # 4 fixed keys + 2 rate-limit keys for the test username = 6.
     assert result["redis_keys_deleted"] == 6
 
+    # Round-6 L-3: sessions_killed True confirms the bump landed.
+    assert result["sessions_killed"] is True
+
     # The other user's key survives.
     assert f"password_version:other" in redis_stub
+
+    # Round-6 L-3: counters are reset to the high water mark so old
+    # tokens can't replay.
+    assert redis_stub.get(f"password_version:{_TEST_USERNAME}") == "1000000"
+    assert redis_stub.get(f"session_epoch:{_TEST_USERNAME}") == "1000000"
 
     # Success audit landed.
     success_events = [
@@ -346,9 +361,25 @@ async def test_erase_success_clears_redis_and_audits(
     ]
     assert len(success_events) == 1
 
-    # The notice in the response mentions retained events + logout-all.
+    # Round-6 L-3 — the notice now references session invalidation
+    # rather than directing the user to /auth/logout-all (the erase
+    # itself does the equivalent).
     assert "retained_for_compliance" in result["notice"]
-    assert "logout-all" in result["notice"]
+    assert "invalidated" in result["notice"]
+
+    # Round-6 L-3: cookie deletion. Both access_token (path=/) and
+    # refresh_token (path=/api/v1/auth) must be cleared with Max-Age=0.
+    set_cookie_strs = [
+        v.decode("latin-1")
+        for k, v in response.raw_headers
+        if k.decode("latin-1").lower() == "set-cookie"
+    ]
+    assert any(
+        "access_token=" in h and "Max-Age=0" in h for h in set_cookie_strs
+    ), f"missing access_token Max-Age=0 in {set_cookie_strs!r}"
+    assert any(
+        "refresh_token=" in h and "Max-Age=0" in h for h in set_cookie_strs
+    ), f"missing refresh_token Max-Age=0 in {set_cookie_strs!r}"
 
 
 # --------------------------------------------------------------------------- #
