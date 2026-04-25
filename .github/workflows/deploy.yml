@@ -401,8 +401,26 @@ jobs:
             # directly via ``docker run --network=...`` is brittle (the
             # default compose project network is ``${project}_${name}``,
             # not ``${project}_default`` when ``networks:`` is declared).
+            #
+            # Round-7 / M-2 (P0 — production silently skipped every swap
+            # since this step was added). ``compose run`` defaults to
+            # allocating a TTY; the ssh-piped ``bash -s`` here runs WITHOUT
+            # a TTY, so docker's TTY-attach grabs the parent stdio and the
+            # SSH transport tears the channel down the moment alembic
+            # finishes its first INFO line. The deploy reports green
+            # because the ssh exit was clean (alembic exited 0), but every
+            # subsequent step in this REMOTE_SCRIPT — down/up swap, Caddy
+            # restart, post-swap migration, readiness check, smoke
+            # tests — was silently truncated. Symptom: the BE/FE
+            # containers report "Up 6 hours" after a green deploy, the
+            # ``/readyz-full`` body is missing ``git_sha``, and only the
+            # bind-mounted Caddyfile takes effect (because Caddy's
+            # restart was hot-applied via SSH out-of-band). Adding ``-T``
+            # detaches stdin so the alembic step doesn't cannibalise the
+            # SSH channel; the post-swap ``exec`` already used ``-T``,
+            # which is why deploys with no migrations ran clean.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
-              run --rm --no-deps -e PYTHONUNBUFFERED=1 backend \
+              run --rm -T --no-deps -e PYTHONUNBUFFERED=1 backend \
               alembic upgrade head \
               || { echo "FATAL: alembic migration failed — aborting before swap"; exit 1; }
 
