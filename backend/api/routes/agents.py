@@ -2,15 +2,27 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.auth import require_auth
+
+# Round-6 L-10: ``context`` size cap. The chat handler shovels the
+# user-provided dict straight into Claude as part of the prompt, so an
+# attacker-controlled large ``context`` becomes a token-amplification
+# DoS — one chat call can burn 100 KB of context tokens × Opus pricing
+# = several dollars per call.
+_CHAT_CONTEXT_MAX_BYTES = 8 * 1024
+
+# Round-6 L-11: ``conversation_id`` is interpolated into a Redis key.
+# Pin to alphanumeric + dash, length-bounded.
+_CONVERSATION_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +125,37 @@ class ChatRequest(BaseModel):
         default_factory=dict,
         description="Additional context (current symbol, portfolio state, etc.)",
     )
+
+    # Round-6 L-11: conversation_id is interpolated into a Redis key
+    # (``conversation:{username}:{conversation_id}``). Reject anything
+    # that isn't alphanumeric + dash, length-bounded.
+    @field_validator("conversation_id")
+    @classmethod
+    def _validate_conversation_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not _CONVERSATION_ID_RE.match(v):
+            raise ValueError(
+                "conversation_id must match ^[A-Za-z0-9-]{1,64}$"
+            )
+        return v
+
+    # Round-6 L-10: cap the JSON-serialised size of ``context`` to
+    # ``_CHAT_CONTEXT_MAX_BYTES``. The dict is passed to Claude on
+    # every call, so a 100 KB ``context`` = a token-amplification DoS
+    # at $15-$75 per million tokens.
+    @field_validator("context")
+    @classmethod
+    def _validate_context_size(cls, v: dict[str, Any]) -> dict[str, Any]:
+        try:
+            size = len(json.dumps(v, separators=(",", ":")).encode("utf-8"))
+        except Exception as e:
+            raise ValueError(f"context must be JSON-serialisable: {e}")
+        if size > _CHAT_CONTEXT_MAX_BYTES:
+            raise ValueError(
+                f"context too large ({size} bytes); cap is {_CHAT_CONTEXT_MAX_BYTES}"
+            )
+        return v
 
 
 class ChatResponse(BaseModel):
