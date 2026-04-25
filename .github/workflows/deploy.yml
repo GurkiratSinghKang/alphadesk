@@ -396,10 +396,13 @@ jobs:
             # migration replays cleanly. Rollback procedure documented in
             # docs/ROLLBACK.md. The post-swap step below remains as an
             # idempotent backstop.
-            docker run --rm \
-              --network=alphadesk_default \
-              --env-file=.env.prod \
-              "${BACKEND_IMAGE}" \
+            # Use ``compose run --rm backend`` so compose resolves the
+            # project network + env-file naturally — naming the network
+            # directly via ``docker run --network=...`` is brittle (the
+            # default compose project network is ``${project}_${name}``,
+            # not ``${project}_default`` when ``networks:`` is declared).
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
+              run --rm --no-deps -e PYTHONUNBUFFERED=1 backend \
               alembic upgrade head \
               || { echo "FATAL: alembic migration failed — aborting before swap"; exit 1; }
 
