@@ -233,11 +233,63 @@ settings = Settings()
 #   NOT-READY badge; ``create_order`` rejects with 422 if the Alpaca base URL
 #   points at a live endpoint. Paper routing remains allowed.
 #
+#   Round-6 / I-2: this set is auto-derived from the strategy registry — any
+#   strategy registered with ``StrategyMeta.kind == "research"`` is structurally
+#   unfit for live capital (research stubs emit no executable signals or are
+#   pending intraday-data integration). Hardcoded ``orb`` is kept in the seed
+#   so the gate still catches the value when the registry hasn't yet been
+#   imported (e.g. config-only test contexts).
+#
 # STRATEGY_PAPER_ONLY — strategy is implementation-complete but statistically
 #   thin. Route to Alpaca paper only. ``create_order`` rejects with 422 when
 #   the Alpaca base URL is a live endpoint.
-STRATEGY_LIVE_DISABLED: set[str] = {"orb"}
-STRATEGY_PAPER_ONLY: set[str] = {"kama_breakout"}
+#
+#   ``earnings_options_play`` is research-only by product design (decision-
+#   support screener, no auto-execution path) — keep it on the paper-only set
+#   as belt-and-suspenders so a catalog regression that flips it to live still
+#   cannot route real capital.
+def _derive_live_disabled_from_registry() -> set[str]:
+    """Return canonical names of strategies registered with ``kind="research"``.
+
+    Imports the strategy package lazily and tolerates an empty registry
+    (e.g. partial test fixtures that haven't called ``load_all``). The
+    seed below ensures ``orb`` stays denied even when registration has
+    not happened.
+
+    The trading-gate keys ``STRATEGY_LIVE_DISABLED`` membership on the
+    canonical underscore form; some strategies (currently
+    ``earnings-options-play``) register under their hyphenated route id
+    so we normalise both forms into the set so a lookup with either
+    spelling hits.
+    """
+    seeds: set[str] = {"orb"}
+    try:
+        # Lazy import — ``core.config`` is loaded very early, before
+        # ``strategies`` is on the import path in some shells.
+        from strategies.registry import list_strategies, load_all
+
+        try:
+            load_all()
+        except Exception:
+            # If registration fails (test stubbing, missing optional
+            # deps), fall through to whatever is already in the registry.
+            pass
+        for meta in list_strategies():
+            if getattr(meta, "kind", "autonomous") == "research":
+                seeds.add(meta.name)
+                # Also store the underscored form so the gate matches
+                # whether the caller passes the hyphen route id or the
+                # canonical Python name.
+                seeds.add(meta.name.replace("-", "_"))
+    except Exception:
+        # core.config must remain importable in every context — a missing
+        # registry import never blocks startup.
+        pass
+    return seeds
+
+
+STRATEGY_LIVE_DISABLED: set[str] = _derive_live_disabled_from_registry()
+STRATEGY_PAPER_ONLY: set[str] = {"kama_breakout", "earnings_options_play"}
 
 
 def is_live_alpaca_base_url(url: str | None = None) -> bool:

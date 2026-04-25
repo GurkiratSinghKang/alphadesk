@@ -117,7 +117,11 @@ def test_http_gate_allows_manual_none(live_active: None) -> None:
 
 def test_http_gate_allows_non_denylisted_strategy_on_live(live_active: None) -> None:
     # A canonical strategy that isn't on either deny-list must pass.
-    reject_if_live_forbidden("vrp_harvest", caller="test")
+    # ``pead`` is autonomous and not in PAPER_ONLY — kept stable as the
+    # canonical "this-strategy-is-allowed" probe; ``vrp_harvest`` was the
+    # original probe but it now lives in LIVE_DISABLED via the auto-derive
+    # rule (kind="research") (Round-6 / I-2).
+    reject_if_live_forbidden("pead", caller="test")
 
 
 # --------------------------------------------------------------------------- #
