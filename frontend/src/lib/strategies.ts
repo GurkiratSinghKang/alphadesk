@@ -96,7 +96,12 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     group: "fundamental",
   },
   "regime-adaptive": {
-    name: "HMM Regime-Adaptive Allocation",
+    // Round-6 / I-5: was "HMM Regime-Adaptive Allocation". The backend
+    // strategy uses an SMA-cross + VIX-level classifier (see
+    // backend/strategies/regime_adaptive/spec.md), not a Hidden-Markov
+    // Model. The previous label was aspirational copy that never
+    // matched the implementation.
+    name: "SMA + VIX Regime Allocation",
     shortName: "Regime Adaptive",
     icon: Brain,
     regimeNote: "Adjusts to any regime",
@@ -219,6 +224,34 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     stage: "other",
   },
 };
+
+/**
+ * Strategies whose backend implementation is structurally unfit for
+ * live capital (research stubs, or pending intraday-data integration).
+ * Mirrors ``STRATEGY_LIVE_DISABLED`` in ``backend/core/config.py`` —
+ * keep these two lists in sync. Used by the catalog UI to render a
+ * "NOT-READY for live" badge instead of an "Active" pill, and by the
+ * trade-button row to gate the "Submit Live" toggle.
+ *
+ * Round-6 / I-16: previously inferred from a missing-id heuristic that
+ * silently let kama_breakout (paper-only) and the four research
+ * strategies (vrp_harvest, earnings_vol, vwap, orb) past the gate.
+ * Hardcoding the list here keeps the FE contract explicit.
+ */
+export const LIVE_DISABLED: ReadonlySet<string> = new Set<string>([
+  "vrp-harvesting",
+  "earnings-vol-premium",
+  "vwap-strategy",
+  "orb",
+  "earnings-options-play",
+]);
+
+/** Strategies routed only to Alpaca paper. Mirror of
+ *  ``STRATEGY_PAPER_ONLY`` in ``backend/core/config.py``. */
+export const PAPER_ONLY: ReadonlySet<string> = new Set<string>([
+  "kama-breakout",
+  "earnings-options-play",
+]);
 
 /** Convenience accessor: treat missing ``stage`` as "live" so callers can
  *  write ``metaStage(id) === "planned"`` without null-handling. */

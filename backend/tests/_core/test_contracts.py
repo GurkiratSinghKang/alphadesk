@@ -287,17 +287,31 @@ def test_trade_roundtrip():
 
 
 def test_repro_meta_required_fields():
+    # Round-6 / I-11: ``run_at`` was removed — the wall-clock timestamp
+    # rendered ReproMeta non-deterministic and lived on the same struct
+    # used to compute the replay hash. It now lives on
+    # ``BacktestResult.audit_metadata``. ReproMeta is wall-clock-free.
     m = ReproMeta(
         git_sha="abc123",
         param_hash="deadbeef" * 2,
         snapshot_root="cafe" * 4,
         seed=42,
-        run_at=datetime.now(timezone.utc),
         strategy_name="pead",
         runner_version="1.0.0",
     )
     assert m.git_sha == "abc123"
     assert m.strategy_name == "pead"
+    # Two independently-constructed ReproMetas with identical inputs
+    # must compare equal — that's the determinism contract.
+    m2 = ReproMeta(
+        git_sha="abc123",
+        param_hash="deadbeef" * 2,
+        snapshot_root="cafe" * 4,
+        seed=42,
+        strategy_name="pead",
+        runner_version="1.0.0",
+    )
+    assert m == m2
 
 
 def test_backtest_config_defaults():

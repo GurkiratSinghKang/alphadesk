@@ -86,13 +86,13 @@ class KamaBreakoutParams(StrategyParams):
     )
     volume_sma_period: int = Field(default=20, ge=1)
 
-    # Pyramiding
-    pyramid_enabled: bool = Field(
-        default=True,
-        json_schema_extra={"tune": {"type": "categorical", "choices": [True, False]}},
-    )
-    pyramid_trigger_atr: float = Field(default=1.0, gt=0.0)
-    pyramid_size_fraction: float = Field(default=0.5, gt=0.0, le=1.0)
+    # Pyramiding — REMOVED Round-6 / I-6. The pyramid path was never
+    # wired into ``run()`` (no second-leg signal emission, no fill-driven
+    # state mutation), so the params, the description's "1/2 size pyramid
+    # at +1 ATR" claim, and the ``atr_at_entry`` field on PosState were
+    # all dead code. Keeping the strategy simpler is the audit's
+    # documented preference; reinstating pyramiding requires a fresh OOS
+    # validation pass per ``spec.md``.
 
     # Earnings skip
     earnings_skip_days: int = Field(default=2, ge=0)

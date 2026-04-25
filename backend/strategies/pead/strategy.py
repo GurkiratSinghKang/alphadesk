@@ -104,7 +104,12 @@ class PEADStrategy(Strategy):
 
         cached = state.get(f"{_NS}.universe")
         if cached is None:
-            cached = load_universe(asof=asof, fundamentals_provider=None)
+            # Round-6 / I-8: ``load_universe`` returns
+            # ``(symbols, has_survivorship_bias)`` — we only need the
+            # symbol list here. The bias bit is recorded on
+            # ``state_update`` so downstream OOS reporters can read it
+            # without consulting a module-level global.
+            cached, _bias = load_universe(asof=asof, fundamentals_provider=None)
         held = set(state.get(f"{_NS}.held_symbols", []))
         return sorted(set(cached) | held)
 

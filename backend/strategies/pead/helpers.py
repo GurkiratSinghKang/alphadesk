@@ -119,6 +119,17 @@ def has_overlapping_earnings(
     respected). Otherwise we fall back to a business-day cushion that
     overshoots slightly — preserved for callers that don't have a
     calendar provider wired.
+
+    Round-6 / I-25 (no behaviour change): the fallback cushion is
+    ``round(horizon_days * 7/5) + 2``. That is intentionally
+    **conservative** — it can overshoot by ~2 sessions on a
+    holiday-dense horizon (e.g. a 5-session holding period that
+    straddles MLK + Presidents' Day will mark 9 calendar days as
+    ineligible instead of 7). The audit explicitly preferred a
+    false-positive on overlap (skip a marginal trade) over a
+    false-negative (enter into an unannounced re-report). When the
+    NYSE-aware ``calendar_provider`` is wired the math is exact and
+    the cushion is unused.
     """
 
     if calendar is None or calendar.empty:
@@ -132,8 +143,9 @@ def has_overlapping_earnings(
         entry_day, int(horizon_days), calendar_provider
     )
     if upper is None:
-        # Conservative fallback (overshoots by ~2 sessions on a holiday-
-        # heavy horizon, but always closes the overlap gap).
+        # Round-6 / I-25: conservative fallback (overshoots by ~2 sessions
+        # on a holiday-heavy horizon — see docstring). Trades a marginal
+        # entry-skip for a guarantee that the overlap gap stays closed.
         cushion = int(round(horizon_days * 7.0 / 5.0)) + 2
         upper = entry_day + timedelta(days=cushion)
 

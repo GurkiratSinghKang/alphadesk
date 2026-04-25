@@ -43,12 +43,16 @@ _REQUIRED_LOOKBACK_DAYS = 260
 
 @dataclass
 class PosState:
-    """State per open position. Serialisable via dict-like conversion."""
+    """State per open position. Serialisable via dict-like conversion.
+
+    Round-6 / I-9: ``atr_at_entry`` removed. The pyramid path that read
+    this field was deleted along with the pyramiding params (Round-6 /
+    I-6 — see ``spec.md``); leaving an unused field on every persisted
+    record was both confusing and a tiny serialisation tax.
+    """
     entry_date: Optional[date] = None
     entry_price: float = 0.0
-    atr_at_entry: float = 0.0
     highest_high: float = 0.0
-    pyramid_count: int = 0
     shares_initial: int = 0
 
 
@@ -60,7 +64,7 @@ class PosState:
         description=(
             "Kaufman adaptive MA + Donchian 20 breakout, gated by Efficiency "
             "Ratio and 200-SMA trend filter. Chandelier trailing stop, "
-            "volatility-parity sizing, 1/2 size pyramid at +1 ATR."
+            "volatility-parity sizing."
         ),
         lookback_days=_REQUIRED_LOOKBACK_DAYS,
         required_bars=("daily",),
@@ -101,11 +105,17 @@ class KamaBreakoutStrategy(Strategy):
                 st = PosState(
                     entry_date=pos.entry_date,
                     entry_price=float(pos.avg_entry_price),
-                    atr_at_entry=0.0,
                     highest_high=float(pos.avg_entry_price),
                     shares_initial=int(pos.quantity),
                 )
             else:
+                # Tolerate legacy state rows that still carry the removed
+                # ``atr_at_entry`` / ``pyramid_count`` keys (Round-6 / I-9
+                # + I-6) — strip them so the dataclass constructor accepts.
+                st_dict = {
+                    k: v for k, v in st_dict.items()
+                    if k in {"entry_date", "entry_price", "highest_high", "shares_initial"}
+                }
                 st = PosState(**st_dict)
 
             hist = _symbol_history(input.bars, sym, asof)
@@ -174,21 +184,22 @@ class KamaBreakoutStrategy(Strategy):
 
             candidates.sort(key=lambda t: t[1], reverse=True)
             slots = params.max_positions - n_open
-            for sym, er, shares, atr_val in candidates[:slots]:
+            for sym, er, shares, _atr_val in candidates[:slots]:
                 signals.append(Signal(
                     symbol=sym, quantity=shares,
                     order_type=OrderType.MOO,
                     time_in_force=TimeInForce.DAY,
                     tag=f"kama-entry er={er:.2f}", asof=asof,
                 ))
-                # Record atr-at-entry so pyramid logic can use it later.
+                # Round-6 / I-6 + I-9: atr_at_entry / pyramid_count
+                # removed from PosState now that the unused pyramiding
+                # path is gone. Entry price is populated by on_fill once
+                # the broker confirms; highest_high seeds from there too.
                 positions_state[sym] = _pos_state_to_dict(PosState(
                     entry_date=asof,
-                    entry_price=0.0,  # populated by on_fill
-                    atr_at_entry=atr_val,
+                    entry_price=0.0,
                     highest_high=0.0,
                     shares_initial=shares,
-                    pyramid_count=0,
                 ))
             diagnostics["entries_emitted"] = len(candidates[:slots])
 
@@ -225,12 +236,12 @@ class KamaBreakoutStrategy(Strategy):
 # Pure helpers                                                                #
 # --------------------------------------------------------------------------- #
 def _pos_state_to_dict(st: PosState) -> dict:
+    """Serialise PosState. Round-6 / I-9: dropped atr_at_entry +
+    pyramid_count which the unused pyramiding path used to track."""
     return {
         "entry_date": st.entry_date,
         "entry_price": st.entry_price,
-        "atr_at_entry": st.atr_at_entry,
         "highest_high": st.highest_high,
-        "pyramid_count": st.pyramid_count,
         "shares_initial": st.shares_initial,
     }
 

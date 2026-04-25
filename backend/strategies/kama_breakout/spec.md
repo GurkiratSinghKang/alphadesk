@@ -113,15 +113,19 @@ After sizing we cap the position's notional at `max_allocation × equity`
 (default **15 %**) — this binds in low-vol regimes where the raw Turtle calc
 would otherwise ask for too many shares.
 
-### 3.6 Pyramiding
+### 3.6 Pyramiding (REMOVED in Round-6)
 
-Mirrors Turtle rule 4 but softened to one extra unit (half-size):
-
-- After the entry fill, if price advances by `+1 × ATR_at_entry` and the
-  position is still net positive, add **half** the original share count. The
-  add re-enters at market open of the next bar.
-- Total notional across entry + pyramid is capped at `max_allocation × equity`.
-- Pyramid is disabled if `pyramid_enabled=False`.
+**Removed Round-6 / I-6 (2026-04-24).** The pyramid path was specified
+above but never wired into ``strategy.run`` — there was no second-leg
+signal emission, no fill-driven state mutation, and the
+``atr_at_entry`` field on ``PosState`` was the only place the trigger
+was meant to be read. Rather than ship dead code that promised a feature
+the strategy did not deliver, the audit's documented preference is to
+keep the strategy simple and reinstate pyramiding only after a fresh
+OOS validation pass justifies it. The ``pyramid_enabled``,
+``pyramid_trigger_atr``, ``pyramid_size_fraction`` params and the
+``atr_at_entry`` / ``pyramid_count`` fields on ``PosState`` were all
+removed in the same commit.
 
 ### 3.7 Portfolio constraints
 

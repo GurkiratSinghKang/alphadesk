@@ -265,6 +265,12 @@ class BacktestRunner:
             if snapshot_ids else ""
         )
 
+        # Round-6 / I-11: ``run_at`` is wall-clock, intrinsically
+        # non-deterministic. It used to live on ``ReproMeta`` and made
+        # the repro hash differ across replays with otherwise identical
+        # inputs. Moved to ``BacktestResult.audit_metadata`` so it stays
+        # available for the audit trail without contaminating the
+        # determinism boundary.
         return BacktestResult(
             equity_curve=equity_df,
             daily_returns=daily_returns,
@@ -279,10 +285,12 @@ class BacktestRunner:
                 param_hash=type(params).param_hash(params),
                 snapshot_root=snapshot_root,
                 seed=self._config.seed,
-                run_at=datetime.now(timezone.utc),
                 strategy_name=self._strategy.META.name,
                 runner_version=RUNNER_VERSION,
             ),
+            audit_metadata={
+                "run_at": datetime.now(timezone.utc).isoformat(),
+            },
             warnings_by_asof={d: r.warnings for d, r in per_bar_results if r.warnings},
         )
 

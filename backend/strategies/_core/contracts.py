@@ -290,6 +290,12 @@ class ReproMeta(BaseModel):
     runner_version is bumped on any behavior-changing runner release
     (bar iteration order, fill model, seed-forking scheme, etc). See
     strategies/_core/__init__.py for the constant.
+
+    Round-6 / I-11: ``run_at`` was previously a field on this model and
+    rendered ``ReproMeta`` non-deterministic across runs (``run_at`` is
+    wall-clock by definition). It now lives on
+    :attr:`BacktestResult.audit_metadata` so two replays with identical
+    inputs produce a bitwise-equal ``repro`` block.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -298,7 +304,6 @@ class ReproMeta(BaseModel):
     param_hash: str
     snapshot_root: str = Field(default="", description="Compound SHA of per-bar snapshot_ids; '' when no snapshots were written")
     seed: int
-    run_at: datetime
     strategy_name: str
     runner_version: str
 
@@ -335,6 +340,12 @@ class BacktestResult(BaseModel):
 
     `repro` is the single source of truth for reproducibility metadata;
     see ReproMeta for replay semantics.
+
+    Round-6 / I-11: ``audit_metadata`` carries non-deterministic
+    bookkeeping (run_at wall-clock, hostname if ever needed) that is
+    useful for the audit trail but must NOT live on ``ReproMeta`` —
+    otherwise a replay with identical inputs would produce a different
+    ``repro`` hash.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -348,4 +359,5 @@ class BacktestResult(BaseModel):
     start: date
     end: date
     repro: ReproMeta
+    audit_metadata: dict[str, Any] = Field(default_factory=dict)
     warnings_by_asof: dict[date, list[str]] = Field(default_factory=dict)

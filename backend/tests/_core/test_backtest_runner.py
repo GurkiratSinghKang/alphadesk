@@ -88,9 +88,12 @@ def test_backtest_runner_produces_deterministic_results():
     r1 = BacktestRunner(strat, cfg, bar_provider=bars).run(SimpleParams(buy_threshold=200.0))
     r2 = BacktestRunner(strat2, cfg, bar_provider=bars).run(SimpleParams(buy_threshold=200.0))
 
-    # Metadata differs (run_at) but equity curves match
+    # Round-6 / I-11: ReproMeta is now fully deterministic — run_at lives
+    # on audit_metadata so two replays produce a bitwise-equal repro
+    # block. Equity curves and signals also match exactly.
     pd.testing.assert_frame_equal(r1.equity_curve, r2.equity_curve)
     assert r1.signals_emitted == r2.signals_emitted
+    assert r1.repro == r2.repro
     assert r1.repro.param_hash == r2.repro.param_hash
 
 

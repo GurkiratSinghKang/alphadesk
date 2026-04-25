@@ -26,12 +26,18 @@ from strategies._core.contracts import StrategyParams
 log = logging.getLogger("alphadesk.strategies.pead.config")
 
 
-# Module-level flag flipped to True by :func:`load_universe` whenever the
-# survivorship-biased static seed is used in place of a point-in-time loader.
-# OOS reporting and the strategy runtime consult this flag so an honest
-# bias-disclosure can be propagated to the artefact JSON without the caller
-# having to remember to plumb the warning through manually.
-UNIVERSE_HAS_SURVIVORSHIP_BIAS: bool = False
+# Round-6 / I-8: the previous module-level
+# ``UNIVERSE_HAS_SURVIVORSHIP_BIAS`` flag was a global flipped by
+# :func:`load_universe` to signal whether the static seed (biased) was
+# used vs. a point-in-time loader (unbiased). Globals on import are not
+# replay-safe — a parallel test that monkey-patches the loader could
+# leave the flag in the "wrong" state for the next caller, and the OOS
+# reporter sometimes captured a stale value.
+#
+# The new shape returns the bias bit as the second element of the
+# ``load_universe`` tuple: ``(symbols, has_survivorship_bias)``. Callers
+# that need the bit thread it through their own state; nothing imports
+# a module-level flag any more.
 
 
 # --------------------------------------------------------------------------- #
@@ -176,23 +182,27 @@ UNIVERSE_SEED = tuple(dict.fromkeys(UNIVERSE_SEED))
 def load_universe(
     asof: Optional[date] = None,
     fundamentals_provider: Any = None,
-) -> list[str]:
-    """Return the PEAD candidate universe as-of ``asof``.
+) -> tuple[list[str], bool]:
+    """Return ``(symbols, has_survivorship_bias)`` for the PEAD candidate
+    universe as-of ``asof``.
 
     Preference order:
 
     1. ``fundamentals_provider.sp500_constituents(asof)`` — a point-in-time
        S&P 500 constituent loader. Adapters that wish to remove the
-       survivorship-bias caveat should implement this hook.
+       survivorship-bias caveat should implement this hook. Returns
+       ``has_survivorship_bias=False``.
     2. Static :data:`UNIVERSE_SEED` — a 2024-era hand list kept as a
-       last-resort fallback. Using this path flips
-       :data:`UNIVERSE_HAS_SURVIVORSHIP_BIAS` to ``True`` and emits a
-       WARNING on every call so downstream OOS JSONs carry the bias flag
-       and the operator is alerted that backtest numbers should be
-       discounted accordingly.
-    """
+       last-resort fallback. Returns ``has_survivorship_bias=True`` and
+       emits a WARNING on every call so downstream OOS JSONs carry the
+       bias flag and the operator is alerted that backtest numbers
+       should be discounted accordingly.
 
-    global UNIVERSE_HAS_SURVIVORSHIP_BIAS
+    Round-6 / I-8: this previously toggled a module-level
+    ``UNIVERSE_HAS_SURVIVORSHIP_BIAS`` global which was not replay-safe.
+    The bias bit is now part of the return value; callers thread it
+    through their own state.
+    """
 
     if fundamentals_provider is not None and hasattr(
         fundamentals_provider, "sp500_constituents"
@@ -207,22 +217,19 @@ def load_universe(
             )
         else:
             if names:
-                UNIVERSE_HAS_SURVIVORSHIP_BIAS = False
-                return sorted({str(s).upper() for s in names})
+                return sorted({str(s).upper() for s in names}), False
 
-    UNIVERSE_HAS_SURVIVORSHIP_BIAS = True
     log.warning(
         "pead: universe falling back to static UNIVERSE_SEED (2024-era "
         "hand-list) — survivorship_bias=True. OOS artefacts should carry "
         "universe_has_survivorship_bias=true until a point-in-time S&P 500 "
         "constituent loader is wired via fundamentals_provider."
     )
-    return list(UNIVERSE_SEED)
+    return list(UNIVERSE_SEED), True
 
 
 __all__ = [
     "PEADParams",
     "UNIVERSE_SEED",
-    "UNIVERSE_HAS_SURVIVORSHIP_BIAS",
     "load_universe",
 ]
