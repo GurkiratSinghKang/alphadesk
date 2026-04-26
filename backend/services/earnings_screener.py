@@ -334,7 +334,16 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     # Per-window asyncio.Lock prevents the thundering-herd on cold cache:
     # without it, N concurrent requests would each fire a fresh FMP call,
     # blow through the rate limit, then all write the same value back.
-    lock = _FMP_UPCOMING_LOCKS.setdefault(window, asyncio.Lock())
+    #
+    # Round-7 / SVC-1: previously keyed on ``window`` only, but the
+    # cache key includes the resolved ``(start, end)`` dates. Around
+    # the ET window-boundary (23:55 → 00:05) two coroutines sharing
+    # ``window="current"`` would resolve to DIFFERENT date pairs, hold
+    # the same lock, but write to different cache keys — so the second
+    # waiter still fired a fresh FMP call, defeating the dedup the
+    # comment claims to provide. Key the lock on the resolved cache
+    # key so single-flight semantics actually hold across rollover.
+    lock = _FMP_UPCOMING_LOCKS.setdefault(cache_key, asyncio.Lock())
 
     def _load() -> list[dict]:
         # Timeout operator-tunable via ``settings.EARNINGS_FMP_TIMEOUT_S``
@@ -550,11 +559,25 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
             for side, contract in [("call", call_match), ("put", put_match)]:
                 if contract is None:
                     continue
-                mid = (
-                    (contract.bid + contract.ask) / 2
-                    if (contract.bid and contract.ask)
-                    else (contract.last or 0)
-                )
+                # Round-7 / SVC-3: a one-sided 0 quote is legitimate on
+                # illiquid wings (no bid OR no ask, the other side is
+                # real). The previous form fell through to ``last or 0``
+                # the moment EITHER side was 0, dropping a real-but-
+                # one-sided quote down to ``mid=0`` and then surfacing
+                # the contract as "zero premium" in the strike ladder
+                # sort. Treat exactly-zero on one side as a quote
+                # absence and fall back to the live side; if both are
+                # absent, last is the next best.
+                bid = float(contract.bid or 0)
+                ask = float(contract.ask or 0)
+                if bid > 0 and ask > 0:
+                    mid = (bid + ask) / 2
+                elif bid > 0:
+                    mid = bid
+                elif ask > 0:
+                    mid = ask
+                else:
+                    mid = float(contract.last or 0)
                 yield_pct = mid / underlying if underlying > 0 else 0.0
                 pop = max(0.0, min(1.0, 1 - abs(contract.delta or 0.5)))
                 rows.append({
@@ -609,6 +632,12 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
 # check, a successor task could be wiped from the dict by its
 # predecessor's cleanup callback.
 _inflight_structured: dict[str, asyncio.Task[dict | None]] = {}
+# Round-7 / BE-2: same single-flight pattern for the *Opus* full-
+# research path. Two concurrent ``POST /full-research`` requests for
+# the same symbol previously each spawned a paid Opus call on cold
+# cache, doubling the spend without any speed-up. We dedup keyed on
+# ``f"{symbol}:{report_date}"`` mirroring the structured-call dict.
+_inflight_full_research: dict[str, "asyncio.Task[ClaudeFullResearch]"] = {}
 _INFLIGHT_LOCK: asyncio.Lock | None = None
 
 
@@ -1578,14 +1607,16 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
 
     Cache hit → return parsed payload straight. Cache miss → gather context,
     build the full prompt, call Claude Opus, persist, return.
+
+    Round-7 / BE-2: previously, two concurrent callers on a cold cache
+    both ran the full Opus path. The structured-call sibling
+    (:func:`_load_claude_structured`) has been deduping via
+    ``_inflight_structured`` since Round-4; this function now wears the
+    same pattern via ``_inflight_full_research``. Cache + meta lookups
+    stay outside the dedup so a cache hit doesn't pay the lock
+    acquisition cost.
     """
-    from agents.claude_client import get_client
     from core.cache import get_cache
-    from services.earnings_prompts import (
-        MODEL_FULL,
-        build_full_prompt,
-        parse_full_response,
-    )
 
     meta = await _load_earnings_meta(symbol)
     if not meta:
@@ -1596,6 +1627,39 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     cached = await cache.get(key)
     if cached:
         return ClaudeFullResearch(**cached)
+
+    inflight_key = f"{symbol}:{meta['report_date']}"
+    lock = _get_inflight_lock()
+    async with lock:
+        task = _inflight_full_research.get(inflight_key)
+        if task is None or task.done():
+            task = asyncio.create_task(
+                _run_full_research_uncached(symbol, meta, cache, key)
+            )
+            _inflight_full_research[inflight_key] = task
+
+            def _done(t: "asyncio.Task[ClaudeFullResearch]", k: str = inflight_key) -> None:
+                # Identity-compare so we never wipe a successor task
+                # that replaced us in the dict.
+                if _inflight_full_research.get(k) is t:
+                    _inflight_full_research.pop(k, None)
+
+            task.add_done_callback(_done)
+    return await task
+
+
+async def _run_full_research_uncached(
+    symbol: str, meta: dict, cache, key: str,
+) -> ClaudeFullResearch:
+    """Cold-cache full-research path — only entered through the
+    ``_inflight_full_research`` single-flight gate so two callers for the
+    same symbol share one Opus call."""
+    from agents.claude_client import get_client
+    from services.earnings_prompts import (
+        MODEL_FULL,
+        build_full_prompt,
+        parse_full_response,
+    )
 
     quote, metrics, news = await asyncio.gather(
         _load_quote(symbol),

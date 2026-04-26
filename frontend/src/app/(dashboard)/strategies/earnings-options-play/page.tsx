@@ -62,10 +62,21 @@ export default function EarningsOptionsPlayPage() {
 
   // Round-4 (B-NEW-4): track the source of the last selection change so
   // DetailHeader knows whether to refocus its <h2>.
-  const lastSelectionSourceRef = useRef<SelectionSource>(null);
+  //
+  // Round-7 / EP-1: this used to live in a ref mutated synchronously
+  // before the setState. React doesn't re-render on ref mutation, so
+  // the source value the rendered tree read was whatever happened to
+  // be in the ref at the next React render. Two near-simultaneous
+  // setSelectedSymbol calls (e.g. keyboard ``j`` plus the auto-select
+  // effect on a calendar refetch) would both stomp the ref, the
+  // commit would coalesce, and DetailHeader's autofocus would key off
+  // the wrong source. Promote to real state so React tracks the
+  // (sym, source) tuple as one render-time value.
+  const [selectionSource, setSelectionSourceState] =
+    useState<SelectionSource>(null);
   const setSelectedSymbol = useCallback(
     (sym: string | null, source: SelectionSource = null) => {
-      lastSelectionSourceRef.current = source;
+      setSelectionSourceState(source);
       setSelectedSymbolState(sym);
     },
     [],
@@ -384,7 +395,7 @@ export default function EarningsOptionsPlayPage() {
           runningFull={runningFull}
           fullResearchError={fullError}
           onRunFullResearch={runFull}
-          selectionSource={lastSelectionSourceRef.current}
+          selectionSource={selectionSource}
         />
       </div>
     </DashboardPageLayout>

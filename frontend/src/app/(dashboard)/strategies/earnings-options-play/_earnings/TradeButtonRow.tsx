@@ -25,11 +25,22 @@ export interface TradeButtonRowProps {
 const STRATEGY_TAG = "earnings-options-play";
 
 export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) {
-  if (!ladder || ladder.rows.length === 0) {
+  // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
+  // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
+  // any other shape (stub responses, chain_demo synthetic rows, future
+  // schema drift) silently produces a malformed OCC like ``NVDAC00205000``
+  // that the broker rejects only at submit time, after the user already
+  // navigated to /trade. Disable the buttons up-front with a clear empty-
+  // state instead.
+  const expiryValid =
+    !!ladder && /^\d{4}-\d{2}-\d{2}$/.test(ladder.expiry);
+  if (!ladder || ladder.rows.length === 0 || !expiryValid) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
         <p className="t-mono text-[12px] u-muted">
-          — options chain unavailable, trade buttons disabled.
+          {ladder && !expiryValid
+            ? "— expiry unavailable, trade buttons disabled."
+            : "— options chain unavailable, trade buttons disabled."}
         </p>
       </div>
     );
@@ -82,8 +93,18 @@ function pickRow(rows: LadderRow[], side: "call" | "put", bucket: "ATM" | "30Δ"
 /**
  * OCC contract symbol: SYMBOL + YYMMDD + C|P + strike*1000 padded 8 digits.
  * E.g. NVDA 2026-04-25 $205 call = NVDA260425C00205000.
+ *
+ * Round-7 / EP-6: callers must validate ``expiry`` matches
+ * ``YYYY-MM-DD`` before passing it (see ``TradeButtonRow`` early
+ * return). The slice indexing produces silently-corrupt symbols on
+ * any other shape; we still defend in depth here by rejecting a
+ * non-finite strike, which would otherwise stringify to
+ * ``"00000NaN"`` and ride through the URL builder undetected.
  */
 function occSymbol(symbol: string, expiry: string, side: "call" | "put", strike: number): string {
+  if (!Number.isFinite(strike) || strike <= 0) {
+    throw new Error(`occSymbol: invalid strike ${strike}`);
+  }
   const yymmdd = expiry.slice(2, 4) + expiry.slice(5, 7) + expiry.slice(8, 10);
   const side_char = side === "call" ? "C" : "P";
   const strike_padded = String(Math.round(strike * 1000)).padStart(8, "0");

@@ -35,7 +35,15 @@ export default function DetailHeader({
   // text without refetching the detail payload. Don't tick MetricsStrip
   // or StrikeLadder — those decay only on data refresh, not the wall
   // clock.
-  useTick(15_000);
+  //
+  // Round-7 / EP-4: the LIVE → DELAYED threshold sits at 30s but the
+  // 15s tick means the pill could lie for up to 15s past the boundary.
+  // The pill is positioned next to the price so a 40-45s-old quote
+  // still rendered "LIVE" was a real risk — at 5s tick we're never
+  // more than 5s stale around the 30s edge, which is below human
+  // perception for a price-decision affordance. Cost is one extra
+  // re-render every 5s of an unchanged header — negligible.
+  useTick(5_000);
   const freshness = getFreshness(generatedAt);
 
   // Round-4 (B-NEW-4): autofocus the H2 only on keyboard / URL selection

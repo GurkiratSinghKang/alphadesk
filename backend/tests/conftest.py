@@ -101,6 +101,8 @@ def _disable_earnings_cache_in_tests():
 # failures that appear only under specific test ordering.
 _MODULE_STATE_REGISTRY = [
     "services.earnings_screener._inflight_structured",
+    # Round-7 / BE-2: full-research path now also single-flighted.
+    "services.earnings_screener._inflight_full_research",
     # Add new module-level state paths here.
 ]
 
