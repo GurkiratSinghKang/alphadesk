@@ -17,7 +17,39 @@ ReportTime = Literal["BMO", "AMC", "DMT"]
 Verdict = Literal["bullish", "neutral-bull", "neutral", "neutral-bear", "bearish"]
 OptionSide = Literal["call", "put"]
 Bucket = Literal["15Δ", "30Δ", "ATM"]
-TopSetup = Literal["short call", "cash-secured put", "short strangle", "iron condor"]
+# Round-13 / RD-1 (P0): the wire-contract vocabulary for ``suggested_play``
+# / ``top_setup`` used to be ``"short call" | "cash-secured put" | "short
+# strangle" | "iron condor"``. Round-12 / DR-1 expanded the prompt-side
+# ``_VALID_SETUPS`` set to 13 DEFINED-RISK shapes, but the Pydantic
+# response schema was left on the legacy 4-value Literal. Result: every
+# Claude response that used the new vocabulary tripped a ``ValidationError``
+# inside ``ClaudeStructured(**claude)`` and the FE rendered the generic
+# 502 "Claude analysis failed unexpectedly" — the entire feature was
+# broken on every full-research call. Widen the literal to match the
+# prompt vocab + retain the legacy values for backward-compat with cached
+# rows; the prompt gate at ``parse_structured_response`` enforces the
+# defined-risk subset on fresh runs.
+TopSetup = Literal[
+    # Defined-risk vocabulary (Round-12 / DR-1):
+    "long call",
+    "long put",
+    "bull put spread",
+    "bear call spread",
+    "bull call spread",
+    "bear put spread",
+    "iron condor",
+    "iron butterfly",
+    "calendar spread",
+    "diagonal spread",
+    "cash-secured put",
+    "covered call",
+    "married put",
+    "long straddle",  # FE alias used by the bull-vol button (defined-risk: max loss = debit)
+    # Legacy values retained ONLY so cached pre-Round-12 rows still
+    # deserialise — fresh prompts forbid them via ``_VALID_SETUPS``.
+    "short call",
+    "short strangle",
+]
 # Round-4 CLUSTER 1 #5: a row's display state for the day-of report.
 # The frontend dims rows based on this; backend never filters >= today_done
 # silently — it surfaces the state so the user sees what we know.
@@ -212,6 +244,13 @@ class NewsArticle(BaseModel):
     source: str
     published_at: datetime
     url: str
+    # Round-13 / RD-5: stage-1 ranking signals computed by
+    # ``backend/services/news.py:_score_relevance``. Optional with
+    # safe defaults so older serialised cache entries still parse.
+    relevance_score: float = 0.0
+    category: str | None = None
+    tier: int = 2
+    sentiment: str | None = None
 
 
 class EarningsDetail(BaseModel):

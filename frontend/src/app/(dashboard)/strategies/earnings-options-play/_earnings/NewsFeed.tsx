@@ -24,10 +24,24 @@ export default function NewsFeed({ news }: NewsFeedProps) {
   useTick(60_000);
 
   if (!news || news.length === 0) {
+    // Round-13 / RD-8 (P1): the empty state used to say "no recent
+    // news" — but with the NF-1 stage-1 filter the more accurate
+    // story is "nothing crossed the relevance threshold". Distinguish
+    // the two so a real trader knows whether to look elsewhere or
+    // whether the feed is simply quiet.
     return (
       <section data-slot="news-feed" className="mt-4">
-        <h3 className="t-display-section italic text-[13px]">News</h3>
-        <p className="mt-1 t-mono text-[12px] u-muted">— no recent news</p>
+        <h3 className="t-display-section italic text-[13px]">
+          News{" "}
+          <span className="t-label u-muted" title="Filtered for stock-price relevance — see trader docs.">
+            · price-driving
+          </span>
+        </h3>
+        <p className="mt-1 t-mono text-[12px] u-muted">
+          — No price-driving headlines cleared the relevance filter.
+          Aggregator wires (PR Newswire, GlobeNewswire) and tangential
+          mentions are filtered out.
+        </p>
       </section>
     );
   }

@@ -6,10 +6,11 @@ import time
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from api.routes._rate_limit import check_detail_rate, check_full_research_rate
 from api.schemas.earnings import CalendarResponse, EarningsDetail, ClaudeFullResearch
+from core.auth import require_auth
 from core.http import client_ip
 from services import earnings_screener
 from services.earnings_screener import _in_curated_universe
@@ -118,6 +119,7 @@ async def get_detail(
 async def post_full_research(
     symbol: Annotated[str, Path(pattern=_SYMBOL_PATTERN)],
     request: Request,
+    username: str = Depends(require_auth),
 ) -> ClaudeFullResearch:
     # Round-4 CLUSTER 2 #6: same curated-universe gate as /detail. The
     # check fires before the rate-limiter so a request for a non-curated
@@ -135,6 +137,35 @@ async def post_full_research(
     # matters — otherwise Caddy's address buckets every user together
     # and the cap is useless in production.
     await check_full_research_rate(client_ip(request))
+    # Round-13 / RD-10 (P1): per-USER rate limit on top of per-IP. A
+    # corporate-NAT user can otherwise share the per-IP bucket with all
+    # coworkers; a malicious user can spin up multiple IPs (mobile
+    # tether, VPN, ipv6 prefix rotation) and burn the daily Claude
+    # budget. Hard cap each authenticated user at 10 calls / 10 min,
+    # tracked in Redis as ``fullres_user:{username}``. Best-effort: if
+    # Redis is unreachable we fall back to per-IP only (preserves UX
+    # during a Redis flap rather than locking everyone out).
+    try:
+        from core.redis import get_redis
+
+        redis = await get_redis()
+        if redis:
+            user_key = f"fullres_user:{username}:{int(time.time() // 600)}"
+            count = await redis.incr(user_key)
+            await redis.expire(user_key, 600)
+            if int(count) > 10:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "Per-user rate limit (10 / 10 min) exceeded for "
+                        "Claude full-research. Cool down ~10 min — Opus "
+                        "calls are billed against the shared daily budget."
+                    ),
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.debug("per-user rate-limit Redis probe failed; allowing", exc_info=True)
     # Round-12 / CL-1 (P1): expand error mapping. Pre-fix, only ValueError
     # was caught — Claude timeouts (``ClaudeTimeoutError`` ≥ 60s),
     # daily-budget kills (``ClaudeBudgetExceeded``), and JSON parse

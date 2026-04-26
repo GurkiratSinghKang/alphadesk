@@ -308,7 +308,14 @@ _CATEGORY_PATTERNS: list[tuple[str, "re.Pattern[str]"]] = [
     ("product", re.compile(r"\blaunch|\bunveils|\bintroduces|\breleases|\bpartner", re.IGNORECASE)),
     ("insider", re.compile(r"insider sell|insider buy|form 4|stake|holdings", re.IGNORECASE)),
 ]
-_UTM_RE = re.compile(r"[?&](utm_[^=&]+|ref|fbclid|gclid)=[^&]*", re.IGNORECASE)
+# Round-13 / RD-6 (P1): the previous regex consumed the leading ``?`` along
+# with the first ``utm_*=…`` param. ``foo?utm_source=a&id=42`` became
+# ``foo&id=42`` (with ``&`` where ``?`` should be), so the canonical key
+# for ``foo?id=42`` and ``foo?utm_source=a&id=42`` diverged and dedupe
+# missed the syndicated repost. Now we match either ``?p=v`` (first
+# param) or ``&p=v`` (subsequent) and rebuild the param list cleanly.
+_UTM_PARAM_NAMES = ("utm_source", "utm_medium", "utm_campaign", "utm_term",
+                    "utm_content", "ref", "fbclid", "gclid")
 
 
 def _classify_source_tier(source: str | None) -> int:
@@ -392,16 +399,28 @@ def _hours_since(iso_or_rfc: str) -> float | None:
 
 
 def _canonical_url(url: str) -> str:
-    """Strip utm_*/ref/fbclid query params and fragments to a canonical key."""
+    """Strip utm_*/ref/fbclid query params and fragments to a canonical key.
+
+    Round-13 / RD-6 (P1): rebuild the param list rather than substituting
+    in-place — the previous in-place ``re.sub`` mangled the URL when a
+    tracker was the FIRST query param (``?utm_source=…&id=42`` →
+    ``&id=42``). Now: parse, drop tracker keys, re-emit with a clean
+    leading ``?``.
+    """
     if not url:
         return ""
     try:
-        # Drop fragment.
-        u = url.split("#", 1)[0]
-        u = _UTM_RE.sub("", u)
-        # Clean a bare trailing ? if all params were stripped.
-        u = u.rstrip("?&")
-        return u.lower()
+        from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+
+        parsed = urlparse(url)
+        # Drop fragment + filter tracker params (case-insensitive).
+        params = [
+            (k, v)
+            for (k, v) in parse_qsl(parsed.query, keep_blank_values=False)
+            if k.lower() not in _UTM_PARAM_NAMES
+        ]
+        rebuilt = parsed._replace(query=urlencode(params), fragment="")
+        return urlunparse(rebuilt).lower()
     except Exception:
         return url.lower()
 

@@ -317,7 +317,33 @@ export interface QuickOrderEvent {
 
 export type EarningsReportTime = "BMO" | "AMC" | "DMT";
 export type EarningsVerdict = "bullish" | "neutral-bull" | "neutral" | "neutral-bear" | "bearish";
-export type EarningsTopSetup = "short call" | "cash-secured put" | "short strangle" | "iron condor";
+/**
+ * Round-13 / RD-1: the FE union mirrors the backend ``TopSetup`` Literal
+ * (``backend/api/schemas/earnings.py:TopSetup``). Round-12 / DR-1
+ * widened the BE prompt vocabulary to 13 defined-risk shapes; this type
+ * was left on the legacy 4-value union and silently coerced any new
+ * shape to ``null`` on the wire, breaking the DecisionStrip + thesis
+ * card render. Include the legacy values ("short call", "short strangle")
+ * only so cached pre-Round-12 server responses still type-check; the
+ * frontend should render a "(legacy)" warning when those appear.
+ */
+export type EarningsTopSetup =
+  | "long call"
+  | "long put"
+  | "bull put spread"
+  | "bear call spread"
+  | "bull call spread"
+  | "bear put spread"
+  | "iron condor"
+  | "iron butterfly"
+  | "calendar spread"
+  | "diagonal spread"
+  | "cash-secured put"
+  | "covered call"
+  | "married put"
+  | "long straddle"
+  | "short call"        // legacy — defined-risk gate now blocks new emissions
+  | "short strangle";   // legacy
 export type EarningsOptionSide = "call" | "put";
 export type EarningsBucket = "15Δ" | "30Δ" | "ATM";
 

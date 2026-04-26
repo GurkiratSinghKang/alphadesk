@@ -163,6 +163,36 @@ class DailyPipelineRunner:
                 ],
             )
 
+        # Round-13 / RD-12 (P1): operator-pause gate. The /strategies UI
+        # writes ``strategy_status:{name}`` to Redis when the operator
+        # pauses a strategy mid-day; the legacy ``daily_pipeline.py``
+        # respects this gate (AA-1.3) but the new ``_core`` runner used
+        # this exact same path didn't, so a paused strategy continued
+        # to emit live signals if dispatched via the new runner. Now
+        # both runners short-circuit identically.
+        try:
+            from core.redis import cache_get
+            paused = await cache_get(
+                f"strategy_status:{self._strategy.META.name}"
+            )
+            if isinstance(paused, dict) and paused.get("status") == "paused":
+                return StrategyResult(
+                    signals=[], state_update={},
+                    diagnostics={"operator_paused": True, "paused_at": paused.get("paused_at")},
+                    warnings=[
+                        f"{self._strategy.META.name} is operator-paused "
+                        f"(status set at {paused.get('paused_at', 'unknown')}) — "
+                        "skipped live-mode emission"
+                    ],
+                )
+        except Exception:
+            # Redis blip: don't fail-OPEN on the pause check, but don't
+            # crash the run either. The legacy pipeline mirrors this
+            # behaviour — operators rely on Postgres-side halt for the
+            # hard kill switch, this Redis gate is the per-strategy
+            # soft pause.
+            pass
+
         state = await self._state_store.load(self._strategy.META.name)
         symbols = self._strategy.universe(asof, state)
         bars = self._providers.bars.fetch_window(

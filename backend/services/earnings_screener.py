@@ -1076,12 +1076,22 @@ async def _news_payload(symbol: str, *, limit: int = 10) -> dict:
     if resp.is_demo:
         return {"articles": [], "is_demo": True}
 
+    # Round-13 / RD-5 (P1): forward all stage-1 ranking fields the
+    # NewsArticle model now carries. Pre-fix this projection only
+    # forwarded title/source/published_at/url — the FE NF-1 features
+    # (category chips, tier-1 ★, relevance-descending sort) were dead
+    # because the wire payload was stripped. The schema mirror lives
+    # in ``backend/api/schemas/earnings.py:EarningsNewsArticle``.
     articles = [
         {
             "title": a.title,
             "source": a.source,
             "published_at": _parse_news_datetime(a.published_at),
             "url": a.url,
+            "relevance_score": getattr(a, "relevance_score", 0.0),
+            "category": getattr(a, "category", None),
+            "tier": getattr(a, "tier", 2),
+            "sentiment": getattr(a, "sentiment", None),
         }
         for a in resp.articles
         if a.url  # Schema requires a URL; drop rows with empty links

@@ -488,6 +488,92 @@ class CreateOrderRequest(BaseModel):
             )
         return normalised
 
+    @model_validator(mode="after")
+    def reject_uncovered_short_options(self) -> "CreateOrderRequest":
+        """Round-13 / RD-2 (P0): close the DR-1 bypass.
+
+        Round-12 / DR-1 forbade naked-risk ``combo_type`` values
+        (``strangle`` etc.), but a caller could side-step the gate
+        entirely by submitting two SELL option legs with NO
+        ``combo_type`` set — the validator only fires when
+        ``combo_type`` is supplied. The downstream notional path then
+        treated them as independent per-leg orders and the broker
+        accepted them as a naked strangle.
+
+        Now: any short option leg must EITHER (a) be backed by a
+        defined-risk ``combo_type`` (covered_call / cash_secured_put /
+        vertical_spread / iron_condor / iron_butterfly /
+        calendar_spread / diagonal_spread / married_put), OR (b) be
+        paired in the same request with a corresponding LONG option
+        leg of the same option type (call/put) and same expiry that
+        bounds the loss.
+
+        The corresponding-leg check is intentionally simple: a SELL
+        call must have a BUY call at the same expiry; a SELL put must
+        have a BUY put at the same expiry. This catches every
+        defined-risk pairing the FE generates without enumerating
+        every shape. The numeric strike-distance check stays in the
+        notional gate where it belongs.
+
+        Operators can opt out per-environment with
+        ``TRADES_ALLOW_NAKED_OPTION_LEGS=1`` if a regulated short-vol
+        strategy ever ships behind margin-requirement-aware sizing.
+        """
+        if (_os.environ.get("TRADES_ALLOW_NAKED_OPTION_LEGS", "") or "").lower() in {"1", "true", "yes"}:
+            return self
+        # When combo_type is set, the new field validator already
+        # restricted it to defined-risk values — short legs inside a
+        # defined-risk combo are wing-protected by definition.
+        if self.combo_type is not None:
+            return self
+        # Inspect every leg for short option exposure.
+        for leg in self.legs:
+            asset_class = (getattr(leg, "asset_class", "equity") or "equity").lower()
+            side = getattr(leg, "side", None)
+            side_value = getattr(side, "value", side)
+            if asset_class != "option" or side_value != "sell":
+                continue
+            # OCC parse to extract option type + expiry. Symbol shape:
+            # ``SYMBOL + YYMMDD + (C|P) + 8-digit-strike``. The leg
+            # validator at OrderLeg.model_validator already verified
+            # this for option legs, so a malformed symbol shouldn't
+            # reach here.
+            occ = leg.symbol
+            try:
+                # Find the C/P pivot — last 9 chars are PXXXXXXXX or
+                # CXXXXXXXX, preceded by 6-digit YYMMDD.
+                opt_type_idx = len(occ) - 9
+                opt_type = occ[opt_type_idx]
+                expiry = occ[opt_type_idx - 6:opt_type_idx]
+            except Exception:
+                # Defensive: if parsing fails treat the whole order
+                # as suspect and refuse it.
+                raise ValueError(
+                    "could not parse option leg OCC symbol; refusing as a "
+                    "defence-in-depth measure (DR-1 / RD-2)"
+                )
+            # Require a covering LONG leg of the same type + expiry.
+            covered = any(
+                (other_leg.symbol != leg.symbol)
+                and ((getattr(other_leg, "asset_class", "equity") or "equity").lower() == "option")
+                and (getattr(getattr(other_leg, "side", None), "value", getattr(other_leg, "side", None)) == "buy")
+                and len(other_leg.symbol) >= 9
+                and other_leg.symbol[-9] == opt_type  # same call/put
+                and other_leg.symbol[-15:-9] == expiry  # same expiry
+                for other_leg in self.legs
+            )
+            if not covered:
+                raise ValueError(
+                    "naked short option leg not permitted: "
+                    f"{leg.symbol} (sell {opt_type}) has no covering long leg "
+                    "in the same request. Submit a defined-risk combo "
+                    "(vertical_spread, iron_condor, iron_butterfly, "
+                    "calendar_spread, diagonal_spread, covered_call, "
+                    "cash_secured_put, or married_put) — naked options are "
+                    "blocked by the DR-1 risk policy."
+                )
+        return self
+
     @field_validator("combo_correlation_id")
     @classmethod
     def sanitize_combo_correlation_id(cls, v: str | None) -> str | None:
@@ -3102,6 +3188,62 @@ async def _aggregate_risk_check(
         if not tradable_ok:
             return False, tradable_reason
 
+    # Round-13 / RD-4 (P0): refuse to submit option orders priced
+    # against a SYNTHETIC chain. ``services/options.py:fetch_chain``
+    # falls back to a BSM-modelled chain (``is_demo=True``) when the
+    # Polygon options feed is unavailable — strikes, Greeks, and IVs
+    # are computed from a constant volatility surface, so the limit
+    # prices the user sees in the StrikeLadder are entirely
+    # fictional. Submitting against them risks egregiously bad fills
+    # (or 422s on strike/contract mismatch when the broker rejects
+    # the synthetic OCC). Operators can opt out per-environment with
+    # ``TRADES_ALLOW_DEMO_CHAIN_ORDERS=1`` for testing.
+    has_option_leg = any(
+        (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+        for leg in request.legs
+    )
+    if has_option_leg and not (
+        (_os.environ.get("TRADES_ALLOW_DEMO_CHAIN_ORDERS", "") or "").lower()
+        in {"1", "true", "yes"}
+    ):
+        # Probe the chain freshness for the first option leg's
+        # underlying — if the chain is_demo, refuse the entire order.
+        try:
+            from services.options import fetch_chain
+
+            first_option_leg = next(
+                leg
+                for leg in request.legs
+                if (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+            )
+            occ = first_option_leg.symbol
+            # OCC underlying = everything before the 6-digit YYMMDD.
+            # Strip the trailing 15 chars: YYMMDD + (C|P) + 8-digit-strike.
+            underlying = occ[:-15] if len(occ) > 15 else occ
+            chain = await fetch_chain(underlying)
+            if getattr(chain, "is_demo", False):
+                return False, (
+                    f"Options chain for {underlying} is currently SYNTHETIC "
+                    "(BSM-modelled fallback) — Polygon options feed is "
+                    "unavailable. Trade submission is blocked until live "
+                    "OPRA quotes return; equities trades on this symbol "
+                    "are unaffected. Set TRADES_ALLOW_DEMO_CHAIN_ORDERS=1 "
+                    "to override (testing only)."
+                )
+        except StopIteration:
+            pass  # No option legs after all (defensive)
+        except HTTPException:
+            raise
+        except Exception:
+            # Chain probe is best-effort; if it fails for transient
+            # reasons we don't want to block legitimate traders. Log
+            # and let the order proceed — broker-side checks will
+            # catch a truly malformed contract.
+            logger.debug(
+                "chain demo-gate probe failed; allowing order through",
+                exc_info=True,
+            )
+
     # J-7 (Round-6): quote-staleness gate. Skipped when caller didn't
     # forward a ``quote_at_fill_ts``; otherwise rejects stale snapshots
     # and limit prices that diverge >50bps from the live quote.
@@ -3557,8 +3699,18 @@ async def halt_trading(
 
     Wave 3K (persona-87 P1 #1 gap 3): halt / resume transitions are
     persisted to ``audit_log`` via ``core.audit.write_audit``.
+
+    Round-13 / RD-3 (P0): admin-only. Pre-fix any authenticated user
+    could halt all trading — a hostile JWT (or a curious one) could
+    DoS the entire trading desk by halting + flattening every
+    position. Now restricted to ``settings.ADMIN_USERNAME`` like
+    ``/reconcile`` and the other operator-only routes.
     """
     from core.audit import write_audit
+    from core.config import settings as _s
+
+    if username != _s.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
 
     request_id = getattr(req.state, "request_id", None)
     client_ip = _client_ip_for_audit(req)
@@ -3715,8 +3867,14 @@ async def resume_trading(
     Wave 3K (persona-87 P1 #1 gap 3): see ``halt_trading`` — both
     transitions are persisted to the compliance ``audit_log`` via
     ``core.audit.write_audit``.
+
+    Round-13 / RD-3 (P0): admin-only — pairs with ``halt_trading``.
     """
     from core.audit import write_audit
+    from core.config import settings as _s
+
+    if username != _s.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
 
     request_id = getattr(req.state, "request_id", None)
     client_ip = _client_ip_for_audit(req)

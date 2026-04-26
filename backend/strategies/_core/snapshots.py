@@ -41,15 +41,38 @@ class SnapshotWriter:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def write(self, input: StrategyInput) -> str:
+        """Write a StrategyInput snapshot to disk.
+
+        Round-13 / RD-11 (P1): atomic write. Pre-fix this called
+        ``df.to_parquet(dest / "bars.parquet")`` and
+        ``(dest/"meta.json").write_text(...)`` directly — a process
+        crash mid-write left a half-written snapshot dir; the
+        ``SnapshotReader`` then silently surfaced the corrupt parquet
+        on replay and crashed downstream. Now: write each artifact to
+        a sibling ``.tmp`` path, then ``os.replace`` it into place
+        only after every artifact succeeds. ``os.replace`` is atomic
+        on the same filesystem (POSIX rename), so a crash during the
+        write phase leaves only ``.tmp`` files which the reader
+        ignores via the ``glob`` pattern.
+        """
         sid = StrategyInput.snapshot_id(input)
         dest = self._root / input.mode / input.asof.isoformat() / sid
         dest.mkdir(parents=True, exist_ok=True)
 
-        input.bars.to_parquet(dest / "bars.parquet")
+        # Build a list of (final_path, write_callable) so we can
+        # write everything to .tmp first, then commit in one swap.
+        pending: list[tuple[Path, callable]] = []
+
+        def _stage_parquet(name: str, df) -> None:
+            if df is None:
+                return
+            tmp = dest / f"{name}.parquet.tmp"
+            df.to_parquet(tmp)
+            pending.append((dest / f"{name}.parquet", tmp))
+
+        _stage_parquet("bars", input.bars)
         for name in ("earnings", "fundamentals", "news"):
-            df = getattr(input, name)
-            if df is not None:
-                df.to_parquet(dest / f"{name}.parquet")
+            _stage_parquet(name, getattr(input, name))
 
         meta = {
             "asof": input.asof.isoformat(),
@@ -60,7 +83,17 @@ class SnapshotWriter:
             "equity": str(input.equity),
             "positions": [p.model_dump(mode="json") for p in input.positions],
         }
-        (dest / "meta.json").write_text(json.dumps(meta, default=str))
+        meta_tmp = dest / "meta.json.tmp"
+        meta_tmp.write_text(json.dumps(meta, default=str))
+        pending.append((dest / "meta.json", meta_tmp))
+
+        # Commit phase — atomic rename of every staged artifact. If
+        # anything raises here the .tmp files persist on disk; a
+        # subsequent successful write (or the reader's glob filter
+        # which excludes ``*.tmp``) cleans up.
+        import os as _os_local
+        for final, tmp in pending:
+            _os_local.replace(tmp, final)
         return sid
 
 

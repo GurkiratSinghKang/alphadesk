@@ -70,6 +70,23 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
   // Long straddle = buy ATM call + buy ATM put — direction-agnostic vol
   const longStraddle = atmCall && atmPut ? { call: atmCall, put: atmPut } : null;
 
+  // Round-13 / RD-7 (P1): a narrow chain (only ATM rows; no 30Δ/15Δ
+  // wing strikes) leaves every defined-risk button null. Pre-fix the
+  // user saw an empty `<div>` with a top border — looked broken. Show
+  // an explicit "narrow chain" message instead.
+  const noButtonsAvailable =
+    !bullPutSpread && !bearCallSpread && !ironCondor && !longStraddle;
+  if (noButtonsAvailable) {
+    return (
+      <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
+        <p className="t-mono text-[12px] u-muted">
+          — Narrow chain: only ATM strikes available. Try a different expiry, a
+          higher-volume symbol, or wait for 15Δ/30Δ wings to populate.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       data-slot="trade-button-row"

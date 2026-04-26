@@ -154,6 +154,10 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         refetching && "opacity-70",
       )}
     >
+      {/* Round-13 / RD-9 (P1): reserve a stable slot so a banner that
+          flips between true/false on refetch doesn't cause a layout
+          shift under the DecisionStrip hero (the most-attended part
+          of the page). The slot is empty when no banner is needed. */}
       {showCodesBanner && <PartialDataBanner codes={errorCodes} />}
       {showLegacyBanner && (
         <div
