@@ -229,12 +229,40 @@ async def redis_xread_portfolio(
 # ---------------------------------------------------------------------------
 
 async def cache_get(key: str) -> Any | None:
+    """Read+decode a JSON value from Redis. Returns ``None`` on miss
+    or operational error.
+
+    Round-11 / BB-15 (P1): split the failure modes. A
+    ``JSONDecodeError`` means the value at ``key`` is corrupt — the
+    previous swallow-all returned ``None`` and the caller silently
+    fetched fresh + wrote back, leaving the bad value in place for
+    its full TTL. Now we delete the corrupt key and emit ERROR. A
+    connection error stays at the original quiet behaviour because
+    Redis flaps are recoverable and noisy on ERROR would drown the
+    real problems.
+    """
     try:
         r = await get_redis()
         raw = await r.get(key)
         if raw is None:
             return None
-        return orjson.loads(raw)
+        try:
+            return orjson.loads(raw)
+        except Exception as decode_err:
+            # Round-11 / BB-15: poisoned key — delete it and surface so
+            # a future visitor doesn't re-hit the same corruption for
+            # the rest of the TTL.
+            try:
+                await r.delete(key)
+            except Exception:  # pragma: no cover — defensive
+                pass
+            import logging
+            logging.getLogger(__name__).error(
+                "cache_get: corrupt JSON at key=%s; deleted",
+                key,
+                exc_info=decode_err,
+            )
+            return None
     except Exception:
         return None
 

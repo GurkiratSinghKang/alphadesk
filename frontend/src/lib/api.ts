@@ -541,7 +541,21 @@ export async function getQuote(symbol: string): Promise<Quote> {
     `/api/v1/market/quotes/${symbol}`,
     resp?.is_demo === true || resp?.source === "demo",
   );
-  return resp;
+  // Round-11 / Y-2 (P0): backend ``services/market.py:35`` declares
+  // ``timestamp: datetime`` which FastAPI serialises as an ISO-8601
+  // string ("2026-04-26T17:32:00+00:00"). The FE ``Quote`` type
+  // (``types/index.ts:15``) declares it as ``number`` (epoch ms).
+  // Any consumer doing ``Date.now() - quote.timestamp`` math gets
+  // ``NaN`` and ``formatDistanceToNow(quote.timestamp)`` shows
+  // "Invalid Date". Normalise here so every consumer sees a number.
+  const rawTs: unknown = (resp as unknown as { timestamp?: unknown })?.timestamp;
+  const ts =
+    typeof rawTs === "number"
+      ? rawTs
+      : typeof rawTs === "string"
+        ? Date.parse(rawTs) || 0
+        : 0;
+  return { ...resp, timestamp: ts };
 }
 
 export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit = 500): Promise<OHLCVBar[]> {

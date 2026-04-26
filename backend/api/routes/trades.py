@@ -956,7 +956,27 @@ async def create_order(
         except HTTPException:
             raise
         except Exception:
-            logger.debug("Redis unavailable for Idempotency-Key lookup", exc_info=True)
+            # Round-11 / BB-18 (P1): when the user supplied an
+            # Idempotency-Key but Redis is unreachable, fail closed
+            # rather than silently fall through. Falling through
+            # would let a retried client submit DUPLICATE orders
+            # during a Redis blip — only the broker-side
+            # ``client_order_id`` dedup catches it (and that's only
+            # set when an idem key exists). 503 is the correct
+            # status: the dedup service is unavailable, not the
+            # order endpoint itself; the client should retry with
+            # the same key once Redis recovers.
+            logger.error(
+                "Idempotency-Key dedup unavailable — refusing to fall through",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Idempotency dedup service unavailable. Retry the "
+                    "request with the same Idempotency-Key when ready."
+                ),
+            )
 
     # J-10 (Round-6) — the gate now applies to ALL order types
     # (market / limit / stop / stop_limit). A limit order placed on a

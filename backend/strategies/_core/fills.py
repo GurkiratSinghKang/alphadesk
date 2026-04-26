@@ -40,7 +40,33 @@ class FillSimulator:
         next_bars: dict[str, pd.Series],
         asof: date,
     ) -> list[Fill]:
-        """Convert signals to fills. `next_bars` maps symbol → next bar's OHLCV row."""
+        """Convert signals to fills. ``next_bars`` maps symbol → next bar's OHLCV row.
+
+        Round-11 / AA-1.2 (P0): the previous version filled every
+        signal at ``self._reference_price(bar)`` regardless of
+        ``signal.order_type`` / ``signal.limit_price`` — a LMT buy at
+        $50 on a gap-up to $55 still "filled" at $55 in the
+        backtest, systematically inflating event-day strategy
+        backtests. Now branches on ``order_type``:
+
+        * MOO  — fill at next bar's open
+        * MOC  — fill at next bar's close
+        * MKT  — fill at the configured ``fill_model`` reference
+        * LMT  — fill only if the bar's range crosses ``limit_price``;
+                 fills at the limit (best-case under no-touch
+                 assumption); slippage still applied as a small
+                 adverse step inside the limit.
+        * STP  — fill if the bar's range crosses ``stop_price``;
+                 entry at the stop (also conservative).
+        * STP_LMT — combined: stop must trigger AND limit must clear.
+
+        Where a limit can't fill, the signal silently drops for this
+        bar — no Fill is emitted and the strategy's intent expires
+        (matching the typical real-broker behaviour for a DAY-TIF
+        order that didn't print).
+        """
+        from strategies._core.contracts import OrderType
+
         fills: list[Fill] = []
         for s in signals:
             if s.quantity is None:
@@ -50,10 +76,26 @@ class FillSimulator:
             if bar is None:
                 continue  # no fill — symbol not in next-bar universe
 
-            ref_price = self._reference_price(bar)
+            ref_price = self._reference_price_for(s, bar)
+            if ref_price is None:
+                # Limit / stop did not clear on this bar; signal expires.
+                continue
+
             slip = ref_price * Decimal(str(self._config.slippage_bps / 10_000))
-            # Buy side slips up, sell side slips down (adverse selection)
+            # Buy side slips up, sell side slips down (adverse selection).
+            # On LMT/STP_LMT we still apply slippage but cap it so the
+            # final fill price never exceeds the user's limit on buys
+            # (or undercuts it on sells). That's the worst-case fill
+            # under "marketable limit" semantics — the limit order
+            # acted as a price ceiling, not just a trigger.
             fill_price = ref_price + slip if s.quantity > 0 else ref_price - slip
+            if s.order_type in {OrderType.LMT, OrderType.STP_LMT} and s.limit_price is not None:
+                limit = Decimal(str(s.limit_price))
+                if s.quantity > 0 and fill_price > limit:
+                    fill_price = limit
+                elif s.quantity < 0 and fill_price < limit:
+                    fill_price = limit
+
             commission = Decimal(abs(s.quantity)) * self._config.commission_per_share
 
             fills.append(Fill(
@@ -63,6 +105,74 @@ class FillSimulator:
                 signal_tag=s.tag,
             ))
         return fills
+
+    def _reference_price_for(self, s: Signal, bar: pd.Series) -> Decimal | None:
+        """Pick the reference fill price for a signal given the next bar.
+
+        Returns ``None`` when an order_type / limit / stop combination
+        doesn't trigger on this bar (so the caller skips emitting a
+        Fill). Round-11 / AA-1.2.
+        """
+        from strategies._core.contracts import OrderType
+
+        bar_open = Decimal(str(bar["open"]))
+        bar_high = Decimal(str(bar["high"]))
+        bar_low = Decimal(str(bar["low"]))
+        bar_close = Decimal(str(bar["close"]))
+
+        if s.order_type == OrderType.MOO:
+            return bar_open
+        if s.order_type == OrderType.MOC:
+            return bar_close
+        if s.order_type == OrderType.MKT:
+            return self._reference_price(bar)
+
+        # Limit-bearing types: check the bar's intraday range.
+        if s.order_type in {OrderType.LMT, OrderType.STP, OrderType.STP_LMT}:
+            limit = Decimal(str(s.limit_price)) if s.limit_price is not None else None
+            stop = Decimal(str(s.stop_price)) if s.stop_price is not None else None
+
+            if s.order_type == OrderType.LMT:
+                if limit is None:
+                    return None
+                # Buy LMT triggers when bar dips at/below limit.
+                # Sell LMT triggers when bar rallies at/above limit.
+                if s.quantity > 0 and bar_low <= limit:
+                    return min(bar_open, limit) if bar_open <= limit else limit
+                if s.quantity < 0 and bar_high >= limit:
+                    return max(bar_open, limit) if bar_open >= limit else limit
+                return None
+
+            if s.order_type == OrderType.STP:
+                if stop is None:
+                    return None
+                if s.quantity > 0 and bar_high >= stop:
+                    return max(bar_open, stop) if bar_open >= stop else stop
+                if s.quantity < 0 and bar_low <= stop:
+                    return min(bar_open, stop) if bar_open <= stop else stop
+                return None
+
+            # STP_LMT — stop must trigger AND limit must clear.
+            if stop is None or limit is None:
+                return None
+            if s.quantity > 0:
+                if bar_high < stop:
+                    return None  # stop never triggered
+                # Within the bar after stop trigger, fill at min(post-trigger, limit)
+                trigger_price = max(bar_open, stop) if bar_open >= stop else stop
+                if trigger_price > limit:
+                    return None
+                return trigger_price
+            else:
+                if bar_low > stop:
+                    return None
+                trigger_price = min(bar_open, stop) if bar_open <= stop else stop
+                if trigger_price < limit:
+                    return None
+                return trigger_price
+
+        # Fallback: configured fill_model for unknown order types.
+        return self._reference_price(bar)
 
     def _reference_price(self, bar: pd.Series) -> Decimal:
         if self._config.fill_model == "next_open":

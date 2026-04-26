@@ -439,5 +439,24 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
     # --- 3. Demo fallback (only for known symbols) ---
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
-    log.warning("DEMO FALLBACK: Serving fake quote for %s — Polygon and Alpaca both failed", symbol.upper())
+    # Round-11 / BB-12 (P0): the demo fallback used to log at WARNING
+    # only. There was no metric, no /readyz flap, no operator alert.
+    # P&L, top-movers, and brief generation all consumed these synthetic
+    # prices as if real. Now we additionally fire a Redis-side counter
+    # so a downstream alerting probe (or /readyz-full) can detect a
+    # provider-outage burst, AND emit a structured ``event="provider_outage"``
+    # log line so log aggregators surface this without a free-text grep.
+    try:
+        from core.redis import cache_set, cache_get
+        cache_key = "metrics:provider_outage:quote_demo_total"
+        prev = await cache_get(cache_key)
+        prev_n = int(prev) if isinstance(prev, (int, str)) and str(prev).isdigit() else 0
+        await cache_set(cache_key, prev_n + 1, ttl_seconds=86_400)
+    except Exception:
+        pass  # metrics are best-effort
+    log.warning(
+        "DEMO FALLBACK: Serving fake quote for %s — Polygon and Alpaca both failed",
+        symbol.upper(),
+        extra={"event": "provider_outage", "provider": "alpaca+polygon", "symbol": symbol.upper()},
+    )
     return _demo_quote(symbol)

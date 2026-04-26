@@ -110,4 +110,8 @@ def test_backtest_result_repro_metadata_populated():
     assert len(m.param_hash) == 16
     assert m.strategy_name == "bttest2"
     assert m.seed == 42
-    assert m.runner_version == "1.0.0"
+    # Round-11 / AA-1.6: import RUNNER_VERSION so a future bump
+    # doesn't break this test — the assertion is "the runner stamps
+    # the constant" not "the constant equals 1.0.0".
+    from strategies._core import RUNNER_VERSION
+    assert m.runner_version == RUNNER_VERSION
