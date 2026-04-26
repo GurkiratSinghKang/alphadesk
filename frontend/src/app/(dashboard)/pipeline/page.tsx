@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton, SkeletonStack } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -697,8 +698,14 @@ export default function PipelinePage() {
       actions={pipelineActions}
     >
       {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          // Phase-1 / SK-1: replace page-level spinner with content-shape
+          // skeleton (Stripe / Linear / Notion pattern). Mirrors the eventual
+          // Live Run card + summary card layout so the user sees the
+          // *shape* of what's loading, not a generic pinwheel.
+          <div className="space-y-3" data-slot="pipeline-loading">
+            <Skeleton className="h-32 w-full rounded" />
+            <Skeleton className="h-24 w-full rounded" />
+            <SkeletonStack rows={5} cells={6} />
           </div>
         ) : (
           <>

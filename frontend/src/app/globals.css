@@ -291,6 +291,20 @@ header {
 }
 
 /* ─── Utilities ────────────────────────────────────────────────── */
+@layer base {
+  /* Phase-1 / TN-1: AlphaDesk uses ``font-mono`` exclusively for
+     numerics, prices, tickers, IDs, and order status — never as
+     decoration. Force tabular figures on every mono cell so
+     digit columns align retroactively across the codebase. The
+     ``.t-mono`` editorial class already had this; this widens the
+     same behaviour to Tailwind's default ``.font-mono`` so we don't
+     have to sweep hundreds of files. Per the 2026 design brief
+     (Vercel Geist + Linear typography research). */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 @layer utilities {
   /* Tabular numbers — required on every number */
   .tabular-nums {
@@ -391,6 +405,24 @@ button:active { transform: scale(0.98); }
 }
 .card-stagger {
   animation: card-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Phase-1 / SK-1 (2026 design brief): shimmer for content-shape skeleton
+   placeholders — Stripe / Linear / Notion convention. The wave runs
+   ``-translate-x-full`` to ``translate-x-full`` so the gradient
+   slides left→right across the placeholder. Subtle (white/5) so it
+   reads on the warm-dark palette without shouting. */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Honor user's motion preference — freeze the shimmer at the
+     translucent default state. The skeleton still reads as a
+     placeholder via shape + bg-color. */
+  [data-slot="skeleton"]::before {
+    animation: none !important;
+  }
 }
 
 @keyframes tab-fade {

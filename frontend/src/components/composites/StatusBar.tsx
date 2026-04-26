@@ -63,14 +63,19 @@ export default function StatusBar({
       )}
       style={{ letterSpacing: "0.02em", lineHeight: 1 }}
     >
-      {pills.map((p, i) => (
-        <span
-          key={p.label + i}
-          className={cn("inline-flex items-center gap-1.5 shrink-0", pillToneClass[p.tone])}
-          title={p.title}
-        >
-          <StatusDot tone={pillDotTone[p.tone]} size={5} />
-          <span>{p.label}</span>
+      {pills.map((p, i) => {
+        // Phase-1 / SB-1: the LIVE-mode pill pulses to draw the eye —
+        // it's the most-consequential single surface in the chrome
+        // (user is in real-money trading mode). PAPER stays static.
+        const isLivePill = p.label === "Mode · LIVE";
+        return (
+          <span
+            key={p.label + i}
+            className={cn("inline-flex items-center gap-1.5 shrink-0", pillToneClass[p.tone])}
+            title={p.title}
+          >
+            <StatusDot tone={pillDotTone[p.tone]} size={5} pulse={isLivePill} />
+            <span className={cn(isLivePill && "tracking-wider")}>{p.label}</span>
           {/* Wave 3N persona-94 #1: broker-offline (and any other
               remediable) pill surfaces a tiny inline link to the
               relevant settings page so a fresh user has somewhere to
@@ -83,8 +88,9 @@ export default function StatusBar({
               {p.hrefLabel ?? "Fix"}
             </Link>
           ) : null}
-        </span>
-      ))}
+          </span>
+        );
+      })}
 
       <div className="ml-auto flex gap-[18px] items-center shrink-0">
         <span className="text-fg-hint">Build {buildVersion}</span>

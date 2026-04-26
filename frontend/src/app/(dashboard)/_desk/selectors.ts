@@ -389,6 +389,12 @@ export function toStatusPills(opts: {
   claudeHealthy: boolean;
   claudeLatencyMs?: number;
   lastTickSec?: number;
+  // Phase-1 / SB-1: pipeline + trading-mode pills mandated by the
+  // 2026 design brief (Datadog/Bloomberg-style status rail). Optional
+  // so non-dashboard surfaces calling this selector keep working.
+  pipelineRunning?: number;  // count of currently-running strategies
+  pipelineTotal?: number;    // total live strategies expected to run today
+  tradingMode?: "paper" | "live";
 }): StatusPill[] {
   const pills: StatusPill[] = [];
   // Wave 3N persona-94 #1: a first-time user with no Alpaca creds sees
@@ -444,6 +450,34 @@ export function toStatusPills(opts: {
           : "Feed idle · market closed",
     tone: "muted",
   });
+  // Phase-1 / SB-1: pipeline pill — Datadog/Bloomberg pattern. Shows
+  // ``running 2/12`` when strategies are mid-run, ``idle`` otherwise.
+  if (opts.pipelineRunning != null && opts.pipelineTotal != null) {
+    const running = opts.pipelineRunning;
+    pills.push({
+      label:
+        running > 0
+          ? `Pipeline · running ${running}/${opts.pipelineTotal}`
+          : "Pipeline · idle",
+      tone: running > 0 ? "profit" : "muted",
+      title: running > 0
+        ? `${running} of ${opts.pipelineTotal} live strategies are currently dispatching`
+        : "Daily pipeline complete — next run at the next market open",
+    });
+  }
+  // Phase-1 / SB-1: trading-mode pill. PAPER = amber (default safety),
+  // LIVE = profit-tone with a small dot pulse the StatusBar may animate.
+  // The mode is the user's most consequential setting; the pill is the
+  // single visual anchor that the chrome is in PAPER vs LIVE state.
+  if (opts.tradingMode != null) {
+    pills.push({
+      label: opts.tradingMode === "live" ? "Mode · LIVE" : "Mode · PAPER",
+      tone: opts.tradingMode === "live" ? "profit" : "amber",
+      title: opts.tradingMode === "live"
+        ? "Real-money trading is ENABLED. Orders dispatched here hit the broker."
+        : "Paper-mode active. Orders simulate against the Alpaca paper account; no real money at risk.",
+    });
+  }
   return pills;
 }
 

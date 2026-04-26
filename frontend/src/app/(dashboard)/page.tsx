@@ -351,6 +351,11 @@ export default function DeskPage() {
   // ``LastTickStatusPills`` component below: the parent renders the
   // initial pills synchronously, then the small child component
   // owns the heartbeat and re-renders only itself.
+  // Phase-1 / SB-1: surface tradingMode + pipeline state into the
+  // status rail. The mode pill is the most-consequential single
+  // surface in the chrome — it's the user's only visual anchor that
+  // the system is in PAPER vs LIVE state.
+  const tradingMode = useUIStore((s) => s.tradingMode);
   const statusPillsBase = useMemo(
     () =>
       toStatusPills({
@@ -359,8 +364,12 @@ export default function DeskPage() {
         claudeHealthy: true,
         // initial value; LastTickStatusPills will refresh in place
         lastTickSec: undefined,
+        // Phase-1 / SB-1: pipeline + mode pills.
+        pipelineRunning: 0,  // TODO: wire to /api/v1/pipeline/status when it ships per-strategy progress
+        pipelineTotal: 12,
+        tradingMode,
       }),
-    [portfolioSummary.is_demo, marketOpen],
+    [portfolioSummary.is_demo, marketOpen, tradingMode],
   );
 
   /* ─── Event handlers — kept inline because they're trivial ─ */

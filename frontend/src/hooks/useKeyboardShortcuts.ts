@@ -18,6 +18,7 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "g a": "navigate:analytics",
   "g l": "navigate:alerts",
   "g r": "navigate:reports",
+  "g e": "navigate:earnings-options-play",
   "n": "navigate:next-tab",
   "p": "navigate:prev-tab",
   "f": "focus:search",
@@ -83,6 +84,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { key: "g p", action: "navigate:pipeline", description: "Go to Pipeline" },
       { key: "g l", action: "navigate:alerts", description: "Go to Alerts", isNew: true },
       { key: "g r", action: "navigate:reports", description: "Go to Reports", isNew: true },
+      { key: "g e", action: "navigate:earnings-options-play", description: "Go to Earnings Play", isNew: true },
       { key: "n", action: "navigate:next-tab", description: "Next tab", isNew: true },
       { key: "p", action: "navigate:prev-tab", description: "Previous tab", isNew: true },
     ],
@@ -244,6 +246,12 @@ export function useKeyboardShortcuts() {
           break;
         case "navigate:reports":
           router.push("/reports");
+          break;
+        case "navigate:earnings-options-play":
+          // Phase-1 / KB-1: dedicated keybinding for the earnings page
+          // — most-used research surface for the earnings-volatility
+          // crowd; previously required two clicks via /strategies.
+          router.push("/strategies/earnings-options-play");
           break;
         case "navigate:next-tab": {
           const currentIdx = TAB_ORDER.indexOf(pathname ?? "/");
