@@ -1991,6 +1991,54 @@ async def _run_pipeline_inner(
                         "trades": [], "halted_by_admin": True,
                     }
 
+                # Round-11 / AA-1.3 (P0): respect per-strategy operator
+                # pause. ``POST /api/v1/strategies/{id}/toggle`` writes
+                # ``strategy_status:{id}`` to Redis, but the daily
+                # pipeline previously never read it — the badge in the
+                # /strategies UI flipped to "paused" while the next
+                # cron tick still ran the strategy and routed signals
+                # through MasterAgent. Mirrors the global halt check
+                # above; emits a structured log so the run summary
+                # can attribute the skip to the operator action.
+                try:
+                    from core.redis import cache_get as _cache_get
+
+                    paused_payload = await _cache_get(
+                        f"strategy_status:{strat_name}"
+                    )
+                    if (
+                        isinstance(paused_payload, dict)
+                        and paused_payload.get("status") == "paused"
+                    ):
+                        logger.info(
+                            "Strategy %s skipped — operator-paused",
+                            strat_name,
+                        )
+                        _completed_strategies += 1
+                        if CURRENT_PROGRESS is not None:
+                            CURRENT_PROGRESS = {
+                                "current": _completed_strategies,
+                                "total": num_strategies,
+                            }
+                        return strat_name, {
+                            "screened": 0, "analyzed": 0, "analyses": [],
+                            "trades_requested": 0, "trades_approved": 0,
+                            "trades": [], "operator_paused": True,
+                        }
+                except Exception:
+                    # Fail-open here is intentional: a Redis blip should
+                    # not silently disable strategies. The halt check
+                    # above is fail-closed for the panic path; this
+                    # check is fail-open because the side-effect of an
+                    # incorrect skip is missing trades for the day,
+                    # which is more harmful than running a strategy
+                    # the operator wanted paused.
+                    logger.debug(
+                        "Strategy %s pause-flag lookup failed — proceeding",
+                        strat_name,
+                        exc_info=True,
+                    )
+
                 # Cooperative cancel: check before each strategy boundary.
                 _check_cancel(f"strategy:{strat_name}")
                 # Update live status. Multiple strategies execute in

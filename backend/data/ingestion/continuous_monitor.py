@@ -234,10 +234,17 @@ async def _run_monitor() -> None:
 
 
 async def start_continuous_monitor() -> None:
-    """Start the continuous market monitor as a background task."""
+    """Start the continuous market monitor as a background task.
+
+    Round-11 / BB-13: supervised so a silent death surfaces at ERROR.
+    """
+    from core.supervised_task import create_supervised_task
+
     global _monitor_task, _should_stop
     _should_stop = False
-    _monitor_task = asyncio.create_task(_run_monitor())
+    _monitor_task = create_supervised_task(
+        _run_monitor(), name="continuous_monitor"
+    )
     logger.info("Continuous market monitor started")
 
 

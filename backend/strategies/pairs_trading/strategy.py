@@ -443,16 +443,33 @@ def _rescreen(
                 [y_ser.rename("y"), x_ser.rename("x")], axis=1
             ).dropna().tail(params.formation_days)
             df = _price_transform(df, params.prices_in_log_space)
+            # Round-11 / AA-1.1 (P0): ``ActivePair`` is ``frozen=True``
+            # (Round-6/I-19 froze it for replay determinism) so direct
+            # field assignment raises ``ValidationError: instance is
+            # frozen``. The exception escaped ``_rescreen``'s caller
+            # and the Kalman branch was permanently broken — every
+            # rescreen with ``hedge_method == "kalman"`` aborted before
+            # ``state.last_screen`` could advance. Swap to
+            # ``model_copy(update=...)`` and rebuild the active list
+            # below the loop.
             if df.empty:
-                pair.kalman_betas = None
-                continue
-            try:
-                pair.kalman_betas = kalman_hedge_ratio(
-                    df["y"], df["x"],
-                    delta=params.kalman_delta, r=params.kalman_r,
-                )
-            except Exception:
-                pair.kalman_betas = None
+                new_betas: Any = None
+            else:
+                try:
+                    new_betas = kalman_hedge_ratio(
+                        df["y"], df["x"],
+                        delta=params.kalman_delta, r=params.kalman_r,
+                    )
+                except Exception:
+                    new_betas = None
+            updated_pair = pair.model_copy(update={"kalman_betas": new_betas})
+            # Replace the original entry in ``active`` so the rest of
+            # the function (and downstream callers) see the updated
+            # betas without mutating the frozen instance.
+            for j, p in enumerate(active):
+                if p is pair:
+                    active[j] = updated_pair
+                    break
 
     return active
 

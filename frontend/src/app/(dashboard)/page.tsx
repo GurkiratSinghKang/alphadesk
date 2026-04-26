@@ -292,11 +292,16 @@ export default function DeskPage() {
       }
 
       hasWarned = false;
+      // Round-11 / Y-3 (P0): include both ``partial`` and the raw
+      // Alpaca-event name ``partial_fill`` — the OrderStatus union has
+      // both variants but the working-set check used to match only one.
+      // A partially-filled order would silently fall out of the count.
       const working = orders.filter(
         (o) =>
           o.status === "pending" ||
           o.status === "open" ||
-          o.status === "partial",
+          o.status === "partial" ||
+          o.status === "partial_fill",
       );
       setOrderCount(working.length);
     }
@@ -406,7 +411,10 @@ export default function DeskPage() {
     }
     if (results[1].status === "fulfilled") {
       usePortfolioStore.getState().setOrders(results[1].value);
-      const workingStatuses = new Set(["pending", "open", "partial"]);
+      // Round-11 / Y-3: keep the working set in sync with the cancel-
+      // count predicate above. Both the legacy ``partial`` and the raw
+      // Alpaca ``partial_fill`` count.
+      const workingStatuses = new Set(["pending", "open", "partial", "partial_fill"]);
       setOrderCount(
         (results[1].value as Array<{ status?: string }>).filter(
           (o) => o.status != null && workingStatuses.has(o.status),

@@ -669,7 +669,10 @@ async def start_fill_reconciler() -> None:
         logger.debug("fill_reconciler: already running")
         return
     _should_stop = False
-    _reconciler_task = asyncio.create_task(
+    # Round-11 / BB-13: supervised so a silent death surfaces at ERROR.
+    from core.supervised_task import create_supervised_task
+
+    _reconciler_task = create_supervised_task(
         _reconciler_loop(), name="fill_reconciler"
     )
     logger.info("fill_reconciler: started")

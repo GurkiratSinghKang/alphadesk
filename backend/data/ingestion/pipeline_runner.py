@@ -462,11 +462,26 @@ async def _scheduler_loop() -> None:
 
 
 async def start_pipeline_scheduler() -> None:
-    """Start the daily pipeline scheduler + ledger sync as background tasks."""
+    """Start the daily pipeline scheduler + ledger sync as background tasks.
+
+    Round-11 / BB-13 (P0): both tasks now go through
+    ``create_supervised_task`` so a silent death (e.g. unexpected
+    ``BaseException``, future refactor that drops the inner ``except``)
+    surfaces in the structured logs at ERROR — without it, the next
+    cron tick simply doesn't fire and oncall finds out only when a
+    user notices. Cancellation during graceful shutdown remains
+    silent (logged at INFO).
+    """
+    from core.supervised_task import create_supervised_task
+
     global _scheduler_task, _ledger_sync_task, _should_stop
     _should_stop = False
-    _scheduler_task = asyncio.create_task(_scheduler_loop())
-    _ledger_sync_task = asyncio.create_task(_ledger_sync_loop())
+    _scheduler_task = create_supervised_task(
+        _scheduler_loop(), name="pipeline_scheduler"
+    )
+    _ledger_sync_task = create_supervised_task(
+        _ledger_sync_loop(), name="pipeline_ledger_sync"
+    )
     logger.info("Pipeline scheduler + ledger sync background tasks created")
 
 

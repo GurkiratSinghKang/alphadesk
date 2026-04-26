@@ -658,10 +658,17 @@ async def _scanner_loop() -> None:
 
 
 async def start_realtime_scanner() -> None:
-    """Start the real-time signal scanner as a background task."""
+    """Start the real-time signal scanner as a background task.
+
+    Round-11 / BB-13: supervised so a silent death surfaces at ERROR.
+    """
+    from core.supervised_task import create_supervised_task
+
     global _scanner_task, _should_stop
     _should_stop = False
-    _scanner_task = asyncio.create_task(_scanner_loop())
+    _scanner_task = create_supervised_task(
+        _scanner_loop(), name="realtime_scanner"
+    )
     logger.info("Real-time signal scanner background task created")
 
 

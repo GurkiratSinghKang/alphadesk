@@ -301,7 +301,15 @@ export default function PositionsList({
           <tbody>
             {orders.map((o) => {
               const priceLabel = orderPriceLabel(o);
-              const cancellable = o.status === "pending" || o.status === "partial";
+              // Round-11 / Y-3 (P0): also accept ``partial_fill`` —
+              // the raw Alpaca event name. Without this branch a
+              // partially-filled order rendered the cancel button
+              // disabled despite still being a working order the
+              // broker would accept a cancel on.
+              const cancellable =
+                o.status === "pending" ||
+                o.status === "partial" ||
+                o.status === "partial_fill";
               return (
                 <tr
                   key={o.id}

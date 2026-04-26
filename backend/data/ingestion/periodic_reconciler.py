@@ -168,7 +168,12 @@ async def start_periodic_reconciler() -> None:
         logger.debug("periodic_reconciler: already running")
         return
     _should_stop = False
-    _task = asyncio.create_task(_reconciler_loop(), name="periodic_reconciler")
+    # Round-11 / BB-13: supervised so a silent death surfaces at ERROR.
+    from core.supervised_task import create_supervised_task
+
+    _task = create_supervised_task(
+        _reconciler_loop(), name="periodic_reconciler"
+    )
     logger.info(
         "periodic_reconciler: started (interval=%ds, window=%s)",
         _RECONCILE_INTERVAL_SECONDS, _LIVE_RECONCILE_WINDOW,
