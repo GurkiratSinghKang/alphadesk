@@ -545,17 +545,46 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
         calls = _filter_chain(chain, "call")
         puts = _filter_chain(chain, "put")
         rows: list[dict] = []
+        # Round-8 visual-bug SL1: previously every bucket selected by
+        # ``abs(c.delta or 0.5) - target_delta``. Two problems:
+        # 1. ``c.delta or 0.5`` collapses a legitimate ``delta == 0``
+        #    (deep-OTM contract or chain whose delta column is missing /
+        #    unpopulated) into 0.5, making that contract the BEST match
+        #    for ATM (target=0.5). On COP this picked a strike-60 call
+        #    on a $121 underlying — far from ATM.
+        # 2. The 30Δ / 15Δ buckets had the same false-positive on
+        #    delta=0 contracts.
+        # Fix:
+        #   * ATM is now nearest-strike-to-spot — robust when delta is
+        #     unreliable (this is also the textbook ATM definition).
+        #   * 30Δ / 15Δ exclude contracts whose delta is missing or
+        #     exactly zero before the min() so we never anchor on a
+        #     mis-quoted leg.
+        def _has_delta(c) -> bool:
+            return c.delta is not None and abs(c.delta) > 1e-6
+
+        def _pick_atm(side_contracts):
+            return min(
+                side_contracts,
+                key=lambda c: abs(c.strike - underlying),
+                default=None,
+            )
+
+        def _pick_by_delta(side_contracts, target):
+            usable = [c for c in side_contracts if _has_delta(c)]
+            return min(
+                usable,
+                key=lambda c: abs(abs(c.delta) - target),
+                default=None,
+            )
+
         for bucket, target_delta in [("ATM", 0.5), ("30Δ", 0.3), ("15Δ", 0.15)]:
-            call_match = min(
-                calls,
-                key=lambda c: abs(abs(c.delta or 0.5) - target_delta),
-                default=None,
-            )
-            put_match = min(
-                puts,
-                key=lambda p: abs(abs(p.delta or 0.5) - target_delta),
-                default=None,
-            )
+            if bucket == "ATM":
+                call_match = _pick_atm(calls)
+                put_match = _pick_atm(puts)
+            else:
+                call_match = _pick_by_delta(calls, target_delta)
+                put_match = _pick_by_delta(puts, target_delta)
             for side, contract in [("call", call_match), ("put", put_match)]:
                 if contract is None:
                     continue

@@ -122,7 +122,18 @@ export default function DetailHeader({
         <div className={"t-mono text-[13px] " + (isNeg ? "u-loss" : "u-profit")}>
           {change == null
             ? "—"
-            : `${fmtCurrency(change, "USD", { signDisplay: "always" })} · ${fmtPct(changePct ?? 0, 2)}`}
+            : /* Round-8 visual-bug DH1: ``changePct`` is a percentage
+                 across the codebase (MarketMovers.tsx, LiveSignalFeed,
+                 SectorTreemap all treat ``2.15`` as "+2.15%"), but
+                 ``fmtPct`` uses ``Intl.NumberFormat({style:"percent"})``
+                 which multiplies the input by 100 (expects decimals).
+                 So a real 2.15% rendered as 215% — a $2.62 drop on a
+                 $121.75 stock landed as ``-211.00%`` on the live page,
+                 a clearly impossible value that erodes user trust. Pass
+                 the value through ``/100`` to convert to the decimal
+                 fraction the locale formatter expects. ``signDisplay``
+                 keeps the sign visible to match the dollar change. */
+              `${fmtCurrency(change, "USD", { signDisplay: "always" })} · ${fmtPct((changePct ?? 0) / 100, 2, { signDisplay: "always" })}`}
         </div>
       </div>
     </header>
