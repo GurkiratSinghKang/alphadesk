@@ -220,6 +220,18 @@ export function toContextCells(
       ? `${realizedSign}${fmtDollars(Math.abs(realizedToday))} realized · ${unrealizedSign}${fmtDollars(Math.abs(unrealizedPnl))} unrealized`
       : undefined;
 
+  // Round-8 UX killer-move 1: compressed from 7 cells to 4. The
+  // previous bar surfaced Book equity, Day P&L, Cash, Exposure,
+  // Unrealized, Realized today, and Positions·Orders — Day P&L's
+  // delta line ALREADY shows the realized/unrealized split (line ~218
+  // above), so the dedicated Unrealized + Realized cells were
+  // duplicates. Cash is rolled into Buying-power (more decision-
+  // relevant for active management) per the synthesis agent's
+  // "40/30/20/10 budget" — equity is the hero, Day P&L is the second
+  // tier, BP and Positions are the supporting context. Drops the
+  // ContextBar cell-count from 7 → 4, eliminates 3 duplicate fields,
+  // and lets the hero (Book equity) breathe.
+  const buyingPower = s?.buyingPower ?? cash;
   return [
     {
       label: "Book equity",
@@ -232,55 +244,18 @@ export function toContextCells(
       label: "Day P&L",
       value: s ? (dayPnl >= 0 ? `+${fmtDollars(dayPnl)}` : `−${fmtDollars(Math.abs(dayPnl))}`) : "—",
       // Surface the realized/unrealized split so the reader can reconcile
-      // the number with the Unrealized / Realized today cells without
-      // mental math.
+      // the number with the underlying Unrealized / Realized lines without
+      // mental math (and without dedicated cells that duplicate the data).
       delta: dayPnlBreakdown,
       // Tone the value itself so negatives render coral and positives chartreuse.
       // Treat an exact zero as muted so it doesn't flash green for no movement.
       valueTone: !s ? "muted" : dayPnl > 0 ? "profit" : dayPnl < 0 ? "loss" : "muted",
     },
     {
-      label: "Cash",
-      value: s ? fmtDollars(cash) : "—",
-    },
-    {
-      label: "Exposure · Long / Short",
-      value: equity > 0 ? `${exposurePct.toFixed(0)}%` : "—",
-      delta: positions.length
-        ? `${pctOfEquity(longVal, equity)} / ${pctOfEquity(shortVal, equity)}`
-        : undefined,
-    },
-    {
-      label: "Unrealized P&L",
-      value: !s
-        ? "—"
-        : unrealizedPnl >= 0
-          ? `+${fmtDollars(unrealizedPnl)}`
-          : `−${fmtDollars(Math.abs(unrealizedPnl))}`,
-      delta:
-        s && unrealizedPnlPct !== 0 ? fmtPct(unrealizedPnlPct) : undefined,
-      valueTone: !s
-        ? "muted"
-        : unrealizedPnl > 0
-          ? "profit"
-          : unrealizedPnl < 0
-            ? "loss"
-            : "muted",
-    },
-    {
-      label: "Realized today",
-      value: !s
-        ? "—"
-        : realizedToday >= 0
-          ? `+${fmtDollars(realizedToday)}`
-          : `−${fmtDollars(Math.abs(realizedToday))}`,
-      valueTone: !s
-        ? "muted"
-        : realizedToday > 0
-          ? "profit"
-          : realizedToday < 0
-            ? "loss"
-            : "muted",
+      // Buying power tells a trader what they CAN do; cash alone
+      // understates capacity in a margin-enabled account.
+      label: "Buying power",
+      value: s ? fmtDollars(buyingPower) : "—",
     },
     {
       // BUG-008: the right-panel Book tabs also show an "Orders" count, but
@@ -289,6 +264,11 @@ export function toContextCells(
       // don't read them as the same number with two values.
       label: "Positions · Open Orders",
       value: `${positions.length} · ${orderCount}`,
+      // Exposure as the secondary context line: shows long/short tilt
+      // without taking a full cell. Quants want it; novices ignore it.
+      delta: positions.length && equity > 0
+        ? `${exposurePct.toFixed(0)}% gross · ${pctOfEquity(longVal, equity)} / ${pctOfEquity(shortVal, equity)}`
+        : undefined,
     },
   ];
 }

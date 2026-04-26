@@ -58,7 +58,10 @@ export default function DashboardLayout({
         // freezes to the larger layout viewport, clipping the bottom row
         // on scroll. Same trick DeskLayout uses.
         "min-h-dvh md:h-dvh w-full overflow-x-hidden md:overflow-hidden bg-bg",
-        "grid grid-rows-[48px_36px_1fr_22px]",
+        // Round-8 killer-move 1: ContextBar grew 36→56px to host the
+        // promoted Book Equity hero (28px display). The other 3 rows
+        // (TopBar 48, main 1fr, StatusBar 22) are unchanged.
+        "grid grid-rows-[48px_56px_1fr_22px]",
         className,
       )}
     >

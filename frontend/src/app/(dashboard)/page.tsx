@@ -594,24 +594,14 @@ export default function DeskPage() {
       }
       right={
         <>
-          {/* 2026-04-20 dashboard redesign. Right rail stacks:
-              - Watchlist (fixed height so book can flex below),
-              - PositionsList (flex-1, scrolls internally),
-              - MorningBrief (only rendered when it has content and
-                hasn't been dismissed for the day — self-gates),
-              - AIMemoPanel (pinned footer).
-              The previous dashboard mounted StrategyRail on the LEFT
-              (260px) — removed per owner feedback: it duplicates the
-              `/strategies` page and was eating viewport. Heads-up: the
-              strategies selector still lives inside OrderBar below the
-              chart, so users can attach trades to a strategy. */}
-          {/* Watchlist: fixed max-height so the Book below can flex; the
-              watchlist itself scrolls internally when it overflows. The
-              wrapping div intentionally has NO border — Watchlist owns
-              its own card border so stacking a second one here would
-              double the hairline and look "boxed twice". Max-height of
-              34vh keeps roughly 6-7 rows visible at typical viewport
-              heights while leaving room for Positions + AI memo below. */}
+          {/* Round-8 killer-move 1: Watchlist + Positions are the ONLY
+              always-visible right-rail panels. MorningBrief and the
+              AI Memo footer used to live here too — they both consume
+              ~120-180 px of vertical chrome whether or not they have
+              content, which violated the "calm, single-hero per page"
+              principle. They now live in the BriefDrawer below
+              (collapsed by default; toggleable per-session). The
+              dashboard right rail breathes. */}
           <div className="shrink-0 max-h-[34vh] overflow-auto p-2">
             <Watchlist />
           </div>
@@ -639,12 +629,52 @@ export default function DeskPage() {
               }}
             />
           </div>
-          <MorningBrief />
-          <AIMemoPanel memo={memo} />
+          <BriefDrawer memo={memo} />
         </>
       }
       statusBar={<StatusBar pills={statusPills} buildVersion={BUILD_VERSION} />}
     />
+  );
+}
+
+/**
+ * Round-8 killer-move 1: collapsible "Today's brief" drawer that hosts
+ * MorningBrief + AI Memo. Pinned at the bottom of the right rail,
+ * collapsed by default — gives the user a single line of context
+ * ("View today's brief →") without consuming the 120-180 px the two
+ * panels needed when they were always-mounted. Expansion state is
+ * per-session (does not persist) so the user gets a clean rail every
+ * morning by default but can keep the brief open for the rest of a
+ * working session. The MorningBrief component still self-dismisses
+ * once read, so opening the drawer twice in a day is a no-op for
+ * dismissed sessions.
+ */
+function BriefDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      data-slot="brief-drawer"
+      className="shrink-0 border-t border-border-hair bg-bg"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between px-4 py-2 text-left t-meta hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-gold-300"
+      >
+        <span>
+          <span className="u-brand">Today&apos;s brief</span>
+          <span className="ml-2 u-muted">— overnight + AI memo</span>
+        </span>
+        <span aria-hidden="true" className="u-muted">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border-hair">
+          <MorningBrief />
+          <AIMemoPanel memo={memo} />
+        </div>
+      )}
+    </div>
   );
 }
 

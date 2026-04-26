@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           className="h-dvh w-full bg-bg"
           style={{
             display: "grid",
-            gridTemplateRows: "48px 38px 1fr 22px",
+            gridTemplateRows: "48px 56px 1fr 22px",
           }}
         >
           <div className="border-b border-border bg-ink-050" />
