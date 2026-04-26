@@ -144,7 +144,21 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
         return []
 
     if await _is_rate_limited():
-        return []  # skip silently during cooldown (shared across workers via Redis)
+        # Round-11 / BB-16 (P2): the previous return-[] was truly
+        # silent — callers couldn't tell "no news" from "we're in
+        # cooldown" and operator dashboards showed an empty news rail
+        # for 15 minutes with no signal. Emit a structured event +
+        # bump a Redis counter so a probe can detect cooldown bursts.
+        log.info(
+            "newsdata.io: skipping fetch during rate-limit cooldown",
+            extra={"event": "news_rate_limited_skip", "provider": "newsdata", "query": query},
+        )
+        try:
+            from core.redis import cache_incr
+            await cache_incr("metrics:provider_outage:news_rate_limited_total")
+        except Exception:
+            pass
+        return []
 
     params = {
         "apikey": api_key,

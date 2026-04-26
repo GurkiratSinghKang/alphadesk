@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { STRATEGY_META, STRATEGY_ORDER, type StrategyGroup } from "@/lib/strategies";
-import { safeSetItem } from "@/lib/storage";
+import { safeSetItem, safeGetItem } from "@/lib/storage";
 
 export { STRATEGY_META, STRATEGY_ORDER };
 
@@ -206,8 +206,8 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
   // then sync from localStorage after mount
   const [viewMode, setViewMode] = useState<ViewMode>("expanded");
   useEffect(() => {
-    const stored = localStorage.getItem(VIEW_MODE_KEY);
-    if (stored === "compact") setViewMode("compact");
+    // Round-11 / BB-22: safeGetItem swallows Safari Private Mode throws.
+    if (safeGetItem(VIEW_MODE_KEY) === "compact") setViewMode("compact");
   }, []);
 
   const toggleView = (mode: ViewMode) => {

@@ -6,7 +6,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { useMorningBrief } from "@/hooks/useQueries";
 import type { MorningBriefData } from "@/lib/api";
 import { getMarketSession } from "@/lib/marketHours";
-import { safeSetItem } from "@/lib/storage";
+import { safeSetItem, safeGetItem } from "@/lib/storage";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -62,7 +62,8 @@ export function MorningBrief() {
   // then check localStorage after mount
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
-    if (localStorage.getItem(getDismissKey()) === "1") {
+    // Round-11 / BB-22: safeGetItem swallows Safari Private Mode throws.
+    if (safeGetItem(getDismissKey()) === "1") {
       setDismissed(true);
     }
   }, []);
@@ -70,17 +71,21 @@ export function MorningBrief() {
   // Clean up old dismiss keys on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const currentKey = getDismissKey();
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("alphadesk-brief-dismissed-") && key !== currentKey) {
-        keysToRemove.push(key);
+    // Round-11 / BB-22: same protection — iterating localStorage.length
+    // and key(i) both throw on Safari Private Mode.
+    try {
+      const currentKey = getDismissKey();
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith("alphadesk-brief-dismissed-") && key !== currentKey) {
+          keysToRemove.push(key);
+        }
       }
-    }
-    for (const key of keysToRemove) {
-      localStorage.removeItem(key);
-    }
+      for (const key of keysToRemove) {
+        window.localStorage.removeItem(key);
+      }
+    } catch { /* ignore — cleanup is best-effort */ }
   }, []);
 
   const handleDismiss = () => {

@@ -277,3 +277,26 @@ async def cache_set(key: str, data: Any, ttl_seconds: int = 300) -> None:
             await r.set(key, orjson.dumps(data).decode(), ex=ttl_seconds)
     except Exception:
         pass
+
+
+async def cache_incr(key: str, *, ttl_seconds: int = 86_400) -> int | None:
+    """Atomically increment a Redis counter by 1 and (re-)set its TTL.
+
+    Round-11 / Batch-F simplify: the four metric counters introduced for
+    BB-11/BB-12/BB-16/BB-19 were each a non-atomic
+    ``cache_get → int(prev) → cache_set(prev+1)`` block — racy under
+    contention (two workers reading 5 both write 6 → one increment lost)
+    and twice the round-trips a Redis ``INCR`` would take. This helper
+    collapses the pattern to a single atomic ``INCR`` + ``EXPIRE``.
+
+    Returns the new counter value, or ``None`` when Redis is
+    unreachable (caller treats as best-effort metric).
+    """
+    try:
+        r = await get_redis()
+        new = await r.incr(key)
+        if ttl_seconds > 0:
+            await r.expire(key, ttl_seconds)
+        return int(new)
+    except Exception:
+        return None

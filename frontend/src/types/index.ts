@@ -26,12 +26,9 @@ export interface OHLCVBar {
 
 // ─── Portfolio ────────────────────────────────────────────────
 
-export interface PositionGreeks {
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-}
+// Round-11 / Y-12: ``PositionGreeks`` removed alongside ``Position.greeks``
+// — the backend never emitted per-position Greek dicts. Use
+// ``PortfolioGreeks.byPosition`` for per-symbol attribution.
 
 export interface Position {
   symbol: string;
@@ -42,7 +39,13 @@ export interface Position {
   marketValue: number;
   side?: "long" | "short";
   sector?: string;
-  greeks?: PositionGreeks;
+  // Round-11 / Y-12 (P3): backend ``PositionResponse`` (trades.py:512)
+  // does not emit per-position Greeks. The previous ``greeks?:
+  // PositionGreeks`` was always ``undefined``, so any consumer doing
+  // ``position.greeks?.delta`` rendered a stale em-dash and any
+  // truthy-check guard short-circuited silently. Use
+  // ``getPortfolioGreeks().byPosition`` (Y-7) when per-position
+  // attribution is needed.
   /**
    * Round-5 F-6 — originating strategy id (e.g. "earnings-options-play").
    * Null when the position was opened manually or before strategy
@@ -93,6 +96,19 @@ export interface Order {
    * `OrderResponse.strategy` (see backend/api/routes/trades.py:398).
    */
   strategy?: string | null;
+  /**
+   * Round-11 / Y-10 (P2): backend ``OrderResponse.combo_type`` carries
+   * the multi-leg shape (``"strangle"`` | ``"vertical_spread"`` |
+   * ``"iron_condor"``). FE used to drop it, so multi-leg orders rendered
+   * as a single leg in the recent-orders strip. Surface it.
+   */
+  comboType?: string | null;
+  /**
+   * Round-11 / Y-10: backend ``OrderResponse.reject_reason`` carries
+   * the broker's free-text rejection message. Without it the UI shows
+   * "rejected" with no operator-actionable detail.
+   */
+  rejectReason?: string | null;
 }
 
 export interface PortfolioSummary {
@@ -107,6 +123,16 @@ export interface PortfolioSummary {
   dayPnl: number;
   dayPnlPct: number;
   is_demo?: boolean;
+  /**
+   * Round-11 / Y-8 (P2): backend ``api/routes/portfolio.py:35-37``
+   * emits ``last_updated`` (ISO datetime) and ``source`` ("alpaca"
+   * | "demo") on every summary response. The FE used to drop both
+   * — surface them so the dashboard header can render a "last
+   * refreshed Xs ago" pill and so other consumers can detect
+   * demo-mode without re-deriving from ``is_demo``.
+   */
+  lastUpdated?: string;
+  source?: string;
 }
 
 export interface PortfolioGreeks {
@@ -115,6 +141,19 @@ export interface PortfolioGreeks {
   netTheta: number;
   netVega: number;
   betaWeightedDelta: number;
+  /**
+   * Round-11 / Y-7 (P2): backend computes per-position Greek
+   * contributions (``api/routes/portfolio.py:75``). Surface the
+   * array so the Greeks panel can show "by position" attribution
+   * — backend already does the work; FE was discarding the field.
+   */
+  byPosition?: Array<{
+    symbol: string;
+    delta: number;
+    gamma: number;
+    theta: number;
+    vega: number;
+  }>;
 }
 
 // ─── Options ──────────────────────────────────────────────────
@@ -212,7 +251,12 @@ export interface Analysis {
 export interface ScreenerResult {
   symbol: string;
   price: number;
-  change: number;
+  // Round-11 / Y-4 (P3): backend ``ScreenerResult`` only emits
+  // ``change_pct`` — never the absolute dollar change. The FE used
+  // to declare ``change: number`` and hard-code ``0`` in the mapper,
+  // which the screener UI then rendered as a stale "$0.00" column.
+  // Dropped: callers should display % only or derive from
+  // ``price * changePct / (100 + changePct)`` if they really need $.
   changePct: number;
   rsScore: number;
   fScore: number;

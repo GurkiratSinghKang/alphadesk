@@ -211,7 +211,30 @@ async def _demo_spot(symbol: str) -> float:
     except Exception:
         log.debug("Alpaca spot-price fetch failed for %s", s, exc_info=True)
 
-    # Fallback to demo prices
+    # Round-11 / BB-11 (P0): the demo fallback used to log at DEBUG
+    # only. Downstream callers (chain valuation, Greek sizing) received
+    # the synthetic price as truth and could fund-size against a wholly
+    # fictional spot. Now WARNs + increments a counter so an alerting
+    # probe can detect a provider outage burst, mirrors the BB-12 fix
+    # for ``services/market.py``.
+    log.warning(
+        "DEMO FALLBACK: serving synthetic spot price for %s — Alpaca latest-trade unavailable",
+        s,
+        extra={"event": "provider_outage", "provider": "alpaca", "symbol": s, "surface": "options_spot"},
+    )
+    try:
+        # Fire-and-forget atomic counter; best-effort.
+        import asyncio as _asyncio
+        from core.redis import cache_incr
+
+        async def _bump() -> None:
+            await cache_incr("metrics:provider_outage:options_spot_demo_total")
+        try:
+            _asyncio.get_running_loop().create_task(_bump())
+        except RuntimeError:
+            pass  # not in an async context — skip
+    except Exception:
+        pass
     if s in _DEMO_BASE_PRICES:
         return _DEMO_BASE_PRICES[s]
     rng = random.Random(_symbol_seed(s))

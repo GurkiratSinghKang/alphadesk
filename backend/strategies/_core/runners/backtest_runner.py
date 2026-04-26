@@ -287,6 +287,11 @@ class BacktestRunner:
                 seed=self._config.seed,
                 strategy_name=self._strategy.META.name,
                 runner_version=RUNNER_VERSION,
+                # Round-11 / AA-1.10 — stamp the strategy's paper_only
+                # flag on every backtest result so a downstream replay
+                # / promotion-check can refuse to deploy a paper-only
+                # strategy as live without an explicit override.
+                paper_only=getattr(self._strategy.META, "paper_only", False),
             ),
             audit_metadata={
                 "run_at": datetime.now(timezone.utc).isoformat(),

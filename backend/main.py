@@ -555,9 +555,28 @@ async def readyz() -> JSONResponse:
         result["disk"] = {"path": data_path, "used_pct": round(pct, 2)}
         if pct >= 90.0:
             degraded = True
+            # Round-11 / BB-21 (P2): emit a structured event + Redis
+            # counter so an external probe / alert rule can detect
+            # disk-pressure without scraping the body. We deliberately
+            # keep the HTTP status at 200 (LB-friendly) — flipping to
+            # 503 here would drop the container out of rotation, which
+            # is wrong for "disk almost full" (not the same kind of
+            # outage as DB-down).
+            logger.warning(
+                "readyz: disk pressure detected (%.1f%% used)",
+                pct,
+                extra={"event": "readyz_disk_pressure", "pct": pct, "path": data_path},
+            )
     except Exception as e:
         # Don't flap readyz over a shutil / fs hiccup.
         result["disk"] = f"check_failed: {type(e).__name__}"
+        # Round-11 / BB-21: also surface check failures on telemetry so
+        # a permission regression doesn't go silent for weeks.
+        logger.warning(
+            "readyz: disk check failed",
+            exc_info=e,
+            extra={"event": "readyz_disk_check_failed"},
+        )
 
     status_code = 200 if overall_ok else 503
     if overall_ok:

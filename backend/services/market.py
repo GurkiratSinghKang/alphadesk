@@ -447,11 +447,8 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
     # provider-outage burst, AND emit a structured ``event="provider_outage"``
     # log line so log aggregators surface this without a free-text grep.
     try:
-        from core.redis import cache_set, cache_get
-        cache_key = "metrics:provider_outage:quote_demo_total"
-        prev = await cache_get(cache_key)
-        prev_n = int(prev) if isinstance(prev, (int, str)) and str(prev).isdigit() else 0
-        await cache_set(cache_key, prev_n + 1, ttl_seconds=86_400)
+        from core.redis import cache_incr
+        await cache_incr("metrics:provider_outage:quote_demo_total")
     except Exception:
         pass  # metrics are best-effort
     log.warning(

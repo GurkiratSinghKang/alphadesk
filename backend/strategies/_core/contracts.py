@@ -306,6 +306,12 @@ class ReproMeta(BaseModel):
     seed: int
     strategy_name: str
     runner_version: str
+    # Round-11 / AA-1.10 (P3): backtests now record the strategy's
+    # ``paper_only`` flag at the time of execution so a replay knows
+    # whether the strategy was live-disabled when the backtest ran.
+    # Defaults to False so existing serialised results stay valid;
+    # BacktestRunner stamps the real value on every fresh run.
+    paper_only: bool = False
 
 
 class BacktestConfig(BaseModel):

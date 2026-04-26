@@ -1229,7 +1229,9 @@ function JournalTab() {
 
   // Persist notes
   useEffect(() => {
-    localStorage.setItem(JOURNAL_NOTES_KEY, JSON.stringify(notes));
+    // Round-11 / BB-22 (P3): use safeSetItem so a Safari Private Mode
+    // / iOS quota error doesn't crash the whole panel tree.
+    safeSetItem(JOURNAL_NOTES_KEY, JSON.stringify(notes));
   }, [notes]);
 
   // Persist tags
@@ -1328,7 +1330,8 @@ function JournalTab() {
       note: notes[e.id] ?? "",
       tags: tagMap[e.id] ?? [],
     }));
-    localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(data));
+    // Round-11 / BB-22: see safeSetItem rationale above.
+    safeSetItem(JOURNAL_STORAGE_KEY, JSON.stringify(data));
   }, [entries, notes, tagMap]);
 
   if (entries.length === 0) {

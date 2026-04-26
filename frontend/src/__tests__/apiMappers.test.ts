@@ -628,7 +628,8 @@ describe('screenStocks', () => {
     expect(result[0].mlScore).toBe(0.88);
     expect(result[0].composite).toBe(0.92);
     expect(result[0].sector).toBe('Technology');
-    expect(result[0].change).toBe(0); // always 0 from mapper
+    // Round-11 / Y-4: ``change`` field removed from ScreenerResult — backend
+    // only emits ``change_pct``; the old hard-coded 0 was a placebo.
   });
 
   it('handles null price and change_pct with 0 defaults', async () => {

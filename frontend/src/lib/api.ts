@@ -517,7 +517,22 @@ export function getStrategyPositions(strategyId: string) {
 // ─── Market Overview ────────────────────────────────────────
 
 export function getMarketIndices() {
-  return apiFetch<{ indices: { symbol: string; name: string; price: number; change: number; change_pct: number }[] }>(
+  // Round-11 / Y-5 (P3): backend ``IndexData`` declares ``prev_close``
+  // (``backend/api/routes/market_overview.py:25``) and ``is_demo`` —
+  // the FE used to drop both. ``prev_close`` lets sparkline / hover
+  // tooltips render "from $X" without an extra fetch; ``is_demo``
+  // lets the indices strip badge demo-mode without re-deriving.
+  return apiFetch<{
+    indices: {
+      symbol: string;
+      name: string;
+      price: number;
+      change: number;
+      change_pct: number;
+      prev_close?: number;
+      is_demo?: boolean;
+    }[];
+  }>(
     `/api/v1/market-overview/indices`
   );
 }
@@ -1016,7 +1031,8 @@ export async function screenStocks(preset?: string, filters?: Record<string, unk
   return resp.results.map((r) => ({
     symbol: r.symbol,
     price: r.price ?? 0,
-    change: 0,
+    // Round-11 / Y-4 — dropped placebo ``change: 0``; backend never
+    // emits a $-change field (only ``change_pct``).
     changePct: r.change_pct ?? 0,
     rsScore: r.metrics?.rs_score ?? 0,
     fScore: r.metrics?.f_score ?? 0,
@@ -1305,6 +1321,11 @@ export async function getOrders(status?: string): Promise<Order[]> {
       // attribution column. Backend already returns `strategy` on
       // OrderResponse (see backend/api/routes/trades.py:398).
       strategy: (o.strategy as string) ?? null,
+      // Round-11 / Y-10 — surface combo_type + reject_reason so
+      // multi-leg orders render correctly and rejected orders show
+      // why. Backend already emits both.
+      comboType: (o.combo_type as string) ?? null,
+      rejectReason: (o.reject_reason as string) ?? null,
       filledAt: (o.filled_at as string) ?? undefined,
       createdAt: (o.submitted_at as string) ?? new Date().toISOString(),
     };
@@ -1346,6 +1367,10 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     positions_count: number;
     is_demo?: boolean;
     source?: string;
+    // Round-11 / Y-8 (P2): the backend emits ``last_updated`` (ISO
+    // datetime) on every summary response. Surface it so the
+    // dashboard header can render a "last refreshed Xs ago" pill.
+    last_updated?: string;
   }
   // 2026-04-20 — bumped per-call timeout to 30s (was default 15s). Cold-start
   // on this endpoint can exceed 15s because the backend fans out to the
@@ -1381,17 +1406,39 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
     dayPnl,
     dayPnlPct,
     is_demo: isDemo,
+    // Round-11 / Y-8 — surface freshness + provenance so consumers
+    // can render an "updated 5s ago" pill or detect demo-mode
+    // without re-deriving from the legacy ``is_demo`` shorthand.
+    lastUpdated: raw.last_updated,
+    source: raw.source,
   };
 }
 
 export async function getPortfolioGreeks(): Promise<PortfolioGreeks> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/portfolio/greeks`);
+  // Round-11 / Y-7 (P2): surface the per-position breakdown the
+  // backend already computes (``api/routes/portfolio.py:75``).
+  // Without this the panel can't show "by position" attribution.
+  const byPositionRaw = raw.by_position;
+  const byPosition = Array.isArray(byPositionRaw)
+    ? byPositionRaw.map((p) => {
+        const r = p as Record<string, unknown>;
+        return {
+          symbol: (r.symbol as string) ?? "",
+          delta: (r.delta as number) ?? 0,
+          gamma: (r.gamma as number) ?? 0,
+          theta: (r.theta as number) ?? 0,
+          vega: (r.vega as number) ?? 0,
+        };
+      })
+    : undefined;
   return {
     netDelta: (raw.net_delta as number) ?? 0,
     netGamma: (raw.net_gamma as number) ?? 0,
     netTheta: (raw.net_theta as number) ?? 0,
     netVega: (raw.net_vega as number) ?? 0,
     betaWeightedDelta: (raw.beta_weighted_delta as number) ?? 0,
+    byPosition,
   };
 }
 

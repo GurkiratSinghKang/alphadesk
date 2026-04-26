@@ -835,6 +835,19 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.debug("revalidate task raised on cleanup", exc_info=True)
+                # Round-11 / BB-20 (P2): the revalidator is the only
+                # piece of code that can detect a logged-out / revoked
+                # JWT mid-stream. If it dies with an unexpected
+                # exception (Redis blip, decode error race) the WS
+                # would historically just leak the failure at DEBUG —
+                # which prod filters out — and the operator never
+                # knows surveillance lapsed for that connection.
+                # Promote to WARNING + emit a structured event so
+                # the alerting probe can detect bursts.
+                logger.warning(
+                    "revalidate task raised on cleanup",
+                    exc_info=True,
+                    extra={"event": "ws_revalidator_failed"},
+                )
         await manager.disconnect(ws)
         await _maybe_stop_listener()

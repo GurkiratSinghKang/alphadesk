@@ -2317,14 +2317,38 @@ async def _check_wash_trade(
 
     Checks every leg. A single hit is enough to refuse the order because a
     multi-leg order with one wash-trade leg is still a wash-trade order.
+
+    Round-11 / BB-19 (P1): when Redis is unreachable this used to
+    return ``(True, "skip")`` — i.e. **fail OPEN**, so a Redis flap
+    silently disabled wash-trade surveillance. The Idempotency-Key
+    gate already fails closed (see ``_dedup_check`` ~L960); align the
+    wash-trade gate with the same posture so surveillance cannot be
+    bypassed by an outage. Operators can opt into the legacy
+    fail-open behaviour with ``TRADES_WASH_FAIL_OPEN=1``.
     """
+    redis = None
     try:
         from core.redis import get_redis
         redis = await get_redis()
     except Exception:
-        return True, "skip"
+        redis = None
     if not redis:
-        return True, "skip"
+        if (_os.environ.get("TRADES_WASH_FAIL_OPEN", "") or "").lower() in {"1", "true", "yes"}:
+            return True, "skip"
+        _SURVEILLANCE_AUDIT.error(
+            "wash_trade_surveillance_unavailable user=%s",
+            username,
+            extra={"event": "wash_trade_surveillance_unavailable", "user": username},
+        )
+        try:
+            from core.redis import cache_incr
+            await cache_incr("metrics:surveillance:wash_check_redis_miss_total")
+        except Exception:
+            pass
+        return False, (
+            "wash-trade surveillance is temporarily unavailable; trading is "
+            "paused until Redis recovers (set TRADES_WASH_FAIL_OPEN=1 to override)"
+        )
 
     now_ts = datetime.now(timezone.utc).timestamp()
     for leg in request.legs:

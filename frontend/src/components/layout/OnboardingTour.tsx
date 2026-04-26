@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui";
-import { safeSetItem } from "@/lib/storage";
+import { safeSetItem, safeGetItem } from "@/lib/storage";
 
 // ─── Tour Step Definitions ──────────────────────────────────
 
@@ -67,10 +67,12 @@ const TOUR_STEPS: TourStep[] = [
 
 export function OnboardingTour() {
   // Check synchronously — never show if already completed (either key dismisses).
+  // Round-11 / BB-22: safeGetItem swallows Safari Private Mode throws and
+  // returns null on failure, so unreadable storage falls through to
+  // "show the tour" rather than crashing the dashboard mount.
   const alreadyCompleted =
     typeof window !== "undefined" &&
-    (!!localStorage.getItem(STORAGE_KEY) ||
-      localStorage.getItem(DISMISSED_KEY) === "true");
+    (!!safeGetItem(STORAGE_KEY) || safeGetItem(DISMISSED_KEY) === "true");
   const [active, setActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
