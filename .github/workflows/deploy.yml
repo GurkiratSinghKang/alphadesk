@@ -515,7 +515,16 @@ jobs:
             # head and acts as a backstop. Idempotent — rolling back to
             # a prior image_sha doesn't downgrade. Downgrades are manual
             # (docs/ROLLBACK.md).
-            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
+            #
+            # Round-7 / M-2 (continued): like ``compose run``,
+            # ``compose exec`` attaches the container's stdin to the
+            # parent shell's stdin. The parent shell here is reading
+            # the deploy script from ssh's heredoc, so attaching alembic
+            # to that stdin consumes the rest of the script and the
+            # /readyz check, smoke tests, and image-cache pruning are
+            # silently dropped. Same fix as pre-swap: ``< /dev/null``.
+            docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
+              exec -T backend alembic upgrade head </dev/null
 
             echo "─── Readiness check ────────────────────────────────────"
             curl -sf http://localhost:8000/readyz || { echo "FATAL: readiness check failed"; exit 1; }
