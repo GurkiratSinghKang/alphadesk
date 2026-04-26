@@ -997,6 +997,22 @@ export default function AnalyticsPage() {
     );
   }
 
+  // Round-8 killer-move 2: hero KpiTile strip for Analytics. The page
+  // had no clear hero — every chart card had a last-value chip and they
+  // competed equally for attention. This 4-tile strip gives a 3-second
+  // glance answer: "how am I doing risk-adjusted?" before drilling into
+  // the charts below. Sourced from already-computed series so no extra
+  // fetch.
+  const heroSummary = (() => {
+    const latestDd = drawdownData[drawdownData.length - 1]?.dd;
+    const latestSharpe = rollingSharpe[rollingSharpe.length - 1]?.sharpe;
+    const totalReturn = dailyReturns.length > 0
+      ? dailyReturns.reduce((acc, r) => (1 + acc / 100) * (1 + r / 100) * 100 - 100, 0)
+      : null;
+    const winRate = tradeStats.winRate;
+    return { latestDd, latestSharpe, totalReturn, winRate };
+  })();
+
   return (
     <ScrollArea className="h-full">
       <DashboardPageLayout
@@ -1004,6 +1020,77 @@ export default function AnalyticsPage() {
         title="Portfolio analytics"
         actions={<RangeSelector value={range} onChange={setRange} />}
       >
+        {/* Round-8 killer-move 2: hero KpiTile strip. Anchors the page
+            in 3 seconds before the user dives into the four charts below.
+            Tone-coded so positive returns / rolling Sharpe ≥ 1 read
+            green, drawdown reads coral. Hidden when no data exists
+            (covered above by the empty-state branch). */}
+        <div
+          data-slot="analytics-hero"
+          className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4"
+          aria-label="Portfolio analytics summary"
+        >
+          <div className="rounded-lg border border-border bg-[var(--panel)] px-3 py-2.5">
+            <p className="t-label mb-1">Total return</p>
+            <p
+              className={cn(
+                "t-num-lg tabular-nums",
+                heroSummary.totalReturn != null && heroSummary.totalReturn >= 0
+                  ? "text-[var(--profit)]"
+                  : heroSummary.totalReturn != null
+                    ? "text-[var(--loss)]"
+                    : "text-ink-1000",
+              )}
+            >
+              {heroSummary.totalReturn != null
+                ? `${heroSummary.totalReturn >= 0 ? "+" : ""}${heroSummary.totalReturn.toFixed(2)}%`
+                : "—"}
+            </p>
+            <p className="t-meta u-muted">period selected</p>
+          </div>
+          <div className="rounded-lg border border-border bg-[var(--panel)] px-3 py-2.5">
+            <p className="t-label mb-1">Rolling Sharpe (30d)</p>
+            <p
+              className={cn(
+                "t-num-lg tabular-nums",
+                heroSummary.latestSharpe != null && heroSummary.latestSharpe >= 1
+                  ? "text-[var(--profit)]"
+                  : "text-ink-1000",
+              )}
+            >
+              {heroSummary.latestSharpe != null
+                ? heroSummary.latestSharpe.toFixed(2)
+                : "—"}
+            </p>
+            <p className="t-meta u-muted">latest 30-day window</p>
+          </div>
+          <div className="rounded-lg border border-border bg-[var(--panel)] px-3 py-2.5">
+            <p className="t-label mb-1">Max drawdown</p>
+            <p
+              className={cn(
+                "t-num-lg tabular-nums",
+                heroSummary.latestDd != null && heroSummary.latestDd < 0
+                  ? "text-[var(--loss)]"
+                  : "text-ink-1000",
+              )}
+            >
+              {heroSummary.latestDd != null
+                ? `${heroSummary.latestDd.toFixed(2)}%`
+                : "—"}
+            </p>
+            <p className="t-meta u-muted">deepest underwater equity</p>
+          </div>
+          <div className="rounded-lg border border-border bg-[var(--panel)] px-3 py-2.5">
+            <p className="t-label mb-1">Win rate</p>
+            <p className="t-num-lg tabular-nums text-ink-1000">
+              {heroSummary.winRate != null
+                ? `${heroSummary.winRate.toFixed(0)}%`
+                : "—"}
+            </p>
+            <p className="t-meta u-muted">{closedTradesCount} closed trades</p>
+          </div>
+        </div>
+
         {/* Row 1: Drawdown + Rolling Sharpe */}
         {/* 4-col at 2xl (1536+) matches the dashboard hero layout — all
             four charts line up on wide monitors while staying stacked on

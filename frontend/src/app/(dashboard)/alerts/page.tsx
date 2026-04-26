@@ -648,6 +648,34 @@ export default function AlertsPage() {
       actions={headerActions}
     >
 
+      {/* Round-8 killer-move 2: alerts hero summary line. The page
+          previously had no anchor — a 30%-vertical Create form
+          dominated even when alerts existed. This 1-line t-meta
+          summary gives a 1-second status answer ("3 watching · 1
+          fired today · 0 errors") above the form. Hidden until at
+          least one alert exists so the cold empty state still
+          dominates for first-time users (which is the right hero
+          for that mode). */}
+      {!loading && alerts.length > 0 && (
+        <p
+          data-slot="alerts-summary"
+          className="mb-4 t-meta tabular-nums u-muted"
+        >
+          <span className="u-brand">{activeAlerts.length} watching</span>
+          {" · "}
+          {triggeredAlerts.length > 0 ? (
+            <>
+              <span className="u-profit">{triggeredAlerts.length} triggered</span>
+              {" "}
+            </>
+          ) : (
+            <>0 triggered </>
+          )}
+          {" · "}
+          {alerts.length} total
+        </p>
+      )}
+
       {/* Create Form */}
       <CreateAlertForm onCreated={fetchAlerts} />
 

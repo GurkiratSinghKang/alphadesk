@@ -579,6 +579,33 @@ export default function StrategiesListingPage() {
     total: sharedCounts.catalogueTotal,
   };
 
+  // Round-8 killer-move 2: aggregate Sharpe / CAGR / DD across active
+  // strategies for the page hero strip. The page previously opened with
+  // a wall of cards and no anchor — eye didn't know what to read first.
+  // These three numbers answer "how is my catalogue doing as a whole"
+  // in 3 seconds. Computed only over `active` so paused / coming-soon
+  // entries don't dilute the signal. ``Math.abs`` on max_drawdown
+  // because the backend's sign convention varies per strategy
+  // (documented above on the field). When no active strategies exist
+  // (cold catalogue) the hero strip falls back to em-dashes — never
+  // fabricates numbers.
+  const heroStats = useMemo(() => {
+    const active = (summaries ?? []).filter((s) => bucketFor(s) === "active");
+    if (active.length === 0) {
+      return { invested: 0, bestSharpe: null as number | null, worstDD: null as number | null };
+    }
+    const invested = active.reduce((sum, s) => sum + (s.invested_amount ?? 0), 0);
+    const sharpes = active
+      .map((s) => s.sharpe_ratio)
+      .filter((n): n is number => Number.isFinite(n) && n !== 0);
+    const bestSharpe = sharpes.length ? Math.max(...sharpes) : null;
+    const dds = active
+      .map((s) => s.max_drawdown)
+      .filter((n): n is number => n != null && Number.isFinite(n));
+    const worstDD = dds.length ? Math.max(...dds.map((d) => Math.abs(d))) : null;
+    return { invested, bestSharpe, worstDD };
+  }, [summaries]);
+
   const loading = summaries == null && !loadError;
 
   const summaryLine = loading ? (
@@ -608,6 +635,55 @@ export default function StrategiesListingPage() {
       actions={actions}
     >
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
+        {/* Round-8 killer-move 2: catalogue hero strip. Three KpiTile-style
+            cards anchor the page in 3 seconds — a portfolio view of all
+            active strategies. Hidden when no active strategies exist (cold
+            catalogue) so we don't render em-dashes as if they were data. */}
+        {!loading && counts.active > 0 && (
+          <div
+            data-slot="strategies-hero"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+            aria-label="Active catalogue summary"
+          >
+            <div className="rounded-lg border border-border bg-bg-card px-4 py-3">
+              <p className="t-label mb-1">Invested</p>
+              <p className="t-num-lg tabular-nums u-brand">
+                {heroStats.invested > 0
+                  ? new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    }).format(heroStats.invested)
+                  : "—"}
+              </p>
+              <p className="t-meta u-muted">
+                across {counts.active} active strateg{counts.active === 1 ? "y" : "ies"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-bg-card px-4 py-3">
+              <p className="t-label mb-1">Best OOS Sharpe</p>
+              <p className="t-num-lg tabular-nums u-profit">
+                {heroStats.bestSharpe != null
+                  ? heroStats.bestSharpe.toFixed(2)
+                  : "—"}
+              </p>
+              <p className="t-meta u-muted">
+                highest risk-adjusted return in catalogue
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-bg-card px-4 py-3">
+              <p className="t-label mb-1">Worst DD</p>
+              <p className="t-num-lg tabular-nums u-loss">
+                {heroStats.worstDD != null
+                  ? `−${(heroStats.worstDD * 100).toFixed(1)}%`
+                  : "—"}
+              </p>
+              <p className="t-meta u-muted">
+                deepest drawdown across active backtests
+              </p>
+            </div>
+          </div>
+        )}
         {loadError && (
           // 2026-04-21 polish: error surface now offers a retry affordance
           // (previously was a dead string — the only recovery path was a
