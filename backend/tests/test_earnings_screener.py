@@ -503,21 +503,23 @@ async def test_load_strike_ladder_handles_empty_expirations():
     # B-62: services.earnings_screener now calls services.options.fetch_chain
     # directly (no route-handler stub). Patch target moves accordingly.
     #
-    # Round-7 / midnight-flake fix: capture ``date.today()`` BEFORE invoking
-    # the SUT and accept either that value or the next day. The previous
-    # form compared the SUT's ``date.today()`` against a fresh
-    # ``date.today()`` in the assertion; if the test happened to cross
-    # UTC midnight between the two reads (CI runs at all hours) the
-    # assertion failed despite the code working correctly. The intent of
-    # the test is "expiry got filled in to a sensible non-raising
-    # default", which is satisfied by today-or-tomorrow.
-    today_before = date.today()
+    # Round-7 / midnight-flake fix: the SUT falls back to ``market_today()``
+    # (ET-anchored, see ``core.time``), NOT ``date.today()`` (UTC on the
+    # CI runner). Around UTC midnight ET is still on the previous date,
+    # so a ``date.today()``-based assertion fails an otherwise-correct
+    # run. Compare against ``market_today()`` instead, captured both
+    # before and after the call to absorb any rare ET-midnight crossing.
+    from core.time import market_today
+
+    market_before = market_today()
     with patch("services.options.fetch_chain", fake_chain):
         result = await svc._load_strike_ladder("NOOPT", expiry=None)
+    market_after = market_today()
 
-    # No rows since no contracts, but expiry must not raise — should be today.
+    # No rows since no contracts, but expiry must not raise — should be
+    # market today.
     assert result is not None
-    assert result["expiry"] in {today_before, today_before + timedelta(days=1)}
+    assert result["expiry"] in {market_before, market_after}
     assert result["rows"] == []
 
 
