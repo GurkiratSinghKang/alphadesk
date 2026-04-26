@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  BarChart3,
-  Brain,
+  // Round-8 killer-move 3: BarChart3 + Brain icons retired with the
+  // StrategyBuilder + BacktestPanel sections that owned them.
   Play,
   TrendingUp,
   Target,
@@ -40,8 +40,10 @@ import { DashboardPageLayout } from "@/components/layouts";
 import Mono from "@/components/typography/Mono";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getMarketSession } from "@/lib/marketHours";
-import { StrategyBuilder } from "@/components/panels/StrategyBuilder";
-import { BacktestPanel } from "@/components/panels/BacktestPanel";
+// Round-8 killer-move 3: StrategyBuilder + BacktestPanel imports
+// removed — they live behind a CTA pointing to /strategies now.
+// Keeping a comment breadcrumb so a future developer rediscovering
+// these imports doesn't add them back to the ops page reflexively.
 import { StrategyTemplates } from "@/components/panels/StrategyTemplates";
 import {
   getPipelineHistory,
@@ -1016,36 +1018,42 @@ export default function PipelinePage() {
               )}
             </section>
 
+            {/* Round-8 killer-move 3: StrategyBuilder + BacktestPanel
+                were mounted on /pipeline (an operations page) — they are
+                CREATION tools, not operations. The user proposed pulling
+                them off ops pages so each view answers ONE question
+                (R8). They now live in a small CTA card at the bottom of
+                the Pipeline page, deep-linking to the dedicated routes
+                (/strategies/new and /strategies/[id]/backtest, to be
+                wired separately). The ~800 lines of creation UI return
+                later via those routes; the operations page is now
+                focused on "is the system running and what did it do?". */}
             <Separator className="border-border" />
 
-            {/* Strategy Builder */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Brain className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
-                  Strategy builder
-                </h2>
-                <span className="t-label text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                  AI
-                </span>
-              </div>
-              <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
-                <StrategyBuilder />
-              </div>
-            </section>
-
-            <Separator className="border-border" />
-
-            {/* Backtesting */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <BarChart3 className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
-                  Backtesting
-                </h2>
-              </div>
-              <div className="rounded-xl border border-border bg-[var(--surface)] p-4">
-                <BacktestPanel />
+            <section
+              data-slot="pipeline-builder-cta"
+              aria-label="Build or backtest a strategy"
+            >
+              <div className="rounded-xl border border-border bg-[var(--surface)] p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="t-display-section text-foreground">
+                      Build or backtest
+                    </h2>
+                    <p className="t-meta u-muted mt-1">
+                      Strategy creation and historical backtesting moved to the
+                      Strategies page — ops view stays focused on live runs.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+                    <a
+                      href="/strategies"
+                      className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-bg-elev-1 px-4 font-mono text-[12px] u-brand transition-colors hover:bg-bg-card hover:border-[color:var(--brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    >
+                      ▸ Open Strategies
+                    </a>
+                  </div>
+                </div>
               </div>
             </section>
 

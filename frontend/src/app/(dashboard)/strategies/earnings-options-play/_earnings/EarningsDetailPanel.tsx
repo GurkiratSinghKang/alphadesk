@@ -6,6 +6,7 @@ import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
 
 import DetailHeader from "./DetailHeader";
+import DecisionStrip from "./DecisionStrip";
 import MetricsStrip from "./MetricsStrip";
 import ClaudeThesisCard from "./ClaudeThesisCard";
 import StrikeLadder from "./StrikeLadder";
@@ -181,6 +182,12 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         quote={detail.quote} generatedAt={detail.generatedAt}
         selectionSource={selectionSource}
       />
+      {/* Round-8 single-view B: DECISION STRIP — page hero. Renders
+          only when Claude's structured response has loaded; the
+          ``claude_unavailable`` partial-data banner above already
+          surfaces the missing-data case explicitly so a placeholder
+          strip would just add noise. */}
+      <DecisionStrip structured={detail.claudeStructured} metrics={detail.metrics} />
       <MetricsStrip metrics={detail.metrics} />
 
       {isWide ? (

@@ -411,39 +411,52 @@ export default function TradePage() {
         </button>
       </header>
 
-      <section className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden min-h-[360px] flex flex-col">
-        <PriceChartPanel
-          symbol={symbol}
-          quote={quote}
-          meta={meta}
-          series={series}
-          activeRange={range}
-          onRangeChange={setRange}
-          className="flex-1 min-h-[360px]"
-        />
-      </section>
+      {/* Round-8 single-view C: chart + OrderBar are now column-paired
+          at lg+ so the trader's eye doesn't have to dart up-and-down
+          between the chart (decision context) and the ticket (action).
+          Chart spans 7/12, OrderBar 5/12. Both stack on smaller widths.
+          The OrderBar sits at ``lg:sticky top-4`` so it stays visible
+          while the chart scrolls — single-page trade flow per the
+          tastytrade pattern. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <section
+          className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden min-h-[360px] flex flex-col lg:col-span-7"
+        >
+          <PriceChartPanel
+            symbol={symbol}
+            quote={quote}
+            meta={meta}
+            series={series}
+            activeRange={range}
+            onRangeChange={setRange}
+            className="flex-1 min-h-[360px]"
+          />
+        </section>
 
-      <section className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
-        <OrderBar
-          key={`trade-orderbar-${resetTick}`}
-          symbol={selectedSymbol}
-          strategies={strategyOptions}
-          onSubmit={handleSubmit}
-          submitting={submitting}
-          errorMessage={orderError}
-          // Round-5 F-2: when a deep-link pre-stages a contract or combo,
-          // bind the OrderBar to the option's OCC symbol + side + qty +
-          // limit so clicking Place actually places the option order. The
-          // single-leg "Pre-staged contract" panel below is informational
-          // only — the form is the source of truth.
-          defaults={orderBarDefaults}
-          submitLabel={
-            activeLegs.length > 0
-              ? `Place ${activeLegs.length}-leg combo`
-              : "Place order"
-          }
-        />
-      </section>
+        <section
+          className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden lg:col-span-5 lg:sticky lg:top-4 lg:self-start"
+        >
+          <OrderBar
+            key={`trade-orderbar-${resetTick}`}
+            symbol={selectedSymbol}
+            strategies={strategyOptions}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+            errorMessage={orderError}
+            // Round-5 F-2: when a deep-link pre-stages a contract or combo,
+            // bind the OrderBar to the option's OCC symbol + side + qty +
+            // limit so clicking Place actually places the option order. The
+            // single-leg "Pre-staged contract" panel below is informational
+            // only — the form is the source of truth.
+            defaults={orderBarDefaults}
+            submitLabel={
+              activeLegs.length > 0
+                ? `Place ${activeLegs.length}-leg combo`
+                : "Place order"
+            }
+          />
+        </section>
+      </div>
 
       {/* ─── Pre-staged contract (single-leg deep-link) ──────────── */}
       {activeContract && (
