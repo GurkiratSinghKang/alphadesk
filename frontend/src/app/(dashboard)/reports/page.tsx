@@ -983,11 +983,17 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       const entryMid = Date.UTC(e.y, e.m - 1, e.d);
       const exitMid = Date.UTC(x.y, x.m - 1, x.d);
       const holdingDays = Math.round((exitMid - entryMid) / 86_400_000);
-      // IRS: "held more than one year" = long-term. Leap-year safe: a
-      // position entered Feb 29 2024 and sold Feb 28 2025 is 365 days
-      // and still short-term; > 365 covers the common 366+ case without
-      // a leap-year lookup.
-      const isLongTerm = holdingDays > 365;
+      // IRS §1222: "held more than one year" = long-term. The
+      // acquisition day is EXCLUDED from the count. So a position
+      // bought Mar 1 and sold Mar 2 of the next year qualifies as
+      // long-term (> 1 year by the rule), even though our day-count
+      // gives 366 days for non-leap. Round-10 / W-3 (P0): previously
+      // ``> 365`` excluded the boundary case where a non-leap-year
+      // hold landed on day 366 (which IS long-term under the rule).
+      // The correct test for long-term using our acquisition-day-
+      // included integer count is ``>= 366`` so the day-after-
+      // anniversary sale qualifies.
+      const isLongTerm = holdingDays >= 366;
 
       // Round-5 F-9 / J-12 (round-6) — wash-sale flag. Only losses
       // qualify. The IRS window is symmetric: ±30 calendar days around

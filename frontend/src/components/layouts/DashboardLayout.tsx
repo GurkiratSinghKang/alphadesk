@@ -72,10 +72,15 @@ export default function DashboardLayout({
         data-slot="dashboard-main"
         className={cn(
           "min-h-0 overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-[var(--border)]",
-          // Mobile: single column. md: two columns with a slightly narrower
-          // right rail. lg+: the full 388px rail.
-          "grid grid-cols-1 md:grid-cols-[1fr_340px] lg:grid-cols-[1fr_388px] gap-px",
-          "grid-rows-[auto] md:grid-rows-[minmax(0,1fr)_auto] lg:grid-rows-[1fr]",
+          // Round-10 / X-5 (P0): previously ``md:grid-cols-[1fr_340px]``
+          // forced iPad Air portrait (820 px) into a side-by-side layout
+          // — the chart got squeezed to ~430 px which barely cleared its
+          // ``min-h-[360px]`` and the OrderBar fields collapsed onto one
+          // unreadable line. iPad portrait now stays single-column
+          // (chart on top, rail beneath) and the side-by-side kicks in
+          // only at ``lg`` (1024+). lg+ still gets the full 388 px rail.
+          "grid grid-cols-1 lg:grid-cols-[1fr_388px] gap-px",
+          "grid-rows-[auto] lg:grid-rows-[1fr]",
         )}
       >
         <main

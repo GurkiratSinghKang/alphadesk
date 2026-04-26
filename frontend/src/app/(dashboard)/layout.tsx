@@ -78,7 +78,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (isDeskRoute) {
       return (
         <div
-          className="h-dvh w-full bg-bg"
+          // Round-10 / X-2 (P0): overflow-x-hidden so the pre-mount
+          // skeleton doesn't briefly produce horizontal page-scroll on
+          // narrow phone viewports (the 4-cell ContextBar's hero
+          // min-width sums to ~412px which is wider than 393px iPhone).
+          // The live shell already has this guard; the skeleton lacked
+          // it, causing a one-paint flash.
+          className="h-dvh w-full overflow-x-hidden bg-bg"
           style={{
             display: "grid",
             gridTemplateRows: "48px 56px 1fr 22px",

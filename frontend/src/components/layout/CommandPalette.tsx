@@ -204,11 +204,22 @@ export function CommandPalette() {
   }
 
   function handleConfirmLive() {
-    setTradingMode("live");
+    // Round-10 / W-2 (P0): the previous flow flipped
+    // ``useUIStore.tradingMode`` to "live" purely on the client and
+    // toasted "Live trading enabled — orders will use real capital."
+    // — but there's NO ``/auth/switch-mode`` endpoint, the backend
+    // continues to use paper credentials, and ProfileMenu + Settings
+    // both correctly tell users this requires admin action. Three
+    // surfaces presented contradictory truth: a user could convince
+    // themselves they were live via the palette while still trading
+    // paper, or worse, take a real-money posture knowing it was
+    // really a paper account. Aligned now: only paper→paper is
+    // user-toggleable; live requires admin contact.
     setConfirmLiveOpen(false);
     toast({
       type: "info",
-      message: "Live trading enabled — orders will use real capital",
+      message:
+        "Live trading is admin-gated — contact your AlphaDesk operator to enable real-capital orders.",
     });
   }
 

@@ -309,49 +309,54 @@ export default function DeskPage() {
   }, []);
 
   /* ─── Shaped props for the composites ──────────────────── */
-  const regime = toRegime(regimeResp?.regime);
-  const quote = toQuote(selectedQuote ?? undefined);
+  // Round-10 / V-1.01 (P0): every selector below was a fresh
+  // function call in render, returning a new object/array each
+  // cycle and breaking React.memo / useMemo on every consumer.
+  // With ``tickHeartbeat`` ticking every 2s and per-symbol quote
+  // pushes ~10Hz on liquid tickers, the desk was reshaping the
+  // entire prop set continuously. Wrap each selector in useMemo
+  // keyed on the actual inputs so the references stay stable.
+  const marketOpen = isMarketOpen();
+  const regime = useMemo(() => toRegime(regimeResp?.regime), [regimeResp?.regime]);
+  const quote = useMemo(() => toQuote(selectedQuote ?? undefined), [selectedQuote]);
   // BUG-032: pass marketOpen so `toMetaCells` can render "unavailable"
   // instead of "—" when the session is closed and the cells will never
   // populate for this tape.
-  const marketOpen = isMarketOpen();
-  const meta = toMetaCells(selectedQuote ?? undefined, { marketOpen });
-  const symbol = toMarketSymbol(selectedSymbol);
-  const contextCells = toContextCells(portfolioSummary, positions as Position[], orderCount);
-  const positionRows = toPositionRows(positions as Position[]);
+  const meta = useMemo(
+    () => toMetaCells(selectedQuote ?? undefined, { marketOpen }),
+    [selectedQuote, marketOpen],
+  );
+  const symbol = useMemo(() => toMarketSymbol(selectedSymbol), [selectedSymbol]);
+  const contextCells = useMemo(
+    () => toContextCells(portfolioSummary, positions as Position[], orderCount),
+    [portfolioSummary, positions, orderCount],
+  );
+  const positionRows = useMemo(
+    () => toPositionRows(positions as Position[]),
+    [positions],
+  );
   const clock = useDeskClock();
-  const memo = emptyMemo(clock.slice(0, 8));
+  const memo = useMemo(() => emptyMemo(clock.slice(0, 8)), [clock]);
 
-  // Re-render every 2s so the "Last tick" pill's elapsed seconds stay fresh
-  // without piggy-backing on a full-clock re-render.
-  const [tickHeartbeat, setTickHeartbeat] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTickHeartbeat((t) => t + 1), 2_000);
-    return () => clearInterval(id);
-  }, []);
-  const lastTickSec = useMemo(() => {
-    // Referenced in deps so the memo re-evaluates on each heartbeat.
-    void tickHeartbeat;
-    // Wave 14 perf-audit-r3 P1 #2: was `Object.values(quotes).reduce(...)`
-    // with `quotes` in the dep array — that recomputed on every WS tick.
-    // `getFreshestQuoteTimestamp()` reads imperatively from the store so
-    // this memo only re-runs on the 2s heartbeat.
-    const ts = getFreshestQuoteTimestamp();
-    if (!ts) return undefined;
-    // Server timestamps are usually seconds — normalise if they look like ms.
-    const epochMs = ts > 1e12 ? ts : ts * 1000;
-    const delta = (Date.now() - epochMs) / 1000;
-    return delta >= 0 && delta < 86_400 ? delta : undefined;
-  }, [tickHeartbeat]);
-
-  const statusPills = toStatusPills({
-    brokerConnected: !portfolioSummary.is_demo,
-    marketOpen,
-    claudeHealthy: true,
-    // Always pass a tick value so the StatusBar renders 4 pills — even
-    // when we have no data yet, show "Last tick —" rather than omit.
-    lastTickSec,
-  });
+  // Round-10 / V-1.02 (P0): the 2s tickHeartbeat used to live here
+  // and re-render the ENTIRE DeskPage just to keep the "Last tick"
+  // StatusBar pill fresh — including the chart panel, watchlist,
+  // positions, OrderBar. ~30 unnecessary parent renders per minute
+  // even with the V-1.01 memoization. Now isolated into the
+  // ``LastTickStatusPills`` component below: the parent renders the
+  // initial pills synchronously, then the small child component
+  // owns the heartbeat and re-renders only itself.
+  const statusPillsBase = useMemo(
+    () =>
+      toStatusPills({
+        brokerConnected: !portfolioSummary.is_demo,
+        marketOpen,
+        claudeHealthy: true,
+        // initial value; LastTickStatusPills will refresh in place
+        lastTickSec: undefined,
+      }),
+    [portfolioSummary.is_demo, marketOpen],
+  );
 
   /* ─── Event handlers — kept inline because they're trivial ─ */
   function handleNavigate(href: string) {
@@ -632,9 +637,93 @@ export default function DeskPage() {
           <BriefDrawer memo={memo} />
         </>
       }
-      statusBar={<StatusBar pills={statusPills} buildVersion={BUILD_VERSION} />}
+      statusBar={
+        <LastTickStatusBar
+          base={statusPillsBase}
+          buildVersion={BUILD_VERSION}
+          marketOpen={marketOpen}
+        />
+      }
     />
   );
+}
+
+/**
+ * Round-10 / V-1.02 (P0): owns the 2-second heartbeat that keeps the
+ * "Last tick" pill's elapsed seconds fresh. Renders the StatusBar
+ * directly so DeskPage can stay still — only this small child
+ * re-renders on each tick. We mutate ``base`` to swap in a new last
+ * pill rather than rebuild every pill from scratch (the toggle is
+ * cheap because ``base`` is already memoised in the parent).
+ */
+function LastTickStatusBar({
+  base,
+  buildVersion,
+  marketOpen,
+}: {
+  base: ReturnType<typeof import("./_desk/selectors").toStatusPills>;
+  buildVersion: string;
+  marketOpen: boolean;
+}) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    // Round-10 / V-1.12 (P2): pause the heartbeat when the tab is
+    // hidden so we don't wake up the CPU 30 times/minute on background
+    // tabs that the user has stashed for the day.
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (id != null) return;
+      id = setInterval(() => setTick((t) => t + 1), 2_000);
+    };
+    const stop = () => {
+      if (id != null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    if (typeof document === "undefined" || document.visibilityState === "visible") {
+      start();
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  const lastTickSec = useMemo(() => {
+    void tick; // dep so the value is recomputed on each heartbeat
+    const ts = getFreshestQuoteTimestamp();
+    if (!ts) return undefined;
+    const epochMs = ts > 1e12 ? ts : ts * 1000;
+    const delta = (Date.now() - epochMs) / 1000;
+    return delta >= 0 && delta < 86_400 ? delta : undefined;
+  }, [tick]);
+
+  const pills = useMemo(() => {
+    // Replace ONLY the last pill (the "Last tick" / "Feed idle" pill)
+    // — keep every other pill from ``base`` referentially stable so
+    // StatusBar's internal memoisation doesn't bust on a heartbeat.
+    if (base.length === 0) return base;
+    const next = base.slice();
+    const idx = next.length - 1;
+    next[idx] = {
+      ...next[idx],
+      label:
+        lastTickSec != null
+          ? `Last tick ${lastTickSec.toFixed(2)}s`
+          : marketOpen
+            ? "Last tick —"
+            : "Feed idle · market closed",
+    };
+    return next;
+  }, [base, lastTickSec, marketOpen]);
+
+  return <StatusBar pills={pills} buildVersion={buildVersion} />;
 }
 
 /**
@@ -660,7 +749,10 @@ function BriefDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"]
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between px-4 py-2 text-left t-meta hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-gold-300"
+        // Round-10 / X-9 (P1): ``min-h-11`` (44px) hits Apple HIG +
+        // WCAG 2.5.5 touch-target floor. ``py-2`` alone gave ~36-40px
+        // which was below the threshold on phones.
+        className="flex w-full min-h-11 items-center justify-between px-4 py-2 text-left t-meta hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-gold-300"
       >
         <span>
           <span className="u-brand">Today&apos;s brief</span>

@@ -244,16 +244,28 @@ header {
   padding-right: max(0px, env(safe-area-inset-right, 0));
 }
 
-/* Sticky top bars (TopBar, StatusStrip, ContextBar) */
+/* Sticky top bars (TopBar, StatusStrip, ContextBar).
+   Round-10 / X-1 (P0): the Round-9 dashboard reflow introduced
+   ``DashboardLayout`` (Layer-3 shell) which uses ``data-slot="dashboard-*"``
+   — the legacy ``data-slot="desk-*"`` selectors below were a strict
+   no-op on the new desk shell, so iPhone home-bar / notch areas
+   received zero ``env(safe-area-inset-*)`` padding despite
+   ``viewportFit: "cover"``. Mirror the new slot names alongside the
+   legacy ones so both shells get safe-area correctness. */
 [data-slot="desk-top-bar"],
-[data-slot="desk-context-bar"] {
+[data-slot="desk-context-bar"],
+[data-slot="dashboard-layout"] > :first-child,
+[data-slot="dashboard-layout"] [data-slot="context-bar"] {
   padding-left: max(0px, env(safe-area-inset-left, 0));
   padding-right: max(0px, env(safe-area-inset-right, 0));
 }
 
-/* Sticky bottom chrome (StatusBar / status strip) */
+/* Sticky bottom chrome (StatusBar / status strip).
+   Round-10 / X-1 (P0): same fix — match the new desk shell's slot. */
 [data-slot="desk-status-bar"],
-[data-slot="status-strip"] {
+[data-slot="status-strip"],
+[data-slot="status-bar"],
+[data-slot="dashboard-layout"] > :last-child {
   padding-bottom: max(0px, env(safe-area-inset-bottom, 0));
   padding-left: max(0px, env(safe-area-inset-left, 0));
   padding-right: max(0px, env(safe-area-inset-right, 0));
