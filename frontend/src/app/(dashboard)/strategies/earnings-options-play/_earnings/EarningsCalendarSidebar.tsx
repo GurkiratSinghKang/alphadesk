@@ -193,11 +193,20 @@ export default function EarningsCalendarSidebar({
                     title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
                     aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
                     aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
+                    // Round-8 / AX-04: ``aria-current="true"`` on the
+                    // selected calendar row is the canonical SR cue
+                    // for "this is the active item in a list of
+                    // navigation candidates". ``data-selected`` is
+                    // visual-only and unreadable to screen readers.
+                    aria-current={r.symbol === selected ? "true" : undefined}
                     data-selected={r.symbol === selected}
                     data-report-state={state}
                     className={cn(
                       // B-57: px-3/py-2 ensures ≥44 px touch target on iPad.
-                      "flex w-full items-center justify-between rounded px-3 py-2 font-mono text-[12.5px] text-left transition-colors",
+                      // Round-8 / MO-05: explicit ``min-h-[44px]`` floor —
+                      // the previous padding-only approach allowed slim rows
+                      // (~36px) on phones with compressed line-height.
+                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-[12.5px] text-left transition-colors",
                       r.symbol === selected
                         ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                         : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",

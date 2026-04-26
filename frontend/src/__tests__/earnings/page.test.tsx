@@ -76,7 +76,10 @@ describe("Earnings Options Play page", () => {
     // The mock was called with filters — minIvRank should be 50 (default),
     // not NaN (which would coerce to the string "NaN" downstream).
     const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
-    expect(firstCall?.minIvRank).toBe(50);
+    // Round-8 / DT-05: default minIvRank tightened from 50 → 70 because
+    // earnings premium-selling only works on rich-IV setups; 50 let too
+    // many low-vol names through the filter.
+    expect(firstCall?.minIvRank).toBe(70);
     expect(Number.isNaN(firstCall?.minIvRank as number)).toBe(false);
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
@@ -213,7 +216,10 @@ describe("Earnings Options Play page", () => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
     const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
-    expect(firstCall?.minIvRank).toBe(50);
+    // Round-8 / DT-05: default minIvRank tightened from 50 → 70 because
+    // earnings premium-selling only works on rich-IV setups; 50 let too
+    // many low-vol names through the filter.
+    expect(firstCall?.minIvRank).toBe(70);
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
 

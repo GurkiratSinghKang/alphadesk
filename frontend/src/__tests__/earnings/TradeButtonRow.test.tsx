@@ -16,11 +16,16 @@ const ladder: StrikeLadder = {
 };
 
 describe("TradeButtonRow", () => {
-  it("renders three deep-link buttons: short call, short put, strangle", () => {
+  it("renders deep-link buttons for ATM call, ATM put, and strangles", () => {
+    // Round-8 / NV-02: button labels were renamed from "Short call X" to
+    // "Sell-to-open call X" so novice users see the unbounded-risk
+    // semantic explicitly. The undefined-risk pill plus the link slot
+    // attributes are the stable contract — text changed for safety.
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
-    expect(container.textContent).toMatch(/short call/i);
-    expect(container.textContent).toMatch(/short put/i);
-    expect(container.textContent).toMatch(/strangle/i);
+    expect(container.textContent).toMatch(/sell-to-open call/i);
+    expect(container.textContent).toMatch(/sell-to-open put/i);
+    expect(container.textContent).toMatch(/sell.*strangle/i);
+    expect(container.textContent).toMatch(/undefined risk/i);
   });
 
   it("short call button links to /trade with ATM call contract", () => {

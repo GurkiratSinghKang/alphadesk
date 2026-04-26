@@ -356,6 +356,22 @@ export default function EarningsOptionsPlayPage() {
       title={title}
       actions={actions}
     >
+      {/* Round-8 / AX-05: skip-to-detail link for keyboard users so a
+          large calendar (12+ rows after sort/filter) doesn't force a
+          long tab cycle to reach the active symbol's panel. Visible on
+          focus, ``sr-only`` otherwise. */}
+      <a
+        href="#earnings-detail-panel"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:border focus:border-[color:var(--brand)] focus:bg-[color:var(--bg-card)] focus:px-3 focus:py-2 focus:t-mono focus:text-[12px]"
+      >
+        Skip to detail panel
+      </a>
+
+      {/* Round-8 / NV-01: dismissible "what is this strategy?" intro
+          for first-time users. Persisted in localStorage so power
+          users only see it once. */}
+      <StrategyIntroCard />
+
       <FiltersBar
         filters={filters}
         onChange={setFilters}
@@ -384,21 +400,71 @@ export default function EarningsOptionsPlayPage() {
           filters={filters}
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
-          onResetFilters={() => setFilters({ window: "both", minIvRank: 50, sort: "date" })}
+          onResetFilters={() => setFilters({ window: "both", minIvRank: 70, sort: "iv_rank" })}
         />
-        <EarningsDetailPanel
-          ref={detailPanelRef}
-          detail={detail}
-          loading={loadingDetail}
-          refetching={refetchingDetail}
-          error={detailError}
-          runningFull={runningFull}
-          fullResearchError={fullError}
-          onRunFullResearch={runFull}
-          selectionSource={selectionSource}
-        />
+        {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
+        <div id="earnings-detail-panel">
+          <EarningsDetailPanel
+            ref={detailPanelRef}
+            detail={detail}
+            loading={loadingDetail}
+            refetching={refetchingDetail}
+            error={detailError}
+            runningFull={runningFull}
+            fullResearchError={fullError}
+            onRunFullResearch={runFull}
+            selectionSource={selectionSource}
+          />
+        </div>
       </div>
     </DashboardPageLayout>
+  );
+}
+
+/**
+ * Round-8 / NV-01: dismissible plain-language explainer for first-time
+ * users. The page previously dropped novices straight into a calendar
+ * with no orientation — they had no idea the strategy SELLS premium
+ * (vs. the more intuitive "buy a call before earnings" mental model).
+ * Dismissal persists in localStorage so power users see it once.
+ */
+const INTRO_DISMISS_KEY = "alphadesk:earnings-intro-dismissed";
+
+function StrategyIntroCard() {
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true; // SSR: hide so first
+    // hydration paint matches a returning user; only the cold-cache
+    // first-time user pays a flash on mount, which is fine.
+    return false;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setDismissed(window.localStorage?.getItem(INTRO_DISMISS_KEY) === "1");
+  }, []);
+  if (dismissed) return null;
+  return (
+    <aside
+      data-slot="earnings-intro"
+      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-[13px] leading-relaxed"
+    >
+      <p>
+        <strong className="u-brand">This strategy sells volatility into earnings.</strong>{" "}
+        When IV rank is high the market pays you a credit because everyone&apos;s anxious. You{" "}
+        <em>profit</em> if the stock moves <em>less</em> than the implied move; you{" "}
+        <em>lose</em> if it moves more. Naked short calls have <span className="u-loss">unlimited risk</span>;
+        defined-risk variants (iron condors, vertical spreads) cap the loss but earn less.
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          window.localStorage?.setItem(INTRO_DISMISS_KEY, "1");
+          setDismissed(true);
+        }}
+        className="mt-2 t-meta underline u-muted hover:u-brand"
+      >
+        Got it — don&apos;t show again
+      </button>
+    </aside>
   );
 }
 
@@ -433,7 +499,15 @@ function isAbortError(err: unknown): boolean {
  * working across the full target browser matrix.
  */
 function useIsWideViewport(): boolean {
-  const [wide, setWide] = useState(true);
+  // Round-8 / MO-01: SSR default = false (mobile-first). The earlier
+  // ``useState(true)`` was an SSR-optimism tradeoff that broke
+  // deeplinked phone users: the scroll-to-detail effect's
+  // ``if (isWideViewport) return`` short-circuited on first paint
+  // and the panel never auto-scrolled into view when the calendar
+  // hydrated. Defaulting false means desktop pays one re-render on
+  // hydration to flip back to true (negligible) but mobile gets a
+  // correct first paint.
+  const [wide, setWide] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia?.("(min-width: 1024px)");
@@ -466,7 +540,14 @@ function titleForWindow(win: EarningsCalendarFilters["window"]): string {
 // ─── URL sync helpers ────────────────────────────────────────
 
 function readFiltersFromURL(): EarningsCalendarFilters {
-  if (typeof window === "undefined") return { window: "both", minIvRank: 50, sort: "date" };
+  // Round-8 / DT-05: defaults tightened. ``minIvRank=50`` let half the
+  // curated names through — too noisy for a strategy that only works
+  // on rich-IV setups. ``sort=date`` ascending buried the fattest
+  // premiums. Premium sellers want IVR ≥ 70 sorted by IVR desc so
+  // the highest-rank names float to the top of the calendar. Users
+  // who want broader filtering can still loosen via the FiltersBar
+  // and the URL syncs the override back.
+  if (typeof window === "undefined") return { window: "both", minIvRank: 70, sort: "iv_rank" };
   const p = new URLSearchParams(window.location.search);
   const out: EarningsCalendarFilters = {};
 
@@ -498,7 +579,8 @@ function readFiltersFromURL(): EarningsCalendarFilters {
     out.sort = sort as EarningsCalendarFilters["sort"];
   }
 
-  return { window: "both", minIvRank: 50, sort: "date", ...out };
+  // Round-8 / DT-05: same defaults as the SSR branch above.
+  return { window: "both", minIvRank: 70, sort: "iv_rank", ...out };
 }
 
 function syncURL(

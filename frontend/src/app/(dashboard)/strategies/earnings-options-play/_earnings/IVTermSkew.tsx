@@ -75,15 +75,27 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
   const max = Math.max(...finite.map((p) => p.atmIv));
   const min = Math.min(...finite.map((p) => p.atmIv));
   const range = max - min || 1;
+  // Round-8 / QR-02: surface absolute Y-axis bounds. Without them the
+  // chart was a *purely relative* strip — 25%→26% and 25%→80% rendered
+  // identically. We can't add a full SVG axis without a refactor, but
+  // the min/max IV labels next to the front/back caption are a low-
+  // cost way to anchor the chart magnitude.
   return (
-    <div className="mt-1">
-      <div className="flex h-10 items-end gap-1">
+    <figure
+      role="figure"
+      aria-label="Implied volatility term structure"
+      className="mt-1"
+    >
+      {/* Round-8 / AX-06: ``aria-hidden`` the visual chart and provide
+          a sr-only data table so screen-reader users get the same
+          information without parsing pixel heights. */}
+      <div className="flex h-10 items-end gap-1" aria-hidden="true">
         {finite.map((p) => {
           const h = ((p.atmIv - min) / range) * 30 + 8;
           return (
             <div
               key={p.expiry}
-              title={`${p.expiry}: ${fmtPct(p.atmIv, 1)}`}
+              title={`${p.expiry}: ${fmtPct(p.atmIv, 1)} ATM IV (${p.dte} days to expiry)`}
               className="flex flex-col items-center gap-0.5"
             >
               <div
@@ -96,9 +108,35 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
         })}
       </div>
       <p className="mt-1 t-mono text-[11px] u-muted">
+        <span className="tabular-nums">{fmtPct(min, 0)}</span>
+        <span aria-hidden="true"> – </span>
+        <span className="tabular-nums">{fmtPct(max, 0)}</span>
+        {" · "}
         front {fmtPct(finite[0].atmIv, 0)} → back{" "}
         {fmtPct(finite[finite.length - 1].atmIv, 0)}
       </p>
-    </div>
+      <table className="sr-only">
+        <caption>
+          Implied volatility by days to expiry — front-month {fmtPct(finite[0].atmIv, 1)}
+          to back-month {fmtPct(finite[finite.length - 1].atmIv, 1)}.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Expiry</th>
+            <th scope="col">Days to expiry</th>
+            <th scope="col">ATM IV</th>
+          </tr>
+        </thead>
+        <tbody>
+          {finite.map((p) => (
+            <tr key={p.expiry}>
+              <td>{p.expiry}</td>
+              <td>{p.dte}</td>
+              <td>{fmtPct(p.atmIv, 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
   );
 }

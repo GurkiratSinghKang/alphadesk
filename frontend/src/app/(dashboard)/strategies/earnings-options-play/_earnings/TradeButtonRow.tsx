@@ -49,40 +49,93 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
   const atmPut = pickRow(ladder.rows, "put", "ATM");
   const farCall = pickRow(ladder.rows, "call", "30Δ");
   const farPut = pickRow(ladder.rows, "put", "30Δ");
+  // Round-8 / DT-02: defensive 15Δ wide-strangle. Lower vega, higher
+  // POP — a core earnings premium-seller play. The ``pickRow`` typedef
+  // already supports the ``"15Δ"`` bucket; the row was simply never
+  // built. Rendered as a fourth button only when both legs exist (very
+  // illiquid names with thin chains will fall back to the existing
+  // ATM/30Δ trio).
+  const wideCall = pickRow(ladder.rows, "call", "15Δ");
+  const widePut = pickRow(ladder.rows, "put", "15Δ");
 
   return (
     <div
       data-slot="trade-button-row"
-      className="mt-4 grid grid-cols-1 gap-2 border-t border-[color:var(--border)] pt-3 md:grid-cols-3"
+      className="mt-4 grid grid-cols-1 gap-2 border-t border-[color:var(--border)] pt-3 sm:grid-cols-2 md:grid-cols-4"
     >
       {atmCall && (
-        <Link
-          data-slot="trade-button-short-call"
+        <UndefinedRiskTradeLink
+          dataSlot="trade-button-short-call"
           href={buildSingleLegURL({ symbol, row: atmCall, expiry: ladder.expiry })}
-          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
-        >
-          ▸ Short call {fmtNumber(Math.round(atmCall.strike), { maximumFractionDigits: 0 })}c
-        </Link>
+          label={`Sell-to-open call ${fmtNumber(Math.round(atmCall.strike), { maximumFractionDigits: 0 })}c`}
+          riskCopy="Naked short call · max loss UNLIMITED above strike"
+        />
       )}
       {atmPut && (
-        <Link
-          data-slot="trade-button-short-put"
+        <UndefinedRiskTradeLink
+          dataSlot="trade-button-short-put"
           href={buildSingleLegURL({ symbol, row: atmPut, expiry: ladder.expiry })}
-          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
-        >
-          ▸ Short put {fmtNumber(Math.round(atmPut.strike), { maximumFractionDigits: 0 })}p
-        </Link>
+          label={`Sell-to-open put ${fmtNumber(Math.round(atmPut.strike), { maximumFractionDigits: 0 })}p`}
+          riskCopy={`Naked short put · max loss ≈ $${fmtNumber(Math.round(atmPut.strike) * 100, { maximumFractionDigits: 0 })} if stock → 0`}
+        />
       )}
       {farPut && farCall && (
-        <Link
-          data-slot="trade-button-strangle"
+        <UndefinedRiskTradeLink
+          dataSlot="trade-button-strangle"
           href={buildStrangleURL({ symbol, put: farPut, call: farCall, expiry: ladder.expiry })}
-          className="min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-center t-mono text-[12px] u-brand flex items-center justify-center hover:border-[color:var(--brand)]"
-        >
-          ▸ Sell strangle {fmtNumber(Math.round(farPut.strike), { maximumFractionDigits: 0 })}/{fmtNumber(Math.round(farCall.strike), { maximumFractionDigits: 0 })}
-        </Link>
+          label={`Sell 30Δ strangle ${fmtNumber(Math.round(farPut.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(farCall.strike), { maximumFractionDigits: 0 })}`}
+          riskCopy="Naked strangle · max loss UNLIMITED · breakeven outside strikes ± credit"
+        />
+      )}
+      {widePut && wideCall && (
+        <UndefinedRiskTradeLink
+          dataSlot="trade-button-wide-strangle"
+          href={buildStrangleURL({ symbol, put: widePut, call: wideCall, expiry: ladder.expiry })}
+          label={`Sell 15Δ strangle ${fmtNumber(Math.round(widePut.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(wideCall.strike), { maximumFractionDigits: 0 })}`}
+          riskCopy="Wider 15Δ strangle · higher POP, lower premium · still naked / unlimited risk"
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * Round-8 / NV-02: shared button that surfaces an UNDEFINED RISK pill
+ * for every uncovered short trade. Novices reading "Short call 500c"
+ * without context assume defined risk; this label is now explicit
+ * ("Sell-to-open call") and the warning chip + tooltip surface the
+ * unbounded loss profile before they click through to /trade.
+ */
+function UndefinedRiskTradeLink({
+  dataSlot,
+  href,
+  label,
+  riskCopy,
+}: {
+  dataSlot: string;
+  href: string;
+  label: string;
+  riskCopy: string;
+}) {
+  return (
+    <Link
+      data-slot={dataSlot}
+      href={href}
+      title={riskCopy}
+      aria-describedby={`${dataSlot}-risk`}
+      className="group min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]"
+    >
+      <span className="u-brand inline-flex items-center gap-1.5">
+        <span aria-hidden="true">▸</span>
+        {label}
+      </span>
+      <span
+        id={`${dataSlot}-risk`}
+        className="text-[9.5px] uppercase tracking-wider u-loss"
+      >
+        ⚠ Undefined risk
+      </span>
+    </Link>
   );
 }
 

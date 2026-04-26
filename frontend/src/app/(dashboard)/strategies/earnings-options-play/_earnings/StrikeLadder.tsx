@@ -74,18 +74,27 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
       >
         <table className="w-full table-auto border-separate border-spacing-0 t-mono text-[12.5px] tabular-nums">
           <thead className="sticky top-0 bg-[color:var(--bg-card)] z-10">
+            {/*
+              Round-8 / AX-11: every Greek glyph carries an
+              ``aria-label`` so NVDA / VoiceOver speak "delta" instead
+              of "Capital Delta" / "Theta" garbled name.
+              Round-8 / QR-03: ``title`` attributes on every column
+              header surface the unit and sign convention so quants
+              can tell whether ``θ -0.05`` is per-day-per-share or
+              per-day-per-contract.
+            */}
             <tr className="t-ladder-row t-ladder-row--head">
               <th scope="col" className="text-left font-normal">STRIKE</th>
-              <th scope="col" className="text-left font-normal">Δ</th>
-              <th scope="col" className="text-left font-normal">MID</th>
-              <th scope="col" className="text-left font-normal">IV</th>
-              <th scope="col" className="text-left font-normal">YLD</th>
-              <th scope="col" className="text-left font-normal">POP</th>
+              <th scope="col" className="text-left font-normal" aria-label="Delta" title="Δ — change in option price per $1 underlying move (≈ probability ITM, only an approximation under skew)">Δ</th>
+              <th scope="col" className="text-left font-normal" title="Mid — (bid + ask) ÷ 2; marked with ⚠ when bid-ask spread > 10% of mid">MID</th>
+              <th scope="col" className="text-left font-normal" title="Implied volatility for this strike + expiry, annualised">IV</th>
+              <th scope="col" className="text-left font-normal" title="Yield — mid ÷ underlying spot, the credit you collect as a % of stock price">YLD</th>
+              <th scope="col" className="text-left font-normal" title="Probability of profit — (1 - |Δ|) approximation; not the true distribution-integrated value">POP</th>
               {showGreeks && (
                 <>
-                  <th scope="col" className="text-left font-normal" id="ladder-greeks-cols">θ</th>
-                  <th scope="col" className="text-left font-normal">γ</th>
-                  <th scope="col" className="text-left font-normal">ν</th>
+                  <th scope="col" className="text-left font-normal" id="ladder-greeks-cols" aria-label="Theta (per day)" title="θ — option price decay per day (negative for long contracts, positive for short)">θ</th>
+                  <th scope="col" className="text-left font-normal" aria-label="Gamma" title="γ — delta change per $1 underlying move (curvature of the option's price function)">γ</th>
+                  <th scope="col" className="text-left font-normal" aria-label="Vega (per 1% IV)" title="ν — option price change per 1% IV move (positive for long, negative for short)">ν</th>
                 </>
               )}
               <th scope="col" className="text-right font-normal">SIDE</th>
