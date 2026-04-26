@@ -10,16 +10,15 @@
  *
  * Each metric is delivered to `/api/v1/metrics/vitals` via
  * `navigator.sendBeacon` so the request isn't cancelled when the page
- * is unloading. The endpoint does not exist yet — failures are
- * swallowed so dev (and prod, until the backend agent adds it) doesn't
- * break the page.
+ * is unloading. The backend route lands the beacon, validates the
+ * payload shape, logs the sample as a structured INFO line, and
+ * returns 204. See `backend/api/routes/metrics.py` for the schema —
+ * any change to the fields below must keep the Pydantic model in
+ * sync or the beacon will start 422-ing.
  *
- * TODO(backend): add `/api/v1/metrics/vitals` POST endpoint that
- * accepts a JSON body of `{name, value, rating, url, ...}` and writes
- * to the metrics pipeline. See `_metrics-vitals-payload.md` if it
- * exists, or the matching spec section in the round-6 audit. Until
- * then, the beacons are simply dropped server-side and we still get
- * `web-vitals` console output in dev.
+ * Failures are still swallowed: a CSP block, an offline page-hide,
+ * or a transient backend hiccup must never crash the rest of the
+ * listeners.
  */
 
 import {
