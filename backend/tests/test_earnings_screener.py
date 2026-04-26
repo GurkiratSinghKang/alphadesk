@@ -502,12 +502,22 @@ async def test_load_strike_ladder_handles_empty_expirations():
 
     # B-62: services.earnings_screener now calls services.options.fetch_chain
     # directly (no route-handler stub). Patch target moves accordingly.
+    #
+    # Round-7 / midnight-flake fix: capture ``date.today()`` BEFORE invoking
+    # the SUT and accept either that value or the next day. The previous
+    # form compared the SUT's ``date.today()`` against a fresh
+    # ``date.today()`` in the assertion; if the test happened to cross
+    # UTC midnight between the two reads (CI runs at all hours) the
+    # assertion failed despite the code working correctly. The intent of
+    # the test is "expiry got filled in to a sensible non-raising
+    # default", which is satisfied by today-or-tomorrow.
+    today_before = date.today()
     with patch("services.options.fetch_chain", fake_chain):
         result = await svc._load_strike_ladder("NOOPT", expiry=None)
 
     # No rows since no contracts, but expiry must not raise — should be today.
     assert result is not None
-    assert result["expiry"] == date.today()
+    assert result["expiry"] in {today_before, today_before + timedelta(days=1)}
     assert result["rows"] == []
 
 
