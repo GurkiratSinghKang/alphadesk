@@ -1006,8 +1006,11 @@ export default function AnalyticsPage() {
   const heroSummary = (() => {
     const latestDd = drawdownData[drawdownData.length - 1]?.dd;
     const latestSharpe = rollingSharpe[rollingSharpe.length - 1]?.sharpe;
+    // Build-fix: ``dailyReturns`` is ``{date, ret}[]`` where ``ret`` is a
+    // FRACTION (0.012 = +1.2%). Compound them through the period then
+    // convert to a percentage at the end.
     const totalReturn = dailyReturns.length > 0
-      ? dailyReturns.reduce((acc, r) => (1 + acc / 100) * (1 + r / 100) * 100 - 100, 0)
+      ? (dailyReturns.reduce((acc, r) => acc * (1 + r.ret), 1) - 1) * 100
       : null;
     const winRate = tradeStats.winRate;
     return { latestDd, latestSharpe, totalReturn, winRate };

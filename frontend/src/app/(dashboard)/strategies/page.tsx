@@ -580,31 +580,28 @@ export default function StrategiesListingPage() {
   };
 
   // Round-8 killer-move 2: aggregate Sharpe / CAGR / DD across active
-  // strategies for the page hero strip. The page previously opened with
-  // a wall of cards and no anchor — eye didn't know what to read first.
-  // These three numbers answer "how is my catalogue doing as a whole"
-  // in 3 seconds. Computed only over `active` so paused / coming-soon
-  // entries don't dilute the signal. ``Math.abs`` on max_drawdown
-  // because the backend's sign convention varies per strategy
-  // (documented above on the field). When no active strategies exist
-  // (cold catalogue) the hero strip falls back to em-dashes — never
-  // fabricates numbers.
+  // strategies for the page hero strip. Computed over the mapped
+  // ``strategies`` (ListingStrategy[]) so the field names match
+  // (``investedAmount``, ``sharpe``, ``maxDD``). Only ``active``
+  // bucket entries — paused / coming-soon don't dilute the signal.
+  // ``Math.abs`` on maxDD because backend sign convention varies.
+  // No fabricated numbers when no active strategies exist.
   const heroStats = useMemo(() => {
-    const active = (summaries ?? []).filter((s) => bucketFor(s) === "active");
+    const active = strategies.filter((s) => bucketFor(s) === "active");
     if (active.length === 0) {
       return { invested: 0, bestSharpe: null as number | null, worstDD: null as number | null };
     }
-    const invested = active.reduce((sum, s) => sum + (s.invested_amount ?? 0), 0);
+    const invested = active.reduce((sum, s) => sum + (s.investedAmount ?? 0), 0);
     const sharpes = active
-      .map((s) => s.sharpe_ratio)
-      .filter((n): n is number => Number.isFinite(n) && n !== 0);
+      .map((s) => s.sharpe)
+      .filter((n): n is number => n != null && Number.isFinite(n) && n !== 0);
     const bestSharpe = sharpes.length ? Math.max(...sharpes) : null;
     const dds = active
-      .map((s) => s.max_drawdown)
+      .map((s) => s.maxDD)
       .filter((n): n is number => n != null && Number.isFinite(n));
     const worstDD = dds.length ? Math.max(...dds.map((d) => Math.abs(d))) : null;
     return { invested, bestSharpe, worstDD };
-  }, [summaries]);
+  }, [strategies]);
 
   const loading = summaries == null && !loadError;
 
