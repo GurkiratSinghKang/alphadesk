@@ -9,7 +9,15 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import { NotificationCenter } from "./NotificationCenter";
-import { WorkspaceSelector } from "./WorkspaceSelector";
+// Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
+// "Morning Research" persisted to localStorage, dispatched
+// ``alphadesk:workspace-change`` into the void (zero subscribers
+// in the dashboard tree), and toasted a lie about "7 sections
+// emphasised". Round-9 reflow committed to the single-hero-per-page
+// model and made the workspace concept obsolete. Selector unmounted;
+// the file stays in the tree for now in case the concept revives,
+// but the import is gone so it can't be accidentally re-added without
+// a deliberate change.
 
 export function TopBar() {
   const router = useRouter();
@@ -95,10 +103,7 @@ export function TopBar() {
             </button>
           ))}
         </nav>
-        {/* Workspace layout selector — hidden on mobile */}
-        <div className="hidden md:flex ml-1 pl-1 border-l border-border">
-          <WorkspaceSelector />
-        </div>
+        {/* Round-11 / W-1: workspace selector removed (was a placebo). */}
       </div>
 
       <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="flex h-8 flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">

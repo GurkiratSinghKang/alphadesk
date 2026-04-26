@@ -98,18 +98,44 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Round-11 / BB-14 (P1): track how many toasts were silently
+  // dropped past the visible cap so the operator sees a "+N more"
+  // pill rather than a vanishing-act stack. Reset whenever the
+  // visible stack drains to empty (the burst is over and the
+  // pill no longer carries useful info).
+  const droppedRef = useState<{ count: number }>({ count: 0 })[0];
+  const [droppedCount, setDroppedCount] = useState(0);
+
   const addToast = useCallback(
     (data: ToastData) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const entry: ToastEntry = { ...data, id, createdAt: Date.now() };
-      setToasts((prev) => [entry, ...prev].slice(0, 3));
+      setToasts((prev) => {
+        const next = [entry, ...prev];
+        if (next.length > 3) {
+          // Round-11 / BB-14: count the overflow so the user sees it.
+          droppedRef.count += next.length - 3;
+          setDroppedCount(droppedRef.count);
+        }
+        return next.slice(0, 3);
+      });
       const duration = data.duration ?? 5000;
       const timer = setTimeout(() => dismissToast(id), duration);
       timersRef.current.set(id, timer);
       return id;
     },
-    [dismissToast]
+    [dismissToast, droppedRef]
   );
+
+  // Reset the dropped counter when the stack drains to empty —
+  // the burst is over and "+N more" no longer reflects current
+  // reality.
+  useEffect(() => {
+    if (toasts.length === 0 && droppedRef.count > 0) {
+      droppedRef.count = 0;
+      setDroppedCount(0);
+    }
+  }, [toasts.length, droppedRef]);
 
   useEffect(() => {
     return () => {
@@ -137,6 +163,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <ToastItem toast={t} onDismiss={dismissToast} />
           </div>
         ))}
+        {/* Round-11 / BB-14 (P1): "+N more" pill so a burst that
+            exceeds the 3-cap doesn't silently vanish. The pill is
+            polite (aria-live="polite" via the parent region) and
+            self-clears when the stack empties. */}
+        {droppedCount > 0 && (
+          <div
+            data-slot="toast-overflow-pill"
+            className="pointer-events-none self-end rounded-full border border-border bg-bg-elev-2/90 px-3 py-1 font-mono text-[11px] text-fg-muted shadow-md"
+          >
+            + {droppedCount} more notification{droppedCount === 1 ? "" : "s"} (see bell)
+          </div>
+        )}
       </div>
     </ToastContext.Provider>
   );
