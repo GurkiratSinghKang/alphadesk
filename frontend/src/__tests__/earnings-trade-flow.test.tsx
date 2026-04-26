@@ -15,7 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import {
   buildSingleLegURL,
-  buildStrangleURL,
+  buildVerticalSpreadURL,
 } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/TradeButtonRow";
 import TradePage from "@/app/(dashboard)/trade/page";
 import type { LadderRow } from "@/types";
@@ -79,18 +79,23 @@ describe("earnings → trade URL builder (F-1, F-3)", () => {
     expect(url).toContain("side=sell");
   });
 
-  it("buildStrangleURL encodes both legs with :limit and combo_type", () => {
-    const url = buildStrangleURL({
+  it("buildVerticalSpreadURL encodes both legs (sell short-leg, buy long-leg) with combo_type", () => {
+    // Round-12 / DR-1: replaced naked-strangle URL builder with
+    // vertical-spread builder. Bull put spread = sell ATM put, buy
+    // 30Δ put as defined-risk wing.
+    const url = buildVerticalSpreadURL({
       symbol: "NVDA",
       expiry: "2026-04-25",
-      put: fakeLadderRow({ side: "put", strike: 195, mid: 1.45 }),
-      call: fakeLadderRow({ side: "call", strike: 210, mid: 1.32 }),
+      short: fakeLadderRow({ side: "put", strike: 200, mid: 1.45, bucket: "ATM" }),
+      long: fakeLadderRow({ side: "put", strike: 195, mid: 0.95, bucket: "30Δ" }),
+      comboType: "vertical_spread",
     });
     expect(url).toContain("strategy=earnings-options-play");
-    expect(url).toContain("combo_type=strangle");
-    // Canonical leg syntax: OCC:side:qty:limit
-    expect(url).toContain("NVDA260425P00195000%3Asell%3A1%3A1.45");
-    expect(url).toContain("NVDA260425C00210000%3Asell%3A1%3A1.32");
+    expect(url).toContain("combo_type=vertical_spread");
+    // Canonical leg syntax: OCC:side:qty:limit — short leg sold,
+    // long leg (lower strike) bought as protection.
+    expect(url).toContain("NVDA260425P00200000%3Asell%3A1%3A1.45");
+    expect(url).toContain("NVDA260425P00195000%3Abuy%3A1%3A0.95");
   });
 
   it("buildSingleLegURL omits limit when the row's mid is 0 / non-finite", () => {

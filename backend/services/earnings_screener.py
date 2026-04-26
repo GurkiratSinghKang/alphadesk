@@ -181,6 +181,15 @@ def _resolve_window_dates(window: str) -> tuple[date, date]:
       - ``"current"`` → Mon-Fri of the active week (5 days)
       - ``"next"``    → next week's Mon-Fri (5 days)
       - ``"both"``    → 12 calendar days, two Mon-Fri windows together
+
+    Round-12 / EC-1 (P1): on weekends we now ALSO include Friday of the
+    just-finished week so AMC reports that printed Fri 16:30 ET stay
+    visible Saturday morning. Pre-fix the weekend ``anchor`` jumped to
+    next Monday, which narrowed the FMP fetch window to Mon-Fri of the
+    upcoming week — Friday's AMC rows weren't fetched at all and the
+    visibility filter never had a chance to keep them. Now ``current``
+    / ``both`` start one Friday earlier on weekends; ``next`` is
+    unchanged (it explicitly means "the week after today's").
     """
     today = market_today()
     weekday = today.weekday()
@@ -191,14 +200,17 @@ def _resolve_window_dates(window: str) -> tuple[date, date]:
     else:
         anchor = today
     monday = anchor - timedelta(days=anchor.weekday())
+    weekend = weekday >= 5
     if window == "current":
-        start = monday
+        # Round-12 / EC-1: include Friday of the prior week on weekends so
+        # users see Friday's AMC reports they missed Friday afternoon.
+        start = monday - timedelta(days=3) if weekend else monday
         end = monday + timedelta(days=4)  # Friday
     elif window == "next":
         start = monday + timedelta(days=7)
         end = monday + timedelta(days=11)  # next Friday
     else:  # both
-        start = monday
+        start = monday - timedelta(days=3) if weekend else monday
         end = monday + timedelta(days=11)  # spans this Mon → next Fri
     return start, end
 

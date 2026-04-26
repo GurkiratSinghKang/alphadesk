@@ -110,7 +110,8 @@ async def test_get_detail_emits_chain_demo_in_error_codes():
         "verdict": "neutral",
         "direction_magnitude": {"bull_case_pct": 0.0, "bear_case_pct": 0.0},
         "thesis": "x", "catalysts": [], "risks": [],
-        "suggested_play": "short call", "suggested_play_reason": "x",
+        # Round-12 / DR-1: replaced "short call" with a defined-risk setup.
+        "suggested_play": "iron condor", "suggested_play_reason": "x",
         "confidence": 0.5, "model": "claude-haiku-4-7",
         "generated_at": datetime.now(timezone.utc),
     }

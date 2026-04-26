@@ -507,6 +507,34 @@ export interface EarningsNewsArticle {
   source: string;
   publishedAt: string;
   url: string;
+  /**
+   * Round-12 / NF-1 (P2): backend ``services/news.py:_score_relevance``
+   * computes a 0..1 score where higher means more likely to drive the
+   * stock price. The news rail sorts by this so high-impact items
+   * (earnings beats, M&A, analyst rerating, FDA/regulatory actions)
+   * float to the top above generic sector commentary.
+   */
+  relevanceScore?: number;
+  /**
+   * Round-12 / NF-1: matched price-driving category — one of:
+   * ``"earnings" | "rating" | "M&A" | "regulatory" | "filing" |
+   * "product" | "guidance" | "insider"`` — or null when no category
+   * matched. Renders as a small chip on the news row.
+   */
+  category?: string | null;
+  /**
+   * Round-12 / NF-1: source tier. 1 = primary newswires (Bloomberg /
+   * Reuters / WSJ / FT / CNBC); 2 = mainstream secondary; 3 = wire
+   * aggregators (PR Newswire / GlobeNewswire) — already filtered out
+   * by the backend, so the FE rarely sees tier-3.
+   */
+  tier?: number;
+  /**
+   * Round-12 / NF-1: passthrough of the upstream sentiment label
+   * (``"positive" | "neutral" | "negative"`` from newsdata.io). Was
+   * dropped at the FE mapper pre-NF-1.
+   */
+  sentiment?: string | null;
 }
 
 /**

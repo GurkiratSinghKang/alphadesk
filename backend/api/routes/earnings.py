@@ -135,7 +135,51 @@ async def post_full_research(
     # matters — otherwise Caddy's address buckets every user together
     # and the cap is useless in production.
     await check_full_research_rate(client_ip(request))
+    # Round-12 / CL-1 (P1): expand error mapping. Pre-fix, only ValueError
+    # was caught — Claude timeouts (``ClaudeTimeoutError`` ≥ 60s),
+    # daily-budget kills (``ClaudeBudgetExceeded``), and JSON parse
+    # failures all bubbled out as opaque 500s the frontend rendered as
+    # a generic spinner-stuck state. Now each maps to a structured
+    # response the FE can show as a useful error string.
+    from agents.claude_client import ClaudeBudgetExceeded, ClaudeTimeoutError
+
     try:
         return await earnings_screener.run_full_research(sym)
     except ValueError as e:
+        # Curated-universe miss / pre-condition violation.
         raise HTTPException(status_code=404, detail=str(e))
+    except ClaudeTimeoutError as e:
+        # Exceeded the per-request Claude budget — common on Opus tail.
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Claude analysis timed out. The model usually returns within "
+                "60s; tail latency can stretch past 90s. Retry in ~30s."
+            ),
+        ) from e
+    except ClaudeBudgetExceeded as e:
+        # Daily $ cap hit — operator-tunable.
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Claude analysis is temporarily unavailable: daily cost cap "
+                "reached. The cap resets at 00:00 ET."
+            ),
+        ) from e
+    except Exception as e:  # noqa: BLE001
+        # Defensive: any other failure mode (Anthropic 5xx, network blip,
+        # JSON parse) — log + return a useful 502 instead of generic 500.
+        import logging
+        logging.getLogger(__name__).error(
+            "claude full-research failed for %s",
+            sym,
+            exc_info=True,
+            extra={"event": "claude_full_research_failed", "symbol": sym},
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Claude analysis failed unexpectedly. Try again — if the "
+                "issue persists, check /api/v1/health for upstream status."
+            ),
+        ) from e

@@ -75,7 +75,15 @@ class FMPEarningsProvider:
             df = df[df["symbol"].isin({s.upper() for s in symbols})].reset_index(drop=True)
         return df
 
-    @cached(ttl_seconds=TTL_DAILY)
+    # Round-12 / EC-2 (P2): tightened from TTL_DAILY (7 days) to 1 hour.
+    # FMP updates the ``announcement_when`` field intraday — a row that
+    # arrived as "unknown" in the morning often becomes "amc" by lunch
+    # and Bloomberg confirms by mid-afternoon. With a 7-day TTL the
+    # ``_classify_report_state`` cutover (09:30 / 16:30 ET) ran against
+    # stale "unknown" data — DMT was treated like BMO and the row's
+    # state went stale. 1 hour matches typical broker-side latency on
+    # FMP's calendar refresh and survives the BMO/AMC same-day cutover.
+    @cached(ttl_seconds=60 * 60)
     def _calendar_cached(self, start: str, end: str) -> pd.DataFrame:
         data = self._http.get("/earnings-calendar", {"from": start, "to": end})
         if not data:

@@ -283,6 +283,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     const lastBarRef = useRef<OHLCVBar | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<SeriesType>[]>([]);
     const drawingPaneRef = useRef<DrawingPaneHandle | null>(null);
+    // Round-12 / CH-1: gates ``timeScale().fitContent()`` so it runs
+    // only once per (chartType, indicators) lifecycle, not on every
+    // data refetch (which used to reset the user's zoom).
+    const didFitRef = useRef<boolean>(false);
     // Keep the latest callbacks in refs so we can subscribe once inside the
     // chart-creation effect without re-subscribing on every render.
     const onChartClickRef = useRef(onChartClick);
@@ -709,7 +713,18 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
-        chart.timeScale().fitContent();
+        // Round-12 / CH-1 (P1): only fit the visible range on the FIRST
+        // setData call (and on a chartType change, which forces a fresh
+        // mount via the effect below). Previously this fired on EVERY
+        // data update — every WebSocket tick or refetch reset the user's
+        // pan/zoom back to the full range, making zoom-in essentially
+        // unusable. The flag resets when chartType / indicators change
+        // (the dep array on this useCallback) so a new series-shape
+        // genuinely re-fits.
+        if (!didFitRef.current) {
+          chart.timeScale().fitContent();
+          didFitRef.current = true;
+        }
       },
       [chartType, indicators]
     );
@@ -717,6 +732,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     useEffect(() => {
       if (data?.length) setChartData(data);
     }, [data, setChartData]);
+
+    // Round-12 / CH-1: reset the fit-once flag when the user changes
+    // chartType or toggles indicators, so the next render re-fits to
+    // the new shape.
+    useEffect(() => {
+      didFitRef.current = false;
+    }, [chartType, indicators]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {

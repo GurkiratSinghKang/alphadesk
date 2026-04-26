@@ -449,18 +449,42 @@ class CreateOrderRequest(BaseModel):
         SQL-shape payload in the column. The string is also load-bearing
         for the notional calculator (J-2) — an unknown value silently
         falls through to the per-leg path, which is the wrong default
-        for a defined-risk spread. Restrict to the four shapes the
-        notional logic recognises.
+        for a defined-risk spread. Restrict to the shapes the notional
+        logic recognises.
+
+        Round-12 / DR-1 (P0): naked ``strangle`` removed from the
+        allowlist — it is an UNDEFINED-risk combo (max loss
+        unbounded on the call leg) and AlphaDesk now refuses to
+        recommend or accept undefined-risk option orders. Defined
+        substitutes: ``iron_condor`` (strangle with protective
+        wings), ``vertical_spread`` (one-sided), ``iron_butterfly``
+        (centered pin-the-strike), ``calendar_spread`` /
+        ``diagonal_spread`` (long-leg covers short).
+        ``cash_secured_put`` and ``covered_call`` are the only
+        permitted single-leg short positions because the cash
+        collateral / underlying shares cap the downside.
         """
         if v is None:
             return None
         normalised = v.strip().lower()
         if normalised == "":
             return None
-        if not re.fullmatch(r"(iron_condor|vertical_spread|strangle|covered_call)", normalised):
+        _ALLOWED = (
+            "iron_condor",
+            "iron_butterfly",
+            "vertical_spread",
+            "calendar_spread",
+            "diagonal_spread",
+            "covered_call",
+            "cash_secured_put",
+            "married_put",
+        )
+        if normalised not in _ALLOWED:
             raise ValueError(
-                "combo_type must be one of: iron_condor, vertical_spread, "
-                "strangle, covered_call"
+                "combo_type must be a DEFINED-RISK shape: "
+                + ", ".join(_ALLOWED)
+                + " (naked strangles / straddles / short calls are no "
+                "longer accepted — use a vertical spread or iron condor)"
             )
         return normalised
 

@@ -163,20 +163,32 @@ def test_structured_prompt_omits_historical_when_none():
 
 
 def test_parse_structured_response_happy_path():
+    # Round-12 / DR-1: vocab now defined-risk-only. ``iron condor`` is the
+    # closest non-directional premium-selling shape to the prior ``short
+    # strangle`` test fixture, with its risk capped by the wings.
     raw = '''{
       "verdict": "neutral-bull",
       "direction_magnitude": {"bull_case_pct": 0.04, "bear_case_pct": -0.05},
       "thesis": "IV is overpricing vs realized.",
       "catalysts": ["data-center guide"],
       "risks": ["guide miss"],
-      "suggested_play": "short strangle",
-      "suggested_play_reason": "IVR > 75 bucket",
+      "suggested_play": "iron condor",
+      "suggested_play_reason": "IVR > 75 — capped at wing width",
       "confidence": 0.62
     }'''
     parsed = parse_structured_response(raw)
     assert parsed["verdict"] == "neutral-bull"
     assert parsed["confidence"] == 0.62
-    assert parsed["suggested_play"] == "short strangle"
+    assert parsed["suggested_play"] == "iron condor"
+
+
+def test_parse_structured_response_rejects_naked_short_call():
+    """Round-12 / DR-1: naked ``short call`` must be rejected — it was
+    a valid setup pre-DR-1 and is now banned (undefined-risk on the upside)."""
+    import pytest
+    raw = '{"verdict": "bearish", "direction_magnitude": {"bull_case_pct": 0, "bear_case_pct": -0.05}, "thesis": "x", "catalysts": [], "risks": [], "suggested_play": "short call", "suggested_play_reason": "x", "confidence": 0.5}'
+    with pytest.raises(ValueError, match="suggested_play"):
+        parse_structured_response(raw)
 
 
 def test_parse_structured_response_rejects_invalid_verdict():

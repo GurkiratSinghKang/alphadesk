@@ -71,11 +71,13 @@ describe("EarningsDetailPanel", () => {
     );
     const banner = container.querySelector('[data-slot="partial-data-banner"]');
     expect(banner).not.toBeNull();
-    expect(banner?.textContent).toMatch(/synthetic data/i);
-    expect(banner?.textContent).toMatch(/IV history unavailable/i);
+    // Round-12 / PD-1: copy made more concrete. Still mentions
+    // "synthetic" + "IV rank" — exact wording flexible.
+    expect(banner?.textContent).toMatch(/synthetic/i);
+    expect(banner?.textContent).toMatch(/IV rank unavailable/i);
   });
 
-  it("renders chain_demo banner copy referencing broker connection (CLUSTER D/12)", () => {
+  it("renders chain_demo banner copy referencing the synthetic options chain (CLUSTER D/12)", () => {
     const partialDetail: EarningsDetail = {
       ...detail,
       partial: true,
@@ -92,7 +94,8 @@ describe("EarningsDetailPanel", () => {
     );
     const items = container.querySelectorAll('[data-slot="partial-data-banner-item"]');
     expect(items.length).toBe(1);
-    expect(items[0].textContent).toMatch(/broker connection unavailable/i);
+    // Round-12 / PD-1: copy now names the upstream provider explicitly.
+    expect(items[0].textContent).toMatch(/Polygon options feed unavailable/i);
   });
 
   it("dims and sets aria-busy when refetching=true (CLUSTER D/10)", () => {
@@ -111,10 +114,12 @@ describe("EarningsDetailPanel", () => {
     expect(panel?.className).toMatch(/opacity-70/);
   });
 
-  // ── Round-5 (NEW-Y8): ERROR_CODE_COPY map ────────────────────
-  it("ERROR_CODE_COPY covers Round-5 new codes: claude_unavailable, news_error, iv_term_partial", () => {
-    expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/AI thesis.*temporarily unavailable/i);
-    expect(ERROR_CODE_COPY.news_error).toMatch(/see logs/i);
+  // ── Round-12 / PD-1: actionable error copy. ─────────────────
+  it("ERROR_CODE_COPY surfaces actionable details for claude_unavailable / news_error / iv_term_partial", () => {
+    // Each string identifies the upstream provider + likely cause + retry hint.
+    expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/AI thesis unavailable/i);
+    expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/retry/i);
+    expect(ERROR_CODE_COPY.news_error).toMatch(/newsdata/i);
     expect(ERROR_CODE_COPY.iv_term_partial).toMatch(/term structure/i);
   });
 

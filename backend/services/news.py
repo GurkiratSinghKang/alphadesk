@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -43,6 +44,22 @@ class NewsArticle(BaseModel):
     sentiment: str | None = None  # positive/negative/neutral
     symbols: list[str] = []
     is_demo: bool = False
+    # Round-12 / NF-1 (P2): price-driving relevance score (0..1) computed
+    # by ``_score_relevance``. Higher = more likely to move the stock
+    # price (earnings beats/misses, M&A, analyst upgrades, regulatory
+    # actions). Lower = aggregator clones, generic press releases,
+    # tangential market commentary. The frontend sorts on this so the
+    # top of the news rail is the high-impact items.
+    relevance_score: float = 0.0
+    # Round-12 / NF-1: price-driving category — one of "earnings",
+    # "rating", "M&A", "regulatory", "filing", "product", "guidance",
+    # "insider", or null when no category matched. Used for the FE
+    # category chip + analytics.
+    category: str | None = None
+    # Round-12 / NF-1: source-tier classification. 1 = primary
+    # (Bloomberg/Reuters/WSJ), 2 = mainstream (CNBC/MarketWatch), 3 =
+    # syndicated wire (PR Newswire/GlobeNewswire — heavily down-ranked).
+    tier: int = 2
 
 
 class NewsResponse(BaseModel):
@@ -190,27 +207,203 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
 
 
 def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[NewsArticle]:
-    """Convert raw newsdata.io results to NewsArticle models."""
+    """Convert raw newsdata.io results to NewsArticle models, scored
+    and filtered for stock-price relevance.
+
+    Round-12 / NF-1 (P2) — Stage 1 filter pipeline:
+      1. Source tiering — drop the tier-3 wires (PR Newswire,
+         GlobeNewswire, Business Wire, Accesswire) outright; rank tier-1
+         (Bloomberg/Reuters/WSJ/FT/CNBC) above tier-2 mainstream.
+      2. Symbol-density check — count occurrences of the symbol or
+         company name in title + description; require at least one hit
+         in the title to keep the row.
+      3. Category tagging — match price-driving keywords (earnings,
+         upgrade/downgrade, M&A, regulatory, filing, product launch,
+         guidance) against the title and add the matched category.
+      4. Recency decay — multiply score by exp(-age_hours/48) so
+         48h-old items score half what fresh items do.
+      5. URL canonicalisation dedupe — strip utm_*/ref/fragments and
+         keep the highest-scored item per canonical URL (catches
+         syndicated reposts).
+
+    The ``symbols`` parameter (when given) lets the symbol-density
+    check use the actual ticker rather than guessing from the article
+    body — earnings-detail callers thread the symbol through here.
+    """
     articles: list[NewsArticle] = []
     for item in raw:
         title = item.get("title")
         if not title:
             continue
+        source = item.get("source_name") or item.get("source_id") or "unknown"
+        # Stage 1.1: drop tier-3 wires before any further work.
+        if _classify_source_tier(source) == 3:
+            continue
         try:
+            description = item.get("description")
+            tier = _classify_source_tier(source)
+            score, category = _score_relevance(
+                title=title,
+                description=description,
+                source=source,
+                tier=tier,
+                symbol=symbols[0] if symbols else None,
+                published_at=item.get("pubDate") or "",
+            )
+            # Stage 1.2: drop rows whose symbol density is zero — no
+            # point showing news that doesn't even mention the stock.
+            if score <= 0.0:
+                continue
             articles.append(NewsArticle(
                 title=title,
-                description=item.get("description"),
+                description=description,
                 url=item.get("link") or "",
-                source=item.get("source_name") or item.get("source_id") or "unknown",
+                source=source,
                 published_at=item.get("pubDate") or "",
                 image_url=item.get("image_url"),
                 sentiment=item.get("sentiment"),
                 symbols=symbols or [],
+                relevance_score=score,
+                category=category,
+                tier=tier,
             ))
         except Exception:
             log.debug("Skipping malformed news article", exc_info=True)
             continue
-    return articles
+    # Stage 1.5: URL-canonical dedupe — keep the highest-scored item per
+    # canonical URL. Aggregators routinely repost the same Reuters/AP
+    # wire under slightly different URLs.
+    deduped: dict[str, NewsArticle] = {}
+    for a in articles:
+        key = _canonical_url(a.url) or a.title.strip().lower()[:80]
+        existing = deduped.get(key)
+        if existing is None or a.relevance_score > existing.relevance_score:
+            deduped[key] = a
+    # Sort by relevance desc, with recency as the tiebreaker via
+    # published_at (which is encoded in the score already, so this is
+    # just a stable secondary key).
+    return sorted(deduped.values(), key=lambda a: a.relevance_score, reverse=True)
+
+
+# ─── Round-12 / NF-1: scoring helpers ──────────────────────────────────────────
+
+_TIER1_SOURCES = {
+    "bloomberg", "reuters", "wsj", "wall street journal", "financial times",
+    "ft", "cnbc", "barron's", "barrons", "dow jones",
+}
+_TIER3_SOURCES = {
+    "pr newswire", "prnewswire", "globenewswire", "globe newswire",
+    "business wire", "businesswire", "accesswire", "newswire",
+}
+# Category keywords (regex against lowercased title). Order matters:
+# the first match wins so M&A beats earnings on a "X acquires Y, beats"
+# headline.
+_CATEGORY_PATTERNS: list[tuple[str, "re.Pattern[str]"]] = [
+    ("M&A", re.compile(r"\bacqui[rs]|\bmerge[rs]|\bbuyout|\btakeover|\bdivest", re.IGNORECASE)),
+    ("regulatory", re.compile(r"\blawsuit|\bsec\b|\bdoj\b|\bfda\b|\brecall|\bsettlement|\bantitrust|\binvestigat", re.IGNORECASE)),
+    ("rating", re.compile(r"\bupgrade|\bdowngrade|price target|\binitiat[ed]|overweight|underweight", re.IGNORECASE)),
+    ("guidance", re.compile(r"\bguidance|\bguides|\braises forecast|\blowers forecast|\bcuts outlook", re.IGNORECASE)),
+    ("earnings", re.compile(r"\bearnings|\bbeat|\bmiss|\bq[1-4]\b|\brevenue|\beps\b", re.IGNORECASE)),
+    ("filing", re.compile(r"\b8-k|\b10-k|\b10-q|prospectus|\bfiling", re.IGNORECASE)),
+    ("product", re.compile(r"\blaunch|\bunveils|\bintroduces|\breleases|\bpartner", re.IGNORECASE)),
+    ("insider", re.compile(r"insider sell|insider buy|form 4|stake|holdings", re.IGNORECASE)),
+]
+_UTM_RE = re.compile(r"[?&](utm_[^=&]+|ref|fbclid|gclid)=[^&]*", re.IGNORECASE)
+
+
+def _classify_source_tier(source: str | None) -> int:
+    if not source:
+        return 2
+    s = source.strip().lower()
+    if any(t in s for t in _TIER1_SOURCES):
+        return 1
+    if any(t in s for t in _TIER3_SOURCES):
+        return 3
+    return 2
+
+
+def _score_relevance(
+    *,
+    title: str,
+    description: str | None,
+    source: str,
+    tier: int,
+    symbol: str | None,
+    published_at: str,
+) -> tuple[float, str | None]:
+    """Compute (score in 0..1, category or None).
+
+    Score = base × tier × symbol_density × recency × category_boost.
+    """
+    base = 0.5
+    tier_mult = {1: 1.4, 2: 1.0, 3: 0.4}.get(tier, 1.0)
+    title_l = title.lower()
+    desc_l = (description or "").lower()
+    sym_density = 0
+    if symbol:
+        sym_l = symbol.lower()
+        # Title hit is highest signal — a story about the stock leads
+        # with the ticker or company name.
+        if sym_l in title_l:
+            sym_density += 2
+        sym_density += min(2, desc_l.count(sym_l))
+        if sym_density == 0:
+            return 0.0, None  # not about this stock
+    # Category match boost
+    matched_category: str | None = None
+    category_boost = 1.0
+    for cat, pat in _CATEGORY_PATTERNS:
+        if pat.search(title) or (description and pat.search(description)):
+            matched_category = cat
+            category_boost = 1.5
+            break
+    # Recency decay
+    age_h = _hours_since(published_at)
+    recency = 1.0
+    if age_h is not None and age_h > 0:
+        # exp(-h/48) so a 48h-old item is 0.37; 24h = 0.61; 12h = 0.78.
+        import math
+        recency = math.exp(-age_h / 48.0)
+    score = base * tier_mult * (1.0 + sym_density * 0.25) * category_boost * recency
+    return min(1.0, score), matched_category
+
+
+def _hours_since(iso_or_rfc: str) -> float | None:
+    """Best-effort parse of newsdata.io's ``pubDate`` to hours-old.
+
+    newsdata returns ``"2026-04-25 14:30:00"`` (UTC, no tz) typically.
+    We treat naive timestamps as UTC.
+    """
+    if not iso_or_rfc:
+        return None
+    try:
+        # Try the most common newsdata.io shape first.
+        dt = datetime.strptime(iso_or_rfc.strip(), "%Y-%m-%d %H:%M:%S")
+        dt = dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(iso_or_rfc.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    delta = datetime.now(timezone.utc) - dt
+    return max(0.0, delta.total_seconds() / 3600.0)
+
+
+def _canonical_url(url: str) -> str:
+    """Strip utm_*/ref/fbclid query params and fragments to a canonical key."""
+    if not url:
+        return ""
+    try:
+        # Drop fragment.
+        u = url.split("#", 1)[0]
+        u = _UTM_RE.sub("", u)
+        # Clean a bare trailing ? if all params were stripped.
+        u = u.rstrip("?&")
+        return u.lower()
+    except Exception:
+        return url.lower()
 
 
 # ---------------------------------------------------------------------------

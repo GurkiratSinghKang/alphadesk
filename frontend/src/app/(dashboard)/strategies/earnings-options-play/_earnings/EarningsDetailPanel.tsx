@@ -252,20 +252,27 @@ export default EarningsDetailPanel;
  * codes pass through verbatim — we don't suppress new codes shipped
  * before this map is updated.
  */
+// Round-12 / PD-1 (P2): make the partial-data warning copy concrete +
+// actionable. Pre-fix the strings said "X unavailable" with no hint at
+// the upstream cause — the user couldn't tell whether to retry, check
+// the broker, or wait for a rate-limit window. Each copy string now
+// names the upstream provider, the likely cause, and the recommended
+// next action.
 export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
-  stub_detail: "Limited data — next earnings >2 weeks out",
-  news_unavailable: "News feed temporarily unavailable",
-  // Round-5: hard error from the news provider (vs. cooldown).
-  news_error: "News feed unavailable — see logs",
+  stub_detail: "Limited data — next earnings >2 weeks out (FMP calendar gap)",
+  news_unavailable:
+    "News feed in cooldown — newsdata.io rate limit hit (resumes in ~15 min)",
+  news_error: "News feed unavailable — newsdata.io returned an error; retry shortly",
   chain_demo:
-    "⚠ Options chain showing synthetic data — broker connection unavailable",
-  iv_unavailable: "IV history unavailable",
-  // Round-5: only some expiries came back from the IV term-structure call.
-  iv_term_partial: "IV term structure data partially missing",
-  metrics_unavailable: "Metrics partially unavailable",
-  hv_unavailable: "Historical volatility unavailable",
-  // Round-5: Claude budget tripped or upstream raised — thesis temp. unavailable.
-  claude_unavailable: "AI thesis temporarily unavailable",
+    "⚠ Options chain is SYNTHETIC (BSM-modelled) — Polygon options feed unavailable. Strikes/Greeks are estimates, not OPRA quotes",
+  iv_unavailable: "IV rank unavailable — daily HV/IV-rank job hasn't backfilled this symbol yet",
+  iv_term_partial:
+    "IV term structure incomplete — ≥3 of 6 expiry fetches failed; longer-dated expiries may be missing",
+  metrics_unavailable:
+    "Volatility metrics unavailable — HV pipeline output missing for this symbol",
+  hv_unavailable: "Historical volatility unavailable — daily HV job hasn't completed",
+  claude_unavailable:
+    "AI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
 };
 
 /**

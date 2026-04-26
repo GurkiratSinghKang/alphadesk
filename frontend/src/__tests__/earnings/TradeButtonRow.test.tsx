@@ -8,49 +8,71 @@ const ladder: StrikeLadder = {
   expiry: "2026-04-25",
   underlyingPrice: 201.7,
   rows: [
+    { strike: 190, side: "put", bucket: "15Δ", delta: -0.15, bid: 1.8, ask: 2.0, mid: 1.9, iv: 0.83, yieldPct: 0.010, pop: 0.85, theta: -0.18, gamma: 0.014, vega: 0.24, oi: 800, volume: 300 },
     { strike: 195, side: "put", bucket: "30Δ", delta: -0.30, bid: 3.3, ask: 3.5, mid: 3.4, iv: 0.81, yieldPct: 0.017, pop: 0.68, theta: -0.22, gamma: 0.018, vega: 0.31, oi: 1000, volume: 500 },
     { strike: 200, side: "put", bucket: "ATM", delta: -0.50, bid: 5.5, ask: 5.7, mid: 5.6, iv: 0.79, yieldPct: 0.028, pop: 0.50, theta: -0.30, gamma: 0.022, vega: 0.40, oi: 2000, volume: 900 },
     { strike: 205, side: "call", bucket: "ATM", delta: 0.50, bid: 6.1, ask: 6.3, mid: 6.2, iv: 0.78, yieldPct: 0.031, pop: 0.50, theta: -0.29, gamma: 0.021, vega: 0.41, oi: 1800, volume: 700 },
     { strike: 210, side: "call", bucket: "30Δ", delta: 0.30, bid: 3.7, ask: 3.9, mid: 3.8, iv: 0.80, yieldPct: 0.019, pop: 0.68, theta: -0.23, gamma: 0.017, vega: 0.32, oi: 1200, volume: 400 },
+    { strike: 215, side: "call", bucket: "15Δ", delta: 0.15, bid: 2.1, ask: 2.3, mid: 2.2, iv: 0.82, yieldPct: 0.011, pop: 0.85, theta: -0.19, gamma: 0.015, vega: 0.25, oi: 700, volume: 250 },
   ],
 };
 
-describe("TradeButtonRow", () => {
-  it("renders deep-link buttons for ATM call, ATM put, and strangles", () => {
-    // Round-8 / NV-02: button labels were renamed from "Short call X" to
-    // "Sell-to-open call X" so novice users see the unbounded-risk
-    // semantic explicitly. The undefined-risk pill plus the link slot
-    // attributes are the stable contract — text changed for safety.
+describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
+  it("renders defined-risk buttons: bull put / bear call / iron condor / long straddle", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
-    expect(container.textContent).toMatch(/sell-to-open call/i);
-    expect(container.textContent).toMatch(/sell-to-open put/i);
-    expect(container.textContent).toMatch(/sell.*strangle/i);
-    expect(container.textContent).toMatch(/undefined risk/i);
+    expect(container.textContent).toMatch(/bull put spread/i);
+    expect(container.textContent).toMatch(/bear call spread/i);
+    expect(container.textContent).toMatch(/iron condor/i);
+    expect(container.textContent).toMatch(/long straddle/i);
+    // No undefined-risk pills any more — every button is capped.
+    expect(container.textContent).toMatch(/defined risk/i);
+    expect(container.textContent).not.toMatch(/undefined risk/i);
   });
 
-  it("short call button links to /trade with ATM call contract", () => {
+  it("bull put spread sells ATM put, buys 30Δ put", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
-    const btn = container.querySelector('a[data-slot="trade-button-short-call"]') as HTMLAnchorElement;
+    const btn = container.querySelector('a[data-slot="trade-button-bull-put-spread"]') as HTMLAnchorElement;
     expect(btn).not.toBeNull();
-    expect(btn.getAttribute("href")).toMatch(/\/trade\?/);
-    expect(btn.getAttribute("href")).toContain("symbol=NVDA");
-    expect(btn.getAttribute("href")).toMatch(/side=sell/);
-    expect(btn.getAttribute("href")).toContain("205"); // ATM call strike
+    const href = btn.getAttribute("href")!;
+    expect(href).toMatch(/\/trade\?/);
+    expect(href).toContain("symbol=NVDA");
+    expect(href).toContain("combo_type=vertical_spread");
+    // ATM put at 200 sold; 30Δ put at 195 bought
+    expect(href).toMatch(/200.*sell/);
+    expect(href).toMatch(/195.*buy/);
   });
 
-  it("short put button links to ATM put", () => {
+  it("bear call spread sells ATM call, buys 30Δ call", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
-    const btn = container.querySelector('a[data-slot="trade-button-short-put"]') as HTMLAnchorElement;
-    expect(btn.getAttribute("href")).toContain("200"); // ATM put strike
+    const btn = container.querySelector('a[data-slot="trade-button-bear-call-spread"]') as HTMLAnchorElement;
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("combo_type=vertical_spread");
+    expect(href).toMatch(/205.*sell/);
+    expect(href).toMatch(/210.*buy/);
   });
 
-  it("strangle button encodes two legs via ?legs= param", () => {
+  it("iron condor encodes 4 legs (sell 30Δ put/call, buy 15Δ put/call)", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
-    const btn = container.querySelector('a[data-slot="trade-button-strangle"]') as HTMLAnchorElement;
-    expect(btn.getAttribute("href")).toContain("legs=");
-    // 30Δ put + 30Δ call strikes = 195 + 210
-    expect(btn.getAttribute("href")).toMatch(/195.*sell/);
-    expect(btn.getAttribute("href")).toMatch(/210.*sell/);
+    const btn = container.querySelector('a[data-slot="trade-button-iron-condor"]') as HTMLAnchorElement;
+    expect(btn).not.toBeNull();
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("combo_type=iron_condor");
+    // Short 30Δ put / call = 195 / 210; long 15Δ wings = 190 / 215
+    expect(href).toMatch(/195.*sell/);
+    expect(href).toMatch(/210.*sell/);
+    expect(href).toMatch(/190.*buy/);
+    expect(href).toMatch(/215.*buy/);
+  });
+
+  it("long straddle buys both ATM legs (debit max-loss)", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-long-straddle"]') as HTMLAnchorElement;
+    expect(btn).not.toBeNull();
+    const href = btn.getAttribute("href")!;
+    // Both ATM contracts BOUGHT, not sold — capped loss = debit paid
+    expect(href).toMatch(/205.*buy/);
+    expect(href).toMatch(/200.*buy/);
+    expect(href).not.toMatch(/sell/);
   });
 
   it("renders disabled state when ladder is null", () => {

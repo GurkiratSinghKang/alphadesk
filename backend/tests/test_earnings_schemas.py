@@ -76,7 +76,7 @@ def test_claude_structured_verdict_vocabulary():
             verdict="manic",  # invalid
             direction_magnitude={"bull_case_pct": 0.04, "bear_case_pct": -0.05},
             thesis="x", catalysts=[], risks=[],
-            suggested_play="short strangle",
+            suggested_play="iron condor",  # Round-12 / DR-1: defined-risk vocab
             suggested_play_reason="x",
             confidence=0.5, model="claude-opus-4-7",
             generated_at=datetime.now(timezone.utc),

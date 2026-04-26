@@ -194,6 +194,14 @@ export default function ChartPane({
   const [firstPoint, setFirstPoint] = React.useState<{ time: number; price: number } | null>(null);
   const [hoverPoint, setHoverPoint] = React.useState<{ time: number; price: number } | null>(null);
 
+  // Round-12 / CH-2: live OHLC from the chart's crosshair. Used by the
+  // top-left overlay to give a TradingView-style readout when the user
+  // hovers a bar.
+  const [ohlcHover, setOhlcHover] = React.useState<
+    | { open: number; high: number; low: number; close: number; volume?: number }
+    | null
+  >(null);
+
   const symbol = useMarketStore((s) => s.selectedSymbol);
   const { drawings, add } = useChartDrawings(symbol);
 
@@ -515,11 +523,125 @@ export default function ChartPane({
                 drawings={drawingsWithPreview}
                 onChartClick={handleChartClick}
                 onDrawCrosshair={setHoverPoint}
+                // Round-12 / CH-2 (P1): wire OHLC hover to the overlay below.
+                onCrosshairMove={(_p, _t, ohlcv) => setOhlcHover(ohlcv ?? null)}
               />
+              {/* Round-12 / CH-2: TradingView-style OHLC + indicator legend
+                  overlay. Renders top-left so it never overlaps with the
+                  toolbars on the top-right. Always visible (shows last bar
+                  when crosshair isn't active) so the user can see the
+                  current bar's values at a glance. */}
+              <div
+                data-slot="chart-ohlc-overlay"
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-[color:var(--border)] bg-[color:var(--bg-card)]/85 px-2.5 py-1.5 t-mono text-[11px] backdrop-blur-sm"
+              >
+                <OHLCReadout
+                  hover={ohlcHover}
+                  lastBar={data[data.length - 1] ?? null}
+                  indicators={indicators}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+// ─── OHLC + indicator legend overlay ──────────────────────────────────────────
+
+/**
+ * Round-12 / CH-2 + CH-3: TradingView-style OHLC + indicator readout.
+ * Renders top-left of the chart and shows:
+ *
+ *   - Open / High / Low / Close / Volume for the bar under the crosshair
+ *     (or the latest bar if the crosshair isn't active).
+ *   - Net change vs Open with a profit/loss tint so the user can read
+ *     direction at a glance.
+ *   - The active indicators with their PERIODS expanded — "SMA 20",
+ *     "EMA 50" instead of bare "SMA"/"EMA". CH-3: ``TradingChart``
+ *     hard-codes EMA(20)/EMA(50) and SMA(20)/SMA(50) when the user
+ *     toggles those indicators on; this legend reflects those.
+ */
+function OHLCReadout({
+  hover,
+  lastBar,
+  indicators,
+}: {
+  hover: { open: number; high: number; low: number; close: number; volume?: number } | null;
+  lastBar: OHLCVBar | null;
+  indicators: Indicator[];
+}) {
+  const bar = hover ?? (lastBar ? {
+    open: lastBar.open,
+    high: lastBar.high,
+    low: lastBar.low,
+    close: lastBar.close,
+    volume: lastBar.volume,
+  } : null);
+  const changeAbs = bar ? bar.close - bar.open : 0;
+  const changePct = bar && bar.open ? (changeAbs / bar.open) * 100 : 0;
+  const changeTint =
+    !bar ? "" : changeAbs >= 0 ? "text-[color:var(--profit)]" : "text-[color:var(--loss)]";
+  // Compose the indicator legend with periods. TradingChart draws:
+  //   EMA → EMA(20, amber) + EMA(50, blue)
+  //   SMA → SMA(20, gold)  + SMA(50, fg-dim)
+  //   VWAP, Bollinger, RSI, MACD: single instances; show plain.
+  const indicatorLegend = indicators
+    .filter((i) => i !== "Volume")
+    .flatMap((i) => {
+      if (i === "EMA") return ["EMA 20", "EMA 50"];
+      if (i === "SMA") return ["SMA 20", "SMA 50"];
+      if (i === "Bollinger") return ["Bollinger 20"];
+      return [i];
+    });
+  return (
+    <div className="flex flex-col gap-0.5 leading-tight">
+      {bar ? (
+        <>
+          <div className="flex items-baseline gap-2 tabular-nums">
+            <span className="u-muted">O</span>
+            <span>{bar.open.toFixed(2)}</span>
+            <span className="u-muted">H</span>
+            <span>{bar.high.toFixed(2)}</span>
+            <span className="u-muted">L</span>
+            <span>{bar.low.toFixed(2)}</span>
+            <span className="u-muted">C</span>
+            <span>{bar.close.toFixed(2)}</span>
+            <span className={cn("ml-1", changeTint)}>
+              {changeAbs >= 0 ? "+" : ""}
+              {changeAbs.toFixed(2)} ({changePct >= 0 ? "+" : ""}
+              {changePct.toFixed(2)}%)
+            </span>
+          </div>
+          {bar.volume != null && (
+            <div className="flex items-baseline gap-2 u-muted tabular-nums">
+              <span>VOL</span>
+              <span>{formatVolume(bar.volume)}</span>
+            </div>
+          )}
+        </>
+      ) : (
+        <span className="u-muted">— no bar</span>
+      )}
+      {indicatorLegend.length > 0 && (
+        <div className="flex items-baseline gap-2 u-muted text-[10px] mt-0.5">
+          {indicatorLegend.map((label) => (
+            <span key={label} className="rounded border border-[color:var(--border)] px-1 py-px">
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatVolume(v: number): string {
+  if (v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1) + "B";
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+  if (v >= 1_000) return (v / 1_000).toFixed(1) + "K";
+  return String(v);
 }

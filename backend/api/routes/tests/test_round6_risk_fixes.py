@@ -70,16 +70,22 @@ def test_combo_vertical_spread_notional() -> None:
     assert width == 10.0
 
 
-def test_combo_strangle_uses_max_naked_side() -> None:
-    """Strangle envelope is max(call_notional, put_notional)."""
+def test_combo_strangle_rejected_as_undefined_risk() -> None:
+    """Round-12 / DR-1: ``combo_type="strangle"`` is no longer accepted —
+    naked strangles are UNDEFINED-risk and AlphaDesk now refuses them at
+    the validator. The legacy ``_combo_strangle_max_notional`` helper
+    still exists for the per-leg fallback notional path on legacy data,
+    but the route's combo_type allowlist rejects ``"strangle"`` outright.
+    """
+    import pytest
+    from pydantic import ValidationError
+
     legs = [
-        _occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0),  # call 500
-        _occ_leg("AAPL260424P00180000", OrderSide.SELL, 1, 3.0),  # put 300
+        _occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0),
+        _occ_leg("AAPL260424P00180000", OrderSide.SELL, 1, 3.0),
     ]
-    req = CreateOrderRequest(legs=legs, combo_type="strangle")
-    notional = trades_mod._combo_strangle_max_notional(req)
-    # 5.0 * 1 * 100 = 500 vs 3.0 * 1 * 100 = 300 → 500
-    assert notional == 500.0
+    with pytest.raises(ValidationError, match="DEFINED-RISK"):
+        CreateOrderRequest(legs=legs, combo_type="strangle")
 
 
 # --------------------------------------------------------------------------- #
@@ -201,11 +207,24 @@ async def test_symbol_tradable_rejects_halted_cached() -> None:
 
 
 def test_combo_type_accepts_known_literals() -> None:
+    """Round-12 / DR-1: defined-risk allowlist replaces ``strangle``
+    with the protective shapes ``iron_butterfly``, ``calendar_spread``,
+    ``diagonal_spread``, ``cash_secured_put``, ``married_put``."""
     leg = OrderLeg(
         symbol="AAPL", side=OrderSide.BUY, qty=1,
         order_type=OrderType.LIMIT, limit_price=150.0,
     )
-    for v in ("iron_condor", "vertical_spread", "strangle", "covered_call"):
+    accepted = (
+        "iron_condor",
+        "iron_butterfly",
+        "vertical_spread",
+        "calendar_spread",
+        "diagonal_spread",
+        "covered_call",
+        "cash_secured_put",
+        "married_put",
+    )
+    for v in accepted:
         req = CreateOrderRequest(legs=[leg], combo_type=v)
         assert req.combo_type == v
 

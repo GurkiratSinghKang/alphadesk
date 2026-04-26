@@ -2095,6 +2095,14 @@ interface RawEarningsNewsArticle {
   source: string;
   published_at: string;
   url: string;
+  // Round-12 / NF-1 (P2): backend ``services/news.py`` now emits a
+  // relevance_score (0..1), price-driving category, and source tier
+  // computed at parse time. Surface them so the FE can render a
+  // category chip + sort by relevance.
+  relevance_score?: number;
+  category?: string | null;
+  tier?: number;
+  sentiment?: string | null;
 }
 
 interface RawEarningsDetail {
@@ -2261,6 +2269,12 @@ function mapNewsArticle(raw: RawEarningsNewsArticle): EarningsNewsArticle {
     source: raw.source,
     publishedAt: raw.published_at,
     url: raw.url,
+    // Round-12 / NF-1 — surface stage-1 ranking signals so the UI can
+    // render a category chip and sort by relevance.
+    relevanceScore: raw.relevance_score ?? 0,
+    category: raw.category ?? null,
+    tier: raw.tier ?? 2,
+    sentiment: raw.sentiment ?? null,
   };
 }
 
@@ -2379,9 +2393,16 @@ export async function getEarningsDetail(
  * Rate-limited per user (~30/5min via backend middleware).
  */
 export async function postEarningsFullResearch(symbol: string): Promise<ClaudeFullResearch> {
+  // Round-12 / CL-1 (P1): bumped FE timeout 60_000 → 120_000.
+  // The backend ``ClaudeClient.complete`` default timeout is 60.0s; with
+  // identical client + server budgets the browser would `AbortError` before
+  // the 500/200 response landed on slow Opus tail latencies (30-60s typical,
+  // 60-90s tail). The mutation rejected with a generic abort and the user
+  // saw the spinner spin forever. Doubling the FE budget gives the backend
+  // breathing room to either return a useful error or the research itself.
   const raw = await apiFetch<RawClaudeFullResearch>(
     `/api/v1/earnings/${encodeURIComponent(symbol)}/full-research`,
-    { method: "POST", timeoutMs: 60_000 },
+    { method: "POST", timeoutMs: 120_000 },
   );
   return mapClaudeFullResearch(raw);
 }

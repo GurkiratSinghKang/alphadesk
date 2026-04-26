@@ -32,20 +32,22 @@ def test_window_current_on_a_tuesday():
     assert end == date(2026, 5, 1)
 
 
-def test_window_current_on_saturday_skips_to_next_week():
-    """Sat 2026-04-25 — there are no more reports this calendar week,
-    so 'current' should mean the upcoming Mon-Fri."""
+def test_window_current_on_saturday_includes_friday_amc():
+    """Round-12 / EC-1: Sat 2026-04-25 — INCLUDE Friday 2026-04-24 so
+    AMC reports that printed Fri 16:30 ET stay visible Saturday morning.
+    Pre-fix this jumped to Mon-Fri of the upcoming week and dropped
+    Friday's AMC rows entirely."""
     with _patch_today(date(2026, 4, 25)):
         start, end = svc._resolve_window_dates("current")
-    assert start == date(2026, 4, 27)
+    assert start == date(2026, 4, 24)  # Friday of the just-finished week
     assert end == date(2026, 5, 1)
 
 
-def test_window_current_on_sunday_skips_to_next_week():
-    """Sun 2026-04-26 — same as Saturday, should anchor to Mon 04-27."""
+def test_window_current_on_sunday_includes_friday_amc():
+    """Round-12 / EC-1: Sun 2026-04-26 — same as Saturday."""
     with _patch_today(date(2026, 4, 26)):
         start, end = svc._resolve_window_dates("current")
-    assert start == date(2026, 4, 27)
+    assert start == date(2026, 4, 24)
     assert end == date(2026, 5, 1)
 
 

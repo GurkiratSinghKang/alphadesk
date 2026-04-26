@@ -476,8 +476,12 @@ describe("Earnings Options Play — full flow", () => {
     await waitFor(() => {
       expect(container.querySelector('[data-slot="claude-thesis"]')?.textContent).toMatch(/NEUTRAL-BULL/);
       expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
-      expect(container.querySelector('[data-slot="trade-button-short-call"]')?.getAttribute("href")).toContain("205");
-      expect(container.querySelector('[data-slot="trade-button-strangle"]')?.getAttribute("href")).toContain("legs=");
+      // Round-12 / DR-1: defined-risk-only buttons. Bear-call-spread sells
+      // ATM call (205) + buys 30Δ call as the protective wing. Bull-put-spread
+      // sells ATM put + buys 30Δ put — both emit ?legs= with two legs.
+      // (Iron condor needs 15Δ rows which this fixture doesn't include.)
+      expect(container.querySelector('[data-slot="trade-button-bear-call-spread"]')?.getAttribute("href")).toContain("205");
+      expect(container.querySelector('[data-slot="trade-button-bull-put-spread"]')?.getAttribute("href")).toContain("legs=");
     });
 
     // Fire the "Run full research" flow

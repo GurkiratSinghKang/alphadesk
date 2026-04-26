@@ -39,7 +39,10 @@ export default function NewsFeed({ news }: NewsFeedProps) {
   return (
     <section data-slot="news-feed" className="mt-4">
       <h3 className="t-display-section italic text-[13px]">
-        News <span className="t-label u-muted">· filtered</span>
+        News{" "}
+        <span className="t-label u-muted" title="Filtered for stock-price relevance: tier-1 sources, headlines mentioning the symbol, ranked by category match × recency.">
+          · price-driving
+        </span>
       </h3>
       {overflow && (
         <p className="mt-0.5 t-mono text-[11px] u-muted" data-slot="news-feed-overflow">
@@ -58,28 +61,31 @@ export default function NewsFeed({ news }: NewsFeedProps) {
       <ul className="mt-1 space-y-0.5">
         {visible.map((a, i) => {
           const rel = fmtRelative(a.publishedAt);
-          // Round-7 / EP-9: ``key={a.url ?? i}`` collided when two
-          // syndicated providers returned the same Reuters URL (FMP
-          // commonly does this) — React warned and only rendered one.
-          // Append publishedAt + index so duplicates remain distinct
-          // and items missing a URL don't index-key into the head of
-          // the list (which shifts every refetch as new headlines
-          // arrive, causing flicker / lost focus on hover).
           const itemKey = `${a.url ?? "no-url"}::${a.publishedAt ?? "no-ts"}::${i}`;
           return (
             <li
               key={itemKey}
               className="border-b border-dotted border-[color:var(--border)] py-1"
             >
-              {/* B-95 — `title` surfaces source + time on hover for sighted
-                  users. The trailing metadata span is aria-hidden so the
-                  link's accessible name is just the headline, not
-                  "Headline — Source · 3h ago". */}
+              {/* Round-12 / NF-1: surface category + sentiment chips so
+                  the user can scan the news rail by impact at a glance.
+                  Category is derived backend-side via keyword match
+                  (earnings, M&A, rating, regulatory, …); sentiment is
+                  the upstream newsdata.io label. */}
+              {a.category && (
+                <span
+                  data-slot="news-category"
+                  className="mr-2 inline-block rounded border border-[color:var(--brand)]/40 bg-[color:var(--brand)]/10 px-1.5 py-px text-[10px] uppercase tracking-wider u-brand"
+                  title={`Category: ${a.category}`}
+                >
+                  {a.category}
+                </span>
+              )}
               <a
                 href={a.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`${a.source} — ${rel}`}
+                title={`${a.source} — ${rel}${a.relevanceScore != null ? ` · score ${a.relevanceScore.toFixed(2)}` : ""}`}
                 className="t-mono text-[12.5px] hover:u-brand"
               >
                 {a.title}
@@ -89,6 +95,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
                 className="ml-2 t-mono text-[11px] u-muted"
               >
                 — {a.source} · {rel}
+                {a.tier === 1 && <span className="ml-1 u-brand" title="Tier-1 newswire">★</span>}
               </span>
             </li>
           );
