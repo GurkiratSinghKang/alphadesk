@@ -530,11 +530,16 @@ export default function ChartPane({
                   overlay. Renders top-left so it never overlaps with the
                   toolbars on the top-right. Always visible (shows last bar
                   when crosshair isn't active) so the user can see the
-                  current bar's values at a glance. */}
+                  current bar's values at a glance.
+
+                  Round-12 / CH-4: pill is intentionally translucent
+                  (40% bg + medium backdrop-blur) so the price bars
+                  underneath stay legible. Border alpha matches so a
+                  dark-mode chart isn't bordered with an opaque hairline. */}
               <div
                 data-slot="chart-ohlc-overlay"
                 aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-[color:var(--border)] bg-[color:var(--bg-card)]/85 px-2.5 py-1.5 t-mono text-[11px] backdrop-blur-sm"
+                className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2.5 py-1.5 t-mono text-[11px] backdrop-blur-md"
               >
                 <OHLCReadout
                   hover={ohlcHover}
