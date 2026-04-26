@@ -6,6 +6,7 @@ per strategy; returns a StrategyResult that the MasterAgent processes.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
@@ -31,18 +32,72 @@ PositionsProvider = Callable[[date], list[Position] | Awaitable[list[Position]]]
 class StateStore:
     """Abstract state persistence — read/write a strategy's state dict.
 
-    Phase 1: in-memory dict-of-dicts placeholder. Phase 2 wires to Redis
-    using the existing cache layer (backend/core/cache.py).
+    Round-11 / AA-1.4 (P1): formerly an in-memory dict. Two
+    concurrent invocations of the same strategy (scheduled cron +
+    manual ``/api/strategies/{id}/run``) used to ``load → run →
+    save`` over each other; the later writer's ``state_update``
+    overwrote the earlier without merging. A process restart
+    dropped every strategy's persisted state — pairs_trading lost
+    its ``active``/``positions``/``pending`` ledger and PEAD lost
+    its time-stop watchdog dict.
+
+    Now wires through the Redis cache (``core/redis.py``) with a
+    per-strategy ``asyncio.Lock`` so ``load`` and ``save`` for the
+    same strategy serialise within a single process. Cross-process
+    races would still need a Redis WATCH/MULTI/EXEC primitive — but
+    AlphaDesk runs a single ``gunicorn -w 1`` worker, so the lock
+    here is sufficient.
+
+    Falls back to the in-memory dict when Redis is unreachable —
+    same fail-open posture as ``cache_get`` callers; preserves
+    the legacy behaviour for ``backend/tests/`` which never had a
+    real Redis.
     """
+
+    # 30 days — long enough that a strategy whose state hasn't been
+    # touched (e.g. paused for a few weeks) doesn't lose its ledger.
+    _TTL_SECONDS = 30 * 86_400
 
     def __init__(self):
         self._data: dict[str, dict[str, Any]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def _lock_for(self, strategy_name: str) -> asyncio.Lock:
+        lock = self._locks.get(strategy_name)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[strategy_name] = lock
+        return lock
 
     async def load(self, strategy_name: str) -> dict[str, Any]:
-        return self._data.get(strategy_name, {})
+        async with self._lock_for(strategy_name):
+            try:
+                from core.redis import cache_get
+                payload = await cache_get(f"strategy_state:{strategy_name}")
+                if isinstance(payload, dict):
+                    # Mirror into in-process cache so test paths +
+                    # Redis-down fallback still see the latest state.
+                    self._data[strategy_name] = dict(payload)
+                    return dict(payload)
+            except Exception:
+                pass
+            return self._data.get(strategy_name, {})
 
     async def save(self, strategy_name: str, state: dict[str, Any]) -> None:
-        self._data[strategy_name] = dict(state)
+        async with self._lock_for(strategy_name):
+            self._data[strategy_name] = dict(state)
+            try:
+                from core.redis import cache_set
+                await cache_set(
+                    f"strategy_state:{strategy_name}",
+                    dict(state),
+                    ttl_seconds=self._TTL_SECONDS,
+                )
+            except Exception:
+                # Fail-open — strategy state is best-effort durable;
+                # better to lose the next run's state-update than to
+                # halt the pipeline on a Redis blip.
+                pass
 
 
 class DailyPipelineRunner:
