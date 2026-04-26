@@ -86,7 +86,7 @@ def app_with_trades(
         probes["halt_called"] = True
         return False
 
-    async def _fake_dup(payload):
+    async def _fake_dup(payload, _username = "test_user"):
         probes["dup_called"] = True
         return None
 

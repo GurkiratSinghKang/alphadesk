@@ -61,6 +61,16 @@ logger = logging.getLogger("alphadesk")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting AlphaDesk backend (%s)", settings.ENVIRONMENT.value)
 
+    # Round-8 / T-1: fail-fast on the broker URL ↔ live-trading flag
+    # asymmetry. ``assert_live_enabled_or_paper()`` raises a clear
+    # ``RuntimeError`` if ``ALPACA_BASE_URL`` points at the live host
+    # without ``LIVE_TRADING_ENABLED=true`` (and vice-versa). Per-order
+    # ``reject_if_live_forbidden`` calls catch the same misconfig later
+    # but only AFTER strategies have started spinning up — booting hard
+    # is the safer signal for a misconfigured deploy.
+    from core.trading_gate import assert_live_enabled_or_paper
+    assert_live_enabled_or_paper()
+
     # Skip DB init if explicitly configured (BUG-003)
     if not settings.SKIP_DB_INIT:
         try:

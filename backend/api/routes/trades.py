@@ -1051,7 +1051,8 @@ async def create_order(
         raise HTTPException(status_code=422, detail=f"Risk check failed: {risk_msg}")
 
     # Duplicate order check (persona-40: now covers notes + strategy + canonical floats)
-    await _check_duplicate_order(payload)
+    # Round-8 / R-4: pass username so the dedup namespace is per-user.
+    await _check_duplicate_order(payload, username)
 
     # persona-56 / persona-65 F1 / Wave-A: client_order_id correlation key so a
     # mid-POST disconnect, retry, or reconciliation pass can match the
@@ -1062,7 +1063,18 @@ async def create_order(
     # that don't pass an Idempotency-Key.
     # Sanitize username → a filesystem-safe-ish slug so an unusual character
     # doesn't land in the Alpaca ID.
-    _user_slug = re.sub(r"[^A-Za-z0-9_\-]", "", username)[:32] or "u"
+    #
+    # Round-8 / R-2: drop ``_`` from the slug alphabet. The previous regex
+    # allowed underscores in the user portion, which made the boundary
+    # between ``<user>`` and ``<idem>`` ambiguous in the resulting
+    # ``<user>_<idem>`` encoding — and the cancel-ownership parser
+    # (``_enforce_cancel_ownership``) used ``coid.split("_", 1)[0]`` to
+    # recover the owner. For a user named ``bob_jones`` the parser saw
+    # ``"bob"`` and 403'd every legitimate cancel. The fix shrinks the
+    # alphabet so the FIRST ``_`` is unambiguously the user/idem
+    # separator regardless of whether the idem itself contains
+    # underscores.
+    _user_slug = re.sub(r"[^A-Za-z0-9\-]", "", username)[:32] or "u"
     if idem_key_short:
         # Strip non-alnum from the idem tail so Alpaca accepts it.
         _idem_clean = re.sub(r"[^A-Za-z0-9_\-]", "", idem_key_short)
@@ -1688,9 +1700,16 @@ async def _enforce_cancel_ownership(order_id: str, username: str) -> None:
             return
         # client_order_id encoding: ``manual_<user>_<hex>`` or
         # ``<user>_<idem>``. Extract the leading owner slug.
+        #
+        # Round-8 / R-2: switch both branches to FORWARD ``split("_", 1)``.
+        # The slug regex (above) no longer allows ``_``, so the first
+        # underscore unambiguously separates user from idem regardless of
+        # how many underscores the idem itself contains. The previous
+        # ``rsplit`` on the manual branch worked for hex-only idems but
+        # was fragile if the format ever changed.
         if coid.startswith("manual_"):
             tail = coid[len("manual_"):]
-            owner = tail.rsplit("_", 1)[0] if "_" in tail else None
+            owner = tail.split("_", 1)[0] if "_" in tail else tail or None
         else:
             owner = coid.split("_", 1)[0] if "_" in coid else None
         if not owner:
@@ -2009,7 +2028,7 @@ def _order_dedup_hash(request: CreateOrderRequest) -> str:
     ).hexdigest()
 
 
-async def _check_duplicate_order(request: CreateOrderRequest) -> None:
+async def _check_duplicate_order(request: CreateOrderRequest, username: str) -> None:
     """Prevent duplicate orders within a 30-second window using atomic Redis SET NX.
 
     The dedup hash now includes ``limit_price`` + ``stop_price`` +
@@ -2019,11 +2038,19 @@ async def _check_duplicate_order(request: CreateOrderRequest) -> None:
     Floats are canonicalised through ``_canonical_float`` so machine-eps
     neighbours (``1.0000000000000002``) don't split the hash either
     (persona-40 F6).
+
+    Round-8 / R-4: the dedup key is now scoped per-user. Previously two
+    users posting the same logical order (e.g. ``BUY 1 SPY``) within
+    30s collided — the second user got 409 "Duplicate order detected"
+    even though their submission was a legitimate distinct intent.
+    Round-7's Idempotency-Key path was already user-scoped via the
+    ``client_order_id`` slug; this layer was the last cross-tenant
+    collision vector in the order-entry pipeline.
     """
     from core.redis import get_redis
 
     order_key = _order_dedup_hash(request)
-    cache_key = f"order_dedup:{order_key}"
+    cache_key = f"order_dedup:{username}:{order_key}"
 
     redis = await get_redis()
     if redis:

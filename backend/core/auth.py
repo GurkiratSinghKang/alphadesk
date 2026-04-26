@@ -381,23 +381,35 @@ async def is_token_revoked(jti: str) -> bool:
 
 
 async def revoke_token(token: str) -> None:
-    """Add a token to the revocation blocklist."""
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_value,
-            algorithms=[ALGORITHM],
-            options={"verify_exp": False},
-            leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
-        )
-        jti = payload.get("jti")
-        if jti:
-            from core.redis import cache_set
-            # Keep in blocklist until token would have expired anyway
-            ttl = max(int(payload.get("exp", 0) - datetime.now(timezone.utc).timestamp()), 0)
-            await cache_set(f"revoked:{jti}", {"revoked": True}, ttl_seconds=max(ttl, 60))
-    except Exception:
-        logger.warning("Token revocation failed", exc_info=True)
+    """Add a token to the revocation blocklist.
+
+    Round-8 / Q-2: previously this swallowed every exception, including
+    ``InvalidSignatureError`` from ``jwt.decode``. If the JWT secret
+    rotated mid-session, the inner decode here failed silently — the
+    blocklist was never updated, callers thought revoke succeeded, and
+    the refresh-token replay window opened. The /refresh handler does
+    have a backstop ``is_token_revoked(jti)`` check that catches this
+    via 503, but only when ``jti`` was successfully extracted by an
+    EARLIER decode in the handler; a decode-mismatch on signature
+    bypassed even that. Now we let exceptions propagate so callers
+    surface the failure explicitly. All three call sites already
+    wrap in try/except (auth.py refresh / logout / logout-all) so the
+    behaviour change is contained.
+    """
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_value,
+        algorithms=[ALGORITHM],
+        options={"verify_exp": False},
+        leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
+    )
+    jti = payload.get("jti")
+    if not jti:
+        return
+    from core.redis import cache_set
+    # Keep in blocklist until token would have expired anyway
+    ttl = max(int(payload.get("exp", 0) - datetime.now(timezone.utc).timestamp()), 0)
+    await cache_set(f"revoked:{jti}", {"revoked": True}, ttl_seconds=max(ttl, 60))
 
 
 async def require_auth(

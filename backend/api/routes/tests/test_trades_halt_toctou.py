@@ -75,7 +75,7 @@ def app_with_trades(
         # Second call: halted (TOCTOU trip just before broker submit).
         return probes["halt_calls"] > probes["flip_after_call"]
 
-    async def _fake_dup(_payload: Any) -> None:
+    async def _fake_dup(_payload: Any, _username: str = "test_user") -> None:
         return None
 
     async def _fake_agg(_payload: Any, username: str | None = None) -> tuple[bool, str]:

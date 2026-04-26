@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -517,7 +518,16 @@ async def login(request: LoginRequest, req: Request):
     # bcrypt cost, so the timing no longer leaks which usernames exist. We
     # also guard for an unconfigured admin (ADMIN_PASSWORD_HASH empty) by
     # falling back to the dummy hash there too.
-    username_matches = submitted_username == settings.ADMIN_USERNAME
+    # Round-8 / Q-3: ``==`` short-circuits on the first byte mismatch
+    # (e.g. ``xdmin`` returns in ns, ``admiX`` returns ns later), giving a
+    # measurable timing oracle that the dummy-bcrypt-hash fix above does
+    # NOT close — the username compare runs strictly BEFORE bcrypt and
+    # leaks the admin name one byte at a time over enough probes. The
+    # canonical fix is a constant-time byte compare.
+    username_matches = hmac.compare_digest(
+        submitted_username.encode("utf-8"),
+        settings.ADMIN_USERNAME.encode("utf-8"),
+    )
     target_hash = (
         settings.ADMIN_PASSWORD_HASH
         if username_matches and settings.ADMIN_PASSWORD_HASH
