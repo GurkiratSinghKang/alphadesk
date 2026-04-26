@@ -188,6 +188,23 @@ export interface Analysis {
   signals: Signal[];
   /** Live technicals from `_compute_technicals`. Optional — may be absent. */
   technicals?: AnalysisTechnicals;
+  /**
+   * Round-11 / Y-9 (P1, regulatory): the BE
+   * (``api/routes/analysis.py``) emits ``advisory_disclaimer`` on
+   * every analyze response (Persona 67-5 explicitly required this).
+   * The FE used to drop it. Recommendation panels must surface this
+   * caveat. Field is optional so older BE responses don't crash
+   * existing consumers; new code paths should expect a string.
+   */
+  disclaimer?: string;
+  /**
+   * Round-11 / Y-9: ``"live_disabled"`` means the strategy is
+   * denylisted from real-capital orders; ``"paper_only"`` means
+   * it can only paper-trade. Both should drive a visible chip on
+   * the Analyze panel so a trader doesn't act on a recommendation
+   * they can't fulfil through this terminal.
+   */
+  strategyLiveStatus?: "live_disabled" | "paper_only" | null;
 }
 
 // ─── Screener ─────────────────────────────────────────────────

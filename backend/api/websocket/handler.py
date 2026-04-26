@@ -420,10 +420,35 @@ async def _redis_listener() -> None:
                     try:
                         data = orjson.loads(message["data"])
                     except Exception:
-                        logger.debug(
+                        # Round-11 / BB-17 (P1): used to be DEBUG only.
+                        # Operators never saw the rate of malformed
+                        # frames; a publisher emitting bad JSON could
+                        # poison every connected client invisibly.
+                        # Promoted to WARNING with a structured
+                        # ``event="ws_pubsub_malformed"`` field, plus a
+                        # Redis counter that an alerting probe can
+                        # threshold.
+                        logger.warning(
                             "Redis pubsub: non-JSON message on %s, passing raw",
-                            channel, exc_info=True,
+                            channel,
+                            exc_info=True,
+                            extra={
+                                "event": "ws_pubsub_malformed",
+                                "channel": channel,
+                            },
                         )
+                        try:
+                            from core.redis import cache_set, cache_get
+                            metric_key = f"metrics:ws_pubsub_malformed:{channel}"
+                            prev = await cache_get(metric_key)
+                            prev_n = (
+                                int(prev)
+                                if isinstance(prev, (int, str)) and str(prev).isdigit()
+                                else 0
+                            )
+                            await cache_set(metric_key, prev_n + 1, ttl_seconds=86_400)
+                        except Exception:
+                            pass
                         data = {"raw": message["data"]}
                     await manager.broadcast(channel, data)
             except asyncio.CancelledError:

@@ -220,6 +220,16 @@ class Portfolio:
         return list(self._trades)
 
     def apply_fill(self, fill: object) -> None:
+        # Round-11 / AA-1.12 (P3 defensive): a zero-quantity Fill (e.g.
+        # a cancelled-order ack mistakenly arriving as a 0-fill) used
+        # to take the same-side branch with ``new_qty == existing.quantity``,
+        # which then rewrote the Position with the SAME qty but a new
+        # ``avg_entry_price`` blended against price=0 — collapsing the
+        # entry price to a fraction of the real one. Real brokers don't
+        # emit zero-quantity fills, but defensive code should reject
+        # them rather than silently corrupt the ledger.
+        if fill.quantity == 0:
+            return
         self._cash -= Decimal(fill.quantity) * fill.price + fill.commission
 
         existing = self._positions.get(fill.symbol)

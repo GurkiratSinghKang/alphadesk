@@ -1041,11 +1041,17 @@ export function getScreenerPresets() {
 // ─── Analysis ────────────────────────────────────────────────
 
 export async function analyzeSymbol(symbol: string): Promise<Analysis> {
+  // Round-11 / Y-9 (P1, regulatory): map ``advisory_disclaimer`` and
+  // ``strategy_live_status`` from the backend response so consumers
+  // can surface the legally-required caveat alongside the
+  // recommendation. The BE emits these on every analyze response.
   interface BackendAnalysis {
     symbol: string;
     composite_score: number;
     recommendation: string;
     agent_results: { agent: string; score: number; summary: string; details: Record<string, unknown> }[];
+    advisory_disclaimer?: string;
+    strategy_live_status?: "live_disabled" | "paper_only" | null;
   }
   const resp = await apiFetch<BackendAnalysis>(`/api/v1/analysis/analyze/${symbol}`, {
     method: "POST",
@@ -1087,6 +1093,10 @@ export async function analyzeSymbol(symbol: string): Promise<Analysis> {
     summary: findAgent("technical")?.summary ?? resp.recommendation ?? "",
     signals: [],
     technicals,
+    // Round-11 / Y-9: surface regulatory caveat + strategy routing
+    // status so panels can render them without re-fetching.
+    disclaimer: resp.advisory_disclaimer ?? undefined,
+    strategyLiveStatus: resp.strategy_live_status ?? null,
   };
 }
 
