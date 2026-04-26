@@ -60,13 +60,25 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
 }
 
 function TermStrip({ points }: { points: IVTermPoint[] }) {
-  const max = Math.max(...points.map((p) => p.atmIv));
-  const min = Math.min(...points.map((p) => p.atmIv));
+  // Round-7 / EP-7: filter to finite ``atmIv`` up-front. A single
+  // missing / NaN point used to poison ``Math.max(...)`` and
+  // ``Math.min(...)`` with NaN, which propagated into every bar
+  // height and triggered React "Invalid value for property 'height'"
+  // dev warnings. ``points[0].atmIv`` and the last-point access in
+  // the front/back caption also crashed when the field was absent.
+  const finite = points.filter((p) => Number.isFinite(p.atmIv));
+  if (finite.length === 0) {
+    return (
+      <p className="mt-1 t-mono text-[12px] u-muted">— term unavailable</p>
+    );
+  }
+  const max = Math.max(...finite.map((p) => p.atmIv));
+  const min = Math.min(...finite.map((p) => p.atmIv));
   const range = max - min || 1;
   return (
     <div className="mt-1">
       <div className="flex h-10 items-end gap-1">
-        {points.map((p) => {
+        {finite.map((p) => {
           const h = ((p.atmIv - min) / range) * 30 + 8;
           return (
             <div
@@ -84,8 +96,8 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
         })}
       </div>
       <p className="mt-1 t-mono text-[11px] u-muted">
-        front {fmtPct(points[0].atmIv, 0)} → back{" "}
-        {fmtPct(points[points.length - 1].atmIv, 0)}
+        front {fmtPct(finite[0].atmIv, 0)} → back{" "}
+        {fmtPct(finite[finite.length - 1].atmIv, 0)}
       </p>
     </div>
   );

@@ -639,19 +639,38 @@ _inflight_structured: dict[str, asyncio.Task[dict | None]] = {}
 # ``f"{symbol}:{report_date}"`` mirroring the structured-call dict.
 _inflight_full_research: dict[str, "asyncio.Task[ClaudeFullResearch]"] = {}
 _INFLIGHT_LOCK: asyncio.Lock | None = None
+# Round-7 / SVC-2: track the loop the lock was built against so we
+# can rebuild on a loop swap. Production runs a single persistent
+# loop so this stays a no-op there; pytest-asyncio (function scope)
+# spins up a fresh loop per test and the previous singleton would
+# surface a stale-loop lock that raised on first acquire.
+_INFLIGHT_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
 
 
 def _get_inflight_lock() -> asyncio.Lock:
     """Return the module-level lock, creating it lazily.
 
-    asyncio.Lock binds to the running event loop on instantiation, so we
-    can't safely instantiate at module-import time (test runners spin up
-    fresh loops per session). Lazy creation keeps the first construction
-    inside the running loop.
+    asyncio.Lock binds its internal waiter queue to the running event
+    loop on first acquire, so we can't safely instantiate at module-
+    import time (test runners spin up fresh loops per session). Lazy
+    creation keeps the first construction inside the running loop.
+
+    Round-7 / SVC-2: also rebuild when the loop changes since last
+    construction. The lock instance is the same across calls within
+    one loop's lifetime — preserving the existing test contract that
+    repeated calls return the same object.
     """
-    global _INFLIGHT_LOCK
-    if _INFLIGHT_LOCK is None:
+    global _INFLIGHT_LOCK, _INFLIGHT_LOCK_LOOP
+    try:
+        running_loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+    if (
+        _INFLIGHT_LOCK is None
+        or (running_loop is not None and _INFLIGHT_LOCK_LOOP is not running_loop)
+    ):
         _INFLIGHT_LOCK = asyncio.Lock()
+        _INFLIGHT_LOCK_LOOP = running_loop
     return _INFLIGHT_LOCK
 
 

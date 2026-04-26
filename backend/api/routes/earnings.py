@@ -29,7 +29,17 @@ _SYMBOL_PATTERN = r"^[A-Z]{1,6}(\.[A-Z])?$"
 async def get_calendar(
     request: Request,
     window: str = Query("both", pattern="^(current|next|both)$"),
-    min_iv_rank: float = Query(0, ge=0, le=100),
+    # Round-7 / BE-4: ``allow_inf_nan=False`` rejects NaN explicitly.
+    # Pydantic v2's ``ge``/``le`` constraints on ``float`` accept NaN
+    # silently because ``NaN >= 0`` and ``NaN <= 100`` both evaluate
+    # to False (the comparison short-circuits to "validator passes" in
+    # the absence of an explicit NaN guard). NaN then flowed into the
+    # downstream filter ``metrics.iv_rank < min_iv_rank`` where
+    # ``< NaN`` is always False, silently disabling the filter —
+    # i.e. an attacker (or a bug) could pass ``min_iv_rank=NaN`` to
+    # bypass the IV-rank gate. The flag is the canonical Pydantic v2
+    # remedy.
+    min_iv_rank: float = Query(0, ge=0, le=100, allow_inf_nan=False),
     bmo_amc: str = Query("both", pattern="^(bmo|amc|both)$"),
     watchlist_only: bool = False,
     sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence)$"),

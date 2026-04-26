@@ -58,9 +58,17 @@ export default function NewsFeed({ news }: NewsFeedProps) {
       <ul className="mt-1 space-y-0.5">
         {visible.map((a, i) => {
           const rel = fmtRelative(a.publishedAt);
+          // Round-7 / EP-9: ``key={a.url ?? i}`` collided when two
+          // syndicated providers returned the same Reuters URL (FMP
+          // commonly does this) — React warned and only rendered one.
+          // Append publishedAt + index so duplicates remain distinct
+          // and items missing a URL don't index-key into the head of
+          // the list (which shifts every refetch as new headlines
+          // arrive, causing flicker / lost focus on hover).
+          const itemKey = `${a.url ?? "no-url"}::${a.publishedAt ?? "no-ts"}::${i}`;
           return (
             <li
-              key={a.url ?? i}
+              key={itemKey}
               className="border-b border-dotted border-[color:var(--border)] py-1"
             >
               {/* B-95 — `title` surfaces source + time on hover for sighted
