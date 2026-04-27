@@ -154,6 +154,16 @@ export interface PortfolioGreeks {
     theta: number;
     vega: number;
   }>;
+  /**
+   * Round-15 / persona-7 P0 + Round-24 contract fix: backend tags
+   * the response with ``is_demo: true`` when the greeks computation
+   * fell back due to an upstream failure (broker outage, cache
+   * miss, etc.). Pre-fix the FE silently treated the all-zero
+   * fallback as "you have no options" — actionably wrong for
+   * an options book. Surface so the UI can render a "data
+   * unavailable" affordance instead.
+   */
+  isDemo?: boolean;
 }
 
 // ─── Options ──────────────────────────────────────────────────

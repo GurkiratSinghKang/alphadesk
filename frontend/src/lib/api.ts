@@ -1438,6 +1438,7 @@ export async function getPortfolioGreeks(): Promise<PortfolioGreeks> {
     netVega: (raw.net_vega as number) ?? 0,
     betaWeightedDelta: (raw.beta_weighted_delta as number) ?? 0,
     byPosition,
+    isDemo: raw.is_demo === true,
   };
 }
 

@@ -76,7 +76,7 @@ function reportMetric(metric: Metric): void {
         body,
         keepalive: true,
       }).catch(() => {
-        /* swallow — endpoint not yet wired */
+        /* swallow — beacon failures shouldn't break the page */
       });
     }
   } catch {

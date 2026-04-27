@@ -1239,6 +1239,21 @@ function BetaWeightedDeltaCard() {
     };
   }, []);
   if (!greeks) return null;
+  // Round-15 / persona-7 P0 + Round-24 contract fix: when the backend
+  // serves ``is_demo: true`` the greeks are zero/synthetic — render a
+  // "data unavailable" affordance instead of treating a flat-delta
+  // book as real (actionably wrong on options risk metrics).
+  if (greeks.isDemo) {
+    return (
+      <div className="rounded-xl border border-[color:var(--warn)]/30 bg-[color:var(--warn)]/5 px-4 py-3">
+        <div className="t-label text-[color:var(--warn)] mb-1">§ BETA-WEIGHTED DELTA</div>
+        <p className="t-meta italic text-fg-muted">
+          Greek aggregates are temporarily unavailable. Showing no data
+          rather than zeros — refresh after upstream recovery.
+        </p>
+      </div>
+    );
+  }
   if (
     greeks.netDelta === 0 &&
     greeks.betaWeightedDelta === 0 &&

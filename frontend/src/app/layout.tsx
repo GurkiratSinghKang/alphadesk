@@ -121,14 +121,24 @@ export default function RootLayout({
       className={`dark ${interTight.variable} ${newsreader.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Round-24 / persona-A: preconnect to the API origin so the
+            first /api/v1 fetch (vitals beacon, useDataPipeline) skips
+            the TLS handshake on the LCP path. Same-origin in prod via
+            Caddy reverse-proxy; the env var lets dev/staging hit a
+            different host without breaking the rule. */}
+        <link
+          rel="preconnect"
+          href={SITE_URL}
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>
-        {/* K-1 + K-14 (round-6): replaces the inline pre-hydration
-            PerformanceObserver script. WebVitalsReporter mounts the
-            web-vitals@4 listeners (LCP/CLS/INP/FCP/TTFB) and beacons
-            each metric to /api/v1/metrics/vitals via sendBeacon. The
-            backend endpoint is not yet wired — failures are swallowed
-            so the page never breaks while we wait for FIX-3 to add the
-            ingest route. See lib/web-vitals.ts for the TODO. */}
+        {/* K-1 + K-14 (round-6): WebVitalsReporter mounts web-vitals@4
+            listeners (LCP/CLS/INP/FCP/TTFB) and beacons each metric to
+            /api/v1/metrics/vitals via sendBeacon. The backend endpoint
+            is wired (api/routes/metrics.py) and rate-limited per IP
+            (Round-17 / persona-C). */}
         <WebVitalsReporter />
         <Providers>{children}</Providers>
       </body>
