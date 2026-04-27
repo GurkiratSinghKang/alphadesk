@@ -374,16 +374,10 @@ export default function DeskPage() {
   // the system is in PAPER vs LIVE state.
   const tradingMode = useUIStore((s) => s.tradingMode);
 
-  // SB-1 pipeline pill: real running count via the shared useQuery
-  // poller (de-duped with any other consumer). ``progress`` is a
-  // per-strategy map; fall back to running:0|1 until that's populated.
-  const { data: pipelineStatus } = usePipelineStatus();
-  const pipelineRunningCount = pipelineStatus?.progress
-    ? Object.values(pipelineStatus.progress).filter((v) => Number(v) < 100).length
-    : pipelineStatus?.running
-      ? 1
-      : 0;
-
+  // SB-1 pipeline pill: the live running count is owned by the
+  // ``LastTickStatusBar`` leaf below — ``usePipelineStatus`` lives
+  // there so the desk page doesn't re-render every 60s when the
+  // poller refreshes. Defaults to 0 here; the leaf overwrites.
   const statusPillsBase = useMemo(
     () =>
       toStatusPills({
@@ -392,11 +386,11 @@ export default function DeskPage() {
         claudeHealthy: true,
         // initial value; LastTickStatusPills will refresh in place
         lastTickSec: undefined,
-        pipelineRunning: pipelineRunningCount,
+        pipelineRunning: 0,
         pipelineTotal: 12,
         tradingMode,
       }),
-    [portfolioSummary.is_demo, marketOpen, tradingMode, pipelineRunningCount],
+    [portfolioSummary.is_demo, marketOpen, tradingMode],
   );
 
   /* ─── Event handlers — kept inline because they're trivial ─ */
@@ -903,6 +897,16 @@ function LastTickStatusBar({
   buildVersion: string;
   marketOpen: boolean;
 }) {
+  // Round-15 / persona-10 P0: pipeline poller lives in the leaf, not
+  // the parent — the 60s refetch only re-renders this small subtree
+  // (was forcing the entire desk to re-render every minute).
+  const { data: pipelineStatus } = usePipelineStatus();
+  const pipelineRunningCount = pipelineStatus?.progress
+    ? Object.values(pipelineStatus.progress).filter((v) => Number(v) < 100).length
+    : pipelineStatus?.running
+      ? 1
+      : 0;
+
   const [tick, setTick] = useState(0);
   useEffect(() => {
     // Round-10 / V-1.12 (P2): pause the heartbeat when the tab is
@@ -943,35 +947,38 @@ function LastTickStatusBar({
   }, [tick]);
 
   const pills = useMemo(() => {
-    // Slice-3 / CH-1B (chart audit 2026-04-26): the previous code wrote
-    // to ``next[next.length - 1]`` to refresh the Last-tick pill. After
-    // SB-1 inserted Pipeline + Mode pills AFTER Last-tick, the index
-    // drifted — the heartbeat now overwrote the Mode pill with a
-    // "Feed idle" label, and the genuine Last-tick pill kept its
-    // stale "Last tick —" copy. Result: the bottom rail showed
-    // "Feed idle · market closed" TWICE (in the Last-tick slot and
-    // in the misnamed Mode slot). Anchor the rewrite by matching
-    // the pill label prefix so it tracks the correct pill regardless
-    // of insertion order.
+    // Anchor pill rewrites by label prefix — index drift after insertion
+    // order changes was a real regression in slice-3 / CH-1B.
     if (base.length === 0) return base;
-    const idx = base.findIndex(
+    const next = base.slice();
+    const tickIdx = next.findIndex(
       (p) =>
         p.label.startsWith("Last tick") ||
         p.label.startsWith("Feed idle"),
     );
-    if (idx === -1) return base;
-    const next = base.slice();
-    next[idx] = {
-      ...next[idx],
-      label:
-        lastTickSec != null
-          ? `Last tick ${lastTickSec.toFixed(2)}s`
-          : marketOpen
-            ? "Last tick —"
-            : "Feed idle · market closed",
-    };
+    if (tickIdx !== -1) {
+      next[tickIdx] = {
+        ...next[tickIdx],
+        label:
+          lastTickSec != null
+            ? `Last tick ${lastTickSec.toFixed(2)}s`
+            : marketOpen
+              ? "Last tick —"
+              : "Feed idle · market closed",
+      };
+    }
+    // Pipeline pill — overwrite with live count from the leaf-owned
+    // useQuery. Match ``Pipeline N/M`` prefix so insertion order can
+    // change without breaking us.
+    const pipeIdx = next.findIndex((p) => p.label.startsWith("Pipeline"));
+    if (pipeIdx !== -1) {
+      next[pipeIdx] = {
+        ...next[pipeIdx],
+        label: `Pipeline ${pipelineRunningCount}/12`,
+      };
+    }
     return next;
-  }, [base, lastTickSec, marketOpen]);
+  }, [base, lastTickSec, marketOpen, pipelineRunningCount]);
 
   return <StatusBar pills={pills} buildVersion={buildVersion} />;
 }

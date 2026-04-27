@@ -233,6 +233,26 @@ export default function PriceChartPanel({
   const deltaSign = (change ?? 0) >= 0 ? "+" : "\u2212";
   const deltaTone = (change ?? 0) >= 0 ? "text-up-500" : "text-down-500";
 
+  // Round-15 / persona-10 P0: the ``data`` prop was being recomputed
+  // from a fresh ``series.map(...)`` literal inline in JSX every parent
+  // render. ChartPane.data → TradingChart.setChartData useEffect dep,
+  // so each desk re-render (and there are many — pipeline pill, ticks,
+  // store updates) tore down + rebuilt every overlay/marker/indicator.
+  // Memoise on series identity so the chart only refreshes when bars
+  // actually change.
+  const chartData = React.useMemo<OHLCVBar[]>(
+    () =>
+      series.map((b) => ({
+        time: b.time,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume ?? 0,
+      })),
+    [series],
+  );
+
   return (
     <section data-slot="price-chart-panel" className={cn("flex flex-col overflow-hidden", className)}>
       {/* Viewport audit r5 #8: header is single-row flex with hero (name +
@@ -372,16 +392,7 @@ export default function PriceChartPanel({
           // chart-type toggle + drawing-tools rail + indicator menu).
           // ChartCanvas remains exported below for any caller that still
           // wants the minimal line-only version; the dashboard does not.
-          <ChartPane
-            data={series.map<OHLCVBar>((b) => ({
-              time: b.time,
-              open: b.open,
-              high: b.high,
-              low: b.low,
-              close: b.close,
-              volume: b.volume ?? 0,
-            }))}
-          />
+          <ChartPane data={chartData} />
         )}
       </div>
     </section>

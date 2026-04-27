@@ -144,6 +144,7 @@ function loadBindings(): Record<string, string> {
 const TAB_ORDER = [
   "/",
   "/strategies",
+  "/trade",
   "/analytics",
   "/pipeline",
   "/reports",

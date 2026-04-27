@@ -257,12 +257,6 @@ export function useDataPipeline(enabled: boolean = true) {
             low: bar.low,
             volume: bar.volume,
           } as Quote);
-          // Dispatch bar event for TradingChart to consume
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("alphadesk:bar-update", { detail: bar })
-            );
-          }
         }
       })
     );
