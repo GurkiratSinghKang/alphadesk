@@ -52,7 +52,11 @@ class PolygonHTTP:
 
     def get(self, path: str, params: dict | None = None) -> dict:
         params = dict(params or {})
-        params.setdefault("apiKey", self._api_key)
+        # Round-15 / persona-11 HIGH: ``setdefault`` allowed callers to
+        # smuggle a stale/bad ``apiKey`` and silently bypass the
+        # configured one. Always overwrite — the configured key is the
+        # only valid auth for this provider instance.
+        params["apiKey"] = self._api_key
         delay = BACKOFF_BASE
         for attempt in range(MAX_RETRIES):
             try:

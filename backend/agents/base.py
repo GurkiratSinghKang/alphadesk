@@ -169,6 +169,29 @@ CLAUDE_CLI = shutil.which("claude")
 _CLAUDE_SEMAPHORE = asyncio.Semaphore(4)
 
 
+def _parse_retry_after_seconds(exc: Exception) -> float | None:
+    """Pull ``retry-after`` from an Anthropic 429 response if present.
+
+    Returns the advertised cooldown in seconds, or None if the header
+    is absent / unparseable. Anthropic returns this as either an
+    integer "seconds" value or an HTTP-date — we only handle the
+    integer form because it's what their SDK surfaces in practice.
+    """
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 class BaseAgent(ABC):
     """Base class for all AlphaDesk agents.
 
@@ -370,9 +393,18 @@ class BaseAgent(ABC):
                     text = "".join(b.text for b in response.content if hasattr(b, "text"))
                     return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
 
-                except anthropic.RateLimitError:
-                    wait = self.retry_delay * (2 ** (attempt - 1))
-                    self.logger.warning("Rate limited, retrying in %.1fs", wait)
+                except anthropic.RateLimitError as rl_exc:
+                    # Round-15 / persona-11 HIGH: honour the upstream
+                    # ``retry-after`` header when present — pure
+                    # exponential backoff lockstepped against Anthropic's
+                    # advertised cooldown, multiplying the 429 lifetime.
+                    retry_after_s = _parse_retry_after_seconds(rl_exc)
+                    backoff = self.retry_delay * (2 ** (attempt - 1))
+                    wait = max(retry_after_s or 0, backoff)
+                    self.logger.warning(
+                        "Rate limited (retry-after=%s); sleeping %.1fs",
+                        retry_after_s, wait,
+                    )
                     await asyncio.sleep(wait)
                 except anthropic.APIError as exc:
                     self.logger.error("API error (attempt %d): %s", attempt, exc)

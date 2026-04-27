@@ -215,6 +215,14 @@ class BoundedPolygonOptionsProvider:
             px = float(bars["close"].iloc[-1])
             return ct, px if px > 0 else None
 
+        # Round-15 / persona-11 HIGH: bid/ask are SYNTHESIZED from the
+        # bar close (×0.95 / ×1.05) when live quotes are unavailable.
+        # That's a ~10% spread fabricated whole-cloth — the strategy
+        # then prices spreads against fake mid-points. Track each
+        # contract's quote-source and surface it to the consumer so
+        # downstream code can either gate on real quotes or at least
+        # log fills against synthetic prices for forensics.
+        synthetic_count = 0
         if tickers:
             with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
                 for ct, px in pool.map(_fetch_one, tickers):
@@ -223,10 +231,20 @@ class BoundedPolygonOptionsProvider:
                     lasts[ct] = px
                     bids[ct] = px * 0.95
                     asks[ct] = px * 1.05
+                    synthetic_count += 1
+        if synthetic_count:
+            log.warning(
+                "vrp_harvest: synthesised bid/ask for %d contracts (±5%% of last close); "
+                "live quotes unavailable. PnL on these contracts is approximate.",
+                synthetic_count,
+            )
         df = df.copy()
         df["last"] = df["contract_ticker"].map(lasts)
         df["bid"] = df["contract_ticker"].map(bids)
         df["ask"] = df["contract_ticker"].map(asks)
+        # Surface the synthetic flag downstream — strategies that care
+        # about real quotes (e.g. live trading) can gate on this column.
+        df["bid_ask_synthetic"] = df["last"].notna()
         # Drop contracts for which enrichment produced nothing.
         df = df[df["last"].notna()].copy()
         return df

@@ -147,6 +147,25 @@ class Signal(BaseModel):
                 "Signal requires exactly one of target_weight or quantity "
                 f"(target_weight={self.target_weight}, quantity={self.quantity})"
             )
+        # Round-15 / persona-11 P1: pydantic v2 accepts NaN/inf for
+        # ``float`` by default. A degenerate ``1.0/vol`` with vol=0
+        # produces inf and propagates silently through the sizing path
+        # in ``backtest_runner._size_signals`` (Decimal(str(NaN)) → NaN
+        # quantization). Reject explicitly here so the strategy author
+        # surfaces a real error instead of corrupted PnL.
+        import math
+        if has_w and not math.isfinite(self.target_weight):
+            raise ValueError(
+                f"Signal.target_weight must be finite (got {self.target_weight!r})"
+            )
+        if self.limit_price is not None and not math.isfinite(self.limit_price):
+            raise ValueError(
+                f"Signal.limit_price must be finite (got {self.limit_price!r})"
+            )
+        if self.stop_price is not None and not math.isfinite(self.stop_price):
+            raise ValueError(
+                f"Signal.stop_price must be finite (got {self.stop_price!r})"
+            )
         return self
 
 
