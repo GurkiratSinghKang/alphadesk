@@ -83,6 +83,33 @@
   --profit-tint: rgba(168, 208, 77, 0.12);
   --loss-tint:   rgba(224, 120, 86, 0.12);
 
+  /* ─── Slice-18 / LCH-1 (2026 design brief, Linear UI redesign) ────────
+     Perceptually-uniform LCH variants of the three semantic tokens.
+     Linear's redesign collapsed ~98 bespoke theme variables to 3
+     base values + LCH math because CSS color models like sRGB/HSL
+     don't track perceived lightness — a green at L=70 reads brighter
+     than a red at L=70 on most displays, breaking accessibility math.
+     LCH (CIELCH) does track perceived lightness, so a profit-green
+     and a loss-red set to the same L are equally legible.
+
+     We keep the existing tokens as-is for backward compat; consumers
+     migrating to perceptually-uniform mode can reach for the ``-lch``
+     variants. The lightness anchor (62) is chosen so all three sit
+     at WCAG-AA contrast (≥ 4.5:1) on the warm-dark base. */
+  --brand-lch:  lch(62 60 75);    /* warm gold, anchored at L=62 */
+  --profit-lch: lch(62 60 130);   /* chartreuse-green at L=62 */
+  --loss-lch:   lch(62 55 35);    /* coral at L=62 */
+  --info-lch:   lch(62 60 260);   /* ice-blue at L=62 */
+  --warn-lch:   lch(62 60 65);    /* amber at L=62 */
+
+  /* Tinted backgrounds derived from the LCH anchors via low alpha.
+     Operators consuming these on backgrounds get equally-weighted
+     visual emphasis across the four semantic tones. */
+  --brand-tint-lch:  lch(62 60 75 / 0.12);
+  --profit-tint-lch: lch(62 60 130 / 0.12);
+  --loss-tint-lch:   lch(62 55 35 / 0.12);
+  --info-tint-lch:   lch(62 60 260 / 0.12);
+
   /* Readable text colors on colored backgrounds.
      - profit bg (luminous chartreuse #a8d04d) → near-black reads cleanly.
      - loss bg (coral #e07856) → warm off-white reads cleanly (WCAG AA).
