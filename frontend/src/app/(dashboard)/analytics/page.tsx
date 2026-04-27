@@ -1094,6 +1094,17 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
+        {/* Slice-10 / BWD-1 (Tastytrade signature): beta-weighted delta
+            hero strip. Surfaces SPY-equivalent directional exposure as
+            the primary risk metric — a $200 AAPL delta + $200 TSLA
+            delta isn't 400 SPY-equivalent units; it's
+            (200×1.2) + (200×2.0) = 640 because TSLA moves at 2× SPY.
+            BWD makes that math glanceable so a trader can read "if SPY
+            drops 1%, my book drops X%" at a glance. Per-position table
+            below ranks contributors so the user can see WHICH symbol
+            is driving the book's beta. */}
+        <BetaWeightedDeltaCard />
+
         {/* Row 1: Drawdown + Rolling Sharpe */}
         {/* 4-col at 2xl (1536+) matches the dashboard hero layout — all
             four charts line up on wide monitors while staying stacked on
@@ -1201,5 +1212,145 @@ export default function AnalyticsPage() {
         </SectionCard>
       </DashboardPageLayout>
     </ScrollArea>
+  );
+}
+
+/**
+ * Slice-10 / BWD-1 (2026 design brief, Tastytrade signature):
+ * Beta-weighted-delta hero card. Renders the SPY-equivalent
+ * directional exposure number plus a per-position attribution table
+ * sorted by absolute BWD contribution, so the user can see at a
+ * glance which positions drive their book's beta.
+ */
+function BetaWeightedDeltaCard() {
+  const [greeks, setGreeks] = useState<import("@/types").PortfolioGreeks | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("@/lib/api")
+      .then((m) => m.getPortfolioGreeks())
+      .then((g) => {
+        if (!cancelled) setGreeks(g);
+      })
+      .catch(() => {
+        // Leave greeks null — card hides itself.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!greeks) return null;
+  if (
+    greeks.netDelta === 0 &&
+    greeks.betaWeightedDelta === 0 &&
+    (!greeks.byPosition || greeks.byPosition.length === 0)
+  ) {
+    return null;
+  }
+  const bwd = greeks.betaWeightedDelta;
+  const tone =
+    bwd > 0
+      ? "text-[var(--profit)]"
+      : bwd < 0
+        ? "text-[var(--loss)]"
+        : "text-ink-1000";
+  const ranked = (greeks.byPosition ?? [])
+    .map(
+      (p) =>
+        p as unknown as {
+          symbol: string;
+          quantity: number;
+          delta: number;
+          beta?: number;
+          beta_weighted_delta?: number;
+        },
+    )
+    .filter((p) => Math.abs(p.delta ?? 0) > 0.5)
+    .sort(
+      (a, b) =>
+        Math.abs(b.beta_weighted_delta ?? b.delta * (b.beta ?? 1)) -
+        Math.abs(a.beta_weighted_delta ?? a.delta * (a.beta ?? 1)),
+    );
+  return (
+    <section
+      data-slot="bwd-card"
+      className="mt-4 rounded-lg border border-border bg-[var(--panel)] p-4"
+      aria-label="Portfolio beta-weighted delta"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 mb-3">
+        <div>
+          <p className="t-label mb-1">Beta-weighted delta · SPY equivalent</p>
+          <p className={cn("t-num-lg tabular-nums font-medium", tone)}>
+            {bwd > 0 ? "+" : ""}
+            {bwd.toFixed(2)}
+          </p>
+        </div>
+        <div>
+          <p className="t-label mb-1">Net delta · raw</p>
+          <p className="font-mono tabular-nums text-[18px] text-ink-1000">
+            {greeks.netDelta > 0 ? "+" : ""}
+            {greeks.netDelta.toFixed(2)}
+          </p>
+        </div>
+        <p className="t-meta u-muted italic ml-auto max-w-[42ch]">
+          Sums each position&apos;s delta times its symbol-to-SPY beta. Reads
+          as &ldquo;if SPY drops 1%, my book moves X% in equivalent dollar
+          terms.&rdquo;
+        </p>
+      </div>
+      {ranked.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-[var(--panel)] border-b border-border-hair">
+                <th className="t-label text-left px-2 py-1.5">Symbol</th>
+                <th className="t-label text-right px-2 py-1.5">Qty</th>
+                <th className="t-label text-right px-2 py-1.5">δ</th>
+                <th className="t-label text-right px-2 py-1.5">β to SPY</th>
+                <th className="t-label text-right px-2 py-1.5">
+                  BWD contribution
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.slice(0, 8).map((p) => {
+                const contrib =
+                  p.beta_weighted_delta ?? p.delta * (p.beta ?? 1);
+                const cTone =
+                  contrib > 0
+                    ? "text-[var(--profit)]"
+                    : contrib < 0
+                      ? "text-[var(--loss)]"
+                      : "text-ink-1000";
+                return (
+                  <tr key={p.symbol} className="border-b border-border-hair">
+                    <td className="px-2 py-1.5 font-mono text-[12px] text-ink-1000">
+                      {p.symbol}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                      {p.quantity}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                      {p.delta?.toFixed(2)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums u-muted">
+                      {(p.beta ?? 1).toFixed(2)}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-2 py-1.5 text-right font-mono text-[12px] tabular-nums",
+                        cTone,
+                      )}
+                    >
+                      {contrib > 0 ? "+" : ""}
+                      {contrib.toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

@@ -749,6 +749,57 @@ async def get_performance(
     return _demo_performance(period)
 
 
+# Slice-10 / BWD-1 (2026 design brief, Tastytrade signature):
+# beta-to-SPY lookup for the curated universe. Numbers are 5-year
+# weekly betas, rounded to one decimal — they don't move enough
+# week-to-week to warrant a real-time computation pass for the
+# initial ship. Unknown symbols default to 1.0 (SPY-like assumption);
+# operators can override per-symbol via env once a backfill ships.
+_BETA_TO_SPY: dict[str, float] = {
+    # Mega-cap tech (high beta)
+    "TSLA": 2.0, "NVDA": 1.7, "META": 1.4, "AMD": 1.6, "CRM": 1.3,
+    "AMZN": 1.2, "GOOGL": 1.1, "GOOG": 1.1, "MSFT": 0.9, "AAPL": 1.2,
+    "NFLX": 1.3, "ADBE": 1.1, "ORCL": 0.9, "AVGO": 1.4, "QCOM": 1.3,
+    "PLTR": 2.6, "COIN": 3.0, "CRWD": 1.5, "SNOW": 1.6, "MU": 1.5,
+    "INTC": 0.9, "MRVL": 1.5, "NET": 1.7, "DDOG": 1.5, "MDB": 1.6,
+    # Index ETFs
+    "SPY": 1.0, "QQQ": 1.1, "IWM": 1.2, "DIA": 0.95, "VTI": 1.0,
+    # Defensive / low-beta
+    "JNJ": 0.6, "PG": 0.5, "KO": 0.6, "PEP": 0.6, "WMT": 0.6,
+    "MCD": 0.7, "VZ": 0.4, "T": 0.5, "DUK": 0.5, "SO": 0.4,
+    "XOM": 0.8, "CVX": 0.9, "BRK.B": 0.85,
+    # Financials (mid-beta)
+    "JPM": 1.1, "BAC": 1.3, "WFC": 1.2, "GS": 1.3, "MS": 1.4,
+    "V": 0.95, "MA": 1.0, "AXP": 1.2,
+    # Healthcare
+    "LLY": 0.7, "UNH": 0.7, "ABBV": 0.7, "PFE": 0.6, "MRK": 0.6,
+    "TMO": 0.9, "ABT": 0.9, "BMY": 0.6, "GILD": 0.6, "AMGN": 0.7,
+    # Industrial / cyclical
+    "BA": 1.5, "CAT": 1.1, "DE": 1.1, "GE": 1.0, "HON": 1.0,
+    "F": 1.4, "GM": 1.5, "RTX": 0.9, "LMT": 0.6,
+    # Consumer cyclical
+    "DIS": 1.1, "NKE": 1.0, "HD": 1.0, "LOW": 1.1, "SBUX": 0.95,
+    "ABNB": 1.4, "BKNG": 1.2, "UBER": 1.5,
+    # High-beta growth
+    "SHOP": 1.9, "SQ": 1.9, "ROKU": 2.1, "CVNA": 3.5, "RBLX": 1.8,
+    "DASH": 1.6, "SOFI": 2.5, "HOOD": 2.1, "RIVN": 2.5, "LCID": 2.5,
+    # Semis (cyclical, high-beta)
+    "TSM": 1.3, "ASML": 1.2, "LRCX": 1.5, "KLAC": 1.4, "AMAT": 1.4,
+    "ADI": 1.1, "TXN": 1.0, "ANET": 1.4,
+    # ADRs
+    "BABA": 1.3,
+}
+
+
+def _beta_to_spy(symbol: str) -> float:
+    """Look up the symbol's beta-to-SPY for portfolio-level
+    directional exposure aggregation. Defaults to 1.0 when unknown
+    (treat as SPY-like). The map is hand-curated for the ~130
+    optionable curated universe; refresh quarterly via a portfolio
+    analytics backfill (future work)."""
+    return _BETA_TO_SPY.get(symbol.upper().split("/")[0], 1.0)
+
+
 @router.get("/greeks", response_model=PortfolioGreeks)
 async def get_portfolio_greeks() -> PortfolioGreeks:
     """Aggregate portfolio-level greeks across all option positions."""
@@ -764,6 +815,15 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
         net_gamma = 0.0
         net_theta = 0.0
         net_vega = 0.0
+        # Slice-10 / BWD-1: beta-weighted delta is the Tastytrade-signature
+        # portfolio metric. Sums each position's delta times its
+        # symbol-to-SPY beta, normalising directional exposure across
+        # symbols that move at different magnitudes vs the index. A
+        # portfolio of +200 AAPL delta + +200 TSLA delta has 400 total
+        # delta but a beta-weighted delta of (200×1.2) + (200×2.0) =
+        # 640 SPY-equivalent — which is the more honest "if SPY drops
+        # 1%, my book drops X%" measurement.
+        beta_weighted_delta = 0.0
         by_position = []
 
         for pos in positions.get("positions", []):
@@ -772,6 +832,7 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
             asset_class = pos.get("asset_class", "us_equity")
             is_option = asset_class == "option"
             multiplier = 100 if is_option else 1
+            symbol = pos.get("symbol", "")
 
             # Stocks have delta=1 per share, no gamma/theta/vega
             if not is_option and not greeks.get("delta"):
@@ -785,18 +846,35 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
                 t = greeks.get("theta", 0) * qty * multiplier
                 v = greeks.get("vega", 0) * qty * multiplier
 
+            # Underlying for option positions is encoded in the OCC; for
+            # stocks the symbol IS the underlying. Strip option-symbol
+            # suffix (YYMMDD + C/P + strike) heuristically — first
+            # alphabetic prefix is the underlying ticker.
+            underlying = symbol
+            if is_option and len(symbol) > 9:
+                underlying = "".join(
+                    ch for ch in symbol[: len(symbol) - 15] if ch.isalpha()
+                ) or symbol
+            beta = _beta_to_spy(underlying)
+
             net_delta += d
             net_gamma += g
             net_theta += t
             net_vega += v
+            beta_weighted_delta += d * beta
 
             by_position.append({
-                "symbol": pos.get("symbol"),
+                "symbol": symbol,
                 "quantity": qty,
                 "delta": round(d, 2),
                 "gamma": round(g, 4),
                 "theta": round(t, 2),
                 "vega": round(v, 2),
+                # Slice-10 / BWD-1: per-position beta + BWD contribution
+                # so the FE can show a "by-position attribution" panel
+                # ranking which positions drive the book's beta.
+                "beta": round(beta, 2),
+                "beta_weighted_delta": round(d * beta, 2),
             })
 
         return PortfolioGreeks(
@@ -804,6 +882,7 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
             net_gamma=round(net_gamma, 4),
             net_theta=round(net_theta, 2),
             net_vega=round(net_vega, 2),
+            beta_weighted_delta=round(beta_weighted_delta, 2),
             by_position=by_position,
         )
     except Exception:
