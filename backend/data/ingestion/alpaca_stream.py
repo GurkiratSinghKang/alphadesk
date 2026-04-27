@@ -319,7 +319,19 @@ async def _run_stream() -> None:
                     "secret": settings.ALPACA_SECRET_KEY.get_secret_value(),
                 }))
                 auth_resp = await ws.recv()
-                logger.info("Alpaca stream auth: %s", str(auth_resp)[:100])
+                # Round-18 / persona-C: don't slice the raw response into
+                # logs — Alpaca echoes vary, and a future format change
+                # could leak the ``key`` field we just sent. Parse first
+                # and log only the structured ``T``/``msg`` fields.
+                try:
+                    _parsed = json.loads(auth_resp)
+                    _msgs = _parsed if isinstance(_parsed, list) else [_parsed]
+                    logger.info(
+                        "Alpaca stream auth ok types=%s",
+                        [m.get("T") for m in _msgs if isinstance(m, dict)],
+                    )
+                except Exception:
+                    logger.info("Alpaca stream auth: <unparseable>")
 
                 # Check for auth errors. Connection-limit (406) happens when
                 # a prior session hasn't expired server-side yet; sleeping
@@ -594,10 +606,13 @@ async def _run_trade_updates_stream() -> None:
                     },
                 }))
                 auth_resp = await ws.recv()
-                logger.info("Alpaca trade_updates auth: %s", str(auth_resp)[:200])
+                # Round-18 / persona-C: log only the parsed status, not
+                # the raw response slice (which on a future Alpaca error-
+                # shape change could echo the secret_key we sent).
                 try:
                     auth_msg = json.loads(auth_resp)
                     status = (auth_msg.get("data") or {}).get("status") or auth_msg.get("status")
+                    logger.info("Alpaca trade_updates auth status=%s", status)
                     if status and str(status).lower() not in ("authorized", "success"):
                         logger.error(
                             "Alpaca trade_updates auth failed (status=%s) — retry in 60s",
@@ -619,9 +634,15 @@ async def _run_trade_updates_stream() -> None:
                     "data": {"streams": ["trade_updates"]},
                 }))
                 listen_resp = await ws.recv()
-                logger.info(
-                    "Alpaca trade_updates listen: %s", str(listen_resp)[:200],
-                )
+                try:
+                    _parsed = json.loads(listen_resp)
+                    _msgs = _parsed if isinstance(_parsed, list) else [_parsed]
+                    logger.info(
+                        "Alpaca trade_updates listen ok types=%s",
+                        [m.get("T") if isinstance(m, dict) else None for m in _msgs],
+                    )
+                except Exception:
+                    logger.info("Alpaca trade_updates listen: <unparseable>")
                 backoff = 5  # reset on successful connect
 
                 # 3. Fan out messages

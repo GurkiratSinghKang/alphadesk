@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from core.auth import require_auth
 from core.config import settings
 from core.redis import cache_get, cache_set
 
@@ -699,12 +700,20 @@ async def trigger_analysis(
     symbol: str,
     request: AnalysisRequest,
     background_tasks: BackgroundTasks,
+    username: str = Depends(require_auth),
 ) -> AnalysisResponse:
     """Trigger a multi-agent analysis pipeline for a symbol.
 
     Tries real data from Alpaca (technicals) and Polygon (fundamentals) first.
     Falls back to Claude agent pipeline, then demo as absolute last resort.
+
+    Round-24 / persona-C P0: now rate-limited per user. Prior to this
+    a stolen access token (or runaway client) could iterate symbols
+    forever, defeating the ``analysis:{SYMBOL}`` cache and forcing a
+    full multi-agent Claude pipeline on each call.
     """
+    from api.routes.agents import _enforce_chat_rate_limit
+    await _enforce_chat_rate_limit(username)
     symbol = symbol.upper()
 
     # 1. Try real data analysis first (Alpaca + Polygon)

@@ -900,20 +900,26 @@ async def change_password(
         req=req,
     )
 
-    # Return the new bcrypt hash so the operator can paste it into the env /
-    # secret store. The message is explicit about the limitation so the UI
-    # can render it verbatim instead of pretending the rotation landed in
-    # the backing store.
+    # Round-16 / persona-7 P0: do NOT return the bcrypt hash in the
+    # JSON body. Pre-fix this leaked the cost-14 hash into browser
+    # memory + access logs + X-Request-ID telemetry / fetch caches —
+    # an attacker who captured the response could run an offline
+    # crack against it. Log the hash server-side at INFO so the
+    # operator can fish it out of the journal during the rotation
+    # window, but never put it on the wire.
+    logger.info(
+        "change_password: new hash minted for %s (paste into env / secret store): %s",
+        username, new_hash,
+    )
     return {
         "ok": True,
         "password_version": new_pv,
-        "new_password_hash": new_hash,
         "message": (
             "Password change acknowledged. All existing sessions have been "
             "invalidated. NOTE: ADMIN_PASSWORD_HASH is env-var-managed and "
-            "was NOT rotated server-side — paste the returned hash into "
-            "your environment config and redeploy for the new password to "
-            "take effect on future logins."
+            "was NOT rotated server-side — the new hash has been written to "
+            "the server log; ops should rotate the env var and redeploy "
+            "before the new password takes effect on future logins."
         ),
     }
 

@@ -25,6 +25,8 @@ hostile beacon can't blow up the log volume.
 from __future__ import annotations
 
 import logging
+import time
+from collections import deque
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -33,6 +35,39 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger("alphadesk.metrics.vitals")
 
 router = APIRouter()
+
+# Round-16 / persona-7 + Round-24 / persona-C P0: the docstring above
+# claimed the endpoint is "rate-limited per source IP" but the handler
+# never actually enforced it — a botnet looping ``navigator.sendBeacon``
+# could trivially flood the JSON-log stream and burn disk + log-bill
+# costs. Lightweight per-IP token-bucket here — single-worker uvicorn
+# means an in-process dict suffices for the scale we ship at.
+_VITALS_RATE_WINDOW_S = 60.0
+_VITALS_RATE_MAX_PER_IP = 60  # 1/sec sustained per IP, fits ~5 vitals/page-load
+_VITALS_HITS: dict[str, deque[float]] = {}
+
+
+def _vitals_rate_check(client_ip: str) -> bool:
+    """Return True if the IP is under the rate limit, False if blocked."""
+    now = time.monotonic()
+    bucket = _VITALS_HITS.get(client_ip)
+    if bucket is None:
+        bucket = deque(maxlen=_VITALS_RATE_MAX_PER_IP * 2)
+        _VITALS_HITS[client_ip] = bucket
+    # Trim entries older than the window.
+    while bucket and now - bucket[0] > _VITALS_RATE_WINDOW_S:
+        bucket.popleft()
+    if len(bucket) >= _VITALS_RATE_MAX_PER_IP:
+        return False
+    bucket.append(now)
+    # Bound the master dict so a flood of distinct IPs can't OOM us.
+    if len(_VITALS_HITS) > 10_000:
+        # Evict the oldest IP entry — best-effort, doesn't need ordering precision.
+        try:
+            del _VITALS_HITS[next(iter(_VITALS_HITS))]
+        except StopIteration:
+            pass
+    return True
 
 
 # Web-Vitals v4 names. Fixed enum so a typo'd beacon can't pollute the log.
@@ -69,6 +104,9 @@ async def log_vital(payload: _VitalsPayload, request: Request) -> Response:
     swallows non-2xx in ``frontend/src/lib/web-vitals.ts``).
     """
     client_host = request.client.host if request.client else "unknown"
+    if not _vitals_rate_check(client_host):
+        # Quietly accept-then-drop so a flood doesn't trigger client retries.
+        return Response(status_code=204)
     logger.info(
         "web_vital",
         extra={

@@ -406,15 +406,35 @@ async def get_agent_status() -> AgentPipelineStatus:
 
 
 @router.post("/refine-strategy")
-async def refine_strategy(request: Request, body: dict) -> dict[str, Any]:
+async def refine_strategy(
+    request: Request,
+    body: dict,
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
     """Use Claude AI to analyze and refine a trading strategy.
 
     Accepts a natural-language strategy description and existing rules,
     then returns parsed rules, improvement suggestions, risk warnings,
     and recommended backtesting parameters.
+
+    Round-24 / persona-C P0: now rate-limited on the same per-user
+    budget as ``/chat`` (30 calls / 5min). Pre-fix this was an
+    Anthropic-spend amplifier — a stolen cookie or runaway client
+    could rip through Sonnet calls at uvicorn-loop speed.
     """
+    await _enforce_chat_rate_limit(username)
+
     strategy_text = body.get("strategy", "")
     rules = body.get("rules", [])
+
+    # Round-24 / persona-C: bound the prompt size so a paste-bomb can't
+    # token-amplify the Claude bill. 8 KB is comfortably more than any
+    # legitimate strategy description.
+    if isinstance(strategy_text, str) and len(strategy_text) > 8_000:
+        raise HTTPException(
+            status_code=413,
+            detail="Strategy description exceeds 8 KB; please summarise.",
+        )
 
     if not strategy_text and not rules:
         return {
