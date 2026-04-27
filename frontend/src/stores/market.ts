@@ -19,6 +19,18 @@ const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY
 // Follow-up owner: next WS wave (consolidate portfolio + quotes into one
 // subscription, drop redundant REST polls).
 
+/**
+ * Slice-11 / SLG-1 (2026 design brief, TWS Mosaic pattern): symbol-link
+ * color groups. Up to 4 groups; any panel can join a group via its
+ * group-picker chip and the panel's symbol updates synchronously when
+ * any other panel in the same group changes its symbol. Group 0 = "no
+ * group" (panel uses its own selectedSymbol independently). Group ids
+ * 1-4 follow the Bloomberg / IBKR convention with brand-coordinated
+ * colors so the user can pin "research" panels to red, "watch" panels
+ * to amber, etc.
+ */
+export type SymbolGroupId = 0 | 1 | 2 | 3 | 4;
+
 interface MarketState {
   quotes: Record<string, Quote>;
   watchlist: string[];
@@ -30,7 +42,16 @@ interface MarketState {
    */
   freshestTs: number;
 
+  /**
+   * Slice-11 / SLG-1: per-group active symbol. Group 0 is unused; groups
+   * 1-4 are the user-pinnable symbol-link buckets. Default to SPY across
+   * all groups so panels that join a group on first mount have something
+   * sensible to display.
+   */
+  groupSymbols: Record<1 | 2 | 3 | 4, string>;
+
   setSelectedSymbol: (symbol: string) => void;
+  setGroupSymbol: (group: 1 | 2 | 3 | 4, symbol: string) => void;
   addToWatchlist: (symbol: string) => void;
   removeFromWatchlist: (symbol: string) => void;
   updateQuote: (quote: Quote) => void;
@@ -56,8 +77,16 @@ export const useMarketStore = create<MarketState>()(
       watchlist: DEFAULT_WATCHLIST,
       selectedSymbol: "SPY",
       freshestTs: 0,
+      groupSymbols: { 1: "SPY", 2: "SPY", 3: "SPY", 4: "SPY" },
 
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      setGroupSymbol: (group, symbol) =>
+        set((state) => ({
+          groupSymbols: {
+            ...state.groupSymbols,
+            [group]: symbol.toUpperCase(),
+          },
+        })),
 
       addToWatchlist: (symbol) =>
         set((state) => {
