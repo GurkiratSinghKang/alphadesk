@@ -271,7 +271,14 @@ export default function ChartPane({
       }));
       return [{ symbol: sym, bars }];
     });
-  }, [compareSymbols, compareBars]);
+    // Key on primitive signature (symbols + per-symbol bar count) —
+    // ``compareBars`` is a react-query wrapper whose identity churns
+    // every poll and would otherwise re-fit the chart every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    compareSymbols.join(","),
+    compareSymbols.map((s) => compareBars[s]?.length ?? 0).join(","),
+  ]);
 
   // Slice-8 / CH-3D (2026 chart audit, TradingView signature): Bar Replay.
   //   ``replayEnabled`` — toggles the entire replay UX
@@ -365,10 +372,10 @@ export default function ChartPane({
     };
   }, []);
 
-  // Last-bar close used to decide buy-limit-below-mid vs sell-limit-above-mid.
-  // Falls back to the most recent OHLC hover if the data prop is empty.
-  const lastClose = data && data.length > 0
-    ? data[data.length - 1].close
+  // Use ``visibleData`` (not ``data``) so the Shift-click side decision
+  // matches the scene the user actually sees under Bar Replay.
+  const lastClose = visibleData.length > 0
+    ? visibleData[visibleData.length - 1].close
     : ohlcHover?.close ?? null;
 
   const symbol = useMarketStore((s) => s.selectedSymbol);

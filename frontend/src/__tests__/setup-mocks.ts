@@ -65,6 +65,11 @@ vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'Solid', VerticalGradient: 'VerticalGradient' },
   LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
   CrosshairMode: { Normal: 0, Magnet: 1 },
+  // createSeriesMarkers — used by TradingChart for event/order pins.
+  createSeriesMarkers: vi.fn(() => ({
+    setMarkers: vi.fn(),
+    detach: vi.fn(),
+  })),
 }));
 
 // ─── WebSocket Provider ────────────────────────────────────

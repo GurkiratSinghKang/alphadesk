@@ -324,8 +324,13 @@ function computeRSI(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
       avgGain = (avgGain * (period - 1) + gains[i - 1]) / period;
       avgLoss = (avgLoss * (period - 1) + losses[i - 1]) / period;
     }
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
+    // Flat series (avgGain=0, avgLoss=0) → neutral 50, not max-strength.
+    const rsi =
+      avgLoss === 0 && avgGain === 0
+        ? 50
+        : avgLoss === 0
+          ? 100
+          : 100 - 100 / (1 + avgGain / avgLoss);
     result.push({
       time: normalizeTime(bars[i].time) as unknown as Time,
       value: rsi,
@@ -425,6 +430,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     const lastBarRef = useRef<OHLCVBar | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<SeriesType>[]>([]);
     const drawingPaneRef = useRef<DrawingPaneHandle | null>(null);
+    // Plugin handle must be detached to avoid stacking instances on
+    // every setData; we keep it in a ref and clear before re-attaching.
+    const seriesMarkersRef = useRef<ReturnType<typeof createSeriesMarkers<Time>> | null>(null);
     // Round-12 / CH-1: gates ``timeScale().fitContent()`` so it runs
     // only once per (chartType, indicators) lifecycle, not on every
     // data refetch (which used to reset the user's zoom).
@@ -695,6 +703,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         observer.disconnect();
         try { drawingPaneRef.current?.detach(); } catch { /* noop */ }
         drawingPaneRef.current = null;
+        try { seriesMarkersRef.current?.detach?.(); } catch { /* noop */ }
+        seriesMarkersRef.current = null;
         chart.remove();
         chartRef.current = null;
         mainSeriesRef.current = null;
@@ -775,12 +785,26 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
             };
             markers.push(marker);
           }
+          // Detach the previous plugin handle before re-attaching so
+          // instances don't stack across setData calls.
+          if (seriesMarkersRef.current) {
+            try {
+              seriesMarkersRef.current.detach?.();
+            } catch {
+              /* noop */
+            }
+            seriesMarkersRef.current = null;
+          }
           if (markers.length > 0) {
             try {
-              createSeriesMarkers(mainSeriesRef.current, markers);
+              seriesMarkersRef.current = createSeriesMarkers(
+                mainSeriesRef.current,
+                markers,
+              );
             } catch {
-              // best-effort; old lightweight-charts versions may not
-              // expose createSeriesMarkers.
+              // Old lightweight-charts versions may not expose
+              // createSeriesMarkers; mark as no-op.
+              seriesMarkersRef.current = null;
             }
           }
         }
@@ -895,26 +919,30 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
-        // Slice-14 / AVWAP-1: anchored VWAP overlay. Renders as a
-        // dashed brand-gold line from the anchor bar forward — same
-        // tone as the regular VWAP but dashed so the user can
-        // distinguish "since anchor" from "session-cumulative."
-        if (
-          anchoredVwapIndex != null &&
-          anchoredVwapIndex >= 0 &&
-          anchoredVwapIndex < bars.length
-        ) {
-          const avwap = computeAnchoredVWAP(bars, anchoredVwapIndex);
-          if (avwap.length >= 2) {
-            const s = chart.addSeries(LineSeries, {
-              color: brandGold,
-              lineWidth: 2,
-              lineStyle: 2, // dashed
-              priceScaleId: "right",
-              title: "AVWAP",
-            });
-            s.setData(avwap);
-            overlaySeriesRef.current.push(s);
+        // Anchored VWAP overlay (dashed brand-gold to distinguish from
+        // session-cumulative VWAP). The anchor is an index into the
+        // *visible* bars (Bar Replay slices ``data`` upstream); we
+        // clamp defensively so a stale anchor outside the rendered
+        // window degrades to "anchor at visible start" instead of
+        // crashing the overlay.
+        if (anchoredVwapIndex != null && bars.length > 0) {
+          const clamped = Math.max(
+            0,
+            Math.min(bars.length - 1, anchoredVwapIndex),
+          );
+          if (clamped < bars.length) {
+            const avwap = computeAnchoredVWAP(bars, clamped);
+            if (avwap.length >= 2) {
+              const s = chart.addSeries(LineSeries, {
+                color: brandGold,
+                lineWidth: 2,
+                lineStyle: 2, // dashed
+                priceScaleId: "right",
+                title: "AVWAP",
+              });
+              s.setData(avwap);
+              overlaySeriesRef.current.push(s);
+            }
           }
         }
 
@@ -1089,7 +1117,11 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           didFitRef.current = true;
         }
       },
-      [chartType, indicators, compareSeries, anchoredVwapIndex, events]
+      // Key on ``events.length`` (primitive) — consumers commonly pass
+      // a fresh ``[]`` literal which would otherwise reset the zoom on
+      // every render via the didFitRef flip.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0]
     );
 
     useEffect(() => {
@@ -1101,7 +1133,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     // the new shape.
     useEffect(() => {
       didFitRef.current = false;
-    }, [chartType, indicators, compareSeries, anchoredVwapIndex, events]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {
