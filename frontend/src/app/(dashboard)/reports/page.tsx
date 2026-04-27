@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
+import SavedViewsBar from "@/components/primitives/SavedViewsBar";
 import {
   getPortfolioSummary,
   getPositions,
@@ -572,6 +573,20 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
         </p>
       ) : (
         <>
+          {/* Slice-7 / TBL-1 (Brex Smart Tables / Airtable convention):
+              saved-views bar above the trade ledger. Captures the
+              current sort key + direction as a named preset; click a
+              preset to recall. Persists to localStorage so a trader's
+              "Q3 winners" view survives a refresh. */}
+          <SavedViewsBar
+            scope="reports-trade-history"
+            current={{ sortKey, sortDir }}
+            onApply={(view) => {
+              setSortKey(view.sortKey);
+              setSortDir(view.sortDir);
+              setPage(0);
+            }}
+          />
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full">
               <thead>
