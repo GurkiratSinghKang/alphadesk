@@ -188,6 +188,14 @@ export default function ChartPane({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [indicators, setIndicators] = React.useState<Indicator[]>(["Volume"]);
 
+  // Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
+  // anchored VWAP. ``avwapAnchor`` is the bar index from which the
+  // VWAP cumulates; null means no anchored VWAP rendered. ``avwapArmed``
+  // is true when the user has clicked the AVWAP toolbar button and the
+  // next chart click should drop the anchor.
+  const [avwapAnchor, setAvwapAnchor] = React.useState<number | null>(null);
+  const [avwapArmed, setAvwapArmed] = React.useState(false);
+
   // Slice-9 / CH-3C (2026 chart audit, TradingView "+ Compare"): list of
   // symbols overlaid on the main chart for percent-change comparison.
   // Symbols are added via the "+ Compare" button in the toolbar; bars
@@ -371,6 +379,28 @@ export default function ChartPane({
   // is disabled at the button level, so this branch is defensive.
   const handleChartClick = React.useCallback(
     (pt: { time: number; price: number }) => {
+      // Slice-14 / AVWAP-1: when the AVWAP tool is armed, the next chart
+      // click drops the anchor and disarms. Find the bar whose time is
+      // closest to the click.
+      if (avwapArmed) {
+        const t = pt.time;
+        let bestIdx = 0;
+        let bestDelta = Infinity;
+        for (let i = 0; i < data.length; i++) {
+          const barT =
+            typeof data[i].time === "number"
+              ? (data[i].time as number)
+              : Math.floor(new Date(data[i].time).getTime() / 1000);
+          const delta = Math.abs(barT - t);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            bestIdx = i;
+          }
+        }
+        setAvwapAnchor(bestIdx);
+        setAvwapArmed(false);
+        return;
+      }
       if (activeTool === "cursor") return;
       if (activeTool === "text") {
         console.warn("text drawing coming in v2");
@@ -395,7 +425,7 @@ export default function ChartPane({
       setFirstPoint(null);
       setActiveTool("cursor");
     },
-    [activeTool, firstPoint, add],
+    [activeTool, firstPoint, add, avwapArmed, data],
   );
 
   // Compose the drawings array with a transient preview entry whenever
@@ -552,6 +582,46 @@ export default function ChartPane({
               </form>
             )}
           </div>
+
+          {/* Slice-14 / AVWAP-1: anchored-VWAP toolbar button.
+              Click → arms; next chart click drops the anchor; AVWAP
+              renders as a dashed brand-gold line from anchor → present.
+              Click again to clear. Quantower / TradingView power-tool. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (avwapAnchor != null) {
+                // Already anchored — clear it.
+                setAvwapAnchor(null);
+                setAvwapArmed(false);
+              } else {
+                // Arm or disarm.
+                setAvwapArmed((v) => !v);
+              }
+            }}
+            aria-pressed={avwapArmed || avwapAnchor != null}
+            title={
+              avwapAnchor != null
+                ? `AVWAP anchored at bar ${avwapAnchor + 1} — click to clear`
+                : avwapArmed
+                  ? "Click any bar to anchor VWAP — click button again to cancel"
+                  : "Anchored VWAP — click then pick a bar to anchor"
+            }
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              avwapAnchor != null
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : avwapArmed
+                  ? "text-[color:var(--brand)] bg-[color:var(--brand)]/10 ring-1 ring-[color:var(--brand)]/40 animate-pulse"
+                  : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 10v-3M5 10V4M8 10V2M11 10V6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>AVWAP</span>
+          </button>
 
           {/* Slice-8 / CH-3D: Bar Replay toggle. Off → button is muted;
               on → button is brand-tinted and the canvas shows the
@@ -770,6 +840,7 @@ export default function ChartPane({
                 data={visibleData}
                 chartType={chartType}
                 compareSeries={compareSeriesProp}
+                anchoredVwapIndex={avwapAnchor}
                 indicators={indicators}
                 drawMode={drawMode}
                 drawings={drawingsWithPreview}

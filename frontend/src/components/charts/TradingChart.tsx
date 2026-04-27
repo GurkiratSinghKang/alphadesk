@@ -67,6 +67,14 @@ interface TradingChartProps {
     bars: OHLCVBar[];
     color?: string;
   }>;
+  /**
+   * Slice-14 / AVWAP-1: anchored-VWAP bar index. When set, an additional
+   * VWAP series renders starting at this bar (cumulative volume-weighted
+   * mean from anchor → present). Power-trader pattern: anchor to an
+   * earnings bar or FOMC release to see "what's the volume-weighted
+   * mean since the catalyst?"
+   */
+  anchoredVwapIndex?: number | null;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
   positionLines?: {
     entry: number | null;
@@ -214,10 +222,25 @@ function computeBollinger(
 }
 
 function computeVWAP(bars: OHLCVBar[]): SingleValueData<Time>[] {
+  return computeAnchoredVWAP(bars, 0);
+}
+
+/**
+ * Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
+ * Anchored VWAP. Same math as cumulative VWAP, but cumulative running
+ * total starts from the anchor bar instead of bar 0. A trader anchors
+ * to an earnings bar / FOMC bar / breakout bar to see "what's the
+ * volume-weighted mean since the anchor event?"
+ */
+function computeAnchoredVWAP(
+  bars: OHLCVBar[],
+  anchorIndex: number,
+): SingleValueData<Time>[] {
   const result: SingleValueData<Time>[] = [];
+  if (anchorIndex < 0 || anchorIndex >= bars.length) return result;
   let cumPV = 0;
   let cumVol = 0;
-  for (let i = 0; i < bars.length; i++) {
+  for (let i = anchorIndex; i < bars.length; i++) {
     const typicalPrice = (bars[i].high + bars[i].low + bars[i].close) / 3;
     cumPV += typicalPrice * bars[i].volume;
     cumVol += bars[i].volume;
@@ -378,7 +401,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -790,6 +813,29 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
+        // Slice-14 / AVWAP-1: anchored VWAP overlay. Renders as a
+        // dashed brand-gold line from the anchor bar forward — same
+        // tone as the regular VWAP but dashed so the user can
+        // distinguish "since anchor" from "session-cumulative."
+        if (
+          anchoredVwapIndex != null &&
+          anchoredVwapIndex >= 0 &&
+          anchoredVwapIndex < bars.length
+        ) {
+          const avwap = computeAnchoredVWAP(bars, anchoredVwapIndex);
+          if (avwap.length >= 2) {
+            const s = chart.addSeries(LineSeries, {
+              color: brandGold,
+              lineWidth: 2,
+              lineStyle: 2, // dashed
+              priceScaleId: "right",
+              title: "AVWAP",
+            });
+            s.setData(avwap);
+            overlaySeriesRef.current.push(s);
+          }
+        }
+
         // Slice-12 / RSI-1 (CH-3J): RSI(14) sub-pane, 0-100 axis.
         // Renders on a dedicated "rsi" priceScale so it sits below
         // the main price pane. Color: ice for the line; the standard
@@ -961,7 +1007,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           didFitRef.current = true;
         }
       },
-      [chartType, indicators, compareSeries]
+      [chartType, indicators, compareSeries, anchoredVwapIndex]
     );
 
     useEffect(() => {
@@ -973,7 +1019,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     // the new shape.
     useEffect(() => {
       didFitRef.current = false;
-    }, [chartType, indicators, compareSeries]);
+    }, [chartType, indicators, compareSeries, anchoredVwapIndex]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {
