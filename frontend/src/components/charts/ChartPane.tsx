@@ -187,6 +187,58 @@ export default function ChartPane({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [indicators, setIndicators] = React.useState<Indicator[]>(["Volume"]);
 
+  // Slice-8 / CH-3D (2026 chart audit, TradingView signature): Bar Replay.
+  //   ``replayEnabled`` — toggles the entire replay UX
+  //   ``replayCursor`` — bar index up to which the chart is shown
+  //   ``replaySpeed``  — playback speed multiplier (1×, 2×, 5×, 10×)
+  //   ``replayPlaying``— whether the auto-advance interval is running
+  // When ``replayEnabled`` is on we slice ``data`` before passing it to
+  // TradingChart, so the chart shows ONLY bars up to ``replayCursor``.
+  // Auto-advance uses setInterval at ``1000 / replaySpeed`` ms cadence.
+  const [replayEnabled, setReplayEnabled] = React.useState(false);
+  const [replayCursor, setReplayCursor] = React.useState(0);
+  const [replaySpeed, setReplaySpeed] = React.useState<1 | 2 | 5 | 10>(2);
+  const [replayPlaying, setReplayPlaying] = React.useState(false);
+
+  // Initialize cursor to a sensible position when replay is first enabled.
+  // Default to ~60% of history so the user immediately sees motion.
+  React.useEffect(() => {
+    if (replayEnabled && replayCursor === 0 && data.length > 10) {
+      setReplayCursor(Math.floor(data.length * 0.6));
+    }
+    if (!replayEnabled) {
+      setReplayPlaying(false);
+    }
+  }, [replayEnabled, data.length, replayCursor]);
+
+  // Auto-advance loop. Stops when we reach the end of the data.
+  React.useEffect(() => {
+    if (!replayEnabled || !replayPlaying) return;
+    const intervalMs = Math.max(50, 1000 / replaySpeed);
+    const id = setInterval(() => {
+      setReplayCursor((c) => {
+        const next = c + 1;
+        if (next >= data.length) {
+          setReplayPlaying(false);
+          return data.length;
+        }
+        return next;
+      });
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [replayEnabled, replayPlaying, replaySpeed, data.length]);
+
+  // Slice the data passed to the chart when replay is on. When off,
+  // this is the identity — full data. ``React.useMemo`` keeps the
+  // reference stable so TradingChart's didFitRef logic isn't broken.
+  const visibleData = React.useMemo(
+    () =>
+      replayEnabled
+        ? data.slice(0, Math.min(Math.max(replayCursor, 1), data.length))
+        : data,
+    [data, replayEnabled, replayCursor],
+  );
+
   // Drawing state machine: `firstPoint` is set on the first click of a
   // two-click drawing (trend/rect/fib). The second click commits via
   // `add(...)` and clears. `hoverPoint` trails the crosshair so we can
@@ -393,6 +445,32 @@ export default function ChartPane({
             })}
           </div>
 
+          {/* Slice-8 / CH-3D: Bar Replay toggle. Off → button is muted;
+              on → button is brand-tinted and the canvas shows the
+              ⏮⏯⏭ control strip. TradingView signature. */}
+          <button
+            type="button"
+            onClick={() => setReplayEnabled((v) => !v)}
+            aria-pressed={replayEnabled}
+            title={
+              replayEnabled
+                ? "Exit Bar Replay"
+                : "Enter Bar Replay — scrub through historical bars"
+            }
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              replayEnabled
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <polygon points="3,2 3,10 10,6" fill="currentColor" />
+            </svg>
+            <span>Replay</span>
+          </button>
+
           <div ref={menuRef} className="relative">
             <button
               type="button"
@@ -547,7 +625,7 @@ export default function ChartPane({
             // click will drop a point instead of panning.
             <div className={cn("absolute inset-0", drawMode && "cursor-crosshair")}>
               <TradingChart
-                data={data}
+                data={visibleData}
                 chartType={chartType}
                 indicators={indicators}
                 drawMode={drawMode}
@@ -578,10 +656,84 @@ export default function ChartPane({
               >
                 <OHLCReadout
                   hover={ohlcHover}
-                  lastBar={data[data.length - 1] ?? null}
+                  lastBar={visibleData[visibleData.length - 1] ?? null}
                   indicators={indicators}
                 />
               </div>
+              {/* Slice-8 / CH-3D: Bar Replay control strip — appears at
+                  the bottom-right of the canvas when replay mode is on.
+                  Mirrors TradingView's playback controls: ⏮ rewind 10
+                  bars, ⏯ play/pause, ⏭ step forward 1 bar, then a
+                  speed picker (1× 2× 5× 10×) and an exit X. The cursor
+                  position is reflected in the bar count "324 / 500".
+                  TradingView gates this behind their paid tier; we
+                  ship it free per the design brief. */}
+              {replayEnabled && (
+                <div
+                  data-slot="chart-replay-controls"
+                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/90 px-2 py-1 t-mono text-[11px] backdrop-blur-md shadow-sm"
+                >
+                  <button
+                    type="button"
+                    aria-label="Rewind 10 bars"
+                    title="Rewind 10 bars"
+                    onClick={() => setReplayCursor((c) => Math.max(1, c - 10))}
+                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                  >
+                    ⏮
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={replayPlaying ? "Pause replay" : "Play replay"}
+                    title={replayPlaying ? "Pause" : "Play"}
+                    onClick={() => setReplayPlaying((p) => !p)}
+                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] transition-colors text-[color:var(--brand)]"
+                  >
+                    {replayPlaying ? "⏸" : "▶"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Step forward one bar"
+                    title="Forward one bar"
+                    onClick={() =>
+                      setReplayCursor((c) => Math.min(data.length, c + 1))
+                    }
+                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                  >
+                    ⏭
+                  </button>
+                  <select
+                    aria-label="Replay speed"
+                    title="Playback speed"
+                    value={replaySpeed}
+                    onChange={(e) =>
+                      setReplaySpeed(Number(e.target.value) as 1 | 2 | 5 | 10)
+                    }
+                    className="bg-transparent border-none outline-none px-1 py-0.5 text-[color:var(--fg)] cursor-pointer"
+                  >
+                    <option value={1}>1×</option>
+                    <option value={2}>2×</option>
+                    <option value={5}>5×</option>
+                    <option value={10}>10×</option>
+                  </select>
+                  <span className="px-1 u-muted tabular-nums" aria-live="polite">
+                    {replayCursor} / {data.length}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Exit replay mode"
+                    title="Exit replay"
+                    onClick={() => {
+                      setReplayEnabled(false);
+                      setReplayPlaying(false);
+                      setReplayCursor(0);
+                    }}
+                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)] transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               {/* Slice-4 / CH-3B + Slice-5 / CH-3A: floating chart-axis
                   affordance. Two modes, switched by the Shift key:
 
