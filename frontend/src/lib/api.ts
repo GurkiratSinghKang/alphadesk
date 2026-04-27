@@ -1192,12 +1192,15 @@ export async function getIVData(symbol: string) {
 export interface PlaceOrderPayload {
   symbol: string;
   side: "buy" | "sell";
-  type: "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
+  // Round-16 / persona-12 P0: ``trailing_stop`` was in the type union
+  // but the backend ``OrderType`` enum (trades.py:152) only accepts
+  // market / limit / stop / stop_limit. Every trailing-stop submit
+  // 422'd silently. Removed until the backend grows a TRAILING_STOP
+  // value and a real broker-side wiring.
+  type: "market" | "limit" | "stop" | "stop_limit";
   quantity: number;
   price?: number;
   stop_price?: number;
-  trail_price?: number;
-  trail_percent?: number;
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
   /**
    * Round-5 F-1 — originating strategy tag. Threaded onto the backend
@@ -1235,18 +1238,14 @@ export interface PlaceOrderOptions {
 }
 
 export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
-  // Transform frontend payload to backend CreateOrderRequest format
-  const isTrailing = payload.type === "trailing_stop";
+  // Transform frontend payload to backend CreateOrderRequest format.
   const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => ({
     symbol: leg.symbol,
     side: leg.side,
     qty: leg.quantity,
     order_type: payload.type,
     limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (payload.price ?? leg.price ?? null) : null,
-    stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) :
-                isTrailing ? null : null,
-    trail_price: isTrailing && payload.trail_price ? payload.trail_price : undefined,
-    trail_percent: isTrailing && payload.trail_percent ? payload.trail_percent : undefined,
+    stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) : null,
   }));
 
   // Wave B / persona-72 P0: every POST /trades/orders MUST carry an

@@ -719,7 +719,11 @@ function ChatTab({ symbol }: { symbol: string }) {
 
 // ─── Order Tab ───────────────────────────────────────────────
 
-type AdvancedOrderType = "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
+// Round-16 / persona-12 P0: ``trailing_stop`` removed — the backend
+// OrderType enum (trades.py:152) only accepts market/limit/stop/stop_limit,
+// so every trailing-stop submit 422'd silently. Re-add when the backend
+// grows real broker-side wiring.
+type AdvancedOrderType = "market" | "limit" | "stop" | "stop_limit";
 
 function OrderTab({ symbol }: { symbol: string }) {
   const quote = useMarketStore((s) => s.quotes[symbol]);
@@ -729,8 +733,6 @@ function OrderTab({ symbol }: { symbol: string }) {
   const [orderType, setOrderType] = useState<AdvancedOrderType>("market");
   const [limitPrice, setLimitPrice] = useState(quote?.last ?? 0);
   const [stopPrice, setStopPrice] = useState(quote?.last ?? 0);
-  const [trailAmount, setTrailAmount] = useState(1);
-  const [trailType, setTrailType] = useState<"dollar" | "percent">("dollar");
   const [tif, setTif] = useState<"day" | "gtc">("day");
   const [submitting, setSubmitting] = useState(false);
 
@@ -769,23 +771,19 @@ function OrderTab({ symbol }: { symbol: string }) {
       case "limit": return `${sideLabel} ${quantity} ${symbol} @ $${(limitPrice ?? 0).toFixed(2)}`;
       case "stop": return `${sideLabel} ${quantity} ${symbol} Stop $${(stopPrice ?? 0).toFixed(2)}`;
       case "stop_limit": return `${sideLabel} ${quantity} ${symbol} Stop $${(stopPrice ?? 0).toFixed(2)} Lmt $${(limitPrice ?? 0).toFixed(2)}`;
-      case "trailing_stop": return `${sideLabel} ${quantity} ${symbol} Trail ${trailType === "dollar" ? "$" + (trailAmount ?? 0).toFixed(2) : (trailAmount ?? 0).toFixed(1) + "%"}`;
     }
   }
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const apiType = orderType === "trailing_stop" ? "trailing_stop" : orderType;
       await placeOrder({
         symbol,
         side,
-        type: apiType as any,
+        type: orderType,
         quantity,
         price: orderType === "limit" ? limitPrice : orderType === "stop_limit" ? limitPrice : undefined,
         stop_price: orderType === "stop" ? stopPrice : orderType === "stop_limit" ? stopPrice : undefined,
-        trail_price: orderType === "trailing_stop" && trailType === "dollar" ? trailAmount : undefined,
-        trail_percent: orderType === "trailing_stop" && trailType === "percent" ? trailAmount : undefined,
       });
       toast({ type: "success", message: `Order placed: ${buildOrderLabel()}` });
     } catch (err: any) {
@@ -846,7 +844,6 @@ function OrderTab({ symbol }: { symbol: string }) {
           <option value="limit">Limit</option>
           <option value="stop">Stop</option>
           <option value="stop_limit">Stop Limit</option>
-          <option value="trailing_stop">Trailing Stop</option>
         </select>
       </div>
 
@@ -900,32 +897,6 @@ function OrderTab({ symbol }: { symbol: string }) {
               value={limitPrice}
               onChange={(e) => setLimitPrice(safeNum(e.target.value, 0))}
               step={0.01}
-              className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
-            />
-          </div>
-        </>
-      )}
-
-      {orderType === "trailing_stop" && (
-        <>
-          <div>
-            <label htmlFor="trail-type" className="text-[10px] uppercase tracking-wider text-fg-muted">Trail Type</label>
-            <div className="flex gap-1 mt-1">
-              <button onClick={() => setTrailType("dollar")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "dollar" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>$ Amount</button>
-              <button onClick={() => setTrailType("percent")} className={cn("flex-1 rounded py-1 text-[11px] font-medium transition-colors", trailType === "percent" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-[var(--panel)] text-muted-foreground")}>% Percent</button>
-            </div>
-          </div>
-          <div>
-            <label htmlFor="trail-amount" className="text-[10px] uppercase tracking-wider text-fg-muted">
-              Trail Amount {trailType === "dollar" ? "($)" : "(%)"}
-            </label>
-            <input
-              id="trail-amount"
-              type="number"
-              value={trailAmount}
-              onChange={(e) => setTrailAmount(safeNum(e.target.value, 0))}
-              step={trailType === "dollar" ? 0.01 : 0.1}
-              min={0}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
             />
           </div>

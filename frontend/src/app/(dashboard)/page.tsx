@@ -508,17 +508,24 @@ export default function DeskPage() {
       });
       usePortfolioStore.getState().addOrder(placed);
 
-      // Surface a clearer toast copy than the old "staged" wording — the
-      // button is "Place order", so the user expects the action was to
-      // place. Include a "View orders" action that jumps the Book to the
-      // Orders tab so they can see the new row.
+      // Round-16 / persona-12 P1: backend can return 201 with a
+      // ``rejected`` status (risk gate, halt, insufficient buying
+      // power). Pre-fix the toast was unconditionally a "success" with
+      // copy "Order placed: 1 SPY market — rejected" — visually green
+      // for an order that never lived. Branch on the actual status.
+      const placedStatus = (placed.status ?? "pending").toLowerCase();
+      const failed = placedStatus === "rejected" || placedStatus === "canceled" || placedStatus === "cancelled";
       toast({
-        type: "success",
-        message: `Order placed: ${qty} ${symbol} ${order.type} — ${placed.status ?? "pending"}`,
-        action: {
-          label: "View orders",
-          onClick: () => setBookTab("orders"),
-        },
+        type: failed ? "error" : "success",
+        message: failed
+          ? `Order ${placedStatus}: ${qty} ${symbol} ${order.type}`
+          : `Order placed: ${qty} ${symbol} ${order.type} — ${placedStatus}`,
+        action: failed
+          ? undefined
+          : {
+              label: "View orders",
+              onClick: () => setBookTab("orders"),
+            },
       });
 
       // Bump a tick so OrderBar resets its internal field state via `key`.

@@ -1755,6 +1755,34 @@ async def cancel_order(
     # correctness miss.
     await _record_cancel_for_rate(username)
 
+    # Round-16 / persona-12 P0: write the local DB status so a refetch of
+    # /orders sees ``cancelled`` immediately. Pre-fix the row stayed at
+    # ``submitted`` until fill_reconciler eventually heard the WS event;
+    # if the WS dropped or the event was missed, the local ledger drifted
+    # forever. Fire-and-forget on DB exception — the broker has already
+    # cancelled, so the worst case is the FE's optimistic update + the
+    # next reconciler tick still resolves it.
+    try:
+        from core.config import settings as _s_db
+        if not _s_db.SKIP_DB_INIT:
+            from sqlalchemy import update
+            from core.database import _get_session_factory
+            from data.storage.models import Trade
+            factory = _get_session_factory()
+            async with factory() as db:
+                await db.execute(
+                    update(Trade)
+                    .where(Trade.broker_order_id == order_id)
+                    .where(Trade.status.in_(["submitted", "open", "partial", "partial_fill", "pending"]))
+                    .values(status="cancelled")
+                )
+                await db.commit()
+    except Exception:
+        logger.warning(
+            "cancel_order: local DB status update failed for %s",
+            order_id, exc_info=True,
+        )
+
     # J-18 (Round-6) — clear cached idempotent responses for THIS
     # user that referenced the cancelled broker_order_id.
     try:
@@ -1852,9 +1880,19 @@ async def _enforce_cancel_ownership(order_id: str, username: str) -> None:
     except HTTPException:
         raise
     except Exception:
-        logger.debug(
-            "_enforce_cancel_ownership: ownership probe failed — fail-open",
+        # Round-16 / persona-12 P1: pre-fix this caught bare Exception and
+        # silently let the cancel through — a DB outage during the
+        # ownership lookup would let any authenticated user cancel any
+        # order. Fail-CLOSED with 503 so the legitimate caller can retry
+        # once the DB is back, instead of opening the door to spoofed
+        # cancels.
+        logger.error(
+            "_enforce_cancel_ownership: ownership probe failed — refusing cancel",
             exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Order ownership check temporarily unavailable; please retry.",
         )
 
 
