@@ -598,6 +598,27 @@ export default function DeskPage() {
     };
   }, [ordersFromStore, toast, refreshPortfolio]);
 
+  // Slice-4 / CH-3B: route the chart's "+ alert" affordance to /alerts.
+  // The CustomEvent carries { symbol, price, source } so the alerts page
+  // can pre-fill its form and the user lands in a one-keystroke confirm.
+  useEffect(() => {
+    function onAddAlert(e: Event) {
+      const detail = (e as CustomEvent<{
+        symbol?: string;
+        price?: number;
+      }>).detail;
+      const sym = detail?.symbol ?? "";
+      const price = detail?.price;
+      if (!sym || !Number.isFinite(price as number)) return;
+      const url = `/alerts?prefillSymbol=${encodeURIComponent(sym)}&prefillPrice=${(price as number).toFixed(2)}`;
+      router.push(url);
+    }
+    window.addEventListener("alphadesk:add-price-alert", onAddAlert as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:add-price-alert", onAddAlert as EventListener);
+    };
+  }, [router]);
+
   return (
     <DashboardLayout
       topBar={

@@ -295,11 +295,20 @@ export default function PriceChartPanel({
         </div>
       </header>
 
-      {/* Wave 29 persona-5 #2: range row (8 buttons) + legend (3 chips) were
-          both `flex` no-wrap inside `px-7`, which clipped at 390 viewport.
-          `flex-wrap gap-1.5 md:gap-2` lets the legend drop to a second line
-          and keeps every range button tappable. */}
-      <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1.5 px-4 md:px-7 py-2.5 border-b border-border-hair">
+      {/* Slice-4 / CH-2A (chart audit 2026-04-26): the per-row legend chips
+          (`Price · 20-SMA · Regime bands`) used to live HERE on the toolbar,
+          divorced from the chart. Per TradingView convention the indicator
+          legend belongs INSIDE the chart canvas, top-left, fused with the
+          OHLC overlay so they form a single block. ``OHLCReadout`` (rendered
+          by ``ChartPane`` inside the canvas) already shows the active
+          indicators with their periods (EMA 20, EMA 50, SMA 20, …) tracking
+          actual user-toggled state — so this toolbar copy was both
+          redundant AND lying (always rendering "Price · 20-SMA · Regime
+          bands" regardless of indicator-menu toggles). Removed.
+
+          Range buttons stay on the toolbar (they're a navigation primitive,
+          not a legend). The legend now lives entirely inside the chart. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 md:px-7 py-2.5 border-b border-border-hair">
         <div className="flex flex-wrap gap-0.5">
           {RANGES.map((r) => (
             <button
@@ -308,9 +317,6 @@ export default function PriceChartPanel({
               onClick={() => onRangeChange(r)}
               data-active={r === activeRange || undefined}
               className={cn(
-                // BUG-024 — WCAG 2.5.5 (target size): pills were 31×23 on
-                // mobile, below the 44×44 minimum. Enforce 44×44 until md,
-                // then relax to the dense desktop sizing.
                 "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px] md:px-3",
                 "font-mono text-[13px] px-2.5 py-1 rounded-xs transition-colors",
                 r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
@@ -318,11 +324,6 @@ export default function PriceChartPanel({
               style={{ letterSpacing: "0.02em" }}
             >{r}</button>
           ))}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 md:gap-[14px] font-mono text-[13px] text-fg-muted">
-          <LegendChip swatchColor="var(--gold-300)" label="Price" />
-          <LegendChip swatchColor="var(--up-500)" dashed label="20-SMA" />
-          <LegendChip swatchColor="rgba(141,179,196,0.25)" block label="Regime bands" />
         </div>
       </div>
 

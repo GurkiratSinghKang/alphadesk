@@ -202,6 +202,14 @@ export default function ChartPane({
     | null
   >(null);
 
+  // Slice-4 / CH-3B (TradingView pattern): the floating "+" alert
+  // affordance follows the crosshair along the right edge of the
+  // chart canvas — one click adds a price alert at the exact axis
+  // price the user is pointing at.
+  const [alertHover, setAlertHover] = React.useState<
+    { price: number; y: number } | null
+  >(null);
+
   const symbol = useMarketStore((s) => s.selectedSymbol);
   const { drawings, add } = useChartDrawings(symbol);
 
@@ -525,6 +533,10 @@ export default function ChartPane({
                 onDrawCrosshair={setHoverPoint}
                 // Round-12 / CH-2 (P1): wire OHLC hover to the overlay below.
                 onCrosshairMove={(_p, _t, ohlcv) => setOhlcHover(ohlcv ?? null)}
+                // Slice-4 / CH-3B: wire alert-hover to the floating "+" overlay.
+                onAlertHover={(price, y) =>
+                  setAlertHover(price != null && y != null ? { price, y } : null)
+                }
               />
               {/* Round-12 / CH-2: TradingView-style OHLC + indicator legend
                   overlay. Renders top-left so it never overlaps with the
@@ -547,6 +559,36 @@ export default function ChartPane({
                   indicators={indicators}
                 />
               </div>
+              {/* Slice-4 / CH-3B: floating "+" alert affordance.
+                  Tracks the crosshair along the right edge; one click
+                  emits an event the alerts page subscribes to (or
+                  routes to /alerts?prefilledPrice=…). Hidden when the
+                  cursor isn't on the canvas. TradingView pattern. */}
+              {alertHover && (
+                <button
+                  type="button"
+                  data-slot="chart-add-alert-affordance"
+                  aria-label={`Add price alert at ${alertHover.price.toFixed(2)}`}
+                  title={`Add alert at $${alertHover.price.toFixed(2)} — click to set`}
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(
+                        new CustomEvent("alphadesk:add-price-alert", {
+                          detail: {
+                            symbol,
+                            price: alertHover.price,
+                            source: "chart-axis-hover",
+                          },
+                        }),
+                      );
+                    }
+                  }}
+                  className="absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-5 w-5 rounded-full border border-[color:var(--brand)]/60 bg-[color:var(--bg-card)] text-[12px] leading-none text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] shadow-sm transition-colors"
+                  style={{ top: alertHover.y }}
+                >
+                  +
+                </button>
+              )}
             </div>
           )}
         </div>

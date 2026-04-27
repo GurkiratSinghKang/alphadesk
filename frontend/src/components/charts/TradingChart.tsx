@@ -45,6 +45,15 @@ interface TradingChartProps {
   chartType?: ChartType;
   indicators?: Indicator[];
   onCrosshairMove?: (price: number | null, time: Time | null, ohlcv?: { open: number; high: number; low: number; close: number; volume?: number } | null) => void;
+  /**
+   * Slice-4 / CH-3B (2026 chart audit, TradingView pattern): emits the
+   * crosshair price + canvas-relative Y coordinate so the parent can
+   * render a "+" alert affordance at the right edge of the chart at
+   * the cursor's height. Fires ``null, null`` when the cursor leaves
+   * the plot area. Cheap to wire — separate from ``onCrosshairMove``
+   * so callers that don't want the alert UI don't subscribe to it.
+   */
+  onAlertHover?: (price: number | null, y: number | null) => void;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
   positionLines?: {
     entry: number | null;
@@ -273,7 +282,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -463,6 +472,26 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
               );
             }
           }
+        });
+      }
+
+      // Slice-4 / CH-3B: alert-hover callback. Tracks the crosshair's
+      // canvas-relative Y so the parent can position a "+" affordance
+      // at the right axis. Emits the price-axis price (not the bar's
+      // close) so a click adds an alert at the EXACT axis price the
+      // user pointed at. Fires ``null, null`` on pointer leave.
+      if (onAlertHover) {
+        chart.subscribeCrosshairMove((param) => {
+          if (!param.point) {
+            onAlertHover(null, null);
+            return;
+          }
+          const price = mainSeries.coordinateToPrice(param.point.y);
+          if (price == null) {
+            onAlertHover(null, null);
+            return;
+          }
+          onAlertHover(Number(price), param.point.y);
         });
       }
 
