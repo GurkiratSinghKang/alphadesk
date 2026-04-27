@@ -40,7 +40,17 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("", className)}
+      // Phase-2 / TBL-1 (2026 design brief, Brex/Airtable pattern):
+      // sticky-by-default so column headers stay visible while the
+      // body scrolls. ``sticky top-0`` is a no-op when the parent
+      // container isn't vertically scrollable, so this is safe to
+      // make the global default. Background uses the warm card token
+      // so the header isn't translucent over scrolled rows; z-10
+      // wins over standard row hover but stays below dialog/popover.
+      className={cn(
+        "sticky top-0 z-10 bg-[color:var(--bg-card)]",
+        className
+      )}
       {...props}
     />
   )
