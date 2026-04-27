@@ -26,11 +26,18 @@ import { fmtNumber } from "@/lib/intl";
 export interface TradeButtonRowProps {
   symbol: string;
   ladder: StrikeLadder | null;
+  /**
+   * Slice-6 / CH-3F (Tastytrade dynamic preview): emit the hovered
+   * strategy's profit zone as ``[low, high]`` so the parent's
+   * expected-move strip can render the green zone over the brown
+   * 1σ band. ``null`` clears the overlay (mouse-leave).
+   */
+  onHoverStrategy?: (zone: [number, number] | null) => void;
 }
 
 const STRATEGY_TAG = "earnings-options-play";
 
-export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) {
+export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: TradeButtonRowProps) {
   // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
   // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
   // any other shape (stub responses, chain_demo synthetic rows, future
@@ -104,6 +111,14 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           })}
           label={`Bull put spread ${fmtNumber(Math.round(bullPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossWidth(bullPutSpread.long.strike, bullPutSpread.short.strike, "credit")}
+          // Slice-6 / CH-3F: bull put spread profits when the underlying
+          // stays AT OR ABOVE the short put strike. Profit zone =
+          // [short_put, +∞]. We cap at 2× short_put as a sensible
+          // strip-extent so the green band has a visible right edge.
+          onHoverEnter={() =>
+            onHoverStrategy?.([bullPutSpread.short.strike, bullPutSpread.short.strike * 2])
+          }
+          onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
       {bearCallSpread && (
@@ -118,6 +133,14 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           })}
           label={`Bear call spread ${fmtNumber(Math.round(bearCallSpread.short.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearCallSpread.long.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossWidth(bearCallSpread.short.strike, bearCallSpread.long.strike, "credit")}
+          // Slice-6 / CH-3F: bear call spread profits when the underlying
+          // stays AT OR BELOW the short call strike. Profit zone =
+          // [0, short_call]. Lower bound clamped to 0 (price can't go
+          // negative).
+          onHoverEnter={() =>
+            onHoverStrategy?.([0, bearCallSpread.short.strike])
+          }
+          onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
       {ironCondor && (
@@ -140,6 +163,17 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
             0,
             "wing",
           )}
+          // Slice-6 / CH-3F: iron condor profits when the underlying
+          // stays BETWEEN the short put and short call strikes. The
+          // green zone is [short_put, short_call] — the canonical
+          // "narrow expected move = profit" visual.
+          onHoverEnter={() =>
+            onHoverStrategy?.([
+              ironCondor.shortPut.strike,
+              ironCondor.shortCall.strike,
+            ])
+          }
+          onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
       {longStraddle && (
@@ -153,6 +187,16 @@ export default function TradeButtonRow({ symbol, ladder }: TradeButtonRowProps) 
           })}
           label={`Long straddle ${fmtNumber(Math.round(longStraddle.call.strike), { maximumFractionDigits: 0 })}c/p`}
           riskCopy={`Long straddle · max loss = debit paid (≈ $${fmtNumber(Math.round((longStraddle.call.mid + longStraddle.put.mid) * 100), { maximumFractionDigits: 0 })}) · profits on a big move either way`}
+          // Slice-6 / CH-3F: long straddle profits OUTSIDE the breakevens.
+          // The PnLZones primitive renders ONE profit zone — for a
+          // straddle we'd need two (below lower BE, above upper BE).
+          // Compromise: show the loss zone (between BEs) by passing
+          // the *inverse* — our PnLZones default-loss-on-no-zone path
+          // handles this OK. Caption explains. Pass null so the strip
+          // surfaces only the brown expected-move band, which is the
+          // most-honest visualization of "profitable iff move > 1σ".
+          onHoverEnter={() => onHoverStrategy?.(null)}
+          onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
     </div>
@@ -169,11 +213,18 @@ function DefinedRiskTradeLink({
   href,
   label,
   riskCopy,
+  onHoverEnter,
+  onHoverLeave,
 }: {
   dataSlot: string;
   href: string;
   label: string;
   riskCopy: string;
+  // Slice-6 / CH-3F: hover handlers feed the parent's profit-zone
+  // overlay. Optional so the component still works in a standalone
+  // context where no overlay is mounted.
+  onHoverEnter?: () => void;
+  onHoverLeave?: () => void;
 }) {
   return (
     <Link
@@ -181,6 +232,10 @@ function DefinedRiskTradeLink({
       href={href}
       title={riskCopy}
       aria-describedby={`${dataSlot}-risk`}
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
+      onFocus={onHoverEnter}
+      onBlur={onHoverLeave}
       className="group min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]"
     >
       <span className="u-brand inline-flex items-center gap-1.5">

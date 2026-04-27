@@ -71,6 +71,14 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
   ) {
   const isWide = useIsWide(1200);
 
+  // Slice-6 / CH-3F: which defined-risk strategy is the user hovering?
+  // Set by ``TradeButtonRow`` via the new ``onHoverStrategy`` callback;
+  // consumed by ``_ExpectedMoveStrip`` to render the strategy-specific
+  // green profit zone over the brown expected-move band.
+  const [hoveredStrategyZone, setHoveredStrategyZone] = useState<
+    [number, number] | null
+  >(null);
+
   // Escape clears the selection — dispatches a custom event the parent
   // page listens for. Ignored while focus is inside a text input so
   // users can clear filters without losing the detail view (B-61).
@@ -206,6 +214,13 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           underlying={detail.quote.last}
           expectedMovePct={detail.metrics.expectedMovePct}
           reportDate={detail.reportDate ?? undefined}
+          // Slice-6 / CH-3F: dynamic profit-zone overlay. When the
+          // user hovers a defined-risk button below, the strip shifts
+          // to show *that strategy's* green profit zone over the
+          // brown expected-move band. Lets the user instantly see
+          // whether the expected move sits inside or outside their
+          // chosen strategy's profit range — Tastytrade signature.
+          hoveredStrategyZone={hoveredStrategyZone}
         />
       )}
 
@@ -241,7 +256,11 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         </div>
       )}
 
-      <TradeButtonRow symbol={detail.symbol} ladder={detail.strikeLadder} />
+      <TradeButtonRow
+        symbol={detail.symbol}
+        ladder={detail.strikeLadder}
+        onHoverStrategy={setHoveredStrategyZone}
+      />
 
       <p
         data-slot="data-disclaimer"
@@ -384,10 +403,20 @@ function _ExpectedMoveStrip({
   underlying,
   expectedMovePct,
   reportDate,
+  hoveredStrategyZone,
 }: {
   underlying: number;
   expectedMovePct: number;
   reportDate?: string | Date | null;
+  /**
+   * Slice-6 / CH-3F: the hovered defined-risk strategy's profit zone
+   * as ``[low, high]``. When set, the strip renders this as the green
+   * profit zone over the brown expected-move band so the user can
+   * instantly see whether the implied move sits inside or outside
+   * the strategy's profit range. Null (default) shows the brown
+   * expected-move band only.
+   */
+  hoveredStrategyZone?: [number, number] | null;
 }) {
   if (!Number.isFinite(underlying) || underlying <= 0) return null;
   if (!Number.isFinite(expectedMovePct) || expectedMovePct <= 0) return null;
@@ -414,11 +443,15 @@ function _ExpectedMoveStrip({
         underlying={underlying}
         priceMin={priceMin}
         priceMax={priceMax}
-        profitZone={null}
+        profitZone={hoveredStrategyZone ?? null}
         expectedMove={[expectedLow, expectedHigh]}
-        caption={`Expected move ±$${sigma.toFixed(2)} · ${(
-          expectedMovePct * 100
-        ).toFixed(1)}% · 1σ implied by front-month straddle`}
+        caption={
+          hoveredStrategyZone
+            ? `Profit zone $${hoveredStrategyZone[0].toFixed(2)} → $${hoveredStrategyZone[1].toFixed(2)} · expected move overlay shows whether ±1σ stays inside`
+            : `Expected move ±$${sigma.toFixed(2)} · ${(
+                expectedMovePct * 100
+              ).toFixed(1)}% · 1σ implied by front-month straddle · hover a strategy below to overlay its profit zone`
+        }
       />
     </section>
   );
