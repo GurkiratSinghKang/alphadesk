@@ -9,6 +9,7 @@ import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
 import { useChartDrawings } from "@/hooks/useChartDrawings";
 import { useMarketStore } from "@/stores/market";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 
 /**
  * ChartPane — dashboard chart surface (2026-04-20 redesign)
@@ -183,10 +184,46 @@ export default function ChartPane({
   onRetry,
   className,
 }: ChartPaneProps) {
-  const [chartType, setChartType] = React.useState<ChartType>("candle");
+  // Slice-16 / TPL-1 (2026 design brief, TradingView "Save Layout"): the
+  // user's chart configuration (chartType + indicators) is persisted to
+  // localStorage so it survives a refresh. Lazy-init reads the saved
+  // template on first mount; subsequent state changes trigger a write
+  // via the effect below.
+  const [chartType, setChartType] = React.useState<ChartType>(() => {
+    const raw = safeGetItem("alphadesk:chart-template:default");
+    if (!raw) return "candle";
+    try {
+      const parsed = JSON.parse(raw) as { chartType?: ChartType };
+      const v = parsed.chartType;
+      if (v === "candle" || v === "line" || v === "area") return v;
+    } catch {
+      /* fall through to default */
+    }
+    return "candle";
+  });
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [indicators, setIndicators] = React.useState<Indicator[]>(["Volume"]);
+  const [indicators, setIndicators] = React.useState<Indicator[]>(() => {
+    const raw = safeGetItem("alphadesk:chart-template:default");
+    if (!raw) return ["Volume"];
+    try {
+      const parsed = JSON.parse(raw) as { indicators?: Indicator[] };
+      if (Array.isArray(parsed.indicators)) return parsed.indicators;
+    } catch {
+      /* fall through to default */
+    }
+    return ["Volume"];
+  });
+
+  // Slice-16 / TPL-1: persist template on every chartType / indicators
+  // change. Debounced via the React batching that already groups
+  // setState calls — no manual debounce needed at this volume.
+  React.useEffect(() => {
+    safeSetItem(
+      "alphadesk:chart-template:default",
+      JSON.stringify({ chartType, indicators }),
+    );
+  }, [chartType, indicators]);
 
   // Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
   // anchored VWAP. ``avwapAnchor`` is the bar index from which the
