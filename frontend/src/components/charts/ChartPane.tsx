@@ -8,6 +8,7 @@ import type { ChartType, Indicator, OHLCVBar } from "@/types";
 import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
 import { useChartDrawings } from "@/hooks/useChartDrawings";
 import { useMarketStore } from "@/stores/market";
+import { useSparklineBars } from "@/hooks/useSparklineBars";
 
 /**
  * ChartPane — dashboard chart surface (2026-04-20 redesign)
@@ -186,6 +187,40 @@ export default function ChartPane({
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [indicators, setIndicators] = React.useState<Indicator[]>(["Volume"]);
+
+  // Slice-9 / CH-3C (2026 chart audit, TradingView "+ Compare"): list of
+  // symbols overlaid on the main chart for percent-change comparison.
+  // Symbols are added via the "+ Compare" button in the toolbar; bars
+  // for each compare symbol are fetched on demand via the existing
+  // ``getBars`` API. Capped at 4 simultaneous compares so the overlay
+  // stays readable.
+  const [compareSymbols, setCompareSymbols] = React.useState<string[]>([]);
+  const [compareInputOpen, setCompareInputOpen] = React.useState(false);
+  const [compareInputValue, setCompareInputValue] = React.useState("");
+  const compareBars = useSparklineBars(compareSymbols, {
+    timeframe: "D",
+    limit: 60,
+  });
+  // Build the {symbol, bars} array from the closes-per-symbol cache.
+  // Convert closes[] back into OHLCVBar[] (we only need close + time).
+  const compareSeriesProp = React.useMemo(() => {
+    return compareSymbols.flatMap((sym) => {
+      const closes = compareBars[sym];
+      if (!closes || closes.length < 2) return [];
+      // Synthetic time series — index-based seconds from now back N days.
+      const now = Math.floor(Date.now() / 1000);
+      const dayS = 24 * 60 * 60;
+      const bars = closes.map((close, i) => ({
+        time: now - (closes.length - i - 1) * dayS,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 0,
+      }));
+      return [{ symbol: sym, bars }];
+    });
+  }, [compareSymbols, compareBars]);
 
   // Slice-8 / CH-3D (2026 chart audit, TradingView signature): Bar Replay.
   //   ``replayEnabled`` — toggles the entire replay UX
@@ -445,6 +480,79 @@ export default function ChartPane({
             })}
           </div>
 
+          {/* Slice-9 / CH-3C: "+ Compare" toolbar button.
+              Click to expand a small input where the user types a symbol
+              (SPY / QQQ / etc.); pressing Enter adds it to the overlay.
+              Active compare symbols render as small chips below the
+              toolbar with an ✕ to remove. Capped at 4 symbols.
+              TradingView convention: compare series scale to %-change
+              from first bar so AAPL @ $200 and SPY @ $500 land on
+              the same axis. */}
+          <div className="relative inline-flex items-center mr-1">
+            <button
+              type="button"
+              onClick={() => setCompareInputOpen((v) => !v)}
+              aria-pressed={compareInputOpen}
+              title="Compare symbol — overlay a second symbol on the chart, % change basis"
+              className={cn(
+                "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors",
+                "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+                compareSymbols.length > 0 || compareInputOpen
+                  ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                  : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+              )}
+            >
+              <span aria-hidden="true">+</span>
+              <span>Compare</span>
+              {compareSymbols.length > 0 && (
+                <span className="font-mono tabular-nums text-fg-muted">
+                  {compareSymbols.length}
+                </span>
+              )}
+            </button>
+            {compareInputOpen && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const sym = compareInputValue.trim().toUpperCase();
+                  if (
+                    sym &&
+                    /^[A-Z]{1,6}(\.[A-Z])?$/.test(sym) &&
+                    !compareSymbols.includes(sym) &&
+                    compareSymbols.length < 4
+                  ) {
+                    setCompareSymbols((prev) => [...prev, sym]);
+                    setCompareInputValue("");
+                  }
+                }}
+                className="absolute left-0 top-full mt-1 z-30 flex items-center gap-1 rounded border border-[color:var(--border)] bg-[color:var(--bg-card)] px-2 py-1.5 shadow-lg"
+              >
+                <input
+                  autoFocus
+                  type="text"
+                  value={compareInputValue}
+                  onChange={(e) => setCompareInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setCompareInputOpen(false);
+                      setCompareInputValue("");
+                    }
+                  }}
+                  placeholder="SPY, QQQ, …"
+                  maxLength={6}
+                  className="bg-transparent border border-[color:var(--border)] rounded-xs px-2 py-1 t-mono text-[12px] text-[color:var(--fg)] uppercase outline-none focus:border-[color:var(--brand)] w-24"
+                />
+                <button
+                  type="submit"
+                  className="t-mono text-[11px] text-[color:var(--brand)] hover:underline"
+                  disabled={compareSymbols.length >= 4}
+                >
+                  Add
+                </button>
+              </form>
+            )}
+          </div>
+
           {/* Slice-8 / CH-3D: Bar Replay toggle. Off → button is muted;
               on → button is brand-tinted and the canvas shows the
               ⏮⏯⏭ control strip. TradingView signature. */}
@@ -624,9 +732,44 @@ export default function ChartPane({
             // (which is inside TradingChart) visually telegraphs that a
             // click will drop a point instead of panning.
             <div className={cn("absolute inset-0", drawMode && "cursor-crosshair")}>
+              {/* Slice-9 / CH-3C: active compare-symbol chips. Each chip has
+                  a colored swatch matching its overlay line + an ✕ to remove.
+                  Anchored top-right of the canvas so they sit outside the
+                  drawing tools rail and the OHLC overlay. */}
+              {compareSymbols.length > 0 && (
+                <div
+                  data-slot="chart-compare-chips"
+                  className="absolute right-3 top-3 z-10 flex flex-col items-end gap-1"
+                >
+                  {compareSymbols.map((sym, idx) => {
+                    const palette = ["#5b8def", "#a07550", "#e07856", "#a8d04d"];
+                    const color = palette[idx % palette.length];
+                    return (
+                      <button
+                        key={sym}
+                        type="button"
+                        onClick={() =>
+                          setCompareSymbols((prev) => prev.filter((s) => s !== sym))
+                        }
+                        title={`Remove ${sym} from compare`}
+                        className="inline-flex items-center gap-1.5 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/80 backdrop-blur-md px-1.5 py-0.5 t-mono text-[10.5px] text-[color:var(--fg)] hover:border-[color:var(--loss)]/60 hover:text-[color:var(--loss)] transition-colors"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-1.5 w-3 rounded-sm"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span>{sym}</span>
+                        <span className="opacity-60 text-[11px]">×</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <TradingChart
                 data={visibleData}
                 chartType={chartType}
+                compareSeries={compareSeriesProp}
                 indicators={indicators}
                 drawMode={drawMode}
                 drawings={drawingsWithPreview}

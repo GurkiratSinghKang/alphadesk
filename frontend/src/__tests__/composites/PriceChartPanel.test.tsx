@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import PriceChartPanel from "@/components/composites/PriceChartPanel";
+
+// Slice-9 / CH-3C: ChartPane (mounted by PriceChartPanel) uses
+// react-query for compare-symbol bars; tests must wrap in
+// QueryClientProvider even though no compare symbols are added here.
+const _testClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 // Avoid loading the real chart library in the jsdom test runner.
 // 2026-04-20 dashboard redesign: ChartPane (via TradingChart) imports
@@ -41,7 +47,7 @@ vi.mock("lightweight-charts", () => ({
 describe("PriceChartPanel", () => {
   it("renders header with symbol name, ticker, price, delta and meta cells", () => {
     const { container } = render(
-      <PriceChartPanel
+      <QueryClientProvider client={_testClient}><PriceChartPanel
         symbol={{ ticker: "NVDA", name: "Nvidia", venue: "Nasdaq · Semis" }}
         quote={{ last: 134.82, change: 1.74, changePct: 1.31 }}
         meta={{
@@ -57,7 +63,7 @@ describe("PriceChartPanel", () => {
         ]}
         activeRange="1M"
         onRangeChange={() => {}}
-      />,
+      /></QueryClientProvider>,
     );
     expect(container.querySelector('[data-slot="price-chart-panel"]')).not.toBeNull();
     expect(container.textContent).toContain("Nvidia");

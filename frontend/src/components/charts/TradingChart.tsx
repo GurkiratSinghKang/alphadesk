@@ -54,6 +54,19 @@ interface TradingChartProps {
    * so callers that don't want the alert UI don't subscribe to it.
    */
   onAlertHover?: (price: number | null, y: number | null) => void;
+  /**
+   * Slice-9 / CH-3C (2026 chart audit, TradingView "+ Compare" pattern):
+   * an array of symbols to overlay on the main chart for comparison.
+   * Each entry carries its OHLCV series so the chart can auto-rescale
+   * to percent-change-from-first-bar. The main symbol stays in price
+   * units (right axis); compare series render as percent on a left
+   * axis. Limited to 4 compare symbols to keep the overlay readable.
+   */
+  compareSeries?: Array<{
+    symbol: string;
+    bars: OHLCVBar[];
+    color?: string;
+  }>;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
   positionLines?: {
     entry: number | null;
@@ -282,7 +295,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -742,6 +755,49 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           }
         }
 
+        // Slice-9 / CH-3C: compare-symbol overlay. Each compare series
+        // is rebased to percent-change from its first bar so AAPL @
+        // $200 and SPY @ $500 land on the same axis. Renders on a
+        // dedicated "compare" priceScale (left side), preserving the
+        // main series' price scale on the right. Up to 4 compare
+        // series; cycling palette so they're visually distinguishable.
+        if (compareSeries && compareSeries.length > 0) {
+          const palette = [
+            "#5b8def", // ice
+            "#a07550", // expected-move brown
+            "#e07856", // coral / loss
+            "#a8d04d", // chartreuse / profit (for the 4th series)
+          ];
+          compareSeries.slice(0, 4).forEach((cs, idx) => {
+            if (!cs.bars || cs.bars.length < 2) return;
+            const base = cs.bars[0]?.close;
+            if (!base || base <= 0) return;
+            const lineData = cs.bars
+              .filter((b) => b.close > 0)
+              .map((b) => ({
+                time: (typeof b.time === "number"
+                  ? b.time
+                  : Math.floor(new Date(b.time).getTime() / 1000)) as Time,
+                value: ((b.close - base) / base) * 100,
+              }));
+            const s = chart.addSeries(LineSeries, {
+              color: cs.color ?? palette[idx % palette.length],
+              lineWidth: 2,
+              lineStyle: idx === 0 ? 0 : 2, // solid for first compare, dashed for the rest
+              priceScaleId: "compare",
+              title: `${cs.symbol} %`,
+              lastValueVisible: true,
+              priceLineVisible: false,
+            });
+            s.setData(lineData);
+            overlaySeriesRef.current.push(s);
+          });
+          chart.priceScale("compare").applyOptions({
+            scaleMargins: { top: 0.05, bottom: 0.25 },
+            visible: true,
+          });
+        }
+
         // Round-12 / CH-1 (P1): only fit the visible range on the FIRST
         // setData call (and on a chartType change, which forces a fresh
         // mount via the effect below). Previously this fired on EVERY
@@ -755,7 +811,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           didFitRef.current = true;
         }
       },
-      [chartType, indicators]
+      [chartType, indicators, compareSeries]
     );
 
     useEffect(() => {
@@ -767,7 +823,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     // the new shape.
     useEffect(() => {
       didFitRef.current = false;
-    }, [chartType, indicators]);
+    }, [chartType, indicators, compareSeries]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {
