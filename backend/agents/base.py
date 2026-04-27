@@ -379,10 +379,20 @@ class BaseAgent(ABC):
             for attempt in range(1, self.max_retries + 1):
                 try:
                     t0 = time.monotonic()
+                    # Round-17 cost: wrap stable system prompt in
+                    # ``cache_control: ephemeral`` for the 90% input-
+                    # token discount on second-and-subsequent calls
+                    # with the same system text.
+                    system_param: Any = (
+                        [{"type": "text", "text": self.system_prompt,
+                          "cache_control": {"type": "ephemeral"}}]
+                        if self.system_prompt
+                        else self.system_prompt
+                    )
                     response = await self._api_client.messages.create(
                         model=model_id,
                         max_tokens=4096,
-                        system=self.system_prompt,
+                        system=system_param,
                         messages=[{"role": "user", "content": prompt}],
                     )
                     elapsed = time.monotonic() - t0
@@ -432,10 +442,19 @@ class BaseAgent(ABC):
         # still counts as a single slot. Otherwise a 10-iteration loop
         # could trickle through the semaphore and blow past the cap.
         async with _CLAUDE_SEMAPHORE:
+            # Same prompt-caching wrap as ``_run_api`` above. Tool-loop
+            # runs reuse the same system across every iteration, so the
+            # second iteration onward hits the cache.
+            tool_system_param: Any = (
+                [{"type": "text", "text": self.system_prompt,
+                  "cache_control": {"type": "ephemeral"}}]
+                if self.system_prompt
+                else self.system_prompt
+            )
             for _ in range(max_iterations):
                 response = await self._api_client.messages.create(
                     model=model_id, max_tokens=4096,
-                    system=self.system_prompt, messages=messages, tools=tools,
+                    system=tool_system_param, messages=messages, tools=tools,
                 )
                 text_parts, tool_calls = [], []
                 for block in response.content:

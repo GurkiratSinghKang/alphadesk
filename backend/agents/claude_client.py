@@ -133,6 +133,15 @@ async def _record_spend_estimate(estimate: float) -> float:
         return float(new_total)
     except Exception as e:
         logger.warning("claude budget tracker unavailable: %s", e)
+        # Round-17 / persona-11 P0: pre-fix returned 0.0, which made
+        # ``running_total > limit`` always false on Redis-down — i.e.
+        # the kill-switch fails OPEN. When kill-switch is enabled, a
+        # Redis flap means runaway prompt loops can burn the budget
+        # with no in-band stop. Surface a sentinel that fails CLOSED
+        # for the kill-switch path: returning ``inf`` makes the gate
+        # always trip when the operator has explicitly opted in.
+        if settings.CLAUDE_BUDGET_KILL_SWITCH_ENABLED:
+            return float("inf")
         return 0.0
 
 
@@ -258,11 +267,28 @@ class ClaudeClient:
 
         async with _CLAUDE_SEMAPHORE:
             try:
+                # Round-17 / persona-11 + Round-21 cost: wrap the system
+                # prompt in a ``cache_control: ephemeral`` block so the
+                # second-and-subsequent call with the same system text
+                # (typical for our structured-prompt builders) gets the
+                # 90% input-token discount. ``str``-typed system fallback
+                # for backwards compat — the Anthropic SDK accepts both.
+                system_param: Any
+                if isinstance(system, str) and system:
+                    system_param = [
+                        {
+                            "type": "text",
+                            "text": system,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                else:
+                    system_param = system
                 resp = await asyncio.wait_for(
                     self._client.messages.create(
                         model=resolved,
                         max_tokens=max_tokens,
-                        system=system,
+                        system=system_param,
                         messages=[{"role": "user", "content": user}],
                     ),
                     timeout=t,
