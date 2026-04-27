@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   AreaSeries,
@@ -20,6 +21,7 @@ import {
   type SingleValueData,
   type HistogramData,
   type Time,
+  type SeriesMarker,
   ColorType,
   CrosshairMode,
 } from "lightweight-charts";
@@ -75,6 +77,18 @@ interface TradingChartProps {
    * mean since the catalyst?"
    */
   anchoredVwapIndex?: number | null;
+  /**
+   * Slice-15 / EVT-1 (2026 design brief, TradingView event markers):
+   * date-aligned event annotations on the time axis. Each event renders
+   * as a small badge (E for earnings, D for dividend, F for FOMC, S
+   * for split, X for custom) at the bar closest to its date. Uses
+   * lightweight-charts ``series.setMarkers``.
+   */
+  events?: Array<{
+    date: string; // ISO YYYY-MM-DD
+    kind: "earnings" | "dividend" | "fomc" | "split" | "custom";
+    label?: string; // optional one-line title for the marker tooltip
+  }>;
   onTimeRangeChange?: (from: Time | null, to: Time | null) => void;
   positionLines?: {
     entry: number | null;
@@ -401,7 +415,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -702,6 +716,74 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           mainSeriesRef.current?.setData(bars.map(toLineData));
         }
         volumeSeriesRef.current?.setData(bars.map(toChartVolume));
+
+        // Slice-15 / EVT-1: event markers on the time axis. Each event
+        // attaches to the bar whose date matches (or is the closest
+        // before) the event date. Tone + glyph map per kind:
+        //   earnings  → E (amber circle below bar)
+        //   dividend  → D (ice circle below bar)
+        //   fomc      → F (gold square above bar)
+        //   split     → S (loss-coral square above bar)
+        //   custom    → ★ (brand-gold star above bar)
+        if (events && events.length > 0 && mainSeriesRef.current) {
+          const markerColors: Record<string, string> = {
+            earnings: getTokenVar("--amber-500", "#d9a441"),
+            dividend: getTokenVar("--ice-500", "#5b8def"),
+            fomc: getTokenVar("--gold-500", "#c9a66b"),
+            split: getTokenVar("--loss", "#e07856"),
+            custom: getTokenVar("--brand", "#c9a66b"),
+          };
+          const markerTexts: Record<string, string> = {
+            earnings: "E",
+            dividend: "D",
+            fomc: "F",
+            split: "S",
+            custom: "★",
+          };
+          const markers: SeriesMarker<Time>[] = [];
+          for (const ev of events) {
+            const evDate = ev.date;
+            let bestIdx = -1;
+            for (let i = 0; i < bars.length; i++) {
+              const t = bars[i].time as unknown;
+              const iso =
+                typeof t === "string"
+                  ? (t as string).slice(0, 10)
+                  : new Date(
+                      typeof t === "number" && t < 1e12
+                        ? (t as number) * 1000
+                        : (t as number),
+                    )
+                      .toISOString()
+                      .slice(0, 10);
+              if (iso <= evDate) bestIdx = i;
+            }
+            if (bestIdx === -1) continue;
+            const marker: SeriesMarker<Time> = {
+              time: normalizeTime(bars[bestIdx].time) as unknown as Time,
+              position:
+                ev.kind === "earnings" || ev.kind === "dividend"
+                  ? "belowBar"
+                  : "aboveBar",
+              color: markerColors[ev.kind] ?? markerColors.custom,
+              shape:
+                ev.kind === "fomc" || ev.kind === "split"
+                  ? "square"
+                  : "circle",
+              text: markerTexts[ev.kind] ?? "★",
+              size: 1,
+            };
+            markers.push(marker);
+          }
+          if (markers.length > 0) {
+            try {
+              createSeriesMarkers(mainSeriesRef.current, markers);
+            } catch {
+              // best-effort; old lightweight-charts versions may not
+              // expose createSeriesMarkers.
+            }
+          }
+        }
 
         // BUG #12: Remove old overlay series
         for (const s of overlaySeriesRef.current) {
@@ -1007,7 +1089,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           didFitRef.current = true;
         }
       },
-      [chartType, indicators, compareSeries, anchoredVwapIndex]
+      [chartType, indicators, compareSeries, anchoredVwapIndex, events]
     );
 
     useEffect(() => {
@@ -1019,7 +1101,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     // the new shape.
     useEffect(() => {
       didFitRef.current = false;
-    }, [chartType, indicators, compareSeries, anchoredVwapIndex]);
+    }, [chartType, indicators, compareSeries, anchoredVwapIndex, events]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {
