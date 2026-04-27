@@ -60,6 +60,11 @@ export default function SymbolGroupDot({
     8: "h-2 w-2",
     10: "h-2.5 w-2.5",
   };
+  // The visible dot stays small (7-10px) by design — it's a chip, not
+  // a control. Round-15 / persona-9 P1: the previous markup was ALSO
+  // the click target, giving an 8×8 hit area (way under WCAG 2.5.5
+  // 24×24). Wrap in a 24×24 transparent button so motor-impaired
+  // users can hit it; visual stays identical.
   return (
     <button
       type="button"
@@ -72,15 +77,22 @@ export default function SymbolGroupDot({
       aria-label={ariaLabel}
       title={ariaLabel}
       className={cn(
-        "inline-flex items-center justify-center rounded-full border transition-colors",
-        "border-[color:var(--border)] hover:border-[color:var(--brand)]",
-        sizeStyle[size],
+        "inline-flex items-center justify-center min-h-6 min-w-6 p-1 transition-colors",
         className,
       )}
-      style={{
-        backgroundColor: color,
-        opacity: group === 0 ? 0.3 : 0.85,
-      }}
-    />
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-block rounded-full border transition-colors",
+          "border-[color:var(--border)] hover:border-[color:var(--brand)]",
+          sizeStyle[size],
+        )}
+        style={{
+          backgroundColor: color,
+          opacity: group === 0 ? 0.3 : 0.85,
+        }}
+      />
+    </button>
   );
 }

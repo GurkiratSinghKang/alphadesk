@@ -633,6 +633,7 @@ export default function ChartPane({
                     }
                   }}
                   placeholder="SPY, QQQ, …"
+                  aria-label="Compare symbol ticker"
                   maxLength={6}
                   className="bg-transparent border border-[color:var(--border)] rounded-xs px-2 py-1 t-mono text-[12px] text-[color:var(--fg)] uppercase outline-none focus:border-[color:var(--brand)] w-24"
                 />
@@ -701,7 +702,7 @@ export default function ChartPane({
               avwapAnchor != null
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : avwapArmed
-                  ? "text-[color:var(--brand)] bg-[color:var(--brand)]/10 ring-1 ring-[color:var(--brand)]/40 animate-pulse"
+                  ? "text-[color:var(--brand)] bg-[color:var(--brand)]/10 ring-1 ring-[color:var(--brand)]/40 motion-safe:animate-pulse"
                   : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
             )}
           >
@@ -993,7 +994,7 @@ export default function ChartPane({
                     aria-label="Rewind 10 bars"
                     title="Rewind 10 bars"
                     onClick={() => setReplayCursor((c) => Math.max(1, c - 10))}
-                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
                   >
                     ⏮
                   </button>
@@ -1002,7 +1003,7 @@ export default function ChartPane({
                     aria-label={replayPlaying ? "Pause replay" : "Play replay"}
                     title={replayPlaying ? "Pause" : "Play"}
                     onClick={() => setReplayPlaying((p) => !p)}
-                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] transition-colors text-[color:var(--brand)]"
+                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] transition-colors"
                   >
                     {replayPlaying ? "⏸" : "▶"}
                   </button>
@@ -1013,7 +1014,7 @@ export default function ChartPane({
                     onClick={() =>
                       setReplayCursor((c) => Math.min(data.length, c + 1))
                     }
-                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
                   >
                     ⏭
                   </button>
@@ -1043,7 +1044,7 @@ export default function ChartPane({
                       setReplayPlaying(false);
                       setReplayCursor(0);
                     }}
-                    className="px-1.5 py-0.5 rounded hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)] transition-colors"
+                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)] transition-colors"
                   >
                     ×
                   </button>
