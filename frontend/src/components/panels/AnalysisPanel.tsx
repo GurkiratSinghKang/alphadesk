@@ -699,7 +699,17 @@ function ChatTab({ symbol }: { symbol: string }) {
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          // Round-17 / persona-C: gate on ``isComposing`` so IME users
+          // (Japanese / Chinese / Korean keyboards) don't send mid-
+          // composition; ``maxLength`` bounds paste-bombs.
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            if (e.shiftKey) return;
+            e.preventDefault();
+            handleSend();
+          }}
+          maxLength={2000}
           placeholder={`Ask about ${symbol}...`}
           className="h-8 text-xs bg-background/50 border-border"
         />
@@ -823,9 +833,18 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-quantity"
             type="number"
             value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, Math.floor(safeNum(e.target.value, 1))))}
+            onChange={(e) => {
+              // Round-17 / persona-C input fuzzing fix: ``type="number"``
+              // accepts ``1e3`` = 1000 and ``2e2`` = 200 silently. Clamp
+              // to a sane integer range up front so paste/typo can't
+              // submit a million-share order.
+              const raw = safeNum(e.target.value, 1);
+              const clamped = Math.max(1, Math.min(999_999, Math.floor(raw)));
+              setQuantity(clamped);
+            }}
             className="h-8 flex-1 rounded border border-border bg-background px-2 text-center text-sm tabular-nums text-foreground"
             min={1}
+            max={999999}
           />
           <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)} className="h-8 w-8 rounded border border-border bg-[var(--panel)] text-muted-foreground hover:text-foreground text-sm">+</button>
         </div>
@@ -855,8 +874,9 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-limit-price"
             type="number"
             value={limitPrice}
-            onChange={(e) => setLimitPrice(safeNum(e.target.value, 0))}
+            onChange={(e) => setLimitPrice(Math.max(0, safeNum(e.target.value, 0)))}
             step={0.01}
+            min={0}
             className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
           />
         </div>
@@ -869,8 +889,9 @@ function OrderTab({ symbol }: { symbol: string }) {
             id="order-stop-price"
             type="number"
             value={stopPrice}
-            onChange={(e) => setStopPrice(safeNum(e.target.value, 0))}
+            onChange={(e) => setStopPrice(Math.max(0, safeNum(e.target.value, 0)))}
             step={0.01}
+            min={0}
             className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
           />
         </div>
@@ -884,8 +905,9 @@ function OrderTab({ symbol }: { symbol: string }) {
               id="order-stop-price-sl"
               type="number"
               value={stopPrice}
-              onChange={(e) => setStopPrice(safeNum(e.target.value, 0))}
+              onChange={(e) => setStopPrice(Math.max(0, safeNum(e.target.value, 0)))}
               step={0.01}
+              min={0}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
             />
           </div>
@@ -895,8 +917,9 @@ function OrderTab({ symbol }: { symbol: string }) {
               id="order-limit-price-sl"
               type="number"
               value={limitPrice}
-              onChange={(e) => setLimitPrice(safeNum(e.target.value, 0))}
+              onChange={(e) => setLimitPrice(Math.max(0, safeNum(e.target.value, 0)))}
               step={0.01}
+              min={0}
               className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-sm tabular-nums text-foreground"
             />
           </div>

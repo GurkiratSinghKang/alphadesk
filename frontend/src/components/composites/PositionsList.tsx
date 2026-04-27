@@ -248,7 +248,7 @@ export default function PositionsList({
                     >
                       {p.symbol}
                       <span className="block t-meta mt-[1px]">
-                        {p.quantity} @ {p.entryPrice.toFixed(2)}
+                        {p.quantity} @ {Number.isFinite(p.entryPrice) ? p.entryPrice.toFixed(2) : "\u2014"}
                       </span>
                     </button>
                   </td>

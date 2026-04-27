@@ -20,7 +20,7 @@ section first; the rest is context.
 
 3. **SSH in.**
    ```
-   ssh -i ~/.ssh/alphadesk root@87.99.143.65
+   ssh -i ~/.ssh/alphadesk root@178.156.145.213
    cd /opt/alphadesk
    ```
 
@@ -77,7 +77,7 @@ gate).
 
 ## Where logs live
 
-On the VPS (Hetzner, `87.99.143.65`):
+On the VPS (Hetzner, `178.156.145.213`):
 
 | Source | Path / command |
 | --- | --- |
@@ -220,7 +220,7 @@ See [ROLLBACK.md](./ROLLBACK.md).
 
 ```
 # SSH into the VPS
-ssh -i ~/.ssh/alphadesk root@87.99.143.65
+ssh -i ~/.ssh/alphadesk root@178.156.145.213
 
 # From the VPS, compose root
 cd /opt/alphadesk

@@ -34,7 +34,7 @@ import {
   cn,
 } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
-import { safeSetItem } from "@/lib/storage";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
 import { PayoffDiagram, type OptionLeg } from "@/components/panels/PayoffDiagram";
 import {
@@ -1098,8 +1098,11 @@ const JOURNAL_NOTES_KEY = "journal-notes";
 const JOURNAL_TAGS_KEY = "journal-tags";
 
 function loadJournalTags(): Record<string, JournalTag[]> {
+  // Round-21 / persona-B: bare localStorage.getItem throws SecurityError
+  // in Safari Private Mode; the JSON.parse on undefined is also a hazard.
+  // Use safeGetItem and treat any failure as "no tags".
   try {
-    return JSON.parse(localStorage.getItem(JOURNAL_TAGS_KEY) || "{}");
+    return JSON.parse(safeGetItem(JOURNAL_TAGS_KEY) || "{}");
   } catch {
     return {};
   }

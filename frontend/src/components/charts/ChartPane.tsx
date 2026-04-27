@@ -467,7 +467,7 @@ export default function ChartPane({
       }
       if (activeTool === "cursor") return;
       if (activeTool === "text") {
-        console.warn("text drawing coming in v2");
+        // Text drawing is a v2 feature; silently no-op for now.
         return;
       }
       const kind = TOOL_TO_KIND[activeTool];
@@ -609,9 +609,13 @@ export default function ChartPane({
                 onSubmit={(e) => {
                   e.preventDefault();
                   const sym = compareInputValue.trim().toUpperCase();
+                  // Round-17 / persona-C: broaden the regex so legit
+                  // tickers like BF.B, BRK-B, RDS.A, GOOGL (5), and
+                  // 7+-char foreign listings pass. Pre-fix the regex
+                  // silently dropped them with no error toast.
                   if (
                     sym &&
-                    /^[A-Z]{1,6}(\.[A-Z])?$/.test(sym) &&
+                    /^[A-Z]{1,7}([.\-][A-Z]{1,2})?$/.test(sym) &&
                     !compareSymbols.includes(sym) &&
                     compareSymbols.length < 4
                   ) {

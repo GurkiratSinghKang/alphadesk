@@ -193,7 +193,7 @@ Production server reference:
 
 ```bash
 # SSH (admin only)
-ssh -i ~/.ssh/alphadesk root@87.99.143.65
+ssh -i ~/.ssh/alphadesk root@178.156.145.213
 # Live URL
 https://tradingalpha.net
 ```

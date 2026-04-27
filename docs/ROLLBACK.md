@@ -54,7 +54,7 @@ with those exact image hashes.
   downgrade automatically. If the bad deploy included a schema migration
   that is incompatible with the prior image, you must also run:
   ```
-  ssh -i ~/.ssh/alphadesk root@87.99.143.65
+  ssh -i ~/.ssh/alphadesk root@178.156.145.213
   cd /opt/alphadesk
   docker compose exec -T backend alembic downgrade <prior_alembic_revision>
   ```
@@ -79,7 +79,7 @@ Expected: `200 {"db":"ok","redis":"ok","status":"ok"}`.
 If `/readyz` still returns 503, SSH to the VPS and pull backend logs:
 
 ```
-ssh -i ~/.ssh/alphadesk root@87.99.143.65
+ssh -i ~/.ssh/alphadesk root@178.156.145.213
 cd /opt/alphadesk
 docker compose logs backend --tail 200
 ```
