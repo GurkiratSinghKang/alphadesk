@@ -263,6 +263,89 @@ function computeStochastic(
   return { k: kValues, d: dValues };
 }
 
+/**
+ * Slice-12 / RSI-1 (2026 design brief, CH-3J): RSI(14) — Wilder's
+ * relative strength index. Returns the smoothed 14-period RSI as a
+ * 0-100 series. Renders on a dedicated lower pane via priceScaleId.
+ */
+function computeRSI(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
+  if (bars.length <= period) return [];
+  const gains: number[] = [];
+  const losses: number[] = [];
+  for (let i = 1; i < bars.length; i++) {
+    const change = bars[i].close - bars[i - 1].close;
+    gains.push(Math.max(0, change));
+    losses.push(Math.max(0, -change));
+  }
+  const result: SingleValueData<Time>[] = [];
+  // Initial average uses simple mean over the first ``period`` values.
+  let avgGain = gains.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  let avgLoss = losses.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  for (let i = period; i < bars.length; i++) {
+    if (i > period) {
+      // Wilder's smoothing: ((prev × (n-1)) + curr) / n
+      avgGain = (avgGain * (period - 1) + gains[i - 1]) / period;
+      avgLoss = (avgLoss * (period - 1) + losses[i - 1]) / period;
+    }
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
+    result.push({
+      time: normalizeTime(bars[i].time) as unknown as Time,
+      value: rsi,
+    });
+  }
+  return result;
+}
+
+/**
+ * Slice-12 / MACD-1: MACD line + signal line + histogram. The line is
+ * EMA(12) − EMA(26); the signal is EMA(9) of the line; the histogram
+ * is the line minus the signal. Returns three series so the chart
+ * can render line + signal as two lines and the histogram as bars.
+ */
+function computeMACD(
+  bars: OHLCVBar[],
+): {
+  line: SingleValueData<Time>[];
+  signal: SingleValueData<Time>[];
+  hist: SingleValueData<Time>[];
+} {
+  if (bars.length < 35) return { line: [], signal: [], hist: [] };
+  const ema12 = computeEMA(bars, 12);
+  const ema26 = computeEMA(bars, 26);
+  // Align the two EMAs on common timestamps. EMA(26) starts later, so
+  // we trim EMA(12) to match.
+  const ema26Map = new Map(ema26.map((p) => [p.time as unknown as number, p.value]));
+  const line: SingleValueData<Time>[] = [];
+  for (const p12 of ema12) {
+    const v26 = ema26Map.get(p12.time as unknown as number);
+    if (v26 !== undefined) {
+      line.push({ time: p12.time, value: p12.value - v26 });
+    }
+  }
+  // Signal = EMA(9) of the MACD line. Compute inline (since computeEMA
+  // takes OHLCVBar input).
+  const signal: SingleValueData<Time>[] = [];
+  if (line.length > 9) {
+    const k = 2 / (9 + 1);
+    let prev = line.slice(0, 9).reduce((s, p) => s + p.value, 0) / 9;
+    signal.push({ time: line[8].time, value: prev });
+    for (let i = 9; i < line.length; i++) {
+      prev = line[i].value * k + prev * (1 - k);
+      signal.push({ time: line[i].time, value: prev });
+    }
+  }
+  // Histogram = line - signal at common timestamps.
+  const sigMap = new Map(signal.map((p) => [p.time as unknown as number, p.value]));
+  const hist: SingleValueData<Time>[] = line
+    .filter((p) => sigMap.has(p.time as unknown as number))
+    .map((p) => ({
+      time: p.time,
+      value: p.value - (sigMap.get(p.time as unknown as number) ?? 0),
+    }));
+  return { line, signal, hist };
+}
+
 function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
   if (bars.length < 2) return [];
   const trValues: number[] = [];
@@ -704,6 +787,73 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
             });
             s.setData(vwap);
             overlaySeriesRef.current.push(s);
+          }
+        }
+
+        // Slice-12 / RSI-1 (CH-3J): RSI(14) sub-pane, 0-100 axis.
+        // Renders on a dedicated "rsi" priceScale so it sits below
+        // the main price pane. Color: ice for the line; the standard
+        // 30/70 reference levels are NOT drawn here (would clutter)
+        // but the chart's crosshair label gives the user the exact
+        // value at hover.
+        if (indicators.includes("RSI")) {
+          const rsi = computeRSI(bars, 14);
+          if (rsi.length) {
+            const s = chart.addSeries(LineSeries, {
+              color: ice,
+              lineWidth: 2,
+              priceScaleId: "rsi",
+              title: "RSI 14",
+            });
+            s.setData(rsi);
+            overlaySeriesRef.current.push(s);
+            chart.priceScale("rsi").applyOptions({
+              scaleMargins: { top: 0.78, bottom: 0.02 },
+            });
+          }
+        }
+
+        // Slice-12 / MACD-1 (CH-3J): MACD line + signal + histogram.
+        // Renders on a dedicated "macd" priceScale below the main pane.
+        // Line = EMA(12)−EMA(26) in brand-gold; signal = EMA(9) of the
+        // line in amber (dashed); histogram = line−signal as bars,
+        // colored profit/loss by sign.
+        if (indicators.includes("MACD")) {
+          const macd = computeMACD(bars);
+          if (macd.line.length) {
+            const lineS = chart.addSeries(LineSeries, {
+              color: brandGold,
+              lineWidth: 2,
+              priceScaleId: "macd",
+              title: "MACD 12/26",
+            });
+            lineS.setData(macd.line);
+            overlaySeriesRef.current.push(lineS);
+            const sigS = chart.addSeries(LineSeries, {
+              color: amber,
+              lineWidth: 1,
+              lineStyle: 2,
+              priceScaleId: "macd",
+              title: "Signal 9",
+            });
+            sigS.setData(macd.signal);
+            overlaySeriesRef.current.push(sigS);
+            const histS = chart.addSeries(HistogramSeries, {
+              priceScaleId: "macd",
+              title: "Histogram",
+              priceFormat: { type: "price" as const },
+            });
+            histS.setData(
+              macd.hist.map((p) => ({
+                time: p.time,
+                value: p.value,
+                color: p.value >= 0 ? "#a8d04d" : "#e07856",
+              })),
+            );
+            overlaySeriesRef.current.push(histS);
+            chart.priceScale("macd").applyOptions({
+              scaleMargins: { top: 0.78, bottom: 0.02 },
+            });
           }
         }
 
