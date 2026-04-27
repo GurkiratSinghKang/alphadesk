@@ -730,12 +730,15 @@ def test_watchlist_default_symbols_setting():
 
 
 def test_claude_budget_kill_switch_settings():
-    """H-2: ship defaults — kill-switch ON, budget at $100/day."""
+    """Phase-2 / EP-2 (per user directive 2026-04-26): kill-switch
+    flipped OFF + budget bumped 100 → 5,000 so Claude analysis is
+    available at all times. Operators can still pin a hard ceiling
+    via the env var."""
     from core.config import Settings
 
     s = Settings()
-    assert s.CLAUDE_BUDGET_KILL_SWITCH_ENABLED is True
-    assert s.CLAUDE_DAILY_BUDGET_USD > 0
+    assert s.CLAUDE_BUDGET_KILL_SWITCH_ENABLED is False
+    assert s.CLAUDE_DAILY_BUDGET_USD >= 5000
 
 
 # ─── Schema additions on EarningsDetail / StrikeLadder ──────

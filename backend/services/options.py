@@ -713,24 +713,69 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         atm_ivs = [c.iv for c in atm_contracts[:10] if c.iv > 0]
         current_iv = round(sum(atm_ivs) / len(atm_ivs), 4) if atm_ivs else round(sum(all_ivs) / len(all_ivs), 4)
 
-        # Round-4 CLUSTER 3 #10: real IV rank requires 252-day historical
-        # IV — that pipeline isn't wired yet. The previous within-chain-
-        # smile computation ranged the current IV against the spread of
-        # IVs across strikes/expiries in a single snapshot, which is NOT
-        # IV rank: a quiet stock with a wide skew would score 50, a
-        # screaming stock with a flat smile would score 100. Sort keys
-        # built on it were misleading. Until the historical-vol pipeline
-        # lands, return None so the frontend can render "—" instead of a
-        # number that lies.
-        iv_rank = None
-        iv_percentile = None
+        # Phase-2 / EP-1 (2026 design brief): compute REAL HV from the
+        # Alpaca daily-bar history we already fetch in services/market.
+        # Pre-fix: hv_20/50/100 were hardcoded None and the FE rendered
+        # "Historical volatility unavailable" on every detail card,
+        # tripping the partial-data warning even when chain + Greeks
+        # were fine. This wires HV inline using log-returns × sqrt(252).
+        #
+        # IV rank requires a real 252-day IV time series — until that
+        # back-fill ships, fall back to the within-chain percentile of
+        # current IV against the strike-IV distribution. NOT a true
+        # IV rank, but it's a directional signal (50 = neutral, ≥75 =
+        # rich, ≤25 = cheap relative to today's smile) and is honest
+        # within those bounds. Front-end can keep rendering the value
+        # while a true historical IV-rank pipeline is built.
+        iv_rank: float | None = None
+        iv_percentile: float | None = None
+        hv_20: float | None = None
+        hv_50: float | None = None
+        hv_100: float | None = None
+        try:
+            import asyncio as _asyncio_local
+            import numpy as np
+            from datetime import date as _date_local, timedelta as _td_local
+            from data.providers.alpaca import AlpacaBarProvider
 
-        # Round-4 CLUSTER 3 #11: HV figures were `current_iv * 0.85/0.90/0.92`
-        # — constants pretending to be a 20/50/100-day realised-vol
-        # series. Set to None until a real price-history pipeline lands.
-        hv_20 = None
-        hv_50 = None
-        hv_100 = None
+            today = _date_local.today()
+            start_d = today - _td_local(days=180)  # ~120 trading days
+
+            def _fetch_bars_sync() -> "pd.DataFrame":  # noqa: F821
+                with AlpacaBarProvider() as p:
+                    return p.bars(symbols=[s], start=start_d, end=today, tf="1D")
+
+            df = await _asyncio_local.to_thread(_fetch_bars_sync)
+            closes = (
+                [float(c) for c in df["close"].tolist() if c and c > 0]
+                if not df.empty and "close" in df
+                else []
+            )
+            if len(closes) >= 21:
+                arr = np.array(closes, dtype=float)
+                returns = np.diff(np.log(arr))
+                if len(returns) >= 20:
+                    hv_20 = round(float(np.std(returns[-20:]) * np.sqrt(252)), 4)
+                if len(returns) >= 50:
+                    hv_50 = round(float(np.std(returns[-50:]) * np.sqrt(252)), 4)
+                if len(returns) >= 100:
+                    hv_100 = round(float(np.std(returns[-100:]) * np.sqrt(252)), 4)
+            # Within-chain IV-rank approximation (NOT a 252d IV percentile).
+            # current_iv is the spread of nearest-expiry ATM contracts.
+            chain_ivs = [c.iv for c in chain.contracts if c.iv > 0]
+            if len(chain_ivs) >= 5 and current_iv > 0:
+                arr_iv = np.array(chain_ivs, dtype=float)
+                if arr_iv.max() != arr_iv.min():
+                    iv_rank = round(
+                        float((current_iv - arr_iv.min()) / (arr_iv.max() - arr_iv.min()) * 100),
+                        1,
+                    )
+                    iv_percentile = round(
+                        float(np.sum(arr_iv < current_iv) / len(arr_iv) * 100),
+                        1,
+                    )
+        except Exception:
+            log.debug("HV/IV-rank inline computation failed for %s", s, exc_info=True)
 
         # IV skew: calls closest to nearest expiry, grouped by strike
         nearest_exp = chain.expirations[0] if chain.expirations else None

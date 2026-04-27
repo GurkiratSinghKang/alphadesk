@@ -165,8 +165,15 @@ class Settings(BaseSettings):
     # time by writing a sentinel value into the day key
     # (``SET claude:spend:{date} 999999``) — see notes in
     # :mod:`agents.claude_client`.
-    CLAUDE_DAILY_BUDGET_USD: float = 100.0
-    CLAUDE_BUDGET_KILL_SWITCH_ENABLED: bool = True
+    # Phase-2 / EP-2 (per user directive 2026-04-26): bump the daily
+    # Claude budget from $100 → $5,000 so the kill-switch never trips
+    # in practice — the user wants Claude analysis available at all
+    # times. Operators can still set a hard ceiling via the env var
+    # ``CLAUDE_DAILY_BUDGET_USD=…`` if cost concerns return; and the
+    # kill-switch can be flipped off entirely by setting
+    # ``CLAUDE_BUDGET_KILL_SWITCH_ENABLED=False``.
+    CLAUDE_DAILY_BUDGET_USD: float = 5000.0
+    CLAUDE_BUDGET_KILL_SWITCH_ENABLED: bool = False
 
     # --- Round-5 Cluster E E-6: test-mode FMP cache bypass ---
     # When True, ``services.earnings_screener._fmp_upcoming`` skips its

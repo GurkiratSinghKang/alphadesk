@@ -16,7 +16,12 @@ function withQueryClient(children: ReactNode) {
 }
 
 describe("Earnings Options Play page", () => {
-  it("fetches calendar on mount and auto-selects first symbol", async () => {
+  it("fetches calendar on mount but does NOT auto-select first symbol (Phase-2 EP-3)", async () => {
+    // Phase-2 / EP-3: heavy work (Claude structured analysis, options
+    // chain fetch, IV term backfill) only runs when /detail is hit, so
+    // an auto-selection burns Opus tokens on a symbol the user never
+    // asked for. The page still fetches the calendar — just doesn't
+    // auto-pick the top row.
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
       earnings: [
         { symbol: "NVDA", company: "Nvidia", sector: "Semis",
@@ -25,7 +30,7 @@ describe("Earnings Options Play page", () => {
           premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
           expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
           claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
-          topSetup: "short strangle" },
+          topSetup: "iron condor" },
         { symbol: "TSLA", company: "Tesla", sector: "Auto",
           reportDate: "2026-04-23", reportTime: "AMC", daysUntil: 1,
           price: 392, change: -8.2, changePct: -0.02, ivRank: 84,
@@ -39,12 +44,12 @@ describe("Earnings Options Play page", () => {
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
-      // getEarningsDetail now takes (symbol, { signal }) per B-97. Assert on the
-      // symbol arg; ignore the options bag.
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
       expect(container.textContent).toContain("NVDA");
       expect(container.textContent).toContain("TSLA");
     });
+    // The detail endpoint must NOT be called automatically — only on
+    // explicit user click. Tests of the click path live below.
+    expect(api.getEarningsDetail).not.toHaveBeenCalled();
   });
 
   it("announces calendar count via aria-live region (B-37)", async () => {
@@ -73,13 +78,13 @@ describe("Earnings Options Play page", () => {
     await waitFor(() => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
-    // The mock was called with filters — minIvRank should be 50 (default),
-    // not NaN (which would coerce to the string "NaN" downstream).
+    // The mock was called with filters — minIvRank should fall through
+    // to the default, NOT NaN.
     const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
-    // Round-8 / DT-05: default minIvRank tightened from 50 → 70 because
-    // earnings premium-selling only works on rich-IV setups; 50 let too
-    // many low-vol names through the filter.
-    expect(firstCall?.minIvRank).toBe(70);
+    // Phase-2 / EP-4: default minIvRank relaxed 70 → 0 to surface ALL
+    // curated-universe names (the curated universe filter already keeps
+    // the catalog tight; a vol-rank floor on top is over-screening).
+    expect(firstCall?.minIvRank).toBe(0);
     expect(Number.isNaN(firstCall?.minIvRank as number)).toBe(false);
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
@@ -177,9 +182,10 @@ describe("Earnings Options Play page", () => {
     });
     render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
-    // Next → TSLA
+    // Phase-2 / EP-3: no auto-select. First Next event picks row 1 (TSLA)
+    // because currentIdx=-1 falls back to base=0 (NVDA), then dir=1 → idx=1.
     act(() => {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
     });
@@ -193,7 +199,7 @@ describe("Earnings Options Play page", () => {
     await waitFor(() => {
       expect(api.getEarningsDetail).toHaveBeenCalledWith("META", expect.anything());
     });
-    // Prev → TSLA (wraps back)
+    // Prev → TSLA
     act(() => {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-prev"));
     });
@@ -216,10 +222,10 @@ describe("Earnings Options Play page", () => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
     const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
-    // Round-8 / DT-05: default minIvRank tightened from 50 → 70 because
-    // earnings premium-selling only works on rich-IV setups; 50 let too
-    // many low-vol names through the filter.
-    expect(firstCall?.minIvRank).toBe(70);
+    // Phase-2 / EP-4: default minIvRank relaxed 70 → 0 to surface ALL
+    // curated-universe names; vol-rank filtering on top of the curated
+    // list was over-screening.
+    expect(firstCall?.minIvRank).toBe(0);
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
 
@@ -387,13 +393,20 @@ describe("Earnings Options Play — round-4 fixes", () => {
           premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
           expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
           claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
-          topSetup: "short strangle" },
+          topSetup: "iron condor" },
       ],
       generatedAt: new Date().toISOString(), partial: false,
     });
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    // Phase-2 / EP-3: must click the calendar row first (no auto-select).
     await waitFor(() => {
-      // Auto-selected NVDA → detail panel mounted with detail-header.
+      expect(container.textContent).toContain("NVDA");
+    });
+    const nvdaBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("NVDA"),
+    ) as HTMLButtonElement;
+    fireEvent.click(nvdaBtn);
+    await waitFor(() => {
       expect(container.querySelector('[data-slot="detail-header"]')).not.toBeNull();
     });
 
@@ -417,11 +430,18 @@ describe("Earnings Options Play — round-4 fixes", () => {
           premiumYieldCallAtm: 0.031, premiumYieldPutAtm: 0.028,
           expectedMovePct: 0.064, histAvgAbsMovePct: 0.052,
           claudeVerdict: "neutral-bull", claudeConfidence: 0.62,
-          topSetup: "short strangle" },
+          topSetup: "iron condor" },
       ],
       generatedAt: new Date().toISOString(), partial: false,
     });
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(container.textContent).toContain("NVDA");
+    });
+    const nvdaBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("NVDA"),
+    ) as HTMLButtonElement;
+    fireEvent.click(nvdaBtn);
     await waitFor(() => {
       expect(container.querySelector('[data-slot="detail-header"]')).not.toBeNull();
     });
@@ -473,6 +493,14 @@ describe("Earnings Options Play — full flow", () => {
     vi.mocked(api.getEarningsDetail).mockResolvedValue(fullNvdaDetail);
 
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
+    // Phase-2 / EP-3: click the calendar row to opt in to detail load.
+    await waitFor(() => {
+      expect(container.textContent).toContain("NVDA");
+    });
+    const nvdaBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("NVDA"),
+    ) as HTMLButtonElement;
+    fireEvent.click(nvdaBtn);
     await waitFor(() => {
       expect(container.querySelector('[data-slot="claude-thesis"]')?.textContent).toMatch(/NEUTRAL-BULL/);
       expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();

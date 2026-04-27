@@ -182,10 +182,16 @@ export default function EarningsOptionsPlayPage() {
       selectedSymbol && calendar.earnings.some((r) => r.symbol === selectedSymbol);
     const isUrlPinned =
       urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
-    if (!stillValid && !isUrlPinned) {
-      // Auto-fill is treated as a URL-equivalent selection (deeplink-y) —
-      // DetailHeader is allowed to focus the heading.
-      setSelectedSymbol(calendar.earnings[0].symbol, "url");
+    // Phase-2 / EP-3 (per user directive 2026-04-26): do NOT auto-select
+    // the first calendar row on cold load. Heavy work (Claude structured
+    // analysis, options chain fetch, IV term backfill, news scoring)
+    // only fires once /detail is hit, so an auto-selection burns Opus
+    // tokens + chain bandwidth on a symbol the user never asked for.
+    // We still rehydrate URL-pinned selections (deeplink path) and
+    // preserve the current selection if it's still in the visible
+    // calendar — but we no longer pre-pick the top row.
+    if (!stillValid && !isUrlPinned && selectedSymbol !== null) {
+      setSelectedSymbol(null, null);
     }
   }, [calendar, selectedSymbol, setSelectedSymbol]);
 
@@ -400,7 +406,7 @@ export default function EarningsOptionsPlayPage() {
           filters={filters}
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
-          onResetFilters={() => setFilters({ window: "both", minIvRank: 70, sort: "iv_rank" })}
+          onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
         />
         {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
         <div id="earnings-detail-panel">
@@ -540,14 +546,16 @@ function titleForWindow(win: EarningsCalendarFilters["window"]): string {
 // ─── URL sync helpers ────────────────────────────────────────
 
 function readFiltersFromURL(): EarningsCalendarFilters {
-  // Round-8 / DT-05: defaults tightened. ``minIvRank=50`` let half the
-  // curated names through — too noisy for a strategy that only works
-  // on rich-IV setups. ``sort=date`` ascending buried the fattest
-  // premiums. Premium sellers want IVR ≥ 70 sorted by IVR desc so
-  // the highest-rank names float to the top of the calendar. Users
-  // who want broader filtering can still loosen via the FiltersBar
-  // and the URL syncs the override back.
-  if (typeof window === "undefined") return { window: "both", minIvRank: 70, sort: "iv_rank" };
+  // Phase-2 / EP-4 (per user directive 2026-04-26): default filters
+  // relaxed to show ALL interesting (curated-universe) names. Pre-fix
+  // ``minIvRank=70`` filtered out 80%+ of legitimate setups — the user
+  // reasonably objected: "we want all the companies which are
+  // interesting, in the calendar." The curated universe filter
+  // already keeps the catalog tight (~130 mega/large caps with deep
+  // options); a vol-rank floor on top of that is over-screening.
+  // Premium sellers can still re-impose ``minIvRank=70`` via the
+  // FiltersBar, which the URL syncs back.
+  if (typeof window === "undefined") return { window: "both", minIvRank: 0, sort: "date" };
   const p = new URLSearchParams(window.location.search);
   const out: EarningsCalendarFilters = {};
 
@@ -580,7 +588,7 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   }
 
   // Round-8 / DT-05: same defaults as the SSR branch above.
-  return { window: "both", minIvRank: 70, sort: "iv_rank", ...out };
+  return { window: "both", minIvRank: 0, sort: "date", ...out };
 }
 
 function syncURL(
