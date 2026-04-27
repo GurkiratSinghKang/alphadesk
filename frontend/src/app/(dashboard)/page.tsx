@@ -59,6 +59,7 @@ import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import { useMarketStore, useQuote, getFreshestQuoteTimestamp } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useUIStore } from "@/stores/ui";
+import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { useToast } from "@/hooks/useToast";
 import type { Position, Order } from "@/types";
 
@@ -336,9 +337,22 @@ export default function DeskPage() {
     () => toContextCells(portfolioSummary, positions as Position[], orderCount),
     [portfolioSummary, positions, orderCount],
   );
-  const positionRows = useMemo(
-    () => toPositionRows(positions as Position[]),
+  // Phase-2 / SP-1 (Tufte): fetch 30-day daily closes for every open
+  // position so the PositionsList row can render a sparkline beside
+  // the strategy name. The hook batches via react-query so a 10-leg
+  // book triggers 10 parallel cached fetches with 5-min staleTime.
+  const positionSymbols = useMemo(
+    () => Array.from(new Set((positions as Position[]).map((p) => p.symbol))),
     [positions],
+  );
+  const positionSparks = useSparklineBars(positionSymbols, { timeframe: "D", limit: 30 });
+  const positionRows = useMemo(
+    () =>
+      toPositionRows(positions as Position[]).map((row) => ({
+        ...row,
+        spark30d: positionSparks[row.symbol],
+      })),
+    [positions, positionSparks],
   );
   const clock = useDeskClock();
   const memo = useMemo(() => emptyMemo(clock.slice(0, 8)), [clock]);
@@ -546,6 +560,43 @@ export default function DeskPage() {
     },
     [toast, refreshPortfolio]
   );
+
+  // Phase-2 / KP-1: listen for the Cmd+K palette's "Cancel all working
+  // orders" event. Routes through the same cancelOrder + react-query
+  // refresh as a manual click so optimistic state + final reconciliation
+  // stays consistent.
+  useEffect(() => {
+    function onCancelAll() {
+      const working = (ordersFromStore as Order[] | undefined)?.filter(
+        (o) =>
+          o.status === "pending" ||
+          o.status === "submitted" ||
+          o.status === "open" ||
+          o.status === "partial" ||
+          o.status === "partial_fill",
+      ) ?? [];
+      if (working.length === 0) {
+        toast({ type: "info", message: "No working orders to cancel." });
+        return;
+      }
+      Promise.allSettled(working.map((o) => cancelOrder(o.id))).then((rs) => {
+        const ok = rs.filter((r) => r.status === "fulfilled").length;
+        const fail = rs.length - ok;
+        toast({
+          type: fail === 0 ? "success" : fail === rs.length ? "error" : "info",
+          message:
+            fail === 0
+              ? `Cancelled ${ok} working order${ok === 1 ? "" : "s"}.`
+              : `Cancelled ${ok}/${rs.length}; ${fail} failed (broker may have filled them).`,
+        });
+        refreshPortfolio().catch(() => {});
+      });
+    }
+    window.addEventListener("alphadesk:cancel-all-orders", onCancelAll as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:cancel-all-orders", onCancelAll as EventListener);
+    };
+  }, [ordersFromStore, toast, refreshPortfolio]);
 
   return (
     <DashboardLayout

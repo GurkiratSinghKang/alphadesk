@@ -239,6 +239,59 @@ export function CommandPalette() {
     }, 50);
   }
 
+  // Phase-2 / KP-1 (2026 design brief): Linear/Ramp pattern — Cmd+K
+  // becomes the unifying action surface for navigate + act + search.
+  // These are the high-leverage trading actions the brief calls out.
+  function handleCancelAllOrders() {
+    setCommandPaletteOpen(false);
+    // Dispatch an event the dashboard listens for; the actual API call
+    // lives in the page-level handler so it can show the right toast +
+    // optimistic update + react-query invalidation.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:cancel-all-orders"));
+    }
+    toast({
+      type: "info",
+      message: "Cancelling all working orders…",
+    });
+  }
+
+  function handleFlattenCurrentSymbol() {
+    const sym = selectedSymbol;
+    setCommandPaletteOpen(false);
+    if (!sym) {
+      toast({ type: "info", message: "No symbol selected — pick one first." });
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("alphadesk:flatten-symbol", { detail: { symbol: sym } }),
+      );
+    }
+    toast({
+      type: "info",
+      message: `Flattening ${sym} — closing position at market…`,
+    });
+  }
+
+  function handleOpenShortcuts() {
+    setCommandPaletteOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:open-shortcuts"));
+    }
+  }
+
+  function handlePauseAllStrategies() {
+    setCommandPaletteOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:pause-all-strategies"));
+    }
+    toast({
+      type: "info",
+      message: "Pausing all strategies — pipeline will skip the next dispatch.",
+    });
+  }
+
   // Focus options chain — router.push rather than hard nav
   function handleFocusOptions() {
     setCommandPaletteOpen(false);
@@ -342,6 +395,34 @@ export function CommandPalette() {
                 icon={<ArrowRightLeft className="h-4 w-4" />}
                 label="Switch to live trading"
                 onSelect={handleSwitchLive}
+              />
+              {/* Phase-2 / KP-1: high-leverage trading actions per the
+                  2026 design brief (Linear/Ramp pattern — Cmd+K unifies
+                  navigate + act + search). */}
+              <CommandItem
+                icon={<Target className="h-4 w-4" />}
+                label="Cancel all working orders"
+                onSelect={handleCancelAllOrders}
+              />
+              <CommandItem
+                icon={<TrendingUp className="h-4 w-4" />}
+                label={
+                  selectedSymbol
+                    ? `Flatten ${selectedSymbol} — close at market`
+                    : "Flatten current symbol (none selected)"
+                }
+                onSelect={handleFlattenCurrentSymbol}
+              />
+              <CommandItem
+                icon={<Bot className="h-4 w-4" />}
+                label="Pause all strategies"
+                onSelect={handlePauseAllStrategies}
+              />
+              <CommandItem
+                icon={<Clock className="h-4 w-4" />}
+                label="Show keyboard shortcuts"
+                shortcut="?"
+                onSelect={handleOpenShortcuts}
               />
             </Command.Group>
 

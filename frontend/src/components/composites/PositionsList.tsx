@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
+import Sparkline from "@/components/primitives/Sparkline";
 import type { PositionRow, PositionTab } from "./types";
 
 // A lightweight shape for Orders tab rows. Kept narrow on purpose — the
@@ -254,9 +255,26 @@ export default function PositionsList({
 
                   <td className="align-middle py-2.5 pr-2.5">
                     <div className="flex flex-col gap-[2px]">
-                      <span className="font-display italic text-[11.5px] text-fg-dim">
-                        {p.strategyName}
-                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-display italic text-[11.5px] text-fg-dim truncate">
+                          {p.strategyName}
+                        </span>
+                        {/* Phase-2 / SP-1 (Tufte): 30-day sparkline gives
+                            the row context the scalar P&L cannot — was
+                            this position trending up before the open?
+                            Position is anchored by the entry price via
+                            the parent hook. Tone tracks current P&L sign. */}
+                        {p.spark30d && p.spark30d.length >= 2 && (
+                          <Sparkline
+                            data={p.spark30d}
+                            tone={isLoss ? "loss" : "profit"}
+                            width={64}
+                            height={16}
+                            strokeWidth={1.25}
+                            aria-label={`30-day price trend for ${p.symbol}`}
+                          />
+                        )}
+                      </div>
                       <div
                         className={cn("h-[3px] bg-border rounded-xs overflow-hidden mt-1")}
                         aria-hidden

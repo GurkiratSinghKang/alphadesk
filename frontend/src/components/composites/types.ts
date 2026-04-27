@@ -131,6 +131,13 @@ export interface PositionRow {
   progress: number;
   pnl: number;
   pnlPct: number;
+  /**
+   * Phase-2 / SP-1 (2026 design brief, Tufte): 30-day daily-close
+   * sparkline data. Optional so the row still renders before the
+   * bars hook resolves; PositionsList shows a Skeleton during the
+   * fetch and the Sparkline once data lands.
+   */
+  spark30d?: number[];
 }
 
 /* ─── AI memo ──────────────────────────────────────────────── */
