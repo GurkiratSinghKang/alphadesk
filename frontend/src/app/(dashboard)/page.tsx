@@ -773,12 +773,24 @@ function LastTickStatusBar({
   }, [tick]);
 
   const pills = useMemo(() => {
-    // Replace ONLY the last pill (the "Last tick" / "Feed idle" pill)
-    // — keep every other pill from ``base`` referentially stable so
-    // StatusBar's internal memoisation doesn't bust on a heartbeat.
+    // Slice-3 / CH-1B (chart audit 2026-04-26): the previous code wrote
+    // to ``next[next.length - 1]`` to refresh the Last-tick pill. After
+    // SB-1 inserted Pipeline + Mode pills AFTER Last-tick, the index
+    // drifted — the heartbeat now overwrote the Mode pill with a
+    // "Feed idle" label, and the genuine Last-tick pill kept its
+    // stale "Last tick —" copy. Result: the bottom rail showed
+    // "Feed idle · market closed" TWICE (in the Last-tick slot and
+    // in the misnamed Mode slot). Anchor the rewrite by matching
+    // the pill label prefix so it tracks the correct pill regardless
+    // of insertion order.
     if (base.length === 0) return base;
+    const idx = base.findIndex(
+      (p) =>
+        p.label.startsWith("Last tick") ||
+        p.label.startsWith("Feed idle"),
+    );
+    if (idx === -1) return base;
     const next = base.slice();
-    const idx = next.length - 1;
     next[idx] = {
       ...next[idx],
       label:

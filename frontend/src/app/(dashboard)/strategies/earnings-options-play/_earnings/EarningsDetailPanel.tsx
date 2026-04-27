@@ -16,6 +16,7 @@ import StrikeLadder from "./StrikeLadder";
 import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
 import TradeButtonRow from "./TradeButtonRow";
+import PnLZones from "@/components/primitives/PnLZones";
 
 export interface EarningsDetailPanelProps {
   detail: EarningsDetail | null;
@@ -193,6 +194,20 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           strip would just add noise. */}
       <DecisionStrip structured={detail.claudeStructured} metrics={detail.metrics} />
       <MetricsStrip metrics={detail.metrics} />
+      {/* Slice-3 / FZ-1 (2026 design brief, Tastytrade signature):
+          page-level expected-move strip. Shows the underlying price
+          tick + ±1σ shaded brown band derived from front-month IV,
+          giving the user a glanceable "where could it land by next
+          report" visual before they pick a strategy. The actual
+          profit-zone shading per-strategy is rendered alongside the
+          relevant TradeButtonRow button hover (next slice). */}
+      {detail.quote && detail.metrics?.expectedMovePct != null && (
+        <_ExpectedMoveStrip
+          underlying={detail.quote.last}
+          expectedMovePct={detail.metrics.expectedMovePct}
+          reportDate={detail.reportDate ?? undefined}
+        />
+      )}
 
       {isWide ? (
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
@@ -353,3 +368,59 @@ function useIsWide(panelThresholdPx: number): boolean {
   }, [panelThresholdPx]);
   return wide;
 }
+
+/**
+ * Slice-3 / FZ-1: page-level expected-move strip rendered between the
+ * DecisionStrip and the TradeButtonRow. Wraps ``<PnLZones>`` with the
+ * subset of fields the earnings-page actually has: spot quote +
+ * straddle-implied 1σ move from ``metrics.expectedMovePct``. The
+ * profitZone is intentionally null at this level — once the user
+ * hovers a specific defined-risk button (bull put / bear call / iron
+ * condor / long straddle) we render a strategy-specific overlay
+ * with the green profit zone. Until then this is the at-a-glance
+ * "where could it land" Tastytrade hero.
+ */
+function _ExpectedMoveStrip({
+  underlying,
+  expectedMovePct,
+  reportDate,
+}: {
+  underlying: number;
+  expectedMovePct: number;
+  reportDate?: string | Date | null;
+}) {
+  if (!Number.isFinite(underlying) || underlying <= 0) return null;
+  if (!Number.isFinite(expectedMovePct) || expectedMovePct <= 0) return null;
+  // ``expectedMovePct`` arrives as a fraction (0.064 = 6.4%).
+  const sigma = underlying * expectedMovePct;
+  const expectedLow = underlying - sigma;
+  const expectedHigh = underlying + sigma;
+  // Show ±2σ on the strip so the 1σ band sits centered with breathing
+  // room either side.
+  const priceMin = underlying - sigma * 2;
+  const priceMax = underlying + sigma * 2;
+  const reportLabel = reportDate
+    ? new Date(reportDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })
+    : "the report";
+  return (
+    <section data-slot="expected-move-strip" className="mt-3">
+      <PnLZones
+        label={`Expected move ±$${sigma.toFixed(2)} (${(
+          expectedMovePct * 100
+        ).toFixed(1)}%) by ${reportLabel}`}
+        underlying={underlying}
+        priceMin={priceMin}
+        priceMax={priceMax}
+        profitZone={null}
+        expectedMove={[expectedLow, expectedHigh]}
+        caption={`Expected move ±$${sigma.toFixed(2)} · ${(
+          expectedMovePct * 100
+        ).toFixed(1)}% · 1σ implied by front-month straddle`}
+      />
+    </section>
+  );
+}
+

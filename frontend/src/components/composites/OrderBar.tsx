@@ -261,14 +261,26 @@ export default function OrderBar({
     <div
       data-slot="order-bar"
       data-tour="order-bar"
+      // Slice-3 / CH-5A (chart audit 2026-04-26): on /trade the OrderBar
+      // lives in a 5/12-col side panel ~600px wide, which is narrower
+      // than the desktop ``md:flex-row`` breakpoint expected. Field
+      // labels (STRATEGY, SIDE, SYMBOL, QTY…) collided into garble like
+      // "STRATEG SIDE" / "BUY/SELL/SPY" overlap. Use a CSS container
+      // query so the layout decides based on the OrderBar's actual
+      // width, not the viewport. ``@container (min-width: 720px)``
+      // gates the horizontal row; below that we stack via the 2-col
+      // grid that already worked on mobile.
+      style={{ containerType: "inline-size" }}
       className={cn(
-        // Mobile: 2-col grid, stacked. md+: horizontal flex row.
+        // Default: 2-col grid, stacked.
         "grid grid-cols-2 gap-3 items-end px-4 py-4 border-t border-border bg-ink-050",
-        // Viewport audit r5 #7: 7 fields × 90px + gaps + review span + Stage
-        // button overflows the center column at 1280-1380 (mid-laptop with
-        // rail+right aside). Allow wrapping to 2 rows below xl; keep a single
-        // non-wrapping row at xl+ where the desk center has enough room.
-        "md:flex md:flex-row md:flex-wrap xl:flex-nowrap md:gap-5 md:px-7",
+        // ``@md`` here is the project's container-query alias (see
+        // tailwind config) — applies the horizontal layout only when
+        // the OrderBar's container is ≥720px wide, NOT when the
+        // viewport is ≥768px. On /trade's 5/12 side panel that means
+        // we stay stacked until the viewport is ~1500px+, which is
+        // exactly when the OrderBar actually has room to breathe.
+        "@[720px]:flex @[720px]:flex-row @[720px]:flex-wrap @[1100px]:flex-nowrap @[720px]:gap-5 @[720px]:px-7",
         className
       )}
     >
