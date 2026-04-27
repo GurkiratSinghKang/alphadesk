@@ -41,7 +41,9 @@ import {
   getOrders,
   getPortfolioSummary,
   getPositions,
+  getStrategies,
   placeOrder,
+  toggleStrategy,
 } from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
@@ -52,6 +54,7 @@ import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 // `/strategies` page header.
 import {
   useIndices,
+  usePipelineStatus,
   useRegime,
   useStrategies,
 } from "@/hooks/useQueries";
@@ -370,6 +373,17 @@ export default function DeskPage() {
   // surface in the chrome — it's the user's only visual anchor that
   // the system is in PAPER vs LIVE state.
   const tradingMode = useUIStore((s) => s.tradingMode);
+
+  // SB-1 pipeline pill: real running count via the shared useQuery
+  // poller (de-duped with any other consumer). ``progress`` is a
+  // per-strategy map; fall back to running:0|1 until that's populated.
+  const { data: pipelineStatus } = usePipelineStatus();
+  const pipelineRunningCount = pipelineStatus?.progress
+    ? Object.values(pipelineStatus.progress).filter((v) => Number(v) < 100).length
+    : pipelineStatus?.running
+      ? 1
+      : 0;
+
   const statusPillsBase = useMemo(
     () =>
       toStatusPills({
@@ -378,12 +392,11 @@ export default function DeskPage() {
         claudeHealthy: true,
         // initial value; LastTickStatusPills will refresh in place
         lastTickSec: undefined,
-        // Phase-1 / SB-1: pipeline + mode pills.
-        pipelineRunning: 0,  // TODO: wire to /api/v1/pipeline/status when it ships per-strategy progress
+        pipelineRunning: pipelineRunningCount,
         pipelineTotal: 12,
         tradingMode,
       }),
-    [portfolioSummary.is_demo, marketOpen, tradingMode],
+    [portfolioSummary.is_demo, marketOpen, tradingMode, pipelineRunningCount],
   );
 
   /* ─── Event handlers — kept inline because they're trivial ─ */
@@ -579,15 +592,34 @@ export default function DeskPage() {
         toast({ type: "info", message: "No working orders to cancel." });
         return;
       }
-      Promise.allSettled(working.map((o) => cancelOrder(o.id))).then((rs) => {
-        const ok = rs.filter((r) => r.status === "fulfilled").length;
-        const fail = rs.length - ok;
+      // Cap concurrency at 5 in flight — Alpaca rate-limits at 200
+      // req/min and a heavy desk can trip it on a "cancel all" burst.
+      const CONCURRENCY = 5;
+      let cursor = 0;
+      const results: PromiseSettledResult<unknown>[] = new Array(working.length);
+      async function worker() {
+        while (cursor < working.length) {
+          const i = cursor++;
+          try {
+            const v = await cancelOrder(working[i].id);
+            results[i] = { status: "fulfilled", value: v };
+          } catch (err) {
+            results[i] = { status: "rejected", reason: err };
+          }
+        }
+      }
+      Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, working.length) }, worker),
+      ).then(() => {
+        const ok = results.filter((r) => r?.status === "fulfilled").length;
+        const fail = results.length - ok;
+        const allFailed = ok === 0 && fail > 0;
         toast({
-          type: fail === 0 ? "success" : fail === rs.length ? "error" : "info",
+          type: fail === 0 ? "success" : allFailed ? "error" : "info",
           message:
             fail === 0
               ? `Cancelled ${ok} working order${ok === 1 ? "" : "s"}.`
-              : `Cancelled ${ok}/${rs.length}; ${fail} failed (broker may have filled them).`,
+              : `Cancelled ${ok}/${results.length}; ${fail} failed (broker may have filled them).`,
         });
         refreshPortfolio().catch(() => {});
       });
@@ -597,6 +629,63 @@ export default function DeskPage() {
       window.removeEventListener("alphadesk:cancel-all-orders", onCancelAll as EventListener);
     };
   }, [ordersFromStore, toast, refreshPortfolio]);
+
+  // KP-1 dispatchers (CommandPalette → flatten-symbol /
+  // pause-all-strategies) had no listeners; toasts said "Flattening
+  // AAPL…" but nothing closed. Wire them here.
+  // (The ``alphadesk:open-shortcuts`` consumer lives in
+  // ``useKeyboardShortcuts`` where the overlay state is owned.)
+  useEffect(() => {
+    async function onFlatten(e: Event) {
+      const detail = (e as CustomEvent<{ symbol?: string }>).detail;
+      const sym = detail?.symbol ?? "";
+      if (!sym) return;
+      const positions = usePortfolioStore.getState().positions ?? [];
+      const pos = positions.find((p) => p.symbol === sym);
+      if (!pos || !pos.quantity) {
+        toast({ type: "info", message: `No open position in ${sym}.` });
+        return;
+      }
+      try {
+        await placeOrder({
+          symbol: sym,
+          side: pos.quantity > 0 ? "sell" : "buy",
+          type: "market",
+          quantity: Math.abs(pos.quantity),
+        });
+        toast({ type: "success", message: `Flatten ${sym} order submitted.` });
+        refreshPortfolio().catch(() => {});
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Flatten failed";
+        toast({ type: "error", message: msg });
+      }
+    }
+    async function onPauseAll() {
+      // Toggle endpoint flips active↔paused — filter to status==="active"
+      // so we never accidentally re-activate a paused strategy.
+      try {
+        const strategies = await getStrategies();
+        const names = strategies
+          .filter((s) => s.status === "active")
+          .map((s) => s.id);
+        if (names.length === 0) {
+          toast({ type: "info", message: "No active strategies to pause." });
+          return;
+        }
+        await Promise.allSettled(names.map((n) => toggleStrategy(n)));
+        toast({ type: "success", message: `Paused ${names.length} strategies.` });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Pause-all failed";
+        toast({ type: "error", message: msg });
+      }
+    }
+    window.addEventListener("alphadesk:flatten-symbol", onFlatten as EventListener);
+    window.addEventListener("alphadesk:pause-all-strategies", onPauseAll as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:flatten-symbol", onFlatten as EventListener);
+      window.removeEventListener("alphadesk:pause-all-strategies", onPauseAll as EventListener);
+    };
+  }, [toast, refreshPortfolio]);
 
   // Slice-4 / CH-3B: route the chart's "+ alert" affordance to /alerts.
   // The CustomEvent carries { symbol, price, source } so the alerts page

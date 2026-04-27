@@ -405,5 +405,18 @@ export function useKeyboardShortcuts() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [handleAction, pathname]);
 
+  // CommandPalette dispatches ``alphadesk:open-shortcuts`` from its
+  // help menu — this is the only consumer (overlay state is owned
+  // here, the palette can't reach it directly).
+  useEffect(() => {
+    function onOpenShortcuts() {
+      setOverlayOpen(true);
+    }
+    window.addEventListener("alphadesk:open-shortcuts", onOpenShortcuts);
+    return () => {
+      window.removeEventListener("alphadesk:open-shortcuts", onOpenShortcuts);
+    };
+  }, []);
+
   return { overlayOpen, setOverlayOpen };
 }
