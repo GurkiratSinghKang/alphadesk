@@ -10,6 +10,7 @@ import { useChartDrawings } from "@/hooks/useChartDrawings";
 import { useMarketStore } from "@/stores/market";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
+import VolumeProfile from "@/components/primitives/VolumeProfile";
 
 /**
  * ChartPane — dashboard chart surface (2026-04-20 redesign)
@@ -224,6 +225,11 @@ export default function ChartPane({
       JSON.stringify({ chartType, indicators }),
     );
   }, [chartType, indicators]);
+
+  // Slice-17 / VPF-1 (2026 design brief, Quantower / GoCharting): volume
+  // profile toggle. Off by default; renders a translucent vertical
+  // histogram on the right edge of the chart canvas when on.
+  const [volumeProfileOn, setVolumeProfileOn] = React.useState(false);
 
   // Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
   // anchored VWAP. ``avwapAnchor`` is the bar index from which the
@@ -620,6 +626,30 @@ export default function ChartPane({
             )}
           </div>
 
+          {/* Slice-17 / VPF-1: Volume Profile toggle. Renders a vertical
+              histogram of volume-at-price on the right edge of the
+              canvas with Point of Control + Value Area highlighted. */}
+          <button
+            type="button"
+            onClick={() => setVolumeProfileOn((v) => !v)}
+            aria-pressed={volumeProfileOn}
+            title={volumeProfileOn ? "Hide volume profile" : "Show volume profile (POC + Value Area)"}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              volumeProfileOn
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="2" y="3" width="6" height="1.4" fill="currentColor" />
+              <rect x="2" y="5" width="9" height="1.4" fill="currentColor" />
+              <rect x="2" y="7" width="4" height="1.4" fill="currentColor" />
+            </svg>
+            <span>Profile</span>
+          </button>
+
           {/* Slice-14 / AVWAP-1: anchored-VWAP toolbar button.
               Click → arms; next chart click drops the anchor; AVWAP
               renders as a dashed brand-gold line from anchor → present.
@@ -871,6 +901,19 @@ export default function ChartPane({
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {/* Slice-17 / VPF-1: volume profile overlay. Sits to the
+                  right of the price axis at low opacity so it doesn't
+                  fight the candles for visual weight. POC bin is
+                  brand-gold; Value Area bins are lighter; rest are
+                  muted border-color. */}
+              {volumeProfileOn && (
+                <div
+                  data-slot="chart-volume-profile-overlay"
+                  className="pointer-events-none absolute right-12 top-3 bottom-12 z-10 opacity-70"
+                >
+                  <VolumeProfile bars={visibleData} height={300} width={70} />
                 </div>
               )}
               <TradingChart
