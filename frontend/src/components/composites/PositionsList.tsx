@@ -271,7 +271,7 @@ export default function PositionsList({
                             width={64}
                             height={16}
                             strokeWidth={1.25}
-                            aria-label={`30-day price trend for ${p.symbol}`}
+                            label={`30-day price trend for ${p.symbol}`}
                           />
                         )}
                       </div>

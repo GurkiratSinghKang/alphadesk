@@ -78,9 +78,24 @@ export default function Sparkline({
     })
     .join(" ");
 
+  // Resolve a11y attributes. Order of precedence:
+  //   1. Explicit ``label`` prop → role="img" + aria-label.
+  //   2. Pre-existing aria-* in rest (caller already wired AT) → leave
+  //      it alone (with role="img" so the aria-label actually applies).
+  //   3. Otherwise treat as decorative → aria-hidden=true.
+  // Spreading ``...rest`` LAST so explicit caller attributes still win
+  // when they really need to (e.g. tests), but the default branch
+  // doesn't collide with a caller-supplied aria-label any more.
+  const callerHasA11y =
+    "aria-label" in rest ||
+    "aria-labelledby" in rest ||
+    "aria-describedby" in rest ||
+    "role" in rest;
   const a11yProps = label
     ? { role: "img" as const, "aria-label": label }
-    : { "aria-hidden": true as const };
+    : callerHasA11y
+      ? { role: "img" as const }
+      : { "aria-hidden": true as const };
 
   return (
     <svg

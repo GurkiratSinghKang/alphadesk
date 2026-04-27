@@ -636,16 +636,27 @@ export default function DeskPage() {
   // (The ``alphadesk:open-shortcuts`` consumer lives in
   // ``useKeyboardShortcuts`` where the overlay state is owned.)
   useEffect(() => {
+    // In-flight guards. Holding the keybind would otherwise fire one
+    // market order per repeat tick before the position store catches
+    // up, double-flattening the position. Same for pause-all (the
+    // second invocation could re-toggle a still-active strategy).
+    const flatteningInflight = new Set<string>();
+    let pauseAllInflight = false;
     async function onFlatten(e: Event) {
       const detail = (e as CustomEvent<{ symbol?: string }>).detail;
       const sym = detail?.symbol ?? "";
       if (!sym) return;
+      if (flatteningInflight.has(sym)) {
+        toast({ type: "info", message: `Already flattening ${sym}…` });
+        return;
+      }
       const positions = usePortfolioStore.getState().positions ?? [];
       const pos = positions.find((p) => p.symbol === sym);
       if (!pos || !pos.quantity) {
         toast({ type: "info", message: `No open position in ${sym}.` });
         return;
       }
+      flatteningInflight.add(sym);
       try {
         await placeOrder({
           symbol: sym,
@@ -658,11 +669,16 @@ export default function DeskPage() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Flatten failed";
         toast({ type: "error", message: msg });
+      } finally {
+        flatteningInflight.delete(sym);
       }
     }
     async function onPauseAll() {
-      // Toggle endpoint flips active↔paused — filter to status==="active"
-      // so we never accidentally re-activate a paused strategy.
+      if (pauseAllInflight) {
+        toast({ type: "info", message: "Pause-all already in progress…" });
+        return;
+      }
+      pauseAllInflight = true;
       try {
         const strategies = await getStrategies();
         const names = strategies
@@ -672,11 +688,30 @@ export default function DeskPage() {
           toast({ type: "info", message: "No active strategies to pause." });
           return;
         }
-        await Promise.allSettled(names.map((n) => toggleStrategy(n)));
+        // Cap concurrency at 4 — toggle hits the same backend rate
+        // bucket as the order endpoints; an unbounded fan-out across
+        // 50 strategies could trip rate-limits / DB lock contention.
+        const CONCURRENCY = 4;
+        let cursor = 0;
+        async function worker() {
+          while (cursor < names.length) {
+            const i = cursor++;
+            try {
+              await toggleStrategy(names[i]);
+            } catch {
+              /* per-strategy failure surfaces in the strategies page */
+            }
+          }
+        }
+        await Promise.all(
+          Array.from({ length: Math.min(CONCURRENCY, names.length) }, worker),
+        );
         toast({ type: "success", message: `Paused ${names.length} strategies.` });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Pause-all failed";
         toast({ type: "error", message: msg });
+      } finally {
+        pauseAllInflight = false;
       }
     }
     window.addEventListener("alphadesk:flatten-symbol", onFlatten as EventListener);

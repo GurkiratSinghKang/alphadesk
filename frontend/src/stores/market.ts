@@ -234,9 +234,10 @@ export const useMarketStore = create<MarketState>()(
 //
 // Zustand persist writes to localStorage; other tabs don't get notified
 // without an explicit `storage` listener. We mirror watchlist +
-// selectedSymbol across tabs so a watchlist add in tab A shows up in
-// tab B without the user having to reload. quotes are intentionally NOT
-// synced — they'd thrash on every tick and the per-tab WebSocket already
+// selectedSymbol + groupSymbols (SLG-1) across tabs so a watchlist
+// add or colour-group reassign in tab A shows up in tab B without
+// the user having to reload. quotes are intentionally NOT synced —
+// they'd thrash on every tick and the per-tab WebSocket already
 // keeps each tab in sync with the wire.
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
@@ -253,16 +254,24 @@ if (typeof window !== "undefined") {
         typeof incoming.selectedSymbol === "string"
           ? incoming.selectedSymbol
           : current.selectedSymbol;
+      const nextGroupSymbols =
+        incoming.groupSymbols && typeof incoming.groupSymbols === "object"
+          ? { ...current.groupSymbols, ...incoming.groupSymbols }
+          : current.groupSymbols;
       // Only call setState if something actually changed — otherwise we
       // trigger needless rerenders in every component subscribed to either
       // field.
+      const groupsChanged =
+        JSON.stringify(nextGroupSymbols) !== JSON.stringify(current.groupSymbols);
       if (
         nextSelected !== current.selectedSymbol ||
-        nextWatchlist.join("|") !== current.watchlist.join("|")
+        nextWatchlist.join("|") !== current.watchlist.join("|") ||
+        groupsChanged
       ) {
         useMarketStore.setState({
           watchlist: nextWatchlist,
           selectedSymbol: nextSelected,
+          groupSymbols: nextGroupSymbols,
         });
       }
     } catch {
