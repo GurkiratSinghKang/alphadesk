@@ -217,9 +217,13 @@ export const useMarketStore = create<MarketState>()(
       // Persist watchlist + selectedSymbol so cross-tab sync (below) can
       // mirror both. quotes are deliberately excluded — they're noisy and
       // re-fetched on mount; freshestTs is derived from quotes.
+      // SLG-1: groupSymbols persist so the colour-group assignments
+      // survive a reload (the user has bound semantic meaning to them
+      // — group 1 = "watching", group 2 = "in-trade", etc.).
       partialize: (state) => ({
         watchlist: state.watchlist,
         selectedSymbol: state.selectedSymbol,
+        groupSymbols: state.groupSymbols,
       }),
       skipHydration: true,
     }

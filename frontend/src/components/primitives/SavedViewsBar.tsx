@@ -115,28 +115,40 @@ export default function SavedViewsBar<T>({
         </span>
       ) : (
         views.map((v) => (
-          <button
+          // Two adjacent buttons inside a styled wrapper — keeps the
+          // visual "tab with an X" without nesting a button inside a
+          // button (invalid HTML; some browsers split focus weirdly
+          // and AT announces both).
+          <span
             key={v.id}
-            type="button"
-            onClick={() => onApply(v.filter)}
             className={cn(
-              "group inline-flex items-center gap-1.5 rounded border px-2 py-0.5 t-mono text-[11.5px] transition-colors",
+              "group inline-flex items-center rounded border t-mono text-[11.5px] transition-colors",
               activeId === v.id
-                ? "border-[color:var(--brand)] bg-[color:var(--brand)]/15 text-[color:var(--brand)]"
-                : "border-[color:var(--border)] text-[color:var(--fg)] hover:border-[color:var(--brand)]/60",
+                ? "border-[color:var(--brand)] bg-[color:var(--brand)]/15"
+                : "border-[color:var(--border)] hover:border-[color:var(--brand)]/60",
             )}
           >
-            <span>{v.name}</span>
-            <span
-              role="button"
-              tabIndex={-1}
+            <button
+              type="button"
+              onClick={() => onApply(v.filter)}
+              className={cn(
+                "px-2 py-0.5",
+                activeId === v.id
+                  ? "text-[color:var(--brand)]"
+                  : "text-[color:var(--fg)]",
+              )}
+            >
+              {v.name}
+            </button>
+            <button
+              type="button"
               aria-label={`Delete view ${v.name}`}
               onClick={(e) => handleDelete(v.id, e)}
-              className="opacity-40 hover:opacity-100 hover:text-[color:var(--loss)] transition-opacity"
+              className="px-1.5 py-0.5 opacity-40 hover:opacity-100 hover:text-[color:var(--loss)] transition-opacity"
             >
               ×
-            </span>
-          </button>
+            </button>
+          </span>
         ))
       )}
       <button

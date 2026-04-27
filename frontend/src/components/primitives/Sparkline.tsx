@@ -23,6 +23,13 @@ export interface SparklineProps
   height?: number;
   /** Default 1.5. */
   strokeWidth?: number;
+  /**
+   * Accessible label, e.g. "AAPL 5-day price trend, +2.3%". When
+   * omitted the sparkline is treated as decorative (aria-hidden) —
+   * callers should provide a label whenever the data isn't redundant
+   * with adjacent text content.
+   */
+  label?: string;
 }
 
 const toneToVar: Record<SparklineTone, string> = {
@@ -39,6 +46,7 @@ export default function Sparkline({
   width = 200,
   height = 28,
   strokeWidth = 1.5,
+  label,
   className,
   ...rest
 }: SparklineProps) {
@@ -70,6 +78,10 @@ export default function Sparkline({
     })
     .join(" ");
 
+  const a11yProps = label
+    ? { role: "img" as const, "aria-label": label }
+    : { "aria-hidden": true as const };
+
   return (
     <svg
       data-slot="sparkline"
@@ -79,6 +91,7 @@ export default function Sparkline({
       height={height}
       preserveAspectRatio="none"
       className={cn("shrink-0", className)}
+      {...a11yProps}
       {...rest}
     >
       <polyline

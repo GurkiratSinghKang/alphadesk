@@ -33,6 +33,13 @@ export interface VolumeProfileProps {
   height?: number;
   /** Pixel width of the SVG (typically 15-20% of chart width). */
   width?: number;
+  /**
+   * Optional accessible label. If omitted the SVG is treated as
+   * decorative (aria-hidden) — recommended unless the profile is
+   * the primary surface for the data (it usually overlays a chart
+   * whose price/volume readouts are already exposed elsewhere).
+   */
+  label?: string;
   className?: string;
 }
 
@@ -41,6 +48,7 @@ export default function VolumeProfile({
   binCount = 24,
   height = 360,
   width = 80,
+  label,
   className,
 }: VolumeProfileProps) {
   const profile = React.useMemo(() => {
@@ -100,8 +108,14 @@ export default function VolumeProfile({
   }, [bars, binCount]);
 
   if (!profile) return null;
-  const { bins, pocIdx, lowIdx, highIdx, maxVol } = profile;
+  const { bins, pocIdx, lowIdx, highIdx, maxVol, lo, binSize } = profile;
   const binPxHeight = height / binCount;
+  const a11yProps = label
+    ? {
+        role: "img" as const,
+        "aria-label": `${label}. Point of control near $${(lo + (pocIdx + 0.5) * binSize).toFixed(2)}; value area $${(lo + (lowIdx + 0.5) * binSize).toFixed(2)}–$${(lo + (highIdx + 0.5) * binSize).toFixed(2)}.`,
+      }
+    : { "aria-hidden": true as const };
 
   return (
     <svg
@@ -110,7 +124,7 @@ export default function VolumeProfile({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       className={cn("pointer-events-none", className)}
-      aria-hidden="true"
+      {...a11yProps}
     >
       {bins.map((vol, i) => {
         // Reverse so bin 0 (lowest price) is at the bottom.

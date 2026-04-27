@@ -305,8 +305,22 @@ export default function ChartPane({
   }, [replayEnabled, data.length, replayCursor]);
 
   // Auto-advance loop. Stops when we reach the end of the data.
+  // Honors ``prefers-reduced-motion``: a user who's flagged it gets
+  // step-only replay (no auto-advance) — the play button still works
+  // but each click moves one bar instead of starting an interval.
   React.useEffect(() => {
     if (!replayEnabled || !replayPlaying) return;
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) {
+      // Single-step on each "play" click; turn off the auto loop so
+      // the user can advance bar-by-bar without a moving image.
+      setReplayCursor((c) => Math.min(data.length, c + 1));
+      setReplayPlaying(false);
+      return;
+    }
     const intervalMs = Math.max(50, 1000 / replaySpeed);
     const id = setInterval(() => {
       setReplayCursor((c) => {
