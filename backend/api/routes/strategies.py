@@ -1790,6 +1790,21 @@ async def toggle_strategy(
     # persona-9 #7 — guarantee a real 404 on bad ids before any Redis I/O.
     data = await _require_strategy(strategy_id)
 
+    # Round-15 / persona-7 P1: reject toggles for non-toggleable
+    # statuses. PLANNED entries are catalogue stubs with no backend
+    # — flipping them to ACTIVE would misrepresent operational state
+    # to every consumer (and the new "pause-all" UX could fan out a
+    # mass activation across every PLANNED strategy on a single click).
+    # BACKTEST is also untoggleable from this endpoint.
+    if data["status"] not in (StrategyStatus.ACTIVE, StrategyStatus.PAUSED):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Strategy {strategy_id!r} has status {data['status'].value!r} "
+                "and cannot be toggled (only active↔paused is supported)."
+            ),
+        )
+
     canonical = _canonical_id(strategy_id)
     redis_key = f"strategy_status:{canonical}"
 
@@ -1865,13 +1880,16 @@ async def toggle_strategy(
                 break
         else:
             # Exhausted retries without breaking out — surface the conflict.
+            # Round-15 / persona-7 P2: don't echo the Redis exception repr
+            # back to the FE (it can include host:port / connection details).
+            # Log details server-side, return a generic 409.
             logger.error(
-                "toggle_strategy: %d WATCH conflicts in a row for %s; giving up",
-                max_attempts, strategy_id,
+                "toggle_strategy: %d WATCH conflicts in a row for %s; last_err=%r",
+                max_attempts, strategy_id, last_err,
             )
             raise HTTPException(
                 status_code=409,
-                detail=f"Strategy toggle conflicted with concurrent updates: {last_err}",
+                detail="Strategy toggle conflicted with concurrent updates; please retry.",
             )
 
     return ToggleResponse(

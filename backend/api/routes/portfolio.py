@@ -73,6 +73,15 @@ class PortfolioGreeks(BaseModel):
     net_vega: float
     beta_weighted_delta: float = Field(0, description="SPY beta-weighted delta")
     by_position: list[dict[str, Any]] = Field(default_factory=list)
+    # Round-15 / persona-7 P0: explicit ``is_demo`` flag so the FE can
+    # render a "data unavailable" empty state instead of treating a
+    # silent fallback (e.g. cache miss, broker outage) as real flat
+    # delta. ``True`` means "we couldn't compute these; don't act on
+    # them"; ``False`` is the live path.
+    is_demo: bool = Field(
+        False,
+        description="True when greeks are demo / fallback data, not live",
+    )
 
 
 class JournalEntry(BaseModel):
@@ -424,8 +433,11 @@ def _build_performance_from_pnls(
     )
 
 
-def _demo_greeks() -> PortfolioGreeks:
-    """Return zero greeks when no option positions exist."""
+def _demo_greeks(is_demo: bool = False) -> PortfolioGreeks:
+    """Return zero greeks when no option positions exist or when an
+    upstream failure forces a fallback. ``is_demo=True`` flags the
+    latter so the FE can show a "data unavailable" affordance instead
+    of treating a flat-delta book as real."""
     return PortfolioGreeks(
         net_delta=0,
         net_gamma=0,
@@ -433,6 +445,7 @@ def _demo_greeks() -> PortfolioGreeks:
         net_vega=0,
         beta_weighted_delta=0,
         by_position=[],
+        is_demo=is_demo,
     )
 
 
@@ -576,9 +589,22 @@ async def get_portfolio_summary() -> PortfolioSummary:
         )
     except HTTPException:
         raise
-    except Exception:
-        logger.warning("Failed to fetch portfolio summary from Alpaca, falling back to demo", exc_info=True)
-        return _demo_portfolio_summary()
+    except Exception as exc:
+        # Round-15 / persona-7 P0: do NOT silently serve demo equity on
+        # a transient broker outage — the dashboard then reads
+        # ``is_demo=True`` and may not surface that to the operator,
+        # who acts on a fake $100k book. Demo fallback belongs only
+        # behind the ``_alpaca_keys_empty()`` branch above (genuinely
+        # not configured). For real failures, raise 502 so the caller
+        # sees an explicit "broker unreachable" state.
+        logger.error(
+            "Portfolio summary fetch failed; returning 502 (refusing to serve demo)",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Broker unreachable — portfolio summary temporarily unavailable",
+        ) from exc
 
 
 @router.get("/performance", response_model=PerformanceMetrics)
@@ -918,8 +944,15 @@ async def get_portfolio_greeks() -> PortfolioGreeks:
             by_position=by_position,
         )
     except Exception:
-        logger.warning("Failed to compute portfolio greeks, falling back to demo", exc_info=True)
-        return _demo_greeks()
+        # Round-15 / persona-7 P0: surface the failure to the FE via
+        # ``is_demo=True`` instead of returning zeros that look like
+        # "you have no options" — flat-delta on a real options book
+        # is actionably wrong.
+        logger.error(
+            "Failed to compute portfolio greeks; returning is_demo=true fallback",
+            exc_info=True,
+        )
+        return _demo_greeks(is_demo=True)
 
 
 def _demo_calendar(year: int, month: int) -> CalendarResponse:
