@@ -762,42 +762,74 @@ _BETA_TO_SPY: dict[str, float] = {
     "NFLX": 1.3, "ADBE": 1.1, "ORCL": 0.9, "AVGO": 1.4, "QCOM": 1.3,
     "PLTR": 2.6, "COIN": 3.0, "CRWD": 1.5, "SNOW": 1.6, "MU": 1.5,
     "INTC": 0.9, "MRVL": 1.5, "NET": 1.7, "DDOG": 1.5, "MDB": 1.6,
+    "CSCO": 0.8, "IBM": 0.7, "INTU": 1.2, "NOW": 1.2, "PANW": 1.2,
+    "WDAY": 1.2, "FTNT": 1.0, "ZS": 1.7, "TEAM": 1.5, "CDNS": 1.1,
+    "SNPS": 1.2,
     # Index ETFs
     "SPY": 1.0, "QQQ": 1.1, "IWM": 1.2, "DIA": 0.95, "VTI": 1.0,
     # Defensive / low-beta
     "JNJ": 0.6, "PG": 0.5, "KO": 0.6, "PEP": 0.6, "WMT": 0.6,
     "MCD": 0.7, "VZ": 0.4, "T": 0.5, "DUK": 0.5, "SO": 0.4,
-    "XOM": 0.8, "CVX": 0.9, "BRK.B": 0.85,
+    "XOM": 0.8, "CVX": 0.9, "BRK.B": 0.85, "BRKB": 0.85,
+    "CL": 0.5, "MO": 0.5, "PM": 0.5, "MDLZ": 0.6, "WM": 0.7,
+    "NEE": 0.6, "AMT": 0.7, "PLD": 1.1, "COST": 0.8, "TJX": 0.8,
     # Financials (mid-beta)
     "JPM": 1.1, "BAC": 1.3, "WFC": 1.2, "GS": 1.3, "MS": 1.4,
     "V": 0.95, "MA": 1.0, "AXP": 1.2,
+    "BLK": 1.3, "BX": 1.5, "C": 1.4, "CB": 0.7, "CME": 0.6,
+    "ICE": 0.9, "MMC": 0.7, "SCHW": 1.2, "SPGI": 1.0,
     # Healthcare
     "LLY": 0.7, "UNH": 0.7, "ABBV": 0.7, "PFE": 0.6, "MRK": 0.6,
     "TMO": 0.9, "ABT": 0.9, "BMY": 0.6, "GILD": 0.6, "AMGN": 0.7,
+    "BSX": 0.8, "CI": 0.7, "CVS": 0.6, "DHR": 0.9, "ELV": 0.7,
+    "ISRG": 1.1, "MDT": 0.7, "REGN": 0.7, "SYK": 0.9, "VRTX": 0.7,
+    "ZTS": 0.9,
     # Industrial / cyclical
     "BA": 1.5, "CAT": 1.1, "DE": 1.1, "GE": 1.0, "HON": 1.0,
     "F": 1.4, "GM": 1.5, "RTX": 0.9, "LMT": 0.6,
+    "ETN": 1.0, "GEV": 1.2, "UNP": 0.9, "APH": 1.0,
     # Consumer cyclical
     "DIS": 1.1, "NKE": 1.0, "HD": 1.0, "LOW": 1.1, "SBUX": 0.95,
-    "ABNB": 1.4, "BKNG": 1.2, "UBER": 1.5,
+    "ABNB": 1.4, "BKNG": 1.2, "UBER": 1.5, "SPOT": 1.5,
     # High-beta growth
     "SHOP": 1.9, "SQ": 1.9, "ROKU": 2.1, "CVNA": 3.5, "RBLX": 1.8,
     "DASH": 1.6, "SOFI": 2.5, "HOOD": 2.1, "RIVN": 2.5, "LCID": 2.5,
+    "PYPL": 1.6,
     # Semis (cyclical, high-beta)
     "TSM": 1.3, "ASML": 1.2, "LRCX": 1.5, "KLAC": 1.4, "AMAT": 1.4,
     "ADI": 1.1, "TXN": 1.0, "ANET": 1.4,
+    # Energy / materials
+    "COP": 1.0, "LIN": 0.8, "SHW": 0.8,
+    # Services / payments
+    "ACN": 1.0, "ADP": 0.9, "FI": 1.0,
     # ADRs
     "BABA": 1.3,
 }
 
 
+# Bound the log-on-miss volume — once per symbol per process, a
+# heavy desk doesn't spam the journal with the same warning.
+_BETA_MISS_LOGGED: set[str] = set()
+
+
 def _beta_to_spy(symbol: str) -> float:
     """Look up the symbol's beta-to-SPY for portfolio-level
     directional exposure aggregation. Defaults to 1.0 when unknown
-    (treat as SPY-like). The map is hand-curated for the ~130
+    (treat as SPY-like). The map is hand-curated for the ~136
     optionable curated universe; refresh quarterly via a portfolio
     analytics backfill (future work)."""
-    return _BETA_TO_SPY.get(symbol.upper().split("/")[0], 1.0)
+    key = symbol.upper().split("/")[0]
+    beta = _BETA_TO_SPY.get(key)
+    if beta is None:
+        if key not in _BETA_MISS_LOGGED:
+            _BETA_MISS_LOGGED.add(key)
+            logger.info(
+                "BWD beta lookup miss for %s — defaulting to 1.0 (SPY-like). "
+                "Add to _BETA_TO_SPY when this symbol is in regular rotation.",
+                key,
+            )
+        return 1.0
+    return beta
 
 
 @router.get("/greeks", response_model=PortfolioGreeks)
