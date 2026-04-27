@@ -619,6 +619,31 @@ export default function DeskPage() {
     };
   }, [router]);
 
+  // Slice-5 / CH-3A: route the chart's Shift-click "place limit"
+  // affordance to /trade. NinjaTrader pattern — chart click maps to
+  // an order ticket pre-filled with side + limit price. The /trade
+  // page already accepts ?contract=&side=&qty=&limit= deep-link
+  // params (Round-5 F-2/F-3); we use those.
+  useEffect(() => {
+    function onPlaceLimit(e: Event) {
+      const detail = (e as CustomEvent<{
+        symbol?: string;
+        price?: number;
+        side?: "buy" | "sell";
+      }>).detail;
+      const sym = detail?.symbol ?? "";
+      const price = detail?.price;
+      const side = detail?.side ?? "buy";
+      if (!sym || !Number.isFinite(price as number)) return;
+      const url = `/trade?symbol=${encodeURIComponent(sym)}&side=${side}&qty=1&type=limit&limit=${(price as number).toFixed(2)}`;
+      router.push(url);
+    }
+    window.addEventListener("alphadesk:place-limit-from-chart", onPlaceLimit as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:place-limit-from-chart", onPlaceLimit as EventListener);
+    };
+  }, [router]);
+
   return (
     <DashboardLayout
       topBar={

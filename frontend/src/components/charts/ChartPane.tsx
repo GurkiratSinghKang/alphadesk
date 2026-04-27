@@ -210,6 +210,29 @@ export default function ChartPane({
     { price: number; y: number } | null
   >(null);
 
+  // Slice-5 / CH-3A (NinjaTrader pattern): track Shift modifier so
+  // the affordance switches mode — Shift held = "place limit" target
+  // (B above mid, S below); no modifier = "add alert". One axis,
+  // two affordances, distinguished by keyboard.
+  const [shiftHeld, setShiftHeld] = React.useState(false);
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      setShiftHeld(e.shiftKey);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, []);
+
+  // Last-bar close used to decide buy-limit-below-mid vs sell-limit-above-mid.
+  // Falls back to the most recent OHLC hover if the data prop is empty.
+  const lastClose = data && data.length > 0
+    ? data[data.length - 1].close
+    : ohlcHover?.close ?? null;
+
   const symbol = useMarketStore((s) => s.selectedSymbol);
   const { drawings, add } = useChartDrawings(symbol);
 
@@ -559,36 +582,83 @@ export default function ChartPane({
                   indicators={indicators}
                 />
               </div>
-              {/* Slice-4 / CH-3B: floating "+" alert affordance.
-                  Tracks the crosshair along the right edge; one click
-                  emits an event the alerts page subscribes to (or
-                  routes to /alerts?prefilledPrice=…). Hidden when the
-                  cursor isn't on the canvas. TradingView pattern. */}
-              {alertHover && (
-                <button
-                  type="button"
-                  data-slot="chart-add-alert-affordance"
-                  aria-label={`Add price alert at ${alertHover.price.toFixed(2)}`}
-                  title={`Add alert at $${alertHover.price.toFixed(2)} — click to set`}
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(
-                        new CustomEvent("alphadesk:add-price-alert", {
-                          detail: {
-                            symbol,
-                            price: alertHover.price,
-                            source: "chart-axis-hover",
-                          },
-                        }),
-                      );
-                    }
-                  }}
-                  className="absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-5 w-5 rounded-full border border-[color:var(--brand)]/60 bg-[color:var(--bg-card)] text-[12px] leading-none text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] shadow-sm transition-colors"
-                  style={{ top: alertHover.y }}
-                >
-                  +
-                </button>
-              )}
+              {/* Slice-4 / CH-3B + Slice-5 / CH-3A: floating chart-axis
+                  affordance. Two modes, switched by the Shift key:
+
+                  · No modifier: "+" → adds a price alert at the axis
+                    price (TradingView pattern).
+                  · Shift held:  "B" or "S" → places a buy/sell limit
+                    order at the axis price (NinjaTrader pattern). B
+                    when the cursor is BELOW current close, S when
+                    ABOVE.
+
+                  Tooltip teaches the modifier. Color tracks side
+                  (buy = profit, sell = loss) when in trade mode.
+                  Same single button — one affordance, two roles. */}
+              {alertHover && (() => {
+                const tradeMode = shiftHeld && lastClose != null;
+                const side: "buy" | "sell" =
+                  tradeMode && alertHover.price < lastClose! ? "buy" : "sell";
+                const label = tradeMode ? (side === "buy" ? "B" : "S") : "+";
+                const ariaLabel = tradeMode
+                  ? `Place ${side} limit at ${alertHover.price.toFixed(2)}`
+                  : `Add price alert at ${alertHover.price.toFixed(2)}`;
+                const titleCopy = tradeMode
+                  ? `${side === "buy" ? "Buy" : "Sell"} limit @ $${alertHover.price.toFixed(2)} · click to stage`
+                  : `Add alert @ $${alertHover.price.toFixed(2)} · Shift-click for limit order`;
+                const tone = tradeMode
+                  ? side === "buy"
+                    ? "border-[color:var(--profit)]/60 text-[color:var(--profit)] hover:bg-[color:var(--profit)] hover:text-[color:var(--bg-base)]"
+                    : "border-[color:var(--loss)]/60 text-[color:var(--loss)] hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)]"
+                  : "border-[color:var(--brand)]/60 text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)]";
+                return (
+                  <button
+                    type="button"
+                    data-slot="chart-axis-affordance"
+                    data-mode={tradeMode ? "trade" : "alert"}
+                    aria-label={ariaLabel}
+                    title={titleCopy}
+                    onClick={(e) => {
+                      if (typeof window === "undefined") return;
+                      // Re-read modifier from the click event itself —
+                      // the keydown listener can lag if the user holds
+                      // Shift after the cursor lands on the button.
+                      const isTrade = e.shiftKey && lastClose != null;
+                      if (isTrade) {
+                        const orderSide: "buy" | "sell" =
+                          alertHover.price < lastClose! ? "buy" : "sell";
+                        window.dispatchEvent(
+                          new CustomEvent("alphadesk:place-limit-from-chart", {
+                            detail: {
+                              symbol,
+                              price: alertHover.price,
+                              side: orderSide,
+                              source: "chart-axis-shift-click",
+                            },
+                          }),
+                        );
+                      } else {
+                        window.dispatchEvent(
+                          new CustomEvent("alphadesk:add-price-alert", {
+                            detail: {
+                              symbol,
+                              price: alertHover.price,
+                              source: "chart-axis-hover",
+                            },
+                          }),
+                        );
+                      }
+                    }}
+                    className={cn(
+                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-5 w-5 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
+                      tone,
+                    )}
+                    style={{ top: alertHover.y }}
+                  >
+                    {label}
+                  </button>
+                );
+              })()}
             </div>
           )}
         </div>
