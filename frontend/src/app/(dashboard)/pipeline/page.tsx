@@ -1084,7 +1084,22 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <>
+                  {/* Slice-13 / SWIM-1 (2026 design brief, Datadog
+                      observability pattern): 30-day swimlane heatmap
+                      above the detail table. Each cell = one day,
+                      tone-coded by run health: profit-green = clean run
+                      (no errors), amber = partial (errors > 0 but
+                      strategies ran), loss-coral = failed run, muted =
+                      no run logged. Hover any cell for the day's
+                      headline numbers; click to scroll the table to
+                      that row. Renders the timeline as a single dense
+                      glance — "is the pipeline healthy?" in 1 second. */}
+                  <PipelineSwimlane
+                    history={history}
+                    onCellClick={(date) => handleExpandHistory(date)}
+                  />
+                  <Card className="border-border bg-[var(--surface)] overflow-hidden mt-3">
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border">
@@ -1255,6 +1270,7 @@ export default function PipelinePage() {
                     </TableBody>
                   </Table>
                 </Card>
+                </>
               )}
             </section>
 
@@ -1441,5 +1457,114 @@ export default function PipelinePage() {
         </DialogContent>
       </Dialog>
     </DashboardPageLayout>
+  );
+}
+
+/**
+ * Slice-13 / SWIM-1 (2026 design brief, Datadog observability pattern):
+ * 30-day pipeline run swimlane. Each cell = one calendar day, tone-coded
+ * by run health. Hover for the day's headline numbers; click to scroll
+ * to the corresponding row in the detail table below. Renders as a
+ * single dense glance ("is the pipeline healthy?" in 1 second).
+ */
+function PipelineSwimlane({
+  history,
+  onCellClick,
+}: {
+  history: Array<Record<string, unknown>>;
+  onCellClick: (date: string) => void;
+}) {
+  // Build a 30-day map keyed by ISO date so cells render in chronological
+  // order regardless of how the API returned them.
+  const byDate = new Map<string, Record<string, unknown>>();
+  for (const h of history) {
+    const d = String(h.date ?? "");
+    if (d) byDate.set(d, h);
+  }
+  const today = new Date();
+  const days: { date: string; entry: Record<string, unknown> | null }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ date: iso, entry: byDate.get(iso) ?? null });
+  }
+  return (
+    <Card className="border-border bg-[var(--surface)] overflow-hidden mb-3">
+      <CardContent className="p-3">
+        <div className="flex items-baseline justify-between mb-2">
+          <p className="t-label">Last 30 days</p>
+          <p className="t-meta u-muted italic">
+            click a day to expand · hover for details
+          </p>
+        </div>
+        <div className="flex gap-[3px]">
+          {days.map(({ date, entry }) => {
+            let tone:
+              | "muted"
+              | "profit"
+              | "amber"
+              | "loss" = "muted";
+            let title = `${date} · no run`;
+            if (entry) {
+              const errors = Number(entry.errors ?? 0);
+              const stratsRun = Number(entry.strategies_run ?? 0);
+              const ordersPlaced = Number(entry.orders_placed ?? 0);
+              if (errors === 0 && stratsRun > 0) {
+                tone = "profit";
+              } else if (errors > 0 && stratsRun > 0) {
+                tone = "amber";
+              } else if (errors > 0) {
+                tone = "loss";
+              }
+              title = `${date} · ${stratsRun} strategies run · ${ordersPlaced} orders · ${errors} errors`;
+            }
+            const bg =
+              tone === "profit"
+                ? "bg-[color:var(--profit)]/65"
+                : tone === "amber"
+                  ? "bg-[color:var(--amber-500,#d97706)]/65"
+                  : tone === "loss"
+                    ? "bg-[color:var(--loss)]/65"
+                    : "bg-[color:var(--border)]/40";
+            return (
+              <button
+                type="button"
+                key={date}
+                onClick={() => entry && onCellClick(date)}
+                title={title}
+                aria-label={title}
+                disabled={!entry}
+                className={cn(
+                  "flex-1 h-10 rounded-sm transition-opacity",
+                  bg,
+                  entry
+                    ? "hover:opacity-100 opacity-85 cursor-pointer"
+                    : "cursor-default opacity-50",
+                )}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3 mt-2 t-meta u-muted">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--profit)]/65" />
+            clean
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--amber-500,#d97706)]/65" />
+            partial
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--loss)]/65" />
+            failed
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--border)]/40" />
+            no run
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
