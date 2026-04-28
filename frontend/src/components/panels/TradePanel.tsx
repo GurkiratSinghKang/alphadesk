@@ -681,6 +681,10 @@ function PositionsTab() {
   const [stopLossOpen, setStopLossOpen] = useState(false);
   const [stopLossPrice, setStopLossPrice] = useState("");
   const [stopLossSymbol, setStopLossSymbol] = useState("");
+  // Round-28 / persona-F P0: in-flight guard. Pre-fix the Set-Stop-Loss
+  // button only checked stopLossPrice validity; double-tap between click
+  // and toast submitted two stop orders.
+  const [stopLossSubmitting, setStopLossSubmitting] = useState(false);
 
   // Position management keyboard shortcuts
   useEffect(() => {
@@ -884,10 +888,12 @@ function PositionsTab() {
             </Button>
             <Button
               onClick={() => {
+                if (stopLossSubmitting) return;
                 const price = parseFloat(stopLossPrice);
-                if (!price || price <= 0) return;
+                if (!price || price <= 0 || !Number.isFinite(price)) return;
                 const pos = positions.find((p) => p.symbol === stopLossSymbol);
                 if (!pos) return;
+                setStopLossSubmitting(true);
                 placeOrder({
                   symbol: pos.symbol,
                   side: pos.side === "short" ? "buy" : "sell",
@@ -900,16 +906,22 @@ function PositionsTab() {
                     setStopLossOpen(false);
                   })
                   .catch((err: unknown) => {
-                    // Wave C (persona 74-5): consistent "Action failed:" wording
-                    // across all three placeOrder callsites in this file.
                     const msg = err instanceof Error ? err.message : "Unknown error";
                     toast({ type: "error", message: `Action failed: ${msg}` });
+                  })
+                  .finally(() => {
+                    setStopLossSubmitting(false);
                   });
               }}
-              disabled={!stopLossPrice || parseFloat(stopLossPrice) <= 0}
+              disabled={
+                stopLossSubmitting ||
+                !stopLossPrice ||
+                parseFloat(stopLossPrice) <= 0 ||
+                !Number.isFinite(parseFloat(stopLossPrice))
+              }
               className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
             >
-              Set Stop Loss
+              {stopLossSubmitting ? "Setting…" : "Set Stop Loss"}
             </Button>
           </DialogFooter>
         </DialogContent>

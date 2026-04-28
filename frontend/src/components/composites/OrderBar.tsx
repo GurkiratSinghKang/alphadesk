@@ -241,17 +241,53 @@ export default function OrderBar({
     ? "Quantity must be a whole number between 1 and 999,999,999"
     : null;
 
+  // Round-28 / persona-B P0: pre-fix only ``qtyInvalid`` blocked submit.
+  // ``Number("abc")`` yielded NaN, ``-50`` and ``0`` slipped through.
+  // Now validate price + stop too, with appropriate gating per type.
+  const priceNum = priceRequired && price !== "" ? Number(price) : undefined;
+  const stopNum = stopRequired && stop !== "" ? Number(stop) : undefined;
+  const priceInvalid =
+    priceRequired &&
+    (price === "" || priceNum === undefined || !Number.isFinite(priceNum) || priceNum <= 0);
+  const stopInvalid =
+    stopRequired &&
+    (stop === "" || stopNum === undefined || !Number.isFinite(stopNum) || stopNum <= 0);
+  const priceLocalError =
+    priceRequired && price !== "" && priceInvalid
+      ? "Price must be a positive number"
+      : null;
+  const stopLocalError =
+    stopRequired && stop !== "" && stopInvalid
+      ? "Stop must be a positive number"
+      : null;
+  const symInvalid = !(symbolValue || symbol).trim();
+
+  // Round-28 / persona-B P0: in-flight idempotency guard. Pre-fix the
+  // ``disabled={submitting}`` relied on the parent flipping
+  // ``submitting`` synchronously after onSubmit. Between the click and
+  // the parent setState, a double-tap on touch (or a fast finger) would
+  // re-enter ``stage()`` twice and submit two POSTs. Local ref blocks
+  // re-entry until the parent's ``submitting`` prop comes back true.
+  const submittingRef = React.useRef(false);
+  React.useEffect(() => {
+    // Parent has acknowledged the submission and is now showing the
+    // submitting state — clear the local guard so subsequent legit
+    // submissions (after this one resolves) can proceed.
+    if (submitting) submittingRef.current = false;
+  }, [submitting]);
+
   const stage = () => {
-    if (submitting) return;
-    if (qtyInvalid) return;
+    if (submitting || submittingRef.current) return;
+    if (qtyInvalid || priceInvalid || stopInvalid || symInvalid) return;
+    submittingRef.current = true;
     onSubmit({
       strategyId,
       symbol: (symbolValue || symbol).trim().toUpperCase(),
       side,
       quantity: qtyNum,
       type,
-      price: price ? Number(price) : undefined,
-      stop: stop || undefined,
+      price: priceNum,
+      stop: stopNum != null ? String(stopNum) : undefined,
     });
   };
 
@@ -472,10 +508,10 @@ export default function OrderBar({
           variant="primary"
           className="w-full md:w-auto min-h-11"
           onClick={stage}
-          // BUG-002 — disable during in-flight POST, empty-strategy, and
-          // when client-side qty validation fails. The backend 422 is the
-          // belt; this is the suspenders.
-          disabled={submitting || noStrategies || qtyInvalid}
+          // BUG-002 + Round-28 — disable during in-flight POST, empty
+          // strategy, and when client-side qty / price / stop / symbol
+          // validation fails. Backend 422 is the belt; this is suspenders.
+          disabled={submitting || noStrategies || qtyInvalid || priceInvalid || stopInvalid || symInvalid}
           aria-busy={submitting || undefined}
           data-testid="order-bar-submit"
         >
@@ -492,14 +528,14 @@ export default function OrderBar({
             local validation message (e.g. negative qty) or the parent's
             `errorMessage` prop (e.g. the backend 422 detail). Rendered
             with role="alert" so screen readers announce on change. */}
-        {(qtyLocalError || errorMessage) && (
+        {(qtyLocalError || priceLocalError || stopLocalError || errorMessage) && (
           <p
             id={qtyLocalError ? "order-bar-qty-error" : undefined}
             role="alert"
             data-testid="order-bar-error"
             className="font-sans text-[13px] text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
           >
-            {qtyLocalError ?? errorMessage}
+            {qtyLocalError ?? priceLocalError ?? stopLocalError ?? errorMessage}
           </p>
         )}
       </div>

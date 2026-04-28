@@ -257,7 +257,13 @@ export function CommandPalette() {
   }
 
   function handleFlattenCurrentSymbol() {
-    const sym = selectedSymbol;
+    // Round-28 / persona-A P0: pre-fix this read ``selectedSymbol`` from
+    // the render closure, which is captured at component mount. If the
+    // user typed in the palette while another tab / WS event updated
+    // selectedSymbol, the dispatched ``alphadesk:flatten-symbol`` would
+    // ship the STALE symbol — flattening the wrong position. Read fresh
+    // from the store at click time, mirroring ``handleSwitchLive``.
+    const sym = useMarketStore.getState().selectedSymbol;
     setCommandPaletteOpen(false);
     if (!sym) {
       toast({ type: "info", message: "No symbol selected — pick one first." });
