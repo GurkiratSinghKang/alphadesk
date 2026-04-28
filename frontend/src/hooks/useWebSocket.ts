@@ -231,6 +231,18 @@ export function useWebSocket(): UseWebSocketReturn {
           // every WS frame (perf-audit-r3 P0). `onMessage(channel, cb)` is
           // the only supported consumption path.
           const channel = msg.channel ?? (msg as unknown as Record<string, unknown>).type as WsChannel | undefined;
+          // Round-29 / persona-E F2: backend may send a one-shot
+          // ``cursor_expired`` notice when a stale resume cursor is
+          // refused. Drop our stored cursor so the next reconnect
+          // starts fresh from "$" instead of replaying again with the
+          // same expired ID.
+          const msgType = (msg as unknown as Record<string, unknown>).type;
+          if (msgType === "cursor_expired") {
+            const expiredChannel = (msg as unknown as Record<string, unknown>).channel as WsChannel | undefined;
+            if (expiredChannel) {
+              lastIdsRef.current.delete(expiredChannel);
+            }
+          }
           if (channel) {
             // Wave C: capture the stream ID cursor for stream-backed
             // channels so we can resume on reconnect. The backend writes

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import orjson
@@ -241,6 +242,34 @@ class ConnectionManager:
         # client already consumed everything, xread returns an empty list.
         if channel in _STREAM_BACKED_CHANNELS:
             cursor = last_id if last_id is not None else "$"
+            # Round-29 / persona-E F2: cursor age guard. Pre-fix a tab that
+            # slept 6 h then woke would send a 6-h-old cursor; the backend
+            # would attempt replay against a stream that has likely been
+            # trimmed (10 K MAXLEN), get an empty list back with no error,
+            # and the tab would silently be missing thousands of fills /
+            # alerts. If the cursor is older than ~30 min, refuse to replay
+            # and force the client to start fresh from "$" (live tail). The
+            # FE will show a "reconnected" banner; better than silent loss.
+            _MAX_CURSOR_AGE_MS = 30 * 60 * 1000
+            if cursor != "$" and isinstance(cursor, str) and "-" in cursor:
+                try:
+                    cursor_ms = int(cursor.split("-", 1)[0])
+                    age_ms = int(time.time() * 1000) - cursor_ms
+                    if age_ms > _MAX_CURSOR_AGE_MS:
+                        logger.info(
+                            "subscribe_client: cursor age %.1fmin exceeds %dmin "
+                            "for %s; forcing fresh subscribe",
+                            age_ms / 60_000, _MAX_CURSOR_AGE_MS // 60_000, channel,
+                        )
+                        await self._send(ws, {
+                            "type": "cursor_expired",
+                            "channel": channel,
+                            "reason": "stale_cursor",
+                        })
+                        cursor = "$"
+                except (ValueError, IndexError):
+                    # Malformed cursor — treat as fresh.
+                    cursor = "$"
             try:
                 if channel == CHANNEL_TRADE_UPDATES:
                     entries = await redis_xread_trade_updates(
