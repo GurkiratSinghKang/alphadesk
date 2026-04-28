@@ -152,16 +152,24 @@ export function CommandPalette() {
   }, []);
 
   // Ctrl+K global shortcut
+  // Round-28 / persona-A finding 3: pre-fix this re-fired on every
+  // ``toggleCommandPalette`` reference change. Zustand returns a fresh
+  // function reference on every state update unless explicit selectors
+  // + shallow-compare are used, so every state change anywhere in the
+  // UI store tore down + re-added the document keydown listener
+  // (per-keystroke listener churn while typing in the palette). Read
+  // the fresh action via ``getState()`` inside the handler so the
+  // effect can run with an empty dep array.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        toggleCommandPalette();
+        useUIStore.getState().toggleCommandPalette();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toggleCommandPalette]);
+  }, []);
 
   function selectSymbol(symbol: string) {
     setSelectedSymbol(symbol);

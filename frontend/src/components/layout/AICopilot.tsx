@@ -189,7 +189,15 @@ export function AICopilot() {
         content: text.trim(),
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMsg]);
+      // Round-27 / persona-F P1: cap in-memory history at the same
+      // bound as the persisted slice. Pre-fix the persisted state was
+      // capped at 50 (line 123) but the in-memory ``messages`` state
+      // grew unbounded — a heavy day with hundreds of turns retained
+      // every Message + Date object in heap. Mirror the cap here so
+      // RAM doesn't drift over an 8h trading session.
+      setMessages((prev) =>
+        [...prev, userMsg].slice(-AICOPILOT_MAX_PERSISTED_MESSAGES),
+      );
       setInput("");
       setLoading(true);
 
@@ -235,7 +243,9 @@ export function AICopilot() {
             : undefined,
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) =>
+          [...prev, assistantMsg].slice(-AICOPILOT_MAX_PERSISTED_MESSAGES),
+        );
       } catch {
         setMessages((prev) => [
           ...prev,

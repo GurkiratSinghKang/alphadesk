@@ -73,6 +73,15 @@ export function useWebSocket(): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Round-28 / persona-E P1: client-originated heartbeat. Pre-fix the
+  // backend handler responds to ``{action:"ping"}`` but the FE never
+  // sends one, so half-open TCP connections (NAT timeout, transparent
+  // proxy reset, laptop sleep) sit invisible for ~2 hours until the
+  // OS keepalive trips. Send ping every 30s while open; if we don't
+  // see a pong (or any message) in 90s, force-close to trigger the
+  // reconnect path.
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const lastMessageAtRef = useRef<number>(0);
   // long-session-audit-r4 P2: track the re-subscribe timeout so we can
   // cancel it on reconnect / visibility change. Previously the 100ms
   // setTimeout could fire on an already-closed socket, raising
@@ -169,6 +178,21 @@ export function useWebSocket(): UseWebSocketReturn {
         hasBeenOpenRef.current = true;
         setWsStatus("open");
         retriesRef.current = 0;
+        // Heartbeat: ping every 30s; if no message arrives within 90s
+        // close the socket so the reconnect path fires.
+        lastMessageAtRef.current = Date.now();
+        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+        pingTimerRef.current = setInterval(() => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const idleMs = Date.now() - lastMessageAtRef.current;
+          if (idleMs > 90_000) {
+            try { ws.close(); } catch { /* noop */ }
+            return;
+          }
+          try {
+            ws.send(JSON.stringify({ action: "ping" }));
+          } catch { /* noop — close will surface via onclose */ }
+        }, 30_000);
 
         // Re-subscribe to all channels after a short delay so the backend
         // has time to send the `authenticated` ack before we flood it with
@@ -196,6 +220,10 @@ export function useWebSocket(): UseWebSocketReturn {
 
       ws.onmessage = (event) => {
         try {
+          // Heartbeat liveness: stamp last-message-time on every frame
+          // (including the pong response). The 90s idle threshold above
+          // uses this to decide when to force-close a half-open socket.
+          lastMessageAtRef.current = Date.now();
           const msg = JSON.parse(event.data) as WsMessage & { _id?: string; data?: { _id?: string } };
           // Dispatch to channel-specific callbacks (no React re-render).
           // The previous `setLastMessage(msg)` call was removed in Wave 14
@@ -230,6 +258,12 @@ export function useWebSocket(): UseWebSocketReturn {
 
       ws.onclose = () => {
         setIsConnected(false);
+        // Stop the heartbeat timer; the new socket (after reconnect)
+        // will install its own.
+        if (pingTimerRef.current) {
+          clearInterval(pingTimerRef.current);
+          pingTimerRef.current = undefined;
+        }
         // Only clear ref if this is still the active socket
         if (wsRef.current === ws) {
           wsRef.current = null;
@@ -352,6 +386,10 @@ export function useWebSocket(): UseWebSocketReturn {
       if (subscribeTimeoutRef.current) {
         clearTimeout(subscribeTimeoutRef.current);
         subscribeTimeoutRef.current = null;
+      }
+      if (pingTimerRef.current) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = undefined;
       }
       if (wsRef.current) {
         wsRef.current.onclose = null;
