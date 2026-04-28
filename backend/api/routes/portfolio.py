@@ -133,6 +133,39 @@ def _alpaca_keys_empty() -> bool:
     )
 
 
+async def _get_unrealized_pnl_today() -> float:
+    """Round-17 / persona-A P1-7: read the unrealised PnL across all
+    open broker positions (sum of ``unrealized_pl`` in cents). Used
+    by the daily-loss circuit breaker so a trader -8% on open
+    positions with zero closed trades trips the gate.
+
+    Returns 0.0 when keys are missing, the broker is unreachable, or
+    no positions exist. Best-effort by design — the caller treats a
+    failure as "fall back to realized-only" rather than refuse all
+    orders.
+    """
+    if _alpaca_keys_empty():
+        return 0.0
+    import httpx
+    from core.config import settings
+    headers = {
+        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.get(
+                f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers,
+            )
+            if resp.status_code != 200:
+                return 0.0
+            positions = resp.json() or []
+            return sum(float(p.get("unrealized_pl", 0) or 0) for p in positions)
+    except Exception:
+        logger.debug("_get_unrealized_pnl_today fetch failed", exc_info=True)
+        return 0.0
+
+
 def _demo_portfolio_summary() -> PortfolioSummary:
     return PortfolioSummary(
         equity=100_000.00,

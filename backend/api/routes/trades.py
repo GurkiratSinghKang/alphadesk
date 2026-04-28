@@ -2663,7 +2663,9 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
 
     Combo rules:
       * ``iron_condor``      : width × qty × 100
-      * ``vertical_spread``  : width × qty × 100
+      * ``iron_butterfly``   : width × qty × 100  (Round-17 / persona-A P0)
+      * ``vertical_spread``  : width × qty × 100  (with shape validation)
+      * ``cash_secured_put`` : strike × qty × 100  (Round-17 / persona-A P0)
       * ``strangle``         : max(naked_call_notional, naked_put_notional)
 
     For all other shapes (single equity leg, single options leg, no
@@ -2673,10 +2675,41 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
     combo = (request.combo_type or "").strip().lower()
 
     # --- Combo: defined-risk spreads ---------------------------------
-    if combo in ("iron_condor", "vertical_spread"):
-        width = _combo_spread_width(request)
+    # Round-17 / persona-A P0-2: iron_butterfly added. Pre-fix it fell
+    # through to the per-leg sum which OVERSTATED 4-leg notional 5-30×,
+    # blocking legitimately-sized butterflies. Same shape as iron_condor
+    # for risk purposes — the worst-case loss is the spread WIDTH.
+    if combo in ("iron_condor", "iron_butterfly", "vertical_spread"):
+        width = _combo_spread_width(request, combo)
         qty = float(request.legs[0].qty) if request.legs else 0.0
         return abs(width) * qty * 100.0
+
+    # Round-17 / persona-A P0-2: cash-secured-put collateral is the
+    # STRIKE × 100, not the premium. Pre-fix a $1.50 premium SELL put
+    # at strike $500 was treated as $150 notional when actual collateral
+    # required is $50,000 — a $200K daily-cap account could short 1300
+    # of these.
+    if combo == "cash_secured_put":
+        if len(request.legs) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="cash_secured_put requires exactly 1 SELL put leg.",
+            )
+        leg = request.legs[0]
+        parsed = _parse_occ_symbol(leg.symbol)
+        if parsed is None or parsed.get("call_put") != "put":
+            raise HTTPException(
+                status_code=400,
+                detail="cash_secured_put leg must be a put option (OCC symbol).",
+            )
+        side_value = getattr(getattr(leg, "side", None), "value", getattr(leg, "side", None))
+        if side_value != "sell":
+            raise HTTPException(
+                status_code=400,
+                detail="cash_secured_put leg must be SELL (collecting premium).",
+            )
+        strike = float(parsed["strike"])
+        return strike * float(leg.qty) * 100.0
 
     if combo == "strangle":
         return _combo_strangle_max_notional(request)
@@ -2704,21 +2737,32 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
     return total
 
 
-def _combo_spread_width(request: CreateOrderRequest) -> float:
-    """J-2 — width of a defined-risk spread (iron_condor / vertical_spread).
+def _combo_spread_width(
+    request: CreateOrderRequest,
+    combo: str = "",
+) -> float:
+    """J-2 — width of a defined-risk spread (iron_condor / vertical_spread / iron_butterfly).
 
-    Vertical: |strike_buy - strike_sell| of the two legs.
+    Vertical: |strike_buy - strike_sell| of the two legs (same call/put,
+    same expiry, opposite sides).
     Iron condor: max(call_spread_width, put_spread_width) so a skewed
     condor still gets a conservative envelope.
+    Iron butterfly: 4 legs at 3 strikes (center body + 2 wings); width
+    is the larger of (call_wing - body) and (body - put_wing).
 
-    Round-7 / M-6: a previous version returned ``0.0`` when any leg's
-    strike couldn't be parsed. That collapsed the order's notional cap
-    to zero and let unparseable-OCC combos sail past the per-order
-    envelope. We now fail closed: an unparseable leg or an unrecognised
-    leg shape (neither vertical nor iron condor) raises 400 so the
-    caller fixes the request rather than silently bypassing the gate.
+    Round-7 / M-6: failed-parse fails closed (raises 400) instead of
+    returning 0.0 (which would have collapsed the cap and let the
+    combo sail past the gate).
+
+    Round-17 / persona-A P0-3: tightened the 2-leg branch. Pre-fix a
+    naked short ladder (two SELLs at different strikes) returned a
+    finite "width" and slipped through the gate. Now we require:
+    one BUY + one SELL, same call/put type, same expiry, different
+    strikes. A strangle (call + put) or a calendar (different expiry)
+    is now rejected with 400 instead of being treated as a vertical.
     """
     strikes_by_side: dict[str, list[float]] = {"C": [], "P": []}
+    parsed_legs: list[tuple[Any, dict[str, Any]]] = []
     all_strikes: list[float] = []
     for leg in request.legs:
         parsed = _parse_occ_symbol(leg.symbol)
@@ -2734,26 +2778,90 @@ def _combo_spread_width(request: CreateOrderRequest) -> float:
         strike = float(parsed["strike"])
         strikes_by_side[side_letter].append(strike)
         all_strikes.append(strike)
+        parsed_legs.append((leg, parsed))
 
-    # Vertical: 2 legs.
+    # Vertical: 2 legs, one BUY + one SELL, same option type, same expiry.
     if len(request.legs) == 2 and len(all_strikes) == 2:
+        leg_a, parsed_a = parsed_legs[0]
+        leg_b, parsed_b = parsed_legs[1]
+        side_a = getattr(getattr(leg_a, "side", None), "value", getattr(leg_a, "side", None))
+        side_b = getattr(getattr(leg_b, "side", None), "value", getattr(leg_b, "side", None))
+        # Reject naked-double (both same side).
+        if side_a == side_b:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "vertical_spread requires one BUY and one SELL leg; "
+                    f"got two {side_a} legs (rejected as naked-double)."
+                ),
+            )
+        # Reject strangle disguised as vertical (call + put).
+        if parsed_a["call_put"] != parsed_b["call_put"]:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "vertical_spread requires both legs same option type "
+                    "(call+call or put+put); got call + put. If you meant "
+                    "a strangle, use combo_type=strangle (defined-risk only)."
+                ),
+            )
+        # Reject calendar disguised as vertical (different expiry).
+        # ``_parse_occ_symbol`` returns expiry as separate yy/mm/dd ints.
+        expiry_a = (parsed_a.get("expiry_yy"), parsed_a.get("expiry_mm"), parsed_a.get("expiry_dd"))
+        expiry_b = (parsed_b.get("expiry_yy"), parsed_b.get("expiry_mm"), parsed_b.get("expiry_dd"))
+        if expiry_a != expiry_b:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "vertical_spread requires both legs at the same expiry; "
+                    "use combo_type=calendar_spread or diagonal_spread for "
+                    "different-expiry shapes."
+                ),
+            )
+        # Reject zero-width (same strike — that's a degenerate butterfly center).
+        if all_strikes[0] == all_strikes[1]:
+            raise HTTPException(
+                status_code=400,
+                detail="vertical_spread legs must be at different strikes.",
+            )
         return abs(all_strikes[0] - all_strikes[1])
 
-    # Iron condor: 2 calls + 2 puts.
+    # Iron condor: 2 calls + 2 puts. Each side must have one BUY + one SELL.
     if (
         len(request.legs) == 4
         and len(strikes_by_side["C"]) == 2
         and len(strikes_by_side["P"]) == 2
     ):
+        # Verify each side has both a BUY and a SELL leg (a 4-leg with
+        # all-SELL or 2C-SELL + 2P-SELL is a naked short condor — slip
+        # past the gate pre-fix).
+        for kind in ("call", "put"):
+            same_kind = [
+                getattr(getattr(leg, "side", None), "value", getattr(leg, "side", None))
+                for leg, parsed in parsed_legs
+                if parsed["call_put"] == kind
+            ]
+            if "buy" not in same_kind or "sell" not in same_kind:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"iron_condor / iron_butterfly {kind} side requires "
+                        "one BUY (wing) and one SELL (body) — got "
+                        f"sides={same_kind}."
+                    ),
+                )
         call_width = abs(strikes_by_side["C"][0] - strikes_by_side["C"][1])
         put_width = abs(strikes_by_side["P"][0] - strikes_by_side["P"][1])
+        # Iron butterfly: bodies share the center strike, wings differ.
+        # Both call_width and put_width are wing-distance from center.
+        # Same envelope formula as iron_condor (max wing).
         return max(call_width, put_width)
 
     raise HTTPException(
         status_code=400,
         detail=(
-            "Spread combo must be a 2-leg vertical or 4-leg iron condor "
-            f"(got {len(request.legs)} leg(s))."
+            "Spread combo must be a 2-leg vertical or 4-leg iron condor / "
+            f"iron butterfly (got {len(request.legs)} leg(s))."
         ),
     )
 
@@ -2964,34 +3072,56 @@ DAILY_LOSS_LIMIT_FRACTION = 0.05
 async def _daily_loss_check(
     equity: float,
 ) -> tuple[bool, str, float]:
-    """J-3 — refuse new orders when today's realised loss is ≥ 5% of equity.
+    """J-3 — refuse new orders when today's loss is ≥ 5% of equity.
 
-    Returns ``(passed, reason, realized_pnl_today)``. ``passed`` is
-    True when ``realized_pnl >= -equity * 0.05`` OR when equity is
-    zero (broker unreachable — the aggregate gate's other layers will
+    Returns ``(passed, reason, total_pnl_today)``. ``passed`` is True
+    when ``total_pnl >= -equity * 0.05`` OR when equity is zero
+    (broker unreachable — the aggregate gate's other layers will
     fail-closed in that case).
 
     Round-7 / M-4 (J-3 follow-up): the previous version used
     ``abs(realized) > limit`` which blocked new orders after a +5%
     profitable day too — gains are not "loss." The threshold compares
-    the (signed) realised PnL against the negative cap so only true
-    drawdowns trip the gate.
+    the (signed) PnL against the negative cap so only true drawdowns
+    trip the gate.
+
+    Round-17 / persona-A P1-7: pre-fix this only summed REALIZED PnL
+    (closed trades). A trader -8% on UNREALIZED losses (open positions
+    deeply red) with zero closed trades would not trip the breaker —
+    exactly the wrong behaviour for a pause-and-think threshold. Now
+    factor in the unrealised mark-to-market loss too. Realized still
+    needs the JOIN-aggregate (closed trades), unrealized comes from
+    the broker summary which the caller already has open.
     """
     if equity <= 0:
         return True, "skipped_no_equity", 0.0
     realized = await _get_realized_pnl_today()
+    unrealized = 0.0
+    try:
+        # Resolve unrealized PnL from the broker positions endpoint.
+        # Best-effort: any failure falls back to realized-only (the
+        # legacy behaviour) rather than refusing every order.
+        from api.routes.portfolio import _get_unrealized_pnl_today
+        unrealized = float(await _get_unrealized_pnl_today())
+    except Exception:
+        logger.debug(
+            "_daily_loss_check: unrealized lookup failed; using realized-only",
+            exc_info=True,
+        )
+    total_pnl = realized + unrealized
     limit = equity * DAILY_LOSS_LIMIT_FRACTION
-    if realized < -limit:
+    if total_pnl < -limit:
         return (
             False,
             (
-                f"Daily loss limit reached: realised P&L ${realized:,.2f} "
+                f"Daily loss limit reached: total P&L ${total_pnl:,.2f} "
+                f"(realised ${realized:,.2f} + unrealised ${unrealized:,.2f}) "
                 f"vs cap −${limit:,.2f} (5% of equity). New orders blocked "
                 f"until tomorrow's session."
             ),
-            realized,
+            total_pnl,
         )
-    return True, "passed", realized
+    return True, "passed", total_pnl
 
 
 # J-7 — quote staleness gate. Reject when the limit price was anchored
