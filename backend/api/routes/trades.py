@@ -4260,6 +4260,43 @@ async def _save_alert(alert: dict, username: str | None = None) -> None:
         logger.warning("Failed to save alert to Redis", exc_info=True)
 
 
+async def sweep_expired_alerts() -> int:
+    """Round-29 / persona-C F6: remove alerts whose ``expires_at`` is in
+    the past from every user's hash. Pre-fix the trigger checker
+    skipped expired alerts but never deleted them; expired OCC-tied
+    alerts piled up in ``price_alerts:{username}`` forever AND were
+    re-scanned on every quote tick (CPU cost on the hottest path).
+
+    Idempotent — safe to call repeatedly. Returns the number of
+    expired alerts removed. Designed to be invoked from a scheduled
+    task at low frequency (hourly is plenty).
+    """
+    now_utc = datetime.now(timezone.utc)
+    removed_total = 0
+    alerts = await _get_all_alerts(username=None)
+    for alert in alerts:
+        expires_at_iso = alert.get("expires_at")
+        if not expires_at_iso:
+            continue
+        try:
+            exp = datetime.fromisoformat(expires_at_iso)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if now_utc <= exp:
+            continue
+        owner = alert.get("username")
+        alert_id = alert.get("id")
+        if not alert_id:
+            continue
+        if await _delete_alert_from_redis(alert_id, username=owner):
+            removed_total += 1
+    if removed_total:
+        logger.info("sweep_expired_alerts: removed %d expired alerts", removed_total)
+    return removed_total
+
+
 async def _delete_alert_from_redis(alert_id: str, username: str | None = None) -> bool:
     """Delete a single alert. J-13: when ``username`` set, only checks that
     user's namespace. Otherwise scans all per-user + legacy keys."""
@@ -4333,6 +4370,7 @@ async def list_alerts(
 @router.post("/alerts", status_code=201)
 async def create_alert(
     body: CreateAlertRequest,
+    http_request: Request,
     username: str = Depends(require_auth),
 ):
     """Create a new price alert. Persisted in Redis.
@@ -4459,6 +4497,26 @@ async def create_alert(
         alert["symbol"], alert["condition"], alert["price"],
         alert["reference"], alert["reference_price"],
     )
+    # Round-29 / persona-D: audit the create.
+    from core.audit import write_audit
+    from core.logging import REQUEST_ID
+    rid = REQUEST_ID.get()
+    try:
+        await write_audit(
+            "alert_create",
+            username=username,
+            ip=_client_ip_for_audit(http_request),
+            request_id=rid if rid and rid != "-" else None,
+            details={
+                "alert_id": alert["id"],
+                "symbol": alert["symbol"],
+                "condition": alert["condition"],
+                "price": alert["price"],
+                "reference": alert["reference"],
+            },
+        )
+    except Exception:
+        logger.debug("alert_create: audit persistence failed", exc_info=True)
     return alert
 
 
@@ -4508,16 +4566,88 @@ async def _resolve_reference_price(symbol: str, reference: str) -> float:
 
 
 @router.delete("/alerts/{alert_id}")
-async def delete_alert(alert_id: str, username: str = Depends(require_auth)):
+async def delete_alert(
+    alert_id: str,
+    request: Request,
+    username: str = Depends(require_auth),
+):
     """Delete a price alert by ID.
 
     J-13 (Round-6): scoped to the caller's per-user namespace. If the
     alert lives in another user's bucket, this returns 404 (not 403)
     so the existence of the alert isn't disclosed.
+
+    Round-29 / persona-D: audit the delete so SOX/SEC 17a-4 has a
+    durable trail of alert lifecycle events.
     """
     deleted = await _delete_alert_from_redis(alert_id, username=username)
     if not deleted:
         raise HTTPException(status_code=404, detail="Alert not found")
+    from core.audit import write_audit
+    from core.logging import REQUEST_ID
+    rid = REQUEST_ID.get()
+    try:
+        await write_audit(
+            "alert_delete",
+            username=username,
+            ip=_client_ip_for_audit(request),
+            request_id=rid if rid and rid != "-" else None,
+            details={"alert_id": alert_id},
+        )
+    except Exception:
+        logger.debug("alert_delete: audit persistence failed", exc_info=True)
+    return {"ok": True}
+
+
+@router.post("/alerts/{alert_id}/ack")
+async def acknowledge_alert(
+    alert_id: str,
+    request: Request,
+    username: str = Depends(require_auth),
+):
+    """Mark a triggered alert as acknowledged.
+
+    Round-28 / persona-C F3: pre-fix this endpoint did not exist —
+    the FE NotificationCenter's "mark as read" / "acknowledge" only
+    flipped client-side state in localStorage. A reload from a
+    different device showed the alert as unread again, and the
+    server-side ``acknowledged: False`` field on the published WS
+    payload was never updatable.
+
+    Now writes ``acknowledged: True`` + ``acknowledged_at`` to the
+    Redis-stored alert and audits the action.
+    """
+    alerts = await _get_all_alerts(username=username)
+    target = next((a for a in alerts if a.get("id") == alert_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if not target.get("triggered"):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot acknowledge an un-triggered alert",
+        )
+    if target.get("acknowledged"):
+        return {"ok": True, "already_acknowledged": True}
+    target["acknowledged"] = True
+    target["acknowledged_at"] = datetime.now(ZoneInfo("America/New_York")).isoformat()
+    await _save_alert(target, username=username)
+    from core.audit import write_audit
+    from core.logging import REQUEST_ID
+    rid = REQUEST_ID.get()
+    try:
+        await write_audit(
+            "alert_acknowledge",
+            username=username,
+            ip=_client_ip_for_audit(request),
+            request_id=rid if rid and rid != "-" else None,
+            details={
+                "alert_id": alert_id,
+                "symbol": target.get("symbol"),
+                "condition": target.get("condition"),
+            },
+        )
+    except Exception:
+        logger.debug("alert_acknowledge: audit persistence failed", exc_info=True)
     return {"ok": True}
 
 
