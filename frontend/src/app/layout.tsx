@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter_Tight, Newsreader, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/lib/providers";
 import WebVitalsReporter from "@/components/layout/WebVitalsReporter";
+import ServiceWorkerRegistrar from "@/components/layout/ServiceWorkerRegistrar";
 import "./globals.css";
 
 // iOS/mobile viewport — `viewportFit: "cover"` allows the app to paint under
@@ -140,6 +141,7 @@ export default function RootLayout({
             is wired (api/routes/metrics.py) and rate-limited per IP
             (Round-17 / persona-C). */}
         <WebVitalsReporter />
+        <ServiceWorkerRegistrar />
         <Providers>{children}</Providers>
       </body>
     </html>
