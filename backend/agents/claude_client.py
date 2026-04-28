@@ -133,15 +133,11 @@ async def _record_spend_estimate(estimate: float) -> float:
         return float(new_total)
     except Exception as e:
         logger.warning("claude budget tracker unavailable: %s", e)
-        # Round-17 / persona-11 P0: pre-fix returned 0.0, which made
-        # ``running_total > limit`` always false on Redis-down — i.e.
-        # the kill-switch fails OPEN. When kill-switch is enabled, a
-        # Redis flap means runaway prompt loops can burn the budget
-        # with no in-band stop. Surface a sentinel that fails CLOSED
-        # for the kill-switch path: returning ``inf`` makes the gate
-        # always trip when the operator has explicitly opted in.
-        if settings.CLAUDE_BUDGET_KILL_SWITCH_ENABLED:
-            return float("inf")
+        # Round-29 (user pivot): always return 0.0 on tracker failure
+        # so the soft cap above stays open. The Round-17 fail-closed
+        # branch was contributing to "Claude not working" reports —
+        # any Redis blip would return inf and trip the legacy gate.
+        # The soft-cap log above remains for observability.
         return 0.0
 
 
@@ -239,30 +235,30 @@ class ClaudeClient:
             estimated_input_tokens * in_rate / 1_000_000
             + max_tokens * out_rate / 1_000_000
         )
+        # Round-29 (user pivot): the $-bound that blocked Claude+strategies
+        # was tripping in production despite the kill-switch defaulting to
+        # False. The combined Round-17 fail-closed-on-Redis-down behaviour
+        # plus the legacy gate created a footgun where a single Redis
+        # blip silently halted every Claude call. The user explicitly
+        # asked to "remove the $ bound and have it work" — we still
+        # track ``running_total`` for observability but no longer
+        # raise ``ClaudeBudgetExceeded`` from this codepath. Operators
+        # who want a hard cap should drive it externally (e.g. an
+        # Anthropic billing alarm) rather than rely on this in-process
+        # gate that silently discards every call when the spend tracker
+        # is unreachable.
         running_total = await _record_spend_estimate(pre_estimate_usd)
         if (
             settings.CLAUDE_BUDGET_KILL_SWITCH_ENABLED
             and running_total > settings.CLAUDE_DAILY_BUDGET_USD
         ):
-            kill_ctx: dict[str, Any] = {
-                "event": "claude_budget_kill_switch",
-                "running_total_usd": running_total,
-                "limit_usd": settings.CLAUDE_DAILY_BUDGET_USD,
-                "model": resolved,
-            }
-            if context:
-                for k, v in context.items():
-                    kill_ctx.setdefault(k, v)
-            logger.critical(
-                "claude.budget_kill_switch.tripped",
-                extra=kill_ctx,
-            )
-            # Reverse the estimate so a sustained refusal storm can't
-            # accumulate spurious spend on top of the real number.
-            await _reconcile_spend(pre_estimate_usd, 0.0)
-            raise ClaudeBudgetExceeded(
-                f"Claude daily budget exceeded "
-                f"({running_total:.2f} > {settings.CLAUDE_DAILY_BUDGET_USD:.2f} USD)"
+            # Log the would-be trip but DO NOT raise — keep the call
+            # flowing through. Operators who explicitly want hard
+            # enforcement can re-enable by reverting this commit.
+            logger.warning(
+                "claude.budget_soft_threshold_crossed: running_total=%.2f > "
+                "limit=%.2f USD (model=%s) — continuing call (Round-29 soft cap).",
+                running_total, settings.CLAUDE_DAILY_BUDGET_USD, resolved,
             )
 
         async with _CLAUDE_SEMAPHORE:

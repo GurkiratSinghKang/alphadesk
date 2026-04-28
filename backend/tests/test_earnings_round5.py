@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -439,17 +439,20 @@ async def test_cache_get_logs_hit_and_miss(caplog):
 
 
 @pytest.mark.asyncio
-async def test_claude_budget_kill_switch_raises_when_over(monkeypatch):
-    """H-2: when running spend exceeds the daily budget AND the
-    kill-switch is enabled, ClaudeBudgetExceeded must be raised
-    BEFORE the API call fires."""
+async def test_claude_budget_kill_switch_logs_when_over_but_does_not_raise(monkeypatch, caplog):
+    """Round-29 (user pivot): the previous H-2 hard-cap behaviour was
+    silently halting Claude calls when the spend tracker glitched, so
+    the budget-exceeded path is now a SOFT cap — log a WARNING but
+    keep the call flowing. Operators who want a hard cap should drive
+    it externally (e.g. an Anthropic billing alarm) rather than rely
+    on this in-process gate."""
+    import logging
     from agents import claude_client as cc
     from core.config import settings
 
     monkeypatch.setattr(settings, "CLAUDE_DAILY_BUDGET_USD", 1.0)
     monkeypatch.setattr(settings, "CLAUDE_BUDGET_KILL_SWITCH_ENABLED", True)
 
-    # Force the running-total accumulator to land above the budget.
     async def _over_budget(_estimate):
         return 99.0
 
@@ -459,16 +462,29 @@ async def test_claude_budget_kill_switch_raises_when_over(monkeypatch):
     monkeypatch.setattr(cc, "_record_spend_estimate", _over_budget)
     monkeypatch.setattr(cc, "_reconcile_spend", _no_op_reconcile)
 
+    # The API call SHOULD fire — return a minimal valid response.
+    fake_resp = MagicMock()
+    fake_resp.content = [MagicMock(text="ok")]
+    fake_resp.usage.input_tokens = 1
+    fake_resp.usage.output_tokens = 1
+    fake_resp.usage.cache_creation_input_tokens = 0
+    fake_resp.usage.cache_read_input_tokens = 0
+    fake_resp.model = "claude-haiku-4-7"
     fake_anthropic = AsyncMock()
-    fake_anthropic.messages.create = AsyncMock(side_effect=AssertionError(
-        "API call should NOT have fired when budget is exceeded"
-    ))
+    fake_anthropic.messages.create = AsyncMock(return_value=fake_resp)
 
     client = cc.ClaudeClient.__new__(cc.ClaudeClient)
     client._client = fake_anthropic
 
-    with pytest.raises(cc.ClaudeBudgetExceeded):
-        await client.complete(system="s", user="u", model="claude-haiku-4-7")
+    with caplog.at_level(logging.WARNING, logger="agents.claude_client"):
+        result = await client.complete(system="s", user="u", model="claude-haiku-4-7")
+
+    # Soft-cap log fired but call proceeded.
+    assert any(
+        "soft_threshold_crossed" in record.message for record in caplog.records
+    )
+    assert result is not None
+    fake_anthropic.messages.create.assert_called_once()
 
 
 @pytest.mark.asyncio
