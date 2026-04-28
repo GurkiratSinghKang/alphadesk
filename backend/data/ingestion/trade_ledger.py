@@ -189,6 +189,15 @@ def _ensure_schema(engine: Any) -> None:
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_status ON trade_ledger(status);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_symbol ON trade_ledger(symbol);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_strategy ON trade_ledger(strategy);
+    -- Round-27 / persona-G P0: composite index for the dominant
+    -- ``WHERE status='closed' AND exit_time >= :cutoff`` query used
+    -- by /portfolio/performance and the strategy-analytics SQL
+    -- aggregate. The status-only index above is too broad — at scale
+    -- it returns every closed trade ever, then Python filters dates,
+    -- defeating the index. Composite (status, exit_time) makes the
+    -- planner pick a range scan bounded by the cutoff.
+    CREATE INDEX IF NOT EXISTS ix_trade_ledger_status_exit_time
+        ON trade_ledger(status, exit_time);
     CREATE SEQUENCE IF NOT EXISTS trade_ledger_id_seq;
     """
     with engine.begin() as conn:
