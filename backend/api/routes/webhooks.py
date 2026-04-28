@@ -223,6 +223,19 @@ async def receive_tradingview_webhook(
     if provided_sig:
         if not hmac.compare_digest(provided_sig, expected_sig):
             logger.warning("Invalid TradingView webhook signature from %s", client_ip)
+            # Round-29 / persona-D: audit security-relevant rejections
+            # so the operator can spot brute-force / replay attempts.
+            try:
+                from core.audit import write_audit
+                await write_audit(
+                    "tradingview_webhook_reject",
+                    username="system",
+                    ip=client_ip,
+                    request_id=None,
+                    details={"reason": "invalid_signature"},
+                )
+            except Exception:
+                pass
             raise HTTPException(status_code=403, detail="Invalid webhook signature")
     else:
         # Backward-compat path — legacy callers that pre-date the signature
@@ -279,6 +292,28 @@ async def receive_tradingview_webhook(
         actions.append(action_result)
     else:
         logger.warning("Unknown TradingView action: %s", alert.action)
+
+    # Round-29 / persona-D: audit the webhook receive. Pre-fix this
+    # only emitted ``logger.info``; SOX / SEC 17a-4 expect a durable
+    # Postgres trail of every external alert that triggered state
+    # mutations (orders, alert publishes, broker calls).
+    try:
+        from core.audit import write_audit
+        await write_audit(
+            "tradingview_webhook",
+            username="system",
+            ip=client_ip,
+            request_id=alert_id,
+            details={
+                "action": alert.action,
+                "ticker": alert.ticker,
+                "price": alert.price,
+                "strategy": alert.strategy,
+                "alert_id": alert_id,
+            },
+        )
+    except Exception:
+        logger.debug("tradingview_webhook: audit persistence failed", exc_info=True)
 
     # Broadcast alert via websocket
     await publish("alerts", {
