@@ -70,7 +70,7 @@ from datetime import date
 from enum import Enum
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class OrderType(str, Enum):
@@ -138,6 +138,20 @@ class Signal(BaseModel):
     tag: str = Field(default="", max_length=256)
     legs: list[OptionLeg] | None = None
 
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def _normalize_symbol(cls, v: Any) -> Any:
+        """Round-27 / persona-E P0: canonicalise symbol case + whitespace
+        at the contract layer so a strategy author yielding
+        ``Signal(symbol="brk.b", ...)`` doesn't produce a different DB
+        row than the existing ``BRK.B`` position. The runner, ledger,
+        and broker bridge all assume uppercase — enforce once here
+        rather than scatter ``.upper()`` calls through every
+        downstream reader."""
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
+
     @model_validator(mode="after")
     def _exactly_one_sizing(self) -> "Signal":
         has_w = self.target_weight is not None
@@ -191,6 +205,14 @@ class Position(BaseModel):
     entry_date: date
     tag: str = Field(default="", max_length=256)
 
+    # Round-27 / persona-E P0: same uppercase canonicalisation as Signal.
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def _normalize_symbol(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
+
 
 class Fill(BaseModel):
     """One executed order. Returned by the fill simulator or the live broker;
@@ -204,6 +226,14 @@ class Fill(BaseModel):
     price: Decimal
     commission: Decimal = Decimal("0")
     signal_tag: str = Field(default="", max_length=256)
+
+    # Round-27 / persona-E P0: same uppercase canonicalisation.
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def _normalize_symbol(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
 
 
 class StrategyInput(BaseModel):
