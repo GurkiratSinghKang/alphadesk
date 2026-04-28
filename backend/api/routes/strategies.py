@@ -13,7 +13,11 @@ from enum import Enum
 from pathlib import Path as FilePath
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
+
+from core.auth import require_auth
+from core.audit import write_audit
+from core.logging import REQUEST_ID
 from pydantic import BaseModel, Field
 
 from api.routes.auth import require_admin
@@ -1760,7 +1764,9 @@ async def get_strategy_performance(
 
 @router.post("/{strategy_id}/toggle", response_model=ToggleResponse)
 async def toggle_strategy(
+    request: Request,
     strategy_id: str = Path(..., description="Strategy identifier"),
+    username: str = Depends(require_auth),
 ) -> ToggleResponse:
     """Toggle a strategy between active and paused.
 
@@ -1892,6 +1898,29 @@ async def toggle_strategy(
                 detail="Strategy toggle conflicted with concurrent updates; please retry.",
             )
 
+    # Round-27 / persona-D P0: audit the toggle. Pre-fix this only
+    # logged via ``logger.warning`` to stdout — Loki could lose it,
+    # and SOX/SEC 17a-4 expects a durable Postgres trail of every
+    # operator-initiated change to active risk-execution state.
+    rid = REQUEST_ID.get()
+    try:
+        await write_audit(
+            "strategy_toggle",
+            username=username,
+            ip=request.client.host if request.client else None,
+            request_id=rid if rid and rid != "-" else None,
+            details={
+                "strategy_id": strategy_id,
+                "previous_status": previous_status.value,
+                "new_status": new_status.value,
+            },
+        )
+    except Exception:
+        logger.error(
+            "strategy_toggle: audit persistence failed for %s",
+            strategy_id, exc_info=True,
+        )
+
     return ToggleResponse(
         id=strategy_id,
         name=data["name"],
@@ -1911,8 +1940,9 @@ class RiskMonitorState(BaseModel):
 
 @router.post("/admin/risk-monitor", response_model=RiskMonitorState)
 async def toggle_risk_monitor(
+    request: Request,
     enabled: bool = True,
-    _admin: str = Depends(require_admin),
+    admin: str = Depends(require_admin),
 ) -> RiskMonitorState:
     """Toggle the Master Agent risk monitor on or off.
 
@@ -1920,16 +1950,38 @@ async def toggle_risk_monitor(
     (P1-P4) are bypassed and trades are auto-approved (only duplicate symbol
     check remains) — toggling this off is a trust-me-bro override that should
     never be exposed to a non-admin principal.
+
+    Round-27 / persona-D P0: every flip writes an audit_log row. Disabling
+    the risk monitor is the most consequential single change in the
+    system — every trade-gate (P1-P4) goes silent. SOX/SEC 17a-4 require
+    a durable Postgres trail of operator-initiated risk-control changes.
     """
     from data.ingestion.master_agent import MasterAgent
 
     previous = MasterAgent.RISK_MONITOR_ENABLED
     MasterAgent.RISK_MONITOR_ENABLED = enabled
     logger.warning(
-        "Risk monitor toggled: %s -> %s",
+        "Risk monitor toggled: %s -> %s by %s",
         "ON" if previous else "OFF",
         "ON" if enabled else "OFF",
+        admin,
     )
+    rid = REQUEST_ID.get()
+    try:
+        await write_audit(
+            "risk_monitor_toggle",
+            username=admin,
+            ip=request.client.host if request.client else None,
+            request_id=rid if rid and rid != "-" else None,
+            details={
+                "previous_enabled": previous,
+                "new_enabled": enabled,
+            },
+        )
+    except Exception:
+        logger.error(
+            "risk_monitor_toggle: audit persistence failed", exc_info=True,
+        )
     return RiskMonitorState(
         enabled=enabled,
         message=f"Risk monitor {'enabled' if enabled else 'disabled'}. "
