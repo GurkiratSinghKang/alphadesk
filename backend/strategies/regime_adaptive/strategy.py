@@ -183,17 +183,44 @@ class RegimeAdaptiveStrategy(Strategy):
 # Pure helpers                                                                #
 # --------------------------------------------------------------------------- #
 def _is_rebalance_day(asof: date, freq: str) -> bool:
+    """True when ``asof`` is the last TRADING day of its month.
+
+    Round-21 / persona-C P0 fix: the previous version used ``weekday()``
+    arithmetic which silently dropped the rebalance any month whose
+    final calendar day was a weekend AND whose final Friday wasn't in
+    the runner's bar set (or any month with a holiday on the last
+    weekday — Christmas Day, MLK Monday, etc.). Now defers to the
+    real US market calendar via ``data.calendar`` so holidays /
+    half-days are correctly handled.
+    """
+    try:
+        from data.calendar import is_trading_day
+    except Exception:
+        # Calendar unavailable (test environment) — fall back to the
+        # naive Mon-Fri heuristic. Better than crashing the runner.
+        is_trading_day = lambda d: getattr(d, "weekday", lambda: 5)() < 5  # noqa: E731
+    if not is_trading_day(asof):
+        return False
+    # Walk forward a generous window (~10 calendar days covers 4-day
+    # weekends + Christmas-NYE clusters) to find the next trading day.
     probe = asof + timedelta(days=1)
-    for _ in range(7):
-        if probe.month != asof.month:
+    for _ in range(10):
+        if is_trading_day(probe):
+            # Same month → asof isn't the month's last trading day.
+            if probe.month == asof.month:
+                return False
             break
-        if probe.weekday() < 5:
-            return False
         probe += timedelta(days=1)
-    is_last = asof.weekday() < 5
+    # Either the next trading day is in a different month, OR the
+    # probe window exhausted (very long holiday — month-end is the
+    # safer bet). Either way, asof is the last trading day.
+    return _bimonthly_gate(asof, freq)
+
+
+def _bimonthly_gate(asof: date, freq: str) -> bool:
     if freq == "bimonthly":
-        return is_last and (asof.month % 2 == 1)
-    return is_last
+        return asof.month % 2 == 1
+    return True
 
 
 def _close_panel(

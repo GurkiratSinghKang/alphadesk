@@ -187,7 +187,12 @@ class TestRebalanceTrigger:
     def test_quarterly_only_in_march_june_sep_dec(self):
         # Last business day of Jan 2024 — should not rebalance under quarterly
         assert is_rebalance_day(REBAL_DAY, "quarterly") is False
-        march_end = date(2024, 3, 29)
+        # Round-21 / persona-C: switched from Mar 29 → Mar 28, 2024.
+        # Good Friday 2024 fell on Mar 29, so the actual last TRADING
+        # day of March was Mar 28 (Thursday). The previous Mon-Fri-only
+        # heuristic incorrectly accepted Mar 29; the calendar-aware
+        # implementation correctly rejects it.
+        march_end = date(2024, 3, 28)
         assert is_last_trading_day_of_month(march_end) is True
         assert is_rebalance_day(march_end, "quarterly") is True
 

@@ -269,6 +269,16 @@ def kalman_hedge_ratio(
     P = np.eye(2) * 1.0  # wide prior
     W = delta / (1.0 - delta) * np.eye(2)  # process noise
 
+    # Round-21 / persona-C P1: bound covariance so pathological data
+    # (extreme x scale, observation with infinite leverage on the
+    # intercept) can't drive ``S = F @ P @ F.T + r`` to underflow /
+    # overflow / NaN. Reset to the wide-prior identity if any element
+    # of P or state crosses these bounds — graceful divergence handling
+    # rather than NaN-poisoning every subsequent bar.
+    P_MAX = 1e6   # diagonal cap (variance can't exceed 1M units²)
+    P_MIN = 1e-12  # diagonal floor (filter can't be infinitely confident)
+    STATE_MAX = 1e6  # alpha/beta sanity bound
+
     beta_series = pd.Series(np.nan, index=df.index, dtype="float64")
     y_vals = df["y"].to_numpy()
     x_vals = df["x"].to_numpy()
@@ -283,10 +293,32 @@ def kalman_hedge_ratio(
         # Innovation
         y_hat = float(F @ state)
         S = float(F @ P @ F.T + r)
+        # Guard against degenerate S (zero / negative / non-finite).
+        if not np.isfinite(S) or S <= 0:
+            # Reset filter state — output the prior beta and continue.
+            P = np.eye(2) * 1.0
+            beta_series.iloc[i] = state[1] if np.isfinite(state[1]) else np.nan
+            continue
         innov = y_vals[i] - y_hat
         K = (P @ F) / S  # Kalman gain
         state = state + K * innov
         P = P - np.outer(K, F) @ P
+
+        # Round-21 / persona-C P1: enforce PSD-ness and bounded variance
+        # by clamping the diagonal. Off-diagonal can drift; if det(P)
+        # goes non-positive on a future iteration, S guard above catches
+        # it and resets.
+        diag = np.diag(P).copy()
+        if not np.all(np.isfinite(diag)) or np.any(diag > P_MAX) or np.any(diag < P_MIN):
+            np.fill_diagonal(P, np.clip(np.where(np.isfinite(diag), diag, P_MIN), P_MIN, P_MAX))
+        if not np.all(np.isfinite(state)) or np.any(np.abs(state) > STATE_MAX):
+            # State diverged — reset to zero with wide prior. Better to
+            # restart than to propagate NaN through every downstream
+            # rolling-z-score consumer.
+            state = np.zeros(2)
+            P = np.eye(2) * 1.0
+            beta_series.iloc[i] = np.nan
+            continue
         beta_series.iloc[i] = state[1]
 
     return beta_series.astype("float64")

@@ -182,19 +182,27 @@ _ALL_UNIVERSE_TICKERS: tuple[str, ...] = tuple(
 def _is_rebalance_day(asof: date, freq: str) -> bool:
     """True iff ``asof`` is the last trading day in its calendar month.
 
-    Mon-Fri fallback since pure-function run() has no calendar provider.
+    Round-21 / persona-C P0: defers to the real US market calendar so
+    holidays / half-days are correctly handled (was Mon-Fri only,
+    silently dropping rebalance any month with a holiday on the last
+    weekday). Falls back to Mon-Fri if the calendar import fails.
     """
+    try:
+        from data.calendar import is_trading_day
+    except Exception:
+        is_trading_day = lambda d: getattr(d, "weekday", lambda: 5)() < 5  # noqa: E731
+    if not is_trading_day(asof):
+        return False
     probe = asof + timedelta(days=1)
-    for _ in range(7):
-        if probe.month != asof.month:
+    for _ in range(10):
+        if is_trading_day(probe):
+            if probe.month == asof.month:
+                return False
             break
-        if probe.weekday() < 5:
-            return False
         probe += timedelta(days=1)
-    is_last = asof.weekday() < 5
     if freq == "bimonthly":
-        return is_last and (asof.month % 2 == 1)
-    return is_last
+        return asof.month % 2 == 1
+    return True
 
 
 def _close_panel(

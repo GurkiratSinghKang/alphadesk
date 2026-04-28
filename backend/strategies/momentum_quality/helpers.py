@@ -25,15 +25,26 @@ HALT_THRESHOLD_BARS = 5
 # Rebalance calendar                                                          #
 # --------------------------------------------------------------------------- #
 def is_last_trading_day_of_month(asof: date) -> bool:
-    """True iff ``asof`` is the last Mon-Fri in its calendar month."""
+    """True iff ``asof`` is the last TRADING day in its calendar month.
+
+    Round-21 / persona-C P0: defers to the real US market calendar so
+    holidays / half-days are correctly handled (was Mon-Fri only, which
+    silently dropped any month whose final weekday was a holiday — MLK
+    Monday, Christmas Day, etc.). Falls back to Mon-Fri if the
+    calendar import fails (test environments).
+    """
+    try:
+        from data.calendar import is_trading_day
+    except Exception:
+        is_trading_day = lambda d: getattr(d, "weekday", lambda: 5)() < 5  # noqa: E731
+    if not is_trading_day(asof):
+        return False
     probe = asof + timedelta(days=1)
-    for _ in range(7):
-        if probe.month != asof.month:
-            break
-        if probe.weekday() < 5:
-            return False
+    for _ in range(10):
+        if is_trading_day(probe):
+            return probe.month != asof.month
         probe += timedelta(days=1)
-    return asof.weekday() < 5
+    return True
 
 
 def is_rebalance_day(asof: date, freq: str) -> bool:

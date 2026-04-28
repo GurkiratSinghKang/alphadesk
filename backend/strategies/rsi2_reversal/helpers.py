@@ -141,12 +141,24 @@ def has_upcoming_earnings(
 # Misc                                                                        #
 # --------------------------------------------------------------------------- #
 def trading_days_between(start: Optional[date], end: date) -> int:
-    """Business-day count between two dates (inclusive of ``end``)."""
+    """Trading-session count between two dates (inclusive of ``end``).
+
+    Round-21 / persona-C P2: pre-fix used ``pd.bdate_range`` which is
+    Mon-Fri minus 1 — ignored NYSE holidays. A 5-day holding window
+    straddling Thanksgiving week ended 1 session early. Now defers to
+    the real US market calendar.
+    """
     if start is None:
         return 0
     if start > end:
         return 0
-    return int(len(pd.bdate_range(start=start, end=end))) - 1
+    try:
+        from data.calendar import _default
+        sessions = list(_default().sessions(start, end))
+        return max(0, len(sessions) - 1)
+    except Exception:
+        # Calendar unavailable — Mon-Fri fallback (legacy behaviour).
+        return int(len(pd.bdate_range(start=start, end=end))) - 1
 
 
 def adv_dollar_mean(bars: pd.DataFrame, lookback_bars: int = 90) -> Optional[float]:
