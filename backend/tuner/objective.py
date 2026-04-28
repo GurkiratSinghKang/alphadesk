@@ -139,6 +139,26 @@ class WalkForwardObjective:
             raise ValueError(
                 f"tune_on={self.tune_on!r}; expected 'train' or 'test'."
             )
+        # Round-27 / persona-C P0: honesty about walk-forward. Pre-fix
+        # ``train_end``/``k_folds``/``purge_days`` accepted at line 121-123
+        # but never read in ``__call__`` or ``_run_backtest`` — every
+        # trial ran a single in-sample backtest over [start, end] and
+        # the reported "best Sharpe" was pure overfitting. The CLI
+        # exposed these flags too, silently doing nothing. We can't
+        # implement walk-forward in this commit (would need a real
+        # train/test split + folded scoring), but we CAN refuse to
+        # silently lie. Warn loudly when the inert knobs are set.
+        import logging as _logging
+        if self.train_end is not None or self.k_folds != 5 or self.purge_days != 60:
+            _logging.getLogger(__name__).warning(
+                "tuner: walk-forward parameters (train_end=%s, k_folds=%d, "
+                "purge_days=%d) are CURRENTLY INERT — every trial runs a "
+                "single in-sample backtest. Best-Sharpe report is biased "
+                "upward by O(sigma * sqrt(2 * log N)) per Bailey/Lopez de "
+                "Prado. Wrap this objective in your own train/test split "
+                "until upstream walk-forward lands.",
+                self.train_end, self.k_folds, self.purge_days,
+            )
         if self.params_model is None:
             pm = getattr(self.strategy_cls, "PARAMS_MODEL", None)
             if pm is None:

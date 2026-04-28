@@ -194,6 +194,31 @@ class BacktestRunner:
             price = mark_prices.get(p.symbol, p.avg_entry_price)
             equity += price * Decimal(p.quantity)
 
+        # Round-27 / persona-B P0: leverage cap. Pre-fix a strategy
+        # emitting target_weight=2.0 (200% gross) would size accordingly,
+        # cash would simply go negative without any RuntimeError, no
+        # borrow cost, no haircut, no buying-power check. This is the
+        # single biggest source of unrealistic backtest equity curves.
+        # Cap gross weight at 100% by default (no leverage); emit a
+        # single warning per asof when the strategy tries to exceed it.
+        MAX_GROSS_LEVERAGE = Decimal("1.0")
+        gross_weight = Decimal("0")
+        target_weights: list[tuple[int, Decimal]] = []
+        for i, s in enumerate(signals):
+            if s.target_weight is not None:
+                gross_weight += abs(Decimal(str(s.target_weight)))
+                target_weights.append((i, abs(Decimal(str(s.target_weight)))))
+        scale = Decimal("1.0")
+        if gross_weight > MAX_GROSS_LEVERAGE:
+            scale = MAX_GROSS_LEVERAGE / gross_weight
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "backtest leverage cap engaged: gross %.2f > %.2f cap; "
+                "scaling weights by %.4f. Implement margin + overnight-"
+                "funding logic before raising MAX_GROSS_LEVERAGE.",
+                float(gross_weight), float(MAX_GROSS_LEVERAGE), float(scale),
+            )
+
         for s in signals:
             if s.quantity is not None:
                 sized.append(s)
@@ -215,7 +240,8 @@ class BacktestRunner:
             if price is None or price <= 0:
                 continue
 
-            target_value = Decimal(str(s.target_weight)) * equity
+            scaled_weight = Decimal(str(s.target_weight)) * scale
+            target_value = scaled_weight * equity
             target_qty = int((target_value / price).to_integral_value(rounding="ROUND_DOWN"))
             delta = target_qty - current_qty.get(s.symbol, 0)
             if delta == 0:
@@ -306,14 +332,31 @@ class BacktestRunner:
 
     @staticmethod
     def _compute_metrics(equity_df: pd.DataFrame, daily_returns: pd.Series) -> dict[str, float]:
-        mean, std = float(daily_returns.mean()), float(daily_returns.std())
+        # Round-27 / persona-B P1: drop the seed-bar NaN before stats so
+        # ``pct_change()`` row-0 zero doesn't bias mean/std toward zero
+        # and inflate Sharpe modestly on short backtests.
+        clean_returns = daily_returns.dropna()
+        mean, std = float(clean_returns.mean()), float(clean_returns.std())
         sharpe = (mean / std * (252 ** 0.5)) if std > 0 else 0.0
         total_ret = float(equity_df["equity"].iloc[-1] / equity_df["equity"].iloc[0] - 1) if len(equity_df) > 1 else 0.0
         days = max((equity_df.index[-1] - equity_df.index[0]).days, 1) if len(equity_df) > 1 else 1
-        cagr = (1 + total_ret) ** (365 / days) - 1 if total_ret > -1 else -1.0
+        # Round-27 / persona-B P1: pre-fix a 1-day backtest with a 1% gain
+        # extrapolated to (1.01 ** 365 - 1) = 3678% CAGR — meaningless
+        # noise. Refuse to annualize when the window is too short to
+        # support the claim; report ``cagr = nan`` instead so downstream
+        # consumers can branch on it.
+        if days < 30 or total_ret <= -1:
+            cagr = float("nan")
+        else:
+            cagr = (1 + total_ret) ** (365 / days) - 1
         max_dd = float(equity_df["drawdown"].min()) if "drawdown" in equity_df else 0.0
-        calmar = cagr / abs(max_dd) if max_dd < 0 else 0.0
+        calmar = (cagr / abs(max_dd)) if (max_dd < 0 and not _isnan(cagr)) else 0.0
         return {
             "sharpe": sharpe, "cagr": cagr, "total_return": total_ret,
             "max_drawdown": max_dd, "calmar": calmar,
         }
+
+
+def _isnan(x: float) -> bool:
+    """Stdlib-free isnan check for the metrics aggregator."""
+    return x != x
