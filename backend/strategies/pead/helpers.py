@@ -89,7 +89,13 @@ def passes_liquidity(
 
     if bars is None or bars.empty:
         return False
-    hist = bars[bars["ts_date"] <= asof].tail(90)
+    # Round-29 / persona-A F3: pre-fix used ``<= asof`` which included
+    # the asof-bar's close + volume. At MOO submission (9:30am ET on
+    # the entry day) neither is realised yet — the liquidity gate was
+    # peeking at the post-close data the entry decision shouldn't
+    # know. Strict ``< asof`` so ADV is computed from the prior 90
+    # sessions only.
+    hist = bars[bars["ts_date"] < asof].tail(90)
     if len(hist) < 30:
         return False
     close = float(hist["close"].iloc[-1])

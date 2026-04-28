@@ -195,7 +195,7 @@ class PEADStrategy(Strategy):
             elif ann_date is None:
                 continue
 
-            hist = self._surprise_history(earnings, sym)
+            hist = self._surprise_history(earnings, sym, ann_date)
             sue = compute_sue(
                 eps_actual,
                 eps_est,
@@ -462,6 +462,7 @@ class PEADStrategy(Strategy):
     def _surprise_history(
         earnings: pd.DataFrame,
         symbol: str,
+        asof: date,
     ) -> Optional[pd.DataFrame]:
         """Return per-symbol historical surprise series from ``input.earnings``.
 
@@ -469,6 +470,13 @@ class PEADStrategy(Strategy):
         for every symbol in the universe, so in the new shell the full
         surprise history is always present in ``input.earnings`` — we just
         filter by symbol here and hand the slice to :func:`compute_sue`.
+
+        Round-29 / persona-A F1: defensive filter on ``date < asof`` so a
+        future modification to ``compute_sue`` (or a caller that doesn't
+        pass the announcement date) can't accidentally include
+        same-or-future-quarter rows in the σ denominator. ``compute_sue``
+        already does this filter internally; this is belt-and-suspenders
+        in case the contract drifts.
         """
 
         if earnings is None or earnings.empty:
@@ -477,6 +485,16 @@ class PEADStrategy(Strategy):
         if sub.empty:
             return None
         sub = sub.copy()
+        # Pre-filter to strict-prior rows. Mixed types (Timestamp / date
+        # / str) get coerced via pandas' standard to_datetime path.
+        try:
+            sub = sub[pd.to_datetime(sub["date"]).dt.date < asof]
+        except Exception:
+            # If the column can't be coerced, fall through and let
+            # compute_sue's own filter handle it.
+            pass
+        if sub.empty:
+            return None
         # compute_sue inspects history["surprise"] when available, falling
         # back to eps_actual - eps_estimated. We leave the frame alone.
         return sub.sort_values("date", ignore_index=True)
