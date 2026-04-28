@@ -122,6 +122,15 @@
         # remain in place — those close gaps left implicit and don't
         # depend on the frontend build.
         >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+        # Round-23 / persona-A P0: telemetry path for migrating off
+        # unsafe-inline. The strict policy below runs Report-Only —
+        # browsers POST violations to /api/v1/security/csp-report
+        # without blocking, so we can see exactly which inline
+        # scripts/styles need hashing or nonce-wiring before flipping
+        # the enforced header. Once the violation log is empty for a
+        # week of normal traffic, the unsafe-inline above can be
+        # dropped and this Report-Only line removed.
+        >Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https:; style-src 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/v1/security/csp-report"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the

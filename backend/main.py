@@ -421,6 +421,13 @@ app.include_router(earnings.router, prefix="/api/v1", tags=["Earnings"], depende
 # every landing-page sample). Validated payload shape + per-IP
 # rate-limit at the route layer keeps abuse bounded.
 app.include_router(metrics_routes.router, prefix="/api/v1/metrics", tags=["Metrics"])
+# Round-23 / persona-A P0: CSP violation report ingest. Public endpoint
+# (browsers POST without credentials when violation fires); validated +
+# per-IP rate-limited at the route layer. Used by the Report-Only CSP
+# in Caddyfile to inventory inline scripts/styles before flipping the
+# enforced policy.
+from api.routes import security as security_routes  # noqa: E402
+app.include_router(security_routes.router, prefix="/api/v1/security", tags=["Security"])
 app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
 # Wave 4Q (persona-103): user-rights endpoints (GDPR Art. 17 + Art. 20 /
 # CCPA parity).  Auth is enforced INSIDE each handler via Depends(require_auth)
