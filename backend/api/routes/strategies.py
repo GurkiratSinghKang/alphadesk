@@ -1238,16 +1238,24 @@ async def list_strategies() -> list[StrategySummary]:
     # 4. Build Alpaca position map keyed by strategy for accurate counts
     #    and unrealized P&L (Alpaca provides unrealized_pl per position)
     # ------------------------------------------------------------------
+    # Round-29 / persona-G P0: pre-fix this loop did
+    # ``for t in ledger._data["trades"]: ...`` for EVERY broker
+    # position (50M-row full-table scan × N positions = O(N×M)). Now
+    # do ONE SQL query bounded by status='open' to seed a per-symbol
+    # → strategy lookup, then iterate broker positions in O(positions).
+    open_ledger_trades = ledger.list({"status": "open"})
+    sym_to_strat_id: dict[str, str] = {}
+    for t in open_ledger_trades:
+        sym = t.get("symbol")
+        if not sym or sym in sym_to_strat_id:
+            continue
+        strat_name = t.get("strategy", "manual")
+        sym_to_strat_id[sym] = _STRATEGY_NAME_TO_ID.get(strat_name, "manual-discretionary")
+
     alpaca_by_strategy: dict[str, list[dict]] = {}
     for pos in alpaca_positions:
         sym = pos.get("symbol", "")
-        # Determine strategy from ledger
-        strat_id = "manual-discretionary"
-        for t in ledger._data.get("trades", []):
-            if t["symbol"] == sym and t["status"] == "open":
-                strat_name = t.get("strategy", "manual")
-                strat_id = _STRATEGY_NAME_TO_ID.get(strat_name, "manual-discretionary")
-                break
+        strat_id = sym_to_strat_id.get(sym, "manual-discretionary")
         alpaca_by_strategy.setdefault(strat_id, []).append(pos)
 
     # Unrealized P&L per strategy from Alpaca position data
@@ -1664,18 +1672,23 @@ async def get_strategy_performance(
     # Map Alpaca positions to this strategy
     # ------------------------------------------------------------------
     ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
-    alpaca_for_strat: list[dict] = []
-    for pos in alpaca_positions:
-        sym = pos.get("symbol", "")
-        matched_strat_id = "manual-discretionary"
-        for t in ledger._data.get("trades", []):
-            if t["symbol"] == sym and t["status"] == "open":
-                matched_strat_id = _STRATEGY_NAME_TO_ID.get(
-                    t.get("strategy", "manual"), "manual-discretionary"
-                )
-                break
-        if matched_strat_id == strategy_id:
-            alpaca_for_strat.append(pos)
+    # Round-29 / persona-G P0: same fix as the strategies-list above —
+    # bound the SQL query to status='open' (uses ix_trade_ledger_status)
+    # and seed a per-symbol → strategy_id map. Replaces the per-position
+    # full-ledger nested scan.
+    open_ledger_trades = ledger.list({"status": "open"})
+    sym_to_strat_id: dict[str, str] = {}
+    for t in open_ledger_trades:
+        sym = t.get("symbol")
+        if not sym or sym in sym_to_strat_id:
+            continue
+        sym_to_strat_id[sym] = _STRATEGY_NAME_TO_ID.get(
+            t.get("strategy", "manual"), "manual-discretionary"
+        )
+    alpaca_for_strat: list[dict] = [
+        pos for pos in alpaca_positions
+        if sym_to_strat_id.get(pos.get("symbol", ""), "manual-discretionary") == strategy_id
+    ]
 
     unrealized = sum(float(p.get("unrealized_pl", 0)) for p in alpaca_for_strat)
     active_count = len(alpaca_for_strat)
@@ -2078,10 +2091,15 @@ async def get_strategy_analytics(
     # Resolve ledger strategy name from route ID
     ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
 
-    all_trades = [
-        t for t in ledger._data.get("trades", [])
-        if t.get("strategy") == ledger_name
-    ]
+    # Round-29 / persona-G P0: SQL-bounded fetch instead of pulling
+    # the FULL trade ledger and filtering in Python. Pre-fix this
+    # endpoint did 4 sequential full-ledger scans (sector, monthly,
+    # streaks, conviction passes) plus a 5th in
+    # ``_get_real_strategy_performance``. With ``ledger.list`` the
+    # planner uses ``ix_trade_ledger_strategy`` (declared in
+    # ``_ensure_schema``) for a bounded scan. The 4 in-memory passes
+    # downstream then operate on only this strategy's rows.
+    all_trades = ledger.list({"strategy": ledger_name})
     open_trades = [t for t in all_trades if t.get("status") == "open"]
     closed_trades = [t for t in all_trades if t.get("status") == "closed"]
 
@@ -2277,12 +2295,13 @@ async def get_strategy_positions(
     for pos in alpaca_positions:
         alpaca_by_sym[pos.get("symbol", "")] = pos
 
-    # Find open trades for this strategy
+    # Find open trades for this strategy.
+    # Round-29 / persona-G P0: SQL-bounded query (uses
+    # ix_trade_ledger_strategy) instead of full-table scan. Each handler
+    # call goes from O(N_total_trades) to O(N_strategy_trades).
     ledger_name = _ID_TO_NAME.get(strategy_id, strategy_id)
-    open_trades = [
-        t for t in ledger._data.get("trades", [])
-        if t.get("status") == "open" and t.get("strategy") == ledger_name
-    ]
+    strategy_trades = ledger.list({"strategy": ledger_name})
+    open_trades = [t for t in strategy_trades if t.get("status") == "open"]
 
     today = date.today()
     results: list[StrategyPosition] = []
