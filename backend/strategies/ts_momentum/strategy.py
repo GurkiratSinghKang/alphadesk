@@ -28,7 +28,6 @@ import numpy as np
 import pandas as pd
 
 from strategies._core.contracts import (
-    Fill,
     OrderType,
     Signal,
     StrategyInput,
@@ -123,7 +122,9 @@ class TSMomentumStrategy(Strategy):
                 warnings=warnings,
             )
 
-        weights = _compute_target_weights(params, closes, tickers, peak, cur_equity)
+        weights, weight_diagnostics = _compute_target_weights_with_diagnostics(
+            params, closes, tickers, peak, cur_equity
+        )
         state_update[f"{_NS}.last_weights"] = dict(weights)
 
         signals: list[Signal] = []
@@ -161,6 +162,7 @@ class TSMomentumStrategy(Strategy):
 
         diagnostics["rebalance"] = True
         diagnostics["target_weight_count"] = len([w for w in weights.values() if abs(w) >= 1e-6])
+        diagnostics["weight_model"] = weight_diagnostics
         return StrategyResult(
             signals=signals,
             state_update=state_update,
@@ -359,28 +361,73 @@ def _compute_target_weights(
     cur_equity: float,
 ) -> dict[str, float]:
     """Signal + inverse-vol + cap + drawdown de-lever."""
+    weights, _diagnostics = _compute_target_weights_with_diagnostics(
+        params, closes, tickers, peak_equity, cur_equity
+    )
+    return weights
+
+
+def _compute_target_weights_with_diagnostics(
+    params: TSMomentumParams,
+    closes: pd.DataFrame,
+    tickers: list[str],
+    peak_equity: Optional[float],
+    cur_equity: float,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Signal + inverse-vol + cap + drawdown de-lever with a JSON-safe trace."""
+    diagnostics: dict[str, Any] = {
+        "tickers": list(tickers),
+        "lookbacks": list(signal_lookback_days(params)),
+        "signals_available": 0,
+        "vols_available": 0,
+        "raw_weight_count": 0,
+        "final_weight_count": 0,
+        "raw_gross": 0.0,
+        "final_gross": 0.0,
+        "drawdown": 0.0,
+        "delevered": False,
+        "shorts_disabled_filtered": 0,
+        "cap_binding_count": 0,
+        "skipped": {},
+        "weights": {},
+    }
     lookback = signal_lookback_days(params)
     signals = _compute_signals(closes, tickers, lookback)
+    diagnostics["signals_available"] = len(signals)
     if not params.shorts_enabled:
+        diagnostics["shorts_disabled_filtered"] = sum(1 for s in signals.values() if s < 0)
         signals = {sym: max(s, 0.0) for sym, s in signals.items()}
 
     vols = _compute_realized_vols(closes, tickers, params.realized_vol_window)
+    diagnostics["vols_available"] = len(vols)
 
     raw: dict[str, float] = {}
+    skipped: dict[str, int] = diagnostics["skipped"]
     for sym in tickers:
+        if sym not in signals:
+            skipped["signal_unavailable"] = skipped.get("signal_unavailable", 0) + 1
+            continue
         s = signals.get(sym, 0.0)
         sigma = vols.get(sym, float("nan"))
-        if s == 0.0 or not math.isfinite(sigma) or sigma <= 0:
+        if s == 0.0:
+            skipped["flat_or_disabled_signal"] = (
+                skipped.get("flat_or_disabled_signal", 0) + 1
+            )
+            continue
+        if not math.isfinite(sigma) or sigma <= 0:
+            skipped["vol_unavailable"] = skipped.get("vol_unavailable", 0) + 1
             continue
         sigma_eff = max(sigma, params.vol_floor)
         raw[sym] = s * (params.target_vol / sigma_eff)
+    diagnostics["raw_weight_count"] = len(raw)
 
     if not raw:
-        return {}
+        return {}, diagnostics
 
     gross = sum(abs(v) for v in raw.values())
+    diagnostics["raw_gross"] = float(gross)
     if gross <= 0:
-        return {}
+        return {}, diagnostics
     scale = params.target_vol_gross_mul / gross
     weights = {sym: v * scale for sym, v in raw.items()}
 
@@ -391,13 +438,22 @@ def _compute_target_weights(
     dd = 0.0
     if peak_equity and peak_equity > 0:
         dd = (peak_equity - cur_equity) / peak_equity
+    diagnostics["drawdown"] = float(dd)
     if dd > params.drawdown_delever_threshold and params.drawdown_delever_threshold > 0:
         weights = {k: v * 0.5 for k, v in weights.items()}
+        diagnostics["delevered"] = True
 
     weights = _cap_and_renormalize(
         weights, params.max_weight_per_asset, sum(abs(v) for v in weights.values())
     )
-    return weights
+    diagnostics["final_weight_count"] = len(weights)
+    diagnostics["final_gross"] = float(sum(abs(v) for v in weights.values()))
+    diagnostics["cap_binding_count"] = sum(
+        1 for v in weights.values()
+        if abs(v) >= params.max_weight_per_asset - 1e-9
+    )
+    diagnostics["weights"] = {sym: float(w) for sym, w in weights.items()}
+    return weights, diagnostics
 
 
 _TS_HALT_BARS = 5

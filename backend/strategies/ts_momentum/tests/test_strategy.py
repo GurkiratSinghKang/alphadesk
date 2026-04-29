@@ -143,6 +143,11 @@ class TestSignOfReturn:
         result = strat.run(_build_input(bars, self._rebalance_day()), params)
         syms = [s.symbol for s in result.signals]
         assert "SPY" not in syms
+        assert result.diagnostics["weight_model"]["shorts_disabled_filtered"] == 1
+        assert (
+            result.diagnostics["weight_model"]["skipped"]["flat_or_disabled_signal"]
+            >= 1
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -167,6 +172,11 @@ class TestInverseVolWeights:
         result = strat.run(_build_input(bars, self._rebalance_day()), params)
         total_gross = sum(abs(s.target_weight or 0) for s in result.signals)
         assert total_gross == pytest.approx(1.0, abs=1e-6)
+        model = result.diagnostics["weight_model"]
+        assert model["raw_weight_count"] == 6
+        assert model["final_weight_count"] == 6
+        assert model["final_gross"] == pytest.approx(1.0, abs=1e-6)
+        assert set(model["weights"]) == {"SPY", "EFA", "IEF", "TLT", "GLD", "DBC"}
 
     def test_low_vol_leg_gets_higher_weight(self):
         bars = _build_bars({
