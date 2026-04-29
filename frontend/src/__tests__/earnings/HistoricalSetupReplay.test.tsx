@@ -2,6 +2,7 @@ import "../setup-mocks";
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import HistoricalSetupReplay, {
+  buildHistoricalReplayComparisonRequest,
   buildHistoricalReplayRequest,
 } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/HistoricalSetupReplay";
 import { postEarningsBacktest } from "@/lib/api";
@@ -157,6 +158,31 @@ describe("HistoricalSetupReplay", () => {
     });
   });
 
+  it("builds one comparison request across all ticketable earnings setups", () => {
+    const request = buildHistoricalReplayComparisonRequest(detail);
+
+    expect(request?.events).toHaveLength(16);
+    expect(new Set(request?.events.map((event) => event.topSetup) ?? [])).toEqual(
+      new Set([
+        "long call",
+        "long put",
+        "bull put spread",
+        "bear call spread",
+        "bull call spread",
+        "bear put spread",
+        "iron condor",
+        "long straddle",
+      ]),
+    );
+    expect(request?.events[0]).toMatchObject({
+      symbol: "NVDA",
+      reportDate: "2026-01-30",
+      expectedMovePct: 0.064,
+      premiumYieldCallAtm: 0.032,
+      premiumYieldPutAtm: 0.034,
+    });
+  });
+
   it("renders backend replay metrics and trade rows", async () => {
     vi.mocked(postEarningsBacktest).mockResolvedValueOnce({
       trades: [
@@ -169,27 +195,56 @@ describe("HistoricalSetupReplay", () => {
           edgeScore: null,
           reason: "realized move stayed inside expected move",
         },
+        {
+          symbol: "NVDA",
+          reportDate: "2025-10-30",
+          setup: "iron condor",
+          returnPct: -0.2,
+          win: false,
+          edgeScore: null,
+          reason: "realized move breached expected move",
+        },
+        {
+          symbol: "NVDA",
+          reportDate: "2026-01-30",
+          setup: "long call",
+          returnPct: 0.8,
+          win: true,
+          edgeScore: null,
+          reason: "post-report rally cleared debit hurdle",
+        },
+        {
+          symbol: "NVDA",
+          reportDate: "2025-10-30",
+          setup: "long call",
+          returnPct: -1,
+          win: false,
+          edgeScore: null,
+          reason: "post-report rally did not clear debit hurdle",
+        },
       ],
       skipped: [],
       metrics: {
-        events: 1,
-        winRate: 1,
-        avgTradeReturnPct: 0.45,
-        totalReturnPct: 0.0045,
-        maxDrawdownPct: 0,
-        profitFactor: null,
+        events: 4,
+        winRate: 0.5,
+        avgTradeReturnPct: 0.0125,
+        totalReturnPct: 0.0005,
+        maxDrawdownPct: 0.01,
+        profitFactor: 1.04,
       },
     });
 
     const { container } = render(<HistoricalSetupReplay detail={detail} />);
 
     await waitFor(() => expect(postEarningsBacktest).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(postEarningsBacktest).mock.calls[0][0].events).toHaveLength(2);
+    expect(vi.mocked(postEarningsBacktest).mock.calls[0][0].events).toHaveLength(16);
     await waitFor(() => {
       expect(container.querySelector('[data-slot="historical-setup-replay-trades"]')).not.toBeNull();
     });
     expect(container.textContent).toMatch(/Setup replay/);
     expect(container.textContent).toMatch(/Thin sample/);
+    expect(container.textContent).toMatch(/Setup comparison/);
+    expect(container.textContent).toMatch(/long call/);
     expect(container.textContent).toMatch(/not point-in-time historical option-chain fills/);
     expect(container.textContent).toMatch(/realized move stayed inside expected move/);
   });
