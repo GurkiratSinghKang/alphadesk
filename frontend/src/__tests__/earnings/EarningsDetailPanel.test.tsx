@@ -12,6 +12,13 @@ const detail: EarningsDetail = {
   quote: { last: 201.7, change: -1.4, changePct: -0.007 },
   metrics: { ivRank: 78, ivPercentile: 82, currentIv: 0.79, hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71, expectedMovePct: 0.064, expectedMoveDollars: 12.8, histAvgAbsMovePct: 0.052, beatRate: 0.87, daysToEarnings: 1, daysToExpiry: 3 },
   strikeLadder: null, claudeStructured: null, claudeFullResearch: null,
+  historicalEarnings: {
+    quarters: [
+      { reportDate: "2026-01-30", surprisePct: 0.08, nextDayMovePct: 0.042, fiveDayMovePct: 0.053 },
+      { reportDate: "2025-10-30", surprisePct: -0.02, nextDayMovePct: -0.081, fiveDayMovePct: -0.023 },
+    ],
+    stats: { avgAbsMovePct: 0.062, wins: 1, losses: 1, surpriseBeatRate: 0.5, ivVsHistVolPoints: null },
+  },
   ivTermStructure: null, skew: null,
   news: [], partial: false, generatedAt: new Date().toISOString(),
 };
@@ -25,8 +32,7 @@ describe("EarningsDetailPanel", () => {
     expect(container.querySelector('[data-slot="metrics-strip"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="claude-thesis"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
-    // B-63: historical-moves panel removed along with the stubbed backend
-    // loader; restore this assertion when the FMP surprises join lands.
+    expect(container.querySelector('[data-slot="historical-moves"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="news-feed"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="trade-button-row"]')).not.toBeNull();
   });

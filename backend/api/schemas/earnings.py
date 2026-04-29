@@ -220,7 +220,7 @@ class HistoricalStats(BaseModel):
     wins: int
     losses: int
     surprise_beat_rate: float
-    iv_vs_hist_vol_points: float | None
+    iv_vs_hist_vol_points: float | None = None
 
 
 class HistoricalBlock(BaseModel):
@@ -269,9 +269,9 @@ class EarningsDetail(BaseModel):
     strike_ladder: StrikeLadder | None = None
     claude_structured: ClaudeStructured | None = None
     claude_full_research: ClaudeFullResearch | None = None
-    # B-63: `historical_earnings` removed — the upstream loader was a stub
-    # that always returned None. Restore once the FMP surprises join is
-    # wired in a dedicated follow-up.
+    # Historical per-quarter earnings moves. Nullable because upstream
+    # surprise/price joins may be unavailable for a symbol.
+    historical_earnings: HistoricalBlock | None = None
     iv_term_structure: list[IVTermPoint] | None = None
     skew: SkewBlock | None = None
     news: list[NewsArticle] = Field(default_factory=list)

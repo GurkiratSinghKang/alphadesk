@@ -122,9 +122,7 @@ def test_detail_route_returns_stub_for_off_calendar_symbol():
     assert body["claude_structured"] is None
     assert body["claude_full_research"] is None
     assert body["strike_ladder"] is None
-    # B-63 removed the `historical_earnings` field from EarningsDetail entirely;
-    # it used to hold stub data and was replaced by `metrics.hist_avg_abs_move_pct`.
-    assert "historical_earnings" not in body
+    assert body["historical_earnings"] is None
     assert body["iv_term_structure"] is None
     assert body["skew"] is None
     assert body["news"] == []

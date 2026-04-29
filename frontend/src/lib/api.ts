@@ -23,6 +23,9 @@ import type {
   ClaudeStructured,
   ClaudeFullResearch,
   ComparableSetup,
+  HistQuarter,
+  HistoricalBlock,
+  HistoricalStats,
   IVTermPoint,
   SkewBlock,
   LadderRow,
@@ -2059,9 +2062,25 @@ interface RawClaudeFullResearch {
   generated_at: string;
 }
 
-// B-63: RawHistQuarter / RawHistoricalStats / RawHistoricalBlock removed —
-// EarningsDetail no longer carries `historical_earnings`. See companion
-// note in the mapper section.
+interface RawHistQuarter {
+  report_date: string;
+  surprise_pct: number | null;
+  next_day_move_pct: number;
+  five_day_move_pct: number;
+}
+
+interface RawHistoricalStats {
+  avg_abs_move_pct: number;
+  wins: number;
+  losses: number;
+  surprise_beat_rate: number;
+  iv_vs_hist_vol_points: number | null;
+}
+
+interface RawHistoricalBlock {
+  quarters: RawHistQuarter[];
+  stats: RawHistoricalStats;
+}
 
 interface RawIVTermPoint {
   expiry: string;
@@ -2118,6 +2137,7 @@ interface RawEarningsDetail {
   strike_ladder: RawStrikeLadder | null;
   claude_structured: RawClaudeStructured | null;
   claude_full_research: RawClaudeFullResearch | null;
+  historical_earnings?: RawHistoricalBlock | null;
   iv_term_structure: RawIVTermPoint[] | null;
   skew: RawSkewBlock | null;
   news: RawEarningsNewsArticle[];
@@ -2251,11 +2271,31 @@ function mapMetrics(raw: RawEarningsMetricsBlock): EarningsMetricsBlock {
   };
 }
 
-// B-63: mapHistQuarter / mapHistoricalStats / mapHistoricalBlock removed —
-// the backend dropped `historical_earnings` from EarningsDetail (the upstream
-// loader was a stub). The HistoricalMoves component + its types/tests stay
-// in tree as scaffolding; restore the mappers here when the FMP-surprises
-// join lands as the follow-up B-63 PR.
+function mapHistQuarter(raw: RawHistQuarter): HistQuarter {
+  return {
+    reportDate: raw.report_date,
+    surprisePct: raw.surprise_pct,
+    nextDayMovePct: raw.next_day_move_pct,
+    fiveDayMovePct: raw.five_day_move_pct,
+  };
+}
+
+function mapHistoricalStats(raw: RawHistoricalStats): HistoricalStats {
+  return {
+    avgAbsMovePct: raw.avg_abs_move_pct,
+    wins: raw.wins,
+    losses: raw.losses,
+    surpriseBeatRate: raw.surprise_beat_rate,
+    ivVsHistVolPoints: raw.iv_vs_hist_vol_points,
+  };
+}
+
+function mapHistoricalBlock(raw: RawHistoricalBlock): HistoricalBlock {
+  return {
+    quarters: raw.quarters.map(mapHistQuarter),
+    stats: mapHistoricalStats(raw.stats),
+  };
+}
 
 function mapIVTermPoint(raw: RawIVTermPoint): IVTermPoint {
   return { expiry: raw.expiry, dte: raw.dte, atmIv: raw.atm_iv };
@@ -2316,6 +2356,9 @@ export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     strikeLadder: raw.strike_ladder ? mapStrikeLadder(raw.strike_ladder) : null,
     claudeStructured: raw.claude_structured ? mapClaudeStructured(raw.claude_structured) : null,
     claudeFullResearch: raw.claude_full_research ? mapClaudeFullResearch(raw.claude_full_research) : null,
+    historicalEarnings: raw.historical_earnings
+      ? mapHistoricalBlock(raw.historical_earnings)
+      : null,
     ivTermStructure: raw.iv_term_structure ? raw.iv_term_structure.map(mapIVTermPoint) : null,
     skew: raw.skew ? mapSkew(raw.skew) : null,
     news: (raw.news ?? []).map(mapNewsArticle),

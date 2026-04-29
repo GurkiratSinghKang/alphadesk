@@ -337,6 +337,32 @@ async def test_get_detail_merges_all_blocks():
         "hv_20": 0.42, "hv_50": 0.38, "hv_100": 0.35, "hv_iv_ratio": 0.71,
         "expected_move_pct": 0.064, "expected_move_dollars": 12.8,
         "hist_avg_abs_move_pct": 0.052, "beat_rate": 0.87,
+        "historical_stats": {
+            "avg_abs_move_pct": 0.052,
+            "wins": 2,
+            "losses": 1,
+            "surprise_beat_rate": 0.67,
+        },
+        "historical_quarters": [
+            {
+                "report_date": "2026-01-30",
+                "surprise_pct": 0.08,
+                "next_day_move_pct": 0.04,
+                "five_day_move_pct": 0.05,
+            },
+            {
+                "report_date": "2025-10-30",
+                "surprise_pct": -0.02,
+                "next_day_move_pct": -0.03,
+                "five_day_move_pct": -0.01,
+            },
+            {
+                "report_date": "2025-07-30",
+                "surprise_pct": 0.04,
+                "next_day_move_pct": 0.08,
+                "five_day_move_pct": 0.07,
+            },
+        ],
         "days_to_earnings": 1, "days_to_expiry": 3,
     }
     future_date = (date.today() + timedelta(days=1)).isoformat()
@@ -362,6 +388,9 @@ async def test_get_detail_merges_all_blocks():
     assert detail.symbol == "NVDA"
     assert detail.quote.last == 200.0
     assert detail.metrics.iv_rank == 78
+    assert detail.historical_earnings is not None
+    assert len(detail.historical_earnings.quarters) == 3
+    assert detail.historical_earnings.stats.wins == 2
     # Blocks that returned None must stay None
     assert detail.strike_ladder is None
     assert detail.claude_structured is None

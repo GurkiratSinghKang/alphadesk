@@ -613,8 +613,8 @@ export interface EarningsDetail {
   strikeLadder: StrikeLadder | null;
   claudeStructured: ClaudeStructured | null;
   claudeFullResearch: ClaudeFullResearch | null;
-  // B-63: `historicalEarnings` removed — backend loader was a stub; the
-  // FMP surprises join will return as a dedicated follow-up PR.
+  /** Recent historical earnings moves joined from backend surprise data. */
+  historicalEarnings?: HistoricalBlock | null;
   ivTermStructure: IVTermPoint[] | null;
   skew: SkewBlock | null;
   news: EarningsNewsArticle[];

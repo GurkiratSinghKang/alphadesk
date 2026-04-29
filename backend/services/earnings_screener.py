@@ -411,6 +411,7 @@ from api.schemas.earnings import (  # noqa: E402 — after helpers by design
     ClaudeFullResearch,
     ClaudeStructured,
     EarningsDetail,
+    HistoricalBlock,
     IVTermPoint,
     MetricsBlock,
     NewsArticle,
@@ -819,6 +820,7 @@ async def _load_metrics(
             "premium_yield_put_atm": premium_yield_put_atm,
             "hist_avg_abs_move_pct": historical_stats.get("avg_abs_move_pct"),
             "beat_rate": historical_stats.get("surprise_beat_rate"),
+            "historical_stats": historical_stats,
             "historical_quarters": historical.get("quarters", []) if historical else [],
             "days_to_earnings": days_to_earnings,
             "days_to_expiry": days_to_expiry,
@@ -838,6 +840,28 @@ async def _load_metrics(
             ),
         )
         return None
+
+
+def _historical_block_from_metrics(metrics: Mapping[str, Any] | None) -> HistoricalBlock | None:
+    if not isinstance(metrics, Mapping):
+        return None
+    quarters = metrics.get("historical_quarters")
+    if not isinstance(quarters, list) or not quarters:
+        return None
+    stats = metrics.get("historical_stats")
+    if not isinstance(stats, Mapping):
+        stats = compute_historical_stats(quarters)
+    payload = {
+        "quarters": quarters,
+        "stats": {
+            "avg_abs_move_pct": stats.get("avg_abs_move_pct", 0.0),
+            "wins": stats.get("wins", 0),
+            "losses": stats.get("losses", 0),
+            "surprise_beat_rate": stats.get("surprise_beat_rate", 0.0),
+            "iv_vs_hist_vol_points": stats.get("iv_vs_hist_vol_points"),
+        },
+    }
+    return HistoricalBlock(**payload)
 
 
 async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
@@ -1997,6 +2021,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         strike_ladder=StrikeLadder(**ladder) if ladder else None,
         claude_structured=ClaudeStructured(**claude) if claude else None,
         claude_full_research=None,
+        historical_earnings=_historical_block_from_metrics(metrics),
         iv_term_structure=[IVTermPoint(**p) for p in iv_term] if iv_term else None,
         skew=SkewBlock(**skew) if skew else None,
         news=[NewsArticle(**n) for n in news],

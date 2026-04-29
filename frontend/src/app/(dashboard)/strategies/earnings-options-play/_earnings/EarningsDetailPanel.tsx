@@ -18,9 +18,7 @@ import DecisionStrip from "./DecisionStrip";
 import MetricsStrip from "./MetricsStrip";
 import ClaudeThesisCard from "./ClaudeThesisCard";
 import StrikeLadder from "./StrikeLadder";
-// B-63: HistoricalMoves removed — backend loader was stubbed and the
-// `historical_earnings` field is gone from EarningsDetail. Restore when
-// the FMP surprises join lands.
+import HistoricalMoves from "./HistoricalMoves";
 import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
 import TradeButtonRow from "./TradeButtonRow";
@@ -249,6 +247,9 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           // chosen strategy's profit range — Tastytrade signature.
           hoveredStrategyZone={hoveredStrategyZone}
         />
+      )}
+      {detail.historicalEarnings && (
+        <HistoricalMoves historical={detail.historicalEarnings} />
       )}
 
       {isWide ? (

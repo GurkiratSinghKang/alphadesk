@@ -244,6 +244,7 @@ describe('mapEarningsDetail', () => {
     report_date: '2026-04-23', report_time: 'AMC' as const,
     quote: null, metrics: null, strike_ladder: null,
     claude_structured: null, claude_full_research: null,
+    historical_earnings: null,
     iv_term_structure: null, skew: null,
     news: [], partial: false,
     generated_at: '2026-04-23T15:00:00Z',
@@ -287,6 +288,36 @@ describe('mapEarningsDetail', () => {
       error_codes: ['some_brand_new_code', 'iv_unavailable'] as unknown as string[],
     });
     expect(out.errorCodes).toEqual(['iv_unavailable', 'some_brand_new_code']);
+  });
+
+  it('maps historical earnings quarters and stats', () => {
+    const out = mapEarningsDetail({
+      ...baseRaw,
+      historical_earnings: {
+        quarters: [
+          {
+            report_date: '2026-01-30',
+            surprise_pct: 0.08,
+            next_day_move_pct: 0.042,
+            five_day_move_pct: 0.053,
+          },
+        ],
+        stats: {
+          avg_abs_move_pct: 0.042,
+          wins: 1,
+          losses: 0,
+          surprise_beat_rate: 1,
+          iv_vs_hist_vol_points: null,
+        },
+      },
+    });
+    expect(out.historicalEarnings?.quarters[0]).toEqual({
+      reportDate: '2026-01-30',
+      surprisePct: 0.08,
+      nextDayMovePct: 0.042,
+      fiveDayMovePct: 0.053,
+    });
+    expect(out.historicalEarnings?.stats.avgAbsMovePct).toBe(0.042);
   });
 });
 
