@@ -37,11 +37,39 @@ Validation after these fixes:
 Still open:
 
 - Dedicated event-level options backtest harness.
-- Explainable edge score and candidate ranking.
+- Full explainable edge score and candidate ranking in the primary calendar.
 - Mobile swipe-card queue and web compare/order queue.
 - `/help/earnings-data` route.
 - BMO/AMC timing enrichment.
 - Claude unavailable retry/full-research state.
+
+### 2026-04-29 Follow-up Strategy Pass
+
+Closed after the first remediation batch:
+
+- Earnings setup recommendations are now constrained to actionable order flows. Calendar/detail prompts no longer suggest non-ticketable ideas as the primary trade.
+- Earnings replay now compares all ticketable setup shapes instead of replaying only the suggested setup, so users can see whether the recommendation beats other defined-risk alternatives.
+- Earnings decision counts now apply only to the currently visible calendar rows, avoiding stale saved/queued/discarded counts from old windows.
+- The related `earnings_vol` research strategy now honors `after_close_only` and minimum underlying price filters in candidate diagnostics.
+- The related `vrp_harvest` research strategy now keeps the executable gate closed when no options chain is available, instead of exposing a misleading open entry gate.
+- `pead` now exposes skipped-entry reason counts for held/pending names, SUE threshold failures, disabled shorts, liquidity, and overlapping earnings.
+
+Cross-strategy reliability fixes completed in the same pass:
+
+- `momentum_quality`: candidate funnel diagnostics, selected symbol scores, and fill-driven stale-universe cleanup.
+- `dual_momentum`: month-end rebalances now refresh the 100% target allocation even when the target ETF is already held; diagnostics explain the equity gate and missing-data fallbacks.
+- `rsi2_reversal`: queued entries now consume capacity and block duplicate orders; entry diagnostics show skip reasons.
+- `ts_momentum`: diagnostics now trace signal, volatility, cap, drawdown, short-filter, and final-weight construction.
+- `kama_breakout`: queued entries now reserve slots and the entry funnel reports gate failures.
+- `orb`: research shell prefetches the union of configurable profiles so a `spy_qqq` run cannot miss SPY.
+- `vwap`: research-shell diagnostics now show the active universe and missing 5-minute bar dependency.
+- `pairs_trading`: pair exits now require both legs to confirm before clearing the confirmed position ledger.
+- `regime_adaptive`: month-end rebalances now refresh target weights even when the regime is unchanged; regime history is capped to avoid unbounded state growth.
+
+Validation for this follow-up pass:
+
+- `PYTHONPATH=backend .venv/bin/python -m pytest backend/strategies/*/tests/test_strategy.py -q`: 173 passed.
+- Targeted suites for each touched strategy passed before commit.
 
 ## Evidence Collected
 
