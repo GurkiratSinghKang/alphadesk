@@ -21,6 +21,8 @@ import {
   type StrategyPerformance,
 } from "@/lib/api";
 import {
+  LIVE_DISABLED,
+  PAPER_ONLY,
   STRATEGY_META,
   STRATEGY_ORDER,
   metaStage,
@@ -65,23 +67,12 @@ interface ListingStrategy {
   maxDD: number | null; // fraction; sign varies per backend
   // A3#2 (Wave 8) — routing flags driving the card pill. Sourced from the
   // ``/api/v1/strategies/catalog`` endpoint once it resolves; pre-seeded
-  // from the static client-side manifest below so the pill appears on
-  // first paint for ``orb`` (live-denied) and ``kama-breakout`` (paper-only).
+  // from the shared client-side manifest so the pill appears on first paint.
   liveDisabled: boolean;
   paperOnly: boolean;
 }
 
 type Bucket = "active" | "paused" | "coming_soon";
-
-// ─── A3#2 — static routing-flag manifest ─────────────────────
-// Mirrors ``backend/core/config.py``'s ``STRATEGY_LIVE_DISABLED`` /
-// ``STRATEGY_PAPER_ONLY`` sets so the list-page card pills appear
-// immediately, before the catalog endpoint round-trips. The backend
-// catalog response is still the source of truth — it unions with this
-// manifest, so a flag flipped server-side but not yet mirrored here still
-// lights the pill. Update whenever the backend sets change.
-const LIVE_DISABLED: ReadonlySet<string> = new Set(["orb"]);
-const PAPER_ONLY: ReadonlySet<string> = new Set(["kama-breakout"]);
 
 // ─── Formatters ──────────────────────────────────────────────
 
@@ -406,9 +397,8 @@ export default function StrategiesListingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // A3#2 (Wave 8) — routing-flag catalog. ``null`` during first paint;
   // replaced by the server payload once ``/api/v1/strategies/catalog``
-  // resolves. The per-card pill falls back to ``LIVE_DISABLED`` /
-  // ``PAPER_ONLY`` until this lands, so the pill is never absent for the
-  // strategies those static sets cover.
+  // resolves. The per-card pill falls back to the shared ``LIVE_DISABLED`` /
+  // ``PAPER_ONLY`` manifests until this lands.
   const [catalog, setCatalog] = useState<StrategyCatalogEntry[] | null>(null);
 
   // Initial summaries — fills investedAmount / status / positions for every
@@ -441,8 +431,7 @@ export default function StrategiesListingPage() {
   }, [loadSummaries]);
 
   // A3#2 (Wave 8) — catalog fetch (cheap, no DB). Failure is non-fatal:
-  // the static manifest still lights the pill for ``orb`` and
-  // ``kama-breakout``, which are the cases that actually matter.
+  // the shared manifest still lights first-paint routing pills.
   useEffect(() => {
     let cancelled = false;
     getStrategyCatalog()

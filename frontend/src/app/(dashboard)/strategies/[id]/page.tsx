@@ -22,7 +22,7 @@ import {
   type StrategyPositionDetail,
 } from "@/lib/api";
 import { STRATEGY_CONTENT, type StrategyContent } from "@/lib/strategy-content";
-import { STRATEGY_META } from "@/lib/strategies";
+import { LIVE_DISABLED, PAPER_ONLY, STRATEGY_META } from "@/lib/strategies";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 
@@ -47,6 +47,7 @@ const SLUG_TO_ID: Record<string, string> = {
   // Legacy short-form alias (kept for any bookmarks).
   "earnings-vol": "earnings-vol-premium",
   // Underscore fallbacks — one per canonical strategy id.
+  earnings_options_play: "earnings-options-play",
   momentum_quality: "momentum-quality",
   vrp_harvesting: "vrp-harvesting",
   earnings_vol_premium: "earnings-vol-premium",
@@ -56,7 +57,7 @@ const SLUG_TO_ID: Record<string, string> = {
   rsi2_reversal: "rsi2-reversal",
   dual_momentum: "dual-momentum",
   pairs_trading: "pairs-trading",
-  pairs_stat_arb: "pairs-stat-arb",
+  pairs_stat_arb: "pairs-trading",
   kama_breakout: "kama-breakout",
   vwap_strategy: "vwap-strategy",
   claude_alpha: "claude-alpha",
@@ -70,18 +71,6 @@ const SLUG_TO_ID: Record<string, string> = {
 function resolveStrategyId(slug: string): string {
   return SLUG_TO_ID[slug] ?? slug;
 }
-
-// ─── Wave 8 — static routing-flag manifest ──────────────────────
-// A3#6 — the "NOT READY FOR LIVE" pill must appear on first paint for
-// strategies like `orb` (live-denied) and `kama-breakout` (paper-only)
-// because users shouldn't see a headline "OOS Sharpe 8.34" without the
-// caveat, even for the ~500ms that `perf` is loading. Mirror the backend's
-// `STRATEGY_LIVE_DISABLED` / `STRATEGY_PAPER_ONLY` sets (see
-// `backend/core/config.py`); the server flag still wins after it arrives
-// via `perf` (see `StrategyDisclosure` props below). When the backend flips
-// a new strategy into either set, this manifest has to be updated.
-const STATIC_LIVE_DISABLED: ReadonlySet<string> = new Set(["orb"]);
-const STATIC_PAPER_ONLY: ReadonlySet<string> = new Set(["kama-breakout"]);
 
 // ─── Category label from STRATEGY_META.group ───────────────────
 
@@ -455,9 +444,9 @@ export default function StrategyDetailPage() {
 
   const status = statusRegime(perf?.status, {
     liveDisabled:
-      STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false),
+      LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false),
     paperOnly:
-      STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false),
+      PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false),
   });
 
   // Wave 26 — hero metrics now prefer OOS backtest values. `cagr` and
@@ -619,9 +608,9 @@ export default function StrategyDetailPage() {
         ref={focusTargetRef}
         tabIndex={-1}
         aria-label={
-          (STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false))
+          (LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false))
             ? `${meta.name} — not ready for live`
-            : (STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false))
+            : (PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false))
               ? `${meta.name} — paper-only`
               : meta.name
         }
@@ -656,8 +645,8 @@ export default function StrategyDetailPage() {
           (renders nothing) for PASS strategies — the 7 non-disclosed pages
           remain unchanged.
 
-          A3#6 (Wave 8) — the pill now pre-seeds from the static client-side
-          manifest (``STATIC_LIVE_DISABLED`` / ``STATIC_PAPER_ONLY``) so it
+          A3#6 (Wave 8) — the pill now pre-seeds from the shared client-side
+          manifest (``LIVE_DISABLED`` / ``PAPER_ONLY``) so it
           appears on first paint. Without this, researchers saw a headline
           high-OOS-Sharpe banner for ~500ms with no "NOT READY FOR LIVE"
           pill while ``perf`` was loading — a dangerous gap for ``orb`` and
@@ -667,10 +656,10 @@ export default function StrategyDetailPage() {
       <StrategyDisclosure
         strategyId={strategyId}
         liveDisabled={
-          STATIC_LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false)
+          LIVE_DISABLED.has(strategyId) || (perf?.live_disabled ?? false)
         }
         paperOnly={
-          STATIC_PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false)
+          PAPER_ONLY.has(strategyId) || (perf?.paper_only ?? false)
         }
       />
       </div>

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { STRATEGY_META, STRATEGY_ORDER } from '@/lib/strategies';
+import {
+  LIVE_DISABLED,
+  PAPER_ONLY,
+  STRATEGY_META,
+  STRATEGY_ORDER,
+} from '@/lib/strategies';
 
 describe('Strategy configuration', () => {
   it('has metadata for all strategies in order', () => {
@@ -36,5 +41,19 @@ describe('Strategy configuration', () => {
     expect(STRATEGY_META['vwap-strategy'].regimeNote).toContain('no live signals');
     expect(STRATEGY_META['gap-fill'].regimeNote).toContain('Planned');
     expect(STRATEGY_META['earnings-vol-premium'].regimeNote).toContain('live disabled');
+  });
+
+  it('shares the first-paint routing flags across catalogue and detail pages', () => {
+    expect([...LIVE_DISABLED].sort()).toEqual([
+      'earnings-options-play',
+      'earnings-vol-premium',
+      'orb',
+      'vrp-harvesting',
+      'vwap-strategy',
+    ]);
+    expect([...PAPER_ONLY].sort()).toEqual([
+      'earnings-options-play',
+      'kama-breakout',
+    ]);
   });
 });
