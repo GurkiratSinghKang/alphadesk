@@ -94,6 +94,8 @@ class TestRun:
         assert "vrp" in result.diagnostics
         assert result.diagnostics["options_chain_available"] is False
         assert result.diagnostics["term_structure_gate"] is None
+        assert result.diagnostics["entry_gate_open"] is False
+        assert result.diagnostics["entry_gate_blocked_reason"] == "options_chain_unavailable"
         assert any("Research shell" in w for w in result.warnings)
 
     def test_warmup_bars_returns_empty(self):
@@ -113,3 +115,17 @@ class TestRun:
         strat = VRPHarvestStrategy()
         result = strat.run(_build_input(bars, date(2024, 4, 30)), VRPHarvestParams())
         assert result.diagnostics.get("kill_switch_tripped") is True
+        assert result.diagnostics.get("entry_gate_open") is False
+
+    def test_proxy_gate_is_separate_from_executable_entry_gate(self):
+        closes = np.linspace(400.0, 430.0, 120)
+        bars = _build_bars(closes, date(2024, 4, 30))
+        strat = VRPHarvestStrategy()
+        result = strat.run(
+            _build_input(bars, date(2024, 4, 30)),
+            VRPHarvestParams(vrp_entry_threshold=0.0, min_iv_30=0.0),
+        )
+
+        assert result.diagnostics.get("proxy_entry_gate_open") is True
+        assert result.diagnostics.get("entry_gate_open") is False
+        assert result.diagnostics.get("entry_gate_blocked_reason") == "options_chain_unavailable"

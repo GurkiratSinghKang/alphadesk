@@ -104,11 +104,14 @@ class VRPHarvestStrategy(Strategy):
         diagnostics["term_structure_gate"] = None
         diagnostics["tail_hedge_available"] = False
         diagnostics["kill_switch_tripped"] = bool(iv_proxy_30 >= params.vix_kill_switch)
-        diagnostics["entry_gate_open"] = bool(
+        proxy_entry_gate_open = bool(
             vrp >= params.vrp_entry_threshold
             and iv_proxy_30 >= params.min_iv_30
             and iv_proxy_30 < params.vix_kill_switch
         )
+        diagnostics["proxy_entry_gate_open"] = proxy_entry_gate_open
+        diagnostics["entry_gate_open"] = False
+        diagnostics["entry_gate_blocked_reason"] = "options_chain_unavailable"
         warnings.append(
             "Research shell: StrategyInput has no options chain yet; "
             "VRP diagnostics are proxy-only and no SPY strangle signals are emitted."
