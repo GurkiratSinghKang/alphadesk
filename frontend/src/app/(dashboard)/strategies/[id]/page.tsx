@@ -485,9 +485,9 @@ export default function StrategyDetailPage() {
   const hitRateBackend = perf?.hit_rate != null ? perf.hit_rate * 100 : null;
   const hitRateDisplay = hasAnyBacktestMetric ? (hitRateBackend ?? hitRate) : null;
   const showNoBacktestNote = perf != null && !hasAnyBacktestMetric;
-  // Suspicious-Sharpe caveat threshold. ORB publishes 8.34 in the live API;
-  // the editorial caveat ("Live deployment may diverge") renders next to the
-  // OOS SHARPE cell when the value exceeds this threshold.
+  // High-OOS-Sharpe caveat threshold. Research-shell strategies can publish
+  // excellent checked-in OOS metrics while still being explicitly not ready
+  // for live capital; render the editorial caveat when a value clears this.
   const SHARPE_CAVEAT_THRESHOLD = 3.0;
   const suspiciousSharpe =
     perf?.sharpe_ratio != null && perf.sharpe_ratio > SHARPE_CAVEAT_THRESHOLD;
@@ -659,7 +659,7 @@ export default function StrategyDetailPage() {
           A3#6 (Wave 8) — the pill now pre-seeds from the static client-side
           manifest (``STATIC_LIVE_DISABLED`` / ``STATIC_PAPER_ONLY``) so it
           appears on first paint. Without this, researchers saw a headline
-          "OOS Sharpe 8.34" banner for ~500ms with no "NOT READY FOR LIVE"
+          high-OOS-Sharpe banner for ~500ms with no "NOT READY FOR LIVE"
           pill while ``perf`` was loading — a dangerous gap for ``orb`` and
           ``kama-breakout``. Once ``perf`` arrives, the backend flag can
           still widen the set (``||``), so the server remains the source of
@@ -675,10 +675,10 @@ export default function StrategyDetailPage() {
       />
       </div>
 
-      {/* Wave 26 — honesty caveat for implausibly high OOS Sharpe (e.g. ORB's
-          8.34). Instead of hiding the number we attach a small italic
-          disclosure so researchers understand in-sample selection bias can
-          flatter backtest Sharpe. Renders only when the threshold is cleared. */}
+      {/* Wave 26 — honesty caveat for unusually high OOS Sharpe. Instead of
+          hiding the number we attach a small italic disclosure so researchers
+          understand in-sample selection bias can flatter backtest Sharpe.
+          Renders only when the threshold is cleared. */}
       {suspiciousSharpe ? (
         <p
           data-testid="sharpe-caveat"

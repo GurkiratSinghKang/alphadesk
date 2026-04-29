@@ -92,7 +92,7 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Earnings Volatility Premium",
     shortName: "Earnings Vol",
     icon: BarChart3,
-    regimeNote: "Paused in high-vol regimes",
+    regimeNote: "Options research · live disabled",
     group: "fundamental",
   },
   "regime-adaptive": {
@@ -137,7 +137,7 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Time-Series Momentum",
     shortName: "TS Momentum",
     icon: LineChart,
-    regimeNote: "200-SMA trend following, crisis alpha",
+    regimeNote: "Sign-of-12M ETF momentum",
     group: "technical",
   },
   "rsi2-reversal": {
@@ -151,7 +151,7 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Dual Momentum",
     shortName: "Dual Momentum",
     icon: Layers,
-    regimeNote: "Top-quintile relative strength",
+    regimeNote: "GEM: US / ex-US / bonds",
     group: "technical",
   },
   "pairs-trading": {
@@ -176,14 +176,14 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Opening Range Breakout",
     shortName: "ORB",
     icon: Clock,
-    regimeNote: "Intraday, first 30-min range",
+    regimeNote: "Research shell · no live signals",
     group: "technical",
   },
   "vwap-strategy": {
     name: "VWAP Bounce / Breakout",
     shortName: "VWAP Strategy",
     icon: CandlestickChart,
-    regimeNote: "Institutional benchmark levels",
+    regimeNote: "Research shell · no live signals",
     group: "technical",
   },
   "mean-reversion": {
@@ -206,7 +206,7 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Overnight Gap Fill",
     shortName: "Gap Fill",
     icon: ArrowLeftRight,
-    regimeNote: "Intraday, paused after hours",
+    regimeNote: "Planned intraday concept",
     group: "technical",
     stage: "planned",
   },
@@ -234,9 +234,8 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
  * trade-button row to gate the "Submit Live" toggle.
  *
  * Round-6 / I-16: previously inferred from a missing-id heuristic that
- * silently let kama_breakout (paper-only) and the four research
- * strategies (vrp_harvest, earnings_vol, vwap, orb) past the gate.
- * Hardcoding the list here keeps the FE contract explicit.
+ * silently let paper-only or live-disabled research/screener entries past
+ * the gate. Hardcoding the list here keeps the FE contract explicit.
  */
 export const LIVE_DISABLED: ReadonlySet<string> = new Set<string>([
   "vrp-harvesting",

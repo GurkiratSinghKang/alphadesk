@@ -26,4 +26,15 @@ describe('Strategy configuration', () => {
     const unique = new Set(STRATEGY_ORDER);
     expect(unique.size).toBe(STRATEGY_ORDER.length);
   });
+
+  it('keeps strategy summary notes aligned with implementation stage', () => {
+    expect(STRATEGY_META['ts-momentum'].regimeNote).toContain('Sign-of-12M');
+    expect(STRATEGY_META['ts-momentum'].regimeNote).not.toContain('200-SMA');
+    expect(STRATEGY_META['dual-momentum'].regimeNote).toContain('GEM');
+    expect(STRATEGY_META['dual-momentum'].regimeNote).not.toContain('Top-quintile');
+    expect(STRATEGY_META.orb.regimeNote).toContain('Research shell');
+    expect(STRATEGY_META['vwap-strategy'].regimeNote).toContain('no live signals');
+    expect(STRATEGY_META['gap-fill'].regimeNote).toContain('Planned');
+    expect(STRATEGY_META['earnings-vol-premium'].regimeNote).toContain('live disabled');
+  });
 });
