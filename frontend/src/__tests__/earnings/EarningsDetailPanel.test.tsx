@@ -76,6 +76,65 @@ describe("EarningsDetailPanel", () => {
     expect(onCandidateDecision).toHaveBeenNthCalledWith(3, null);
   });
 
+  it("maps mobile card swipes to discard, save, and queue actions", () => {
+    const onCandidateDecision = vi.fn();
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={detail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+        onCandidateDecision={onCandidateDecision}
+      />,
+    );
+    const swipeCard = container.querySelector('[data-slot="candidate-swipe-card"]') as HTMLElement;
+    expect(swipeCard).not.toBeNull();
+
+    fireEvent.pointerDown(swipeCard, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 160,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(swipeCard, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 70,
+      clientY: 104,
+    });
+
+    fireEvent.pointerDown(swipeCard, {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 70,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(swipeCard, {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 160,
+      clientY: 101,
+    });
+
+    fireEvent.pointerDown(swipeCard, {
+      pointerId: 3,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 180,
+    });
+    fireEvent.pointerUp(swipeCard, {
+      pointerId: 3,
+      pointerType: "touch",
+      clientX: 104,
+      clientY: 90,
+    });
+
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(2, "saved");
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(3, "order");
+  });
+
   // ── Round-4 additions ─────────────────────────────────────
 
   it("surfaces a partial-data banner when partial=true and errorCodes has codes (CLUSTER D/12)", () => {

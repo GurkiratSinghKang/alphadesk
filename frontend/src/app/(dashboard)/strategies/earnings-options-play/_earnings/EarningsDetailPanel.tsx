@@ -1,6 +1,13 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
 import type { EarningsCandidateDecision, EarningsDetail, EarningsErrorCode } from "@/types";
 import type { SelectionSource } from "../page";
@@ -75,6 +82,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
     ref,
   ) {
   const isWide = useIsWide(1200);
+  const swipeHandlers = useCandidateDecisionSwipe(onCandidateDecision);
 
   // Slice-6 / CH-3F: which defined-risk strategy is the user hovering?
   // Set by ``TradeButtonRow`` via the new ``onHoverStrategy`` callback;
@@ -200,16 +208,26 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         quote={detail.quote} generatedAt={detail.generatedAt}
         selectionSource={selectionSource}
       />
-      <CandidateDecisionBar
-        decision={candidateDecision}
-        onDecision={onCandidateDecision}
-      />
-      {/* Round-8 single-view B: DECISION STRIP — page hero. Renders
-          only when Claude's structured response has loaded; the
-          ``claude_unavailable`` partial-data banner above already
-          surfaces the missing-data case explicitly so a placeholder
-          strip would just add noise. */}
-      <DecisionStrip structured={detail.claudeStructured} metrics={detail.metrics} />
+      <div
+        data-slot="candidate-swipe-card"
+        aria-describedby="candidate-swipe-card-hint"
+        className="touch-pan-y select-none"
+        {...swipeHandlers}
+      >
+        <span id="candidate-swipe-card-hint" className="sr-only">
+          On touch screens, swipe left to discard, right to save, or up to queue an order.
+        </span>
+        <CandidateDecisionBar
+          decision={candidateDecision}
+          onDecision={onCandidateDecision}
+        />
+        {/* Round-8 single-view B: DECISION STRIP — page hero. Renders
+            only when Claude's structured response has loaded; the
+            ``claude_unavailable`` partial-data banner above already
+            surfaces the missing-data case explicitly so a placeholder
+            strip would just add noise. */}
+        <DecisionStrip structured={detail.claudeStructured} metrics={detail.metrics} />
+      </div>
       <MetricsStrip metrics={detail.metrics} />
       {/* Slice-3 / FZ-1 (2026 design brief, Tastytrade signature):
           page-level expected-move strip. Shows the underlying price
@@ -290,6 +308,55 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
 );
 
 export default EarningsDetailPanel;
+
+const SWIPE_MIN_PX = 72;
+const SWIPE_AXIS_RATIO = 1.2;
+
+function useCandidateDecisionSwipe(
+  onDecision?: (decision: EarningsCandidateDecision | null) => void,
+) {
+  const startRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+
+  function onPointerDown(e: PointerEvent<HTMLElement>) {
+    if (!onDecision) return;
+    if (e.pointerType === "mouse") return;
+    if (isInteractiveSwipeTarget(e.target)) return;
+    startRef.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  }
+
+  function onPointerUp(e: PointerEvent<HTMLElement>) {
+    const start = startRef.current;
+    startRef.current = null;
+    if (!onDecision || !start || start.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (absX >= SWIPE_MIN_PX && absX >= absY * SWIPE_AXIS_RATIO) {
+      onDecision(dx > 0 ? "saved" : "discarded");
+      return;
+    }
+    if (dy <= -SWIPE_MIN_PX && absY >= absX * SWIPE_AXIS_RATIO) {
+      onDecision("order");
+    }
+  }
+
+  function onPointerCancel() {
+    startRef.current = null;
+  }
+
+  return { onPointerDown, onPointerUp, onPointerCancel };
+}
+
+function isInteractiveSwipeTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      'a,button,input,select,textarea,[role="button"],[contenteditable="true"]',
+    ),
+  );
+}
 
 function CandidateDecisionBar({
   decision,
