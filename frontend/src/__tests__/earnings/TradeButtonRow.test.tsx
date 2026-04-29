@@ -18,10 +18,12 @@ const ladder: StrikeLadder = {
 };
 
 describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
-  it("renders defined-risk buttons: bull put / bear call / iron condor / long straddle", () => {
+  it("renders defined-risk buttons including directional debit verticals", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
     expect(container.textContent).toMatch(/bull put spread/i);
     expect(container.textContent).toMatch(/bear call spread/i);
+    expect(container.textContent).toMatch(/bull call spread/i);
+    expect(container.textContent).toMatch(/bear put spread/i);
     expect(container.textContent).toMatch(/iron condor/i);
     expect(container.textContent).toMatch(/long straddle/i);
     // No undefined-risk pills any more — every button is capped.
@@ -49,6 +51,24 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(href).toContain("combo_type=vertical_spread");
     expect(href).toMatch(/205.*sell/);
     expect(href).toMatch(/210.*buy/);
+  });
+
+  it("bull call spread buys ATM call and sells 30Δ call", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-bull-call-spread"]') as HTMLAnchorElement;
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("combo_type=vertical_spread");
+    expect(href).toMatch(/205.*buy/);
+    expect(href).toMatch(/210.*sell/);
+  });
+
+  it("bear put spread buys ATM put and sells 30Δ put", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-bear-put-spread"]') as HTMLAnchorElement;
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("combo_type=vertical_spread");
+    expect(href).toMatch(/200.*buy/);
+    expect(href).toMatch(/195.*sell/);
   });
 
   it("iron condor encodes 4 legs (sell 30Δ put/call, buy 15Δ put/call)", () => {

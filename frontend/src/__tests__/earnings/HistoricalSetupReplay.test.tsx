@@ -116,6 +116,21 @@ describe("HistoricalSetupReplay", () => {
     });
   });
 
+  it("supports directional debit verticals from Claude's setup vocabulary", () => {
+    const request = buildHistoricalReplayRequest({
+      ...detail,
+      claudeStructured: {
+        ...detail.claudeStructured!,
+        suggestedPlay: "bull call spread",
+      },
+    });
+
+    expect(request?.events[0]).toMatchObject({
+      topSetup: "bull call spread",
+      premiumYieldCallAtm: 0.032,
+    });
+  });
+
   it("renders backend replay metrics and trade rows", async () => {
     vi.mocked(postEarningsBacktest).mockResolvedValueOnce({
       trades: [

@@ -32,6 +32,36 @@ def test_simulate_long_straddle_loses_when_move_does_not_cover_debit():
     assert trade.return_pct < 0
 
 
+def test_simulate_bull_call_spread_wins_when_rally_clears_debit():
+    trade = simulate_event_trade({
+        "symbol": "AAPL",
+        "report_date": "2026-04-24",
+        "setup": "bull call spread",
+        "expected_move_pct": 0.05,
+        "realized_move_pct": 0.06,
+        "premium_yield_call_atm": 0.035,
+    })
+
+    assert trade.win is True
+    assert trade.return_pct > 0
+    assert trade.reason == "post-report rally cleared debit hurdle"
+
+
+def test_simulate_bear_put_spread_wins_when_selloff_clears_debit():
+    trade = simulate_event_trade({
+        "symbol": "MSFT",
+        "report_date": "2026-04-24",
+        "setup": "bear put spread",
+        "expected_move_pct": 0.05,
+        "realized_move_pct": -0.055,
+        "premium_yield_put_atm": 0.032,
+    })
+
+    assert trade.win is True
+    assert trade.return_pct > 0
+    assert trade.reason == "post-report selloff cleared debit hurdle"
+
+
 def test_run_event_backtest_filters_by_edge_and_reports_metrics():
     result = run_event_backtest(
         [

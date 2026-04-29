@@ -10,6 +10,8 @@ import { fmtNumber } from "@/lib/intl";
  *
  *   · Bull put spread   — bullish premium-selling, capped loss
  *   · Bear call spread  — bearish premium-selling, capped loss
+ *   · Bull call spread  — bullish debit vertical, capped loss
+ *   · Bear put spread   — bearish debit vertical, capped loss
  *   · Iron condor       — non-directional premium-selling, capped both sides
  *   · Long straddle     — directional vol play, max loss = debit paid
  *
@@ -69,6 +71,10 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
   const bullPutSpread = atmPut && farPut ? { short: atmPut, long: farPut } : null;
   // Bear call spread = sell ATM call, buy 30Δ call as protection
   const bearCallSpread = atmCall && farCall ? { short: atmCall, long: farCall } : null;
+  // Bull call spread = buy ATM call, sell 30Δ call against it
+  const bullCallSpread = atmCall && farCall ? { long: atmCall, short: farCall } : null;
+  // Bear put spread = buy ATM put, sell 30Δ put against it
+  const bearPutSpread = atmPut && farPut ? { long: atmPut, short: farPut } : null;
   // Iron condor = bull put spread + bear call spread, all 4 legs at 30Δ/15Δ
   const ironCondor =
     farPut && widePut && farCall && wideCall
@@ -82,7 +88,12 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
   // user saw an empty `<div>` with a top border — looked broken. Show
   // an explicit "narrow chain" message instead.
   const noButtonsAvailable =
-    !bullPutSpread && !bearCallSpread && !ironCondor && !longStraddle;
+    !bullPutSpread
+    && !bearCallSpread
+    && !bullCallSpread
+    && !bearPutSpread
+    && !ironCondor
+    && !longStraddle;
   if (noButtonsAvailable) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
@@ -140,6 +151,50 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           onHoverEnter={() =>
             onHoverStrategy?.([0, bearCallSpread.short.strike])
           }
+          onHoverLeave={() => onHoverStrategy?.(null)}
+        />
+      )}
+      {bullCallSpread && (
+        <DefinedRiskTradeLink
+          dataSlot="trade-button-bull-call-spread"
+          href={buildDebitVerticalSpreadURL({
+            symbol,
+            long: bullCallSpread.long,
+            short: bullCallSpread.short,
+            expiry: ladder.expiry,
+            comboType: "vertical_spread",
+          })}
+          label={`Bull call spread ${fmtNumber(Math.round(bullCallSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullCallSpread.short.strike), { maximumFractionDigits: 0 })}c`}
+          riskCopy={maxLossDebit(
+            bullCallSpread.long.mid - bullCallSpread.short.mid,
+            "Bull call spread",
+          )}
+          onHoverEnter={() => {
+            const breakeven = bullCallSpread.long.strike + Math.max(0, bullCallSpread.long.mid - bullCallSpread.short.mid);
+            onHoverStrategy?.([breakeven, breakeven * 2]);
+          }}
+          onHoverLeave={() => onHoverStrategy?.(null)}
+        />
+      )}
+      {bearPutSpread && (
+        <DefinedRiskTradeLink
+          dataSlot="trade-button-bear-put-spread"
+          href={buildDebitVerticalSpreadURL({
+            symbol,
+            long: bearPutSpread.long,
+            short: bearPutSpread.short,
+            expiry: ladder.expiry,
+            comboType: "vertical_spread",
+          })}
+          label={`Bear put spread ${fmtNumber(Math.round(bearPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
+          riskCopy={maxLossDebit(
+            bearPutSpread.long.mid - bearPutSpread.short.mid,
+            "Bear put spread",
+          )}
+          onHoverEnter={() => {
+            const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
+            onHoverStrategy?.([0, breakeven]);
+          }}
           onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
@@ -264,6 +319,11 @@ function maxLossWidth(a: number, b: number, kind: "credit" | "wing"): string {
   return `Vertical spread · max loss = ($${fmtNumber(widthDollars, { maximumFractionDigits: 2 })} width × 100) − net credit per contract`;
 }
 
+function maxLossDebit(netDebit: number, label: string): string {
+  const debitDollars = Math.max(0, netDebit) * 100;
+  return `${label} · max loss = net debit paid (≈ $${fmtNumber(Math.round(debitDollars), { maximumFractionDigits: 0 })}) per contract`;
+}
+
 /**
  * OCC contract symbol: SYMBOL + YYMMDD + C|P + strike*1000 padded 8 digits.
  * E.g. NVDA 2026-04-25 $205 call = NVDA260425C00205000.
@@ -326,6 +386,33 @@ export function buildVerticalSpreadURL(opts: {
   const shortLeg = shortLim ? `${shortContract}:sell:1:${shortLim}` : `${shortContract}:sell:1`;
   const longLeg = longLim ? `${longContract}:buy:1:${longLim}` : `${longContract}:buy:1`;
   const legs = `${shortLeg},${longLeg}`;
+  const params = new URLSearchParams({
+    symbol: opts.symbol,
+    legs,
+    strategy: STRATEGY_TAG,
+    combo_type: opts.comboType,
+  });
+  return `/trade?${params.toString()}`;
+}
+
+/**
+ * Defined-risk debit vertical: buy the closer-to-money leg and sell the
+ * further OTM leg. Max loss is the net debit paid.
+ */
+export function buildDebitVerticalSpreadURL(opts: {
+  symbol: string;
+  long: LadderRow;
+  short: LadderRow;
+  expiry: string;
+  comboType: "vertical_spread";
+}): string {
+  const longContract = occSymbol(opts.symbol, opts.expiry, opts.long.side, opts.long.strike);
+  const shortContract = occSymbol(opts.symbol, opts.expiry, opts.short.side, opts.short.strike);
+  const longLim = fmtMid(opts.long.mid);
+  const shortLim = fmtMid(opts.short.mid);
+  const longLeg = longLim ? `${longContract}:buy:1:${longLim}` : `${longContract}:buy:1`;
+  const shortLeg = shortLim ? `${shortContract}:sell:1:${shortLim}` : `${shortContract}:sell:1`;
+  const legs = `${longLeg},${shortLeg}`;
   const params = new URLSearchParams({
     symbol: opts.symbol,
     legs,
