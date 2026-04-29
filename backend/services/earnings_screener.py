@@ -146,6 +146,177 @@ def compute_historical_stats(quarters: Sequence[Mapping]) -> dict:
     }
 
 
+def _coerce_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(f) or math.isinf(f) else f
+
+
+def _build_historical_quarters(
+    surprises_df: Any,
+    bars_df: Any,
+    *,
+    asof: date,
+    limit: int = 8,
+) -> list[dict]:
+    """Join FMP earnings rows to daily bars and compute event moves.
+
+    Without reliable historical BMO/AMC timestamps, use a conservative
+    close-to-close event window: previous trading-session close to the
+    next trading-session close after the report date.
+    """
+    if surprises_df is None or bars_df is None:
+        return []
+    if getattr(surprises_df, "empty", False) or getattr(bars_df, "empty", False):
+        return []
+
+    closes: list[tuple[date, float]] = []
+    for row in bars_df.to_dict("records"):
+        bar_date = _coerce_date(row.get("ts"))
+        close = _safe_float(row.get("close"))
+        if bar_date is not None and close is not None and close > 0:
+            closes.append((bar_date, close))
+    closes.sort(key=lambda item: item[0])
+    if len(closes) < 2:
+        return []
+
+    events: list[dict] = []
+    for row in surprises_df.to_dict("records"):
+        event_date = _coerce_date(row.get("date"))
+        if event_date is None or event_date >= asof:
+            continue
+        events.append({**row, "date": event_date})
+    events.sort(key=lambda row: row["date"], reverse=True)
+
+    quarters: list[dict] = []
+    for event in events:
+        event_date = event["date"]
+        prev = [item for item in closes if item[0] < event_date]
+        after = [item for item in closes if item[0] > event_date]
+        if not prev or not after:
+            continue
+        pre_close = prev[-1][1]
+        next_close = after[0][1]
+        five_close = after[min(4, len(after) - 1)][1]
+        if pre_close <= 0:
+            continue
+        quarters.append(
+            {
+                "report_date": event_date.isoformat(),
+                "surprise_pct": _safe_float(event.get("surprise_pct")),
+                "next_day_move_pct": (next_close - pre_close) / pre_close,
+                "five_day_move_pct": (five_close - pre_close) / pre_close,
+            }
+        )
+        if len(quarters) >= limit:
+            break
+    return quarters
+
+
+async def _load_historical_earnings(
+    symbol: str,
+    report_date: date,
+    *,
+    lookback_quarters: int = 8,
+) -> dict | None:
+    """Load last earnings reactions from FMP surprises + adjusted daily bars."""
+    from core.cache import get_cache
+
+    cache_key = f"earnings:historical:{symbol}:{report_date.isoformat()}:{lookback_quarters}"
+    cache = get_cache()
+    cached = await cache.get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    def _load_sync() -> dict | None:
+        from data.providers.alpaca import AlpacaBarProvider
+        from data.providers.fmp_earnings import FMPEarningsProvider
+
+        start = report_date - timedelta(days=365 * 3)
+        end = report_date - timedelta(days=1)
+        with FMPEarningsProvider(timeout=15.0) as earnings_provider:
+            surprises = earnings_provider.surprises(symbol, start, end)
+        if getattr(surprises, "empty", True):
+            return None
+
+        event_dates = [
+            d for d in (_coerce_date(v) for v in surprises["date"].tolist())
+            if d is not None and d < report_date
+        ]
+        if not event_dates:
+            return None
+
+        bars_start = min(event_dates) - timedelta(days=10)
+        bars_end = max(event_dates) + timedelta(days=10)
+        with AlpacaBarProvider(timeout=20.0) as bar_provider:
+            bars = bar_provider.bars([symbol], bars_start, bars_end, tf="1D")
+
+        quarters = _build_historical_quarters(
+            surprises,
+            bars,
+            asof=report_date,
+            limit=lookback_quarters,
+        )
+        if not quarters:
+            return None
+        return {
+            "quarters": quarters,
+            "stats": compute_historical_stats(quarters),
+        }
+
+    try:
+        payload = await asyncio.to_thread(_load_sync)
+    except Exception as e:
+        log.debug(
+            "historical earnings load failed for %s: %s",
+            symbol,
+            _scrub_fmp_error(str(e)),
+            extra=_log_ctx(
+                endpoint="earnings._load_historical_earnings",
+                symbol=symbol,
+                error=_scrub_fmp_error(str(e)),
+            ),
+        )
+        return None
+
+    if payload:
+        await cache.set(cache_key, payload, ttl_seconds=24 * 3600)
+    return payload
+
+
+def _recent_beats_misses(quarters: Sequence[Mapping]) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for q in quarters[:8]:
+        report_date = str(q.get("report_date", ""))
+        surprise = _safe_float(q.get("surprise_pct"))
+        move = _safe_float(q.get("next_day_move_pct"))
+        if surprise is None:
+            surprise_text = "surprise n/a"
+        else:
+            surprise_text = f"{'beat' if surprise > 0 else 'miss' if surprise < 0 else 'inline'} {surprise:+.1%}"
+        if move is not None:
+            surprise_text = f"{surprise_text}; next-session {move:+.1%}"
+        rows.append((report_date, surprise_text))
+    return rows
+
+
 # ─── Schemas (local imports kept at call sites for lighter boot) ──
 
 from api.schemas.earnings import (  # noqa: E402 — after helpers by design
@@ -481,6 +652,25 @@ def _filter_chain(chain: Any, option_type: str) -> list:
     return [c for c in chain.contracts if getattr(c.option_type, "value", c.option_type) == option_type]
 
 
+def _option_mid(contract: Any | None) -> float:
+    """Return the best usable mid for a single option contract."""
+    if contract is None:
+        return 0.0
+    try:
+        bid = float(getattr(contract, "bid", 0) or 0)
+        ask = float(getattr(contract, "ask", 0) or 0)
+        last = float(getattr(contract, "last", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if bid > 0 and ask > 0:
+        return (bid + ask) / 2
+    if bid > 0:
+        return bid
+    if ask > 0:
+        return ask
+    return last if last > 0 else 0.0
+
+
 async def _load_metrics(
     symbol: str,
     report_date: date | None = None,
@@ -498,12 +688,20 @@ async def _load_metrics(
         atm_call = min(calls, key=lambda c: abs(c.strike - underlying), default=None)
         atm_put = min(puts, key=lambda p: abs(p.strike - underlying), default=None)
         em_pct = None
+        call_mid = _option_mid(atm_call)
+        put_mid = _option_mid(atm_put)
+        premium_yield_call_atm = None
+        premium_yield_put_atm = None
         if atm_call and atm_put and underlying > 0:
             em_pct = compute_expected_move_from_straddle(
                 underlying=underlying,
-                call_mid=(atm_call.bid + atm_call.ask) / 2,
-                put_mid=(atm_put.bid + atm_put.ask) / 2,
+                call_mid=call_mid,
+                put_mid=put_mid,
             )
+        if atm_call and underlying > 0:
+            premium_yield_call_atm = call_mid / underlying
+        if atm_put and underlying > 0:
+            premium_yield_put_atm = put_mid / underlying
         today = market_today()
         days_to_earnings = (report_date - today).days if report_date else None
         days_to_expiry = (expiry - today).days if expiry else None
@@ -515,6 +713,12 @@ async def _load_metrics(
             hv_iv_ratio = iv.hv_20 / iv.current_iv
         else:
             hv_iv_ratio = None
+        historical = None
+        if report_date is not None:
+            historical = await _load_historical_earnings(symbol, report_date)
+        historical_stats = historical.get("stats") if historical else {}
+        if not isinstance(historical_stats, dict):
+            historical_stats = {}
         return {
             "iv_rank": iv.iv_rank,
             "iv_percentile": iv.iv_percentile,
@@ -525,8 +729,11 @@ async def _load_metrics(
             "hv_iv_ratio": hv_iv_ratio,
             "expected_move_pct": em_pct,
             "expected_move_dollars": em_pct * underlying if em_pct is not None else None,
-            "hist_avg_abs_move_pct": None,  # filled later from _load_historical
-            "beat_rate": None,
+            "premium_yield_call_atm": premium_yield_call_atm,
+            "premium_yield_put_atm": premium_yield_put_atm,
+            "hist_avg_abs_move_pct": historical_stats.get("avg_abs_move_pct"),
+            "beat_rate": historical_stats.get("surprise_beat_rate"),
+            "historical_quarters": historical.get("quarters", []) if historical else [],
             "days_to_earnings": days_to_earnings,
             "days_to_expiry": days_to_expiry,
         }
@@ -765,6 +972,16 @@ async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
         # The task already logged at DEBUG; surface None to the caller so
         # the detail panel still renders without the Claude block.
         return None
+
+
+async def _load_claude_structured_cached(symbol: str, report_date: date | str) -> dict | None:
+    """Read calendar-safe Claude structured data without creating a paid call."""
+    from core.cache import get_cache
+
+    report_key = report_date.isoformat() if hasattr(report_date, "isoformat") else str(report_date)
+    cache = get_cache()
+    cached = await cache.get(f"earnings:claude-structured:{symbol}:{report_key}")
+    return cached if isinstance(cached, dict) else None
 
 
 async def _run_structured_and_cache(
@@ -1171,13 +1388,15 @@ async def _hydrate_row(
     # `fetch_quote` no longer accepts client_host. _load_metrics keeps the
     # kwarg for API parity (unused today; revisit when options.py grows
     # service-layer rate limits).
-    quote_result, metrics_result = await asyncio.gather(
+    report_date_obj = date.fromisoformat(row["report_date"])
+    quote_result, metrics_result, claude_result = await asyncio.gather(
         _load_quote(symbol),
         _load_metrics(
             symbol,
-            report_date=date.fromisoformat(row["report_date"]),
+            report_date=report_date_obj,
             client_host=client_host,
         ),
+        _load_claude_structured_cached(symbol, report_date_obj),
         return_exceptions=True,
     )
     if isinstance(quote_result, Exception):
@@ -1190,10 +1409,14 @@ async def _hydrate_row(
         metrics = None
     else:
         metrics = metrics_result
+    if isinstance(claude_result, Exception):
+        log.debug("Claude cache task raised for %s: %s", symbol, claude_result)
+        claude = None
+    else:
+        claude = claude_result if isinstance(claude_result, dict) else None
     iv_rank = metrics.get("iv_rank") if metrics else None
     if iv_rank is not None and iv_rank < min_iv_rank:
         return None
-    report_date_obj = date.fromisoformat(row["report_date"])
     days_until = (report_date_obj - today).days
     report_state = _classify_report_state(report_date_obj, row.get("report_time", "DMT"))
     return {
@@ -1203,12 +1426,12 @@ async def _hydrate_row(
         "change_pct": quote["change_pct"] if quote else None,
         "iv_rank": iv_rank,
         "expected_move_pct": metrics.get("expected_move_pct") if metrics else None,
-        "premium_yield_call_atm": None,
-        "premium_yield_put_atm": None,
-        "hist_avg_abs_move_pct": None,
-        "claude_verdict": None,
-        "claude_confidence": None,
-        "top_setup": None,
+        "premium_yield_call_atm": metrics.get("premium_yield_call_atm") if metrics else None,
+        "premium_yield_put_atm": metrics.get("premium_yield_put_atm") if metrics else None,
+        "hist_avg_abs_move_pct": metrics.get("hist_avg_abs_move_pct") if metrics else None,
+        "claude_verdict": claude.get("verdict") if claude else None,
+        "claude_confidence": claude.get("confidence") if claude else None,
+        "top_setup": claude.get("suggested_play") if claude else None,
         "days_until": days_until,
         "report_state": report_state,
     }
@@ -1627,11 +1850,12 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "iv_percentile": metrics.get("iv_percentile") or 0 if metrics else 0,
         "hv_20": metrics.get("hv_20") or 0 if metrics else 0,
         "expected_move_pct": metrics.get("expected_move_pct") or 0 if metrics else 0,
-        # B-63: historical block was stubbed + removed from the response.
-        # Pass None so the prompt omits the line rather than lying to
-        # Claude that realized vol is 0%.
-        "hist_avg_abs_move_pct": None,
-        "recent_beats_misses": [],
+        "hist_avg_abs_move_pct": (
+            metrics.get("hist_avg_abs_move_pct") if metrics else None
+        ),
+        "recent_beats_misses": _recent_beats_misses(
+            metrics.get("historical_quarters", []) if metrics else []
+        ),
         "headlines": [n["title"] for n in news],
         "market_regime": "Unknown",  # wire once regime service is exposed
     }
@@ -1760,9 +1984,9 @@ async def _run_full_research_uncached(
         expected_move_pct=(
             metrics.get("expected_move_pct") or 0 if isinstance(metrics, dict) else 0
         ),
-        # B-63: historical data loader removed; quarters list is empty
-        # until the FMP surprises join lands in a follow-up.
-        historical_quarters=[],
+        historical_quarters=(
+            metrics.get("historical_quarters", []) if isinstance(metrics, dict) else []
+        ),
         headlines=safe_headlines,
         market_regime="Unknown",  # wire once regime service is exposed
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists

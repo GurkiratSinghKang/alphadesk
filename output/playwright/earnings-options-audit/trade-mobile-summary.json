@@ -1,0 +1,1065 @@
+{
+  "base": "https://tradingalpha.net",
+  "startedAt": "2026-04-29T14:38:34.959Z",
+  "screenshots": [
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/06-desktop-detail-no-intro-BMY.png",
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/07-desktop-trade-prefill.png",
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/08-mobile-default-no-intro.png",
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/09-mobile-detail-BMY.png"
+  ],
+  "probes": {
+    "date": {
+      "status": 200,
+      "count": 8,
+      "symbols": [
+        {
+          "symbol": "BMY",
+          "ivRank": 37.5,
+          "expectedMovePct": 0.05078429673281914,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "MA",
+          "ivRank": 40.2,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CL",
+          "ivRank": 26.5,
+          "expectedMovePct": 0.04941413184992307,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CVX",
+          "ivRank": 19.7,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "LIN",
+          "ivRank": 2.8,
+          "expectedMovePct": 0.02507468001345229,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "XOM",
+          "ivRank": 4.1,
+          "expectedMovePct": 0.031932386214154174,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "PLTR",
+          "ivRank": 1.4,
+          "expectedMovePct": 0.019828984225269054,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "VRTX",
+          "ivRank": 15.1,
+          "expectedMovePct": 0.022228826151560178,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        }
+      ],
+      "meta": {
+        "reason": "ok",
+        "before_curated": 3104
+      }
+    },
+    "iv50": {
+      "status": 200,
+      "count": 0,
+      "symbols": [],
+      "meta": {
+        "reason": "no_curated_matches",
+        "before_curated": 3104
+      }
+    },
+    "yieldSort": {
+      "status": 200,
+      "count": 8,
+      "symbols": [
+        {
+          "symbol": "BMY",
+          "ivRank": 37.5,
+          "expectedMovePct": 0.05078429673281914,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "MA",
+          "ivRank": 40.2,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CL",
+          "ivRank": 26.5,
+          "expectedMovePct": 0.04941413184992307,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CVX",
+          "ivRank": 19.7,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "LIN",
+          "ivRank": 2.8,
+          "expectedMovePct": 0.02507468001345229,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "XOM",
+          "ivRank": 4.1,
+          "expectedMovePct": 0.031932386214154174,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "PLTR",
+          "ivRank": 1.4,
+          "expectedMovePct": 0.019828984225269054,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "VRTX",
+          "ivRank": 15.1,
+          "expectedMovePct": 0.022228826151560178,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        }
+      ],
+      "meta": {
+        "reason": "ok",
+        "before_curated": 3104
+      }
+    },
+    "claudeSort": {
+      "status": 200,
+      "count": 8,
+      "symbols": [
+        {
+          "symbol": "BMY",
+          "ivRank": 37.5,
+          "expectedMovePct": 0.05078429673281914,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "MA",
+          "ivRank": 40.2,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CL",
+          "ivRank": 26.5,
+          "expectedMovePct": 0.04941413184992307,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "CVX",
+          "ivRank": 19.7,
+          "expectedMovePct": null,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "LIN",
+          "ivRank": 2.8,
+          "expectedMovePct": 0.02507468001345229,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "XOM",
+          "ivRank": 4.1,
+          "expectedMovePct": 0.031932386214154174,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "PLTR",
+          "ivRank": 1.4,
+          "expectedMovePct": 0.019828984225269054,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        },
+        {
+          "symbol": "VRTX",
+          "ivRank": 15.1,
+          "expectedMovePct": 0.022228826151560178,
+          "premiumCall": null,
+          "premiumPut": null,
+          "claudeConfidence": null,
+          "reportTime": "DMT"
+        }
+      ],
+      "meta": {
+        "reason": "ok",
+        "before_curated": 3104
+      }
+    },
+    "bmoOnly": {
+      "status": 200,
+      "count": 0,
+      "symbols": [],
+      "meta": {
+        "reason": "no_curated_matches",
+        "before_curated": 3104
+      }
+    },
+    "amcOnly": {
+      "status": 200,
+      "count": 0,
+      "symbols": [],
+      "meta": {
+        "reason": "no_curated_matches",
+        "before_curated": 3104
+      }
+    },
+    "watchlist": {
+      "status": 200,
+      "count": 0,
+      "symbols": [],
+      "meta": {
+        "reason": "no_curated_matches",
+        "before_curated": 3104
+      }
+    },
+    "helpEarningsData": {
+      "status": 404,
+      "ok": false,
+      "url": "https://tradingalpha.net/help/earnings-data",
+      "text": "<!DOCTYPE html><html lang=\"en\" class=\"dark inter_tight_e4be7ea8-module__Vso_Sa__variable newsreader_bf87fcb7-module__Ixc"
+    }
+  },
+  "trade": {
+    "linkCount": 4,
+    "linkHrefs": [
+      {
+        "slot": "trade-button-bull-put-spread",
+        "text": "▸Bull put spread 56/58p✓ Defined risk",
+        "href": "/trade?symbol=BMY&legs=BMY260501P00058000%3Asell%3A1%3A1.54%2CBMY260501P00056000%3Abuy%3A1%3A0.61&strategy=earnings-options-play&combo_type=vertical_spread"
+      },
+      {
+        "slot": "trade-button-bear-call-spread",
+        "text": "▸Bear call spread 58/60c✓ Defined risk",
+        "href": "/trade?symbol=BMY&legs=BMY260501C00058000%3Asell%3A1%3A1.40%2CBMY260501C00060000%3Abuy%3A1%3A0.65&strategy=earnings-options-play&combo_type=vertical_spread"
+      },
+      {
+        "slot": "trade-button-iron-condor",
+        "text": "▸Iron condor 54/56p · 60/62c✓ Defined risk",
+        "href": "/trade?symbol=BMY&legs=BMY260501P00056000%3Asell%3A1%3A0.61%2CBMY260501P00054000%3Abuy%3A1%3A0.25%2CBMY260501C00060000%3Asell%3A1%3A0.65%2CBMY260501C00062000%3Abuy%3A1%3A0.29&strategy=earnings-options-play&combo_type=iron_condor"
+      },
+      {
+        "slot": "trade-button-long-straddle",
+        "text": "▸Long straddle 58c/p✓ Defined risk",
+        "href": "/trade?symbol=BMY&legs=BMY260501C00058000%3Abuy%3A1%3A1.40%2CBMY260501P00058000%3Abuy%3A1%3A1.54&strategy=earnings-options-play"
+      }
+    ],
+    "afterClick": {
+      "url": "https://tradingalpha.net/trade?symbol=BMY&legs=BMY260501P00058000%3Asell%3A1%3A1.54%2CBMY260501P00056000%3Abuy%3A1%3A0.61&strategy=earnings-options-play&combo_type=vertical_spread",
+      "strategyTag": "strategy: earnings-options-play · combo: vertical_spread",
+      "activeLegs": 2,
+      "activeContract": 0,
+      "activeLegTexts": [
+        "Leg 1BMY260501P00058000BMY 2026-05-01 PUT  $58sell × 1@ $1.54",
+        "Leg 2BMY260501P00056000BMY 2026-05-01 PUT  $56buy × 1@ $0.61"
+      ],
+      "orderBarText": "StrategyEarnings OptionsMomentum + QualityPEADVRP HarvestingEarnings VolRegime AdaptiveTS MomentumRSI-2 ReversalDual MomentumPairs TradingKAMA BreakoutORBVWAP StrategyManualSideBuySellSymbolQtyTypeMarketLimitStopStop LimitPriceStopReview before submit · regime check · risk policyPlace 2-leg comboSubmits to paper account",
+      "audit": {
+        "url": "https://tradingalpha.net/trade?symbol=BMY&legs=BMY260501P00058000%3Asell%3A1%3A1.54%2CBMY260501P00056000%3Abuy%3A1%3A0.61&strategy=earnings-options-play&combo_type=vertical_spread",
+        "viewport": {
+          "width": 1440,
+          "height": 960
+        },
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "horizontalOverflow": false,
+        "buttons": [
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Trend line",
+            "w": 41,
+            "h": 38
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Horizontal line",
+            "w": 41,
+            "h": 38
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Rectangle",
+            "w": 41,
+            "h": 38
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Fibonacci retracement",
+            "w": 41,
+            "h": 38
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Text (coming soon)",
+            "w": 41,
+            "h": 38
+          },
+          {
+            "tag": "button",
+            "slot": "button",
+            "text": "Place 2-leg combo",
+            "w": 134,
+            "h": 41
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Close AI Copilot",
+            "w": 26,
+            "h": 26
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "What should I watch today?",
+            "w": 354,
+            "h": 36
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Analyze my portfolio risk",
+            "w": 354,
+            "h": 36
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "How are my strategies performing?",
+            "w": 354,
+            "h": 36
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "What's the market outlook?",
+            "w": 354,
+            "h": 36
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Suggest a hedge for my positions",
+            "w": 354,
+            "h": 36
+          },
+          {
+            "tag": "button",
+            "slot": null,
+            "text": "Send message",
+            "w": 23,
+            "h": 23
+          }
+        ],
+        "textSample": "Skip to content\nAlphaDesk\nDashboard\nStrategies\nTrade\nAnalytics\nAlerts\nPipeline\nReports\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nP&L\nloss\n$916.19(-0.90%)\nRegime\nBull - High Volatility\nVIX\n27.4\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ TRADE\nTrade · SPY\nstrategy:\nearnings-options-play\n·\ncombo:\nvertical_spread\nBack to desk\nSPY\nSPY · NYSE ARCA · ETF\n711.89\n+0.20 · +0.03%\nVOL\n7.3M\nAVG VOL\n—\nRANGE\n709.66 — 712.20\nIV\n—\nREGIME FIT\n—\n1D\n5D\n1M\n3M\n6M\nYTD\n1Y\nALL\nCANDLES\nLINE\nAREA\n+\nCOMPARE\nPROFILE\nAVWAP\nREPLAY\nINDICATORS\n1\n\t\n\t\n\n\t\n\t\nO\n711.00\nH\n712.20\nL\n709.66\nC\n711.96\n+0.96 (+0.14%)\nVOL\n7.3M\nSTRATEGY\nEarnings Options\nMomentum + Quality\nPEAD\nVRP Harvesting\nEarnings Vol\nRegime Adaptive\nTS Momentum\nRSI-2 Reversal\nDual Momentum\nPairs Trading\nKAMA Breakout\nORB\nVWAP Strategy\nManual\nSIDE\nBUY\nSELL\nSYMBOL\nQTY\nTYPE\nMarket\nLimit\nStop\nStop Limit\nPRICE\nSTOP\nReview before submit · regime check · risk policy\nPlace 2-leg combo\nSubmits to paper account\nPre-staged combo order· vertical_spread\n\nAll 2legs are submitted as one combo order via the broker’s combo lane. Click Place above to stage the entire combo at once.\n\nLeg 1\nBMY260501P00058000\nBMY 2026-05-01 PUT  $58\nSELL × 1\n@ $1.54\nLeg 2\nBMY260501P00056000\nBMY 2026-05-01 PUT  $56\nBUY × 1\n@ $0.61\nRecent orders\nRecent orders\nDATE\tTIME\tSYMBOL\tSIDE\tQTY\tTYPE\tSTRATEGY\tSTATUS\nApr 29, 2026\t10:30:16 AM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:42 PM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:42 PM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:26 PM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:26 PM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:21 PM\tAVGO\tSELL\t15\tStop\t—\tCANCELLED\nApr 28, 2026\t3:30:06 PM\tAVGO\tSELL\t15\tStop\t—\t"
+      }
+    }
+  },
+  "mobile": {
+    "default": {
+      "url": "https://tradingalpha.net/strategies/earnings-options-play?window=both&minIvRank=0",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "horizontalOverflow": false,
+      "buttons": [
+        {
+          "tag": "button",
+          "slot": "sheet-trigger",
+          "text": "Open menu",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Search symbols, commands...Ctrl+K",
+          "w": 181,
+          "h": 30
+        },
+        {
+          "tag": "button",
+          "slot": "popover-trigger",
+          "text": "",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "tag": "button",
+          "slot": "button",
+          "text": "Notifications",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "tag": "button",
+          "slot": "dropdown-menu-trigger",
+          "text": "A",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "tag": "a",
+          "slot": null,
+          "text": "Skip to detail panel",
+          "w": 1,
+          "h": 1
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "○Current week",
+          "w": 88,
+          "h": 53
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "○Next week",
+          "w": 74,
+          "h": 53
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "●Both weeks",
+          "w": 79,
+          "h": 53
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "○BMO",
+          "w": 57,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "○AMC",
+          "w": 57,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "●All hours",
+          "w": 100,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "BMYDMT38",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "MADMT40",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Close AI Copilot",
+          "w": 26,
+          "h": 26
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "What should I watch today?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Analyze my portfolio risk",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "How are my strategies performing?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "What's the market outlook?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Suggest a hedge for my positions",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Send message",
+          "w": 23,
+          "h": 23
+        }
+      ],
+      "textSample": "Skip to content\nAlphaDesk\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nP&L\nloss\n$913.95(-0.90%)\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ EARNINGS · OPTIONS PLAY\nThis + next week's earnings · Apr 27 - May 8, 2026\n8 earnings · sorted by date\nSkip to detail panel\nWINDOW\n○\nCurrent week\n○\nNext week\n●\nBoth weeks\nIV RANK ≥\n0\nTIME\n○\nBMO\n○\nAMC\n●\nAll hours\nWATCHLIST ONLY\nSORT\nEarnings date\nIV rank\nPremium yield\nClaude confidence\n\n§ CALENDAR · APR 27 - MAY 8, 2026 · 8 REPORTS\n\nThu, 04/30 · 2 REPORTS\nBMY\nDMT\n38\nMA\nDMT\n40\nFri, 05/01 · 4 REPORTS\nCL\nDMT\n27\nCVX\nDMT\n20\nLIN\nDMT\n3\nXOM\nDMT\n4\nMon, 05/04 · 2 REPORTS\nPLTR\nDMT\n1\nVRTX\nDMT\n15\n\nSelect a symbol from the sidebar.\n\nAlphaDesk dev — Powered by Claude AI — © 2026\nAI Copilot\nStrategies/earnings-options-play\n\nHow can I help?\n\nAsk me anything about your portfolio, markets, or trading strategies.\n\nWhat should I watch today?\nAnalyze my portfolio risk\nHow are my strategies performing?\nWhat's the market outlook?\nSuggest a hedge for my positions\nCmd+J to toggle"
+    },
+    "rowCount": 8,
+    "detail": {
+      "url": "https://tradingalpha.net/strategies/earnings-options-play?symbol=BMY&window=both&minIvRank=0",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "horizontalOverflow": false,
+      "buttons": [
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "BMYDMT38",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "MADMT40",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "CLDMT27",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "CVXDMT20",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "LINDMT3",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "XOMDMT4",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "PLTRDMT1",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "VRTXDMT15",
+          "w": 321,
+          "h": 44
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Close AI Copilot",
+          "w": 26,
+          "h": 26
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "What should I watch today?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Analyze my portfolio risk",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "How are my strategies performing?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "What's the market outlook?",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Suggest a hedge for my positions",
+          "w": 344,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "slot": null,
+          "text": "Send message",
+          "w": 23,
+          "h": 23
+        }
+      ],
+      "textSample": "Skip to content\nAlphaDesk\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nAAPL\n$269.26\n-1.45 (-0.54%)\nMSFT\n$425.20\n-4.05 (-0.94%)\nGOOGL\n$354.96\n+5.18 (+1.48%)\nAMZN\n$265.36\n+5.66 (+2.18%)\nNVDA\n$211.49\n-1.69 (-0.79%)\nTSLA\n$372.83\n-3.19 (-0.85%)\nSPY\n$711.97\n+0.28 (+0.04%)\nQQQ\n$660.88\n+3.33 (+0.51%)\nMETA\n$672.97\n+1.63 (+0.24%)\nAMD\n$331.38\n+8.17 (+2.53%)\nP&L\nloss\n$913.95(-0.90%)\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ EARNINGS · OPTIONS PLAY\nThis + next week's earnings · Apr 27 - May 8, 2026\n8 earnings · sorted by date\nSkip to detail panel\nWINDOW\n○\nCurrent week\n○\nNext week\n●\nBoth weeks\nIV RANK ≥\n0\nTIME\n○\nBMO\n○\nAMC\n●\nAll hours\nWATCHLIST ONLY\nSORT\nEarnings date\nIV rank\nPremium yield\nClaude confidence\n\n§ CALENDAR · APR 27 - MAY 8, 2026 · 8 REPORTS\n\nThu, 04/30 · 2 REPORTS\nBMY\nDMT\n38\nMA\nDMT\n40\nFri, 05/01 · 4 REPORTS\nCL\nDMT\n27\nCVX\nDMT\n20\nLIN\nDMT\n3\nXOM\nDMT\n4\nMon, 05/04 · 2 REPORTS\nPLTR\nDMT\n1\nVRTX\nDMT\n15\n\n⚠ PARTIAL DATA\n\nAI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s\n\n§ EARNINGS · OPTIONS PLAY\n\nBMY · BMY\n\n· Reports Thu, Apr 30 · DMT\n\nUpdated just now\n\nLIVE\n$57.70\n-$0.56 · -0.96%\nIV RANK\n38\nIV %ILE\n33\nHV 20\n23.3%\nHV / IV\n0.34\nEXP MOVE\n±5.1%\nHIST |MV|\n—\nBEAT %\n—\nDTE\n—\n$51.84\n$57.70\n$63.55\n\nExpected move ±$2.93 · 5.1% · 1σ implied by front-month straddle · hover a strategy below to overlay its profit zone\n\n◇ CLAUDE · STRUCTURED\n\nAnalyzing (typically 30 s)… Analysis pending — come back in a moment.\nStrike ladder · EXPIRY 2026-05-01 · UNDERLYING $57.70\nShow Greeks\nSTRIKE\nΔ\nMID\nIV\nYLD\nPOP\nSIDE\n58\n+0.49\n$1.40⚠\n42%\n2.4%\n51%\ncall ATM\n58\n-0.52\n$1.54\n81%\n2.7%\n48%\nput ATM\n60\n+0.29\n$0.65⚠\n41%\n1.1%\n71%\ncall 30Δ\n56\n-0.29\n$0.62⚠\n77%\n1.1%\n71%\nput 30Δ\n62\n+0.15\n$0.29⚠\n42%\n0.5%\n85%\ncall 15Δ\n54\n-0.13\n$0.25⚠\n84%\n0.4%\n87%\nput 15Δ\nIV term structure\n2d\n9d\n\n42% – 42% · front 42% → back 42%\n\nImplied volatility by days to expiry — front-month 41.9%to back-month 41.9%.\nExpiry\tDays to expiry\tATM IV\n2026-05-01\t2\t41.9"
+    }
+  },
+  "consoleErrors": [
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    },
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    }
+  ],
+  "failedResponses": [
+    {
+      "status": 404,
+      "url": "https://tradingalpha.net/help/earnings-data"
+    }
+  ],
+  "desktopDetailNoIntro": {
+    "url": "https://tradingalpha.net/strategies/earnings-options-play?symbol=BMY&window=both&minIvRank=0",
+    "viewport": {
+      "width": 1440,
+      "height": 960
+    },
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "horizontalOverflow": false,
+    "buttons": [
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Dashboard",
+        "w": 94,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Strategies",
+        "w": 90,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Trade",
+        "w": 69,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Analytics",
+        "w": 85,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Alerts",
+        "w": 69,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Pipeline",
+        "w": 78,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Reports",
+        "w": 79,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Search symbols, commands...Ctrl+K",
+        "w": 480,
+        "h": 30
+      },
+      {
+        "tag": "button",
+        "slot": "popover-trigger",
+        "text": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "button",
+        "slot": "button",
+        "text": "Notifications",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "button",
+        "slot": "dropdown-menu-trigger",
+        "text": "A",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "a",
+        "slot": null,
+        "text": "Skip to detail panel",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "○Current week",
+        "w": 121,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "○Next week",
+        "w": 100,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "●Both weeks",
+        "w": 107,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "○BMO",
+        "w": 57,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "○AMC",
+        "w": 57,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "●All hours",
+        "w": 100,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "BMYDMT38",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "MADMT40",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "CLDMT27",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "CVXDMT20",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "LINDMT3",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "XOMDMT4",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "PLTRDMT1",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "VRTXDMT15",
+        "w": 256,
+        "h": 44
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "tooltip-trigger",
+        "text": "",
+        "w": 13,
+        "h": 13
+      },
+      {
+        "tag": "button",
+        "slot": "ladder-greeks-toggle",
+        "text": "Show Greeks",
+        "w": 97,
+        "h": 34
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Close AI Copilot",
+        "w": 26,
+        "h": 26
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "What should I watch today?",
+        "w": 354,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Analyze my portfolio risk",
+        "w": 354,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "How are my strategies performing?",
+        "w": 354,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "What's the market outlook?",
+        "w": 354,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Suggest a hedge for my positions",
+        "w": 354,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "slot": null,
+        "text": "Send message",
+        "w": 23,
+        "h": 23
+      }
+    ],
+    "textSample": "Skip to content\nAlphaDesk\nDashboard\nStrategies\nTrade\nAnalytics\nAlerts\nPipeline\nReports\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nAAPL\n$269.28\n-1.43 (-0.53%)\nMSFT\n$425.28\n-3.97 (-0.92%)\nGOOGL\n$355.00\n+5.22 (+1.49%)\nAMZN\n$265.40\n+5.70 (+2.19%)\nNVDA\n$211.36\n-1.81 (-0.85%)\nTSLA\n$372.68\n-3.34 (-0.89%)\nSPY\n$711.89\n+0.20 (+0.03%)\nQQQ\n$660.76\n+3.21 (+0.49%)\nMETA\n$672.87\n+1.53 (+0.23%)\nAMD\n$331.16\n+7.95 (+2.46%)\nP&L\nloss\n$916.19(-0.90%)\nRegime\nBull - High Volatility\nVIX\n27.4\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ EARNINGS · OPTIONS PLAY\nThis + next week's earnings · Apr 27 - May 8, 2026\n8 earnings · sorted by date\nSkip to detail panel\nWINDOW\n○\nCurrent week\n○\nNext week\n●\nBoth weeks\nIV RANK ≥\n0\nTIME\n○\nBMO\n○\nAMC\n●\nAll hours\nWATCHLIST ONLY\nSORT\nEarnings date\nIV rank\nPremium yield\nClaude confidence\n\n§ CALENDAR · APR 27 - MAY 8, 2026 · 8 REPORTS\n\nThu, 04/30 · 2 REPORTS\nBMY\nDMT\n38\nMA\nDMT\n40\nFri, 05/01 · 4 REPORTS\nCL\nDMT\n27\nCVX\nDMT\n20\nLIN\nDMT\n3\nXOM\nDMT\n4\nMon, 05/04 · 2 REPORTS\nPLTR\nDMT\n1\nVRTX\nDMT\n15\n\n⚠ PARTIAL DATA\n\nAI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s\n\n§ EARNINGS · OPTIONS PLAY\n\nBMY · BMY\n\n· Reports Thu, Apr 30 · DMT\n\nUpdated just now\n\nLIVE\n$57.70\n-$0.56 · -0.96%\nIV RANK\n38\nIV %ILE\n33\nHV 20\n23.3%\nHV / IV\n0.34\nEXP MOVE\n±5.1%\nHIST |MV|\n—\nBEAT %\n—\nDTE\n—\n$51.84\n$57.70\n$63.55\n\nExpected move ±$2.93 · 5.1% · 1σ implied by front-month straddle · hover a strategy below to overlay its profit zone\n\n◇ CLAUDE · STRUCTURED\n\nAnalyzing (typically 30 s)… Analysis pending — come back in a moment.\nStrike ladder · EXPIRY 2026-05-01 · UNDERLYING $57.70\nShow Greeks\nSTRIKE\nΔ\nMID\nIV\nYLD\nPOP\nSIDE\n58\n+0.49\n$1.40⚠\n42%\n2.4%\n51%\ncall ATM\n58\n-0.52\n$1.54\n81%\n2.7%\n48%\nput ATM\n60\n+0.29\n$0.65⚠\n41%\n1.1%\n71%\ncall 30Δ\n56\n-0.29\n$0.62⚠\n77%\n1.1%\n71%\nput 30Δ\n62\n+0.15\n$0.29⚠\n42%\n0.5%\n85%\ncall 15Δ\n54\n-0.13\n$0.25⚠\n84%\n0.4%\n87%\nput 15Δ\nIV term structure\n2d\n9d\n\n42% – 42% · front 42% → back 42%\n\nImplied volatility by d"
+  },
+  "finishedAt": "2026-04-29T14:38:57.210Z"
+}

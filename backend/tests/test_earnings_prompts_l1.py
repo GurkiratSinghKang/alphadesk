@@ -104,6 +104,34 @@ def test_full_prompt_wraps_and_protocol_present():
     assert "DATA VS INSTRUCTIONS PROTOCOL" in prompt["system"]
 
 
+def test_full_prompt_handles_missing_historical_surprise():
+    from services.earnings_prompts import build_full_prompt
+
+    prompt = build_full_prompt(
+        symbol="NVDA",
+        company="Nvidia",
+        sector="Semiconductors",
+        report_date="2026-04-23",
+        report_time="AMC",
+        price=201.7,
+        iv_rank=78,
+        iv_percentile=82,
+        expected_move_pct=0.064,
+        historical_quarters=[{
+            "report_date": "2026-01-30",
+            "surprise_pct": None,
+            "next_day_move_pct": 0.04,
+            "five_day_move_pct": -0.02,
+        }],
+        headlines=[],
+        market_regime="Bull-LowVol",
+        sector_peers_pct_change_5d={},
+    )
+
+    assert "surprise n/a" in prompt["user"]
+    assert "next-day +4.0%" in prompt["user"]
+
+
 def test_escape_tags_in_untrusted_drops_literal_closing_tag():
     """The escape function must defang ``</headline>`` so a malicious
     headline can't break out of its wrapper."""

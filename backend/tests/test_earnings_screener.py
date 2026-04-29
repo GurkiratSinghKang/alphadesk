@@ -1207,10 +1207,185 @@ async def test_load_metrics_hv_iv_ratio_is_none_when_hv_missing():
         return _FakeChain()
 
     with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
-         patch("services.options.fetch_chain", fake_chain):
+         patch("services.options.fetch_chain", fake_chain), \
+         patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=None)):
         metrics = await svc._load_metrics("NVDA", report_date=date(2026, 4, 30))
 
     assert metrics is not None
     assert metrics["iv_rank"] is None
     assert metrics["hv_20"] is None
     assert metrics["hv_iv_ratio"] is None
+
+
+@pytest.mark.asyncio
+async def test_load_metrics_populates_atm_premium_yields():
+    """Calendar yield sorting needs real ATM premium yields, not nulls."""
+    from services import earnings_screener as svc
+    from services.options import IVData
+    from datetime import datetime, timezone
+
+    class _FakeContract:
+        def __init__(self, option_type, strike, bid, ask, last=0.0):
+            self.option_type = option_type
+            self.strike = strike
+            self.bid = bid
+            self.ask = ask
+            self.last = last
+
+    class _FakeChain:
+        spot_price = 100.0
+
+        def __init__(self):
+            self.contracts = [
+                _FakeContract("call", 100.0, 2.5, 3.5),
+                _FakeContract("put", 100.0, 3.0, 4.0),
+            ]
+
+    fake_iv = IVData(
+        symbol="NVDA",
+        current_iv=0.45,
+        iv_rank=72,
+        iv_percentile=75,
+        hv_20=0.30,
+        hv_50=0.28,
+        hv_100=0.25,
+        is_demo=False,
+        fetched_at=datetime.now(timezone.utc),
+    )
+
+    async def fake_iv_analysis(symbol, client_host=None):
+        return fake_iv
+
+    async def fake_chain(symbol, expiry=None):
+        return _FakeChain()
+
+    historical = {
+        "quarters": [
+            {
+                "report_date": "2026-01-30",
+                "surprise_pct": 0.08,
+                "next_day_move_pct": 0.04,
+                "five_day_move_pct": 0.05,
+            }
+        ],
+        "stats": {"avg_abs_move_pct": 0.04, "surprise_beat_rate": 1.0},
+    }
+
+    with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
+         patch("services.options.fetch_chain", fake_chain), \
+         patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=historical)):
+        metrics = await svc._load_metrics("NVDA", report_date=date(2026, 4, 30))
+
+    assert metrics is not None
+    assert metrics["premium_yield_call_atm"] == 0.03
+    assert metrics["premium_yield_put_atm"] == 0.035
+    assert metrics["expected_move_pct"] == 0.065
+    assert metrics["hist_avg_abs_move_pct"] == 0.04
+    assert metrics["beat_rate"] == 1.0
+    assert metrics["historical_quarters"] == historical["quarters"]
+
+
+def test_option_mid_uses_one_sided_quotes_before_last():
+    from services.earnings_screener import _option_mid
+
+    class _Contract:
+        bid = 0.0
+        ask = 1.25
+        last = 0.40
+
+    assert _option_mid(_Contract()) == 1.25
+
+
+def test_build_historical_quarters_joins_surprises_to_bars():
+    import pandas as pd
+
+    from services.earnings_screener import _build_historical_quarters
+
+    surprises = pd.DataFrame([
+        {"date": date(2026, 1, 30), "surprise_pct": 0.08},
+        {"date": date(2025, 10, 30), "surprise_pct": -0.03},
+    ])
+    bars = pd.DataFrame([
+        {"ts": pd.Timestamp("2025-10-29", tz="UTC"), "close": 100.0},
+        {"ts": pd.Timestamp("2025-10-31", tz="UTC"), "close": 94.0},
+        {"ts": pd.Timestamp("2025-11-03", tz="UTC"), "close": 95.0},
+        {"ts": pd.Timestamp("2026-01-29", tz="UTC"), "close": 200.0},
+        {"ts": pd.Timestamp("2026-02-02", tz="UTC"), "close": 214.0},
+        {"ts": pd.Timestamp("2026-02-03", tz="UTC"), "close": 212.0},
+    ])
+
+    quarters = _build_historical_quarters(
+        surprises,
+        bars,
+        asof=date(2026, 4, 30),
+        limit=8,
+    )
+
+    assert [q["report_date"] for q in quarters] == ["2026-01-30", "2025-10-30"]
+    assert quarters[0]["next_day_move_pct"] == 0.07
+    assert quarters[1]["next_day_move_pct"] == -0.06
+
+
+@pytest.mark.asyncio
+async def test_hydrate_row_populates_calendar_rank_fields_from_metrics_and_cache():
+    """Calendar rows should expose yield and cached Claude fields for sorting."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=3)).isoformat()
+    row = {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+           "report_date": future, "report_time": "AMC"}
+    metrics = {
+        "iv_rank": 70,
+        "expected_move_pct": 0.061,
+        "premium_yield_call_atm": 0.024,
+        "premium_yield_put_atm": 0.031,
+        "hist_avg_abs_move_pct": None,
+    }
+    cached_claude = {
+        "verdict": "neutral-bull",
+        "confidence": 0.64,
+        "suggested_play": "bull put spread",
+    }
+
+    with patch.object(svc, "_load_quote",
+                      AsyncMock(return_value={"last": 200.0, "change": 1.0, "change_pct": 0.5})), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value=metrics)), \
+         patch.object(svc, "_load_claude_structured_cached", AsyncMock(return_value=cached_claude)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock()) as paid_loader:
+        result = await svc._hydrate_row(row, min_iv_rank=0)
+
+    assert result is not None
+    assert result["premium_yield_call_atm"] == 0.024
+    assert result["premium_yield_put_atm"] == 0.031
+    assert result["claude_verdict"] == "neutral-bull"
+    assert result["claude_confidence"] == 0.64
+    assert result["top_setup"] == "bull put spread"
+    paid_loader.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_sorts_by_yield_and_claude_confidence():
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=2)).isoformat()
+    fake_earnings = [
+        {"symbol": "NVDA", "company": "Nvidia", "sector": "Semis",
+         "report_date": future, "report_time": "AMC"},
+        {"symbol": "TSLA", "company": "Tesla", "sector": "Auto",
+         "report_date": future, "report_time": "AMC"},
+    ]
+    hydrated = {
+        "NVDA": {"premium_yield_call_atm": 0.02, "premium_yield_put_atm": 0.03, "claude_confidence": 0.40},
+        "TSLA": {"premium_yield_call_atm": 0.06, "premium_yield_put_atm": 0.01, "claude_confidence": 0.75},
+    }
+
+    async def hydrate(row, *, min_iv_rank=0, client_host=None, today=None):
+        return {**row, "price": 100.0, "iv_rank": 50.0, **hydrated[row["symbol"]]}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake_earnings)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
+        by_yield = await svc.list_upcoming(window="both", sort="yield")
+        by_claude = await svc.list_upcoming(window="both", sort="claude_confidence")
+
+    assert [r.symbol for r in by_yield.earnings] == ["TSLA", "NVDA"]
+    assert [r.symbol for r in by_claude.earnings] == ["TSLA", "NVDA"]

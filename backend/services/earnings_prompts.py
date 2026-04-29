@@ -254,11 +254,23 @@ def build_full_prompt(
 
     Round-6 L-1: same data-tag wrapping as ``build_structured_prompt``.
     """
+    def _pct_text(value: object) -> str:
+        try:
+            f = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return "n/a"
+        if f != f:
+            return "n/a"
+        return f"{f:+.1%}"
+
     quarters_block = "\n".join(
-        f"  · {q['report_date']}: surprise {q.get('surprise_pct', 0):+.1%}, "
-        f"next-day {q['next_day_move_pct']:+.1%}, 5-day {q['five_day_move_pct']:+.1%}"
+        f"  · {q['report_date']}: surprise {_pct_text(q.get('surprise_pct'))}, "
+        f"next-day {_pct_text(q.get('next_day_move_pct'))}, "
+        f"5-day {_pct_text(q.get('five_day_move_pct'))}"
         for q in historical_quarters[:8]
     )
+    if not quarters_block:
+        quarters_block = "  · unavailable"
     peers_block = ", ".join(f"{s} {p:+.1%}" for s, p in sector_peers_pct_change_5d.items())
     if headlines:
         headlines_block = "; ".join(

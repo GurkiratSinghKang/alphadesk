@@ -1,0 +1,665 @@
+{
+  "base": "https://tradingalpha.net",
+  "startedAt": "2026-04-29T14:36:37.910Z",
+  "screenshots": [
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/01-desktop-default.png",
+    "/Users/GK/Downloads/alphadesk/output/playwright/earnings-options-audit/02-desktop-detail-BMY.png"
+  ],
+  "calendar": {
+    "status": 200,
+    "count": 8,
+    "partial": false,
+    "windowLabel": "Apr 27 - May 8, 2026",
+    "meta": {
+      "reason": "ok",
+      "before_curated": 3104
+    },
+    "symbols": [
+      {
+        "symbol": "BMY",
+        "reportDate": "2026-04-30",
+        "reportTime": "DMT",
+        "ivRank": 33.6,
+        "expectedMovePct": 0.05065926439972241,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "MA",
+        "reportDate": "2026-04-30",
+        "reportTime": "DMT",
+        "ivRank": 58.9,
+        "expectedMovePct": null,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "CL",
+        "reportDate": "2026-05-01",
+        "reportTime": "DMT",
+        "ivRank": 31,
+        "expectedMovePct": 0.04947268633724375,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "CVX",
+        "reportDate": "2026-05-01",
+        "reportTime": "DMT",
+        "ivRank": 13.8,
+        "expectedMovePct": null,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "LIN",
+        "reportDate": "2026-05-01",
+        "reportTime": "DMT",
+        "ivRank": 3.4,
+        "expectedMovePct": 0.026079296898196717,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "XOM",
+        "reportDate": "2026-05-01",
+        "reportTime": "DMT",
+        "ivRank": 7.7,
+        "expectedMovePct": 0.03208624361480465,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "PLTR",
+        "reportDate": "2026-05-04",
+        "reportTime": "DMT",
+        "ivRank": 3.6,
+        "expectedMovePct": 0.02015178308281757,
+        "reportState": "upcoming"
+      },
+      {
+        "symbol": "VRTX",
+        "reportDate": "2026-05-04",
+        "reportTime": "DMT",
+        "ivRank": 14.1,
+        "expectedMovePct": 0.02221958174904943,
+        "reportState": "upcoming"
+      }
+    ],
+    "renderedRowCount": 8
+  },
+  "detail": {
+    "selectedSymbol": "BMY",
+    "audit": {
+      "url": "https://tradingalpha.net/strategies/earnings-options-play?symbol=BMY&window=both&minIvRank=0",
+      "title": "AlphaDesk — AI-Powered Trading Terminal",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "horizontalOverflow": false,
+      "overflowEls": [
+        {
+          "label": "div",
+          "tag": "div",
+          "left": -316,
+          "right": 5083,
+          "width": 5399,
+          "text": "AAPL$269.16-1.55 (-0.57%)MSFT$425.57-3.67 (-0.86%)GOOGL$355.43+5.65 (+1.62%)AMZN"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -316,
+          "right": -140,
+          "width": 177,
+          "text": "AAPL$269.16-1.55 (-0.57%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -301,
+          "right": -274,
+          "width": 27,
+          "text": "AAPL"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -269,
+          "right": -227,
+          "width": 42,
+          "text": "$269.16"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -221,
+          "right": -156,
+          "width": 66,
+          "text": "-1.55 (-0.57%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -140,
+          "right": 39,
+          "width": 178,
+          "text": "MSFT$425.57-3.67 (-0.86%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -125,
+          "right": -96,
+          "width": 29,
+          "text": "MSFT"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -90,
+          "right": -49,
+          "width": 42,
+          "text": "$425.57"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": -43,
+          "right": 23,
+          "width": 66,
+          "text": "-3.67 (-0.86%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1305,
+          "right": 1483,
+          "width": 178,
+          "text": "AMD$330.74+7.53 (+2.33%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1397,
+          "right": 1467,
+          "width": 70,
+          "text": "+7.53 (+2.33%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1483,
+          "right": 1660,
+          "width": 177,
+          "text": "AAPL$269.16-1.55 (-0.57%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1498,
+          "right": 1526,
+          "width": 27,
+          "text": "AAPL"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1531,
+          "right": 1573,
+          "width": 42,
+          "text": "$269.16"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1578,
+          "right": 1644,
+          "width": 66,
+          "text": "-1.55 (-0.57%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1660,
+          "right": 1839,
+          "width": 178,
+          "text": "MSFT$425.57-3.67 (-0.86%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1675,
+          "right": 1704,
+          "width": 29,
+          "text": "MSFT"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1710,
+          "right": 1751,
+          "width": 42,
+          "text": "$425.57"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1757,
+          "right": 1823,
+          "width": 66,
+          "text": "-3.67 (-0.86%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1839,
+          "right": 2030,
+          "width": 191,
+          "text": "GOOGL$355.43+5.65 (+1.62%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1854,
+          "right": 1891,
+          "width": 37,
+          "text": "GOOGL"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1897,
+          "right": 1938,
+          "width": 42,
+          "text": "$355.43"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 1944,
+          "right": 2014,
+          "width": 70,
+          "text": "+5.65 (+1.62%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 2030,
+          "right": 2215,
+          "width": 185,
+          "text": "AMZN$265.37+5.67 (+2.18%)"
+        },
+        {
+          "label": "span",
+          "tag": "span",
+          "left": 2045,
+          "right": 2076,
+          "width": 31,
+          "text": "AMZN"
+        }
+      ],
+      "visibleSlots": [
+        "sheet-trigger",
+        "popover-trigger",
+        "button",
+        "dropdown-menu-trigger",
+        "dashboard-page-layout",
+        "earnings-intro",
+        "filters-bar",
+        "sort-direction-indicator",
+        "earnings-page-grid",
+        "earnings-calendar-sidebar",
+        "calendar-summary",
+        "day-group",
+        "day-group",
+        "day-group",
+        "earnings-detail-panel",
+        "partial-data-banner",
+        "partial-data-banner-item",
+        "detail-header",
+        "detail-updated",
+        "freshness-pill",
+        "metrics-strip",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "tooltip-trigger",
+        "expected-move-strip",
+        "pnl-zones",
+        "claude-thesis",
+        "strike-ladder",
+        "ladder-greeks-toggle",
+        "iv-term-skew",
+        "news-feed",
+        "news-category",
+        "news-category",
+        "trade-button-row",
+        "trade-button-bull-put-spread",
+        "trade-button-bear-call-spread",
+        "trade-button-iron-condor",
+        "trade-button-long-straddle",
+        "data-disclaimer"
+      ],
+      "textSample": "Skip to content\nAlphaDesk\nDashboard\nStrategies\nTrade\nAnalytics\nAlerts\nPipeline\nReports\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nP&L\nloss\n$916.67(-0.90%)\nRegime\nBull - High Volatility\nVIX\n27.4\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ EARNINGS · OPTIONS PLAY\nThis + next week's earnings · Apr 27 - May 8, 2026\n8 earnings · sorted by date\nSkip to detail panel\n\nThis strategy sells volatility into earnings. When IV rank is high the market pays you a credit because everyone's anxious. You profit if the stock moves less than the implied move; you lose if it moves more. Naked short calls have unlimited risk; defined-risk variants (iron condors, vertical spreads) cap the loss but earn less.\n\nGot it — don't show again\nWINDOW\n○\nCurrent week\n○\nNext week\n●\nBoth weeks\nIV RANK ≥\n0\nTIME\n○\nBMO\n○\nAMC\n●\nAll hours\nWATCHLIST ONLY\nSORT\nEarnings date\nIV rank\nPremium yield\nClaude confidence\n\n§ CALENDAR · APR 27 - MAY 8, 2026 · 8 REPORTS\n\nThu, 04/30 · 2 REPORTS\nBMY\nDMT\n34\nMA\nDMT\n59\nFri, 05/01 · 4 REPORTS\nCL\nDMT\n31\nCVX\nDMT\n14\nLIN\nDMT\n3\nXOM\nDMT\n8\nMon, 05/04 · 2 REPORTS\nPLTR\nDMT\n4\nVRTX\nDMT\n14\n\n⚠ PARTIAL DATA\n\nAI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s\n\n§ EARNINGS · OPTIONS PLAY\n\nBMY · BMY\n\n· Reports Thu, Apr 30 · DMT\n\nUpdated just now\n\nLIVE\n$57.64\n-$0.62 · -1.06%\nIV RANK\n34\nIV %ILE\n33\nHV 20\n23.3%\nHV / IV\n0.34\nEXP MOVE\n±5.1%\nHIST |MV|\n—\nBEAT %\n—\nDTE\n—\n$51.80\n$57.64\n$63.48\n\nExpected move ±$2.92 · 5.1% · 1σ implied by front-month straddle · hover a strategy below to overlay its profit zone\n\n◇ CLAUDE · STRUCTURED\n\nAnalyzing (typically 30 s)… Analysis pending — come back in a moment.\nStrike ladder · EXPIRY 2026-05-01 · UNDERLYING $57.64\nShow Greeks\nSTRIKE\nΔ\nMID\nIV\nYLD\nPOP\nSIDE\n58\n+0.48\n$1.38\n42%\n2.4%\n52%\ncall ATM\n58\n-0.53\n$1.54\n80%\n2.7%\n47%\nput ATM\n60\n+0.28\n$0.64⚠\n41%\n1.1%\n72%\ncall 30Δ\n56\n-0.29\n$0.62⚠\n76%\n1.1%\n71%\nput 30Δ\n62\n+0.15\n$0.29⚠\n43%\n0.5%\n85%\ncall 15Δ\n54\n-0.14\n$0.26⚠\n83%\n0.4%\n86%\nput 15Δ\nIV term structure\n2d\n9d\n\n42% – 42% · front 42% → back 42%\n\nImplied volatility by days to expiry — front-month 42.2%to back-month 42.2%.\nExpiry\tDays to expiry\tATM IV\n2026-05-01\t2\t42.2%\n2026-05-08\t9\t42.2%\nPut/call skew\n25Δ put IV: 76.0%\n25Δ call IV: 78.6%\nSkew: -2.6pts\ncall-heavy skew\nNews · PRICE-DRIVING\nFILINGComerica Bank Decreases Stake in Bristol Myers Squibb Company $BMY— Defenseworld Net · yesterday\nREGULATORYD.A. Davidson & CO. Purchases 28,410 Shares of Bristol Myers Squibb Company $BMY— Defenseworld Net · yesterday\nBristol Myers Squibb Company (NYSE:BMY) Given Consensus Recommendation of “Hold” by Brokerages— Defenseworld Net · yesterday\n▸\nBull put spread 56/58p\n✓ DEFINED RISK\n▸\nBear call spread 58/60c\n✓ DE"
+    },
+    "partialBannerTexts": [
+      "⚠ PARTIAL DATAAI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s"
+    ],
+    "tradeButtonTexts": [
+      "▸Bull put spread 56/58p✓ Defined risk▸Bear call spread 58/60c✓ Defined risk▸Iron condor 54/56p · 60/62c✓ Defined risk▸Long straddle 58c/p✓ Defined risk",
+      "▸Bull put spread 56/58p✓ Defined risk",
+      "▸Bear call spread 58/60c✓ Defined risk",
+      "▸Iron condor 54/56p · 60/62c✓ Defined risk",
+      "▸Long straddle 58c/p✓ Defined risk"
+    ],
+    "disabledTradeText": "▸Bull put spread 56/58p✓ Defined risk▸Bear call spread 58/60c✓ Defined risk▸Iron condor 54/56p · 60/62c✓ Defined risk▸Long straddle 58c/p✓ Defined risk",
+    "hasRunFullResearchButton": 0,
+    "helpLinks": 1,
+    "api": {
+      "status": 200,
+      "symbol": "BMY",
+      "partial": true,
+      "errorCodes": [
+        "claude_unavailable"
+      ],
+      "hasQuote": true,
+      "hasMetrics": true,
+      "hasLadder": true,
+      "ladderRows": 6,
+      "hasClaudeStructured": false,
+      "hasNews": 3,
+      "hasHistorical": false,
+      "reportDate": "2026-04-30"
+    }
+  },
+  "trade": null,
+  "mobile": null,
+  "consoleErrors": [
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    },
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    },
+    {
+      "type": "warning",
+      "text": "Error with Permissions-Policy header: Unrecognized feature: 'web-share'."
+    },
+    {
+      "type": "error",
+      "text": "The Content Security Policy directive 'upgrade-insecure-requests' is ignored when delivered in a report-only policy."
+    }
+  ],
+  "failedResponses": [],
+  "networkErrors": [
+    {
+      "url": "https://tradingalpha.net/api/v1/metrics/vitals",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://tradingalpha.net/api/v1/metrics/vitals",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://tradingalpha.net/api/v1/metrics/vitals",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://tradingalpha.net/api/v1/metrics/vitals",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "login": {
+    "ok": true,
+    "status": 200,
+    "bodyKeys": [
+      "ok",
+      "expires_in"
+    ],
+    "detail": null
+  },
+  "desktopDefaultAudit": {
+    "url": "https://tradingalpha.net/strategies/earnings-options-play?window=both&minIvRank=0",
+    "title": "AlphaDesk — AI-Powered Trading Terminal",
+    "viewport": {
+      "width": 1440,
+      "height": 960
+    },
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "horizontalOverflow": false,
+    "overflowEls": [
+      {
+        "label": "div",
+        "tag": "div",
+        "left": -84,
+        "right": 5315,
+        "width": 5399,
+        "text": "AAPL$269.16-1.55 (-0.57%)MSFT$425.57-3.67 (-0.86%)GOOGL$355.43+5.65 (+1.62%)AMZN"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": -84,
+        "right": 93,
+        "width": 177,
+        "text": "AAPL$269.16-1.55 (-0.57%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": -69,
+        "right": -42,
+        "width": 27,
+        "text": "AAPL"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": -36,
+        "right": 5,
+        "width": 42,
+        "text": "$269.16"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1355,
+        "right": 1538,
+        "width": 183,
+        "text": "META$673.41+2.07 (+0.31%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1405,
+        "right": 1446,
+        "width": 42,
+        "text": "$673.41"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1452,
+        "right": 1522,
+        "width": 70,
+        "text": "+2.07 (+0.31%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1538,
+        "right": 1716,
+        "width": 178,
+        "text": "AMD$330.74+7.53 (+2.33%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1553,
+        "right": 1577,
+        "width": 24,
+        "text": "AMD"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1583,
+        "right": 1624,
+        "width": 42,
+        "text": "$330.74"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1630,
+        "right": 1700,
+        "width": 70,
+        "text": "+7.53 (+2.33%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1716,
+        "right": 1893,
+        "width": 177,
+        "text": "AAPL$269.16-1.55 (-0.57%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1731,
+        "right": 1758,
+        "width": 27,
+        "text": "AAPL"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1764,
+        "right": 1805,
+        "width": 42,
+        "text": "$269.16"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1811,
+        "right": 1877,
+        "width": 66,
+        "text": "-1.55 (-0.57%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1893,
+        "right": 2071,
+        "width": 178,
+        "text": "MSFT$425.57-3.67 (-0.86%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1908,
+        "right": 1936,
+        "width": 29,
+        "text": "MSFT"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1942,
+        "right": 1984,
+        "width": 42,
+        "text": "$425.57"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 1989,
+        "right": 2055,
+        "width": 66,
+        "text": "-3.67 (-0.86%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2071,
+        "right": 2262,
+        "width": 191,
+        "text": "GOOGL$355.43+5.65 (+1.62%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2086,
+        "right": 2123,
+        "width": 37,
+        "text": "GOOGL"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2129,
+        "right": 2171,
+        "width": 42,
+        "text": "$355.43"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2176,
+        "right": 2246,
+        "width": 70,
+        "text": "+5.65 (+1.62%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2262,
+        "right": 2447,
+        "width": 185,
+        "text": "AMZN$265.37+5.67 (+2.18%)"
+      },
+      {
+        "label": "span",
+        "tag": "span",
+        "left": 2277,
+        "right": 2308,
+        "width": 31,
+        "text": "AMZN"
+      }
+    ],
+    "visibleSlots": [
+      "sheet-trigger",
+      "popover-trigger",
+      "button",
+      "dropdown-menu-trigger",
+      "dashboard-page-layout",
+      "earnings-intro",
+      "filters-bar",
+      "sort-direction-indicator",
+      "earnings-page-grid",
+      "earnings-calendar-sidebar",
+      "calendar-summary",
+      "day-group",
+      "day-group",
+      "day-group",
+      "earnings-detail-panel"
+    ],
+    "textSample": "Skip to content\nAlphaDesk\nDashboard\nStrategies\nTrade\nAnalytics\nAlerts\nPipeline\nReports\nSearch symbols, commands...\nCtrl+K\nA\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nAAPL\n$269.16\n-1.55 (-0.57%)\nMSFT\n$425.57\n-3.67 (-0.86%)\nGOOGL\n$355.43\n+5.65 (+1.62%)\nAMZN\n$265.37\n+5.67 (+2.18%)\nNVDA\n$211.41\n-1.76 (-0.82%)\nTSLA\n$373.26\n-2.76 (-0.73%)\nSPY\n$712.02\n+0.33 (+0.05%)\nQQQ\n$660.95\n+3.40 (+0.52%)\nMETA\n$673.41\n+2.07 (+0.31%)\nAMD\n$330.74\n+7.53 (+2.33%)\nP&L\nloss\n$916.67(-0.90%)\nRegime\nBull - High Volatility\nVIX\n27.4\nSTREAMING\nAlpaca (Paper)\nPAPER\n§ EARNINGS · OPTIONS PLAY\nThis + next week's earnings · Apr 27 - May 8, 2026\n8 earnings · sorted by date\nSkip to detail panel\n\nThis strategy sells volatility into earnings. When IV rank is high the market pays you a credit because everyone's anxious. You profit if the stock moves less than the implied move; you lose if it moves more. Naked short calls have unlimited risk; defined-risk variants (iron condors, vertical spreads) cap the loss but earn less.\n\nGot it — don't show again\nWINDOW\n○\nCurrent week\n○\nNext week\n●\nBoth weeks\nIV RANK ≥\n0\nTIME\n○\nBMO\n○\nAMC\n●\nAll hours\nWATCHLIST ONLY\nSORT\nEarnings date\nIV rank\nPremium yield\nClaude confidence\n\n§ CALENDAR · APR 27 - MAY 8, 2026 · 8 REPORTS\n\nThu, 04/30 · 2 REPORTS\nBMY\nDMT\n34\nMA\nDMT\n59\nFri, 05/01 · 4 REPORTS\nCL\nDMT\n31\nCVX\nDMT\n14\nLIN\nDMT\n3\nXOM\nDMT\n8\nMon, 05/04 · 2 REPORTS\nPLTR\nDMT\n4\nVRTX\nDMT\n14\n\nSelect a symbol from the sidebar.\n\nAlphaDesk dev — Powered by Claude AI — © 2026\nAI Copilot\nStrategies/earnings-options-play\n\nHow can I help?\n\nAsk me anything about your portfolio, markets, or trading strategies.\n\nWhat should I watch today?\nAnalyze my portfolio risk\nHow are my strategies performing?\nWhat's the market outlook?\nSuggest a hedge for my positions\nCmd+J to toggle"
+  },
+  "error": "page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at [stdin]:186:16"
+}

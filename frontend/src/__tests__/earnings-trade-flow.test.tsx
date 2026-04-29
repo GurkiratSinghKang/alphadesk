@@ -18,6 +18,8 @@ import {
   buildVerticalSpreadURL,
 } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/TradeButtonRow";
 import TradePage from "@/app/(dashboard)/trade/page";
+import { getBars } from "@/lib/api";
+import { useMarketStore } from "@/stores/market";
 import type { LadderRow } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -113,6 +115,8 @@ describe("earnings → trade URL builder (F-1, F-3)", () => {
 describe("Trade page parses Round-5 deep-link contract", () => {
   beforeEach(() => {
     _origLocation = window.location;
+    vi.clearAllMocks();
+    useMarketStore.setState({ selectedSymbol: "SPY" });
   });
   afterEach(() => {
     Object.defineProperty(window, "location", {
@@ -146,6 +150,13 @@ describe("Trade page parses Round-5 deep-link contract", () => {
       const stratChip = container.querySelector("[data-slot='trade-strategy-tag']");
       expect(stratChip).not.toBeNull();
       expect(stratChip!.textContent).toContain("earnings-options-play");
+
+      // The visual trade context should follow the URL underlying, not
+      // the previously-selected desk symbol. The ticket can still carry
+      // the OCC contract as its order symbol.
+      expect(container.textContent).toContain("Trade · NVDA");
+      expect(useMarketStore.getState().selectedSymbol).toBe("NVDA");
+      expect(vi.mocked(getBars).mock.calls.some((call) => call[0] === "NVDA")).toBe(true);
     });
   });
 

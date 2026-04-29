@@ -86,6 +86,12 @@ export function parseOccSymbol(occ: string): {
   };
 }
 
+function normalizeUnderlyingSymbol(raw: string | null): string | null {
+  const sym = (raw ?? "").trim().toUpperCase();
+  if (!sym) return null;
+  return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym) ? sym : null;
+}
+
 // ─── Pre-fill state types ──────────────────────────────────────────────────────
 
 interface ActiveContract {
@@ -135,8 +141,15 @@ export default function TradePage() {
   const router = useRouter();
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const [urlUnderlyingSymbol, setUrlUnderlyingSymbol] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    return normalizeUnderlyingSymbol(params.get("symbol"));
+  });
+  const tradeContextSymbol = urlUnderlyingSymbol ?? selectedSymbol;
   // Wave 14 perf-audit-r3 P0 #3: scoped to selected symbol only.
-  const selectedQuote = useQuote(selectedSymbol);
+  const selectedQuote = useQuote(tradeContextSymbol);
   const { data: strategiesResp } = useStrategies();
 
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
@@ -159,6 +172,8 @@ export default function TradePage() {
     const legsParam = params.get("legs");
     const strategyParam = params.get("strategy");
     const comboParam = params.get("combo_type");
+    const underlyingFromUrl = normalizeUnderlyingSymbol(params.get("symbol"));
+    let firstParsedUnderlying: string | null = null;
 
     if (strategyParam) setUrlStrategy(strategyParam);
     if (comboParam) setComboType(comboParam);
@@ -167,6 +182,7 @@ export default function TradePage() {
       // Single-leg deep-link.
       const parsed = parseOccSymbol(contractOcc);
       if (parsed) {
+        firstParsedUnderlying = parsed.symbol;
         const rawSide = params.get("side") ?? "buy";
         const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
         const qty = parseInt(params.get("qty") ?? "1", 10) || 1;
@@ -188,6 +204,7 @@ export default function TradePage() {
         const [occ, rawSide, rawQty, rawLimit] = parts;
         const parsed = parseOccSymbol(occ);
         if (!parsed) continue;
+        firstParsedUnderlying ??= parsed.symbol;
         const orderSide: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
         const qty = parseInt(rawQty ?? "1", 10) || 1;
         const lim = rawLimit ? parseFloat(rawLimit) : NaN;
@@ -196,7 +213,12 @@ export default function TradePage() {
       }
       if (legs.length > 0) setActiveLegs(legs);
     }
-  }, []);
+    const nextUnderlying = underlyingFromUrl ?? firstParsedUnderlying;
+    if (nextUnderlying) {
+      setUrlUnderlyingSymbol(nextUnderlying);
+      setSelectedSymbol(nextUnderlying);
+    }
+  }, [setSelectedSymbol]);
 
   const [range, setRange] = useState<ChartRange>("1M");
   const [series, setSeries] = useState<ChartBar[]>([]);
@@ -204,18 +226,18 @@ export default function TradePage() {
     let cancelled = false;
     (async () => {
       try {
-        const bars = await getBars(selectedSymbol, "D", rangeToLimit(range));
+        const bars = await getBars(tradeContextSymbol, "D", rangeToLimit(range));
         if (!cancelled) setSeries(bars);
       } catch {
         if (!cancelled) setSeries([]);
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSymbol, range]);
+  }, [tradeContextSymbol, range]);
 
   const quote = toQuote(selectedQuote ?? undefined);
   const meta = toMetaCells(selectedQuote ?? undefined);
-  const symbol = toMarketSymbol(selectedSymbol);
+  const symbol = toMarketSymbol(tradeContextSymbol);
 
   /* ─── Recent orders strip ──────────────────────────────── */
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -438,7 +460,7 @@ export default function TradePage() {
         >
           <OrderBar
             key={`trade-orderbar-${resetTick}`}
-            symbol={selectedSymbol}
+            symbol={tradeContextSymbol}
             strategies={strategyOptions}
             onSubmit={handleSubmit}
             submitting={submitting}

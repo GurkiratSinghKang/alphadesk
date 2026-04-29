@@ -1,0 +1,93 @@
+{
+  "source": "backend/data/oos/phase1-earnings_vol-oos.json",
+  "metrics": {
+    "sharpe": 1.4335960719437035,
+    "sortino": 1.2755892947351903,
+    "calmar": 6.26279331104955,
+    "max_drawdown": 0.019014660805729666,
+    "cagr": 0.1190848905059998,
+    "tail_ratio": 0,
+    "hit_rate": 0.55,
+    "profit_factor": 1.3084351002617556,
+    "turnover": 0.018703191944187014,
+    "alpha": 0,
+    "beta": 0
+  },
+  "stats": {
+    "count": 40,
+    "sum": 26296.088730059702,
+    "mean": 657.4022182514925,
+    "min": -13335.575,
+    "max": 12839.375,
+    "win_rate": 0.55
+  },
+  "startEquity": 100000,
+  "endEquity": 126245.6087300597,
+  "totalReturn": 0.262456087300597,
+  "byUnderlying": [
+    {
+      "symbol": "GS",
+      "legs": 4,
+      "pnl": 7324.609099212471,
+      "wins": 3,
+      "losses": 1,
+      "winRate": 0.75
+    },
+    {
+      "symbol": "QCOM",
+      "legs": 8,
+      "pnl": 5914.645601329519,
+      "wins": 5,
+      "losses": 3,
+      "winRate": 0.625
+    },
+    {
+      "symbol": "MS",
+      "legs": 4,
+      "pnl": 2965.6097280162653,
+      "wins": 2,
+      "losses": 2,
+      "winRate": 0.5
+    },
+    {
+      "symbol": "ORCL",
+      "legs": 4,
+      "pnl": 2806.839124839513,
+      "wins": 2,
+      "losses": 2,
+      "winRate": 0.5
+    },
+    {
+      "symbol": "ADBE",
+      "legs": 4,
+      "pnl": 2507.6774180749194,
+      "wins": 2,
+      "losses": 2,
+      "winRate": 0.5
+    },
+    {
+      "symbol": "MU",
+      "legs": 8,
+      "pnl": 2457.800259949282,
+      "wins": 4,
+      "losses": 4,
+      "winRate": 0.5
+    },
+    {
+      "symbol": "UNH",
+      "legs": 4,
+      "pnl": 1488.9074986377345,
+      "wins": 2,
+      "losses": 2,
+      "winRate": 0.5
+    },
+    {
+      "symbol": "INTC",
+      "legs": 4,
+      "pnl": 830,
+      "wins": 2,
+      "losses": 2,
+      "winRate": 0.5
+    }
+  ]
+}

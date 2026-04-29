@@ -16,6 +16,22 @@ def _define_models() -> dict[str, Any]:
     if _models_cache:
         return _models_cache
 
+    # Round-29 hotfix — survive a ``_models_cache.clear()`` in tests
+    # (test_optimistic_locking + test_audit_log_cleanup do this to force a
+    # fresh registration). Without this guard the second ``_define_models``
+    # call raises ``Table 'ohlcv_bars' is already defined for this MetaData
+    # instance`` because Base.metadata is shared across the process. If the
+    # tables are already on Base.metadata, look them up by tablename and
+    # rebuild the cache from existing class objects instead of re-defining.
+    from core.database import get_base
+    _base = get_base()
+    if "ohlcv_bars" in _base.metadata.tables:
+        for cls in _base.registry.mappers:
+            klass = cls.class_
+            _models_cache[klass.__name__] = klass
+        if _models_cache:
+            return _models_cache
+
     from sqlalchemy import (
         BigInteger,
         Boolean,
