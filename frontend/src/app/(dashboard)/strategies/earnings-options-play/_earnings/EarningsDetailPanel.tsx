@@ -290,6 +290,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         symbol={detail.symbol}
         ladder={detail.strikeLadder}
         onHoverStrategy={setHoveredStrategyZone}
+        recommendedSetup={detail.claudeStructured?.suggestedPlay ?? null}
       />
 
       <p

@@ -33,6 +33,25 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(container.textContent).not.toMatch(/undefined risk/i);
   });
 
+  it("marks Claude's recommended setup without changing other buttons", () => {
+    const { container } = render(
+      <TradeButtonRow
+        symbol="NVDA"
+        ladder={ladder}
+        recommendedSetup="bull call spread"
+      />,
+    );
+    const recommended = container.querySelector(
+      'a[data-slot="trade-button-bull-call-spread"]',
+    ) as HTMLAnchorElement;
+    const nonRecommended = container.querySelector(
+      'a[data-slot="trade-button-bear-put-spread"]',
+    ) as HTMLAnchorElement;
+
+    expect(recommended.textContent).toMatch(/Suggested/i);
+    expect(nonRecommended.textContent).not.toMatch(/Suggested/i);
+  });
+
   it("bull put spread sells ATM put, buys 30Δ put", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
     const btn = container.querySelector('a[data-slot="trade-button-bull-put-spread"]') as HTMLAnchorElement;

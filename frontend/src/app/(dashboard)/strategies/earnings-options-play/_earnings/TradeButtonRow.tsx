@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { StrikeLadder, LadderRow } from "@/types";
+import type { EarningsTopSetup, StrikeLadder, LadderRow } from "@/types";
 import { fmtNumber } from "@/lib/intl";
+import { cn } from "@/lib/utils";
 
 /**
  * TradeButtonRow — earnings → /trade deep-link builder.
@@ -36,11 +37,18 @@ export interface TradeButtonRowProps {
    * 1σ band. ``null`` clears the overlay (mouse-leave).
    */
   onHoverStrategy?: (zone: [number, number] | null) => void;
+  /** Claude's recommended setup, used to visually prioritize one button. */
+  recommendedSetup?: EarningsTopSetup | null;
 }
 
 const STRATEGY_TAG = "earnings-options-play";
 
-export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: TradeButtonRowProps) {
+export default function TradeButtonRow({
+  symbol,
+  ladder,
+  onHoverStrategy,
+  recommendedSetup = null,
+}: TradeButtonRowProps) {
   // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
   // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
   // any other shape (stub responses, chain_demo synthetic rows, future
@@ -128,6 +136,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           })}
           label={`Bull put spread ${fmtNumber(Math.round(bullPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossWidth(bullPutSpread.long.strike, bullPutSpread.short.strike, "credit")}
+          recommended={recommendedSetup === "bull put spread"}
           // Slice-6 / CH-3F: bull put spread profits when the underlying
           // stays AT OR ABOVE the short put strike. Profit zone =
           // [short_put, +∞]. We cap at 2× short_put as a sensible
@@ -150,6 +159,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           })}
           label={`Bear call spread ${fmtNumber(Math.round(bearCallSpread.short.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearCallSpread.long.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossWidth(bearCallSpread.short.strike, bearCallSpread.long.strike, "credit")}
+          recommended={recommendedSetup === "bear call spread"}
           // Slice-6 / CH-3F: bear call spread profits when the underlying
           // stays AT OR BELOW the short call strike. Profit zone =
           // [0, short_call]. Lower bound clamped to 0 (price can't go
@@ -175,6 +185,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
             bullCallSpread.long.mid - bullCallSpread.short.mid,
             "Bull call spread",
           )}
+          recommended={recommendedSetup === "bull call spread"}
           onHoverEnter={() => {
             const breakeven = bullCallSpread.long.strike + Math.max(0, bullCallSpread.long.mid - bullCallSpread.short.mid);
             onHoverStrategy?.([breakeven, breakeven * 2]);
@@ -197,6 +208,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
             bearPutSpread.long.mid - bearPutSpread.short.mid,
             "Bear put spread",
           )}
+          recommended={recommendedSetup === "bear put spread"}
           onHoverEnter={() => {
             const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
             onHoverStrategy?.([0, breakeven]);
@@ -215,6 +227,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           })}
           label={`Long call ${fmtNumber(Math.round(longCall.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossLongOption(longCall.mid, "Long call")}
+          recommended={recommendedSetup === "long call"}
           onHoverEnter={() => {
             const breakeven = longCall.strike + Math.max(0, longCall.mid);
             onHoverStrategy?.([breakeven, breakeven * 2]);
@@ -233,6 +246,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           })}
           label={`Long put ${fmtNumber(Math.round(longPut.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossLongOption(longPut.mid, "Long put")}
+          recommended={recommendedSetup === "long put"}
           onHoverEnter={() =>
             onHoverStrategy?.([0, longPut.strike - Math.max(0, longPut.mid)])
           }
@@ -259,6 +273,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
             0,
             "wing",
           )}
+          recommended={recommendedSetup === "iron condor"}
           // Slice-6 / CH-3F: iron condor profits when the underlying
           // stays BETWEEN the short put and short call strikes. The
           // green zone is [short_put, short_call] — the canonical
@@ -283,6 +298,7 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
           })}
           label={`Long straddle ${fmtNumber(Math.round(longStraddle.call.strike), { maximumFractionDigits: 0 })}c/p`}
           riskCopy={`Long straddle · max loss = debit paid (≈ $${fmtNumber(Math.round((longStraddle.call.mid + longStraddle.put.mid) * 100), { maximumFractionDigits: 0 })}) · profits on a big move either way`}
+          recommended={recommendedSetup === "long straddle"}
           // Slice-6 / CH-3F: long straddle profits OUTSIDE the breakevens.
           // The PnLZones primitive renders ONE profit zone — for a
           // straddle we'd need two (below lower BE, above upper BE).
@@ -309,6 +325,7 @@ function DefinedRiskTradeLink({
   href,
   label,
   riskCopy,
+  recommended = false,
   onHoverEnter,
   onHoverLeave,
 }: {
@@ -316,6 +333,7 @@ function DefinedRiskTradeLink({
   href: string;
   label: string;
   riskCopy: string;
+  recommended?: boolean;
   // Slice-6 / CH-3F: hover handlers feed the parent's profit-zone
   // overlay. Optional so the component still works in a standalone
   // context where no overlay is mounted.
@@ -332,7 +350,12 @@ function DefinedRiskTradeLink({
       onMouseLeave={onHoverLeave}
       onFocus={onHoverEnter}
       onBlur={onHoverLeave}
-      className="group min-h-[44px] rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]"
+      className={cn(
+        "group min-h-[44px] rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
+        recommended
+          ? "border-[color:var(--brand)] shadow-[0_0_0_1px_var(--brand)]"
+          : "border-[color:var(--border)]",
+      )}
     >
       <span className="u-brand inline-flex items-center gap-1.5">
         <span aria-hidden="true">▸</span>
@@ -342,7 +365,7 @@ function DefinedRiskTradeLink({
         id={`${dataSlot}-risk`}
         className="text-[9.5px] uppercase tracking-wider u-profit"
       >
-        ✓ Defined risk
+        {recommended ? "✓ Suggested · defined risk" : "✓ Defined risk"}
       </span>
     </Link>
   );
