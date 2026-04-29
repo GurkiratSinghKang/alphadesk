@@ -9,6 +9,7 @@ import {
   postEarningsFullResearch,
 } from "@/lib/api";
 import type {
+  CalendarRow,
   EarningsCandidateDecision,
   EarningsDetail,
   EarningsCalendarFilters,
@@ -30,6 +31,26 @@ export type SelectionSource = "pointer" | "keyboard" | "url" | null;
 type CandidateDecisionMap = Partial<Record<string, EarningsCandidateDecision>>;
 const CANDIDATE_DECISIONS_KEY = "alphadesk:earnings-candidate-decisions:v1";
 const CANDIDATE_DECISION_VALUES = new Set(["saved", "discarded", "order"]);
+type CandidateDecisionCounts = {
+  saved: number;
+  discarded: number;
+  order: number;
+  total: number;
+};
+
+export function countVisibleCandidateDecisions(
+  rows: Pick<CalendarRow, "symbol" | "reportDate">[],
+  candidateDecisions: CandidateDecisionMap,
+): CandidateDecisionCounts {
+  const counts: CandidateDecisionCounts = { saved: 0, discarded: 0, order: 0, total: 0 };
+  for (const row of rows) {
+    const decision = candidateDecisions[candidateDecisionKey(row.symbol, row.reportDate)] ?? null;
+    if (!decision) continue;
+    counts[decision] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
 
 /**
  * /strategies/earnings-options-play — research screener.
@@ -135,6 +156,7 @@ export default function EarningsOptionsPlayPage() {
     queryFn: ({ signal }) => getEarningsCalendar(calendarFilters, { signal }),
   });
   const calendar = calendarQuery.data ?? null;
+  const visibleRows = useMemo(() => calendar?.earnings ?? [], [calendar?.earnings]);
   const loadingCalendar = calendarQuery.isLoading;
   // CLUSTER D (10): isFetching covers the refetch case (stale data on
   // screen + a fresh request in flight). Sidebar uses this to dim itself
@@ -183,30 +205,36 @@ export default function EarningsOptionsPlayPage() {
   // serves a stub for off-calendar curated symbols.
   useEffect(() => {
     if (!calendar) return;
-    if (calendar.earnings.length === 0) {
+    let shouldClearSelection = false;
+    if (visibleRows.length === 0) {
       // Empty calendar — only clear if we don't have a URL-pinned symbol.
       const isUrlPinned =
         urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
-      if (!isUrlPinned && selectedSymbol !== null) setSelectedSymbol(null, null);
-      return;
+      shouldClearSelection = !isUrlPinned && selectedSymbol !== null;
+    } else if (!userClearedRef.current) {
+      const stillValid =
+        selectedSymbol && visibleRows.some((r) => r.symbol === selectedSymbol);
+      const isUrlPinned =
+        urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
+      // Phase-2 / EP-3 (per user directive 2026-04-26): do NOT auto-select
+      // the first calendar row on cold load. Heavy work (Claude structured
+      // analysis, options chain fetch, IV term backfill, news scoring)
+      // only fires once /detail is hit, so an auto-selection burns Opus
+      // tokens + chain bandwidth on a symbol the user never asked for.
+      // We still rehydrate URL-pinned selections (deeplink path) and
+      // preserve the current selection if it's still in the visible
+      // calendar — but we no longer pre-pick the top row.
+      shouldClearSelection = !stillValid && !isUrlPinned && selectedSymbol !== null;
     }
-    if (userClearedRef.current) return;
-    const stillValid =
-      selectedSymbol && calendar.earnings.some((r) => r.symbol === selectedSymbol);
-    const isUrlPinned =
-      urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
-    // Phase-2 / EP-3 (per user directive 2026-04-26): do NOT auto-select
-    // the first calendar row on cold load. Heavy work (Claude structured
-    // analysis, options chain fetch, IV term backfill, news scoring)
-    // only fires once /detail is hit, so an auto-selection burns Opus
-    // tokens + chain bandwidth on a symbol the user never asked for.
-    // We still rehydrate URL-pinned selections (deeplink path) and
-    // preserve the current selection if it's still in the visible
-    // calendar — but we no longer pre-pick the top row.
-    if (!stillValid && !isUrlPinned && selectedSymbol !== null) {
-      setSelectedSymbol(null, null);
-    }
-  }, [calendar, selectedSymbol, setSelectedSymbol]);
+    if (!shouldClearSelection) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setSelectedSymbol(null, null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [calendar, selectedSymbol, setSelectedSymbol, visibleRows]);
 
   // ── Full research (on-demand Claude Opus note) ───────────
   // CLUSTER D (11): expose the mutation error so ClaudeThesisCard can
@@ -295,18 +323,12 @@ export default function EarningsOptionsPlayPage() {
 
   // ── B-60: j/k and ArrowUp/ArrowDown shortcuts from useKeyboardShortcuts
   // dispatch these window-level events; we advance selection through the
-  // currently-loaded calendar. Use a ref so the handlers always see the
-  // latest rows without re-binding on every fetch.
-  const rowsRef = useRef(calendar?.earnings ?? []);
-  rowsRef.current = calendar?.earnings ?? [];
-  const selectedRef = useRef(selectedSymbol);
-  selectedRef.current = selectedSymbol;
-
+  // currently-loaded calendar.
   useEffect(() => {
     function step(dir: 1 | -1) {
-      const rows = rowsRef.current;
+      const rows = visibleRows;
       if (rows.length === 0) return;
-      const currentIdx = rows.findIndex((r) => r.symbol === selectedRef.current);
+      const currentIdx = rows.findIndex((r) => r.symbol === selectedSymbol);
       const base = currentIdx === -1 ? 0 : currentIdx;
       const nextIdx = (base + dir + rows.length) % rows.length;
       // Round-4 (B-NEW-4): keyboard nav allows DetailHeader to refocus.
@@ -328,7 +350,7 @@ export default function EarningsOptionsPlayPage() {
       window.removeEventListener("alphadesk:earnings-select-next", next);
       window.removeEventListener("alphadesk:earnings-select-prev", prev);
     };
-  }, [setSelectedSymbol]);
+  }, [selectedSymbol, setSelectedSymbol, visibleRows]);
 
   // Round-4: source-tagging wrappers for sidebar/keyboard handlers.
   // Round-5 (NEW-Y4 / G-19): clear the URL pin on the first user-driven
@@ -384,15 +406,10 @@ export default function EarningsOptionsPlayPage() {
     ? candidateDecisions[candidateDecisionKey(selectedSymbol, selectedReportDate)] ?? null
     : null;
 
-  const decisionCounts = useMemo(() => {
-    const counts = { saved: 0, discarded: 0, order: 0, total: 0 };
-    for (const decision of Object.values(candidateDecisions)) {
-      if (!decision) continue;
-      counts[decision] += 1;
-      counts.total += 1;
-    }
-    return counts;
-  }, [candidateDecisions]);
+  const decisionCounts = useMemo(
+    () => countVisibleCandidateDecisions(calendar?.earnings ?? [], candidateDecisions),
+    [calendar?.earnings, candidateDecisions],
+  );
 
   const actions = (
     <span
@@ -504,15 +521,9 @@ const INTRO_DISMISS_KEY = "alphadesk:earnings-intro-dismissed";
 
 function StrategyIntroCard() {
   const [dismissed, setDismissed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true; // SSR: hide so first
-    // hydration paint matches a returning user; only the cold-cache
-    // first-time user pays a flash on mount, which is fine.
-    return false;
+    if (typeof window === "undefined") return true;
+    return window.localStorage?.getItem(INTRO_DISMISS_KEY) === "1";
   });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setDismissed(window.localStorage?.getItem(INTRO_DISMISS_KEY) === "1");
-  }, []);
   if (dismissed) return null;
   return (
     <aside

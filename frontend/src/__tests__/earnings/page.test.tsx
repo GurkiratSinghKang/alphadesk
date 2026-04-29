@@ -3,7 +3,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, waitFor, act, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import EarningsOptionsPlayPage from "@/app/(dashboard)/strategies/earnings-options-play/page";
+import EarningsOptionsPlayPage, {
+  countVisibleCandidateDecisions,
+} from "@/app/(dashboard)/strategies/earnings-options-play/page";
 import * as api from "@/lib/api";
 import { useMarketStore } from "@/stores/market";
 
@@ -17,6 +19,29 @@ function withQueryClient(children: ReactNode) {
 }
 
 describe("Earnings Options Play page", () => {
+  it("counts saved and queued decisions only for the visible calendar window", () => {
+    expect(
+      countVisibleCandidateDecisions(
+        [
+          {
+            symbol: "NVDA",
+            reportDate: "2026-04-23",
+          },
+          {
+            symbol: "TSLA",
+            reportDate: "2026-04-24",
+          },
+        ],
+        {
+          "NVDA@2026-04-23": "saved",
+          "TSLA@2026-04-24": "order",
+          "NVDA@2026-01-30": "discarded",
+          "AAPL@2026-04-23": "order",
+        },
+      ),
+    ).toEqual({ saved: 1, discarded: 0, order: 1, total: 2 });
+  });
+
   it("fetches calendar on mount but does NOT auto-select first symbol (Phase-2 EP-3)", async () => {
     // Phase-2 / EP-3: heavy work (Claude structured analysis, options
     // chain fetch, IV term backfill) only runs when /detail is hit, so
