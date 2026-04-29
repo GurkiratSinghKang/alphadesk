@@ -33,6 +33,16 @@ describe("Watchlist", () => {
     }
   });
 
+  it("uses the persisted market-store watchlist by default", () => {
+    useMarketStore.setState({ watchlist: ["IBM", "ORCL"] });
+    const { container } = render(<Watchlist />);
+    const rows = container.querySelectorAll('[data-slot="watchlist"] ul > li');
+    expect(rows.length).toBe(2);
+    expect(container.textContent).toContain("IBM");
+    expect(container.textContent).toContain("ORCL");
+    expect(container.textContent).not.toContain("SPY");
+  });
+
   it("renders em-dash placeholders when a quote is missing", () => {
     const { container } = render(<Watchlist />);
     // No quotes were seeded → every row should show at least one em-dash.
@@ -67,5 +77,16 @@ describe("Watchlist", () => {
     });
     const { container } = render(<Watchlist />);
     expect(container.textContent).toContain("482.91");
+  });
+
+  it("adds a symbol through the header form and selects it", () => {
+    const { getByLabelText } = render(<Watchlist />);
+    fireEvent.click(getByLabelText("Add symbol"));
+    fireEvent.change(getByLabelText("Symbol"), { target: { value: "orcl" } });
+    fireEvent.click(getByLabelText("Save symbol"));
+
+    const state = useMarketStore.getState();
+    expect(state.watchlist).toContain("ORCL");
+    expect(state.selectedSymbol).toBe("ORCL");
   });
 });

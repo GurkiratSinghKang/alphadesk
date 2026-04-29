@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Check, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
@@ -28,13 +29,11 @@ import { getBars } from "@/lib/api";
  *   renders without a spark — the em-dash quote placeholders cover the
  *   empty-quote case separately.
  *
- * TODO(watchlist-prefs): the `DEFAULT_SYMBOLS` array below should become
- * user-configurable — read from `useMarketStore().watchlist` or a new
- * preferences slice — in a follow-up. The v2 "+" header button is a
- * placeholder until that add-symbol flow ships.
+ * The default symbol set comes from the persisted market store. The header
+ * plus button opens an inline add-symbol form and writes back to that store,
+ * so dashboard watchlist changes survive reloads and sync across tabs.
  */
 
-// Hard-coded for v1 — see TODO above.
 const DEFAULT_SYMBOLS = [
   "SPY",
   "QQQ",
@@ -50,6 +49,24 @@ const DEFAULT_SYMBOLS = [
 
 // Hard cap on rows — the design tops out at 12.
 const MAX_SYMBOLS = 12;
+const SYMBOL_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
+
+function normalizeSymbol(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 10);
+}
+
+function normalizeList(symbols: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of symbols) {
+    const sym = normalizeSymbol(raw);
+    if (!SYMBOL_RE.test(sym) || seen.has(sym)) continue;
+    seen.add(sym);
+    out.push(sym);
+    if (out.length >= MAX_SYMBOLS) break;
+  }
+  return out;
+}
 
 export interface WatchlistProps {
   /** Optional override of the initial symbol set — the dashboard page
@@ -59,14 +76,36 @@ export interface WatchlistProps {
 }
 
 export function Watchlist({ symbols, className }: WatchlistProps) {
-  // Clamp to the hard cap so callers can't push past 12 accidentally.
-  const list = React.useMemo(() => {
-    const source = symbols && symbols.length > 0 ? symbols : DEFAULT_SYMBOLS;
-    return source.slice(0, MAX_SYMBOLS);
-  }, [symbols]);
-
+  const storeWatchlist = useMarketStore((s) => s.watchlist);
+  const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const [isAdding, setIsAdding] = React.useState(false);
+  const [draftSymbol, setDraftSymbol] = React.useState("");
+
+  // Clamp to the hard cap so callers and persisted state can't push past 12.
+  const list = React.useMemo(() => {
+    const source = symbols && symbols.length > 0
+      ? symbols
+      : storeWatchlist.length > 0
+        ? storeWatchlist
+        : DEFAULT_SYMBOLS;
+    return normalizeList(source);
+  }, [storeWatchlist, symbols]);
+
+  const usesExternalSymbols = symbols != null;
+  const draft = normalizeSymbol(draftSymbol);
+  const addDisabled =
+    usesExternalSymbols || list.length >= MAX_SYMBOLS || !SYMBOL_RE.test(draft) || list.includes(draft);
+
+  function submitDraft(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (addDisabled) return;
+    addToWatchlist(draft);
+    setSelectedSymbol(draft);
+    setDraftSymbol("");
+    setIsAdding(false);
+  }
 
   // Sparkline closes per symbol. We fetch each row's bars once on first
   // render of the list and keep them in a single map — a row-level effect
@@ -122,34 +161,57 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
         <span className="t-display-section">Watchlist</span>
         <button
           type="button"
-          aria-label="Add symbol"
-          title="Add symbol"
-          // Placeholder — real add-symbol flow ships in v2. Deliberately a
-          // no-op so QA can see the affordance exists without wiring.
+          aria-label={isAdding ? "Cancel add symbol" : "Add symbol"}
+          title={usesExternalSymbols ? "Read-only symbol set" : isAdding ? "Cancel" : "Add symbol"}
+          disabled={usesExternalSymbols || (!isAdding && list.length >= MAX_SYMBOLS)}
           onClick={() => {
-            /* v2 */
+            setIsAdding((v) => !v);
+            setDraftSymbol("");
           }}
           className={cn(
             "inline-flex items-center justify-center h-7 w-7 rounded-sm",
             "text-fg-muted hover:text-ink-1000 hover:bg-bg-elev-2 transition-colors",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+            (usesExternalSymbols || (!isAdding && list.length >= MAX_SYMBOLS))
+              && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-fg-muted",
           )}
         >
-          <svg
-            aria-hidden="true"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          {isAdding ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />}
         </button>
       </header>
+
+      {isAdding ? (
+        <form
+          className="flex items-center gap-1.5 border-b border-border-hair px-3 py-2"
+          onSubmit={submitDraft}
+        >
+          <input
+            aria-label="Symbol"
+            value={draftSymbol}
+            maxLength={10}
+            onChange={(e) => setDraftSymbol(normalizeSymbol(e.target.value))}
+            className={cn(
+              "min-w-0 flex-1 rounded-sm border border-border bg-bg-card px-2 py-1.5",
+              "font-mono text-[12px] uppercase text-fg outline-none",
+              "focus:border-brand focus:ring-1 focus:ring-brand"
+            )}
+            placeholder="SYMBOL"
+          />
+          <button
+            type="submit"
+            aria-label="Save symbol"
+            disabled={addDisabled}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border",
+              "text-brand transition-colors hover:bg-bg-elev-2",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+              addDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
+            )}
+          >
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </form>
+      ) : null}
 
       <ul className="flex flex-col" role="list">
         {list.map((symbol) => (
