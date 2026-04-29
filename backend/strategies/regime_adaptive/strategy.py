@@ -110,8 +110,11 @@ class RegimeAdaptiveStrategy(Strategy):
         diagnostics["streak"] = new_streak
 
         # --- Per-day regime history ---------------------------------- #
-        history = dict(state.get("ra_regime_history", {}))
-        history[asof] = {
+        history = {
+            (k.isoformat() if hasattr(k, "isoformat") else str(k)): v
+            for k, v in dict(state.get("ra_regime_history", {})).items()
+        }
+        history[asof.isoformat()] = {
             "instant": new_instant,
             "confirmed": new_confirmed,
             "streak": new_streak,

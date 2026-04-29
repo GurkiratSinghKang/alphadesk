@@ -6,7 +6,7 @@ Indicator computations are kept pure so they can be shared with tests.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import numpy as np
@@ -140,7 +140,22 @@ def has_upcoming_earnings(
 # --------------------------------------------------------------------------- #
 # Misc                                                                        #
 # --------------------------------------------------------------------------- #
-def trading_days_between(start: Optional[date], end: date) -> int:
+def _coerce_date(value: Optional[date | datetime | str]) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def trading_days_between(start: Optional[date | datetime | str], end: date) -> int:
     """Trading-session count between two dates (inclusive of ``end``).
 
     Round-21 / persona-C P2: pre-fix used ``pd.bdate_range`` which is
@@ -148,17 +163,18 @@ def trading_days_between(start: Optional[date], end: date) -> int:
     straddling Thanksgiving week ended 1 session early. Now defers to
     the real US market calendar.
     """
-    if start is None:
+    s = _coerce_date(start)
+    if s is None:
         return 0
-    if start > end:
+    if s > end:
         return 0
     try:
         from data.calendar import _default
-        sessions = list(_default().sessions(start, end))
+        sessions = list(_default().sessions(s, end))
         return max(0, len(sessions) - 1)
     except Exception:
         # Calendar unavailable — Mon-Fri fallback (legacy behaviour).
-        return int(len(pd.bdate_range(start=start, end=end))) - 1
+        return int(len(pd.bdate_range(start=s, end=end))) - 1
 
 
 def adv_dollar_mean(bars: pd.DataFrame, lookback_bars: int = 90) -> Optional[float]:

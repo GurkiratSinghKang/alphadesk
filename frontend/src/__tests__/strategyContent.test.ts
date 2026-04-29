@@ -32,6 +32,14 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['earnings-vol-premium']).toBeDefined();
   });
 
+  it('earnings-vol-premium content matches the checked-in OOS artifact', () => {
+    const c = STRATEGY_CONTENT['earnings-vol-premium'];
+    expect(c.thesis).toContain('Sharpe 1.43');
+    expect(c.thesis).not.toContain('Sharpe 6.10');
+    expect(c.parameters.maxPositions).toBe('1');
+    expect(c.parameters.entryCriteria).toContain('1.7555');
+  });
+
   it('includes regime-adaptive strategy', () => {
     expect(STRATEGY_CONTENT['regime-adaptive']).toBeDefined();
   });
@@ -88,6 +96,14 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['mean-reversion'].riskProfile.level).toBe('Medium');
   });
 
+  it('mean-reversion content is explicit that the strategy is planned', () => {
+    const c = STRATEGY_CONTENT['mean-reversion'];
+    expect(c.thesis).toContain('planned catalogue concept');
+    expect(c.thesis).toContain('rsi2-reversal');
+    expect(c.parameters.maxPositions).toContain('0 live');
+    expect(c.risks[0]).toContain('No backend implementation');
+  });
+
   it('pead has Medium risk', () => {
     expect(STRATEGY_CONTENT['pead'].riskProfile.level).toBe('Medium');
   });
@@ -102,14 +118,34 @@ describe('Strategy Content', () => {
     expect(thesis).toContain('earnings');
   });
 
+  it('pead workflow copy distinguishes AMC and BMO timing', () => {
+    const copy = STRATEGY_CONTENT['pead'].howItWorks.join(' ');
+    expect(copy).toContain('AMC rows from the prior session');
+    expect(copy).toContain('BMO rows dated today');
+  });
+
   it('vrp-harvesting edge mentions volatility', () => {
     const edge = STRATEGY_CONTENT['vrp-harvesting'].edge.toLowerCase();
     expect(edge).toContain('volatility');
   });
 
+  it('vrp-harvesting copy makes research-shell status explicit', () => {
+    const c = STRATEGY_CONTENT['vrp-harvesting'];
+    expect(c.thesis.toLowerCase()).toContain('research-only');
+    expect(c.howItWorks.join(' ')).toContain('options_chain_available=false');
+    expect(c.parameters.maxPositions).toContain('0 live');
+  });
+
   it('claude-alpha mentions LLM or Claude', () => {
     const thesis = STRATEGY_CONTENT['claude-alpha'].thesis;
     expect(thesis).toContain('Claude');
+  });
+
+  it('claude-alpha content is explicit that the strategy is planned', () => {
+    const c = STRATEGY_CONTENT['claude-alpha'];
+    expect(c.thesis).toContain('planned research concept');
+    expect(c.parameters.maxPositions).toContain('0 live');
+    expect(c.risks[0]).toContain('No backend implementation');
   });
 
   it('all strategies have non-empty thesis (at least 100 chars)', () => {

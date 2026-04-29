@@ -16,13 +16,15 @@ from decimal import Decimal
 from typing import Optional
 
 import numpy as np
+import orjson
 import pandas as pd
 import pytest
 
-from strategies._core.contracts import Position, StrategyInput
+from strategies._core.contracts import Fill, Position, StrategyInput
 from strategies._core.protocol import get_meta, get_strategy
 from strategies._core.contracts import OrderType
 from strategies.rsi2_reversal.config import CORE_ETFS, RSI2Params
+from strategies.rsi2_reversal.helpers import trading_days_between
 from strategies.rsi2_reversal.strategy import RSI2ReversalStrategy
 
 
@@ -193,6 +195,11 @@ class TestEntryGates:
         assert aapl_sig.order_type is OrderType.MOO
         assert aapl_sig.stop_price is not None
         assert float(aapl_sig.stop_price) < float(dipped_aapl["close"].iloc[-1])
+        held = result.state_update["rsi2_reversal.held_symbols"]
+        assert isinstance(held, list)
+        assert "AAPL" in held
+        assert result.state_update["rsi2_reversal.entries"]["AAPL"]["queued_on"] == asof.isoformat()
+        orjson.dumps(result.state_update)
 
     def test_spy_regime_blocks_entry(self):
         base = _uptrend_path(n=300, seed=3)
@@ -384,3 +391,55 @@ class TestUniverse:
         syms = strat.universe(date(2024, 3, 15), state={})
         for core in CORE_ETFS:
             assert core in syms
+
+
+# --------------------------------------------------------------------------- #
+# State serialization                                                         #
+# --------------------------------------------------------------------------- #
+class TestStateSerialization:
+    def test_trading_days_between_accepts_persisted_iso_dates(self):
+        assert trading_days_between("2024-01-02", date(2024, 1, 5)) == 3
+
+    def test_on_fill_returns_json_safe_state(self):
+        strat = RSI2ReversalStrategy()
+        fill = Fill(
+            symbol="AAPL",
+            asof=date(2024, 3, 15),
+            quantity=10,
+            price=Decimal("175.25"),
+            signal_tag="rsi2-entry-tp180.0000",
+        )
+
+        update = strat.on_fill(
+            fill,
+            {
+                "rsi2_reversal.entries": {},
+                "rsi2_reversal.held_symbols": ["MSFT"],
+            },
+        )
+
+        assert update["rsi2_reversal.held_symbols"] == ["AAPL", "MSFT"]
+        assert update["rsi2_reversal.entries"]["AAPL"]["filled_on"] == "2024-03-15"
+        orjson.dumps(update)
+
+    def test_on_fill_close_removes_symbol_from_json_safe_state(self):
+        strat = RSI2ReversalStrategy()
+        fill = Fill(
+            symbol="AAPL",
+            asof=date(2024, 3, 18),
+            quantity=-10,
+            price=Decimal("178.10"),
+            signal_tag="rsi2-exit-sma-cross",
+        )
+
+        update = strat.on_fill(
+            fill,
+            {
+                "rsi2_reversal.entries": {"AAPL": {"filled_on": "2024-03-15"}},
+                "rsi2_reversal.held_symbols": ["AAPL", "MSFT"],
+            },
+        )
+
+        assert update["rsi2_reversal.held_symbols"] == ["MSFT"]
+        assert "AAPL" not in update["rsi2_reversal.entries"]
+        orjson.dumps(update)

@@ -186,6 +186,26 @@ class TestConfirmation:
         assert state.get("ra_instant_regime") == "HighVol"
         assert state.get("ra_confirmed_regime") == "HighVol"
 
+    def test_regime_history_uses_iso_string_keys(self):
+        asof = date(2024, 1, 31)
+        strat = RegimeAdaptiveStrategy()
+        inp = StrategyInput(
+            asof=asof,
+            mode="backtest",
+            bars=pd.DataFrame(),
+            cash=Decimal("100000"),
+            equity=Decimal("100000"),
+            positions=[],
+            state={"ra_regime_history": {date(2024, 1, 30): {"instant": "TrendUp"}}},
+            seed=0,
+            rng=np.random.default_rng(0),
+        )
+        result = strat.run(inp, RegimeAdaptiveParams())
+        history = result.state_update["ra_regime_history"]
+        assert "2024-01-30" in history
+        assert "2024-01-31" in history
+        assert all(isinstance(k, str) for k in history)
+
 
 # --------------------------------------------------------------------------- #
 # Rebalance trigger                                                           #

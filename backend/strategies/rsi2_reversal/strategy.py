@@ -114,7 +114,7 @@ class RSI2ReversalStrategy(Strategy):
         entries_state: dict[str, dict[str, Any]] = dict(
             state.get(f"{_NS}.entries", {})
         )
-        held_symbols: set[str] = set(state.get(f"{_NS}.held_symbols") or set())
+        held_symbols: set[str] = set(state.get(f"{_NS}.held_symbols") or [])
 
         signals: list[Signal] = []
 
@@ -167,7 +167,7 @@ class RSI2ReversalStrategy(Strategy):
                     )
                 )
                 entries_state[sym] = {
-                    "queued_on": asof,
+                    "queued_on": asof.isoformat(),
                     "stop_price": stop_px,
                     "entry_close_est": close_px,
                     "take_profit": tp_px,
@@ -176,7 +176,7 @@ class RSI2ReversalStrategy(Strategy):
             diagnostics["entries_emitted"] = min(capacity, len(candidates))
 
         state_update[f"{_NS}.entries"] = entries_state
-        state_update[f"{_NS}.held_symbols"] = held_symbols - exit_syms
+        state_update[f"{_NS}.held_symbols"] = sorted(held_symbols - exit_syms)
         return StrategyResult(
             signals=signals,
             state_update=state_update,
@@ -186,7 +186,7 @@ class RSI2ReversalStrategy(Strategy):
 
     def on_fill(self, fill: Fill, state: dict[str, Any]) -> dict[str, Any]:
         entries = dict(state.get(f"{_NS}.entries", {}))
-        held_symbols = set(state.get(f"{_NS}.held_symbols") or set())
+        held_symbols = set(state.get(f"{_NS}.held_symbols") or [])
 
         sym = fill.symbol
         is_close = fill.quantity < 0 or (fill.signal_tag or "").startswith("rsi2-exit")
@@ -195,13 +195,13 @@ class RSI2ReversalStrategy(Strategy):
             held_symbols.discard(sym)
         else:
             meta = entries.setdefault(sym, {})
-            meta["filled_on"] = fill.asof
+            meta["filled_on"] = fill.asof.isoformat()
             meta["entry_price"] = float(fill.price)
             held_symbols.add(sym)
 
         return {
             f"{_NS}.entries": entries,
-            f"{_NS}.held_symbols": held_symbols,
+            f"{_NS}.held_symbols": sorted(held_symbols),
         }
 
 

@@ -296,7 +296,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "mean-reversion": {
         "name": "Mean Reversion",
-        "description": "Buy oversold quality stocks with strong fundamentals (F-Score >= 5) and sell on reversion to mean. Uses wider stops and targets.",
+        "description": "Planned quality-conditioned mean-reversion concept. No backend package or live execution yet; use rsi2-reversal for the implemented Connors RSI(2) strategy.",
         # Wave 6γ (persona-109 P2): planned-only catalogue entry.
         "status": StrategyStatus.PLANNED,
         "invested_amount": 0,

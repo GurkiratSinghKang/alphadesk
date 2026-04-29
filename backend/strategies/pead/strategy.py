@@ -404,7 +404,7 @@ class PEADStrategy(Strategy):
           actionable at ``asof = D`` (MOO entry at D.open).
         * **BMO** (before-market open): FMP dates the row on the session
           during whose open the release hits. A BMO row dated D is
-          actionable at ``asof = D+1`` (MOO entry at D+1.open).
+          actionable at ``asof = D`` (MOO entry at D.open).
 
         Rows without an ``announcement_when`` classification fall back
         to the AMC anchor to preserve legacy behaviour when the calendar

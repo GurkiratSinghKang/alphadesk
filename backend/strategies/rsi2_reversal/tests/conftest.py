@@ -67,6 +67,7 @@ def _install_stub() -> None:
     pkg = sys.modules["backend.strategies.rsi2_reversal"]
     strat = importlib.import_module("backend.strategies.rsi2_reversal.strategy")
     cfg = importlib.import_module("backend.strategies.rsi2_reversal.config")
+    helpers = importlib.import_module("backend.strategies.rsi2_reversal.helpers")
     tests_mod = importlib.import_module("backend.strategies.rsi2_reversal.tests")
 
     if "strategies" not in sys.modules:
@@ -74,10 +75,11 @@ def _install_stub() -> None:
         leg.__path__ = [str(_BACKEND / "strategies")]
         leg.__file__ = "(stub)"
         sys.modules["strategies"] = leg
-    sys.modules.setdefault("strategies.rsi2_reversal", pkg)
-    sys.modules.setdefault("strategies.rsi2_reversal.strategy", strat)
-    sys.modules.setdefault("strategies.rsi2_reversal.config", cfg)
-    sys.modules.setdefault("strategies.rsi2_reversal.tests", tests_mod)
+    sys.modules["strategies.rsi2_reversal"] = pkg
+    sys.modules["strategies.rsi2_reversal.strategy"] = strat
+    sys.modules["strategies.rsi2_reversal.config"] = cfg
+    sys.modules["strategies.rsi2_reversal.helpers"] = helpers
+    sys.modules["strategies.rsi2_reversal.tests"] = tests_mod
 
 
 _install_stub()

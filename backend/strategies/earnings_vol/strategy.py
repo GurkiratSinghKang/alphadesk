@@ -116,6 +116,8 @@ def _upcoming_earnings(
     sub = earnings[mask]
     if sub.empty:
         return []
+    sub = sub.assign(_event_date=frame_dates[mask])
+    sub = sub.sort_values(["_event_date", "symbol"])
     out: list[tuple[str, Optional[date]]] = []
     seen: set[str] = set()
     for _, row in sub.iterrows():
@@ -150,6 +152,13 @@ def _historical_move_median(
     sub = sub.dropna(subset=[move_col])
     if sub.empty:
         return None
+    date_col = next(
+        (c for c in ("date", "report_date", "ts") if c in sub.columns),
+        None,
+    )
+    if date_col is not None:
+        sub = sub.assign(_event_date=pd.to_datetime(sub[date_col], errors="coerce"))
+        sub = sub.sort_values(["_event_date"])
     tail = sub.tail(lookback_quarters)
     return float(tail[move_col].abs().median())
 

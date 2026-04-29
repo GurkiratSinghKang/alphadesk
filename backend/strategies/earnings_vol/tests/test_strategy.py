@@ -17,7 +17,11 @@ import pytest
 from strategies._core.contracts import StrategyInput
 from strategies._core.protocol import get_meta, get_strategy
 from strategies.earnings_vol.config import EarningsVolParams, UNIVERSE
-from strategies.earnings_vol.strategy import EarningsVolStrategy
+from strategies.earnings_vol.strategy import (
+    EarningsVolStrategy,
+    _historical_move_median,
+    _upcoming_earnings,
+)
 
 
 def _build_bars(
@@ -122,3 +126,21 @@ class TestRun:
         syms = {c["symbol"] for c in cands}
         assert "AAPL" in syms
         assert "ZZZZ" not in syms
+
+    def test_upcoming_earnings_uses_earliest_event_when_provider_unsorted(self):
+        asof = date(2024, 4, 30)
+        earnings = pd.DataFrame([
+            {"symbol": "AAPL", "date": date(2024, 5, 15)},
+            {"symbol": "AAPL", "date": date(2024, 5, 2)},
+        ])
+        assert _upcoming_earnings(earnings, asof, dte_target=21) == [
+            ("AAPL", date(2024, 5, 2)),
+        ]
+
+    def test_historical_move_median_sorts_by_event_date_before_tail(self):
+        earnings = pd.DataFrame([
+            {"symbol": "AAPL", "date": date(2024, 1, 30), "move_pct": 0.02},
+            {"symbol": "AAPL", "date": date(2024, 7, 30), "move_pct": 0.10},
+            {"symbol": "AAPL", "date": date(2024, 4, 30), "move_pct": 0.04},
+        ])
+        assert _historical_move_median(earnings, "AAPL", lookback_quarters=2) == pytest.approx(0.07)

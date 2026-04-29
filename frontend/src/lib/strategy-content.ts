@@ -76,7 +76,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       maxPositions: "15",
     },
     howItWorks: [
-      "Each morning, pull the FMP earnings calendar for the prior session (BMO + AMC reporters are treated as known by T-1 close).",
+      "Each morning, pull the FMP earnings calendar. AMC rows from the prior session and BMO rows dated today are actionable at the next open; unknown timing falls back to the AMC anchor.",
       "Compute SUE as (actual - estimate) / trailing-quarter sigma; require at least 4 prior quarters of surprise history to size the denominator.",
       "Rank the day's surprises by |SUE| descending; take the top percent of the day by tuner selection, apply universe filters.",
       "Emit MOO entries: long if SUE > threshold, short if SUE < -threshold and shorts are enabled. Size equal-weight, sign-aware.",
@@ -93,31 +93,31 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "vrp-harvesting": {
     thesis:
-      "A short-volatility options strategy that systematically sells 16-delta SPY strangles at ~30 DTE to harvest the variance risk premium documented by Bakshi & Madan (2006) and Carr & Wu (2009) — the chronic wedge between implied volatility and subsequent realized volatility on index options. The book is managed with three hard gates: an entry threshold on live VRP (IV_30 - HV_20 >= 2%), a term-structure gate that refuses entries into backwardation, and a VIX kill switch that flattens the book when 30-day ATM IV crosses 35%.\n\nShort-vol without tail protection is famously lethal (XIV 5-Feb-2018, Aug-2024 JPY carry). This rewrite follows Dubinsky & Johannes (2023): every strangle is paired with an optional 5-delta far-OTM SPY put tail hedge at a 1:5 ratio, funded from the short premium. Position sizing is theta-target (0.3% of equity per calendar day of theta), exits trigger at 50% of max profit, 200% loss, 21 DTE, or kill-switch activation.\n\nThe legacy AlphaDesk implementation issued long equity BUY signals on high-IV-rank stocks — the exact opposite of VRP harvesting (flagged in prior audit). This rewrite replaces that with a real multi-leg options program via ctx.options_provider. 2024-04 through 2024-09 smoke window: Sharpe 0.88, max drawdown 7.3%, the VIX kill switch correctly stepped the book aside for the full week around the Aug-5-2024 VIX spike.",
+      "A short-volatility options strategy design that would systematically sell 16-delta SPY strangles at ~30 DTE to harvest the variance risk premium documented by Bakshi & Madan (2006) and Carr & Wu (2009) — the chronic wedge between implied volatility and subsequent realized volatility on index options. In the current SOTA shell, the backend is registered as research-only because StrategyInput does not yet carry an options chain. It computes a proxy VRP diagnostic from SPY realized volatility and emits no executable options signals.\n\nThe target production design keeps three hard gates: an entry threshold on live VRP (IV_30 - HV_20 >= 2%), a term-structure gate that refuses entries into backwardation, and a VIX/IV kill switch that flattens the book when 30-day ATM IV crosses 35%. Short-vol without tail protection is famously lethal (XIV 5-Feb-2018, Aug-2024 JPY carry), so the intended implementation pairs each strangle with a 5-delta far-OTM SPY put tail hedge at a 1:5 or 1:10 ratio.\n\nThe legacy AlphaDesk implementation issued long equity BUY signals on high-IV-rank stocks — the exact opposite of VRP harvesting. The current shell is safer: it surfaces proxy diagnostics only, marks options-chain and term-structure gates unavailable, and waits for multi-leg options-chain support before becoming autonomous.",
     edge:
-      "Harvests the volatility risk premium — the gap between implied and realized vol on SPX, positive ~81% of days over 2004-2024 — while the term-structure gate and VIX kill switch step aside for the specific regimes (Feb-2018, Mar-2020, Aug-2024) that destroyed unhedged short-vol programs.",
+      "Research-stage monitor for the volatility risk premium — the gap between implied and realized vol on SPX, positive ~81% of days over 2004-2024. The live edge requires options-chain data so the term-structure gate, tail hedge, and VIX kill switch can be enforced before any short-vol order is emitted.",
     riskProfile: {
       level: "High",
       description:
-        "Short-vol options strategy with defined-risk legs via the tail-hedge overlay when enabled. Convex downside in gap moves is mitigated by the kill switch + term-structure gate, but a true Feb-2018 intraday spike between daily closes can still produce a 5-10% mark-to-market hit.",
+        "Research shell today; high-risk short-vol options strategy once enabled. Convex downside in gap moves must be mitigated by the kill switch + term-structure gate + tail hedge, but a true Feb-2018 intraday spike between daily closes can still produce a large mark-to-market hit.",
     },
     parameters: {
-      rebalanceFrequency: "Daily management (entry on VRP signal; exits on TP / SL / DTE / kill switch)",
-      universe: "SPY index options — 30 DTE at entry, 16-delta strangle with optional 5-delta put tail hedge",
+      rebalanceFrequency: "Daily diagnostics today; daily management after options-chain integration",
+      universe: "SPY realized-vol proxy today; target live universe is SPY index/ETF options around 30 DTE",
       positionSizing:
-        "Theta-target sizing — contracts scaled to target 0.3% of equity per calendar day of theta across the book",
+        "No live sizing in research mode. Target design uses theta-target sizing with contracts scaled to target 0.3% of equity per calendar day of theta across the book",
       entryCriteria:
-        "VRP (IV_30_ATM - HV_20) >= 2%, term structure in contango (front < back), IV_30 < 35% kill switch",
+        "Proxy gate today: HV_20-derived IV proxy minus HV_20 >= 2% and proxy IV below 35%. Live gate will require real IV_30, term contango, and tail-hedge availability",
       exitCriteria:
-        "50% of max profit, 200% loss stop, 21 DTE roll, or IV_30 kill switch flat-book",
-      maxPositions: "10",
+        "No live exits in research mode. Target design exits at 50% max profit, 200% loss stop, 21 DTE roll, or IV_30 kill switch flat-book",
+      maxPositions: "0 live; target 10 after options-chain integration",
     },
     howItWorks: [
-      "Each session, fetch the live SPY option chain snapshot from ctx.options_provider. Solve IV via BS inversion if Greeks missing.",
-      "Compute VRP = IV_30_ATM - HV_20_annualized. Compute term structure = IV_30_ATM - IV_60_ATM. Check the 35% kill switch.",
-      "If gates pass and no position is open, sell 16-delta call + 16-delta put at 30 DTE. If tail_hedge_ratio > 0, buy one 5-delta put per N strangles.",
-      "Size the strangle count so per-position theta fits the 0.3%-of-equity daily target.",
-      "Manage daily: close at 50% max profit, 200% loss stop, or 21 DTE roll. If IV_30 crosses 35% or term structure inverts, flatten the entire vol-short book and refuse new entries.",
+      "Each session, read SPY daily bars and compute HV_20 plus a simple IV proxy until StrategyInput carries options-chain data.",
+      "Emit diagnostics: hv_short, hv_long, iv_proxy_30, proxy VRP, kill_switch_tripped, entry_gate_open, and options_chain_available=false.",
+      "Do not emit live strangle or tail-hedge signals while the options chain, term structure, and multi-leg execution contract are absent.",
+      "After options-chain integration, compute real VRP = IV_30_ATM - HV_20_annualized and term structure = IV_30_ATM - IV_60_ATM.",
+      "Only then sell the 16-delta strangle and buy the tail hedge, with daily management and kill-switch flattening.",
     ],
     whenToUse:
       "Best in stable, moderately-elevated VIX regimes (18-30) with contango term structure — the paying-for-insurance regime where realized vol consistently underruns implied. The kill switch is designed to stand aside in Feb-2018 / Mar-2020 / Aug-2024 events; expect extended flat-book periods during sustained backwardation.",
@@ -130,7 +130,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "earnings-vol-premium": {
     thesis:
-      "An event-driven short-volatility strategy that sells defined-risk iron butterflies one session before a scheduled earnings release and closes at the post-event open/close the following session. The edge is the Ederington & Lee (1996) IV-ramp-then-crush pattern: front-week implied vol systematically elevates into scheduled announcements and collapses within minutes of the next open, regardless of the direction of the underlying move.\n\nThe body of the butterfly (short ATM call + short ATM put) collects a large net credit; wings (long call + long put at ±1.4x the implied move) cap risk at the wing width minus the credit. Dubinsky, Johannes, Kaeck & Seeger (2019) decompose option prices into diffusive and event components and document that the event component is empirically mispriced on average; Gao, Xing & Zhang (2018) show the cross-sectional smirk richness persists around earnings.\n\nEntry is gated by a richness ratio: implied straddle move / trailing-8-quarter median realized earnings move >= 1.2. Below that ratio the market isn't over-pricing the event by enough to cover slippage. Universe is a fixed 29-name weekly-options liquidity list (mega-cap tech + major financials + select healthcare / semis). 2023-2024 OOS on synthetic BS exit pricing: Sharpe 6.10, max drawdown 1.26%, 132 trades, 89% win rate. The headline Sharpe is almost certainly inflated by the synthetic pricing model — expect a 30-50% haircut when moving from model to real single-name weekly options fills.",
+      "An event-driven short-volatility strategy that sells defined-risk iron butterflies one session before a scheduled earnings release and closes at the post-event open/close the following session. The edge is the Ederington & Lee (1996) IV-ramp-then-crush pattern: front-week implied vol systematically elevates into scheduled announcements and collapses within minutes of the next open, regardless of the direction of the underlying move.\n\nThe body of the butterfly (short ATM call + short ATM put) collects a large net credit; wings (long call + long put at roughly 0.8x the implied move in the current tuned defaults) cap risk at the wing width minus the credit. Dubinsky, Johannes, Kaeck & Seeger (2019) decompose option prices into diffusive and event components and document that the event component is empirically mispriced on average; Gao, Xing & Zhang (2018) show the cross-sectional smirk richness persists around earnings.\n\nEntry is gated by a richness ratio: implied straddle move / trailing-8-quarter median realized earnings move >= 1.7555 in the checked-in tuned defaults. Below that ratio the market is not over-pricing the event by enough to cover slippage. Universe is a fixed 29-name weekly-options liquidity list (mega-cap tech + major financials + select healthcare / semis). The checked-in 2023-2024 OOS artifact reports Sharpe 1.43, max drawdown 1.9%, CAGR 11.9%, 40 OOS trades, 55% hit rate, and 1.31 profit factor. Results still use synthetic BS exit pricing, so live fills should be treated with a meaningful haircut.",
     edge:
       "Exploits the Ederington-Lee pre-earnings IV ramp and post-event crush, gated on a historical-realized-move richness filter so the position only fires when the market is over-pricing the event relative to the last 8 quarters of actual single-name earnings-day reactions.",
     riskProfile: {
@@ -141,28 +141,28 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
     parameters: {
       rebalanceFrequency: "Event-driven (T-1 MOC entry before earnings; T or T+1 open/close exit)",
       universe:
-        "29-name fixed list with liquid weekly options — mega-cap tech, major banks, select healthcare/semis; underlying price >= $50",
+        "29-name fixed list with liquid weekly options — mega-cap tech, major banks, select healthcare/semis; underlying price >= $20",
       positionSizing:
-        "Max loss per trade capped at ~1.9% of equity; contract count = floor(equity * max_loss / (wing_width*100 - credit))",
+        "Max loss per trade capped at ~2.9% of equity in the tuned defaults; contract count = floor(equity * max_loss / (wing_width*100 - credit))",
       entryCriteria:
-        "Implied straddle move / 8-quarter median realized earnings move >= 1.2, wing bid-ask < 10% of mid, earnings after close only",
+        "Implied straddle move / 8-quarter median realized earnings move >= 1.7555, wing bid-ask < 10% of mid, timing filter currently any",
       exitCriteria:
-        "First post-event open (or next close, per tuner) — all four legs closed together. No intraday stops.",
-      maxPositions: "10",
+        "One hour after the post-event open in the tuned default (or next open/close in parameter sweeps) — all four legs closed together. No intraday stops.",
+      maxPositions: "1",
     },
     howItWorks: [
       "On each session, pull the FMP earnings calendar for the next session. Filter to after-market-close announcements in the 29-name universe.",
       "For each candidate, pull the Polygon chain snapshot, solve ATM straddle mid, compute implied move = straddle / underlying_close.",
-      "Compute the 8-quarter median |close_T / close_T-1 - 1| from historical earnings dates. Require implied / historical >= 1.2.",
-      "At T-1 close, emit a single 4-leg Signal: short ATM call + short ATM put + long OTM call at ATM + 1.4 * implied_move + long OTM put at ATM - 1.4 * implied_move.",
-      "Exit all four legs together at the first post-event open (or next close, per tuner). Crush is captured on the opening print; holding beyond adds gamma risk.",
+      "Compute the 8-quarter median |close_T / close_T-1 - 1| from historical earnings dates. Require implied / historical >= 1.7555 in the current tuned defaults.",
+      "At T-1 close, emit a single 4-leg Signal: short ATM call + short ATM put + long OTM call/put using the tuned wing-width multiple.",
+      "Exit all four legs together one hour after the post-event open in the checked-in tuned defaults. Crush is captured early; holding beyond adds gamma risk.",
     ],
     whenToUse:
-      "Diversified across 20+ names per year produces a smooth P&L stream. The Sharpe collapses if the universe is narrowed (single-name concentration risk) or the richness filter is lowered below 1.2. Historically struggled in Q1 2020 COVID vol explosion; 2020 bars are not in the reported OOS window.",
+      "Use only when event vol is meaningfully overpriced versus that name's own earnings history. The tuned defaults are selective (max one concurrent position); widening capacity or lowering the richness filter can quickly turn this into concentrated short-gamma exposure. Historically struggled in Q1 2020 COVID vol explosion; 2020 bars are not in the reported OOS window.",
     risks: [
       "Reported Sharpe uses a synthetic BS exit-pricing model because Polygon Developer lacks historical IV and bid/ask. Real single-name weekly options will give up meaningful spread and slippage — expect a 30-50% haircut.",
       "AI-boom outliers (NVDA / META / NFLX) have produced 3-6 sigma earnings realizations that pin the trade against the wings; wing width is the guard, but 2024 losses on LLY were real.",
-      "5-trial Optuna tuning — small parameter budget relative to RSI2 (80) and momentum_quality (25). Longer runs could shift exit_timing back to 'next_open'.",
+      "20-trial Optuna tuning — still a small parameter budget for a path-dependent options strategy. Longer runs or real historical bid/ask could shift the selected exit_timing or wing width.",
     ],
   },
 
@@ -205,37 +205,37 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "claude-alpha": {
     thesis:
-      "Claude Alpha represents a novel approach to systematic equity selection that leverages large language model reasoning as the core analytical engine. Rather than relying on predefined quantitative factors, the strategy uses Claude to perform multi-dimensional analysis of each candidate stock, integrating fundamental data (earnings quality, balance sheet strength, capital allocation efficiency), technical signals (trend structure, volume patterns, relative strength), sentiment indicators (earnings call transcript tone, news flow, social media positioning), and options market signals (unusual flow, put-call skew shifts, term structure anomalies). The synthesis of these heterogeneous data sources into a unified investment thesis for each position mirrors the cognitive process of a skilled discretionary portfolio manager, but with the consistency, scalability, and absence of emotional bias that systematic approaches provide.\n\nThe theoretical basis for this approach draws from the information aggregation literature, particularly Grossman & Stiglitz (1980), who argue that prices cannot fully reflect all available information when information acquisition is costly. A large language model's ability to rapidly process and synthesize vast quantities of unstructured data — earnings transcripts, management commentary, industry reports, macro context — represents a step function reduction in the cost of information processing. This creates an edge in the speed and completeness of fundamental analysis, particularly for mid-cap names where analyst coverage is thinner and informational inefficiencies persist, consistent with the findings of Hong, Lim & Stein (2000) on the relationship between analyst coverage and the speed of price adjustment.\n\nThe strategy maintains epistemic humility by treating Claude's analysis as a sophisticated signal rather than an oracle. Position sizing reflects conviction levels derived from the model's own uncertainty estimates, and all positions are subject to systematic risk management overlays including stop-losses, correlation caps, and sector concentration limits. The approach is inherently adaptive — as the model's training data and reasoning capabilities evolve, the analytical framework improves without requiring manual factor engineering or backtesting of new signals.",
+      "Claude Alpha is a planned research concept, not a live backend strategy. The intended design is systematic equity selection powered by large language model reasoning: Claude would synthesize fundamentals, technical structure, sentiment, catalyst context, and options-flow clues into a scored thesis for each candidate.\n\nThe theoretical basis for the concept draws from information aggregation literature, particularly Grossman & Stiglitz (1980), which argues that prices cannot fully reflect all available information when information acquisition is costly. A model that can rapidly process earnings transcripts, management commentary, industry reports, and macro context could reduce that processing cost, especially in names with thinner analyst coverage.\n\nBefore this becomes autonomous, AlphaDesk still needs a backend strategy package, prompt/version controls, point-in-time data contracts, a replayable backtest harness, risk-manager gates, and live monitoring for model drift. Until those exist, Claude Alpha should be treated as roadmap/design material rather than an active book.",
     edge:
-      "Achieves information processing breadth and speed that exceeds human capacity, synthesizing unstructured fundamental, technical, sentiment, and flow data into unified stock-level views — particularly effective in the mid-cap space where analyst coverage gaps create persistent informational inefficiencies.",
+      "Planned edge: use Claude to synthesize unstructured fundamental, technical, sentiment, and flow data into unified stock-level views, then validate those views with replayable point-in-time backtests before any capital is allocated.",
     riskProfile: {
       level: "High",
       description:
-        "Novel strategy without extensive live track record; model reasoning is not fully interpretable, creating opacity risk in understanding why specific positions are selected during drawdown periods.",
+        "Planned strategy without a backend implementation or live track record. Model opacity, prompt drift, and point-in-time data leakage are the primary risks to solve before activation.",
     },
     parameters: {
-      rebalanceFrequency: "Weekly analysis with position changes as needed",
+      rebalanceFrequency: "Planned weekly analysis; not active",
       universe:
         "US equities with market cap > $2B, average daily volume > $10M, and sufficient public information for multi-factor analysis",
       positionSizing:
-        "Conviction-weighted: 1-3% per position based on Claude's confidence score, with a 5% maximum for highest-conviction ideas",
+        "Not live. Target design: conviction-weighted 1-3% per position with hard portfolio-level risk caps",
       entryCriteria:
-        "Claude composite score in top quintile across fundamentals, technicals, sentiment, and flow dimensions, with explicit articulation of catalyst and thesis",
+        "Not live. Target design: Claude composite score in top quintile with explicit catalyst, thesis, uncertainty, and invalidation criteria",
       exitCriteria:
-        "Thesis invalidation identified by Claude, stop-loss at 8% from entry, or position held > 60 days without catalyst realization",
-      maxPositions: "15",
+        "Not live. Target design: thesis invalidation, risk stop, or stale catalyst timeout after model-reviewed holding period",
+      maxPositions: "0 live; target 15 after implementation",
     },
     howItWorks: [
-      "Weekly, pull the top screener candidates based on a multi-factor composite score (technical trend structure, fundamental quality, relative strength, and options flow signals).",
-      "For each candidate, Claude performs deep analysis: reads recent earnings transcripts, evaluates management commentary, assesses competitive positioning, and checks for sentiment divergence.",
-      "Claude generates a conviction-weighted score (0-100) with an explicit articulation of the catalyst and investment thesis for each stock.",
-      "Positions are sized based on Claude's confidence: 1-3% per position for standard conviction, up to 5% for highest-conviction ideas, with a maximum of 15 concurrent positions.",
-      "Exit management: Claude reviews all positions weekly for thesis invalidation. Hard 8% stop-loss from entry. Maximum 60-day holding period without catalyst realization triggers review.",
+      "Build a point-in-time candidate dataset first: fundamentals, transcripts, price/volume, news, estimates, and options-flow proxies.",
+      "Version every prompt and model setting so a backtest can replay exactly what Claude saw at the time.",
+      "Require structured output: score, catalyst, thesis, uncertainty, invalidation, and max holding period.",
+      "Run the output through risk gates and a paper-trade ledger before any autonomous sizing is allowed.",
+      "Only after replay + paper results are stable should the strategy graduate from planned to research or autonomous.",
     ],
     whenToUse:
-      "Claude Alpha adds the most value in markets with active stock-level dispersion and abundant catalysts -- earnings seasons, sector rotations, and periods of policy uncertainty where fundamental analysis drives returns. It excels in the mid-cap space (market cap $2-10B) where analyst coverage is thinner and informational inefficiencies persist. Less effective during macro-driven, high-correlation environments where all stocks move together.",
+      "Most promising in markets with active stock-level dispersion and abundant catalysts -- earnings seasons, sector rotations, and periods of policy uncertainty where fundamental analysis drives returns. It is not active today.",
     risks: [
-      "Novel strategy without extensive live track record; past performance of the analytical framework in backtesting may not predict forward results.",
+      "No backend implementation or live track record yet; all performance claims must be withheld until point-in-time replay exists.",
       "Model opacity: Claude's reasoning is not fully interpretable, making it difficult to understand why specific positions are selected during drawdown periods.",
       "AI model evolution: changes to Claude's reasoning capabilities between versions could alter the strategy's characteristics without explicit calibration.",
       "Concentration risk: if Claude's analysis converges on a narrow set of themes, the portfolio may be less diversified than intended.",
@@ -244,41 +244,41 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "mean-reversion": {
     thesis:
-      "This strategy targets short-term mean reversion in fundamentally sound equities that have experienced transient price dislocations. The core premise rests on the overreaction hypothesis formalized by De Bondt & Thaler (1985, 1987), which demonstrates that stocks experiencing sharp declines tend to exhibit subsequent reversals as the initial price move overshoots fundamental value. By conditioning entry on both a technical oversold signal (RSI below 30) and a fundamental quality floor (Piotroski F-Score of 5 or higher), the strategy isolates temporary liquidity-driven dislocations from genuine fundamental deterioration — a critical distinction that separates profitable mean reversion from value traps.\n\nThe quality filter addresses the primary failure mode of naive mean reversion: buying stocks that are cheap for a reason. Stambaugh, Yu & Yuan (2012) show that many apparent mean reversion opportunities are concentrated in low-quality, high-short-interest names where the \"reversion\" never materializes because the price decline reflects rational repricing of impaired fundamentals. By requiring a minimum F-Score, the strategy ensures that purchased stocks have demonstrated profitability, improving leverage ratios, and adequate operating efficiency — characteristics that support the thesis that the current drawdown represents a buying opportunity rather than the beginning of a sustained decline.\n\nThe holding period is deliberately short — positions are closed when RSI recovers above 50 (indicating normalization of selling pressure) or after a maximum of 20 trading days, whichever comes first. This time-boxed approach reflects the empirical evidence from Gutierrez & Kelley (2008) showing that mean reversion in fundamentally sound stocks is a short-duration phenomenon, with the majority of the reversal occurring within the first 15-20 trading days. Extended holding periods dilute returns and introduce exposure to new information that may alter the original thesis.",
+      "Mean Reversion is a planned catalogue concept, not a registered backend strategy today. The live short-horizon reversal implementation is RSI-2 Mean Reversion under the rsi2-reversal strategy; this card is reserved for a future quality-conditioned mean-reversion book that would be distinct from the Connors RSI(2) system.\n\nThe intended design is a slower, fundamentally aware reversal strategy: find liquid US equities that have sold off sharply, require point-in-time evidence that balance-sheet and profitability quality remain intact, avoid imminent earnings, and exit when the dislocation normalizes or the thesis times out. That concept is plausible, but AlphaDesk does not yet ship the backend package, point-in-time fundamentals contract, backtest artifact, or live risk controls required to trade it.\n\nUntil those pieces exist, this strategy should surface as roadmap material only. Performance metrics, active positions, and order controls should remain inactive so users do not confuse it with the implemented rsi2-reversal strategy.",
     edge:
-      "Exploits the behavioral tendency of market participants to overreact to negative news in fundamentally healthy companies, creating transient mispricings that correct as panic selling subsides and fundamental value reasserts itself.",
+      "Planned edge: combine behavioral overreaction with a point-in-time quality gate so the system buys temporary dislocations rather than structurally impaired names. The edge still needs a replayable backtest before capital is allocated.",
     riskProfile: {
       level: "Medium",
       description:
-        "Catching falling knives carries inherent timing risk, and systemic market dislocations can push oversold stocks further down before mean reversion materializes, though the quality filter and time stop limit drawdown severity.",
+        "Planned strategy with no live implementation. The intended risk is medium because single-name reversals can keep falling during broad selloffs, and stale fundamentals can mistake deterioration for temporary panic.",
     },
     parameters: {
       rebalanceFrequency:
-        "Daily screening with immediate entry on signal confirmation",
+        "Not live. Target design: daily screening with next-session execution after signal confirmation",
       universe:
-        "S&P 500 and Russell 1000 constituents with average daily volume > $5M",
+        "Not live. Target design: liquid US large/mid caps with point-in-time fundamentals and earnings-calendar coverage",
       positionSizing:
-        "Equal-weight at 3-5% per position, reduced to 2% during periods of elevated market volatility (VIX > 25)",
+        "Not live. Target design: equal-weight 3-5% positions with volatility and correlation caps",
       entryCriteria:
-        "14-day RSI < 30 AND Piotroski F-Score >= 5 AND no pending earnings within 5 trading days AND stock not in a structural downtrend (above 200-day SMA within last 20 days)",
+        "Not live. Target design: oversold technical setup plus point-in-time quality floor, no imminent earnings, and no structural downtrend",
       exitCriteria:
-        "RSI recovers above 50 OR 20 trading day maximum holding period OR 10% stop-loss from entry",
-      maxPositions: "10",
+        "Not live. Target design: normalization exit, thesis timeout, or risk stop",
+      maxPositions: "0 live; target 10 after implementation",
     },
     howItWorks: [
-      "Screen the S&P 500 and Russell 1000 daily for stocks with 14-day RSI below 30, indicating extreme short-term oversold conditions.",
-      "Apply a fundamental quality filter: require Piotroski F-Score of 5 or higher to ensure the price decline reflects a temporary dislocation, not genuine deterioration.",
-      "Confirm no pending earnings within 5 trading days (to avoid binary event risk) and that the stock was above its 200-day SMA within the last 20 days (eliminating structural downtrends).",
-      "Enter qualifying positions at equal weight (3-5% per position, reduced to 2% when VIX > 25) on signal confirmation.",
-      "Close when RSI recovers above 50 (mean reversion achieved), at the 20 trading day maximum holding period, or at the 10% stop-loss from entry -- whichever comes first.",
+      "Do not emit live orders today; the catalogue entry is planned-only.",
+      "Before implementation, define a point-in-time fundamentals provider contract so quality scores cannot leak future filings.",
+      "Build a replayable backtest that separates this slower quality-reversion design from the existing rsi2-reversal backend.",
+      "Add risk gates for earnings proximity, market-wide selloffs, sector clustering, and stale-fundamental data.",
+      "Graduate to paper trading only after the backtest artifact and live state contract are checked in.",
     ],
     whenToUse:
-      "Mean reversion works best during sideways or mildly volatile markets where individual stock dislocations occur against a stable macro backdrop. It excels during sector-specific selloffs (e.g., biotech rotation, bank stress) where the broad market is stable but individual names are temporarily depressed. Avoid during systemic crises where 'oversold' stocks can become much more oversold, and the quality filter alone cannot protect against cascading failures.",
+      "Most promising as a future strategy in sideways or mildly volatile markets where individual stocks overreact while the broad market remains stable. It is not active today.",
     risks: [
-      "Catching falling knives: even with the quality filter, stocks can continue declining if the dislocation is driven by a fundamental change the F-Score hasn't yet captured.",
-      "Correlated drawdowns: during broad market selloffs, multiple mean-reversion positions can all move against you simultaneously.",
-      "Time decay of the signal: if the stock doesn't revert within 20 days, the mean-reversion thesis weakens and the time stop forces an exit that may be at a loss.",
-      "F-Score lag: Piotroski scores are based on annual financial statements and may not reflect recent deterioration in fundamentals.",
+      "No backend implementation or live track record yet; all performance claims must be withheld until point-in-time replay exists.",
+      "Quality-score leakage is easy to introduce if filings are not timestamped by availability date.",
+      "Correlated drawdowns can hit many reversal names at once during broad market selloffs.",
+      "The catalogue already has rsi2-reversal; this future design must stay clearly differentiated to avoid duplicate exposure.",
     ],
   },
 

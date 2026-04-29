@@ -92,6 +92,9 @@ class TestRun:
         result = strat.run(_build_input(bars, date(2024, 4, 30)), VRPHarvestParams())
         assert result.signals == []
         assert "vrp" in result.diagnostics
+        assert result.diagnostics["options_chain_available"] is False
+        assert result.diagnostics["term_structure_gate"] is None
+        assert any("Research shell" in w for w in result.warnings)
 
     def test_warmup_bars_returns_empty(self):
         rng = np.random.default_rng(13)

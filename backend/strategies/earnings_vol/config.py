@@ -16,7 +16,7 @@ from strategies._core.contracts import StrategyParams
 
 
 # --------------------------------------------------------------------------- #
-# Fixed universe — 30 names with liquid weekly options                        #
+# Fixed universe — 29 names with liquid weekly options                        #
 # --------------------------------------------------------------------------- #
 UNIVERSE: tuple[str, ...] = (
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD",

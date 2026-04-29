@@ -475,6 +475,28 @@ class TestDirectionGating:
         assert entries == []
 
 
+class TestAnnouncementTiming:
+    def test_amc_prior_session_and_bmo_same_session_are_actionable(self):
+        asof = date(2023, 4, 14)
+        prior = asof - timedelta(days=1)
+        calendar = pd.DataFrame([
+            {"symbol": "AAPL", "date": prior, "announcement_when": "amc", "eps_actual": 1.2, "eps_estimated": 1.0},
+            {"symbol": "MSFT", "date": asof, "announcement_when": "bmo", "eps_actual": 1.2, "eps_estimated": 1.0},
+            {"symbol": "NVDA", "date": prior, "announcement_when": "unknown", "eps_actual": 1.2, "eps_estimated": 1.0},
+        ])
+        ann = PEADStrategy._yesterday_announcements(calendar, asof)
+        assert set(ann["symbol"]) == {"AAPL", "MSFT", "NVDA"}
+
+    def test_bmo_prior_session_is_not_reentered_late(self):
+        asof = date(2023, 4, 14)
+        prior = asof - timedelta(days=1)
+        calendar = pd.DataFrame([
+            {"symbol": "MSFT", "date": prior, "announcement_when": "bmo", "eps_actual": 1.2, "eps_estimated": 1.0},
+        ])
+        ann = PEADStrategy._yesterday_announcements(calendar, asof)
+        assert ann.empty
+
+
 # --------------------------------------------------------------------------- #
 # Time-stop exit                                                              #
 # --------------------------------------------------------------------------- #
