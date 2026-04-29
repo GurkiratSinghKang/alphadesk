@@ -19,7 +19,7 @@ import orjson
 import pandas as pd
 import pytest
 
-from strategies._core.contracts import Position, StrategyInput
+from strategies._core.contracts import Fill, Position, StrategyInput
 from strategies.momentum_quality.config import (
     MomentumQualityParams,
     EXCLUDED_SECTORS,
@@ -34,6 +34,7 @@ from strategies.momentum_quality.helpers import (
 from strategies.momentum_quality.strategy import (
     MomentumQualityStrategy,
     _compute_target,
+    _compute_target_with_diagnostics,
 )
 
 
@@ -275,6 +276,38 @@ class TestFScoreHandling:
         assert "AAPL" not in target
         assert "MSFT" in target
 
+    def test_candidate_funnel_counts_filter_reasons(self):
+        syms = ["AAPL", "MSFT", "NVDA", "META"]
+        returns = {"AAPL": 0.60, "MSFT": 0.50, "NVDA": -0.20}
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals(
+            {"AAPL": 9, "MSFT": None, "NVDA": 9},
+            REBAL_DAY,
+        )
+        params = MomentumQualityParams(
+            top_n=2,
+            min_f_score=5,
+            momentum_filter_min=0.0,
+            earnings_skip_days=0,
+        )
+
+        target, diagnostics = _compute_target_with_diagnostics(
+            params, bars, fund, None, syms, REBAL_DAY
+        )
+
+        assert target == ["AAPL"]
+        assert diagnostics["universe_size"] == 4
+        assert diagnostics["momentum_available"] == 3
+        assert diagnostics["filtered_below_momentum_floor"] == 1
+        assert diagnostics["filtered_missing_fscore"] == 1
+        assert diagnostics["ranked_candidates"] == 1
+        assert diagnostics["selected"][0]["symbol"] == "AAPL"
+        assert diagnostics["drop_reasons"] == {
+            "missing_momentum": 1,
+            "below_momentum_floor": 1,
+            "missing_fscore": 1,
+        }
+
 
 # --------------------------------------------------------------------------- #
 # End-to-end signal emission                                                  #
@@ -320,6 +353,40 @@ class TestSignalEmission:
         assert {"AAPL", "MSFT", "NVDA"}.issubset(set(held))
         assert "ORCL" in held
         orjson.dumps(result.state_update)
+
+    def test_on_fill_removes_exited_symbols_from_universe_state(self):
+        s = MomentumQualityStrategy()
+        state = {"momentum_quality.held_symbols": ["AAPL", "ORCL"]}
+
+        update = s.on_fill(
+            Fill(
+                symbol="ORCL",
+                asof=REBAL_DAY,
+                quantity=-10,
+                price=Decimal("100"),
+                signal_tag="mq-exit",
+            ),
+            state,
+        )
+
+        assert update["momentum_quality.held_symbols"] == ["AAPL"]
+
+    def test_on_fill_keeps_trimmed_target_symbols(self):
+        s = MomentumQualityStrategy()
+        state = {"momentum_quality.held_symbols": ["AAPL", "MSFT"]}
+
+        update = s.on_fill(
+            Fill(
+                symbol="MSFT",
+                asof=REBAL_DAY,
+                quantity=-2,
+                price=Decimal("400"),
+                signal_tag="mq-entry",
+            ),
+            state,
+        )
+
+        assert update["momentum_quality.held_symbols"] == ["AAPL", "MSFT"]
 
     def test_earnings_skip_blocks_name(self):
         syms = eligible_universe()

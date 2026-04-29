@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from strategies._core.contracts import (
+    Fill,
     OrderType,
     Signal,
     StrategyInput,
@@ -107,8 +108,16 @@ class MomentumQualityStrategy(Strategy):
             )
         diagnostics["rebalance"] = True
 
-        target = _compute_target(params, input.bars, input.fundamentals, input.earnings, universe_list, asof)
+        target, target_diagnostics = _compute_target_with_diagnostics(
+            params,
+            input.bars,
+            input.fundamentals,
+            input.earnings,
+            universe_list,
+            asof,
+        )
         diagnostics["target"] = list(target)
+        diagnostics["candidate_funnel"] = target_diagnostics
 
         target_set = set(target)
         signals: list[Signal] = []
@@ -160,6 +169,15 @@ class MomentumQualityStrategy(Strategy):
             warnings=warnings,
         )
 
+    def on_fill(self, fill: Fill, state: dict[str, Any]) -> dict[str, Any]:
+        held_symbols = set(state.get(f"{_NS}.held_symbols") or [])
+        tag = fill.signal_tag or ""
+        if tag.startswith("mq-exit"):
+            held_symbols.discard(fill.symbol)
+        elif tag.startswith("mq-entry") or fill.quantity > 0:
+            held_symbols.add(fill.symbol)
+        return {f"{_NS}.held_symbols": sorted(held_symbols)}
+
 
 # --------------------------------------------------------------------------- #
 # Core decision logic                                                         #
@@ -173,49 +191,127 @@ def _compute_target(
     asof: date,
 ) -> list[str]:
     """Return the ranked top-N symbol list for ``asof`` — pure function."""
+    target, _diagnostics = _compute_target_with_diagnostics(
+        params, bars, fundamentals, earnings, universe_list, asof
+    )
+    return target
+
+
+def _compute_target_with_diagnostics(
+    params: MomentumQualityParams,
+    bars: pd.DataFrame,
+    fundamentals: pd.DataFrame | None,
+    earnings: pd.DataFrame | None,
+    universe_list: list[str],
+    asof: date,
+) -> tuple[list[str], dict[str, Any]]:
+    """Return top-N targets plus a JSON-safe candidate funnel."""
+    diagnostics: dict[str, Any] = {
+        "universe_size": len(universe_list),
+        "required_bars": params.momentum_lookback_m * _TRADING_DAYS_PER_MONTH
+        + params.momentum_skip_m * _TRADING_DAYS_PER_MONTH
+        + 2,
+        "panel_rows": 0,
+        "panel_symbols": 0,
+        "momentum_available": 0,
+        "filtered_below_momentum_floor": 0,
+        "fscore_available": 0,
+        "filtered_missing_fscore": 0,
+        "filtered_low_fscore": 0,
+        "earnings_blocked": 0,
+        "ranked_candidates": 0,
+        "selected": [],
+        "drop_reasons": {},
+    }
     panel = close_panel_from_bars(bars, asof)
     if panel is None or panel.empty:
-        return []
+        diagnostics["drop_reasons"]["bars_unavailable"] = len(universe_list)
+        return [], diagnostics
+
+    diagnostics["panel_rows"] = int(len(panel))
+    diagnostics["panel_symbols"] = int(len(panel.columns))
 
     lookback_days = params.momentum_lookback_m * _TRADING_DAYS_PER_MONTH
     skip_days = params.momentum_skip_m * _TRADING_DAYS_PER_MONTH
     min_bars = lookback_days + skip_days + 2
     if len(panel) < min_bars:
-        return []
+        diagnostics["drop_reasons"]["insufficient_panel_history"] = len(universe_list)
+        return [], diagnostics
 
     mom = compute_momentum(panel, universe_list, lookback_days, skip_days)
+    diagnostics["momentum_available"] = len(mom)
+    missing_momentum = sorted(set(universe_list) - set(mom))
+    if missing_momentum:
+        diagnostics["drop_reasons"]["missing_momentum"] = len(missing_momentum)
     if not mom:
-        return []
+        return [], diagnostics
 
     eligible_syms = [s for s, r in mom.items() if r >= params.momentum_filter_min]
+    low_momentum = sorted(s for s, r in mom.items() if r < params.momentum_filter_min)
+    diagnostics["filtered_below_momentum_floor"] = len(low_momentum)
+    if low_momentum:
+        diagnostics["drop_reasons"]["below_momentum_floor"] = len(low_momentum)
     if not eligible_syms:
-        return []
+        return [], diagnostics
 
     fscores = get_fscores(fundamentals, eligible_syms, asof)
+    diagnostics["fscore_available"] = sum(
+        1 for s in eligible_syms if fscores.get(s) is not None
+    )
+    missing_fscore = sorted(s for s in eligible_syms if fscores.get(s) is None)
+    diagnostics["filtered_missing_fscore"] = len(missing_fscore)
+    if missing_fscore:
+        diagnostics["drop_reasons"]["missing_fscore"] = len(missing_fscore)
+    low_fscore = sorted(
+        s for s in eligible_syms
+        if (f := fscores.get(s)) is not None and f < params.min_f_score
+    )
+    diagnostics["filtered_low_fscore"] = len(low_fscore)
+    if low_fscore:
+        diagnostics["drop_reasons"]["low_fscore"] = len(low_fscore)
     eligible_syms = [
         s for s in eligible_syms
         if (f := fscores.get(s)) is not None and f >= params.min_f_score
     ]
     if not eligible_syms:
-        return []
+        return [], diagnostics
 
     if params.earnings_skip_days > 0:
         blocked = earnings_blocked(
             earnings, eligible_syms, asof, params.earnings_skip_days,
         )
+        diagnostics["earnings_blocked"] = len(blocked)
+        if blocked:
+            diagnostics["drop_reasons"]["earnings_window"] = len(blocked)
         eligible_syms = [s for s in eligible_syms if s not in blocked]
         if not eligible_syms:
-            return []
+            return [], diagnostics
 
     q_weight = params.quality_weight
     m_weight = 1.0 - q_weight
 
     mom_vals = np.array([mom[s] for s in eligible_syms], dtype=float)
     f_vals = np.array([float(fscores[s]) for s in eligible_syms], dtype=float)
-    score = m_weight * rank_01(mom_vals) + q_weight * rank_01(f_vals)
+    mom_rank = rank_01(mom_vals)
+    quality_rank = rank_01(f_vals)
+    score = m_weight * mom_rank + q_weight * quality_rank
 
     order = np.argsort(-score, kind="stable")
-    return [eligible_syms[i] for i in order[:params.top_n]]
+    ranked = [
+        {
+            "symbol": str(eligible_syms[i]),
+            "momentum": float(mom[eligible_syms[i]]),
+            "f_score": int(fscores[eligible_syms[i]]),
+            "momentum_rank": float(mom_rank[i]),
+            "quality_rank": float(quality_rank[i]),
+            "composite_score": float(score[i]),
+        }
+        for i in order
+    ]
+    target = [row["symbol"] for row in ranked[:params.top_n]]
+    diagnostics["ranked_candidates"] = len(ranked)
+    diagnostics["selected"] = ranked[:params.top_n]
+    return target, diagnostics
 
 
 __all__ = ["MomentumQualityStrategy"]
