@@ -215,7 +215,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         {...swipeHandlers}
       >
         <span id="candidate-swipe-card-hint" className="sr-only">
-          On touch screens, swipe left to discard, right to save, or up to queue an order.
+          On touch screens, swipe left to discard, right to save, or up to queue an order, then advance.
         </span>
         <CandidateDecisionBar
           decision={candidateDecision}
@@ -334,11 +334,18 @@ function useCandidateDecisionSwipe(
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
     if (absX >= SWIPE_MIN_PX && absX >= absY * SWIPE_AXIS_RATIO) {
-      onDecision(dx > 0 ? "saved" : "discarded");
+      commitSwipeDecision(dx > 0 ? "saved" : "discarded");
       return;
     }
     if (dy <= -SWIPE_MIN_PX && absY >= absX * SWIPE_AXIS_RATIO) {
-      onDecision("order");
+      commitSwipeDecision("order");
+    }
+  }
+
+  function commitSwipeDecision(decision: EarningsCandidateDecision) {
+    onDecision?.(decision);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
     }
   }
 

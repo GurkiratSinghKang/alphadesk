@@ -78,6 +78,8 @@ describe("EarningsDetailPanel", () => {
 
   it("maps mobile card swipes to discard, save, and queue actions", () => {
     const onCandidateDecision = vi.fn();
+    const onNext = vi.fn();
+    window.addEventListener("alphadesk:earnings-select-next", onNext);
     const { container } = render(
       <EarningsDetailPanel
         detail={detail}
@@ -133,6 +135,8 @@ describe("EarningsDetailPanel", () => {
     expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
     expect(onCandidateDecision).toHaveBeenNthCalledWith(2, "saved");
     expect(onCandidateDecision).toHaveBeenNthCalledWith(3, "order");
+    expect(onNext).toHaveBeenCalledTimes(3);
+    window.removeEventListener("alphadesk:earnings-select-next", onNext);
   });
 
   // ── Round-4 additions ─────────────────────────────────────
