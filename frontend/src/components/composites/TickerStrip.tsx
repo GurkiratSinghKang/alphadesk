@@ -105,7 +105,7 @@ export default function TickerStrip({
             <span
               key={`${t.symbol}-${t._k}`}
               className="font-mono text-[12px] text-fg-muted inline-flex items-baseline gap-2"
-              style={{ letterSpacing: "0.03em" }}
+              style={{ letterSpacing: 0 }}
             >
               <span>{t.symbol}</span>
               <b className="text-fg font-medium">{t.price}</b>

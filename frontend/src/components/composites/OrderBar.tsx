@@ -520,7 +520,7 @@ export default function OrderBar({
         <span
           data-slot="order-destination"
           className="font-mono text-[13px] text-fg-hint text-center md:text-right"
-          style={{ letterSpacing: "0.05em" }}
+          style={{ letterSpacing: 0 }}
         >
           {submitDestination}
         </span>

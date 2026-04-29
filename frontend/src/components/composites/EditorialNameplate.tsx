@@ -39,7 +39,7 @@ export default function EditorialNameplate({
     >
       <div
         className="flex items-baseline gap-1.5 font-display italic text-[32px] text-ink-1000"
-        style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
+        style={{ letterSpacing: 0, lineHeight: 1 }}
       >
         <span className="text-brand">α</span>
         <span>AlphaDesk</span>
@@ -54,7 +54,7 @@ export default function EditorialNameplate({
 
       <span
         className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
-        style={{ letterSpacing: "0.18em" }}
+        style={{ letterSpacing: 0 }}
       >
         Vol. {volume}
       </span>
@@ -65,7 +65,7 @@ export default function EditorialNameplate({
 
       <span
         className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
-        style={{ letterSpacing: "0.18em" }}
+        style={{ letterSpacing: 0 }}
       >
         Issue {issue}
       </span>
@@ -76,14 +76,14 @@ export default function EditorialNameplate({
 
       <span
         className="font-display italic text-[15px] text-fg"
-        style={{ letterSpacing: "-0.005em" }}
+        style={{ letterSpacing: 0 }}
       >
         {title}
       </span>
 
       <span
         className="ml-auto font-mono text-[10.5px] text-fg-hint"
-        style={{ letterSpacing: "0.05em" }}
+        style={{ letterSpacing: 0 }}
       >
         {date}
       </span>

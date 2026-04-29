@@ -45,7 +45,7 @@ export default function ClaudeStamp({
         "inline-flex items-center gap-1.5 font-mono text-[9.5px] text-fg-hint uppercase",
         className
       )}
-      style={{ letterSpacing: "0.06em" }}
+      style={{ letterSpacing: 0 }}
     >
       {parts.map((p, i) => (
         <React.Fragment key={i}>

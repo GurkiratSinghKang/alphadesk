@@ -44,6 +44,14 @@ vi.mock("lightweight-charts", () => ({
   CrosshairMode: { Normal: 0, Magnet: 1 },
 }));
 
+function expectZeroInlineTracking(container: HTMLElement) {
+  const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const node of tracked) {
+    expect(["0", "0px"]).toContain(node.style.letterSpacing);
+  }
+}
+
 describe("PriceChartPanel", () => {
   it("renders header with symbol name, ticker, price, delta and meta cells", () => {
     const { container } = render(
@@ -71,5 +79,6 @@ describe("PriceChartPanel", () => {
     expect(container.textContent).toContain("134.82");
     expect(container.textContent).toContain("Vol");
     expect(container.textContent).toContain("28.4M");
+    expectZeroInlineTracking(container);
   });
 });

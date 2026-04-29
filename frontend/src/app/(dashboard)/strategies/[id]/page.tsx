@@ -834,7 +834,7 @@ export default function StrategyDetailPage() {
               "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-4 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             )}
-            style={{ letterSpacing: "0.1em" }}
+            style={{ letterSpacing: 0 }}
           >
             Retry
           </button>

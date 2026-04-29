@@ -195,15 +195,15 @@ function StrategyCatalogCard({
           {pillLabel ? (
             // 2026-04-21 polish: bumped pill text from 9.5px to 11px — the
             // lower value was below the post-redesign 11px readable floor
-            // (design-tokens.css sets --fs-label=12). Capitalised tracking is
-            // preserved so the pill still reads as a chip, not prose.
+            // (design-tokens.css sets --fs-label=12). Keep normal tracking
+            // so the chip remains legible in dense card grids.
             <span
               data-testid="strategy-card-pill"
               role="status"
               aria-label={pillAriaLabel}
               className={cn(
                 "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
-                "font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+                "font-sans text-[11px] font-semibold uppercase tracking-normal text-amber-100"
               )}
             >
               {pillLabel}

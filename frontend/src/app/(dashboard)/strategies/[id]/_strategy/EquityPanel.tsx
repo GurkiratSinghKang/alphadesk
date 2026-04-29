@@ -153,7 +153,7 @@ export default function EquityPanel({
                     : "text-fg-muted hover:text-fg",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 )}
-                style={{ letterSpacing: "0.04em" }}
+                style={{ letterSpacing: 0 }}
               >
                 {r}
               </button>

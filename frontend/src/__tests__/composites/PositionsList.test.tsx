@@ -25,6 +25,14 @@ const rows = [
   },
 ];
 
+function expectZeroTracking(container: HTMLElement) {
+  const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const node of tracked) {
+    expect(["0", "0px"]).toContain(node.style.letterSpacing);
+  }
+}
+
 describe("PositionsList", () => {
   it("renders one row per position with tabs", () => {
     const { container } = render(
@@ -38,6 +46,7 @@ describe("PositionsList", () => {
     expect(container.textContent).toContain("UNH");
     // count label
     expect(container.textContent).toContain("2");
+    expectZeroTracking(container);
   });
 
   it("sets aria-selected on the active tab", () => {

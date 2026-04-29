@@ -2,6 +2,14 @@ import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import EditorialNameplate from "@/components/composites/EditorialNameplate";
 
+function expectZeroTracking(container: HTMLElement) {
+  const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const node of tracked) {
+    expect(["0", "0px"]).toContain(node.style.letterSpacing);
+  }
+}
+
 describe("EditorialNameplate", () => {
   it("renders all editorial fields", () => {
     const { container } = render(
@@ -19,5 +27,6 @@ describe("EditorialNameplate", () => {
     expect(text).toContain("Issue 04");
     expect(text).toContain("Quiet money");
     expect(text).toContain("2026-04-17");
+    expectZeroTracking(container);
   });
 });

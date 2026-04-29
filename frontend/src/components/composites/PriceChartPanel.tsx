@@ -276,18 +276,18 @@ export default function PriceChartPanel({
         <div className="flex items-baseline gap-3">
           <span
             className="font-display italic text-[22px] md:text-[26px] text-ink-1000"
-            style={{ letterSpacing: "-0.02em", lineHeight: 1 }}
+            style={{ letterSpacing: 0, lineHeight: 1 }}
           >{symbol.name}</span>
           <span
             className="font-sans font-semibold text-[12px] text-fg-muted uppercase"
-            style={{ letterSpacing: "0.12em" }}
+            style={{ letterSpacing: 0 }}
           >{symbol.ticker}{symbol.venue ? ` · ${symbol.venue}` : ""}</span>
         </div>
 
         <div className="flex items-baseline gap-2">
           <span
             className="font-mono tabular-nums text-[24px] md:text-[32px] font-light text-ink-1000"
-            style={{ letterSpacing: "-0.015em", lineHeight: 1 }}
+            style={{ letterSpacing: 0, lineHeight: 1 }}
           >
             {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
           </span>
@@ -341,7 +341,7 @@ export default function PriceChartPanel({
                 "font-mono text-[13px] px-2.5 py-1 rounded-xs transition-colors",
                 r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
               )}
-              style={{ letterSpacing: "0.02em" }}
+              style={{ letterSpacing: 0 }}
             >{r}</button>
           ))}
         </div>
@@ -355,7 +355,7 @@ export default function PriceChartPanel({
           >
             <span
               className="font-display italic text-[13px] text-fg-muted"
-              style={{ letterSpacing: "-0.005em" }}
+              style={{ letterSpacing: 0 }}
             >
               Failed to load chart data.
             </span>
@@ -363,7 +363,7 @@ export default function PriceChartPanel({
               <button
                 type="button"
                 onClick={onRetry}
-                className="font-sans font-semibold text-xs uppercase tracking-[0.12em] text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
+                className="font-sans font-semibold text-xs uppercase tracking-normal text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
               >
                 Retry
               </button>
@@ -378,7 +378,7 @@ export default function PriceChartPanel({
           <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
             <span
               className="font-display italic text-[14px] text-fg-muted"
-              style={{ letterSpacing: "-0.005em" }}
+              style={{ letterSpacing: 0 }}
             >
               Not enough price data.
             </span>

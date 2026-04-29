@@ -160,7 +160,7 @@ export default function PositionsList({
                       ? "text-fg-hint opacity-60 cursor-not-allowed"
                       : "text-fg-muted hover:text-fg"
                 )}
-                style={{ letterSpacing: "0.12em" }}
+                style={{ letterSpacing: 0 }}
                 title={disabled ? "Coming soon" : undefined}
               >
                 <span>{TAB_LABEL[t]}</span>
@@ -203,7 +203,7 @@ export default function PositionsList({
           </svg>
           <p
             className="font-display italic text-[14px] text-fg"
-            style={{ letterSpacing: "-0.005em" }}
+            style={{ letterSpacing: 0 }}
           >
             {empty.title}
           </p>
@@ -244,7 +244,7 @@ export default function PositionsList({
                       type="button"
                       onClick={() => onRowClick?.(p.id)}
                       className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
-                      style={{ letterSpacing: "0.02em" }}
+                      style={{ letterSpacing: 0 }}
                     >
                       {p.symbol}
                       <span className="block t-meta mt-[1px]">
@@ -338,7 +338,7 @@ export default function PositionsList({
                       type="button"
                       onClick={() => onRowClick?.(o.symbol)}
                       className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
-                      style={{ letterSpacing: "0.02em" }}
+                      style={{ letterSpacing: 0 }}
                     >
                       {o.symbol}
                       <span className="block t-meta mt-[1px]">

@@ -150,7 +150,7 @@ export default function TopBar({
         prefetch={false}
         aria-label="AlphaDesk home"
         className="flex items-baseline gap-1.5 font-display italic text-[20px] text-ink-1000 no-underline"
-        style={{ letterSpacing: "-0.02em" }}
+        style={{ letterSpacing: 0 }}
       >
         <span className="text-brand">α</span>
         <span>AlphaDesk</span>
@@ -179,7 +179,7 @@ export default function TopBar({
                   ? "text-ink-1000 bg-bg-elev-1"
                   : "text-fg-muted hover:text-fg",
               )}
-              style={{ letterSpacing: "0.02em" }}
+              style={{ letterSpacing: 0 }}
             >
               {r.label}
             </a>
@@ -207,7 +207,7 @@ export default function TopBar({
             "hover:text-fg hover:border-border-strong transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
-          style={{ letterSpacing: "0.02em" }}
+          style={{ letterSpacing: 0 }}
         >
           <Search className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Search</span>

@@ -230,7 +230,7 @@ function WatchlistRow({
         {/* Symbol — fixed width so prices line up in a column. */}
         <span
           className="font-sans font-semibold text-[15px] text-ink-1000 shrink-0 w-[52px]"
-          style={{ letterSpacing: "0.01em" }}
+          style={{ letterSpacing: 0 }}
         >
           {symbol}
         </span>

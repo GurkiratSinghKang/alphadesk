@@ -61,7 +61,7 @@ export default function StatusBar({
         "font-mono text-[12px] text-fg-muted",
         className
       )}
-      style={{ letterSpacing: "0.02em", lineHeight: 1 }}
+      style={{ letterSpacing: 0, lineHeight: 1 }}
     >
       {pills.map((p, i) => {
         // Phase-1 / SB-1: the LIVE-mode pill pulses to draw the eye —
@@ -100,7 +100,7 @@ export default function StatusBar({
             "hidden md:inline-block font-mono text-[12px] text-fg bg-bg-elev-1 border border-border",
             "px-1.5 py-[1px] rounded-xs"
           )}
-          style={{ letterSpacing: "0.04em" }}
+          style={{ letterSpacing: 0 }}
         >
           ⌘K
         </kbd>

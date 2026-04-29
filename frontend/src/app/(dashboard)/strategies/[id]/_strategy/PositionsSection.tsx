@@ -133,7 +133,7 @@ export default function PositionsSection({
                   >
                     {p.symbol}
                   </Link>
-                  <div className="mt-1 font-mono text-[12px] uppercase text-fg-hint tracking-[0.08em]">
+                  <div className="mt-1 font-mono text-[12px] uppercase text-fg-hint tracking-normal">
                     {formatEntryDate(p.entry_date)}
                   </div>
                 </td>
@@ -145,7 +145,7 @@ export default function PositionsSection({
                         ? "border-profit/40 bg-profit/5 text-profit"
                         : "border-loss/40 bg-loss/5 text-loss"
                     )}
-                    style={{ letterSpacing: "0.06em" }}
+                    style={{ letterSpacing: 0 }}
                   >
                     {side}
                   </span>

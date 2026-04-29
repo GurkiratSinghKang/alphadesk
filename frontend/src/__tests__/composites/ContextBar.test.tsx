@@ -2,6 +2,14 @@ import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import ContextBar from "@/components/composites/ContextBar";
 
+function expectZeroTracking(container: HTMLElement) {
+  const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const node of tracked) {
+    expect(["0", "0px"]).toContain(node.style.letterSpacing);
+  }
+}
+
 describe("ContextBar", () => {
   it("renders one cell per entry", () => {
     const { container } = render(
@@ -16,6 +24,7 @@ describe("ContextBar", () => {
     expect(container.querySelector('[data-slot="context-bar"]')).not.toBeNull();
     const rows = container.querySelectorAll('[data-slot="context-bar"] > div');
     expect(rows.length).toBe(3);
+    expectZeroTracking(container);
   });
 
   it("marks the emphasis cell with data-emphasis", () => {

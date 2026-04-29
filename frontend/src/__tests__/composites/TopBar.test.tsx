@@ -4,6 +4,14 @@ import TopBar from "@/components/composites/TopBar";
 
 const baseRegime = { regime: "bull", vol: "low" } as const;
 
+function expectZeroTracking(container: HTMLElement) {
+  const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const node of tracked) {
+    expect(["0", "0px"]).toContain(node.style.letterSpacing);
+  }
+}
+
 describe("TopBar", () => {
   it("renders with data-slot and the logo", () => {
     const { container } = render(
@@ -20,6 +28,7 @@ describe("TopBar", () => {
     expect(container.textContent).toContain("AlphaDesk");
     expect(container.textContent).toContain("Desk");
     expect(container.textContent).toContain("14:32:08");
+    expectZeroTracking(container);
   });
 
   it("marks the active route with data-active", () => {

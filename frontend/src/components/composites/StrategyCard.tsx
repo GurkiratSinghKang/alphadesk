@@ -9,7 +9,7 @@ import Sparkline from "@/components/primitives/Sparkline";
  * Editorial card matching `components-cards.html`:
  *   · 2px left accent — brand for profit, coral for loss
  *   · italic-serif name
- *   · tracked-caps subtitle ("STRATEGY 01 · SWING")
+ *   · uppercase subtitle ("STRATEGY 01 · SWING")
  *   · mono return (30px, 300 weight, sign-colored)
  *   · small 28px sparkline
  *   · meta row: positions · win rate · invested
@@ -102,13 +102,13 @@ export default function StrategyCard({
         <div>
           <div
             className="font-display italic text-[18px] text-ink-1000 leading-[1.1]"
-            style={{ letterSpacing: "-0.01em" }}
+            style={{ letterSpacing: 0 }}
           >
             {name}
           </div>
           <div
             className="font-sans font-semibold text-[10px] uppercase text-fg-muted mt-[3px]"
-            style={{ letterSpacing: "0.14em" }}
+            style={{ letterSpacing: 0 }}
           >
             {subtitle}
           </div>
@@ -118,7 +118,7 @@ export default function StrategyCard({
       {noBacktest ? (
         <div
           className="font-display italic text-[16px] leading-tight text-fg-muted"
-          style={{ letterSpacing: "-0.005em" }}
+          style={{ letterSpacing: 0 }}
         >
           No backtest
           <span className="block font-sans not-italic text-[10.5px] mt-0.5 text-fg-hint">
@@ -131,7 +131,7 @@ export default function StrategyCard({
             "font-mono tabular-nums text-[30px] font-light leading-none",
             toneClass
           )}
-          style={{ letterSpacing: "-0.02em" }}
+          style={{ letterSpacing: 0 }}
         >
           {sign}
           {roundedStr}%
@@ -173,7 +173,7 @@ export default function StrategyCard({
           "transition-all duration-200",
           "group-hover/strat:opacity-100 group-hover/strat:translate-x-0"
         )}
-        style={{ letterSpacing: "-0.01em" }}
+        style={{ letterSpacing: 0 }}
       >
         open →
       </span>

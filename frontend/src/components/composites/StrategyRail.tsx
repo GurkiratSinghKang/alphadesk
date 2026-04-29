@@ -55,11 +55,11 @@ export default function StrategyRail({
       <header className="flex justify-between items-baseline px-4 pt-1 pb-2.5">
         <span
           className="font-display italic text-[15px] text-ink-1000"
-          style={{ letterSpacing: "-0.01em" }}
+          style={{ letterSpacing: 0 }}
         >
           Strategies
         </span>
-        <span className="font-mono text-[10px] text-fg-muted" style={{ letterSpacing: "0.05em" }}>
+        <span className="font-mono text-[10px] text-fg-muted" style={{ letterSpacing: 0 }}>
           {countLabel ?? defaultCount(items)}
         </span>
       </header>
@@ -97,7 +97,7 @@ export default function StrategyRail({
                           "font-sans font-medium text-[12.5px] truncate",
                           paused ? "text-fg-muted" : "text-fg"
                         )}
-                        style={{ letterSpacing: "0.02em" }}
+                        style={{ letterSpacing: 0 }}
                       >
                         {it.name}
                       </span>
@@ -113,7 +113,7 @@ export default function StrategyRail({
                     <div className="flex justify-between items-baseline mb-0.5">
                       <span
                         className="font-sans font-medium text-sm md:text-[12.5px] text-fg"
-                        style={{ letterSpacing: "0.02em" }}
+                        style={{ letterSpacing: 0 }}
                       >
                         {it.name}
                       </span>

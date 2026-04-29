@@ -66,7 +66,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
                           ? "text-fg-muted text-base"
                           : "text-ink-1000 text-base"
                 )}
-                style={{ letterSpacing: "-0.005em" }}
+                style={{ letterSpacing: 0 }}
               >
                 {cell.value}
               </b>
