@@ -99,8 +99,8 @@ CLOSE_STRATEGIES = [
 
 # Monthly (last trading day, 3:55 PM) — rebalance strategies
 MONTHLY_STRATEGIES = [
-    "ts_momentum",      # 200-SMA evaluation
-    "dual_momentum",    # Top-quintile re-rank
+    "ts_momentum",      # Sign-of-12M ETF momentum rebalance
+    "dual_momentum",    # Antonacci GEM monthly sleeve rotation
     "momentum_quality", # Cross-sectional momentum rebalance
 ]
 
