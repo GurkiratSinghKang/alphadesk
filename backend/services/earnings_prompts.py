@@ -42,17 +42,15 @@ MODEL_FULL = "claude-opus-4-7"
 _VALID_VERDICTS = {"bullish", "neutral-bull", "neutral", "neutral-bear", "bearish"}
 # Round-12 / DR-1 (P0): defined-risk-only vocabulary. ``short call`` and
 # ``short strangle`` removed (UNDEFINED RISK — max loss unbounded on the
-# short call leg). Replacements offer the same volatility-selling /
-# directional exposure with capped losses:
+# short call leg). Round-13 narrows *fresh* Claude recommendations to the
+# setups the replay model and TradeButtonRow can both act on end-to-end:
 #  - ``bull put spread``  : bullish premium-selling, max loss = width × 100
 #  - ``bear call spread`` : bearish premium-selling, capped
+#  - ``bull call spread`` : bullish debit vertical, max loss = debit
+#  - ``bear put spread``  : bearish debit vertical, max loss = debit
 #  - ``iron condor``      : non-directional premium-selling, capped
-#  - ``iron butterfly``   : centered premium-selling (pin), capped
-#  - ``cash-secured put`` : long-bias single leg, max loss = strike × 100 - premium
-#  - ``covered call``     : income overlay against owned shares
 #  - ``long call``/``long put`` : pure directional, max loss = premium
-#  - ``calendar spread`` / ``diagonal spread`` : long-leg covers short
-#  - ``married put``      : protective put against owned shares
+#  - ``long straddle``    : vol-buying, max loss = debit
 _VALID_SETUPS = {
     "long call",
     "long put",
@@ -61,12 +59,7 @@ _VALID_SETUPS = {
     "bull call spread",
     "bear put spread",
     "iron condor",
-    "iron butterfly",
-    "calendar spread",
-    "diagonal spread",
-    "cash-secured put",
-    "covered call",
-    "married put",
+    "long straddle",
 }
 
 
@@ -168,22 +161,21 @@ def build_structured_prompt(
         "You are an editorial options-research assistant specializing in "
         "DEFINED-RISK earnings setups. AlphaDesk only accepts trades whose "
         "maximum loss is bounded — naked short calls, naked short puts, "
-        "and naked strangles/straddles are forbidden. Always prefer a "
-        "spread or cash-secured single leg. Output a single JSON object "
+        "and naked short strangles/straddles are forbidden. Use only the "
+        "actionable setup vocabulary below. Output a single JSON object "
         "matching this schema exactly and nothing else:\n"
         '{"verdict": "bullish|neutral-bull|neutral|neutral-bear|bearish",\n'
         ' "direction_magnitude": {"bull_case_pct": float, "bear_case_pct": float},\n'
         ' "thesis": "3 sentences",\n'
         ' "catalysts": ["..."], "risks": ["..."],\n'
         ' "suggested_play": "long call|long put|bull put spread|bear call spread|'
-        'bull call spread|bear put spread|iron condor|iron butterfly|calendar spread|'
-        'diagonal spread|cash-secured put|covered call|married put",\n'
+        'bull call spread|bear put spread|iron condor|long straddle",\n'
         ' "suggested_play_reason": "one sentence — must explicitly note max loss is capped",\n'
         ' "confidence": float 0-1}\n'
         "Hard rule: NEVER suggest a naked short option or short strangle/straddle. "
         "If the directional view is bullish + IV elevated, prefer a bull put spread "
-        "or cash-secured put. If bearish + IV elevated, prefer a bear call spread. "
-        "If non-directional + IV elevated, prefer an iron condor or iron butterfly. "
+        "or bear call spread for bearish + elevated IV. "
+        "If non-directional + IV elevated, prefer an iron condor. "
         "If directional + IV cheap, prefer a long call/put or vertical debit spread.\n\n"
         "No markdown. No prose outside the JSON.\n\n"
         + _DATA_TAG_PROTOCOL

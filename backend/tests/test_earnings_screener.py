@@ -256,6 +256,47 @@ def test_structured_prompt_omits_historical_when_none():
     assert "unavailable" in text.lower()
 
 
+def test_structured_prompt_restricts_fresh_setups_to_actionable_vocab():
+    prompt = build_structured_prompt(
+        symbol="NVDA",
+        company="Nvidia",
+        sector="Semiconductors",
+        report_date="2026-04-23",
+        report_time="AMC",
+        price=201.7,
+        iv_rank=30,
+        iv_percentile=35,
+        hv_20=0.42,
+        expected_move_pct=0.045,
+        hist_avg_abs_move_pct=0.070,
+        recent_beats_misses=[],
+        headlines=[],
+        market_regime="Bull-LowVol",
+    )
+
+    system = prompt["system"]
+    for setup in [
+        "long call",
+        "long put",
+        "bull put spread",
+        "bear call spread",
+        "bull call spread",
+        "bear put spread",
+        "iron condor",
+        "long straddle",
+    ]:
+        assert setup in system
+    for unsupported in [
+        "cash-secured put",
+        "covered call",
+        "calendar spread",
+        "diagonal spread",
+        "iron butterfly",
+        "married put",
+    ]:
+        assert unsupported not in system
+
+
 def test_parse_structured_response_happy_path():
     # Round-12 / DR-1: vocab now defined-risk-only. ``iron condor`` is the
     # closest non-directional premium-selling shape to the prior ``short
@@ -281,6 +322,13 @@ def test_parse_structured_response_rejects_naked_short_call():
     a valid setup pre-DR-1 and is now banned (undefined-risk on the upside)."""
     import pytest
     raw = '{"verdict": "bearish", "direction_magnitude": {"bull_case_pct": 0, "bear_case_pct": -0.05}, "thesis": "x", "catalysts": [], "risks": [], "suggested_play": "short call", "suggested_play_reason": "x", "confidence": 0.5}'
+    with pytest.raises(ValueError, match="suggested_play"):
+        parse_structured_response(raw)
+
+
+def test_parse_structured_response_rejects_non_ticketable_setup():
+    import pytest
+    raw = '{"verdict": "neutral-bull", "direction_magnitude": {"bull_case_pct": 0.03, "bear_case_pct": -0.02}, "thesis": "x", "catalysts": [], "risks": [], "suggested_play": "cash-secured put", "suggested_play_reason": "x", "confidence": 0.5}'
     with pytest.raises(ValueError, match="suggested_play"):
         parse_structured_response(raw)
 
