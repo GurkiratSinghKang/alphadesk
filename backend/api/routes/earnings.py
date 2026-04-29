@@ -10,10 +10,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from api.routes._rate_limit import check_detail_rate, check_full_research_rate
-from api.schemas.earnings import CalendarResponse, EarningsDetail, ClaudeFullResearch
+from api.schemas.earnings import (
+    CalendarResponse,
+    ClaudeFullResearch,
+    EarningsBacktestRequest,
+    EarningsBacktestResponse,
+    EarningsDetail,
+)
 from core.auth import require_auth
 from core.http import client_ip
 from services import earnings_screener
+from services.earnings_backtest import run_event_backtest
 from services.earnings_screener import _in_curated_universe
 
 logger = logging.getLogger(__name__)
@@ -114,6 +121,17 @@ async def get_calendar(
         },
     )
     return r
+
+
+@router.post("/backtest", response_model=EarningsBacktestResponse)
+async def post_backtest(payload: EarningsBacktestRequest) -> EarningsBacktestResponse:
+    result = run_event_backtest(
+        [event.model_dump(mode="json") for event in payload.events],
+        min_edge_score=payload.min_edge_score,
+        max_events=payload.max_events,
+        risk_fraction=payload.risk_fraction,
+    )
+    return EarningsBacktestResponse(**result)
 
 
 @router.get("/{symbol}/detail", response_model=EarningsDetail)

@@ -23,6 +23,10 @@ import type {
   ClaudeStructured,
   ClaudeFullResearch,
   ComparableSetup,
+  EarningsBacktestRequest,
+  EarningsBacktestResponse,
+  EarningsBacktestMetrics,
+  EarningsBacktestTrade,
   HistQuarter,
   HistoricalBlock,
   HistoricalStats,
@@ -2082,6 +2086,36 @@ interface RawHistoricalBlock {
   stats: RawHistoricalStats;
 }
 
+interface RawEarningsBacktestTrade {
+  symbol: string;
+  report_date: string;
+  setup: string;
+  return_pct: number;
+  win: boolean;
+  edge_score: number | null;
+  reason: string;
+}
+
+interface RawEarningsBacktestSkipped {
+  symbol: string;
+  reason: string;
+}
+
+interface RawEarningsBacktestMetrics {
+  events: number;
+  win_rate: number;
+  avg_trade_return_pct: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  profit_factor: number | null;
+}
+
+interface RawEarningsBacktestResponse {
+  trades: RawEarningsBacktestTrade[];
+  skipped: RawEarningsBacktestSkipped[];
+  metrics: RawEarningsBacktestMetrics;
+}
+
 interface RawIVTermPoint {
   expiry: string;
   dte: number;
@@ -2297,6 +2331,39 @@ function mapHistoricalBlock(raw: RawHistoricalBlock): HistoricalBlock {
   };
 }
 
+function mapEarningsBacktestTrade(raw: RawEarningsBacktestTrade): EarningsBacktestTrade {
+  return {
+    symbol: raw.symbol,
+    reportDate: raw.report_date,
+    setup: raw.setup,
+    returnPct: raw.return_pct,
+    win: raw.win,
+    edgeScore: raw.edge_score,
+    reason: raw.reason,
+  };
+}
+
+function mapEarningsBacktestMetrics(raw: RawEarningsBacktestMetrics): EarningsBacktestMetrics {
+  return {
+    events: raw.events,
+    winRate: raw.win_rate,
+    avgTradeReturnPct: raw.avg_trade_return_pct,
+    totalReturnPct: raw.total_return_pct,
+    maxDrawdownPct: raw.max_drawdown_pct,
+    profitFactor: raw.profit_factor,
+  };
+}
+
+export function mapEarningsBacktestResponse(
+  raw: RawEarningsBacktestResponse,
+): EarningsBacktestResponse {
+  return {
+    trades: (raw.trades ?? []).map(mapEarningsBacktestTrade),
+    skipped: raw.skipped ?? [],
+    metrics: mapEarningsBacktestMetrics(raw.metrics),
+  };
+}
+
 function mapIVTermPoint(raw: RawIVTermPoint): IVTermPoint {
   return { expiry: raw.expiry, dte: raw.dte, atmIv: raw.atm_iv };
 }
@@ -2475,6 +2542,41 @@ export async function postEarningsFullResearch(symbol: string): Promise<ClaudeFu
     { method: "POST", timeoutMs: 120_000 },
   );
   return mapClaudeFullResearch(raw);
+}
+
+export async function postEarningsBacktest(
+  request: EarningsBacktestRequest,
+  opts?: { signal?: AbortSignal },
+): Promise<EarningsBacktestResponse> {
+  const init: ApiFetchOptions = {
+    method: "POST",
+    timeoutMs: 30_000,
+    body: JSON.stringify({
+      events: request.events.map((event) => ({
+        symbol: event.symbol,
+        report_date: event.reportDate,
+        top_setup: event.topSetup,
+        expected_move_pct: event.expectedMovePct,
+        realized_move_pct: event.realizedMovePct,
+        ...(event.premiumYieldCallAtm !== undefined
+          ? { premium_yield_call_atm: event.premiumYieldCallAtm }
+          : {}),
+        ...(event.premiumYieldPutAtm !== undefined
+          ? { premium_yield_put_atm: event.premiumYieldPutAtm }
+          : {}),
+        ...(event.edgeScore !== undefined ? { edge_score: event.edgeScore } : {}),
+      })),
+      ...(request.minEdgeScore !== undefined ? { min_edge_score: request.minEdgeScore } : {}),
+      ...(request.maxEvents !== undefined ? { max_events: request.maxEvents } : {}),
+      risk_fraction: request.riskFraction ?? 0.01,
+    }),
+  };
+  if (opts?.signal) init.signal = opts.signal;
+  const raw = await apiFetch<RawEarningsBacktestResponse>(
+    "/api/v1/earnings/backtest",
+    init,
+  );
+  return mapEarningsBacktestResponse(raw);
 }
 
 export async function getPipelinePositions(): Promise<{ positions: PipelinePosition[]; performance: PipelinePerformance }> {

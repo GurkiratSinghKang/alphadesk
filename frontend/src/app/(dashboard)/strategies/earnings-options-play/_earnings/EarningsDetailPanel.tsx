@@ -19,6 +19,7 @@ import MetricsStrip from "./MetricsStrip";
 import ClaudeThesisCard from "./ClaudeThesisCard";
 import StrikeLadder from "./StrikeLadder";
 import HistoricalMoves from "./HistoricalMoves";
+import HistoricalSetupReplay from "./HistoricalSetupReplay";
 import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
 import TradeButtonRow from "./TradeButtonRow";
@@ -251,6 +252,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       {detail.historicalEarnings && (
         <HistoricalMoves historical={detail.historicalEarnings} />
       )}
+      <HistoricalSetupReplay detail={detail} />
 
       {isWide ? (
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">

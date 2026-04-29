@@ -86,6 +86,53 @@ def test_calendar_route_rejects_invalid_watchlist_symbol():
     assert r.status_code == 422
 
 
+def test_backtest_route_replays_defined_risk_events():
+    r = client.post(
+        "/api/v1/earnings/backtest",
+        json={
+            "events": [
+                {
+                    "symbol": "NVDA",
+                    "report_date": "2026-01-30",
+                    "top_setup": "iron condor",
+                    "expected_move_pct": 0.07,
+                    "realized_move_pct": 0.03,
+                    "premium_yield_call_atm": 0.032,
+                    "premium_yield_put_atm": 0.034,
+                    "edge_score": 82.0,
+                },
+                {
+                    "symbol": "NVDA",
+                    "report_date": "2025-10-30",
+                    "top_setup": "iron condor",
+                    "expected_move_pct": 0.07,
+                    "realized_move_pct": -0.11,
+                    "premium_yield_call_atm": 0.032,
+                    "premium_yield_put_atm": 0.034,
+                    "edge_score": 82.0,
+                },
+            ],
+            "risk_fraction": 0.02,
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["metrics"]["events"] == 2
+    assert body["metrics"]["win_rate"] == 0.5
+    assert body["trades"][0]["report_date"] == "2025-10-30"
+    assert body["trades"][1]["setup"] == "iron condor"
+
+
+def test_backtest_route_rejects_empty_event_sets():
+    r = client.post(
+        "/api/v1/earnings/backtest",
+        json={"events": [], "risk_fraction": 0.01},
+    )
+
+    assert r.status_code == 422
+
+
 # ───────────────────────── B-41 stub-detail fallback ─────────────────────────
 
 

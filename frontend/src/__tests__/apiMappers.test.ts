@@ -43,8 +43,10 @@ import {
   getPipelineRun,
   getPipelinePositions,
   getEarningsCalendar,
+  postEarningsBacktest,
   mapPipelineRun,
   mapEarningsDetail,
+  mapEarningsBacktestResponse,
 } from '@/lib/api';
 
 // ─── Mock setup ──────────────────────────────────────────────────────────────
@@ -353,6 +355,82 @@ describe('getEarningsCalendar', () => {
     const [url] = mockFetch.mock.calls[0];
     const parsed = new URL(String(url), 'http://alphadesk.local');
     expect(parsed.searchParams.get('watchlist')).toBe('');
+  });
+});
+
+describe('postEarningsBacktest', () => {
+  it('posts replay events and maps the response', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      trades: [
+        {
+          symbol: 'NVDA',
+          report_date: '2026-01-30',
+          setup: 'iron condor',
+          return_pct: 0.31,
+          win: true,
+          edge_score: null,
+          reason: 'realized move stayed inside expected move',
+        },
+      ],
+      skipped: [],
+      metrics: {
+        events: 1,
+        win_rate: 1,
+        avg_trade_return_pct: 0.31,
+        total_return_pct: 0.0031,
+        max_drawdown_pct: 0,
+        profit_factor: null,
+      },
+    }));
+
+    const result = await postEarningsBacktest({
+      riskFraction: 0.01,
+      events: [
+        {
+          symbol: 'NVDA',
+          reportDate: '2026-01-30',
+          topSetup: 'iron condor',
+          expectedMovePct: 0.07,
+          realizedMovePct: 0.03,
+          premiumYieldCallAtm: 0.032,
+          premiumYieldPutAtm: 0.034,
+        },
+      ],
+    });
+
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/v1/earnings/backtest');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body);
+    expect(body.events[0]).toMatchObject({
+      symbol: 'NVDA',
+      report_date: '2026-01-30',
+      top_setup: 'iron condor',
+      expected_move_pct: 0.07,
+      realized_move_pct: 0.03,
+      premium_yield_call_atm: 0.032,
+      premium_yield_put_atm: 0.034,
+    });
+    expect(body.risk_fraction).toBe(0.01);
+    expect(result.trades[0].reportDate).toBe('2026-01-30');
+    expect(result.metrics.winRate).toBe(1);
+  });
+
+  it('maps skipped rows and nullable profit factor', () => {
+    const result = mapEarningsBacktestResponse({
+      trades: [],
+      skipped: [{ symbol: 'NVDA', reason: 'unsupported earnings setup' }],
+      metrics: {
+        events: 0,
+        win_rate: 0,
+        avg_trade_return_pct: 0,
+        total_return_pct: 0,
+        max_drawdown_pct: 0,
+        profit_factor: null,
+      },
+    });
+    expect(result.skipped[0].reason).toMatch(/unsupported/);
+    expect(result.metrics.profitFactor).toBeNull();
   });
 });
 

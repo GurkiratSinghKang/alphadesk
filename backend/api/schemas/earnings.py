@@ -228,6 +228,54 @@ class HistoricalBlock(BaseModel):
     stats: HistoricalStats
 
 
+class EarningsBacktestEvent(BaseModel):
+    symbol: str
+    report_date: date
+    top_setup: TopSetup
+    expected_move_pct: float = Field(gt=0, allow_inf_nan=False)
+    realized_move_pct: float = Field(allow_inf_nan=False)
+    premium_yield_call_atm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    premium_yield_put_atm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    edge_score: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+
+
+class EarningsBacktestRequest(BaseModel):
+    events: list[EarningsBacktestEvent] = Field(min_length=1, max_length=64)
+    min_edge_score: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    max_events: int | None = Field(default=None, ge=1, le=500)
+    risk_fraction: float = Field(default=0.01, gt=0, le=0.25, allow_inf_nan=False)
+
+
+class EarningsBacktestTrade(BaseModel):
+    symbol: str
+    report_date: date
+    setup: str
+    return_pct: float
+    win: bool
+    edge_score: float | None = None
+    reason: str
+
+
+class EarningsBacktestSkipped(BaseModel):
+    symbol: str
+    reason: str
+
+
+class EarningsBacktestMetrics(BaseModel):
+    events: int
+    win_rate: float
+    avg_trade_return_pct: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    profit_factor: float | None = None
+
+
+class EarningsBacktestResponse(BaseModel):
+    trades: list[EarningsBacktestTrade]
+    skipped: list[EarningsBacktestSkipped]
+    metrics: EarningsBacktestMetrics
+
+
 class IVTermPoint(BaseModel):
     expiry: date
     dte: int

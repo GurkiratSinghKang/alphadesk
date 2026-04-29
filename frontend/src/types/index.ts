@@ -513,6 +513,54 @@ export interface HistoricalBlock {
   stats: HistoricalStats;
 }
 
+export interface EarningsBacktestEvent {
+  symbol: string;
+  reportDate: string;
+  topSetup: EarningsTopSetup;
+  expectedMovePct: number;
+  realizedMovePct: number;
+  premiumYieldCallAtm?: number | null;
+  premiumYieldPutAtm?: number | null;
+  edgeScore?: number | null;
+}
+
+export interface EarningsBacktestRequest {
+  events: EarningsBacktestEvent[];
+  minEdgeScore?: number | null;
+  maxEvents?: number | null;
+  riskFraction?: number;
+}
+
+export interface EarningsBacktestTrade {
+  symbol: string;
+  reportDate: string;
+  setup: string;
+  returnPct: number;
+  win: boolean;
+  edgeScore: number | null;
+  reason: string;
+}
+
+export interface EarningsBacktestSkipped {
+  symbol: string;
+  reason: string;
+}
+
+export interface EarningsBacktestMetrics {
+  events: number;
+  winRate: number;
+  avgTradeReturnPct: number;
+  totalReturnPct: number;
+  maxDrawdownPct: number;
+  profitFactor: number | null;
+}
+
+export interface EarningsBacktestResponse {
+  trades: EarningsBacktestTrade[];
+  skipped: EarningsBacktestSkipped[];
+  metrics: EarningsBacktestMetrics;
+}
+
 export interface IVTermPoint {
   expiry: string;
   dte: number;

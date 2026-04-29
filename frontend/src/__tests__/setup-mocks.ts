@@ -145,6 +145,18 @@ vi.mock('@/lib/api', async (importOriginal) => {
       model: "claude-opus-4-7",
       generatedAt: new Date().toISOString(),
     }),
+    postEarningsBacktest: vi.fn().mockResolvedValue({
+      trades: [],
+      skipped: [],
+      metrics: {
+        events: 0,
+        winRate: 0,
+        avgTradeReturnPct: 0,
+        totalReturnPct: 0,
+        maxDrawdownPct: 0,
+        profitFactor: null,
+      },
+    }),
   };
 });
 
