@@ -91,12 +91,64 @@ class TestCatalogueShape:
             assert isinstance(d["supports_shorts"], bool)
             assert isinstance(d["supports_options"], bool)
 
+    def test_ts_momentum_meta_matches_sign_return_backend(self) -> None:
+        d = strat_mod._STRATEGIES["ts-momentum"]
+        fallback = strat_mod._FALLBACK_META["ts_momentum"]
+        copy = f"{d['description']} {fallback['description']}"
+
+        assert "Sign-of-12" in copy or "sign-of-12" in copy
+        assert "200-day SMA" not in copy
+        assert d["required_lookback_days"] >= 540
+        assert fallback["required_lookback_days"] >= 540
+        assert d["supports_shorts"] is True
+        assert fallback["supports_shorts"] is True
+
+    def test_dual_momentum_meta_matches_gem_backend(self) -> None:
+        d = strat_mod._STRATEGIES["dual-momentum"]
+        fallback = strat_mod._FALLBACK_META["dual_momentum"]
+        copy = f"{d['description']} {fallback['description']}"
+
+        assert "GEM" in copy or "Global Equities Momentum" in copy
+        assert "top quintile" not in copy
+        assert "Ranks stocks" not in copy
+        assert d["required_lookback_days"] >= 400
+        assert fallback["min_universe_size"] >= 3
+
+    def test_orb_meta_matches_research_shell_backend(self) -> None:
+        d = strat_mod._STRATEGIES["orb"]
+        fallback = strat_mod._FALLBACK_META["orb"]
+        copy = f"{d['description']} {fallback['description']}"
+
+        assert "Research" in copy or "research" in copy
+        assert "emits no" in copy
+        assert fallback["supports_shorts"] is False
+
+    def test_vwap_meta_matches_research_shell_backend(self) -> None:
+        d = strat_mod._STRATEGIES["vwap-strategy"]
+        fallback = strat_mod._FALLBACK_META["vwap"]
+        copy = f"{d['description']} {fallback['description']}"
+
+        assert "Research" in copy or "research" in copy
+        assert "emits no" in copy
+        assert fallback["required_bars"] == ["5min"]
+        assert fallback["supports_shorts"] is False
+
     def test_no_smoke_strategy_leaks_to_route(self) -> None:
         for sid in strat_mod._STRATEGIES:
             assert not sid.startswith("_smoke"), (
                 f"Smoke strategy {sid!r} must not be exposed on the route"
             )
             assert sid != "buy_and_hold_spy"
+
+    def test_planned_catalogue_entries_are_not_marked_active(self) -> None:
+        from strategies.registry import PLANNED_STRATEGY_ROUTE_IDS
+
+        for route_id in PLANNED_STRATEGY_ROUTE_IDS:
+            if route_id not in strat_mod._STRATEGIES:
+                continue
+            d = strat_mod._STRATEGIES[route_id]
+            assert d["status"] == strat_mod.StrategyStatus.PLANNED, route_id
+            assert "No backend implementation" in d["description"], route_id
 
 
 class TestOOSMetricsPopulated:
@@ -132,13 +184,11 @@ class TestOOSMetricsPopulated:
         assert d["sharpe_ratio"] > 1.0
 
     def test_missing_oos_returns_null_not_zero(self) -> None:
-        # kama_breakout is the sole Phase-1 strategy with no OOS JSON on
-        # disk. Missing metrics must surface as None, never a fake zero.
-        for route_id in ("kama-breakout",):
-            d = strat_mod._STRATEGIES[route_id]
-            assert d["sharpe_ratio"] is None, route_id
-            assert d["max_drawdown"] is None, route_id
-            assert d["hit_rate"] is None, route_id
+        # Missing files must surface as None, never fake zeroes.
+        d = strat_mod._load_oos_for("__missing_strategy__")
+        assert d["sharpe"] is None
+        assert d["max_drawdown"] is None
+        assert d["hit_rate"] is None
 
     def test_fallback_meta_has_null_metrics(self) -> None:
         # Strategies that don't live in the registry (kept in the fallback

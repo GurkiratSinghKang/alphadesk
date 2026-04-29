@@ -133,7 +133,7 @@ class MomentumQualityStrategy(Strategy):
             )
 
         if not target:
-            state_update[f"{_NS}.held_symbols"] = held
+            state_update[f"{_NS}.held_symbols"] = sorted(held)
             return StrategyResult(
                 signals=signals, state_update=state_update,
                 diagnostics=diagnostics, warnings=warnings,
@@ -152,7 +152,7 @@ class MomentumQualityStrategy(Strategy):
                 )
             )
 
-        state_update[f"{_NS}.held_symbols"] = held | target_set
+        state_update[f"{_NS}.held_symbols"] = sorted(held | target_set)
         return StrategyResult(
             signals=signals,
             state_update=state_update,

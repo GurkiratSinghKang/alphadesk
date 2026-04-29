@@ -136,7 +136,8 @@ def load_all(package: Optional[str] = None) -> list[str]:
 # Implementation-stage taxonomy (surface the catalogue knows about)           #
 # --------------------------------------------------------------------------- #
 #: Strategies that ship a working Python package under
-#: ``backend/strategies/``. Route-id form (hyphens), matching the frontend.
+#: ``backend/strategies/`` or are legacy route aliases to one. Route-id form
+#: (hyphens), matching the frontend.
 IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "momentum-quality",
     "pead",
@@ -147,6 +148,8 @@ IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "rsi2-reversal",
     "dual-momentum",
     "pairs-trading",
+    # Legacy alias retained for API compatibility; backed by pairs_trading.
+    "pairs-stat-arb",
     "kama-breakout",
     "orb",
     "vwap-strategy",
@@ -159,7 +162,6 @@ PLANNED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "dividend-capture",
     "gap-fill",
     "mean-reversion",
-    "pairs-stat-arb",
     "sector-rotation",
     "vcp-breakout",
 })

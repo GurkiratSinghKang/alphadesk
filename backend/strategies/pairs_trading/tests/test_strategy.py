@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import numpy as np
+import orjson
 import pandas as pd
 import pytest
 
@@ -203,6 +204,12 @@ def test_entry_emits_two_legs_with_opposite_signs() -> None:
     # positions ledger (state.positions) is empty at this point.
     assert result.state_update["pairs_trading.pending"].get("AAPL-MSFT") is not None
     assert result.state_update["pairs_trading.positions"] == {}
+    persisted_state = {
+        **state,
+        **orjson.loads(orjson.dumps(result.state_update)),
+    }
+    replay = strat.run(_build_input(bars, asof, state=persisted_state), params)
+    assert [sig for sig in replay.signals if sig.tag.startswith("pairs-entry")] == []
 
 
 # --------------------------------------------------------------------------- #
@@ -343,6 +350,8 @@ def test_on_fill_promotes_pending_to_positions_after_both_legs() -> None:
     update = strat.on_fill(fill_y, state)
     assert update["pairs_trading.positions"] == {}
     assert "AAPL-MSFT" in update["pairs_trading.pending"]
+    assert update["pairs_trading.pending_partials"]["AAPL-MSFT"] == ["y"]
+    orjson.dumps(update)
     state.update(update)
 
     # Fill leg 2 (x) — now confirmed.
@@ -353,6 +362,8 @@ def test_on_fill_promotes_pending_to_positions_after_both_legs() -> None:
     update = strat.on_fill(fill_x, state)
     assert "AAPL-MSFT" in update["pairs_trading.positions"]
     assert update["pairs_trading.pending"] == {}
+    assert update["pairs_trading.held_symbols"] == ["AAPL", "MSFT"]
+    orjson.dumps(update)
 
 
 def test_on_fill_exit_drops_position() -> None:
@@ -380,6 +391,8 @@ def test_on_fill_exit_drops_position() -> None:
     )
     update = strat.on_fill(fill, state)
     assert update["pairs_trading.positions"] == {}
+    assert update["pairs_trading.held_symbols"] == []
+    orjson.dumps(update)
 
 
 def test_active_pair_frozen_model_rejects_mutation() -> None:

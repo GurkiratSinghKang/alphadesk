@@ -355,7 +355,7 @@ class PEADStrategy(Strategy):
 
         return {
             f"{_NS}.entries": entries,
-            f"{_NS}.held_symbols": held_symbols,
+            f"{_NS}.held_symbols": sorted(held_symbols),
         }
 
     # ------------------------------------------------------------------ #

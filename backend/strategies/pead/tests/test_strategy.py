@@ -27,11 +27,13 @@ from decimal import Decimal
 from typing import Iterable
 
 import numpy as np
+import orjson
 import pandas as pd
 import pytest
 from pydantic import ValidationError
 
 from strategies._core.contracts import (
+    Fill,
     OrderType,
     Position,
     StrategyInput,
@@ -851,3 +853,44 @@ class TestPEADRunShell:
             f"Nondeterministic run: r1.signals={r1.signals}, "
             f"r2.signals={r2.signals}"
         )
+
+
+class TestPEADStateDurability:
+    def test_on_fill_persists_json_safe_held_symbols(self):
+        strat = PEADStrategy()
+        state = {
+            "pead.entries": {
+                "AAPL": {
+                    "queued_on": date(2023, 4, 14),
+                    "direction": 1,
+                    "sue": 2.1,
+                }
+            },
+            "pead.held_symbols": [],
+        }
+        entry_update = strat.on_fill(
+            Fill(
+                symbol="AAPL",
+                asof=date(2023, 4, 17),
+                quantity=10,
+                price=Decimal("150"),
+                signal_tag="pead-entry-long-sue+2.10",
+            ),
+            state,
+        )
+        assert entry_update["pead.held_symbols"] == ["AAPL"]
+        orjson.dumps(entry_update)
+
+        exit_update = strat.on_fill(
+            Fill(
+                symbol="AAPL",
+                asof=date(2023, 6, 12),
+                quantity=-10,
+                price=Decimal("155"),
+                signal_tag="pead-exit-time",
+            ),
+            entry_update,
+        )
+        assert exit_update["pead.held_symbols"] == []
+        assert "AAPL" not in exit_update["pead.entries"]
+        orjson.dumps(exit_update)

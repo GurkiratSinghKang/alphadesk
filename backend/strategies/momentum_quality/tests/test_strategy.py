@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Optional
 
 import numpy as np
+import orjson
 import pandas as pd
 import pytest
 
@@ -161,7 +162,7 @@ class TestUniverseFilters:
 
     def test_universe_hook_returns_eligible_syms_plus_positions(self):
         s = MomentumQualityStrategy()
-        state = {f"momentum_quality.held_symbols": {"FOO"}}
+        state = {f"momentum_quality.held_symbols": ["FOO"]}
         u = s.universe(REBAL_DAY, state)
         assert "FOO" in u
         for f in ("JPM", "V", "MA", "BAC"):
@@ -313,6 +314,12 @@ class TestSignalEmission:
         assert total_w == pytest.approx(1.0, abs=1e-9)
         for sig in entries:
             assert sig.target_weight == pytest.approx(1 / 3, abs=1e-9)
+
+        held = result.state_update["momentum_quality.held_symbols"]
+        assert isinstance(held, list)
+        assert {"AAPL", "MSFT", "NVDA"}.issubset(set(held))
+        assert "ORCL" in held
+        orjson.dumps(result.state_update)
 
     def test_earnings_skip_blocks_name(self):
         syms = eligible_universe()

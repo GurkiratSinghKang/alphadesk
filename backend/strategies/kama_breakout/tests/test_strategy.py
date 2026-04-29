@@ -14,10 +14,11 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import numpy as np
+import orjson
 import pandas as pd
 import pytest
 
-from strategies._core.contracts import Position, StrategyInput
+from strategies._core.contracts import Fill, Position, StrategyInput
 from strategies._core.protocol import get_meta, get_strategy
 from strategies.kama_breakout.config import DEFAULT_UNIVERSE, KamaBreakoutParams
 from strategies.kama_breakout.strategy import (
@@ -131,6 +132,25 @@ class TestEntryGate:
         entry_sigs = [s for s in result.signals if s.tag.startswith("kama-entry")]
         # At least some symbols should qualify given the uniform uptrend.
         assert len(entry_sigs) > 0
+        first = entry_sigs[0]
+        state_update = orjson.loads(orjson.dumps(result.state_update))
+        first_state = state_update["kama_breakout.positions"][first.symbol]
+        assert isinstance(first_state["entry_date"], str)
+
+        fill_update = strat.on_fill(
+            Fill(
+                symbol=first.symbol,
+                asof=date(2024, 4, 30),
+                quantity=int(first.quantity or 1),
+                price=Decimal("125.50"),
+                signal_tag=first.tag,
+            ),
+            state_update,
+        )
+        orjson.dumps(fill_update)
+        filled = fill_update["kama_breakout.positions"][first.symbol]
+        assert filled["entry_price"] == pytest.approx(125.50)
+        assert filled["highest_high"] == pytest.approx(125.50)
 
     def test_entry_rejects_downtrend(self):
         # Deliberately falling prices — trend-SMA filter must reject.

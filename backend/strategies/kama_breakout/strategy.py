@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -90,7 +90,7 @@ class KamaBreakoutStrategy(Strategy):
         warnings: list[str] = []
         state_update: dict[str, Any] = {}
 
-        positions_state: dict[str, dict] = dict(state.get(f"{_NS}.positions", {}))
+        positions_state = _coerce_positions_state(state.get(f"{_NS}.positions"))
 
         signals: list[Signal] = []
 
@@ -109,14 +109,7 @@ class KamaBreakoutStrategy(Strategy):
                     shares_initial=int(pos.quantity),
                 )
             else:
-                # Tolerate legacy state rows that still carry the removed
-                # ``atr_at_entry`` / ``pyramid_count`` keys (Round-6 / I-9
-                # + I-6) — strip them so the dataclass constructor accepts.
-                st_dict = {
-                    k: v for k, v in st_dict.items()
-                    if k in {"entry_date", "entry_price", "highest_high", "shares_initial"}
-                }
-                st = PosState(**st_dict)
+                st = PosState(**_clean_pos_state_dict(st_dict))
 
             hist = _symbol_history(input.bars, sym, asof)
             if hist is None or len(hist) < params.trend_sma_period + 15:
@@ -213,7 +206,7 @@ class KamaBreakoutStrategy(Strategy):
         )
 
     def on_fill(self, fill: Fill, state: dict[str, Any]) -> dict[str, Any]:
-        positions = dict(state.get(f"{_NS}.positions", {}))
+        positions = _coerce_positions_state(state.get(f"{_NS}.positions"))
         sym = fill.symbol
         st_dict = positions.get(sym)
         if st_dict is None:
@@ -238,12 +231,56 @@ class KamaBreakoutStrategy(Strategy):
 def _pos_state_to_dict(st: PosState) -> dict:
     """Serialise PosState. Round-6 / I-9: dropped atr_at_entry +
     pyramid_count which the unused pyramiding path used to track."""
+    entry_date = _coerce_date(st.entry_date)
     return {
-        "entry_date": st.entry_date,
+        "entry_date": entry_date.isoformat() if entry_date else None,
         "entry_price": st.entry_price,
         "highest_high": st.highest_high,
         "shares_initial": st.shares_initial,
     }
+
+
+def _coerce_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _clean_pos_state_dict(raw: Any) -> dict:
+    if isinstance(raw, PosState):
+        return _pos_state_to_dict(raw)
+    if not isinstance(raw, dict):
+        return _pos_state_to_dict(PosState())
+    cleaned = {
+        k: raw.get(k)
+        for k in {"entry_date", "entry_price", "highest_high", "shares_initial"}
+        if k in raw
+    }
+    entry_date = _coerce_date(cleaned.get("entry_date"))
+    return {
+        "entry_date": entry_date,
+        "entry_price": float(cleaned.get("entry_price") or 0.0),
+        "highest_high": float(cleaned.get("highest_high") or 0.0),
+        "shares_initial": int(cleaned.get("shares_initial") or 0),
+    }
+
+
+def _coerce_positions_state(raw: Any) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for sym, row in (raw or {}).items():
+        cleaned = _clean_pos_state_dict(row)
+        st = PosState(**cleaned)
+        out[str(sym).upper()] = _pos_state_to_dict(st)
+    return out
 
 
 def _symbol_history(

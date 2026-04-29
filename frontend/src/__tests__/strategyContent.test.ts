@@ -92,6 +92,16 @@ describe('Strategy Content', () => {
     expect(STRATEGY_CONTENT['vcp-breakout'].riskProfile.level).toBe('High');
   });
 
+  it('planned catalogue strategies are explicit about no backend implementation', () => {
+    for (const id of ['vcp-breakout', 'dividend-capture', 'sector-rotation', 'gap-fill']) {
+      const c = STRATEGY_CONTENT[id];
+      expect(c.thesis, id).toContain('not an implemented AlphaDesk backend strategy yet');
+      expect(c.parameters.maxPositions, id).toContain('0 live');
+      expect(c.howItWorks[0], id).toContain('Do not emit live orders today');
+      expect(c.risks[0], id).toContain('No backend implementation');
+    }
+  });
+
   it('mean-reversion has Medium risk', () => {
     expect(STRATEGY_CONTENT['mean-reversion'].riskProfile.level).toBe('Medium');
   });
@@ -111,6 +121,26 @@ describe('Strategy Content', () => {
   it('momentum-quality thesis mentions momentum', () => {
     const thesis = STRATEGY_CONTENT['momentum-quality'].thesis.toLowerCase();
     expect(thesis).toContain('momentum');
+  });
+
+  it('momentum-quality copy distinguishes default 12-1 from checked-in 12-0 tune', () => {
+    const c = STRATEGY_CONTENT['momentum-quality'];
+    expect(c.thesis).toContain('checked-in 2023-2024 OOS tune used momentum_skip_m=0');
+    expect(c.parameters.entryCriteria).toContain('checked-in OOS artifact used momentum_skip_m=0');
+    expect(c.howItWorks.join(' ')).toContain('12-1 month by backend default, 12-0 month in the checked-in OOS tune');
+  });
+
+  it('ts-momentum copy caveats crisis alpha when shorts are disabled', () => {
+    const c = STRATEGY_CONTENT['ts-momentum'];
+    expect(c.edge).toContain('Crisis-alpha behavior requires short legs');
+    expect(c.edge).toContain('shorts off');
+  });
+
+  it('dual-momentum copy uses checked-in defaults, not diagnostic tuned variant', () => {
+    const c = STRATEGY_CONTENT['dual-momentum'];
+    expect(c.thesis).toContain('checked-in 2023-2024 OOS artifact uses textbook defaults');
+    expect(c.thesis).toContain('variant is intentionally excluded');
+    expect(c.thesis).not.toContain('Best tuned');
   });
 
   it('pead thesis mentions earnings', () => {
@@ -134,6 +164,38 @@ describe('Strategy Content', () => {
     expect(c.thesis.toLowerCase()).toContain('research-only');
     expect(c.howItWorks.join(' ')).toContain('options_chain_available=false');
     expect(c.parameters.maxPositions).toContain('0 live');
+  });
+
+  it('pairs-trading content matches the checked-in log-price OOS artifact', () => {
+    const c = STRATEGY_CONTENT['pairs-trading'];
+    expect(c.thesis).toContain('OOS Sharpe is 0.39');
+    expect(c.thesis).toContain('96 trades');
+    expect(c.thesis).toContain('older 1.23 Sharpe raw-price artifact is intentionally retired');
+    expect(c.parameters.entryCriteria).toContain('2.48');
+  });
+
+  it('kama-breakout copy is paper-only and does not promise pyramiding', () => {
+    const c = STRATEGY_CONTENT['kama-breakout'];
+    expect(c.thesis).toContain('structured OOS artifact is now checked in');
+    expect(c.thesis).toContain('paper-only');
+    expect(c.howItWorks.join(' ')).toContain('No pyramiding in the current backend');
+    expect(c.howItWorks.join(' ')).not.toContain('Pyramid at +1 ATR');
+  });
+
+  it('orb copy is explicit that the registered backend is research-only', () => {
+    const c = STRATEGY_CONTENT['orb'];
+    expect(c.thesis).toContain('research-only registered strategy');
+    expect(c.thesis).toContain('Sharpe 4.78');
+    expect(c.thesis).not.toContain('Sharpe 8.34');
+    expect(c.parameters.maxPositions).toBe('0 live');
+  });
+
+  it('vwap-strategy copy is explicit that the registered backend is research-only', () => {
+    const c = STRATEGY_CONTENT['vwap-strategy'];
+    expect(c.thesis).toContain('research-only registered strategy');
+    expect(c.thesis).toContain('2024-H1 Sharpe 0.95');
+    expect(c.parameters.maxPositions).toContain('0 live');
+    expect(c.howItWorks[0]).toContain('emits no signals');
   });
 
   it('claude-alpha mentions LLM or Claude', () => {

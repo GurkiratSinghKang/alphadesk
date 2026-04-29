@@ -24,7 +24,7 @@ State keys:
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Optional
 
 import numpy as np
@@ -112,6 +112,85 @@ class OpenPosition(BaseModel):
     short_weight: float
 
 
+def _coerce_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_active_pairs(raw: Any) -> list[ActivePair]:
+    out: list[ActivePair] = []
+    for item in raw or []:
+        if isinstance(item, ActivePair):
+            out.append(item)
+            continue
+        if isinstance(item, dict):
+            try:
+                out.append(ActivePair.model_validate(item))
+            except Exception:
+                log.warning("pairs_trading: dropping malformed active pair from state")
+    return out
+
+
+def _coerce_positions(raw: Any) -> dict[str, OpenPosition]:
+    out: dict[str, OpenPosition] = {}
+    for pair_id, item in (raw or {}).items():
+        if isinstance(item, OpenPosition):
+            out[str(pair_id)] = item
+            continue
+        if isinstance(item, dict):
+            try:
+                out[str(pair_id)] = OpenPosition.model_validate(item)
+            except Exception:
+                log.warning(
+                    "pairs_trading: dropping malformed position from state pair_id=%s",
+                    pair_id,
+                )
+    return out
+
+
+def _coerce_partials(raw: Any) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for pair_id, legs in (raw or {}).items():
+        if isinstance(legs, (set, list, tuple)):
+            out[str(pair_id)] = {str(leg) for leg in legs}
+    return out
+
+
+def _serialize_active_pairs(pairs: list[ActivePair]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for pair in pairs:
+        payload = pair.model_dump(mode="json", exclude={"kalman_betas"})
+        # Kalman betas are recomputable from the close matrix and may be a
+        # pandas Series; do not write that object into Redis-backed JSON state.
+        payload["kalman_betas"] = None
+        out.append(payload)
+    return out
+
+
+def _serialize_positions(positions: dict[str, OpenPosition]) -> dict[str, dict[str, Any]]:
+    return {
+        pair_id: pos.model_dump(mode="json")
+        for pair_id, pos in positions.items()
+    }
+
+
+def _serialize_partials(partials: dict[str, set[str]]) -> dict[str, list[str]]:
+    return {
+        pair_id: sorted(legs)
+        for pair_id, legs in partials.items()
+    }
+
+
 @register_strategy(
     StrategyMeta(
         name="pairs_trading",
@@ -139,7 +218,7 @@ class PairsTradingStrategy(Strategy):
     # ------------------------------------------------------------------ #
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
         syms = set(UNIVERSE)
-        held = state.get(f"{_NS}.held_symbols") or set()
+        held = state.get(f"{_NS}.held_symbols") or []
         syms.update(held)
         return sorted(syms)
 
@@ -163,8 +242,8 @@ class PairsTradingStrategy(Strategy):
             )
 
         # ---------------- Rescreen (if due) ---------------- #
-        active: list[ActivePair] = list(state.get(f"{_NS}.active") or [])
-        last_screen: Optional[date] = state.get(f"{_NS}.last_screen")
+        active = _coerce_active_pairs(state.get(f"{_NS}.active"))
+        last_screen = _coerce_date(state.get(f"{_NS}.last_screen"))
         do_screen = (
             last_screen is None
             or (asof - last_screen).days >= params.rescreen_days
@@ -173,18 +252,14 @@ class PairsTradingStrategy(Strategy):
             active = _rescreen(closes, params, asof)
 
         # ---------------- Positions state ---------------- #
-        positions: dict[str, OpenPosition] = dict(
-            state.get(f"{_NS}.positions") or {}
-        )
+        positions = _coerce_positions(state.get(f"{_NS}.positions"))
         # ``pending`` is the pre-fill intent ledger — entries land here on
         # signal emission and migrate to ``positions`` only when on_fill
         # confirms the broker filled. Round-6 / I-4: previously
         # ``_compute_entries`` wrote directly into ``positions`` before the
         # broker round-tripped, which double-counted capacity if a signal
         # was canceled or unfilled.
-        pending: dict[str, OpenPosition] = dict(
-            state.get(f"{_NS}.pending") or {}
-        )
+        pending = _coerce_positions(state.get(f"{_NS}.pending"))
 
         exits, active = _compute_exits(closes, positions, active, params, asof)
         diagnostics["exits_emitted"] = len(exits)
@@ -217,13 +292,13 @@ class PairsTradingStrategy(Strategy):
         )
 
         state_update: dict[str, Any] = {
-            f"{_NS}.active": active,
-            f"{_NS}.positions": positions,
-            f"{_NS}.pending": pending,
-            f"{_NS}.held_symbols": held_symbols,
+            f"{_NS}.active": _serialize_active_pairs(active),
+            f"{_NS}.positions": _serialize_positions(positions),
+            f"{_NS}.pending": _serialize_positions(pending),
+            f"{_NS}.held_symbols": sorted(held_symbols),
         }
         if do_screen:
-            state_update[f"{_NS}.last_screen"] = asof
+            state_update[f"{_NS}.last_screen"] = asof.isoformat()
 
         return StrategyResult(
             signals=exits + entries,
@@ -255,9 +330,9 @@ class PairsTradingStrategy(Strategy):
         an unrelated rebalance fill doesn't accidentally promote a pending
         pair.
         """
-        positions: dict[str, OpenPosition] = dict(state.get(f"{_NS}.positions", {}))
-        pending: dict[str, OpenPosition] = dict(state.get(f"{_NS}.pending", {}))
-        partials: dict[str, set[str]] = dict(state.get(f"{_NS}.pending_partials", {}))
+        positions = _coerce_positions(state.get(f"{_NS}.positions"))
+        pending = _coerce_positions(state.get(f"{_NS}.pending"))
+        partials = _coerce_partials(state.get(f"{_NS}.pending_partials"))
 
         tag = fill.signal_tag or ""
         # Entry tag format: pairs-entry-<pair_id>-dir<sign><digit>-<leg>
@@ -293,10 +368,10 @@ class PairsTradingStrategy(Strategy):
             | {p.y for p in pending.values()} | {p.x for p in pending.values()}
         )
         return {
-            f"{_NS}.positions": positions,
-            f"{_NS}.pending": pending,
-            f"{_NS}.pending_partials": partials,
-            f"{_NS}.held_symbols": held_symbols,
+            f"{_NS}.positions": _serialize_positions(positions),
+            f"{_NS}.pending": _serialize_positions(pending),
+            f"{_NS}.pending_partials": _serialize_partials(partials),
+            f"{_NS}.held_symbols": sorted(held_symbols),
         }
 
 

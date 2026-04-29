@@ -96,7 +96,10 @@ def test_combo_strangle_rejected_as_undefined_risk() -> None:
 @pytest.mark.asyncio
 async def test_daily_loss_check_passes_when_realized_below_cap() -> None:
     """Realised P&L <= 5% of equity → passes."""
-    with patch.object(trades_mod, "_get_realized_pnl_today", new=AsyncMock(return_value=-2000.0)):
+    with (
+        patch.object(trades_mod, "_get_realized_pnl_today", new=AsyncMock(return_value=-2000.0)),
+        patch("api.routes.portfolio._get_unrealized_pnl_today", new=AsyncMock(return_value=0.0)),
+    ):
         passed, reason, realized = await trades_mod._daily_loss_check(equity=100_000.0)
     assert passed is True
     assert realized == -2000.0
@@ -105,7 +108,10 @@ async def test_daily_loss_check_passes_when_realized_below_cap() -> None:
 @pytest.mark.asyncio
 async def test_daily_loss_check_rejects_at_threshold() -> None:
     """Realised P&L > 5% of equity → rejects."""
-    with patch.object(trades_mod, "_get_realized_pnl_today", new=AsyncMock(return_value=-6000.0)):
+    with (
+        patch.object(trades_mod, "_get_realized_pnl_today", new=AsyncMock(return_value=-6000.0)),
+        patch("api.routes.portfolio._get_unrealized_pnl_today", new=AsyncMock(return_value=0.0)),
+    ):
         passed, reason, realized = await trades_mod._daily_loss_check(equity=100_000.0)
     assert passed is False
     assert "Daily loss limit reached" in reason

@@ -279,7 +279,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "claude-alpha": {
         "name": "Claude Alpha",
-        "description": "AI-driven opportunistic stock picking powered by Claude. Analyzes top screener picks with a general swing-trade prompt, combining technical and fundamental factors with news sentiment.",
+        "description": "Planned Claude-assisted stock-picking concept. No backend implementation or live orders yet; requires a point-in-time prompt contract, replay harness, and risk gates before activation.",
         # Wave 6γ (persona-109 P2): listed in ``PLANNED_STRATEGY_ROUTE_IDS``
         # (see ``backend/strategies/registry.py``) — no backend package yet.
         # Surfacing ``ACTIVE`` misrepresented state; ``PLANNED`` is the
@@ -296,7 +296,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "mean-reversion": {
         "name": "Mean Reversion",
-        "description": "Planned quality-conditioned mean-reversion concept. No backend package or live execution yet; use rsi2-reversal for the implemented Connors RSI(2) strategy.",
+        "description": "Planned quality-conditioned mean-reversion concept. No backend implementation or live orders yet; use rsi2-reversal for the implemented Connors RSI(2) strategy.",
         # Wave 6γ (persona-109 P2): planned-only catalogue entry.
         "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
@@ -310,7 +310,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "vcp-breakout": {
         "name": "VCP Breakout",
-        "description": "Volatility Contraction Pattern breakout — enters when Stage 2 uptrend stocks form tight bases (Minervini SEPA methodology). Tight 3% stops, 10% targets.",
+        "description": "Planned Volatility Contraction Pattern breakout concept. No backend implementation or live orders yet; needs a pattern detector, intraday breakout confirmation, and a replayed OOS artifact.",
         # Wave 6γ (persona-109 P2): planned-only catalogue entry.
         "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
@@ -337,8 +337,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "dividend-capture": {
         "name": "Dividend Capture",
-        "description": "Systematic dividend harvesting that enters high-yield stocks 2-3 days before ex-dividend date and exits after capture. Screens for dividend yield > 3% with adequate liquidity and momentum support.",
-        "status": StrategyStatus.ACTIVE,
+        "description": "Planned dividend-capture concept. No backend implementation or live orders yet; requires ex-dividend calendar, dividend-adjusted pricing, tax-aware cost model, and point-in-time quality data.",
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -350,8 +350,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "sector-rotation": {
         "name": "Sector Rotation",
-        "description": "Rotates capital into the top 3 performing sectors monthly using relative strength ranking across all 11 GICS sectors. Underweights lagging sectors and overweights leaders based on 1-month and 3-month momentum.",
-        "status": StrategyStatus.ACTIVE,
+        "description": "Planned sector-rotation concept. No backend implementation or live orders yet; needs ETF universe wiring, monthly rebalance state, and a replayed OOS artifact before activation.",
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -363,8 +363,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "gap-fill": {
         "name": "Gap Fill",
-        "description": "Intraday strategy that fades overnight gaps greater than 1% in liquid large-cap stocks. Enters at market open in the direction of the gap fill and targets 50-80% of the gap with a tight stop at the gap extreme.",
-        "status": StrategyStatus.PAUSED,
+        "description": "Planned intraday gap-fill concept. No backend implementation or live orders yet; requires premarket/intraday bars, catalyst filtering, and open-auction slippage modeling.",
+        "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -389,7 +389,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "ts-momentum": {
         "name": "Time-Series Momentum",
-        "description": "Trend following based on Moskowitz et al. (2012). Goes long when price is above the 200-day SMA and exits on trend reversal. Uses inverse-volatility position sizing for risk parity. Provides crisis alpha — positive convexity during market crashes.",
+        "description": "Moskowitz et al. (2012) ETF time-series momentum. Uses sign-of-12-month-return across a multi-asset ETF universe, inverse-vol weighting, monthly/bimonthly rebalance, and optional short legs; crisis alpha requires shorts to be enabled.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -415,7 +415,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "dual-momentum": {
         "name": "Dual Momentum",
-        "description": "Cross-sectional relative strength combined with absolute momentum filter, based on Jegadeesh & Titman (1993) and Antonacci (2014). Ranks stocks by 12-1 month returns, selects top quintile, and only holds those with positive 12-month absolute return. Monthly rebalance.",
+        "description": "Antonacci Global Equities Momentum (GEM). Rotates 100% of the sleeve between US equity, ex-US equity, and an aggregate-bond fallback using monthly absolute and relative momentum; no stock top-quintile basket.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -454,7 +454,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "orb": {
         "name": "Opening Range Breakout",
-        "description": "Intraday breakout strategy based on Crabel (1990) and Fisher's ACD Method. Defines the first 30 minutes' high/low as the opening range, enters on breakout with 1.5x OR width target. Sizes positions using OR width as risk unit. VWAP confirmation filters false breakouts.",
+        "description": "Research-only ORB shell pending 1-minute intraday StrategyInput integration. Standalone simulator exists, but the registered strategy emits no live signals today.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -467,7 +467,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "vwap-strategy": {
         "name": "VWAP Bounce / Breakout",
-        "description": "Institutional VWAP-based strategy (Berkowitz et al. 1988, Madhavan 2002). Three signal modes: VWAP bounce (buy pullback to VWAP in uptrend), upper band breakout (price breaks above 2-std VWAP band with volume), and VWAP reclaim (price crosses back above VWAP). Volume confirmation required.",
+        "description": "Research-only VWAP session-pullback shell pending 5-minute intraday StrategyInput integration. Standalone OOS artifact exists, but the registered backend emits no live signals today.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -578,11 +578,12 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
     },
     "ts_momentum": {
         "category": "macro", "required_bars": ["daily"],
-        "required_lookback_days": 260, "min_universe_size": 1,
-        "supports_shorts": False, "supports_options": False,
+        "required_lookback_days": 540, "min_universe_size": 3,
+        "supports_shorts": True, "supports_options": False,
         "description": (
-            "Time-Series Momentum (Moskowitz et al. 2012). Long when price "
-            "is above the 200-day SMA, flat otherwise. Crisis-alpha convex."
+            "Time-Series Momentum (Moskowitz et al. 2012). Sign-of-12-month "
+            "return on 6-11 ETFs with inverse-vol weights, monthly/bimonthly "
+            "rebalance, and optional signed target weights."
         ),
     },
     "rsi2_reversal": {
@@ -596,11 +597,12 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
     },
     "dual_momentum": {
         "category": "macro", "required_bars": ["daily"],
-        "required_lookback_days": 400, "min_universe_size": 2,
+        "required_lookback_days": 400, "min_universe_size": 3,
         "supports_shorts": False, "supports_options": False,
         "description": (
-            "Antonacci Dual Momentum (GEM). Relative + absolute momentum "
-            "picks between US equities, ex-US equities, and bonds."
+            "Antonacci Global Equities Momentum (GEM). Relative + absolute "
+            "momentum rotates one sleeve among US equity, ex-US equity, and "
+            "aggregate bonds."
         ),
     },
     "pairs_trading": {
@@ -624,19 +626,19 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
     "orb": {
         "category": "intraday", "required_bars": ["1min"],
         "required_lookback_days": 0, "min_universe_size": 1,
-        "supports_shorts": True, "supports_options": False,
+        "supports_shorts": False, "supports_options": False,
         "description": (
-            "Crabel Opening-Range Breakout. 30-minute OR, enter on high/low "
-            "break with 1.5x OR target."
+            "Opening-Range Breakout research shell. Registered backend emits "
+            "no signals until 1-minute intraday bars are wired into StrategyInput."
         ),
     },
     "vwap": {
-        "category": "intraday", "required_bars": ["daily", "5Min"],
-        "required_lookback_days": 30, "min_universe_size": 1,
-        "supports_shorts": True, "supports_options": False,
+        "category": "intraday", "required_bars": ["5min"],
+        "required_lookback_days": 150, "min_universe_size": 1,
+        "supports_shorts": False, "supports_options": False,
         "description": (
-            "Institutional VWAP bounce / band breakout. Enters on pullback "
-            "to VWAP in uptrend or 2-sigma upper-band breakout with volume."
+            "VWAP session-pullback research shell. Registered backend emits "
+            "no signals until 5-minute intraday bars are wired into StrategyInput."
         ),
     },
 }
