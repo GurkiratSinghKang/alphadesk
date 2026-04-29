@@ -91,8 +91,11 @@ class DualMomentumStrategy(Strategy):
             )
         diagnostics["rebalance"] = True
 
-        target = _compute_target(params, input.bars, asof)
+        target, decision_diagnostics = _compute_target_with_diagnostics(
+            params, input.bars, asof
+        )
         diagnostics["target"] = target
+        diagnostics["decision"] = decision_diagnostics
 
         signals: list[Signal] = []
 
@@ -111,21 +114,16 @@ class DualMomentumStrategy(Strategy):
                 )
             )
 
-        # Skip the entry if we're already holding the target at ≥0 weight.
-        holding_target = any(
-            pos.symbol == target and pos.quantity > 0 for pos in input.positions
-        )
-        if not holding_target:
-            signals.append(
-                Signal(
-                    symbol=target,
-                    target_weight=1.0,
-                    order_type=OrderType.MOO,
-                    time_in_force=TimeInForce.DAY,
-                    tag=f"dm-entry-{target}",
-                    asof=asof,
-                )
+        signals.append(
+            Signal(
+                symbol=target,
+                target_weight=1.0,
+                order_type=OrderType.MOO,
+                time_in_force=TimeInForce.DAY,
+                tag=f"dm-entry-{target}",
+                asof=asof,
             )
+        )
 
         return StrategyResult(
             signals=signals,
@@ -212,9 +210,38 @@ def _compute_target(
     asof: date,
 ) -> str:
     """Run the GEM decision logic and return the ticker to hold."""
+    target, _diagnostics = _compute_target_with_diagnostics(params, bars, asof)
+    return target
+
+
+def _compute_target_with_diagnostics(
+    params: DualMomentumParams,
+    bars: pd.DataFrame,
+    asof: date,
+) -> tuple[str, dict[str, Any]]:
+    """Run GEM and return both the target ticker and decision details."""
+    diagnostics: dict[str, Any] = {
+        "target": params.bond_fallback,
+        "reason": None,
+        "panel_rows": 0,
+        "panel_symbols": 0,
+        "lookback_components": [
+            {"days": int(days), "weight": float(weight)}
+            for days, weight in lookback_components(params)
+        ],
+        "relative_scores": {},
+        "risk_free_return": None,
+        "us_excess_return": None,
+        "equity_gate_open": False,
+        "missing_returns": [],
+    }
     closes = _close_panel(bars, asof)
     if closes is None or closes.empty:
-        return params.bond_fallback
+        diagnostics["reason"] = "bars_unavailable"
+        return params.bond_fallback, diagnostics
+
+    diagnostics["panel_rows"] = int(len(closes))
+    diagnostics["panel_symbols"] = int(len(closes.columns))
 
     us_sym = params.relative_universe[0]
     rf_sym = params.risk_free_symbol
@@ -224,17 +251,32 @@ def _compute_target(
     for sym in params.relative_universe:
         r = _composite_return(closes, sym, components)
         if r is None:
-            return params.bond_fallback
+            diagnostics["missing_returns"].append(sym)
+            diagnostics["reason"] = "relative_return_unavailable"
+            return params.bond_fallback, diagnostics
         eq_scores[sym] = r
+    diagnostics["relative_scores"] = {
+        sym: float(score) for sym, score in eq_scores.items()
+    }
 
     rf_r = _composite_return(closes, rf_sym, components)
     if rf_r is None:
-        return params.bond_fallback
+        diagnostics["missing_returns"].append(rf_sym)
+        diagnostics["reason"] = "risk_free_return_unavailable"
+        return params.bond_fallback, diagnostics
+    diagnostics["risk_free_return"] = float(rf_r)
 
-    if eq_scores[us_sym] - rf_r <= params.excess_return_floor:
-        return params.bond_fallback
+    excess = eq_scores[us_sym] - rf_r
+    diagnostics["us_excess_return"] = float(excess)
+    if excess <= params.excess_return_floor:
+        diagnostics["reason"] = "equity_gate_closed"
+        return params.bond_fallback, diagnostics
 
-    return max(eq_scores.items(), key=lambda kv: kv[1])[0]
+    target = max(eq_scores.items(), key=lambda kv: kv[1])[0]
+    diagnostics["target"] = target
+    diagnostics["reason"] = "equity_gate_open"
+    diagnostics["equity_gate_open"] = True
+    return target, diagnostics
 
 
 def _composite_return(

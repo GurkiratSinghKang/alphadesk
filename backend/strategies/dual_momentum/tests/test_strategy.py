@@ -27,6 +27,7 @@ from strategies.dual_momentum.config import (
 from strategies.dual_momentum.strategy import (
     DualMomentumStrategy,
     _composite_return,
+    _compute_target_with_diagnostics,
     _is_rebalance_day,
 )
 
@@ -172,6 +173,26 @@ class TestRebalanceTrigger:
         assert len(entries) == 1
         assert entries[0].symbol == "VOO"
 
+    def test_rebalance_refreshes_existing_target_weight(self):
+        bars = _build_bars({
+            "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
+        }, date(2024, 1, 31))
+        strat = DualMomentumStrategy()
+        pos = Position(
+            symbol="VOO", quantity=100,
+            avg_entry_price=Decimal("100"), entry_date=date(2023, 12, 29),
+        )
+
+        result = strat.run(
+            _build_input(bars, date(2024, 1, 31), positions=[pos]),
+            DualMomentumParams(),
+        )
+
+        entries = [s for s in result.signals if s.tag.startswith("dm-entry")]
+        assert len(entries) == 1
+        assert entries[0].symbol == "VOO"
+        assert entries[0].target_weight == 1.0
+
     def test_bimonthly_skips_even_months(self):
         bars_feb = _build_bars({
             "VOO": 0.20, "VEU": 0.10, "AGG": 0.02, "BIL": 0.05,
@@ -242,6 +263,21 @@ class TestHelpers:
     def test_composite_return_missing_symbol(self):
         closes = pd.DataFrame({"VOO": [1, 2, 3]})
         assert _composite_return(closes, "NOPE", ((126, 1.0),)) is None
+
+    def test_target_diagnostics_explain_equity_gate(self):
+        bars = _build_bars({
+            "VOO": 0.02, "VEU": 0.04, "AGG": 0.03, "BIL": 0.05,
+        }, date(2024, 1, 31))
+
+        target, diagnostics = _compute_target_with_diagnostics(
+            DualMomentumParams(), bars, date(2024, 1, 31)
+        )
+
+        assert target == "AGG"
+        assert diagnostics["reason"] == "equity_gate_closed"
+        assert diagnostics["equity_gate_open"] is False
+        assert diagnostics["relative_scores"]["VOO"] < diagnostics["risk_free_return"]
+        assert diagnostics["us_excess_return"] < 0
 
 
 # --------------------------------------------------------------------------- #
