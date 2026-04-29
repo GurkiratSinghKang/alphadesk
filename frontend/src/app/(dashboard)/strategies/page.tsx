@@ -185,7 +185,7 @@ function StrategyCatalogCard({
         <div className="flex flex-col gap-1">
           <div
             className="font-display italic text-[19px] leading-[1.1] text-fg"
-            style={{ letterSpacing: "-0.01em" }}
+            style={{ letterSpacing: 0 }}
           >
             {s.displayName}
           </div>
@@ -298,7 +298,7 @@ function StrategyCatalogCard({
           "opacity-0 transition-opacity duration-150",
           "group-hover/strat:opacity-100 group-focus/strat:opacity-100"
         )}
-        style={{ letterSpacing: "-0.01em" }}
+        style={{ letterSpacing: 0 }}
       >
         open <ArrowRight className="h-3 w-3" />
       </span>
