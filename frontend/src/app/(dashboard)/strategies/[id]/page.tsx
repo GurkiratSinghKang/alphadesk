@@ -46,6 +46,7 @@ import StrategyDisclosure from "@/components/strategies/StrategyDisclosure";
 const SLUG_TO_ID: Record<string, string> = {
   // Legacy short-form alias (kept for any bookmarks).
   "earnings-vol": "earnings-vol-premium",
+  "pairs-stat-arb": "pairs-trading",
   // Underscore fallbacks — one per canonical strategy id.
   earnings_options_play: "earnings-options-play",
   momentum_quality: "momentum-quality",
