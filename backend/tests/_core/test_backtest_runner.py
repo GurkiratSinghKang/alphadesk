@@ -115,3 +115,17 @@ def test_backtest_result_repro_metadata_populated():
     # the constant" not "the constant equals 1.0.0".
     from strategies._core import RUNNER_VERSION
     assert m.runner_version == RUNNER_VERSION
+
+
+def test_metrics_sharpe_excludes_seed_bar_zero_return():
+    """The row-0 pct_change fill must not make smooth returns look volatile."""
+    idx = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]).date
+    equity_df = pd.DataFrame(
+        {"equity": [100.0, 102.0, 104.04], "drawdown": [0.0, 0.0, 0.0]},
+        index=idx,
+    )
+    daily_returns = pd.Series([0.0, 0.02, 0.02], index=idx)
+
+    metrics = BacktestRunner._compute_metrics(equity_df, daily_returns)
+
+    assert metrics["sharpe"] == pytest.approx(0.0)

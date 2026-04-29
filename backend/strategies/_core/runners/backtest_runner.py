@@ -336,6 +336,8 @@ class BacktestRunner:
         # ``pct_change()`` row-0 zero doesn't bias mean/std toward zero
         # and inflate Sharpe modestly on short backtests.
         clean_returns = daily_returns.dropna()
+        if len(clean_returns) > 1:
+            clean_returns = clean_returns.iloc[1:]
         mean, std = float(clean_returns.mean()), float(clean_returns.std())
         sharpe = (mean / std * (252 ** 0.5)) if std > 0 else 0.0
         total_ret = float(equity_df["equity"].iloc[-1] / equity_df["equity"].iloc[0] - 1) if len(equity_df) > 1 else 0.0

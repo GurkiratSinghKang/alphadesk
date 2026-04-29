@@ -65,10 +65,12 @@ Cross-strategy reliability fixes completed in the same pass:
 - `vwap`: research-shell diagnostics now show the active universe and missing 5-minute bar dependency.
 - `pairs_trading`: pair exits now require both legs to confirm before clearing the confirmed position ledger.
 - `regime_adaptive`: month-end rebalances now refresh target weights even when the regime is unchanged; regime history is capped to avoid unbounded state growth.
+- Shared backtest metrics now exclude the synthetic row-0 zero return from Sharpe calculation, so short/smooth strategy runs are not inflated by the seed bar.
 
 Validation for this follow-up pass:
 
 - `PYTHONPATH=backend .venv/bin/python -m pytest backend/strategies/*/tests/test_strategy.py -q`: 173 passed.
+- `PYTHONPATH=backend .venv/bin/python -m pytest backend/tests/_core/test_backtest_runner.py -q`: 3 passed.
 - Targeted suites for each touched strategy passed before commit.
 
 ## Evidence Collected
