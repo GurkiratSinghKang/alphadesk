@@ -2345,7 +2345,12 @@ export async function getEarningsCalendar(
   // B-66: marketCap dropped — backend now unconditionally applies the
   // curated-universe filter.
   if (filters.bmoAmc) params.set("bmo_amc", filters.bmoAmc);
-  if (filters.watchlistOnly) params.set("watchlist_only", "true");
+  if (filters.watchlistOnly) {
+    params.set("watchlist_only", "true");
+    if (Array.isArray(filters.watchlistSymbols)) {
+      params.set("watchlist", normalizeWatchlistQuery(filters.watchlistSymbols).join(","));
+    }
+  }
   if (filters.sort) params.set("sort", filters.sort);
   const query = params.toString();
   const raw = await apiFetch<RawCalendarResponse>(
@@ -2374,6 +2379,21 @@ export async function getEarningsCalendar(
         }
       : {}),
   };
+}
+
+const WATCHLIST_QUERY_SYMBOL_RE = /^[A-Z]{1,6}(\.[A-Z])?$/;
+
+function normalizeWatchlistQuery(symbols: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of symbols) {
+    const symbol = String(raw).trim().toUpperCase();
+    if (!WATCHLIST_QUERY_SYMBOL_RE.test(symbol)) continue;
+    if (seen.has(symbol)) continue;
+    seen.add(symbol);
+    out.push(symbol);
+  }
+  return out;
 }
 
 /**

@@ -634,6 +634,7 @@ export interface EarningsCalendarFilters {
   // B-66: `marketCap` removed — curated-universe filter always applies.
   bmoAmc?: "bmo" | "amc" | "both";
   watchlistOnly?: boolean;
+  watchlistSymbols?: string[];
   sort?: "date" | "iv_rank" | "yield" | "claude_confidence" | "edge_score";
 }
 

@@ -175,6 +175,64 @@ async def test_list_upcoming_filters_by_watchlist_when_flagged(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_list_upcoming_prefers_explicit_watchlist(monkeypatch):
+    """A user-provided watchlist must override the operator default."""
+    from core.config import settings
+    from services import earnings_screener as svc
+
+    monkeypatch.setattr(settings, "WATCHLIST_DEFAULT_SYMBOLS", "NVDA")
+
+    fake = [
+        {"symbol": "NVDA", "company": "N", "sector": "S",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+        {"symbol": "AAPL", "company": "A", "sector": "S",
+         "report_date": "2026-04-24", "report_time": "AMC"},
+    ]
+
+    async def _hydrate(row, *, min_iv_rank: float = 0,
+                       client_host=None, today=None):
+        return {**row, "price": 100.0, "iv_rank": 50,
+                "days_until": 1, "report_state": "upcoming"}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=_hydrate)):
+        resp = await svc.list_upcoming(
+            watchlist_only=True,
+            watchlist_symbols=["AAPL"],
+        )
+
+    assert [r.symbol for r in resp.earnings] == ["AAPL"]
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_empty_explicit_watchlist_returns_no_rows(monkeypatch):
+    """An explicit empty user watchlist should not fall back to defaults."""
+    from core.config import settings
+    from services import earnings_screener as svc
+
+    monkeypatch.setattr(settings, "WATCHLIST_DEFAULT_SYMBOLS", "NVDA")
+
+    fake = [
+        {"symbol": "NVDA", "company": "N", "sector": "S",
+         "report_date": "2026-04-23", "report_time": "AMC"},
+    ]
+
+    async def _hydrate(row, *, min_iv_rank: float = 0,
+                       client_host=None, today=None):
+        return {**row, "price": 100.0, "iv_rank": 50,
+                "days_until": 1, "report_state": "upcoming"}
+
+    with patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=fake)), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=_hydrate)):
+        resp = await svc.list_upcoming(
+            watchlist_only=True,
+            watchlist_symbols=[],
+        )
+
+    assert resp.earnings == []
+
+
+@pytest.mark.asyncio
 async def test_list_upcoming_watchlist_off_no_filtering(monkeypatch):
     """When watchlist_only=False the watchlist setting is ignored."""
     from core.config import settings

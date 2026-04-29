@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import EarningsOptionsPlayPage from "@/app/(dashboard)/strategies/earnings-options-play/page";
 import * as api from "@/lib/api";
+import { useMarketStore } from "@/stores/market";
 
 // B-97: page uses useQuery; tests need a QueryClientProvider. retry=false
 // so failures surface immediately (no hanging retries mid-waitFor).
@@ -86,6 +87,29 @@ describe("Earnings Options Play page", () => {
     // the catalog tight; a vol-rank floor on top is over-screening).
     expect(firstCall?.minIvRank).toBe(0);
     expect(Number.isNaN(firstCall?.minIvRank as number)).toBe(false);
+    Object.defineProperty(window, "location", { writable: true, value: original });
+  });
+
+  it("passes the saved watchlist when URL enables watchlist-only mode", async () => {
+    const original = window.location;
+    useMarketStore.setState({ watchlist: ["NVDA", "AAPL"] });
+    vi.mocked(api.getEarningsCalendar).mockClear();
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...original, search: "?watchlistOnly=true", pathname: "/strategies/earnings-options-play" },
+    });
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [], generatedAt: new Date().toISOString(), partial: false,
+    });
+
+    render(withQueryClient(<EarningsOptionsPlayPage />));
+
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    const firstCall = vi.mocked(api.getEarningsCalendar).mock.calls[0][0];
+    expect(firstCall?.watchlistOnly).toBe(true);
+    expect(firstCall?.watchlistSymbols).toEqual(["NVDA", "AAPL"]);
     Object.defineProperty(window, "location", { writable: true, value: original });
   });
 

@@ -42,6 +42,7 @@ import {
   getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
+  getEarningsCalendar,
   mapPipelineRun,
   mapEarningsDetail,
 } from '@/lib/api';
@@ -286,6 +287,41 @@ describe('mapEarningsDetail', () => {
       error_codes: ['some_brand_new_code', 'iv_unavailable'] as unknown as string[],
     });
     expect(out.errorCodes).toEqual(['iv_unavailable', 'some_brand_new_code']);
+  });
+});
+
+describe('getEarningsCalendar', () => {
+  it('threads an explicit normalized watchlist query when watchlist-only is active', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      earnings: [],
+      generated_at: '2026-04-29T13:00:00Z',
+      partial: false,
+    }));
+
+    await getEarningsCalendar({
+      watchlistOnly: true,
+      watchlistSymbols: [' nvda ', 'NVDA', 'brk.b', 'bad/script'],
+    });
+
+    const [url] = mockFetch.mock.calls[0];
+    const parsed = new URL(String(url), 'http://alphadesk.local');
+    expect(parsed.pathname).toBe('/api/v1/earnings/calendar');
+    expect(parsed.searchParams.get('watchlist_only')).toBe('true');
+    expect(parsed.searchParams.get('watchlist')).toBe('NVDA,BRK.B');
+  });
+
+  it('sends an empty explicit watchlist instead of falling back to server defaults', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      earnings: [],
+      generated_at: '2026-04-29T13:00:00Z',
+      partial: false,
+    }));
+
+    await getEarningsCalendar({ watchlistOnly: true, watchlistSymbols: [] });
+
+    const [url] = mockFetch.mock.calls[0];
+    const parsed = new URL(String(url), 'http://alphadesk.local');
+    expect(parsed.searchParams.get('watchlist')).toBe('');
   });
 });
 

@@ -54,6 +54,38 @@ def test_calendar_route_passes_filters_through():
     assert called["sort"] == "iv_rank"
 
 
+def test_calendar_route_passes_explicit_watchlist_through():
+    from api.schemas.earnings import CalendarResponse
+    called = {}
+
+    async def fake_list(**kwargs):
+        called.update(kwargs)
+        return CalendarResponse(earnings=[], generated_at=datetime.now(timezone.utc), partial=False)
+
+    with patch("services.earnings_screener.list_upcoming", fake_list):
+        r = client.get(
+            "/api/v1/earnings/calendar?watchlist_only=true&watchlist=nvda,NVDA,BRK.B"
+        )
+    assert r.status_code == 200
+    assert called["watchlist_only"] is True
+    assert called["watchlist_symbols"] == ("NVDA", "BRK.B")
+
+
+def test_calendar_route_rejects_invalid_watchlist_symbol():
+    from api.schemas.earnings import CalendarResponse
+
+    with patch(
+        "services.earnings_screener.list_upcoming",
+        AsyncMock(return_value=CalendarResponse(
+            earnings=[], generated_at=datetime.now(timezone.utc), partial=False
+        )),
+    ):
+        r = client.get(
+            "/api/v1/earnings/calendar?watchlist_only=true&watchlist=NVDA,bad/script"
+        )
+    assert r.status_code == 422
+
+
 # ───────────────────────── B-41 stub-detail fallback ─────────────────────────
 
 

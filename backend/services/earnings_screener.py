@@ -1542,6 +1542,7 @@ async def list_upcoming(
     min_iv_rank: float = 0,
     bmo_amc: str = "both",
     watchlist_only: bool = False,
+    watchlist_symbols: Sequence[str] | None = None,
     sort: str = "date",
     client_host: str | None = None,
 ) -> CalendarResponse:
@@ -1593,17 +1594,13 @@ async def list_upcoming(
         len(raw_rows), before_count, window,
     )
 
-    # Round-5 Cluster A G-15: ``watchlist_only`` was a complete no-op.
-    # Apply the filter using ``settings.WATCHLIST_DEFAULT_SYMBOLS`` until
-    # the per-user watchlist concept is plumbed through the auth context.
-    # TODO: thread user's watchlist from auth context once available; for
-    # now use settings.WATCHLIST_DEFAULT_SYMBOLS so the flag is at least
-    # operational instead of silently ignored.
+    # Prefer the explicit per-user watchlist threaded from the frontend. If
+    # older clients send only ``watchlist_only=true``, fall back to the
+    # operator default so the flag remains useful for compatibility.
     if watchlist_only:
-        watch_raw = (settings.WATCHLIST_DEFAULT_SYMBOLS or "").strip()
-        if watch_raw:
+        if watchlist_symbols is not None:
             watchlist = {
-                s.strip().upper() for s in watch_raw.split(",") if s.strip()
+                s.strip().upper() for s in watchlist_symbols if s.strip()
             }
             before = len(raw_rows)
             raw_rows = [
@@ -1611,14 +1608,29 @@ async def list_upcoming(
                 if r.get("symbol", "").upper() in watchlist
             ]
             log.info(
-                "earnings calendar: watchlist filter kept %d/%d (size=%d)",
+                "earnings calendar: user watchlist filter kept %d/%d (size=%d)",
                 len(raw_rows), before, len(watchlist),
             )
         else:
-            log.info(
-                "earnings calendar: watchlist_only=True but "
-                "WATCHLIST_DEFAULT_SYMBOLS is empty — no rows filtered",
-            )
+            watch_raw = (settings.WATCHLIST_DEFAULT_SYMBOLS or "").strip()
+            if watch_raw:
+                watchlist = {
+                    s.strip().upper() for s in watch_raw.split(",") if s.strip()
+                }
+                before = len(raw_rows)
+                raw_rows = [
+                    r for r in raw_rows
+                    if r.get("symbol", "").upper() in watchlist
+                ]
+                log.info(
+                    "earnings calendar: default watchlist filter kept %d/%d (size=%d)",
+                    len(raw_rows), before, len(watchlist),
+                )
+            else:
+                log.info(
+                    "earnings calendar: watchlist_only=True but "
+                    "WATCHLIST_DEFAULT_SYMBOLS is empty — no rows filtered",
+                )
 
     # Hard cap. At curated-universe default this is rarely binding (≤10
     # tradeable names per week typical), but protects us on weeks where

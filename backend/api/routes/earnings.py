@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from typing import Annotated
@@ -26,6 +27,28 @@ router = APIRouter(prefix="/earnings", tags=["earnings"])
 _SYMBOL_PATTERN = r"^[A-Z]{1,6}(\.[A-Z])?$"
 
 
+def _parse_watchlist_query(raw: str | None) -> tuple[str, ...] | None:
+    """Parse the optional comma-separated watchlist query param."""
+    if raw is None:
+        return None
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        symbol = part.strip().upper()
+        if not symbol:
+            continue
+        if not re.fullmatch(_SYMBOL_PATTERN, symbol):
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid watchlist symbol {symbol!r}",
+            )
+        if symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+    return tuple(symbols)
+
+
 @router.get("/calendar", response_model=CalendarResponse)
 async def get_calendar(
     request: Request,
@@ -43,6 +66,7 @@ async def get_calendar(
     min_iv_rank: float = Query(0, ge=0, le=100, allow_inf_nan=False),
     bmo_amc: str = Query("both", pattern="^(bmo|amc|both)$"),
     watchlist_only: bool = False,
+    watchlist: str | None = Query(None, max_length=1024),
     sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence|edge_score)$"),
 ) -> CalendarResponse:
     # B-33: propagate the real client IP (XFF-aware, so per-IP rate limiters
@@ -71,9 +95,11 @@ async def get_calendar(
             "min_iv_rank": min_iv_rank,
         },
     )
+    watchlist_symbols = _parse_watchlist_query(watchlist)
     r = await earnings_screener.list_upcoming(
         window=window, min_iv_rank=min_iv_rank,
-        bmo_amc=bmo_amc, watchlist_only=watchlist_only, sort=sort,
+        bmo_amc=bmo_amc, watchlist_only=watchlist_only,
+        watchlist_symbols=watchlist_symbols, sort=sort,
         client_host=client_host,
     )
     logger.info(

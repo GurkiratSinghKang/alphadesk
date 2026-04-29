@@ -14,6 +14,7 @@ import type {
   EarningsCalendarFilters,
 } from "@/types";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
+import { useMarketStore } from "@/stores/market";
 
 import EarningsCalendarSidebar from "./_earnings/EarningsCalendarSidebar";
 import FiltersBar from "./_earnings/FiltersBar";
@@ -55,6 +56,7 @@ const CANDIDATE_DECISION_VALUES = new Set(["saved", "discarded", "order"]);
  */
 export default function EarningsOptionsPlayPage() {
   const queryClient = useQueryClient();
+  const marketWatchlist = useMarketStore((s) => s.watchlist);
 
   const [filters, setFilters] = useState<EarningsCalendarFilters>(() =>
     readFiltersFromURL(),
@@ -122,11 +124,15 @@ export default function EarningsOptionsPlayPage() {
   // and scrolls smoothly into view (honoring prefers-reduced-motion).
   const detailPanelRef = useRef<HTMLElement | null>(null);
   const isWideViewport = useIsWideViewport();
+  const calendarFilters = useMemo<EarningsCalendarFilters>(() => {
+    if (!filters.watchlistOnly) return filters;
+    return { ...filters, watchlistSymbols: marketWatchlist };
+  }, [filters, marketWatchlist]);
 
   // ── Calendar ─────────────────────────────────────────────
   const calendarQuery = useQuery({
-    queryKey: ["earnings-calendar", filters],
-    queryFn: ({ signal }) => getEarningsCalendar(filters, { signal }),
+    queryKey: ["earnings-calendar", calendarFilters],
+    queryFn: ({ signal }) => getEarningsCalendar(calendarFilters, { signal }),
   });
   const calendar = calendarQuery.data ?? null;
   const loadingCalendar = calendarQuery.isLoading;
