@@ -13,6 +13,7 @@ describe("FiltersBar", () => {
     expect(container.textContent).toMatch(/this week|next week|both/i);
     expect(container.textContent).toMatch(/IV rank/i);
     expect(container.textContent).toMatch(/sort/i);
+    expect(container.textContent).toMatch(/edge score/i);
   });
 
   it("calls onChange with new filters when window toggle is clicked", () => {
@@ -92,6 +93,12 @@ describe("FiltersBar", () => {
     );
     const ind2 = container.querySelector('[data-slot="sort-direction-indicator"]');
     expect(ind2?.getAttribute("aria-label")).toMatch(/descending/i);
+
+    rerender(
+      <FiltersBar filters={{ window: "both", minIvRank: 50, sort: "edge_score" }} onChange={() => {}} />,
+    );
+    const ind3 = container.querySelector('[data-slot="sort-direction-indicator"]');
+    expect(ind3?.getAttribute("aria-label")).toMatch(/descending/i);
   });
 
   // ── Round-4 additions ────────────────────────────────────────

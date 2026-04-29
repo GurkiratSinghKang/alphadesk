@@ -33,6 +33,8 @@ def test_calendar_row_minimal():
     # All optional fields default to None
     assert row.iv_rank is None
     assert row.claude_verdict is None
+    assert row.edge_score is None
+    assert row.edge_score_reasons == []
 
 
 def test_calendar_row_rejects_bad_report_time():

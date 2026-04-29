@@ -32,8 +32,9 @@ const TIME_OPTIONS: TimeOption[] = [
   { key: "both", label: "All hours" },
 ];
 
-type SortOption = { key: "date" | "iv_rank" | "yield" | "claude_confidence"; label: string };
+type SortOption = { key: "date" | "iv_rank" | "yield" | "claude_confidence" | "edge_score"; label: string };
 const SORT_OPTIONS: SortOption[] = [
+  { key: "edge_score", label: "Edge score" },
   { key: "date", label: "Earnings date" },
   { key: "iv_rank", label: "IV rank" },
   { key: "yield", label: "Premium yield" },
@@ -48,6 +49,7 @@ const SORT_DIRECTION: Record<SortOption["key"], { aria: string; dir: "asc" | "de
   iv_rank:           { aria: "descending (highest first)",  dir: "desc" },
   yield:             { aria: "descending (highest first)",  dir: "desc" },
   claude_confidence: { aria: "descending (highest first)",  dir: "desc" },
+  edge_score:        { aria: "descending (highest first)",  dir: "desc" },
 };
 
 // Round-4 (CLUSTER E/9): 24×24 thumb meets WCAG 2.5.8 minimum (24px on

@@ -77,6 +77,42 @@ describe("ClaudeThesisCard", () => {
     expect(container.textContent).toMatch(/analysis pending|not yet|unavailable/i);
   });
 
+  it("allows full research when structured analysis is unavailable", () => {
+    const onRunFull = vi.fn();
+    const { container, getByRole } = render(
+      <ClaudeThesisCard
+        structured={null}
+        full={null}
+        running={false}
+        onRunFull={onRunFull}
+        symbol="NVDA"
+      />,
+    );
+    expect(container.textContent).toMatch(/structured thesis is unavailable/i);
+    fireEvent.click(getByRole("button", { name: /run full research for NVDA/i }));
+    expect(onRunFull).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders full research when the structured thesis is missing", () => {
+    const full: ClaudeFullResearch = {
+      thesisParagraph: "Fallback full research content.",
+      comparableSetups: [],
+      postEarningsDriftPlaybook: "Watch the post-report opening range.",
+      sectorBackdrop: "Semis are mixed.",
+      analystConsensusDelta: "Estimates are stable.",
+      whatWouldChangeMyMind: "A material guide miss.",
+      confidence: 0.58,
+      model: "claude-opus-4-7",
+      generatedAt: new Date().toISOString(),
+    };
+    const { container, queryByRole } = render(
+      <ClaudeThesisCard structured={null} full={full} running={false} onRunFull={() => {}} />,
+    );
+    expect(container.textContent).toContain("Fallback full research content");
+    expect(container.textContent).toContain("Watch the post-report opening range");
+    expect(queryByRole("button", { name: /run full research/i })).toBeNull();
+  });
+
   // ── Round-4 additions ─────────────────────────────────────
 
   it("renders a live countdown when error is a RateLimitError (CLUSTER D/11)", () => {

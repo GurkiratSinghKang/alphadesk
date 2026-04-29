@@ -86,6 +86,8 @@ class CalendarRow(BaseModel):
     claude_verdict: Verdict | None = None
     claude_confidence: float | None = Field(default=None, ge=0, le=1)
     top_setup: TopSetup | None = None
+    edge_score: float | None = Field(default=None, ge=0, le=100)
+    edge_score_reasons: list[str] = Field(default_factory=list)
 
 
 class CalendarResponse(BaseModel):

@@ -28,19 +28,40 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
     return (
       <section
         data-slot="claude-thesis"
-        aria-busy={true}
+        aria-busy={running}
         className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
       >
-        <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
-        <div
-          role="status"
-          aria-live="polite"
-          className="mt-2 flex items-center gap-2"
-        >
-          <LoadingDots />
-          <span className="t-mono text-[13px] u-muted">
-            Analyzing (typically 30 s)… Analysis pending — come back in a moment.
-          </span>
+        <div className="flex items-center justify-between">
+          <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
+          <span className="t-meta">unavailable</span>
+        </div>
+        {running ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-2 flex items-center gap-2"
+          >
+            <LoadingDots />
+            <span className="t-mono text-[13px] u-muted">
+              Generating full research with the available quote, options, and news context.
+            </span>
+          </div>
+        ) : (
+          <p className="mt-2 t-mono text-[13px] leading-relaxed u-muted">
+            Structured thesis is unavailable right now. You can still request a full research note from the data that loaded for this symbol.
+          </p>
+        )}
+        <div className="mt-3 border-t border-[color:var(--border)] pt-3">
+          {full ? (
+            <FullResearchBlock full={full} />
+          ) : (
+            <FullResearchTrigger
+              running={running}
+              error={error}
+              onRunFull={onRunFull}
+              symbol={symbol}
+            />
+          )}
         </div>
       </section>
     );

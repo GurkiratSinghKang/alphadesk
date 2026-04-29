@@ -382,10 +382,14 @@ export interface CalendarRow {
   claudeVerdict: EarningsVerdict | null;
   claudeConfidence: number | null;
   topSetup: EarningsTopSetup | null;
+  edgeScore?: number | null;
+  edgeScoreReasons?: string[];
   /** Round-4: state of this earnings report relative to today. Optional —
    *  older fixtures predating the field don't need to provide it. */
   reportState?: EarningsReportState;
 }
+
+export type EarningsCandidateDecision = "saved" | "discarded" | "order";
 
 /**
  * Round-4: backend now reports _why_ the calendar slice came back with
@@ -630,7 +634,7 @@ export interface EarningsCalendarFilters {
   // B-66: `marketCap` removed — curated-universe filter always applies.
   bmoAmc?: "bmo" | "amc" | "both";
   watchlistOnly?: boolean;
-  sort?: "date" | "iv_rank" | "yield" | "claude_confidence";
+  sort?: "date" | "iv_rank" | "yield" | "claude_confidence" | "edge_score";
 }
 
 // ─── Strategy SOTA Foundation types ───────────────────────────

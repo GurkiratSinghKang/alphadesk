@@ -3,6 +3,7 @@ Task 8 when we test the aggregator; these tests cover the math."""
 from datetime import date, timedelta
 
 from services.earnings_screener import (
+    compute_earnings_edge_score,
     compute_expected_move_from_straddle,
     compute_historical_stats,
 )
@@ -48,6 +49,33 @@ def test_historical_stats_empty():
     assert stats["wins"] == 0
     assert stats["losses"] == 0
     assert stats["surprise_beat_rate"] == 0.0
+
+
+def test_earnings_edge_score_rewards_rich_premium_and_overpriced_move():
+    scored = compute_earnings_edge_score(
+        iv_rank=82,
+        premium_yield_call_atm=0.041,
+        premium_yield_put_atm=0.036,
+        expected_move_pct=0.074,
+        hist_avg_abs_move_pct=0.049,
+        claude_confidence=0.68,
+        days_until=1,
+    )
+    assert scored["edge_score"] >= 80
+    assert any("IV rank" in r for r in scored["edge_score_reasons"])
+    assert any("Implied move" in r for r in scored["edge_score_reasons"])
+
+
+def test_earnings_edge_score_returns_null_without_evidence():
+    assert compute_earnings_edge_score(
+        iv_rank=None,
+        premium_yield_call_atm=None,
+        premium_yield_put_atm=None,
+        expected_move_pct=None,
+        hist_avg_abs_move_pct=None,
+        claude_confidence=None,
+        days_until=1,
+    ) == {"edge_score": None, "edge_score_reasons": []}
 
 
 from services.earnings_prompts import (
@@ -1360,11 +1388,13 @@ async def test_hydrate_row_populates_calendar_rank_fields_from_metrics_and_cache
     assert result["claude_verdict"] == "neutral-bull"
     assert result["claude_confidence"] == 0.64
     assert result["top_setup"] == "bull put spread"
+    assert result["edge_score"] is not None
+    assert any("ATM premium yield" in r for r in result["edge_score_reasons"])
     paid_loader.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_list_upcoming_sorts_by_yield_and_claude_confidence():
+async def test_list_upcoming_sorts_by_yield_claude_confidence_and_edge_score():
     from services import earnings_screener as svc
 
     future = (date.today() + timedelta(days=2)).isoformat()
@@ -1375,8 +1405,8 @@ async def test_list_upcoming_sorts_by_yield_and_claude_confidence():
          "report_date": future, "report_time": "AMC"},
     ]
     hydrated = {
-        "NVDA": {"premium_yield_call_atm": 0.02, "premium_yield_put_atm": 0.03, "claude_confidence": 0.40},
-        "TSLA": {"premium_yield_call_atm": 0.06, "premium_yield_put_atm": 0.01, "claude_confidence": 0.75},
+        "NVDA": {"premium_yield_call_atm": 0.02, "premium_yield_put_atm": 0.03, "claude_confidence": 0.40, "edge_score": 52.0},
+        "TSLA": {"premium_yield_call_atm": 0.06, "premium_yield_put_atm": 0.01, "claude_confidence": 0.75, "edge_score": 74.0},
     }
 
     async def hydrate(row, *, min_iv_rank=0, client_host=None, today=None):
@@ -1386,6 +1416,8 @@ async def test_list_upcoming_sorts_by_yield_and_claude_confidence():
          patch.object(svc, "_hydrate_row", AsyncMock(side_effect=hydrate)):
         by_yield = await svc.list_upcoming(window="both", sort="yield")
         by_claude = await svc.list_upcoming(window="both", sort="claude_confidence")
+        by_edge = await svc.list_upcoming(window="both", sort="edge_score")
 
     assert [r.symbol for r in by_yield.earnings] == ["TSLA", "NVDA"]
     assert [r.symbol for r in by_claude.earnings] == ["TSLA", "NVDA"]
+    assert [r.symbol for r in by_edge.earnings] == ["TSLA", "NVDA"]

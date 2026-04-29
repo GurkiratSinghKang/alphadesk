@@ -51,6 +51,44 @@ describe("EarningsCalendarSidebar", () => {
     expect(container.textContent).toContain("84");
   });
 
+  it("shows explainable edge score chips when backend ranks candidates", () => {
+    const rankedRows: CalendarRow[] = [
+      {
+        ...rows[0],
+        edgeScore: 83.4,
+        edgeScoreReasons: ["IV rank 78 keeps premium rich", "Implied move 6.4% vs 5.2% historical avg"],
+      },
+    ];
+    const { container } = render(
+      <EarningsCalendarSidebar rows={rankedRows} loading={false} error={null} selected="NVDA" onSelect={() => {}} />,
+    );
+    const chip = container.querySelector('[data-slot="edge-score-chip"]');
+    const row = container.querySelector("button");
+    expect(chip?.textContent).toMatch(/edge\s+83/i);
+    expect(chip?.getAttribute("title")).toMatch(/Implied move/i);
+    expect(row?.getAttribute("aria-label")).toMatch(/edge score 83/i);
+  });
+
+  it("surfaces saved/discarded/order queue status on candidate rows", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        candidateDecisions={{ NVDA: "saved", TSLA: "discarded", META: "order" }}
+      />,
+    );
+    const pills = container.querySelectorAll('[data-slot="candidate-decision-pill"]');
+    expect(pills.length).toBe(3);
+    expect(container.querySelector('[data-decision="saved"]')?.textContent).toMatch(/saved/i);
+    expect(container.querySelector('[data-decision="discarded"]')?.textContent).toMatch(/discarded/i);
+    expect(container.querySelector('[data-decision="order"]')?.textContent).toMatch(/order/i);
+    const discarded = container.querySelector('button[aria-label*="Discarded"]');
+    expect(discarded?.className).toContain("opacity-45");
+  });
+
   it("shows empty state when no rows and not loading", () => {
     const { container } = render(
       <EarningsCalendarSidebar rows={[]} loading={false} error={null} selected={null} onSelect={() => {}} />,
@@ -289,6 +327,20 @@ describe("EarningsCalendarSidebar", () => {
     expect(btn?.getAttribute("data-report-state")).toBe("upcoming");
     expect(btn?.className).not.toContain("opacity-60");
     expect(btn?.querySelector('[data-slot="today-pill"]')).toBeNull();
+  });
+
+  it("adds timing tooltips for DMT rows", () => {
+    const dmtRows: CalendarRow[] = [{ ...rows[0], reportTime: "DMT" }];
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={dmtRows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    expect(container.querySelector('[title*="Timing unconfirmed"]')).not.toBeNull();
   });
 });
 

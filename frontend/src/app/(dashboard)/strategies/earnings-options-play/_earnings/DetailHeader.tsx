@@ -30,6 +30,7 @@ export default function DetailHeader({
   const change = quote?.change ?? null;
   const changePct = quote?.changePct ?? null;
   const isNeg = (change ?? 0) < 0;
+  const reportTiming = describeReportTiming(reportTime);
 
   // Round-4 (CLUSTER E/14): 15s tick re-evaluates the freshness/relative
   // text without refetching the detail payload. Don't tick MetricsStrip
@@ -78,7 +79,10 @@ export default function DetailHeader({
         >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
-        <p className="t-meta mt-1">{sector} · Reports {reportDate ? formatReportDate(reportDate) : "—"} · {reportTime}</p>
+        <p className="t-meta mt-1">
+          {sector} · Reports {reportDate ? formatReportDate(reportDate) : "—"} ·{" "}
+          <span title={reportTiming.help}>{reportTiming.label}</span>
+        </p>
         {generatedAt && (
           <p
             data-slot="detail-updated"
@@ -156,4 +160,24 @@ function getFreshness(iso: string | undefined): { kind: "live" | "delayed"; age:
 function formatReportDate(iso: string): string {
   // Locale-aware via Intl — formats in the viewer's timezone and locale.
   return fmtDate(iso, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function describeReportTiming(reportTime: EarningsReportTime): { label: string; help: string } {
+  switch (reportTime) {
+    case "BMO":
+      return {
+        label: "BMO (before open)",
+        help: "Provider says the company reports before the market opens.",
+      };
+    case "AMC":
+      return {
+        label: "AMC (after close)",
+        help: "Provider says the company reports after the market closes.",
+      };
+    default:
+      return {
+        label: "DMT (unconfirmed)",
+        help: "Provider did not confirm before-open or after-close timing; verify before placing an earnings order.",
+      };
+  }
 }

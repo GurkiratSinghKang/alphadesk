@@ -1,7 +1,8 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState } from "react";
-import type { EarningsDetail, EarningsErrorCode } from "@/types";
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowUpCircle, Bookmark, X } from "lucide-react";
+import type { EarningsCandidateDecision, EarningsDetail, EarningsErrorCode } from "@/types";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,8 @@ export interface EarningsDetailPanelProps {
    *  (RateLimitError → live countdown; other errors → inline alert). */
   fullResearchError?: Error | null;
   onRunFullResearch: () => void;
+  candidateDecision?: EarningsCandidateDecision | null;
+  onCandidateDecision?: (decision: EarningsCandidateDecision | null) => void;
   /** Round-4 (B-NEW-4): why the surrounding selection changed —
    *  passed through to DetailHeader so it autofocuses on keyboard /
    *  URL changes only, never on pointer clicks. */
@@ -65,6 +68,8 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       runningFull,
       fullResearchError = null,
       onRunFullResearch,
+      candidateDecision = null,
+      onCandidateDecision,
       selectionSource = null,
     },
     ref,
@@ -195,6 +200,10 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         quote={detail.quote} generatedAt={detail.generatedAt}
         selectionSource={selectionSource}
       />
+      <CandidateDecisionBar
+        decision={candidateDecision}
+        onDecision={onCandidateDecision}
+      />
       {/* Round-8 single-view B: DECISION STRIP — page hero. Renders
           only when Claude's structured response has loaded; the
           ``claude_unavailable`` partial-data banner above already
@@ -281,6 +290,72 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
 );
 
 export default EarningsDetailPanel;
+
+function CandidateDecisionBar({
+  decision,
+  onDecision,
+}: {
+  decision: EarningsCandidateDecision | null;
+  onDecision?: (decision: EarningsCandidateDecision | null) => void;
+}) {
+  if (!onDecision) return null;
+  return (
+    <div
+      data-slot="candidate-decision-bar"
+      role="toolbar"
+      aria-label="Candidate actions"
+      className="mt-3 flex flex-wrap items-center gap-2 border-t border-[color:var(--border)] pt-3"
+    >
+      <CandidateDecisionButton
+        active={decision === "discarded"}
+        label="Discard"
+        icon={<X className="h-3.5 w-3.5" aria-hidden />}
+        onClick={() => onDecision(decision === "discarded" ? null : "discarded")}
+      />
+      <CandidateDecisionButton
+        active={decision === "saved"}
+        label="Save"
+        icon={<Bookmark className="h-3.5 w-3.5" aria-hidden />}
+        onClick={() => onDecision(decision === "saved" ? null : "saved")}
+      />
+      <CandidateDecisionButton
+        active={decision === "order"}
+        label="Queue order"
+        icon={<ArrowUpCircle className="h-3.5 w-3.5" aria-hidden />}
+        onClick={() => onDecision(decision === "order" ? null : "order")}
+      />
+    </div>
+  );
+}
+
+function CandidateDecisionButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-[11px] transition-colors",
+        active
+          ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] u-brand"
+          : "border-[color:var(--border)] bg-transparent u-muted hover:border-[color:var(--brand)] hover:u-brand",
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
 
 /**
  * Round-5 (NEW-Y8): exported so tests can verify the copy strings without
@@ -456,4 +531,3 @@ function _ExpectedMoveStrip({
     </section>
   );
 }
-

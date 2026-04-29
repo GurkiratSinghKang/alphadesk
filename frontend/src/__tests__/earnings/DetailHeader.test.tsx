@@ -29,4 +29,19 @@ describe("DetailHeader", () => {
     );
     expect(container.textContent).toContain("—");
   });
+
+  it("labels unconfirmed DMT timing explicitly", () => {
+    const { container } = render(
+      <DetailHeader
+        symbol="NVDA"
+        company="Nvidia"
+        sector="Semis"
+        reportDate="2026-04-23"
+        reportTime="DMT"
+        quote={null}
+      />
+    );
+    expect(container.textContent).toContain("DMT (unconfirmed)");
+    expect(container.querySelector('[title*="verify before placing"]')).not.toBeNull();
+  });
 });

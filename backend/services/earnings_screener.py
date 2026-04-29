@@ -46,6 +46,8 @@ _NY_BMO_CUTOFF_HOUR = 9   # 09:30 ET — BMO companies have printed by then
 _NY_BMO_CUTOFF_MINUTE = 30
 _NY_AMC_CUTOFF_HOUR = 16  # 16:30 ET — AMC reports out shortly after close
 _NY_AMC_CUTOFF_MINUTE = 30
+_NY_DMT_CUTOFF_HOUR = 16  # Unknown timing: keep visible through the session
+_NY_DMT_CUTOFF_MINUTE = 30
 
 
 def _classify_report_state(report_date: date, report_time: str) -> str:
@@ -66,12 +68,14 @@ def _classify_report_state(report_date: date, report_time: str) -> str:
         now = market_now()
         if report_time == "AMC":
             cutoff_h, cutoff_m = _NY_AMC_CUTOFF_HOUR, _NY_AMC_CUTOFF_MINUTE
-        else:
-            # BMO and DMT (during-market-trading / unknown) both cut over
-            # at the BMO hour — 09:30 ET. DMT's slightly imprecise but the
-            # alternative is calling everything "upcoming" until midnight,
-            # which is more wrong.
+        elif report_time == "BMO":
             cutoff_h, cutoff_m = _NY_BMO_CUTOFF_HOUR, _NY_BMO_CUTOFF_MINUTE
+        else:
+            # DMT is the provider's unconfirmed bucket, not a true "during
+            # market" guarantee. Keep it visible through the regular session
+            # so an unknown-time AMC-style report does not get hidden at
+            # 09:30 ET.
+            cutoff_h, cutoff_m = _NY_DMT_CUTOFF_HOUR, _NY_DMT_CUTOFF_MINUTE
         if (now.hour, now.minute) < (cutoff_h, cutoff_m):
             return "today_pre"
         return "today_done"
@@ -143,6 +147,88 @@ def compute_historical_stats(quarters: Sequence[Mapping]) -> dict:
         "wins": wins,
         "losses": losses,
         "surprise_beat_rate": beat_rate,
+    }
+
+
+def compute_earnings_edge_score(
+    *,
+    iv_rank: float | None,
+    premium_yield_call_atm: float | None,
+    premium_yield_put_atm: float | None,
+    expected_move_pct: float | None,
+    hist_avg_abs_move_pct: float | None,
+    claude_confidence: float | None,
+    days_until: int | None,
+) -> dict:
+    """Composite 0-100 ranking score for earnings-vol candidates.
+
+    The score is intentionally simple and explainable. It rewards the
+    conditions a premium-selling earnings setup needs: elevated IV, rich ATM
+    option premium, implied move above prior realized earnings moves, and a
+    confident cached AI thesis. The returned reasons are short enough to show
+    in UI tooltips / cards.
+    """
+
+    def clamp(value: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, value))
+
+    score = 0.0
+    reasons: list[str] = []
+    evidence_count = 0
+
+    if iv_rank is not None:
+        iv = clamp(float(iv_rank), 0.0, 100.0)
+        score += iv * 0.35
+        evidence_count += 1
+        if iv >= 70:
+            reasons.append(f"IV rank {iv:.0f} keeps premium rich")
+
+    premiums = [
+        p for p in (premium_yield_call_atm, premium_yield_put_atm)
+        if p is not None and p > 0
+    ]
+    if premiums:
+        premium = max(float(p) for p in premiums)
+        score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
+        evidence_count += 1
+        reasons.append(f"ATM premium yield {premium:.1%}")
+
+    if (
+        expected_move_pct is not None
+        and hist_avg_abs_move_pct is not None
+        and hist_avg_abs_move_pct > 0
+    ):
+        expected = float(expected_move_pct)
+        hist = float(hist_avg_abs_move_pct)
+        overprice_ratio = (expected - hist) / hist
+        if overprice_ratio > 0:
+            score += clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+            reasons.append(
+                f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
+            )
+        evidence_count += 1
+
+    if claude_confidence is not None:
+        confidence = clamp(float(claude_confidence), 0.0, 1.0)
+        score += confidence * 15.0
+        evidence_count += 1
+        if confidence >= 0.6:
+            reasons.append(f"Claude confidence {confidence:.0%}")
+
+    if evidence_count == 0:
+        return {"edge_score": None, "edge_score_reasons": []}
+
+    if days_until is not None:
+        if 0 <= days_until <= 3:
+            score += 5.0
+            reasons.append("Near-term event window")
+        elif days_until < 0:
+            score -= 20.0
+            reasons.append("Already reported; edge decays")
+
+    return {
+        "edge_score": round(clamp(score, 0.0, 100.0), 1),
+        "edge_score_reasons": reasons[:4],
     }
 
 
@@ -1419,6 +1505,15 @@ async def _hydrate_row(
         return None
     days_until = (report_date_obj - today).days
     report_state = _classify_report_state(report_date_obj, row.get("report_time", "DMT"))
+    edge = compute_earnings_edge_score(
+        iv_rank=iv_rank,
+        premium_yield_call_atm=metrics.get("premium_yield_call_atm") if metrics else None,
+        premium_yield_put_atm=metrics.get("premium_yield_put_atm") if metrics else None,
+        expected_move_pct=metrics.get("expected_move_pct") if metrics else None,
+        hist_avg_abs_move_pct=metrics.get("hist_avg_abs_move_pct") if metrics else None,
+        claude_confidence=claude.get("confidence") if claude else None,
+        days_until=days_until,
+    )
     return {
         **row,
         "price": quote["last"] if quote else None,
@@ -1432,6 +1527,7 @@ async def _hydrate_row(
         "claude_verdict": claude.get("verdict") if claude else None,
         "claude_confidence": claude.get("confidence") if claude else None,
         "top_setup": claude.get("suggested_play") if claude else None,
+        **edge,
         "days_until": days_until,
         "report_state": report_state,
     }
@@ -1673,6 +1769,8 @@ async def list_upcoming(
         )
     elif sort == "claude_confidence":
         rows.sort(key=lambda r: r.claude_confidence or 0, reverse=True)
+    elif sort == "edge_score":
+        rows.sort(key=lambda r: r.edge_score or 0, reverse=True)
 
     # Round-4 CLUSTER 5 #21: empty-calendar diagnostic. The frontend
     # uses `meta.reason` to pick the right empty-state copy:

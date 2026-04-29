@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
@@ -9,9 +9,11 @@ import {
   postEarningsFullResearch,
 } from "@/lib/api";
 import type {
+  EarningsCandidateDecision,
   EarningsDetail,
   EarningsCalendarFilters,
 } from "@/types";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 
 import EarningsCalendarSidebar from "./_earnings/EarningsCalendarSidebar";
 import FiltersBar from "./_earnings/FiltersBar";
@@ -24,6 +26,9 @@ import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
  * symbol so SR users keep their place.
  */
 export type SelectionSource = "pointer" | "keyboard" | "url" | null;
+type CandidateDecisionMap = Partial<Record<string, EarningsCandidateDecision>>;
+const CANDIDATE_DECISIONS_KEY = "alphadesk:earnings-candidate-decisions:v1";
+const CANDIDATE_DECISION_VALUES = new Set(["saved", "discarded", "order"]);
 
 /**
  * /strategies/earnings-options-play — research screener.
@@ -59,6 +64,8 @@ export default function EarningsOptionsPlayPage() {
     const params = new URLSearchParams(window.location.search);
     return params.get("symbol");
   });
+  const [candidateDecisions, setCandidateDecisions] =
+    useState<CandidateDecisionMap>(() => readCandidateDecisions());
 
   // Round-4 (B-NEW-4): track the source of the last selection change so
   // DetailHeader knows whether to refocus its <h2>.
@@ -335,6 +342,42 @@ export default function EarningsOptionsPlayPage() {
     firstRowRef.current?.focus();
   }, []);
 
+  const setCandidateDecision = useCallback(
+    (symbol: string, decision: EarningsCandidateDecision | null) => {
+      setCandidateDecisions((prev) => {
+        const next: CandidateDecisionMap = { ...prev };
+        const key = symbol.toUpperCase();
+        if (decision) next[key] = decision;
+        else delete next[key];
+        safeSetItem(CANDIDATE_DECISIONS_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    [],
+  );
+
+  const onCandidateDecision = useCallback(
+    (decision: EarningsCandidateDecision | null) => {
+      if (!selectedSymbol) return;
+      setCandidateDecision(selectedSymbol, decision);
+    },
+    [selectedSymbol, setCandidateDecision],
+  );
+
+  const selectedCandidateDecision = selectedSymbol
+    ? candidateDecisions[selectedSymbol.toUpperCase()] ?? null
+    : null;
+
+  const decisionCounts = useMemo(() => {
+    const counts = { saved: 0, discarded: 0, order: 0, total: 0 };
+    for (const decision of Object.values(candidateDecisions)) {
+      if (!decision) continue;
+      counts[decision] += 1;
+      counts.total += 1;
+    }
+    return counts;
+  }, [candidateDecisions]);
+
   const actions = (
     <span
       role="status"
@@ -342,7 +385,11 @@ export default function EarningsOptionsPlayPage() {
       className="t-meta tabular-nums text-[color:var(--fg-muted)]"
     >
       {calendar
-        ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}`
+        ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}${
+            decisionCounts.total > 0
+              ? ` · ${decisionCounts.saved} saved · ${decisionCounts.order} queued`
+              : ""
+          }`
         : "Loading…"}
     </span>
   );
@@ -401,6 +448,7 @@ export default function EarningsOptionsPlayPage() {
           selected={selectedSymbol}
           onSelect={onSelectFromSidebar}
           firstRowRef={firstRowRef}
+          candidateDecisions={candidateDecisions}
           windowLabel={calendar?.windowLabel ?? null}
           metaReason={calendar?.meta?.reason ?? null}
           filters={filters}
@@ -419,6 +467,8 @@ export default function EarningsOptionsPlayPage() {
             runningFull={runningFull}
             fullResearchError={fullError}
             onRunFullResearch={runFull}
+            candidateDecision={selectedCandidateDecision}
+            onCandidateDecision={onCandidateDecision}
             selectionSource={selectionSource}
           />
         </div>
@@ -583,7 +633,7 @@ function readFiltersFromURL(): EarningsCalendarFilters {
   else if (wl === "false") out.watchlistOnly = false;
 
   const sort = p.get("sort");
-  if (sort && ["date", "iv_rank", "yield", "claude_confidence"].includes(sort)) {
+  if (sort && ["date", "iv_rank", "yield", "claude_confidence", "edge_score"].includes(sort)) {
     out.sort = sort as EarningsCalendarFilters["sort"];
   }
 
@@ -612,5 +662,31 @@ function syncURL(
     window.history.pushState({}, "", newUrl);
   } else {
     window.history.replaceState({}, "", newUrl);
+  }
+}
+
+function readCandidateDecisions(): CandidateDecisionMap {
+  if (typeof window === "undefined") return {};
+  const raw = safeGetItem(CANDIDATE_DECISIONS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const out: CandidateDecisionMap = {};
+    for (const [symbol, decision] of Object.entries(parsed)) {
+      if (
+        typeof symbol === "string"
+        && /^[A-Z]{1,6}(\.[A-Z])?$/.test(symbol.toUpperCase())
+        && typeof decision === "string"
+        && CANDIDATE_DECISION_VALUES.has(decision)
+      ) {
+        out[symbol.toUpperCase()] = decision as EarningsCandidateDecision;
+      }
+    }
+    return out;
+  } catch {
+    return {};
   }
 }

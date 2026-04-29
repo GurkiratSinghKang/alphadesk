@@ -1,6 +1,6 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import EarningsDetailPanel, {
   ERROR_CODE_COPY,
 } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/EarningsDetailPanel";
@@ -50,6 +50,30 @@ describe("EarningsDetailPanel", () => {
       <EarningsDetailPanel detail={null} loading={false} error="provider down" runningFull={false} onRunFullResearch={() => {}} />,
     );
     expect(container.textContent).toMatch(/provider down|error/i);
+  });
+
+  it("renders candidate decision actions and toggles the active choice", () => {
+    const onCandidateDecision = vi.fn();
+    const { getByRole } = render(
+      <EarningsDetailPanel
+        detail={detail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+        candidateDecision="saved"
+        onCandidateDecision={onCandidateDecision}
+      />,
+    );
+
+    expect(getByRole("button", { name: /save/i })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(getByRole("button", { name: /discard/i }));
+    fireEvent.click(getByRole("button", { name: /queue order/i }));
+    fireEvent.click(getByRole("button", { name: /save/i }));
+
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(2, "order");
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(3, null);
   });
 
   // ── Round-4 additions ─────────────────────────────────────

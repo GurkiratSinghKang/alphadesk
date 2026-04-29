@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { RefObject } from "react";
 import type {
   CalendarRow,
+  EarningsCandidateDecision,
   CalendarMetaReason,
   EarningsCalendarFilters,
 } from "@/types";
@@ -24,6 +25,7 @@ export interface EarningsCalendarSidebarProps {
   // row's button so focus can be programmatically restored after a
   // filter-triggered refetch.
   firstRowRef?: RefObject<HTMLButtonElement | null>;
+  candidateDecisions?: Partial<Record<string, EarningsCandidateDecision>>;
   /** Round-4 (CLUSTER A/2): backend-rendered window label for the header
    *  ("§ CALENDAR · Apr 27 – May 1, 2026 · 12 reports"). */
   windowLabel?: string | null;
@@ -56,6 +58,7 @@ export default function EarningsCalendarSidebar({
   selected,
   onSelect,
   firstRowRef,
+  candidateDecisions = {},
   windowLabel,
   metaReason,
   filters,
@@ -158,6 +161,21 @@ export default function EarningsCalendarSidebar({
               const isReported = state === "today_done" || state === "past";
               const isToday = state === "today_pre";
               const reportedSuffix = isReported ? " (reported)" : "";
+              const edgeScore = r.edgeScore;
+              const edgeReasons = r.edgeScoreReasons ?? [];
+              const edgeTitle = edgeReasons.length > 0
+                ? `Edge ${Math.round(edgeScore ?? 0)}: ${edgeReasons.join("; ")}`
+                : `Edge ${Math.round(edgeScore ?? 0)}`;
+              const candidateDecision = candidateDecisions[r.symbol.toUpperCase()] ?? null;
+              const candidateDecisionLabel =
+                candidateDecision === "order"
+                  ? "Order queued"
+                  : candidateDecision === "saved"
+                  ? "Saved"
+                  : candidateDecision === "discarded"
+                  ? "Discarded"
+                  : null;
+              const reportTimeTitle = describeReportTime(r.reportTime);
               return (
                 <li key={r.symbol}>
                   <button
@@ -190,9 +208,9 @@ export default function EarningsCalendarSidebar({
                         );
                       }
                     }}
-                    title={`${r.symbol} — ⌘/Ctrl-click to open in a new tab`}
+                    title={`${r.symbol} — ${candidateDecisionLabel ? `${candidateDecisionLabel}. ` : ""}${edgeScore != null ? `${edgeTitle}. ` : ""}⌘/Ctrl-click to open in a new tab`}
                     aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
-                    aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
+                    aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${candidateDecisionLabel ? ' · ' + candidateDecisionLabel : ''}${edgeScore != null ? ' · edge score ' + Math.round(edgeScore) : ''}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
                     // Round-8 / AX-04: ``aria-current="true"`` on the
                     // selected calendar row is the canonical SR cue
                     // for "this is the active item in a list of
@@ -213,11 +231,23 @@ export default function EarningsCalendarSidebar({
                       // Round-5 (NEW-Y1): dim today_done + past rows so the
                       // user can see they're already reported.
                       isReported && "opacity-60",
+                      candidateDecision === "discarded" && "opacity-45",
                     )}
                   >
                     <span className="flex items-center gap-1.5">
                       <span className="font-semibold text-[color:var(--fg-base)]">{r.symbol}</span>
-                      <span className="text-[10px] text-[color:var(--fg-muted)]">{r.reportTime}</span>
+                      <span className="text-[10px] text-[color:var(--fg-muted)]" title={reportTimeTitle}>
+                        {r.reportTime}
+                      </span>
+                      {candidateDecisionLabel && (
+                        <span
+                          data-slot="candidate-decision-pill"
+                          data-decision={candidateDecision}
+                          className="rounded border border-[color:var(--border)] px-1 py-px font-mono text-[8.5px] uppercase leading-none text-[color:var(--fg-muted)]"
+                        >
+                          {candidateDecision === "order" ? "Order" : candidateDecisionLabel}
+                        </span>
+                      )}
                       {isToday && (
                         <span
                           data-slot="today-pill"
@@ -227,9 +257,22 @@ export default function EarningsCalendarSidebar({
                         </span>
                       )}
                     </span>
-                    {r.ivRank != null && (
-                      <span className="text-[11px] tabular-nums text-[color:var(--fg-pos)]">
-                        {Math.round(r.ivRank)}
+                    {(edgeScore != null || r.ivRank != null) && (
+                      <span className="flex shrink-0 flex-col items-end gap-0.5 leading-none">
+                        {edgeScore != null && (
+                          <span
+                            data-slot="edge-score-chip"
+                            className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-[10px] tabular-nums text-[color:var(--brand)]"
+                            title={edgeTitle}
+                          >
+                            Edge {Math.round(edgeScore)}
+                          </span>
+                        )}
+                        {r.ivRank != null && (
+                          <span className="text-[10.5px] tabular-nums text-[color:var(--fg-pos)]">
+                            IV {Math.round(r.ivRank)}
+                          </span>
+                        )}
                       </span>
                     )}
                   </button>
@@ -257,6 +300,12 @@ function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: 
 function formatDateLabel(iso: string): string {
   // Locale-aware — e.g. en-US "Fri 04/24", de-DE "Fr., 24.04." — via Intl.
   return fmtDate(iso, { weekday: "short", month: "2-digit", day: "2-digit" });
+}
+
+function describeReportTime(reportTime: CalendarRow["reportTime"]): string {
+  if (reportTime === "BMO") return "Before market open";
+  if (reportTime === "AMC") return "After market close";
+  return "Timing unconfirmed; verify before placing an earnings order";
 }
 
 /**

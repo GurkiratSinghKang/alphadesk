@@ -43,7 +43,7 @@ async def get_calendar(
     min_iv_rank: float = Query(0, ge=0, le=100, allow_inf_nan=False),
     bmo_amc: str = Query("both", pattern="^(bmo|amc|both)$"),
     watchlist_only: bool = False,
-    sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence)$"),
+    sort: str = Query("date", pattern="^(date|iv_rank|yield|claude_confidence|edge_score)$"),
 ) -> CalendarResponse:
     # B-33: propagate the real client IP (XFF-aware, so per-IP rate limiters
     # downstream see the caller — not Caddy's address).

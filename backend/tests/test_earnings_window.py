@@ -117,13 +117,13 @@ def test_classify_report_state_past_two_days_is_past():
 @pytest.mark.parametrize("report_time,expected_pre,expected_done", [
     ("BMO", (8, 0), (10, 0)),    # before vs after 09:30 ET
     ("AMC", (15, 0), (17, 0)),   # before vs after 16:30 ET
-    ("DMT", (8, 0), (10, 0)),    # treated like BMO at the cutover
+    ("DMT", (15, 0), (17, 0)),   # unconfirmed timing stays visible all session
 ])
 def test_classify_report_state_today_pre_vs_done(
     report_time: str, expected_pre: tuple[int, int], expected_done: tuple[int, int]
 ):
-    """On the day of the report, the cutover for BMO is 09:30 ET and for
-    AMC is 16:30 ET. Pre-cutover = today_pre, post-cutover = today_done."""
+    """On report day, BMO cuts over at 09:30 ET while AMC and unconfirmed
+    DMT rows cut over at 16:30 ET."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
 

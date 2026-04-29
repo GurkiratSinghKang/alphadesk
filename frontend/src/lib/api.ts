@@ -1978,6 +1978,8 @@ interface RawCalendarRow {
   claude_verdict: EarningsVerdict | null;
   claude_confidence: number | null;
   top_setup: EarningsTopSetup | null;
+  edge_score?: number | null;
+  edge_score_reasons?: unknown;
   /** Round-4: backend tags state of this report relative to today. */
   report_state?: import("@/types").EarningsReportState;
 }
@@ -2131,6 +2133,7 @@ interface RawEarningsDetail {
 }
 
 function mapCalendarRow(r: RawCalendarRow): CalendarRow {
+  const rawReasons = r.edge_score_reasons;
   return {
     symbol: r.symbol,
     company: r.company,
@@ -2149,6 +2152,10 @@ function mapCalendarRow(r: RawCalendarRow): CalendarRow {
     claudeVerdict: r.claude_verdict,
     claudeConfidence: r.claude_confidence,
     topSetup: r.top_setup,
+    edgeScore: r.edge_score ?? null,
+    edgeScoreReasons: Array.isArray(rawReasons)
+      ? rawReasons.filter((v): v is string => typeof v === "string")
+      : [],
     // Round-4: optional report state — pass through when present.
     ...(r.report_state !== undefined ? { reportState: r.report_state } : {}),
   };
