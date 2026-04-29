@@ -241,12 +241,21 @@ class PEADStrategy(Strategy):
         # 2e. Signal emission.
         pending: set[str] = set()
         entries: list[Signal] = []
+        skip_counts = {
+            "held_or_pending": 0,
+            "below_sue_threshold": 0,
+            "shorts_disabled": 0,
+            "liquidity": 0,
+            "overlapping_earnings": 0,
+        }
         for _, sym, sue in scored:
             if len(entries) >= capacity:
                 break
             if sym in held_symbols or sym in pending:
+                skip_counts["held_or_pending"] += 1
                 continue
             if abs(sue) < threshold:
+                skip_counts["below_sue_threshold"] += 1
                 continue
 
             # Direction gate.
@@ -255,11 +264,13 @@ class PEADStrategy(Strategy):
             elif sue < 0 and allow_shorts:
                 direction = -1
             else:
+                skip_counts["shorts_disabled"] += 1
                 continue
 
             # Liquidity / price filter.
             sym_bars = self._symbol_bars(input.bars, sym, asof)
             if not passes_liquidity(sym_bars, asof, adv_min, price_min):
+                skip_counts["liquidity"] += 1
                 continue
 
             # Overlapping earnings filter — another earnings announcement
@@ -271,6 +282,7 @@ class PEADStrategy(Strategy):
                 holding_days_int,
                 calendar_provider=None,
             ):
+                skip_counts["overlapping_earnings"] += 1
                 continue
 
             weight = direction * alloc
@@ -311,6 +323,7 @@ class PEADStrategy(Strategy):
             }
 
         diagnostics["entries_emitted"] = len(entries)
+        diagnostics["entries_skipped"] = skip_counts
         diagnostics["exits_emitted"] = len(exits)
         return self._finalise_result(
             exits + entries, entries_state, state_update, diagnostics, warnings,

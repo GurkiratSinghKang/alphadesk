@@ -465,6 +465,7 @@ class TestDirectionGating:
         result = strat.run(inp, params)
         entries = [s for s in result.signals if s.order_type == OrderType.MOO]
         assert entries == []
+        assert result.diagnostics["entries_skipped"]["shorts_disabled"] == 1
 
     def test_small_sue_does_not_emit(self):
         # 8 historical quarters of ±0.05 → σ ≈ 0.0535. A +0.02 surprise
@@ -475,6 +476,7 @@ class TestDirectionGating:
         result = strat.run(inp, params)
         entries = [s for s in result.signals if s.order_type == OrderType.MOO]
         assert entries == []
+        assert result.diagnostics["entries_skipped"]["below_sue_threshold"] == 1
 
 
 class TestAnnouncementTiming:
@@ -627,6 +629,7 @@ class TestOverlappingEarnings:
         result = strat.run(inp, params)
         entries = [s for s in result.signals if s.order_type == OrderType.MOO]
         assert entries == []
+        assert result.diagnostics["entries_skipped"]["overlapping_earnings"] == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -693,6 +696,7 @@ class TestRunIntegration:
         assert "MSFT" not in syms
         assert len(entries) == 1
         assert entries[0].order_type == OrderType.MOO
+        assert result.diagnostics["entries_skipped"]["below_sue_threshold"] == 1
 
     def test_liquidity_filter_blocks_illiquid_names(self):
         """A stock with low dollar volume (below the 20M ADV floor) is
@@ -735,6 +739,7 @@ class TestRunIntegration:
         result = strat.run(inp, params)
         entries = [s for s in result.signals if s.order_type == OrderType.MOO]
         assert entries == []
+        assert result.diagnostics["entries_skipped"]["liquidity"] == 1
 
 
 # --------------------------------------------------------------------------- #
