@@ -166,9 +166,9 @@ def compute_earnings_edge_score(
     The score is intentionally simple and explainable. It rewards the
     conditions the suggested earnings setup needs. Premium-selling setups want
     elevated IV, rich ATM option premium, and implied move above prior realized
-    earnings moves. Long straddles want the opposite: a debit that looks cheap
-    versus historical report moves. The returned reasons are short enough to
-    show in UI tooltips / cards.
+    earnings moves. Debit setups (long calls/puts, debit verticals, straddles)
+    want the opposite: a debit that looks cheap versus historical report moves.
+    The returned reasons are short enough to show in UI tooltips / cards.
     """
 
     def clamp(value: float, lo: float, hi: float) -> float:
@@ -178,11 +178,18 @@ def compute_earnings_edge_score(
     reasons: list[str] = []
     evidence_count = 0
     setup = (top_setup or "").strip().lower()
-    is_vol_buying = setup == "long straddle"
+    directional_debit_side = {
+        "long call": "call",
+        "bull call spread": "call",
+        "long put": "put",
+        "bear put spread": "put",
+    }.get(setup)
+    is_straddle_debit = setup == "long straddle"
+    is_debit_setup = is_straddle_debit or directional_debit_side is not None
 
     if iv_rank is not None:
         iv = clamp(float(iv_rank), 0.0, 100.0)
-        if is_vol_buying:
+        if is_debit_setup:
             score += (100.0 - iv) * 0.25
             if iv <= 35:
                 reasons.append(f"IV rank {iv:.0f} keeps debit moderate")
@@ -197,16 +204,32 @@ def compute_earnings_edge_score(
         if p is not None and p > 0
     ]
     if premiums:
-        if is_vol_buying:
+        premium_evidence = True
+        if is_straddle_debit:
             debit = sum(float(p) for p in premiums)
             score += clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
             if debit <= 0.06:
                 reasons.append(f"ATM straddle debit {debit:.1%}")
+        elif directional_debit_side:
+            side_premium = (
+                premium_yield_call_atm
+                if directional_debit_side == "call"
+                else premium_yield_put_atm
+            )
+            if side_premium is not None and side_premium > 0:
+                multiplier = 0.6 if "spread" in setup else 1.0
+                debit = float(side_premium) * multiplier
+                score += clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
+                if debit <= 0.035:
+                    reasons.append(f"{setup.title()} debit {debit:.1%}")
+            else:
+                premium_evidence = False
         else:
             premium = max(float(p) for p in premiums)
             score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
             reasons.append(f"ATM premium yield {premium:.1%}")
-        evidence_count += 1
+        if premium_evidence:
+            evidence_count += 1
 
     if (
         expected_move_pct is not None
@@ -215,7 +238,7 @@ def compute_earnings_edge_score(
     ):
         expected = float(expected_move_pct)
         hist = float(hist_avg_abs_move_pct)
-        if is_vol_buying:
+        if is_debit_setup:
             underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
             if underprice_ratio > 0:
                 score += clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0

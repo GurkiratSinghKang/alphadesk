@@ -99,6 +99,39 @@ def test_earnings_edge_score_treats_long_straddle_premium_as_debit_hurdle():
     assert any("Historical move" in r for r in scored["edge_score_reasons"])
 
 
+def test_earnings_edge_score_treats_debit_verticals_as_cheap_vol():
+    scored = compute_earnings_edge_score(
+        iv_rank=28,
+        premium_yield_call_atm=0.035,
+        premium_yield_put_atm=0.070,
+        expected_move_pct=0.040,
+        hist_avg_abs_move_pct=0.075,
+        claude_confidence=0.70,
+        days_until=1,
+        top_setup="bull call spread",
+    )
+
+    assert scored["edge_score"] >= 80
+    assert any("debit" in r.lower() for r in scored["edge_score_reasons"])
+    assert any("Historical move" in r for r in scored["edge_score_reasons"])
+
+
+def test_earnings_edge_score_penalizes_expensive_debit_verticals():
+    scored = compute_earnings_edge_score(
+        iv_rank=78,
+        premium_yield_call_atm=0.030,
+        premium_yield_put_atm=0.080,
+        expected_move_pct=0.090,
+        hist_avg_abs_move_pct=0.045,
+        claude_confidence=0.45,
+        days_until=1,
+        top_setup="bear put spread",
+    )
+
+    assert scored["edge_score"] < 35
+    assert any("above" in r for r in scored["edge_score_reasons"])
+
+
 def test_earnings_edge_score_returns_null_without_evidence():
     assert compute_earnings_edge_score(
         iv_rank=None,
