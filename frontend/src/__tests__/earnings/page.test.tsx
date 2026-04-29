@@ -511,6 +511,12 @@ describe("Earnings Options Play — full flow", () => {
       expect(container.querySelector('[data-slot="trade-button-bear-call-spread"]')?.getAttribute("href")).toContain("205");
       expect(container.querySelector('[data-slot="trade-button-bull-put-spread"]')?.getAttribute("href")).toContain("legs=");
     });
+    const saveBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Save"),
+    ) as HTMLButtonElement;
+    fireEvent.click(saveBtn);
+    expect(window.localStorage.getItem("alphadesk:earnings-candidate-decisions:v1"))
+      .toContain('"NVDA@2026-04-23":"saved"');
 
     // Fire the "Run full research" flow
     vi.mocked(api.postEarningsFullResearch).mockResolvedValueOnce({

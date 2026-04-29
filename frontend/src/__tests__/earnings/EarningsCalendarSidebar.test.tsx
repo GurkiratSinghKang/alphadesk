@@ -77,7 +77,11 @@ describe("EarningsCalendarSidebar", () => {
         error={null}
         selected={null}
         onSelect={() => {}}
-        candidateDecisions={{ NVDA: "saved", TSLA: "discarded", META: "order" }}
+        candidateDecisions={{
+          "NVDA@2026-04-23": "saved",
+          "TSLA@2026-04-23": "discarded",
+          "META@2026-04-24": "order",
+        }}
       />,
     );
     const pills = container.querySelectorAll('[data-slot="candidate-decision-pill"]');
@@ -87,6 +91,21 @@ describe("EarningsCalendarSidebar", () => {
     expect(container.querySelector('[data-decision="order"]')?.textContent).toMatch(/order/i);
     const discarded = container.querySelector('button[aria-label*="Discarded"]');
     expect(discarded?.className).toContain("opacity-45");
+  });
+
+  it("does not carry a prior symbol-only decision into a dated event", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        candidateDecisions={{ NVDA: "discarded" }}
+      />,
+    );
+    expect(container.querySelector('[data-slot="candidate-decision-pill"]')).toBeNull();
+    expect(container.querySelector('button[aria-label*="Discarded"]')).toBeNull();
   });
 
   it("shows empty state when no rows and not loading", () => {

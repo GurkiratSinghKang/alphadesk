@@ -166,7 +166,8 @@ export default function EarningsCalendarSidebar({
               const edgeTitle = edgeReasons.length > 0
                 ? `Edge ${Math.round(edgeScore ?? 0)}: ${edgeReasons.join("; ")}`
                 : `Edge ${Math.round(edgeScore ?? 0)}`;
-              const candidateDecision = candidateDecisions[r.symbol.toUpperCase()] ?? null;
+              const candidateDecision =
+                candidateDecisions[candidateDecisionKey(r.symbol, r.reportDate)] ?? null;
               const candidateDecisionLabel =
                 candidateDecision === "order"
                   ? "Order queued"
@@ -284,6 +285,13 @@ export default function EarningsCalendarSidebar({
       ))}
     </aside>
   );
+}
+
+function candidateDecisionKey(symbol: string, reportDate: string | null | undefined): string {
+  const normalized = symbol.trim().toUpperCase();
+  return reportDate && /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
+    ? `${normalized}@${reportDate}`
+    : normalized;
 }
 
 function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: CalendarRow[] }[] {

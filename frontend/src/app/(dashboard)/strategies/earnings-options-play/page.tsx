@@ -343,10 +343,10 @@ export default function EarningsOptionsPlayPage() {
   }, []);
 
   const setCandidateDecision = useCallback(
-    (symbol: string, decision: EarningsCandidateDecision | null) => {
+    (symbol: string, reportDate: string | null, decision: EarningsCandidateDecision | null) => {
       setCandidateDecisions((prev) => {
         const next: CandidateDecisionMap = { ...prev };
-        const key = symbol.toUpperCase();
+        const key = candidateDecisionKey(symbol, reportDate);
         if (decision) next[key] = decision;
         else delete next[key];
         safeSetItem(CANDIDATE_DECISIONS_KEY, JSON.stringify(next));
@@ -356,16 +356,26 @@ export default function EarningsOptionsPlayPage() {
     [],
   );
 
+  const selectedReportDate = useMemo(() => {
+    if (!selectedSymbol) return null;
+    const upper = selectedSymbol.toUpperCase();
+    return (
+      calendar?.earnings.find((r) => r.symbol.toUpperCase() === upper)?.reportDate
+      ?? detail?.reportDate
+      ?? null
+    );
+  }, [calendar, detail, selectedSymbol]);
+
   const onCandidateDecision = useCallback(
     (decision: EarningsCandidateDecision | null) => {
       if (!selectedSymbol) return;
-      setCandidateDecision(selectedSymbol, decision);
+      setCandidateDecision(selectedSymbol, selectedReportDate, decision);
     },
-    [selectedSymbol, setCandidateDecision],
+    [selectedReportDate, selectedSymbol, setCandidateDecision],
   );
 
   const selectedCandidateDecision = selectedSymbol
-    ? candidateDecisions[selectedSymbol.toUpperCase()] ?? null
+    ? candidateDecisions[candidateDecisionKey(selectedSymbol, selectedReportDate)] ?? null
     : null;
 
   const decisionCounts = useMemo(() => {
@@ -675,18 +685,37 @@ function readCandidateDecisions(): CandidateDecisionMap {
       return {};
     }
     const out: CandidateDecisionMap = {};
-    for (const [symbol, decision] of Object.entries(parsed)) {
+    for (const [rawKey, decision] of Object.entries(parsed)) {
+      const key = normalizeCandidateDecisionKey(rawKey);
       if (
-        typeof symbol === "string"
-        && /^[A-Z]{1,6}(\.[A-Z])?$/.test(symbol.toUpperCase())
+        key
         && typeof decision === "string"
         && CANDIDATE_DECISION_VALUES.has(decision)
       ) {
-        out[symbol.toUpperCase()] = decision as EarningsCandidateDecision;
+        out[key] = decision as EarningsCandidateDecision;
       }
     }
     return out;
   } catch {
     return {};
   }
+}
+
+function candidateDecisionKey(symbol: string, reportDate: string | null | undefined): string {
+  const normalized = symbol.trim().toUpperCase();
+  return reportDate && /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
+    ? `${normalized}@${reportDate}`
+    : normalized;
+}
+
+function normalizeCandidateDecisionKey(rawKey: string): string | null {
+  if (typeof rawKey !== "string") return null;
+  const [symbol, reportDate, ...rest] = rawKey.split("@");
+  if (rest.length > 0) return null;
+  const normalized = symbol.trim().toUpperCase();
+  if (!/^[A-Z]{1,6}(\.[A-Z])?$/.test(normalized)) return null;
+  if (reportDate === undefined) return normalized;
+  return /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
+    ? `${normalized}@${reportDate}`
+    : null;
 }
