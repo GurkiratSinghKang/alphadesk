@@ -69,20 +69,38 @@ class EarningsVolStrategy(Strategy):
         diagnostics: dict[str, Any] = {}
         warnings: list[str] = []
 
-        upcoming = _upcoming_earnings(input.earnings, input.asof, params.dte_target)
+        upcoming = _upcoming_earnings(
+            input.earnings,
+            input.asof,
+            params.dte_target,
+            timing_filter=params.earnings_timing_filter,
+        )
         diagnostics["upcoming_events"] = len(upcoming)
 
+        latest_prices = _latest_close_by_symbol(input.bars, input.asof)
+        filtered_low_price = 0
+        missing_price = 0
         candidates: list[dict[str, Any]] = []
         for sym, event_date in upcoming:
+            latest_price = latest_prices.get(sym)
+            if latest_price is None:
+                missing_price += 1
+                continue
+            if latest_price < params.min_underlying_price:
+                filtered_low_price += 1
+                continue
             hist_median = _historical_move_median(
                 input.earnings, sym, params.historical_moves_lookback_quarters,
             )
             candidates.append({
                 "symbol": sym,
                 "event_date": event_date.isoformat() if event_date else None,
+                "latest_price": latest_price,
                 "hist_move_median": hist_median,
             })
         diagnostics["candidates"] = candidates
+        diagnostics["filtered_below_min_price"] = filtered_low_price
+        diagnostics["missing_price"] = missing_price
 
         return StrategyResult(
             signals=[],
@@ -98,6 +116,8 @@ def _upcoming_earnings(
     earnings: Optional[pd.DataFrame],
     asof: date,
     dte_target: int,
+    *,
+    timing_filter: str = "any",
 ) -> list[tuple[str, Optional[date]]]:
     """Return (symbol, event_date) pairs with upcoming earnings."""
     if earnings is None or getattr(earnings, "empty", True):
@@ -113,6 +133,15 @@ def _upcoming_earnings(
     frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
     window_end = asof + timedelta(days=dte_target * 2)
     mask = (frame_dates >= asof) & (frame_dates <= window_end)
+    if timing_filter == "after_close_only":
+        timing_col = next(
+            (c for c in ("report_time", "time", "timing") if c in earnings.columns),
+            None,
+        )
+        if timing_col is None:
+            return []
+        timing = earnings[timing_col].astype(str).str.upper().str.strip()
+        mask &= timing.isin({"AMC", "AFTER_CLOSE", "AFTER CLOSE", "AFTER_MARKET"})
     sub = earnings[mask]
     if sub.empty:
         return []
@@ -132,6 +161,43 @@ def _upcoming_earnings(
             ev_date = None
         out.append((sym, ev_date))
     return out
+
+
+def _latest_close_by_symbol(
+    bars: Optional[pd.DataFrame],
+    asof: date,
+) -> dict[str, float]:
+    """Latest close at or before ``asof`` keyed by symbol."""
+    if bars is None or getattr(bars, "empty", True):
+        return {}
+    if "close" not in bars.columns:
+        return {}
+
+    idx_names = tuple(bars.index.names or ())
+    if "symbol" in idx_names and "date" in idx_names:
+        frame = bars.reset_index()
+    else:
+        frame = bars.copy()
+    if "symbol" not in frame.columns:
+        return {}
+    date_col = next((c for c in ("date", "ts", "timestamp", "ts_date") if c in frame.columns), None)
+    if date_col is None:
+        return {}
+
+    frame = frame.assign(
+        _symbol=frame["symbol"].astype(str).str.upper(),
+        _bar_date=pd.to_datetime(frame[date_col], errors="coerce").dt.date,
+        _close=pd.to_numeric(frame["close"], errors="coerce"),
+    )
+    frame = frame[(frame["_bar_date"] <= asof) & (frame["_close"] > 0)]
+    if frame.empty:
+        return {}
+    frame = frame.sort_values(["_symbol", "_bar_date"])
+    latest = frame.groupby("_symbol", sort=False).tail(1)
+    return {
+        str(row["_symbol"]): float(row["_close"])
+        for _, row in latest.iterrows()
+    }
 
 
 def _historical_move_median(

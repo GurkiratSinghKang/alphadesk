@@ -110,6 +110,7 @@ class TestRun:
         assert result.diagnostics.get("upcoming_events") == 1
         cands = result.diagnostics.get("candidates") or []
         assert any(c["symbol"] == "AAPL" for c in cands)
+        assert cands[0]["latest_price"] == pytest.approx(100.0)
 
     def test_non_universe_symbols_filtered_out(self):
         bars = _build_bars(["AAPL", "ZZZZ"], date(2024, 4, 30), n_bars=60)
@@ -126,6 +127,40 @@ class TestRun:
         syms = {c["symbol"] for c in cands}
         assert "AAPL" in syms
         assert "ZZZZ" not in syms
+
+    def test_after_close_filter_only_keeps_amc_events(self):
+        asof = date(2024, 4, 30)
+        earnings = pd.DataFrame([
+            {"symbol": "AAPL", "date": date(2024, 5, 2), "report_time": "AMC"},
+            {"symbol": "MSFT", "date": date(2024, 5, 2), "report_time": "BMO"},
+            {"symbol": "NVDA", "date": date(2024, 5, 3), "report_time": "DMT"},
+        ])
+
+        assert _upcoming_earnings(
+            earnings,
+            asof,
+            dte_target=21,
+            timing_filter="after_close_only",
+        ) == [("AAPL", date(2024, 5, 2))]
+
+    def test_min_underlying_price_filters_research_candidates(self):
+        asof = date(2024, 4, 30)
+        bars = _build_bars(["AAPL", "MSFT"], asof, n_bars=60)
+        bars.loc[(slice(None), "AAPL"), "close"] = 10.0
+        earnings = _build_earnings({
+            "AAPL": [date(2024, 5, 2)],
+            "MSFT": [date(2024, 5, 2)],
+        })
+        strat = EarningsVolStrategy()
+        result = strat.run(
+            _build_input(bars, asof, earnings=earnings),
+            EarningsVolParams(min_underlying_price=20),
+        )
+
+        assert result.diagnostics.get("upcoming_events") == 2
+        assert result.diagnostics.get("filtered_below_min_price") == 1
+        cands = result.diagnostics.get("candidates") or []
+        assert [c["symbol"] for c in cands] == ["MSFT"]
 
     def test_upcoming_earnings_uses_earliest_event_when_provider_unsorted(self):
         asof = date(2024, 4, 30)
