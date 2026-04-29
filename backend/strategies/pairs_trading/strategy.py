@@ -333,6 +333,7 @@ class PairsTradingStrategy(Strategy):
         positions = _coerce_positions(state.get(f"{_NS}.positions"))
         pending = _coerce_positions(state.get(f"{_NS}.pending"))
         partials = _coerce_partials(state.get(f"{_NS}.pending_partials"))
+        exit_partials = _coerce_partials(state.get(f"{_NS}.exit_partials"))
 
         tag = fill.signal_tag or ""
         # Entry tag format: pairs-entry-<pair_id>-dir<sign><digit>-<leg>
@@ -355,12 +356,23 @@ class PairsTradingStrategy(Strategy):
                 break
         elif tag.startswith("pairs-exit-"):
             # Exit fills clear any pending intent for the same pair_id and
-            # drop the position from the confirmed ledger.
-            for pair_id in list(positions.keys()):
+            # drop the position from the confirmed ledger once BOTH legs
+            # have confirmed.
+            for pair_id, pos in list(positions.items()):
                 if pair_id in tag:
-                    positions.pop(pair_id, None)
                     pending.pop(pair_id, None)
                     partials.pop(pair_id, None)
+                    legs_seen = set(exit_partials.get(pair_id, set()))
+                    if fill.symbol == pos.y:
+                        legs_seen.add("y")
+                    elif fill.symbol == pos.x:
+                        legs_seen.add("x")
+                    else:
+                        break
+                    exit_partials[pair_id] = legs_seen
+                    if {"y", "x"}.issubset(legs_seen):
+                        positions.pop(pair_id, None)
+                        exit_partials.pop(pair_id, None)
                     break
 
         held_symbols = (
@@ -371,6 +383,7 @@ class PairsTradingStrategy(Strategy):
             f"{_NS}.positions": _serialize_positions(positions),
             f"{_NS}.pending": _serialize_positions(pending),
             f"{_NS}.pending_partials": _serialize_partials(partials),
+            f"{_NS}.exit_partials": _serialize_partials(exit_partials),
             f"{_NS}.held_symbols": sorted(held_symbols),
         }
 

@@ -367,7 +367,7 @@ def test_on_fill_promotes_pending_to_positions_after_both_legs() -> None:
 
 
 def test_on_fill_exit_drops_position() -> None:
-    """An exit fill must clear the pair from the confirmed positions ledger."""
+    """Exit fills clear the pair only after both legs confirm."""
     from decimal import Decimal as _Decimal
 
     from strategies._core.contracts import Fill
@@ -385,12 +385,24 @@ def test_on_fill_exit_drops_position() -> None:
         "pairs_trading.pending": {},
     }
     strat = PairsTradingStrategy()
-    fill = Fill(
+    fill_y = Fill(
         symbol="AAPL", asof=asof, quantity=-10, price=_Decimal("160"),
         signal_tag="pairs-exit-mean-revert-AAPL-MSFT-y",
     )
-    update = strat.on_fill(fill, state)
+    update = strat.on_fill(fill_y, state)
+    assert "AAPL-MSFT" in update["pairs_trading.positions"]
+    assert update["pairs_trading.exit_partials"]["AAPL-MSFT"] == ["y"]
+    assert update["pairs_trading.held_symbols"] == ["AAPL", "MSFT"]
+    orjson.dumps(update)
+    state.update(update)
+
+    fill_x = Fill(
+        symbol="MSFT", asof=asof, quantity=9, price=_Decimal("330"),
+        signal_tag="pairs-exit-mean-revert-AAPL-MSFT-x",
+    )
+    update = strat.on_fill(fill_x, state)
     assert update["pairs_trading.positions"] == {}
+    assert update["pairs_trading.exit_partials"] == {}
     assert update["pairs_trading.held_symbols"] == []
     orjson.dumps(update)
 
