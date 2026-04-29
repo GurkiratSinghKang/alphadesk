@@ -51,11 +51,17 @@ class TestParams:
 class TestRun:
     def test_research_shell_emits_no_signals(self):
         strat = ORBStrategy()
-        result = strat.run(_build_input(date(2024, 4, 30)), ORBParams())
+        result = strat.run(
+            _build_input(date(2024, 4, 30)),
+            ORBParams(universe_profile="spy_qqq"),
+        )
         assert result.signals == []
         assert result.diagnostics.get("research_shell") is True
+        assert result.diagnostics["active_profile"] == "spy_qqq"
+        assert result.diagnostics["active_symbols"] == ["SPY", "QQQ"]
+        assert result.state_update["orb.profile"] == "spy_qqq"
 
-    def test_universe_returns_profile_tickers(self):
+    def test_universe_returns_all_configurable_profile_tickers(self):
         strat = ORBStrategy()
         syms = strat.universe(date(2024, 4, 30), state={})
-        assert syms == list(UNIVERSE_PROFILES["qqq_tqqq"])
+        assert syms == sorted({sym for values in UNIVERSE_PROFILES.values() for sym in values})

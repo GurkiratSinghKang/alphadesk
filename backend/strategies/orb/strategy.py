@@ -50,19 +50,25 @@ class ORBStrategy(Strategy):
     PARAMS_MODEL = ORBParams
 
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
-        profile = state.get(f"{_NS}.profile", "qqq_tqqq")
-        return list(UNIVERSE_PROFILES.get(profile, UNIVERSE_PROFILES["qqq_tqqq"]))
+        symbols: set[str] = set()
+        for profile_symbols in UNIVERSE_PROFILES.values():
+            symbols.update(profile_symbols)
+        return sorted(symbols)
 
     def run(
         self,
         input: StrategyInput,
         params: ORBParams,
     ) -> StrategyResult:
+        profile_symbols = list(UNIVERSE_PROFILES[params.universe_profile])
         return StrategyResult(
             signals=[],
+            state_update={f"{_NS}.profile": params.universe_profile},
             diagnostics={
                 "research_shell": True,
                 "reason": "1min intraday integration deferred",
+                "active_profile": params.universe_profile,
+                "active_symbols": profile_symbols,
             },
             warnings=[],
         )
