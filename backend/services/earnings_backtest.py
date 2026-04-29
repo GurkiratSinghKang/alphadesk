@@ -16,6 +16,8 @@ from typing import Any, Iterable, Mapping
 
 
 DEFINED_RISK_SETUPS = {
+    "long call",
+    "long put",
     "bull put spread",
     "bear call spread",
     "bull call spread",
@@ -79,6 +81,44 @@ def simulate_event_trade(event: Mapping[str, Any]) -> EventTrade:
             win=ret > 0,
             edge_score=edge_score,
             reason="big realized move beat debit" if ret > 0 else "realized move did not clear debit",
+        )
+
+    if setup == "long call":
+        debit = call_yield
+        if debit <= 0:
+            raise ValueError("long call requires call premium yield")
+        ret = max(-1.0, (realized - debit) / debit)
+        return EventTrade(
+            symbol=symbol,
+            report_date=report_date,
+            setup=setup,
+            return_pct=round(ret, 4),
+            win=ret > 0,
+            edge_score=edge_score,
+            reason=(
+                "post-report rally cleared debit hurdle"
+                if ret > 0
+                else "post-report rally did not clear debit hurdle"
+            ),
+        )
+
+    if setup == "long put":
+        debit = put_yield
+        if debit <= 0:
+            raise ValueError("long put requires put premium yield")
+        ret = max(-1.0, (-realized - debit) / debit)
+        return EventTrade(
+            symbol=symbol,
+            report_date=report_date,
+            setup=setup,
+            return_pct=round(ret, 4),
+            win=ret > 0,
+            edge_score=edge_score,
+            reason=(
+                "post-report selloff cleared debit hurdle"
+                if ret > 0
+                else "post-report selloff did not clear debit hurdle"
+            ),
         )
 
     if setup in {"iron condor", "iron butterfly", "calendar spread", "diagonal spread"}:

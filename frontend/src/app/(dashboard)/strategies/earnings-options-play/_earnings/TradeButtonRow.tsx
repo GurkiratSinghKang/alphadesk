@@ -12,6 +12,7 @@ import { fmtNumber } from "@/lib/intl";
  *   · Bear call spread  — bearish premium-selling, capped loss
  *   · Bull call spread  — bullish debit vertical, capped loss
  *   · Bear put spread   — bearish debit vertical, capped loss
+ *   · Long call / put   — pure directional debit, capped loss
  *   · Iron condor       — non-directional premium-selling, capped both sides
  *   · Long straddle     — directional vol play, max loss = debit paid
  *
@@ -75,6 +76,9 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
   const bullCallSpread = atmCall && farCall ? { long: atmCall, short: farCall } : null;
   // Bear put spread = buy ATM put, sell 30Δ put against it
   const bearPutSpread = atmPut && farPut ? { long: atmPut, short: farPut } : null;
+  // Long call / put = pure directional debit, max loss = premium paid
+  const longCall = atmCall;
+  const longPut = atmPut;
   // Iron condor = bull put spread + bear call spread, all 4 legs at 30Δ/15Δ
   const ironCondor =
     farPut && widePut && farCall && wideCall
@@ -92,6 +96,8 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
     && !bearCallSpread
     && !bullCallSpread
     && !bearPutSpread
+    && !longCall
+    && !longPut
     && !ironCondor
     && !longStraddle;
   if (noButtonsAvailable) {
@@ -195,6 +201,41 @@ export default function TradeButtonRow({ symbol, ladder, onHoverStrategy }: Trad
             const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
             onHoverStrategy?.([0, breakeven]);
           }}
+          onHoverLeave={() => onHoverStrategy?.(null)}
+        />
+      )}
+      {longCall && (
+        <DefinedRiskTradeLink
+          dataSlot="trade-button-long-call"
+          href={buildSingleLegURL({
+            symbol,
+            row: longCall,
+            expiry: ladder.expiry,
+            orderSide: "buy",
+          })}
+          label={`Long call ${fmtNumber(Math.round(longCall.strike), { maximumFractionDigits: 0 })}c`}
+          riskCopy={maxLossLongOption(longCall.mid, "Long call")}
+          onHoverEnter={() => {
+            const breakeven = longCall.strike + Math.max(0, longCall.mid);
+            onHoverStrategy?.([breakeven, breakeven * 2]);
+          }}
+          onHoverLeave={() => onHoverStrategy?.(null)}
+        />
+      )}
+      {longPut && (
+        <DefinedRiskTradeLink
+          dataSlot="trade-button-long-put"
+          href={buildSingleLegURL({
+            symbol,
+            row: longPut,
+            expiry: ladder.expiry,
+            orderSide: "buy",
+          })}
+          label={`Long put ${fmtNumber(Math.round(longPut.strike), { maximumFractionDigits: 0 })}p`}
+          riskCopy={maxLossLongOption(longPut.mid, "Long put")}
+          onHoverEnter={() =>
+            onHoverStrategy?.([0, longPut.strike - Math.max(0, longPut.mid)])
+          }
           onHoverLeave={() => onHoverStrategy?.(null)}
         />
       )}
@@ -324,6 +365,11 @@ function maxLossDebit(netDebit: number, label: string): string {
   return `${label} · max loss = net debit paid (≈ $${fmtNumber(Math.round(debitDollars), { maximumFractionDigits: 0 })}) per contract`;
 }
 
+function maxLossLongOption(mid: number, label: string): string {
+  const debitDollars = Math.max(0, mid) * 100;
+  return `${label} · max loss = premium paid (≈ $${fmtNumber(Math.round(debitDollars), { maximumFractionDigits: 0 })}) per contract`;
+}
+
 /**
  * OCC contract symbol: SYMBOL + YYMMDD + C|P + strike*1000 padded 8 digits.
  * E.g. NVDA 2026-04-25 $205 call = NVDA260425C00205000.
@@ -353,12 +399,18 @@ function fmtMid(mid: number): string {
   return mid.toFixed(2);
 }
 
-export function buildSingleLegURL(opts: { symbol: string; row: LadderRow; expiry: string }): string {
+export function buildSingleLegURL(opts: {
+  symbol: string;
+  row: LadderRow;
+  expiry: string;
+  orderSide?: "buy" | "sell";
+}): string {
   const contract = occSymbol(opts.symbol, opts.expiry, opts.row.side, opts.row.strike);
+  const orderSide = opts.orderSide ?? "sell";
   const params = new URLSearchParams({
     symbol: opts.symbol,
     contract,
-    side: "sell",
+    side: orderSide,
     qty: "1",
     strategy: STRATEGY_TAG,
   });

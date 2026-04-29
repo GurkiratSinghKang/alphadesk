@@ -62,6 +62,36 @@ def test_simulate_bear_put_spread_wins_when_selloff_clears_debit():
     assert trade.reason == "post-report selloff cleared debit hurdle"
 
 
+def test_simulate_long_call_wins_when_rally_clears_debit():
+    trade = simulate_event_trade({
+        "symbol": "NVDA",
+        "report_date": "2026-04-24",
+        "setup": "long call",
+        "expected_move_pct": 0.05,
+        "realized_move_pct": 0.08,
+        "premium_yield_call_atm": 0.030,
+    })
+
+    assert trade.win is True
+    assert trade.return_pct > 0
+    assert trade.reason == "post-report rally cleared debit hurdle"
+
+
+def test_simulate_long_put_loses_when_selloff_does_not_cover_debit():
+    trade = simulate_event_trade({
+        "symbol": "META",
+        "report_date": "2026-04-24",
+        "setup": "long put",
+        "expected_move_pct": 0.05,
+        "realized_move_pct": -0.02,
+        "premium_yield_put_atm": 0.040,
+    })
+
+    assert trade.win is False
+    assert trade.return_pct < 0
+    assert trade.reason == "post-report selloff did not clear debit hurdle"
+
+
 def test_run_event_backtest_filters_by_edge_and_reports_metrics():
     result = run_event_backtest(
         [

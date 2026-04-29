@@ -22,6 +22,8 @@ type ReplayState =
   | { status: "error"; requestKey: string; message: string };
 
 const SUPPORTED_REPLAY_SETUPS = new Set<EarningsTopSetup>([
+  "long call",
+  "long put",
   "bull put spread",
   "bear call spread",
   "bull call spread",
@@ -150,10 +152,10 @@ function hasRequiredPremium(
   callYield: number | null,
   putYield: number | null,
 ): boolean {
-  if (setup === "bull put spread" || setup === "bear put spread") {
+  if (setup === "bull put spread" || setup === "bear put spread" || setup === "long put") {
     return putYield != null;
   }
-  if (setup === "bear call spread" || setup === "bull call spread") {
+  if (setup === "bear call spread" || setup === "bull call spread" || setup === "long call") {
     return callYield != null;
   }
   return callYield != null && putYield != null;

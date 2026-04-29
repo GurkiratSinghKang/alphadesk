@@ -24,6 +24,8 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(container.textContent).toMatch(/bear call spread/i);
     expect(container.textContent).toMatch(/bull call spread/i);
     expect(container.textContent).toMatch(/bear put spread/i);
+    expect(container.textContent).toMatch(/long call/i);
+    expect(container.textContent).toMatch(/long put/i);
     expect(container.textContent).toMatch(/iron condor/i);
     expect(container.textContent).toMatch(/long straddle/i);
     // No undefined-risk pills any more — every button is capped.
@@ -69,6 +71,24 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(href).toContain("combo_type=vertical_spread");
     expect(href).toMatch(/200.*buy/);
     expect(href).toMatch(/195.*sell/);
+  });
+
+  it("long call buys the ATM call as a capped-debit single leg", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-long-call"]') as HTMLAnchorElement;
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("side=buy");
+    expect(href).toMatch(/205/);
+    expect(href).not.toContain("combo_type");
+  });
+
+  it("long put buys the ATM put as a capped-debit single leg", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-long-put"]') as HTMLAnchorElement;
+    const href = btn.getAttribute("href")!;
+    expect(href).toContain("side=buy");
+    expect(href).toMatch(/200/);
+    expect(href).not.toContain("combo_type");
   });
 
   it("iron condor encodes 4 legs (sell 30Δ put/call, buy 15Δ put/call)", () => {

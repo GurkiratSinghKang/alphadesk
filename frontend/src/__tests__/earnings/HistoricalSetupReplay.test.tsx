@@ -131,6 +131,32 @@ describe("HistoricalSetupReplay", () => {
     });
   });
 
+  it("supports long calls and long puts from Claude's setup vocabulary", () => {
+    const callRequest = buildHistoricalReplayRequest({
+      ...detail,
+      claudeStructured: {
+        ...detail.claudeStructured!,
+        suggestedPlay: "long call",
+      },
+    });
+    const putRequest = buildHistoricalReplayRequest({
+      ...detail,
+      claudeStructured: {
+        ...detail.claudeStructured!,
+        suggestedPlay: "long put",
+      },
+    });
+
+    expect(callRequest?.events[0]).toMatchObject({
+      topSetup: "long call",
+      premiumYieldCallAtm: 0.032,
+    });
+    expect(putRequest?.events[0]).toMatchObject({
+      topSetup: "long put",
+      premiumYieldPutAtm: 0.034,
+    });
+  });
+
   it("renders backend replay metrics and trade rows", async () => {
     vi.mocked(postEarningsBacktest).mockResolvedValueOnce({
       trades: [
