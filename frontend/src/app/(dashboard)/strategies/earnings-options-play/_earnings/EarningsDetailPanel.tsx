@@ -376,6 +376,13 @@ function CandidateDecisionBar({
   onDecision?: (decision: EarningsCandidateDecision | null) => void;
 }) {
   if (!onDecision) return null;
+  const commitDecision = (nextDecision: EarningsCandidateDecision) => {
+    const value = decision === nextDecision ? null : nextDecision;
+    onDecision(value);
+    if (value && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    }
+  };
   return (
     <div
       data-slot="candidate-decision-bar"
@@ -387,19 +394,19 @@ function CandidateDecisionBar({
         active={decision === "discarded"}
         label="Discard"
         icon={<X className="h-3.5 w-3.5" aria-hidden />}
-        onClick={() => onDecision(decision === "discarded" ? null : "discarded")}
+        onClick={() => commitDecision("discarded")}
       />
       <CandidateDecisionButton
         active={decision === "saved"}
         label="Save"
         icon={<Bookmark className="h-3.5 w-3.5" aria-hidden />}
-        onClick={() => onDecision(decision === "saved" ? null : "saved")}
+        onClick={() => commitDecision("saved")}
       />
       <CandidateDecisionButton
         active={decision === "order"}
         label="Queue order"
         icon={<ArrowUpCircle className="h-3.5 w-3.5" aria-hidden />}
-        onClick={() => onDecision(decision === "order" ? null : "order")}
+        onClick={() => commitDecision("order")}
       />
     </div>
   );

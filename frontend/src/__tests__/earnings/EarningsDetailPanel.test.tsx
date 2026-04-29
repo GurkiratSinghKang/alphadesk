@@ -60,6 +60,8 @@ describe("EarningsDetailPanel", () => {
 
   it("renders candidate decision actions and toggles the active choice", () => {
     const onCandidateDecision = vi.fn();
+    const onNext = vi.fn();
+    window.addEventListener("alphadesk:earnings-select-next", onNext);
     const { getByRole } = render(
       <EarningsDetailPanel
         detail={detail}
@@ -80,6 +82,8 @@ describe("EarningsDetailPanel", () => {
     expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
     expect(onCandidateDecision).toHaveBeenNthCalledWith(2, "order");
     expect(onCandidateDecision).toHaveBeenNthCalledWith(3, null);
+    expect(onNext).toHaveBeenCalledTimes(2);
+    window.removeEventListener("alphadesk:earnings-select-next", onNext);
   });
 
   it("maps mobile card swipes to discard, save, and queue actions", () => {
