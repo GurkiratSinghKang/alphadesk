@@ -165,6 +165,8 @@ def db_patches(monkeypatch: pytest.MonkeyPatch):
         legs = _AnyCol()
 
     import data.storage.models as _models_mod
+    missing = object()
+    previous_trade_model = _models_mod._models_cache.get("Trade", missing)
     _models_mod._models_cache["Trade"] = _TradeStub  # type: ignore[assignment]
 
     # Replace the SQLAlchemy ``select`` + ``or_`` imports the reconciler
@@ -192,7 +194,13 @@ def db_patches(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(_sa_mod, "select", _fake_select, raising=False)
     monkeypatch.setattr(_sa_mod, "or_", _fake_or, raising=False)
 
-    return probes
+    try:
+        yield probes
+    finally:
+        if previous_trade_model is missing:
+            _models_mod._models_cache.pop("Trade", None)
+        else:
+            _models_mod._models_cache["Trade"] = previous_trade_model
 
 
 # ---------------------------------------------------------------------------
