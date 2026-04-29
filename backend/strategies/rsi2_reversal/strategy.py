@@ -136,22 +136,45 @@ class RSI2ReversalStrategy(Strategy):
         diagnostics["spy_rsi"] = spy_rsi
         diagnostics["regime_open"] = regime_open
 
-        held_active = [p for p in input.positions if p.quantity > 0 and p.symbol not in exit_syms]
-        capacity = params.max_positions - len(held_active)
+        held_active = [
+            p for p in input.positions
+            if p.quantity > 0 and p.symbol not in exit_syms
+        ]
+        held_active_syms = {p.symbol for p in held_active}
+        pending_syms = {
+            sym for sym in entries_state
+            if sym not in held_active_syms and sym not in exit_syms
+        }
+        capacity = params.max_positions - len(held_active) - len(pending_syms)
+        capacity = max(0, capacity)
+        diagnostics["held_positions"] = len(held_active)
+        diagnostics["pending_entries"] = len(pending_syms)
         diagnostics["capacity"] = capacity
+        diagnostics["entry_funnel"] = {
+            "evaluated": 0,
+            "eligible": 0,
+            "skipped": {},
+        }
 
         if regime_open and capacity > 0:
-            held_active_syms = {p.symbol for p in held_active}
             candidates: list[tuple[float, str, float, float, float]] = []
+            skipped: dict[str, int] = diagnostics["entry_funnel"]["skipped"]
             for sym in universe_list:
-                if sym in held_active_syms:
+                if sym in held_active_syms or sym in pending_syms:
+                    skipped["held_or_pending"] = skipped.get("held_or_pending", 0) + 1
                     continue
-                result = _evaluate_entry(flat, input.earnings, sym, asof, params)
+                diagnostics["entry_funnel"]["evaluated"] += 1
+                result, reason = _evaluate_entry_with_reason(
+                    flat, input.earnings, sym, asof, params
+                )
                 if result is None:
+                    key = reason or "not_eligible"
+                    skipped[key] = skipped.get(key, 0) + 1
                     continue
                 crsi_val, close_px, stop_px, sma_exit_px = result
                 candidates.append((crsi_val, sym, close_px, stop_px, sma_exit_px))
             candidates.sort(key=lambda row: row[0])
+            diagnostics["entry_funnel"]["eligible"] = len(candidates)
 
             for crsi_val, sym, close_px, stop_px, sma_exit_px in candidates[:capacity]:
                 tp_px = max(sma_exit_px, close_px * 1.01)
@@ -174,6 +197,10 @@ class RSI2ReversalStrategy(Strategy):
                 }
                 held_symbols.add(sym)
             diagnostics["entries_emitted"] = min(capacity, len(candidates))
+        else:
+            reason = "regime_closed" if not regime_open else "capacity_full"
+            diagnostics["entry_funnel"]["skipped"][reason] = len(universe_list)
+            diagnostics["entries_emitted"] = 0
 
         state_update[f"{_NS}.entries"] = entries_state
         state_update[f"{_NS}.held_symbols"] = sorted(held_symbols - exit_syms)
@@ -241,51 +268,63 @@ def _evaluate_entry(
     params: RSI2Params,
 ) -> Optional[tuple[float, float, float, float]]:
     """Return (crsi, close, stop_price, sma_exit_price) if eligible."""
+    result, _reason = _evaluate_entry_with_reason(flat, earnings, sym, asof, params)
+    return result
+
+
+def _evaluate_entry_with_reason(
+    flat: pd.DataFrame,
+    earnings: Optional[pd.DataFrame],
+    sym: str,
+    asof: date,
+    params: RSI2Params,
+) -> tuple[Optional[tuple[float, float, float, float]], Optional[str]]:
+    """Return entry tuple plus the first gating reason when ineligible."""
     bars = symbol_history(flat, sym, asof)
     if bars is None or len(bars) < _MIN_TRADING_BARS:
-        return None
+        return None, "insufficient_history"
 
     ind = indicators_for(bars, params)
     if ind is None:
-        return None
+        return None, "indicators_unavailable"
 
     last_idx = len(bars) - 1
     close_px = float(bars["close"].iloc[-1])
 
     sma_trend_v = ind["sma_trend"][last_idx]
     if not np.isfinite(sma_trend_v) or close_px <= sma_trend_v:
-        return None
+        return None, "below_trend_sma"
 
     rsi_v = ind["rsi"][last_idx]
     crsi_v = ind["crsi"][last_idx]
     if not np.isfinite(rsi_v) or not np.isfinite(crsi_v):
-        return None
+        return None, "oscillator_unavailable"
     if not (rsi_v < params.rsi_entry_max or crsi_v < params.connors_entry_max):
-        return None
+        return None, "not_oversold"
 
     vols = bars["volume"].astype(float).to_numpy()
     if len(vols) < 22:
-        return None
+        return None, "volume_history_unavailable"
     avg_vol = float(vols[-21:-1].mean())
     if avg_vol < _VOL_MIN:
-        return None
+        return None, "volume_average_unavailable"
     if float(vols[-1]) < params.volume_surge_min * avg_vol:
-        return None
+        return None, "volume_surge_missing"
 
     if params.earnings_skip_days > 0 and has_upcoming_earnings(
         earnings, sym, asof, params.earnings_skip_days
     ):
-        return None
+        return None, "earnings_window"
 
     lookback = params.stop_lookback_bars
     lows = bars["low"].astype(float).to_numpy()
     if len(lows) < lookback + 1:
-        return None
+        return None, "stop_history_unavailable"
     stop_px = float(lows[-lookback:].min())
     sma_exit_v = ind["sma_exit"][last_idx]
     if not np.isfinite(sma_exit_v):
-        return None
-    return (float(crsi_v), close_px, stop_px, float(sma_exit_v))
+        return None, "sma_exit_unavailable"
+    return (float(crsi_v), close_px, stop_px, float(sma_exit_v)), None
 
 
 # --------------------------------------------------------------------------- #

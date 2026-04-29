@@ -201,6 +201,40 @@ class TestEntryGates:
         assert result.state_update["rsi2_reversal.entries"]["AAPL"]["queued_on"] == asof.isoformat()
         orjson.dumps(result.state_update)
 
+    def test_pending_entry_consumes_capacity_and_blocks_duplicate_order(self):
+        dipped_spy = _hand_oversold_series(
+            n_trend=400, start_price=400.0, trend_growth=0.0025,
+            dip_pct=0.004, n_dip=3, seed=1,
+        )
+        dipped_aapl = _hand_oversold_series(
+            n_trend=400, start_price=150.0, trend_growth=0.0025,
+            dip_pct=0.014, n_dip=3, seed=2,
+        )
+        bars = _bars_from_frames({"SPY": dipped_spy, "AAPL": dipped_aapl})
+        asof = dipped_aapl.index[-1].date()
+
+        params = RSI2Params(
+            max_positions=1, allocation_per_trade=0.20,
+            spy_rsi_regime_floor=5.0, volume_surge_min=1.5, rsi_entry_max=15.0,
+        )
+        state = {
+            "rsi2_reversal.universe": ["SPY", "AAPL"],
+            "rsi2_reversal.entries": {
+                "AAPL": {"queued_on": asof.isoformat(), "stop_price": 120.0},
+            },
+            "rsi2_reversal.held_symbols": ["AAPL"],
+        }
+        strat = RSI2ReversalStrategy()
+
+        result = strat.run(_build_input(bars, asof, state=state), params)
+
+        entries = [s for s in result.signals if s.tag.startswith("rsi2-entry")]
+        assert entries == []
+        assert result.diagnostics["pending_entries"] == 1
+        assert result.diagnostics["capacity"] == 0
+        assert result.diagnostics["entries_emitted"] == 0
+        assert result.diagnostics["entry_funnel"]["skipped"]["capacity_full"] == 2
+
     def test_spy_regime_blocks_entry(self):
         base = _uptrend_path(n=300, seed=3)
         dipped_spy = _dip_path(base, n_dip=8, dip_pct=0.03)
