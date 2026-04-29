@@ -206,6 +206,35 @@ class TestConfirmation:
         assert "2024-01-31" in history
         assert all(isinstance(k, str) for k in history)
 
+    def test_regime_history_is_bounded(self):
+        asof = date(2024, 1, 31)
+        old_history = {
+            (asof - timedelta(days=i)).isoformat(): {
+                "instant": "TrendUp",
+                "confirmed": "TrendUp",
+                "streak": 20,
+            }
+            for i in range(400, 0, -1)
+        }
+        strat = RegimeAdaptiveStrategy()
+        inp = StrategyInput(
+            asof=asof,
+            mode="backtest",
+            bars=pd.DataFrame(),
+            cash=Decimal("100000"),
+            equity=Decimal("100000"),
+            positions=[],
+            state={"ra_regime_history": old_history},
+            seed=0,
+            rng=np.random.default_rng(0),
+        )
+
+        result = strat.run(inp, RegimeAdaptiveParams())
+
+        history = result.state_update["ra_regime_history"]
+        assert len(history) <= 260
+        assert asof.isoformat() in history
+
 
 # --------------------------------------------------------------------------- #
 # Rebalance trigger                                                           #
@@ -216,6 +245,31 @@ class TestRebalanceTrigger:
 
     def test_mid_month_does_not_fire(self):
         assert _is_rebalance_day(date(2024, 1, 15), "monthly") is False
+
+    def test_month_end_refreshes_existing_regime_allocation(self):
+        asof = date(2024, 1, 31)
+        strat = RegimeAdaptiveStrategy()
+        inp = StrategyInput(
+            asof=asof,
+            mode="backtest",
+            bars=pd.DataFrame(),
+            cash=Decimal("100000"),
+            equity=Decimal("100000"),
+            positions=[],
+            state={
+                "ra_confirmed_regime": "TrendUp",
+                "ra_current_alloc_regime": "TrendUp",
+            },
+            seed=0,
+            rng=np.random.default_rng(0),
+        )
+
+        result = strat.run(inp, RegimeAdaptiveParams())
+
+        assert result.diagnostics["rebalance"] is True
+        assert result.diagnostics["allocation_changed"] is False
+        assert result.diagnostics["target_regime"] == "TrendUp"
+        assert [s for s in result.signals if s.tag == "ra-entry-TrendUp"]
 
 
 # --------------------------------------------------------------------------- #

@@ -46,6 +46,7 @@ log = logging.getLogger("alphadesk.strategies.regime_adaptive")
 
 _NS = "regime_adaptive"
 _REQUIRED_LOOKBACK_DAYS = 400
+_MAX_REGIME_HISTORY_DAYS = 260
 
 
 @register_strategy(
@@ -79,7 +80,7 @@ class RegimeAdaptiveStrategy(Strategy):
     ) -> StrategyResult:
         asof = input.asof
         state = input.state
-        diagnostics: dict[str, Any] = {}
+        diagnostics: dict[str, Any] = {"rebalance": False}
         warnings: list[str] = []
         state_update: dict[str, Any] = {}
 
@@ -119,6 +120,9 @@ class RegimeAdaptiveStrategy(Strategy):
             "confirmed": new_confirmed,
             "streak": new_streak,
         }
+        if len(history) > _MAX_REGIME_HISTORY_DAYS:
+            keep_keys = sorted(history)[-_MAX_REGIME_HISTORY_DAYS:]
+            history = {key: history[key] for key in keep_keys}
         state_update["ra_regime_history"] = history
 
         # --- Rebalance? ---------------------------------------------- #
@@ -134,13 +138,14 @@ class RegimeAdaptiveStrategy(Strategy):
             )
 
         current_alloc = state.get("ra_current_alloc_regime")
-        if current_alloc == new_confirmed:
-            return StrategyResult(
-                signals=[], state_update=state_update,
-                diagnostics=diagnostics, warnings=warnings,
-            )
+        diagnostics["rebalance"] = True
+        diagnostics["allocation_changed"] = current_alloc != new_confirmed
 
         target_weights = allocation_for(new_confirmed, params)
+        diagnostics["target_regime"] = new_confirmed
+        diagnostics["target_weight_count"] = sum(
+            1 for w in target_weights.values() if w > 0.0
+        )
         signals: list[Signal] = []
 
         # Exits: any position whose new weight is 0 (or VIXY which should
