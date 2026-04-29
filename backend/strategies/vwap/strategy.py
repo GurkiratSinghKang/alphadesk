@@ -64,6 +64,8 @@ class VWAPStrategy(Strategy):
             diagnostics={
                 "research_shell": True,
                 "reason": "5min intraday integration deferred",
+                "required_bar_interval": "5min",
+                "active_symbols": list(UNIVERSE),
             },
             warnings=[],
         )

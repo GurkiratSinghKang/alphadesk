@@ -58,6 +58,8 @@ class TestRun:
         result = strat.run(_build_input(date(2024, 4, 30)), VWAPParams())
         assert result.signals == []
         assert result.diagnostics.get("research_shell") is True
+        assert result.diagnostics["required_bar_interval"] == "5min"
+        assert result.diagnostics["active_symbols"] == list(UNIVERSE)
 
     def test_universe_covers_ten_liquid_names(self):
         strat = VWAPStrategy()
