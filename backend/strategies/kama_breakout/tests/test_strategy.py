@@ -152,6 +152,39 @@ class TestEntryGate:
         assert filled["entry_price"] == pytest.approx(125.50)
         assert filled["highest_high"] == pytest.approx(125.50)
 
+    def test_pending_entry_consumes_slot_and_blocks_duplicate_order(self):
+        bars = _merge_bars(
+            *(
+                _build_uptrend_bars(sym, date(2024, 4, 30), seed=1 + i)
+                for i, sym in enumerate(DEFAULT_UNIVERSE)
+            )
+        )
+        state = {
+            "kama_breakout.positions": {
+                "SPY": {
+                    "entry_date": "2024-04-30",
+                    "entry_price": 0.0,
+                    "highest_high": 0.0,
+                    "shares_initial": 10,
+                }
+            }
+        }
+        strat = KamaBreakoutStrategy()
+
+        result = strat.run(
+            _build_input(bars, date(2024, 4, 30), state=state),
+            KamaBreakoutParams(max_positions=1),
+        )
+
+        entry_sigs = [s for s in result.signals if s.tag.startswith("kama-entry")]
+        assert entry_sigs == []
+        assert result.diagnostics["pending_entries"] == 1
+        assert result.diagnostics["entry_slots"] == 0
+        assert result.diagnostics["entries_emitted"] == 0
+        assert result.diagnostics["entry_funnel"]["skipped"]["capacity_full"] == len(
+            DEFAULT_UNIVERSE
+        )
+
     def test_entry_rejects_downtrend(self):
         # Deliberately falling prices — trend-SMA filter must reject.
         rng = np.random.default_rng(7)

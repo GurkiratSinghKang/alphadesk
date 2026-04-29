@@ -160,23 +160,45 @@ class KamaBreakoutStrategy(Strategy):
             positions_state[sym] = _pos_state_to_dict(st)
 
         # --- Entries --------------------------------------------------- #
-        open_positions = [p for p in input.positions if p.quantity > 0 and p.symbol not in closed_syms]
+        open_positions = [
+            p for p in input.positions
+            if p.quantity > 0 and p.symbol not in closed_syms
+        ]
         n_open = len(open_positions)
+        open_symbols = {p.symbol for p in open_positions}
+        pending_syms = {
+            sym for sym in positions_state
+            if sym not in open_symbols and sym not in closed_syms
+        }
+        slots = max(0, params.max_positions - n_open - len(pending_syms))
+        diagnostics["open_positions"] = n_open
+        diagnostics["pending_entries"] = len(pending_syms)
+        diagnostics["entry_slots"] = slots
+        diagnostics["entry_funnel"] = {
+            "evaluated": 0,
+            "eligible": 0,
+            "skipped": {},
+        }
 
-        if n_open < params.max_positions:
-            open_symbols = {p.symbol for p in open_positions}
+        if slots > 0:
             candidates: list[tuple[str, float, int, float]] = []  # (sym, er, shares, atr)
+            skipped: dict[str, int] = diagnostics["entry_funnel"]["skipped"]
             for sym in DEFAULT_UNIVERSE:
-                if sym in open_symbols:
+                if sym in open_symbols or sym in pending_syms:
+                    skipped["held_or_pending"] = skipped.get("held_or_pending", 0) + 1
                     continue
-                evaluation = _evaluate_entry(
+                diagnostics["entry_funnel"]["evaluated"] += 1
+                evaluation, reason = _evaluate_entry_with_reason(
                     input.bars, input.earnings, sym, asof, params, float(input.equity),
                 )
-                if evaluation is not None:
-                    candidates.append(evaluation)
+                if evaluation is None:
+                    key = reason or "not_eligible"
+                    skipped[key] = skipped.get(key, 0) + 1
+                    continue
+                candidates.append(evaluation)
 
             candidates.sort(key=lambda t: t[1], reverse=True)
-            slots = params.max_positions - n_open
+            diagnostics["entry_funnel"]["eligible"] = len(candidates)
             for sym, er, shares, _atr_val in candidates[:slots]:
                 signals.append(Signal(
                     symbol=sym, quantity=shares,
@@ -195,6 +217,9 @@ class KamaBreakoutStrategy(Strategy):
                     shares_initial=shares,
                 ))
             diagnostics["entries_emitted"] = len(candidates[:slots])
+        else:
+            diagnostics["entry_funnel"]["skipped"]["capacity_full"] = len(DEFAULT_UNIVERSE)
+            diagnostics["entries_emitted"] = 0
 
         state_update[f"{_NS}.positions"] = positions_state
 
@@ -329,9 +354,24 @@ def _evaluate_entry(
     equity: float,
 ) -> Optional[tuple[str, float, int, float]]:
     """Return (symbol, ER, shares, atr_value) if the entry gate passes."""
+    result, _reason = _evaluate_entry_with_reason(
+        bars, earnings, sym, asof, params, equity
+    )
+    return result
+
+
+def _evaluate_entry_with_reason(
+    bars: pd.DataFrame,
+    earnings: Optional[pd.DataFrame],
+    sym: str,
+    asof: date,
+    params: KamaBreakoutParams,
+    equity: float,
+) -> tuple[Optional[tuple[str, float, int, float]], Optional[str]]:
+    """Return entry tuple plus the first gating reason when ineligible."""
     hist = _symbol_history(bars, sym, asof)
     if hist is None or len(hist) < params.trend_sma_period + 15:
-        return None
+        return None, "insufficient_history"
 
     close = hist["close"].astype("float64")
     high = hist["high"].astype("float64")
@@ -344,17 +384,17 @@ def _evaluate_entry(
         slow=params.kama_slow,
     )
     if pd.isna(kama_series.iloc[-1]):
-        return None
+        return None, "kama_unavailable"
 
     donch = donchian(high.shift(1), low.shift(1), period=params.donchian_period)
     donch_upper = donch["upper"].iloc[-1]
     if pd.isna(donch_upper):
-        return None
+        return None, "donchian_unavailable"
 
     sma_trend = sma(close, period=params.trend_sma_period)
     sma_last = sma_trend.iloc[-1]
     if pd.isna(sma_last):
-        return None
+        return None, "trend_sma_unavailable"
     sma_lookback = 10
     if len(sma_trend) > sma_lookback:
         sma_prev = sma_trend.iloc[-1 - sma_lookback]
@@ -365,7 +405,7 @@ def _evaluate_entry(
     atr_series = atr(high, low, close, period=params.atr_period)
     atr_last = atr_series.iloc[-1]
     if pd.isna(atr_last) or float(atr_last) <= 0:
-        return None
+        return None, "atr_unavailable"
 
     er = _efficiency_ratio(close, params.kama_er_period)
 
@@ -373,30 +413,30 @@ def _evaluate_entry(
     kama_last = float(kama_series.iloc[-1])
 
     if c_last <= kama_last:
-        return None
+        return None, "below_kama"
     if c_last <= float(donch_upper):
-        return None
+        return None, "below_donchian"
     if er < params.er_min_trend:
-        return None
+        return None, "low_efficiency_ratio"
     if c_last <= float(sma_last) or not sma_rising:
-        return None
+        return None, "trend_filter"
 
     if params.volume_surge_enabled:
         vol_sma = hist["volume"].astype("float64").rolling(params.volume_sma_period).mean()
         if pd.isna(vol_sma.iloc[-1]) or vol_sma.iloc[-1] <= 0:
-            return None
+            return None, "volume_sma_unavailable"
         if float(hist["volume"].iloc[-1]) < params.volume_surge_min * float(vol_sma.iloc[-1]):
-            return None
+            return None, "volume_surge_missing"
 
     if params.earnings_skip_days > 0 and _has_earnings_soon(
         earnings, sym, asof, params.earnings_skip_days,
     ):
-        return None
+        return None, "earnings_window"
 
     atr_val = float(atr_last)
     stop_distance = params.chandelier_atr_mult * atr_val
     if stop_distance <= 0:
-        return None
+        return None, "invalid_stop_distance"
     risk_dollars = params.risk_per_trade * equity
     shares = int(risk_dollars // stop_distance)
 
@@ -404,9 +444,9 @@ def _evaluate_entry(
     cap_shares = int(max_notional // c_last) if c_last > 0 else 0
     shares = min(shares, cap_shares)
     if shares <= 0:
-        return None
+        return None, "position_size_zero"
 
-    return (sym, er, shares, atr_val)
+    return (sym, er, shares, atr_val), None
 
 
 def _efficiency_ratio(close: pd.Series, period: int) -> float:
