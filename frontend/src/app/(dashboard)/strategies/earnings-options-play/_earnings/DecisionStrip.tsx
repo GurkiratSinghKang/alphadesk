@@ -51,7 +51,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
         <span className="t-label u-muted">Verdict</span>
         <span
           className="font-serif italic text-[28px] leading-tight u-brand"
-          style={{ letterSpacing: "-0.01em" }}
+          style={{ letterSpacing: 0 }}
         >
           {verdict}
         </span>
