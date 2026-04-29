@@ -159,14 +159,16 @@ def compute_earnings_edge_score(
     hist_avg_abs_move_pct: float | None,
     claude_confidence: float | None,
     days_until: int | None,
+    top_setup: str | None = None,
 ) -> dict:
     """Composite 0-100 ranking score for earnings-vol candidates.
 
     The score is intentionally simple and explainable. It rewards the
-    conditions a premium-selling earnings setup needs: elevated IV, rich ATM
-    option premium, implied move above prior realized earnings moves, and a
-    confident cached AI thesis. The returned reasons are short enough to show
-    in UI tooltips / cards.
+    conditions the suggested earnings setup needs. Premium-selling setups want
+    elevated IV, rich ATM option premium, and implied move above prior realized
+    earnings moves. Long straddles want the opposite: a debit that looks cheap
+    versus historical report moves. The returned reasons are short enough to
+    show in UI tooltips / cards.
     """
 
     def clamp(value: float, lo: float, hi: float) -> float:
@@ -175,23 +177,36 @@ def compute_earnings_edge_score(
     score = 0.0
     reasons: list[str] = []
     evidence_count = 0
+    setup = (top_setup or "").strip().lower()
+    is_vol_buying = setup == "long straddle"
 
     if iv_rank is not None:
         iv = clamp(float(iv_rank), 0.0, 100.0)
-        score += iv * 0.35
+        if is_vol_buying:
+            score += (100.0 - iv) * 0.25
+            if iv <= 35:
+                reasons.append(f"IV rank {iv:.0f} keeps debit moderate")
+        else:
+            score += iv * 0.35
+            if iv >= 70:
+                reasons.append(f"IV rank {iv:.0f} keeps premium rich")
         evidence_count += 1
-        if iv >= 70:
-            reasons.append(f"IV rank {iv:.0f} keeps premium rich")
 
     premiums = [
         p for p in (premium_yield_call_atm, premium_yield_put_atm)
         if p is not None and p > 0
     ]
     if premiums:
-        premium = max(float(p) for p in premiums)
-        score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
+        if is_vol_buying:
+            debit = sum(float(p) for p in premiums)
+            score += clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
+            if debit <= 0.06:
+                reasons.append(f"ATM straddle debit {debit:.1%}")
+        else:
+            premium = max(float(p) for p in premiums)
+            score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
+            reasons.append(f"ATM premium yield {premium:.1%}")
         evidence_count += 1
-        reasons.append(f"ATM premium yield {premium:.1%}")
 
     if (
         expected_move_pct is not None
@@ -200,12 +215,32 @@ def compute_earnings_edge_score(
     ):
         expected = float(expected_move_pct)
         hist = float(hist_avg_abs_move_pct)
-        overprice_ratio = (expected - hist) / hist
-        if overprice_ratio > 0:
-            score += clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
-            reasons.append(
-                f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
-            )
+        if is_vol_buying:
+            underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
+            if underprice_ratio > 0:
+                score += clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
+                reasons.append(
+                    f"Historical move {hist:.1%} clears debit {expected:.1%}"
+                )
+            else:
+                overprice_ratio = (expected - hist) / hist
+                score -= clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                reasons.append(
+                    f"Debit {expected:.1%} above {hist:.1%} historical avg"
+                )
+        else:
+            overprice_ratio = (expected - hist) / hist
+            if overprice_ratio > 0:
+                score += clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                reasons.append(
+                    f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
+                )
+            else:
+                underprice_ratio = (hist - expected) / hist
+                score -= clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                reasons.append(
+                    f"Implied move {expected:.1%} below {hist:.1%} historical avg"
+                )
         evidence_count += 1
 
     if claude_confidence is not None:
@@ -1537,6 +1572,7 @@ async def _hydrate_row(
         hist_avg_abs_move_pct=metrics.get("hist_avg_abs_move_pct") if metrics else None,
         claude_confidence=claude.get("confidence") if claude else None,
         days_until=days_until,
+        top_setup=claude.get("suggested_play") if claude else None,
     )
     return {
         **row,

@@ -148,6 +148,8 @@ describe("HistoricalSetupReplay", () => {
       expect(container.querySelector('[data-slot="historical-setup-replay-trades"]')).not.toBeNull();
     });
     expect(container.textContent).toMatch(/Setup replay/);
+    expect(container.textContent).toMatch(/Thin sample/);
+    expect(container.textContent).toMatch(/not point-in-time historical option-chain fills/);
     expect(container.textContent).toMatch(/realized move stayed inside expected move/);
   });
 });

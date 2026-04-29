@@ -66,6 +66,39 @@ def test_earnings_edge_score_rewards_rich_premium_and_overpriced_move():
     assert any("Implied move" in r for r in scored["edge_score_reasons"])
 
 
+def test_earnings_edge_score_penalizes_rich_premium_when_realized_moves_are_larger():
+    scored = compute_earnings_edge_score(
+        iv_rank=90,
+        premium_yield_call_atm=0.060,
+        premium_yield_put_atm=0.057,
+        expected_move_pct=0.040,
+        hist_avg_abs_move_pct=0.080,
+        claude_confidence=0.80,
+        days_until=1,
+        top_setup="iron condor",
+    )
+
+    assert scored["edge_score"] < 55
+    assert any("below" in r for r in scored["edge_score_reasons"])
+
+
+def test_earnings_edge_score_treats_long_straddle_premium_as_debit_hurdle():
+    scored = compute_earnings_edge_score(
+        iv_rank=24,
+        premium_yield_call_atm=0.018,
+        premium_yield_put_atm=0.020,
+        expected_move_pct=0.038,
+        hist_avg_abs_move_pct=0.070,
+        claude_confidence=0.72,
+        days_until=2,
+        top_setup="long straddle",
+    )
+
+    assert scored["edge_score"] >= 75
+    assert any("debit" in r.lower() for r in scored["edge_score_reasons"])
+    assert any("Historical move" in r for r in scored["edge_score_reasons"])
+
+
 def test_earnings_edge_score_returns_null_without_evidence():
     assert compute_earnings_edge_score(
         iv_rank=None,

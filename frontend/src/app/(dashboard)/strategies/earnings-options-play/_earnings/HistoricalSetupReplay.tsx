@@ -164,8 +164,30 @@ function ReplayHeader({ setup }: { setup: string }) {
 function ReplayResult({ data }: { data: EarningsBacktestResponse }) {
   const metrics = data.metrics;
   const latestTrades = data.trades.slice(-4).reverse();
+  const verdict = getReplayVerdict(metrics);
   return (
     <>
+      <div
+        data-slot="historical-setup-replay-verdict"
+        className="mt-2 flex flex-wrap items-center gap-2 t-mono text-[11px]"
+      >
+        <span
+          className={
+            "rounded border px-1.5 py-0.5 uppercase " +
+            (verdict.tone === "pos"
+              ? "border-[color:var(--fg-pos)] u-profit"
+              : verdict.tone === "neg"
+              ? "border-[color:var(--fg-neg)] u-loss"
+              : "border-[color:var(--border)] u-muted")
+          }
+        >
+          {verdict.label}
+        </span>
+        <span className="u-muted">
+          {metrics.events} replayed event{metrics.events === 1 ? "" : "s"} using current premium
+          and implied move.
+        </span>
+      </div>
       <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <ReplayStat label="WIN" value={fmtPct(metrics.winRate, 0)} />
         <ReplayStat
@@ -197,8 +219,25 @@ function ReplayResult({ data }: { data: EarningsBacktestResponse }) {
           {data.skipped.length} skipped
         </p>
       )}
+      <p className="mt-2 t-mono text-[10.5px] u-muted">
+        Setup replay only: not point-in-time historical option-chain fills.
+      </p>
     </>
   );
+}
+
+function getReplayVerdict(metrics: EarningsBacktestResponse["metrics"]): {
+  label: string;
+  tone?: "pos" | "neg";
+} {
+  if (metrics.events < 3) return { label: "Thin sample" };
+  if (metrics.avgTradeReturnPct < 0 || metrics.winRate < 0.45) {
+    return { label: "Avoid", tone: "neg" };
+  }
+  if (metrics.avgTradeReturnPct > 0 && metrics.winRate >= 0.6) {
+    return { label: "Replay pass", tone: "pos" };
+  }
+  return { label: "Watch" };
 }
 
 function ReplayStat({
