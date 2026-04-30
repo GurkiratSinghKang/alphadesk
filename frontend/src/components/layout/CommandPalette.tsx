@@ -80,7 +80,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
 }
 
 export function CommandPalette() {
-  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, setTradingMode } = useUIStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, tradingMode, setTradingMode } = useUIStore();
   const { selectedSymbol, setSelectedSymbol, addToWatchlist } = useMarketStore();
   const router = useRouter();
   const { toast } = useToast();
@@ -407,7 +407,7 @@ export function CommandPalette() {
               />
               <CommandItem
                 icon={<ArrowRightLeft className="h-4 w-4" />}
-                label="Switch to live trading"
+                label={tradingMode === "live" ? "Switch to paper trading" : "Live trading access"}
                 onSelect={handleSwitchLive}
               />
               {/* Phase-2 / KP-1: high-leverage trading actions per the
@@ -603,18 +603,18 @@ export function CommandPalette() {
       >
         <DialogHeader>
           <DialogTitle className="text-foreground">
-            Enable live trading?
+            Live trading requires admin enablement
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Orders will route to the live broker and use real capital.
-            Strategy signals, risk monitors and manual orders will all
-            execute against your funded account.
+            This account is currently paper-only. Real-capital routing must
+            be enabled server-side by an AlphaDesk operator before orders can
+            leave the paper broker.
           </DialogDescription>
         </DialogHeader>
         <ul className="list-disc space-y-1 pl-5 text-[12px] text-muted-foreground">
-          <li>Paper-mode safeties no longer apply.</li>
-          <li>Live fills may deviate from backtest P&L.</li>
-          <li>You can switch back to paper from this palette at any time.</li>
+          <li>The command palette cannot enable live trading by itself.</li>
+          <li>Paper-mode orders remain routed to the paper account.</li>
+          <li>Contact your admin when the account is ready for live credentials.</li>
         </ul>
         <DialogFooter className="gap-2">
           <Button
@@ -626,12 +626,12 @@ export function CommandPalette() {
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="primary"
             size="sm"
             onClick={handleConfirmLive}
             data-testid="confirm-live-confirm"
           >
-            Enable live trading
+            Got it
           </Button>
         </DialogFooter>
       </DialogContent>

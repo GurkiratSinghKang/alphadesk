@@ -985,7 +985,9 @@ describe('placeOrder', () => {
     expect(body.legs[0].qty).toBe(10);
     expect(body.legs[0].order_type).toBe('market');
     expect(body.legs[0].limit_price).toBeNull();
+    expect(body.legs[0].asset_class).toBe('equity');
     expect(body.time_in_force).toBe('day');
+    expect(body.quote_at_fill_ts).toBeUndefined();
   });
 
   it('sends limit_price for limit orders', async () => {
@@ -997,6 +999,7 @@ describe('placeOrder', () => {
     const body = JSON.parse(init.body);
     expect(body.legs[0].limit_price).toBe(175);
     expect(body.legs[0].stop_price).toBeNull();
+    expect(typeof body.quote_at_fill_ts).toBe('number');
   });
 
   it('sends stop_price for stop orders', async () => {
@@ -1008,6 +1011,7 @@ describe('placeOrder', () => {
     const body = JSON.parse(init.body);
     expect(body.legs[0].stop_price).toBe(200);
     expect(body.legs[0].limit_price).toBeNull();
+    expect(typeof body.quote_at_fill_ts).toBe('number');
   });
 
   it('uses provided legs when specified', async () => {
@@ -1027,6 +1031,28 @@ describe('placeOrder', () => {
     const body = JSON.parse(init.body);
     expect(body.legs).toHaveLength(1);
     expect(body.legs[0].qty).toBe(10);
+    expect(body.legs[0].asset_class).toBe('equity');
+    expect(typeof body.quote_at_fill_ts).toBe('number');
+  });
+
+  it('marks OCC legs as options and forwards provided quote timestamps', async () => {
+    const order = { id: 'ord-5', symbol: 'AAPL260417C00200000', side: 'buy' as const, type: 'limit' as const, quantity: 1, status: 'pending' as const, createdAt: '2026-04-10T09:30:00Z', legs: [] };
+    mockFetch.mockReturnValueOnce(ok(order));
+
+    await placeOrder({
+      symbol: 'AAPL',
+      side: 'buy',
+      type: 'limit',
+      quantity: 1,
+      quote_at_fill_ts: 1_777_000_000_000,
+      legs: [
+        { symbol: 'AAPL260417C00200000', side: 'buy', quantity: 1, price: 5 },
+      ],
+    });
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.legs[0].asset_class).toBe('option');
+    expect(body.quote_at_fill_ts).toBe(1_777_000_000);
   });
 });
 

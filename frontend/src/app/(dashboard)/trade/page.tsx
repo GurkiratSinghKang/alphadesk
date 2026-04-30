@@ -324,13 +324,23 @@ export default function TradePage() {
           : {}),
       });
       usePortfolioStore.getState().addOrder(placed);
+      const placedStatus = (placed.status ?? "pending").toLowerCase();
+      const brokerRejected =
+        placedStatus === "rejected" ||
+        placedStatus === "canceled" ||
+        placedStatus === "cancelled";
+      const statusCopy = hasLegs
+        ? `${activeLegs.length}-leg combo ${brokerRejected ? placedStatus : "staged"} — ${placedStatus}`
+        : `${order.side.toUpperCase()} ${qty} ${sym} ${brokerRejected ? placedStatus : "staged"} — ${placedStatus}`;
       toast({
-        type: "success",
-        message: hasLegs
-          ? `${activeLegs.length}-leg combo staged — ${placed.status ?? "pending"}`
-          : `${order.side.toUpperCase()} ${qty} ${sym} staged — ${placed.status ?? "pending"}`,
+        type: brokerRejected ? "error" : "success",
+        message: statusCopy,
       });
-      setResetTick((t) => t + 1);
+      if (brokerRejected) {
+        setOrderError(`Order ${placedStatus}: broker or risk policy rejected the request.`);
+      } else {
+        setResetTick((t) => t + 1);
+      }
       // Refresh recent orders strip immediately.
       try {
         const orders = await getOrders();

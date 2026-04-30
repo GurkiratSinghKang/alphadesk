@@ -404,12 +404,16 @@ async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
                 alert.ticker, alert.strategy, reason,
             )
             return {"action": "rejected_by_risk", "detail": reason}
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "TradingView aggregate risk-gate evaluation failed; "
-            "falling through to agent path",
+            "rejecting signal fail-closed",
             exc_info=True,
         )
+        return {
+            "action": "rejected_by_risk",
+            "detail": f"Aggregate risk gate unavailable: {exc}",
+        }
 
     execution_agent = get_agent("execution")
     if execution_agent is None:

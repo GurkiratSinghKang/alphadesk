@@ -145,6 +145,31 @@ async def test_quote_staleness_skipped_when_no_ts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_quote_staleness_requires_ts_for_option_orders() -> None:
+    """OCC option orders fail closed when the UI omits quote freshness."""
+    leg = OrderLeg(
+        symbol="AAPL260417C00200000", side=OrderSide.BUY, qty=1,
+        order_type=OrderType.LIMIT, limit_price=5.0,
+    )
+    req = CreateOrderRequest(legs=[leg])
+    passed, reason = await trades_mod._quote_staleness_check(req)
+    assert passed is False
+    assert "Quote freshness required" in reason
+
+
+def test_occ_symbol_infers_option_asset_class() -> None:
+    """Legacy callers cannot leave OCC legs classified as equity."""
+    leg = OrderLeg(
+        symbol="aapl260417c00200000".upper(),
+        side=OrderSide.BUY,
+        qty=1,
+        order_type=OrderType.LIMIT,
+        limit_price=5.0,
+    )
+    assert leg.asset_class == "option"
+
+
+@pytest.mark.asyncio
 async def test_quote_staleness_rejects_old_snapshot() -> None:
     """Snapshot older than 30s → rejected."""
     leg = OrderLeg(

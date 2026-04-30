@@ -30,4 +30,11 @@ describe('TopBar', () => {
     render(<TopBar />);
     expect(screen.getByText('A')).toBeDefined(); // Avatar shows "A" for admin
   });
+
+  it('keeps the mobile menu trigger at a touch-safe size', () => {
+    render(<TopBar />);
+    const trigger = screen.getByLabelText('Open menu');
+    expect(trigger.className).toContain('min-h-[44px]');
+    expect(trigger.className).toContain('min-w-[44px]');
+  });
 });

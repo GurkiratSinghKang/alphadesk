@@ -83,6 +83,33 @@
   --profit-tint: rgba(168, 208, 77, 0.12);
   --loss-tint:   rgba(224, 120, 86, 0.12);
 
+  /* Raw CSS aliases used by older arbitrary-value utilities. Keep these
+     mapped to semantic tokens so light/dark modes never render transparent
+     pending/neutral/chart states. */
+  --chart-1: var(--up-500);
+  --chart-2: var(--down-500);
+  --chart-3: var(--gold-300);
+  --chart-4: var(--ice-500);
+  --chart-5: var(--amber-500);
+  --neutral: var(--fg-muted);
+  --fg-base: var(--fg);
+  --fg-strong: var(--ink-1000);
+  --fg-border: var(--border);
+  --fg-accent: var(--brand);
+  --fg-neg: var(--loss);
+  --fg-pos: var(--profit);
+  --bg-base: var(--bg);
+  --bg-elevated: var(--bg-elev-1);
+  --bg-accent-subtle: var(--brand-tint);
+  --surface: var(--bg-card);
+  --panel: var(--bg-elev-1);
+  --primary: var(--brand);
+  --muted: var(--bg-elev-1);
+  --muted-foreground: var(--fg-muted);
+  --ring: var(--brand);
+  --warn: var(--amber-500);
+  --warn-tint: color-mix(in oklab, var(--amber-500) 14%, transparent);
+
   /* ─── Slice-18 / LCH-1 (2026 design brief, Linear UI redesign) ────────
      Perceptually-uniform LCH variants of the three semantic tokens.
      Linear's redesign collapsed ~98 bespoke theme variables to 3
@@ -290,7 +317,7 @@
 
   --primary-foreground: #101611;
   --profit-foreground: #fffdf8;
-  --loss-foreground: #fffdf8;
+  --loss-foreground: #050503;
 
   --shadow-hair: 0 0 0 1px var(--border-hair);
   --shadow-1: 0 1px 2px rgba(41, 48, 39, 0.08), 0 0 0 1px var(--border-hair);

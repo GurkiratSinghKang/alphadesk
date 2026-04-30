@@ -837,6 +837,8 @@ export default function DeskPage() {
             key={`orderbar-${orderBarResetTick}`}
             symbol={selectedSymbol}
             strategies={strategyOptions}
+            strategyId={selectedStrategyId}
+            onStrategyChange={setSelectedStrategyId}
             onSubmit={handleStageOrder}
             submitting={submittingOrder}
             errorMessage={orderError}

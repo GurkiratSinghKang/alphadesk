@@ -93,9 +93,9 @@
 
   /* shadcn semantic aliases — keep existing shadcn components working */
   --color-primary: var(--brand);
-  --color-primary-foreground: #1a1206;
+  --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--loss);
-  --color-destructive-foreground: var(--fg);
+  --color-destructive-foreground: var(--loss-foreground);
   --color-accent: var(--bg-elev-1);
   --color-accent-foreground: var(--fg);
   --color-muted: var(--bg-elev-1);
@@ -113,7 +113,7 @@
   --color-sidebar: var(--bg-elev-1);
   --color-sidebar-foreground: var(--fg);
   --color-sidebar-primary: var(--brand);
-  --color-sidebar-primary-foreground: #1a1206;
+  --color-sidebar-primary-foreground: var(--primary-foreground);
   --color-sidebar-accent: var(--bg-elev-2);
   --color-sidebar-accent-foreground: var(--fg);
   --color-sidebar-border: var(--border);

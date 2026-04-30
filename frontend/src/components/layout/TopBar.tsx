@@ -60,7 +60,12 @@ export function TopBar() {
         {/* Mobile hamburger menu */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger render={
-            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" aria-label="Open menu">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="min-h-[44px] min-w-[44px] md:hidden"
+              aria-label="Open menu"
+            >
               <Menu className="h-4 w-4 text-muted-foreground" />
             </Button>
           } />

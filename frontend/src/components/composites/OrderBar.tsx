@@ -50,6 +50,10 @@ export interface OrderBarProps {
   submitDestination?: string;
   /** Primary button label. Defaults to "Place order". */
   submitLabel?: string;
+  /** Controlled strategy selection, used when parent chrome summarizes the ticket. */
+  strategyId?: string;
+  /** Fires when the Strategy select changes in controlled or uncontrolled mode. */
+  onStrategyChange?: (strategyId: string) => void;
   className?: string;
 }
 
@@ -70,19 +74,33 @@ export default function OrderBar({
   errorMessage = null,
   submitDestination = "Submits to paper account",
   submitLabel = "Place order",
+  strategyId: controlledStrategyId,
+  onStrategyChange,
   className,
 }: OrderBarProps) {
   const noStrategies = strategies.length === 0;
-  const [strategyId, setStrategyId] = React.useState<string>(
+  const [internalStrategyId, setInternalStrategyId] = React.useState<string>(
     defaults?.strategyId ?? strategies[0]?.id ?? ""
   );
+  const strategyId = controlledStrategyId ?? internalStrategyId;
   // When strategies resolve later (React Query), adopt the first one as
   // the sensible default so the select doesn't stay on an empty string.
   React.useEffect(() => {
     if (!strategyId && strategies[0]?.id) {
-      setStrategyId(strategies[0].id);
+      setInternalStrategyId(strategies[0].id);
+      onStrategyChange?.(strategies[0].id);
     }
-  }, [strategies, strategyId]);
+  }, [onStrategyChange, strategies, strategyId]);
+
+  const handleStrategyChange = React.useCallback(
+    (next: string) => {
+      if (controlledStrategyId == null) {
+        setInternalStrategyId(next);
+      }
+      onStrategyChange?.(next);
+    },
+    [controlledStrategyId, onStrategyChange],
+  );
 
   const [side, setSide] = React.useState<OrderSide>(defaults?.side ?? "buy");
   // Round-5 F-2 — when an earnings deep-link pre-stages an OCC option
@@ -324,7 +342,7 @@ export default function OrderBar({
         <select
           aria-label="Strategy"
           value={strategyId}
-          onChange={(e) => setStrategyId(e.target.value)}
+          onChange={(e) => handleStrategyChange(e.target.value)}
           disabled={noStrategies}
           className={cn(
             "h-11 md:h-10 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",

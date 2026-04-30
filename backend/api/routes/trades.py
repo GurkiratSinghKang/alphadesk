@@ -301,6 +301,17 @@ class OrderLeg(BaseModel):
         read-path fix). Reject both at the boundary so the user sees a 422
         with a useful message instead of a 502 from the broker.
         """
+        parsed_occ = _parse_occ_symbol(self.symbol.upper())
+        if parsed_occ is not None:
+            # Treat OCC-shaped symbols as options even when older frontend
+            # callers omit asset_class. Several downstream risk gates key off
+            # asset_class, so preserving the default "equity" would bypass
+            # demo-chain and naked-short protections for option legs.
+            self.symbol = self.symbol.upper()
+            self.asset_class = "option"
+        else:
+            self.asset_class = (self.asset_class or "equity").lower()
+
         if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and self.stop_price is None:
             raise ValueError("stop_price is required for stop and stop_limit orders")
         if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and self.limit_price is None:
@@ -526,12 +537,16 @@ class CreateOrderRequest(BaseModel):
         # defined-risk combo are wing-protected by definition.
         if self.combo_type is not None:
             return self
-        # Inspect every leg for short option exposure.
+        # Inspect every leg for short option exposure. OCC-shaped symbols are
+        # considered options even if a legacy caller omitted asset_class.
         for leg in self.legs:
-            asset_class = (getattr(leg, "asset_class", "equity") or "equity").lower()
+            is_option = (
+                (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+                or _parse_occ_symbol(leg.symbol) is not None
+            )
             side = getattr(leg, "side", None)
             side_value = getattr(side, "value", side)
-            if asset_class != "option" or side_value != "sell":
+            if not is_option or side_value != "sell":
                 continue
             # OCC parse to extract option type + expiry. Symbol shape:
             # ``SYMBOL + YYMMDD + (C|P) + 8-digit-strike``. The leg
@@ -555,7 +570,10 @@ class CreateOrderRequest(BaseModel):
             # Require a covering LONG leg of the same type + expiry.
             covered = any(
                 (other_leg.symbol != leg.symbol)
-                and ((getattr(other_leg, "asset_class", "equity") or "equity").lower() == "option")
+                and (
+                    (getattr(other_leg, "asset_class", "equity") or "equity").lower() == "option"
+                    or _parse_occ_symbol(other_leg.symbol) is not None
+                )
                 and (getattr(getattr(other_leg, "side", None), "value", getattr(other_leg, "side", None)) == "buy")
                 and len(other_leg.symbol) >= 9
                 and other_leg.symbol[-9] == opt_type  # same call/put
@@ -3137,11 +3155,25 @@ async def _quote_staleness_check(
 ) -> tuple[bool, str]:
     """J-7 — reject limit orders anchored on stale quotes.
 
-    Skipped when caller didn't forward ``quote_at_fill_ts``. When set:
+    Equity-only legacy callers may still omit ``quote_at_fill_ts``. Option
+    orders fail closed without it because option limits are normally anchored
+    to a chain snapshot, not a live NBBO re-fetchable through the equity quote
+    path. When set:
       1. quote_at_fill_ts more than 30s old → reject.
       2. Limit price diverges from current quote by > 0.5% → reject.
     """
     if request.quote_at_fill_ts is None:
+        has_option_leg = any(
+            (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+            or _parse_occ_symbol(leg.symbol) is not None
+            for leg in request.legs
+        )
+        if has_option_leg:
+            return False, (
+                "Quote freshness required: option orders must include "
+                "quote_at_fill_ts from the chain snapshot used to price the "
+                "legs. Re-open the ticket from fresh option data and resubmit."
+            )
         return True, "skipped_no_ts"
     ts = float(request.quote_at_fill_ts)
     age_seconds = max(0.0, datetime.now(timezone.utc).timestamp() - ts)
@@ -3368,6 +3400,7 @@ async def _aggregate_risk_check(
     # ``TRADES_ALLOW_DEMO_CHAIN_ORDERS=1`` for testing.
     has_option_leg = any(
         (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+        or _parse_occ_symbol(leg.symbol) is not None
         for leg in request.legs
     )
     if has_option_leg and not (
@@ -3382,7 +3415,10 @@ async def _aggregate_risk_check(
             first_option_leg = next(
                 leg
                 for leg in request.legs
-                if (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+                if (
+                    (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+                    or _parse_occ_symbol(leg.symbol) is not None
+                )
             )
             occ = first_option_leg.symbol
             # OCC underlying = everything before the 6-digit YYMMDD.

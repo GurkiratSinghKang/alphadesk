@@ -101,8 +101,11 @@ export default function DashboardLayout({
           aria-label="Watchlist and open positions"
           className={cn(
             "flex min-h-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
-            // md: rejoin as 2nd column (full height). lg+ same.
-            "md:row-start-1 md:col-start-2",
+            // Rejoin as the 2nd column only once the parent grid actually
+            // switches to two columns. At md widths the layout is intentionally
+            // single-column; placing the aside at md:col-start-2 creates an
+            // implicit off-screen column on tablets.
+            "lg:row-start-1 lg:col-start-2",
           )}
         >
           {right}

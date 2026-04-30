@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from core.auth import require_auth
 from api.routes.auth import require_admin
 
 logger = logging.getLogger("alphadesk.pipeline.api")
@@ -116,7 +115,7 @@ async def _pipeline_rate_limit(username: str) -> None:
 async def trigger_pipeline(
     screen_limit: int = Query(100, ge=1, le=500, description="Number of stocks to screen"),
     analyze_limit: int = Query(40, ge=1, le=200, description="Total analysis budget across all strategies"),
-    username: str = Depends(require_auth),
+    username: str = Depends(require_admin),
 ) -> dict[str, Any]:
     """Kick off the multi-strategy pipeline asynchronously.
 

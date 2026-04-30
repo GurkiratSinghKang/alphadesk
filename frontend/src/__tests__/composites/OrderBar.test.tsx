@@ -41,4 +41,28 @@ describe("OrderBar", () => {
     expect(order.side).toBe("buy");
     expect(order.quantity).toBe(100);
   });
+
+  it("supports controlled strategy selection for dashboard summaries", () => {
+    const submit = vi.fn();
+    const change = vi.fn();
+    const { getByLabelText, getByText } = render(
+      <OrderBar
+        symbol="SPY"
+        strategies={[
+          { id: "ra", label: "Regime Adaptive" },
+          { id: "mq", label: "Momentum & Quality" },
+        ]}
+        strategyId="mq"
+        onStrategyChange={change}
+        onSubmit={submit}
+        defaults={{ side: "buy", quantity: 1, type: "market" }}
+      />,
+    );
+
+    expect((getByLabelText("Strategy") as HTMLSelectElement).value).toBe("mq");
+    fireEvent.change(getByLabelText("Strategy"), { target: { value: "ra" } });
+    expect(change).toHaveBeenCalledWith("ra");
+    fireEvent.click(getByText(/Place order|Stage order/i));
+    expect(submit.mock.calls[0][0].strategyId).toBe("mq");
+  });
 });

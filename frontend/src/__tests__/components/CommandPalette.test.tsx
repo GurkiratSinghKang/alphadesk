@@ -77,11 +77,18 @@ describe('CommandPalette', () => {
     expect(screen.getByText('Show portfolio')).toBeDefined();
   });
 
-  it('has Switch to live trading command', async () => {
+  it('shows honest live-trading access copy while paper-only', async () => {
     useUIStore.setState({ commandPaletteOpen: true });
     const { CommandPalette } = await import('@/components/layout/CommandPalette');
     render(<CommandPalette />);
-    expect(screen.getByText('Switch to live trading')).toBeDefined();
+    expect(screen.getByText('Live trading access')).toBeDefined();
+  });
+
+  it('offers switch-to-paper copy when already live', async () => {
+    useUIStore.setState({ commandPaletteOpen: true, tradingMode: 'live' });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+    expect(screen.getByText('Switch to paper trading')).toBeDefined();
   });
 
   it('has Navigation group', async () => {

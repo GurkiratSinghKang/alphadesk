@@ -1216,6 +1216,8 @@ export interface PlaceOrderPayload {
   price?: number;
   stop_price?: number;
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
+  /** Unix timestamp for the quote snapshot used to price this order. */
+  quote_at_fill_ts?: number;
   /**
    * Round-5 F-1 — originating strategy tag. Threaded onto the backend
    * `CreateOrderRequest.strategy` field so the trade ledger and
@@ -1253,14 +1255,18 @@ export interface PlaceOrderOptions {
 
 export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
   // Transform frontend payload to backend CreateOrderRequest format.
-  const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => ({
-    symbol: leg.symbol,
-    side: leg.side,
-    qty: leg.quantity,
-    order_type: payload.type,
-    limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (payload.price ?? leg.price ?? null) : null,
-    stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) : null,
-  }));
+  const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => {
+    const symbol = leg.symbol.trim().toUpperCase();
+    return {
+      symbol,
+      side: leg.side,
+      qty: leg.quantity,
+      order_type: payload.type,
+      limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (payload.price ?? leg.price ?? null) : null,
+      stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) : null,
+      asset_class: isOccOptionSymbol(symbol) ? "option" : "equity",
+    };
+  });
 
   // Wave B / persona-72 P0: every POST /trades/orders MUST carry an
   // Idempotency-Key so a mid-POST network blip that triggers a client
@@ -1291,6 +1297,17 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
   if (payload.strategy) reqBody.strategy = payload.strategy;
   if (payload.combo_type) reqBody.combo_type = payload.combo_type;
   if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
+  const requiresFreshQuote =
+    payload.type !== "market" || legs.some((leg) => leg.asset_class === "option");
+  if (payload.quote_at_fill_ts != null) {
+    reqBody.quote_at_fill_ts = normalizeQuoteTimestamp(payload.quote_at_fill_ts);
+  } else if (requiresFreshQuote) {
+    // Direct UI submissions always include a timestamp so the backend's
+    // stale-quote gate runs instead of silently skipping. Callers that own
+    // a real quote snapshot should pass it; this fallback preserves older
+    // manual flows while still enabling server-side drift checks.
+    reqBody.quote_at_fill_ts = Date.now() / 1000;
+  }
 
   return apiFetch<Order>(`/api/v1/trades/orders`, {
     method: "POST",
@@ -1299,6 +1316,14 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
     },
     body: JSON.stringify(reqBody),
   });
+}
+
+function isOccOptionSymbol(symbol: string): boolean {
+  return /^[A-Z0-9]{1,6}\d{6}[CP]\d{8}$/.test(symbol);
+}
+
+function normalizeQuoteTimestamp(ts: number): number {
+  return ts > 1e12 ? ts / 1000 : ts;
 }
 
 export function cancelOrder(orderId: string) {

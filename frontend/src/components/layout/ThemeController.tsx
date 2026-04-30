@@ -4,6 +4,8 @@ import { useEffect } from "react";
 
 import { usePreferencesStore } from "@/stores/preferences";
 
+let preferencesHydrationStarted = false;
+
 /**
  * ThemeController
  * ────────────────
@@ -19,6 +21,18 @@ import { usePreferencesStore } from "@/stores/preferences";
  */
 export default function ThemeController() {
   const theme = usePreferencesStore((s) => s.display.theme);
+
+  useEffect(() => {
+    // Preferences use skipHydration because the trading data bridge hydrates
+    // several stores together. Theme, however, is app-chrome level and should
+    // work on lightweight routes like /login too, where the bridge is not
+    // mounted. Start preferences hydration here once per tab; duplicate calls
+    // from the bridge are harmless, but this prevents login/settings shells
+    // from being stuck on the default dark theme.
+    if (preferencesHydrationStarted) return;
+    preferencesHydrationStarted = true;
+    void usePreferencesStore.persist.rehydrate();
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

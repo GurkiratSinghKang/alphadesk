@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import calendar
 import logging
-from datetime import datetime, date, time as dt_time, timedelta
+from datetime import datetime, date, time as dt_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from data.calendar import USMarketCalendar
@@ -335,15 +335,16 @@ async def _run_window(
     """Run a subset of strategies for a given time window."""
     today = datetime.now(ET).strftime("%Y-%m-%d")
     state_key = f"last_{window_name}"
+    in_progress_key = f"{state_key}_in_progress"
 
-    if state.get(state_key) == today:
-        return  # Already ran today
+    if state.get(state_key) == today or state.get(in_progress_key) == today:
+        return  # Already ran or is currently running today
 
     logger.info(
         "=== %s window === Running: %s",
         window_name.upper(), ", ".join(strategies),
     )
-    state[state_key] = today
+    state[in_progress_key] = today
     await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
 
     try:
@@ -354,8 +355,14 @@ async def _run_window(
             "%s window complete: %d approved, %d rejected",
             window_name, len(approved), len(rejected),
         )
+        state[state_key] = today
+        state.pop(in_progress_key, None)
+        await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
     except Exception:
         logger.exception("%s window failed", window_name)
+        state.pop(in_progress_key, None)
+        state[f"{state_key}_failed_at"] = datetime.now(timezone.utc).isoformat()
+        await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
 
 
 async def _scheduler_loop() -> None:
