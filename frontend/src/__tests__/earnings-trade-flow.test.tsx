@@ -10,7 +10,7 @@
  */
 import "./setup-mocks";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import {
@@ -18,7 +18,7 @@ import {
   buildVerticalSpreadURL,
 } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/TradeButtonRow";
 import TradePage from "@/app/(dashboard)/trade/page";
-import { getBars } from "@/lib/api";
+import { getBars, placeOrder } from "@/lib/api";
 import { useMarketStore } from "@/stores/market";
 import type { LadderRow } from "@/types";
 
@@ -70,6 +70,7 @@ describe("earnings → trade URL builder (F-1, F-3)", () => {
       symbol: "NVDA",
       expiry: "2026-04-25",
       row: fakeLadderRow({ side: "call", strike: 205, mid: 1.42 }),
+      quoteTs: "2026-04-23T15:00:00Z",
     });
     // F-1: strategy tag flows.
     expect(url).toContain("strategy=earnings-options-play");
@@ -79,6 +80,8 @@ describe("earnings → trade URL builder (F-1, F-3)", () => {
     expect(url).toContain("contract=NVDA260425C00205000");
     // Side defaults to sell (earnings playbook is short-vol).
     expect(url).toContain("side=sell");
+    // Real ladder snapshot timestamp flows through to the order risk gate.
+    expect(url).toContain("quote_ts=2026-04-23T15%3A00%3A00Z");
   });
 
   it("buildVerticalSpreadURL encodes both legs (sell short-leg, buy long-leg) with combo_type", () => {
@@ -164,7 +167,7 @@ describe("Trade page parses Round-5 deep-link contract", () => {
     setSearch(
       "?symbol=NVDA" +
         "&legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32" +
-        "&strategy=earnings-options-play&combo_type=strangle",
+        "&strategy=earnings-options-play&combo_type=strangle&quote_ts=2026-04-23T15%3A00%3A00Z",
     );
     const { container } = render(<TradePage />, { wrapper: makeWrapper() });
 
@@ -182,6 +185,29 @@ describe("Trade page parses Round-5 deep-link contract", () => {
       const stratChip = container.querySelector("[data-slot='trade-strategy-tag']");
       expect(stratChip).not.toBeNull();
       expect(stratChip!.textContent).toContain("strangle");
+    });
+  });
+
+  it("forwards quote_ts to placeOrder as quote_at_fill_ts", async () => {
+    const quoteIso = "2026-04-23T15:00:00Z";
+    setSearch(
+      "?symbol=NVDA" +
+        "&legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:buy:1:0.95" +
+        `&strategy=earnings-options-play&combo_type=vertical_spread&quote_ts=${encodeURIComponent(quoteIso)}`,
+    );
+    const { container } = render(<TradePage />, { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      const submit = container.querySelector("[data-testid='order-bar-submit']") as HTMLButtonElement | null;
+      expect(submit).not.toBeNull();
+      expect(submit!.disabled).toBe(false);
+    });
+
+    fireEvent.click(container.querySelector("[data-testid='order-bar-submit']") as HTMLButtonElement);
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(placeOrder).mock.calls[0][0]).toMatchObject({
+      quote_at_fill_ts: Date.parse(quoteIso) / 1000,
     });
   });
 

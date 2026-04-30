@@ -168,6 +168,10 @@ class StrikeLadder(BaseModel):
     expiry: date
     underlying_price: float
     rows: list[LadderRow]
+    # Timestamp of the option-chain snapshot used to derive row mids.
+    # Trade deep-links forward this as quote_at_fill_ts so the order risk
+    # gate evaluates freshness against the actual ladder data.
+    fetched_at: datetime | None = None
     # Round-5 Cluster A E-1: surface the underlying chain's demo flag so
     # the frontend can render its DEMO DATA badge. Defaults False so
     # real-chain responses don't change shape; the screener fills this in

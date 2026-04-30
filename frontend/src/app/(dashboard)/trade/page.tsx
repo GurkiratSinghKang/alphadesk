@@ -92,6 +92,17 @@ function normalizeUnderlyingSymbol(raw: string | null): string | null {
   return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym) ? sym : null;
 }
 
+function parseQuoteSnapshotTs(raw: string | null): number | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1e12 ? numeric / 1000 : numeric;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms / 1000 : null;
+}
+
 // ─── Pre-fill state types ──────────────────────────────────────────────────────
 
 interface ActiveContract {
@@ -165,6 +176,7 @@ export default function TradePage() {
   // Set by the earnings deep-link; surfaced to the broker so the risk gate
   // recognises a defined-risk spread. Round-5 F-14.
   const [comboType, setComboType] = useState<string | null>(null);
+  const [quoteAtFillTs, setQuoteAtFillTs] = useState<number | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -172,11 +184,13 @@ export default function TradePage() {
     const legsParam = params.get("legs");
     const strategyParam = params.get("strategy");
     const comboParam = params.get("combo_type");
+    const quoteTsParam = parseQuoteSnapshotTs(params.get("quote_ts"));
     const underlyingFromUrl = normalizeUnderlyingSymbol(params.get("symbol"));
     let firstParsedUnderlying: string | null = null;
 
     if (strategyParam) setUrlStrategy(strategyParam);
     if (comboParam) setComboType(comboParam);
+    setQuoteAtFillTs(quoteTsParam);
 
     if (contractOcc) {
       // Single-leg deep-link.
@@ -307,6 +321,7 @@ export default function TradePage() {
         quantity: qty,
         price: order.price,
         stop_price: stopNum,
+        quote_at_fill_ts: quoteAtFillTs ?? undefined,
         // Round-5 F-1: thread the URL's strategy tag through to the
         // backend `CreateOrderRequest.strategy` field.
         strategy: urlStrategy ?? undefined,

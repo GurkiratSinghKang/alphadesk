@@ -454,6 +454,8 @@ export interface StrikeLadder {
   expiry: string;
   underlyingPrice: number;
   rows: LadderRow[];
+  /** ISO timestamp of the option-chain snapshot that produced the mids. */
+  fetchedAt?: string | null;
   /** Round-4: true when the chain is synthetic / demo data — UI surfaces
    *  a "DEMO DATA" badge in the StrikeLadder header. Optional so older
    *  fixtures don't need it. */

@@ -1214,6 +1214,7 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
             "expiry": resolved_expiry,
             "underlying_price": underlying,
             "rows": rows,
+            "fetched_at": getattr(chain, "fetched_at", None),
             "is_demo": bool(getattr(chain, "is_demo", False)),
         }
     except Exception as e:

@@ -94,6 +94,7 @@ export default function TradeButtonRow({
       : null;
   // Long straddle = buy ATM call + buy ATM put — direction-agnostic vol
   const longStraddle = atmCall && atmPut ? { call: atmCall, put: atmPut } : null;
+  const quoteTs = ladder.fetchedAt ?? undefined;
 
   // Round-13 / RD-7 (P1): a narrow chain (only ATM rows; no 30Δ/15Δ
   // wing strikes) leaves every defined-risk button null. Pre-fix the
@@ -133,6 +134,7 @@ export default function TradeButtonRow({
             long: bullPutSpread.long,
             expiry: ladder.expiry,
             comboType: "vertical_spread",
+            quoteTs,
           })}
           label={`Bull put spread ${fmtNumber(Math.round(bullPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossWidth(bullPutSpread.long.strike, bullPutSpread.short.strike, "credit")}
@@ -156,6 +158,7 @@ export default function TradeButtonRow({
             long: bearCallSpread.long,
             expiry: ladder.expiry,
             comboType: "vertical_spread",
+            quoteTs,
           })}
           label={`Bear call spread ${fmtNumber(Math.round(bearCallSpread.short.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearCallSpread.long.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossWidth(bearCallSpread.short.strike, bearCallSpread.long.strike, "credit")}
@@ -179,6 +182,7 @@ export default function TradeButtonRow({
             short: bullCallSpread.short,
             expiry: ladder.expiry,
             comboType: "vertical_spread",
+            quoteTs,
           })}
           label={`Bull call spread ${fmtNumber(Math.round(bullCallSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullCallSpread.short.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossDebit(
@@ -202,6 +206,7 @@ export default function TradeButtonRow({
             short: bearPutSpread.short,
             expiry: ladder.expiry,
             comboType: "vertical_spread",
+            quoteTs,
           })}
           label={`Bear put spread ${fmtNumber(Math.round(bearPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossDebit(
@@ -224,6 +229,7 @@ export default function TradeButtonRow({
             row: longCall,
             expiry: ladder.expiry,
             orderSide: "buy",
+            quoteTs,
           })}
           label={`Long call ${fmtNumber(Math.round(longCall.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossLongOption(longCall.mid, "Long call")}
@@ -243,6 +249,7 @@ export default function TradeButtonRow({
             row: longPut,
             expiry: ladder.expiry,
             orderSide: "buy",
+            quoteTs,
           })}
           label={`Long put ${fmtNumber(Math.round(longPut.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossLongOption(longPut.mid, "Long put")}
@@ -263,6 +270,7 @@ export default function TradeButtonRow({
             shortCall: ironCondor.shortCall,
             longCall: ironCondor.longCall,
             expiry: ladder.expiry,
+            quoteTs,
           })}
           label={`Iron condor ${fmtNumber(Math.round(ironCondor.longPut.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(ironCondor.shortPut.strike), { maximumFractionDigits: 0 })}p · ${fmtNumber(Math.round(ironCondor.shortCall.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(ironCondor.longCall.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossWidth(
@@ -295,6 +303,7 @@ export default function TradeButtonRow({
             call: longStraddle.call,
             put: longStraddle.put,
             expiry: ladder.expiry,
+            quoteTs,
           })}
           label={`Long straddle ${fmtNumber(Math.round(longStraddle.call.strike), { maximumFractionDigits: 0 })}c/p`}
           riskCopy={`Long straddle · max loss = debit paid (≈ $${fmtNumber(Math.round((longStraddle.call.mid + longStraddle.put.mid) * 100), { maximumFractionDigits: 0 })}) · profits on a big move either way`}
@@ -422,11 +431,19 @@ function fmtMid(mid: number): string {
   return mid.toFixed(2);
 }
 
+function addQuoteSnapshotParam(params: URLSearchParams, quoteTs?: string | null): void {
+  if (!quoteTs) return;
+  const parsed = Date.parse(quoteTs);
+  if (Number.isNaN(parsed)) return;
+  params.set("quote_ts", quoteTs);
+}
+
 export function buildSingleLegURL(opts: {
   symbol: string;
   row: LadderRow;
   expiry: string;
   orderSide?: "buy" | "sell";
+  quoteTs?: string | null;
 }): string {
   const contract = occSymbol(opts.symbol, opts.expiry, opts.row.side, opts.row.strike);
   const orderSide = opts.orderSide ?? "sell";
@@ -439,6 +456,7 @@ export function buildSingleLegURL(opts: {
   });
   const lim = fmtMid(opts.row.mid);
   if (lim) params.set("limit", lim);
+  addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
 
@@ -453,6 +471,7 @@ export function buildVerticalSpreadURL(opts: {
   long: LadderRow;
   expiry: string;
   comboType: "vertical_spread";
+  quoteTs?: string | null;
 }): string {
   const shortContract = occSymbol(opts.symbol, opts.expiry, opts.short.side, opts.short.strike);
   const longContract = occSymbol(opts.symbol, opts.expiry, opts.long.side, opts.long.strike);
@@ -467,6 +486,7 @@ export function buildVerticalSpreadURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: opts.comboType,
   });
+  addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
 
@@ -480,6 +500,7 @@ export function buildDebitVerticalSpreadURL(opts: {
   short: LadderRow;
   expiry: string;
   comboType: "vertical_spread";
+  quoteTs?: string | null;
 }): string {
   const longContract = occSymbol(opts.symbol, opts.expiry, opts.long.side, opts.long.strike);
   const shortContract = occSymbol(opts.symbol, opts.expiry, opts.short.side, opts.short.strike);
@@ -494,6 +515,7 @@ export function buildDebitVerticalSpreadURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: opts.comboType,
   });
+  addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
 
@@ -508,6 +530,7 @@ export function buildIronCondorURL(opts: {
   shortCall: LadderRow;
   longCall: LadderRow;
   expiry: string;
+  quoteTs?: string | null;
 }): string {
   const sP = occSymbol(opts.symbol, opts.expiry, "put", opts.shortPut.strike);
   const lP = occSymbol(opts.symbol, opts.expiry, "put", opts.longPut.strike);
@@ -531,6 +554,7 @@ export function buildIronCondorURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: "iron_condor",
   });
+  addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
 
@@ -544,6 +568,7 @@ export function buildStraddleURL(opts: {
   call: LadderRow;
   put: LadderRow;
   expiry: string;
+  quoteTs?: string | null;
 }): string {
   const callContract = occSymbol(opts.symbol, opts.expiry, "call", opts.call.strike);
   const putContract = occSymbol(opts.symbol, opts.expiry, "put", opts.put.strike);
@@ -560,5 +585,6 @@ export function buildStraddleURL(opts: {
     // two-leg debit position, not a credit combo) — so omit combo_type
     // and let the per-leg notional path price it. Net debit = max loss.
   });
+  addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }

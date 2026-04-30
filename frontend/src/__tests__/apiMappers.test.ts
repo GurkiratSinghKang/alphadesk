@@ -321,6 +321,37 @@ describe('mapEarningsDetail', () => {
     });
     expect(out.historicalEarnings?.stats.avgAbsMovePct).toBe(0.042);
   });
+
+  it('maps strike-ladder snapshot timestamp for order freshness', () => {
+    const out = mapEarningsDetail({
+      ...baseRaw,
+      strike_ladder: {
+        expiry: '2026-04-24',
+        underlying_price: 200,
+        fetched_at: '2026-04-23T15:00:00Z',
+        rows: [
+          {
+            strike: 200,
+            side: 'call',
+            bucket: 'ATM',
+            delta: 0.5,
+            bid: 1,
+            ask: 1.2,
+            mid: 1.1,
+            iv: 0.4,
+            yield_pct: 0.0055,
+            pop: 0.5,
+            theta: -0.04,
+            gamma: 0.01,
+            vega: 0.08,
+            oi: 100,
+            volume: 10,
+          },
+        ],
+      },
+    });
+    expect(out.strikeLadder?.fetchedAt).toBe('2026-04-23T15:00:00Z');
+  });
 });
 
 describe('getEarningsCalendar', () => {

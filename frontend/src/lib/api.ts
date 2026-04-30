@@ -2061,6 +2061,8 @@ interface RawStrikeLadder {
   expiry: string;
   underlying_price: number;
   rows: RawLadderRow[];
+  /** ISO timestamp of the options-chain snapshot used for row mids. */
+  fetched_at?: string | null;
   /** Round-4: true when the ladder is synthetic / demo data. */
   is_demo?: boolean;
 }
@@ -2272,6 +2274,7 @@ function mapStrikeLadder(raw: RawStrikeLadder): StrikeLadder {
     expiry: raw.expiry,
     underlyingPrice: raw.underlying_price,
     rows: raw.rows.map(mapLadderRow),
+    fetchedAt: raw.fetched_at ?? null,
     // Round-4: backend may flag synthetic / demo chain — UI badges it.
     isDemo: raw.is_demo === true,
   };
