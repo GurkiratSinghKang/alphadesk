@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui";
+import { usePreferencesStore, type ThemePreference } from "@/stores/preferences";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
@@ -35,6 +36,8 @@ function decodeJwtSub(): string | null {
 export function ProfileMenu() {
   const router = useRouter();
   const { tradingMode, setTradingMode } = useUIStore();
+  const theme = usePreferencesStore((s) => s.display.theme);
+  const setDisplayPref = usePreferencesStore((s) => s.setDisplayPref);
   const summary = usePortfolioStore((s) => s.summary);
   const { toast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -141,21 +144,33 @@ export function ProfileMenu() {
             {/* Theme section */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Appearance</h3>
-              <div className="rounded-lg border border-border bg-[var(--panel)] p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">Dark theme</p>
-                    <p className="text-[10px] text-muted-foreground">OLED optimized, reduced eye strain</p>
-                  </div>
-                  <span className="rounded bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">Active</span>
+              <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
+                <div
+                  role="radiogroup"
+                  aria-label="Theme preference"
+                  className="grid grid-cols-3 gap-1 rounded-md border border-border bg-bg p-1"
+                >
+                  {(["dark", "light", "system"] as const).map((opt: ThemePreference) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === opt}
+                      onClick={() => setDisplayPref("theme", opt)}
+                      className={cn(
+                        "min-h-9 rounded-sm px-2 text-[11px] font-medium capitalize transition-colors",
+                        theme === opt
+                          ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      )}
+                    >
+                      {opt}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between opacity-50">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">Light theme</p>
-                    <p className="text-[10px] text-muted-foreground">Coming soon</p>
-                  </div>
-                  <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Soon</span>
-                </div>
+                <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                  Light mode uses the tuned porcelain palette; System follows your OS.
+                </p>
               </div>
             </div>
             {/* Other settings placeholder */}

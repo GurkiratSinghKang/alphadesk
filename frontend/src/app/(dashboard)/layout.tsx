@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
-import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
@@ -14,7 +13,6 @@ import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
 import { useNotifications } from "@/hooks/useNotifications";
-import { usePreferencesStore } from "@/stores/preferences";
 import type { ReactNode } from "react";
 
 /**
@@ -42,7 +40,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Defer persisted store read to avoid hydration mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const tickerTapeOn = usePreferencesStore((s) => s.display.tickerTapeOn);
 
   useEffect(() => {
     function handleApiError(e: CustomEvent) {
@@ -162,7 +159,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
       <SessionExpiryBanner />
       <TopBar />
-      {tickerTapeOn && <TickerTape />}
       <StatusStrip />
       {/* Non-desk routes use natural document body scroll (simplest, matches
           browser mouse-wheel defaults). The previous `overflow-y-auto` here

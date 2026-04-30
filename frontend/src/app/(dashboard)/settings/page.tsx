@@ -439,12 +439,6 @@ export default function SettingsPage() {
           </div>
           <div className="space-y-1">
             <Toggle
-              checked={display.tickerTapeOn}
-              onChange={(v) => setDisplayPref("tickerTapeOn", v)}
-              label="Ticker Tape"
-              description="Show the scrolling market ticker below the header"
-            />
-            <Toggle
               checked={display.compactStrategyView}
               onChange={(v) => setDisplayPref("compactStrategyView", v)}
               label="Compact Strategy View"
@@ -455,20 +449,11 @@ export default function SettingsPage() {
                 lightweight-charts, the marquee, the pulse dots, etc. The
                 rest of the app honours `prefers-reduced-motion` instead.
                 Honest move: don't ship a setting we can't back. */}
-            {/* Wave 6γ (persona-112 + Round 5 deferred): "Light" removed
-                from the theme picker. The ``.light {}`` CSS tokens were
-                never fleshed out, so toggling the radio produced no visible
-                change — a promise the app couldn't keep. Until the light
-                palette is tuned, only System and Dark are offered, and
-                ``ThemeController`` treats a persisted "light" preference as
-                "dark" so users who flipped the radio pre-fix land on a
-                theme that actually renders. */}
             <div className="flex items-center justify-between gap-4 py-1.5">
               <div>
                 <p className="text-xs font-medium text-foreground">Theme</p>
                 <p className="t-meta mt-0.5">
-                  Dark mode is fully tuned today. Light mode is coming in a
-                  future release.
+                  Choose dark, light, or follow your OS preference.
                 </p>
               </div>
               <div
@@ -476,7 +461,7 @@ export default function SettingsPage() {
                 aria-label="Theme preference"
                 className="flex rounded-md border border-border overflow-hidden"
               >
-                {(["system", "dark"] as const).map((opt) => (
+                {(["system", "dark", "light"] as const).map((opt) => (
                   <button
                     key={opt}
                     type="button"

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import RegimePill from "@/components/primitives/RegimePill";
 import Mono from "@/components/typography/Mono";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
   Sheet,
   SheetTrigger,
@@ -219,6 +220,8 @@ export default function TopBar({
           </kbd>
         </button>
       )}
+
+      <ThemeToggle className="hidden sm:inline-flex" />
 
       <div className="hidden sm:block">
         <RegimePill regime={regime.regime} vol={regime.vol} label={regime.label} />

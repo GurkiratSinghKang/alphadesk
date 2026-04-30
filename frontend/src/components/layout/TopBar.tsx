@@ -9,6 +9,7 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import { NotificationCenter } from "./NotificationCenter";
+import { ThemeToggle } from "./ThemeToggle";
 // Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
 // "Morning Research" persisted to localStorage, dispatched
 // ``alphadesk:workspace-change`` into the void (zero subscribers
@@ -113,6 +114,7 @@ export function TopBar() {
       </button>
 
       <div className="flex items-center gap-2">
+        <ThemeToggle />
         <NotificationCenter />
         <ProfileMenu />
       </div>

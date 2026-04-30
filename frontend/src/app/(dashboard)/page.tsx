@@ -174,6 +174,14 @@ export default function DeskPage() {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>(
     () => rail[0]?.id ?? ""
   );
+  const selectedStrategy = useMemo(
+    () => rail.find((s) => s.id === selectedStrategyId) ?? rail[0],
+    [rail, selectedStrategyId],
+  );
+  const activeStrategyCount = useMemo(
+    () => rail.filter((s) => s.status === "active").length,
+    [rail],
+  );
   useEffect(() => {
     if (!selectedStrategyId && rail[0]?.id) {
       setSelectedStrategyId(rail[0].id);
@@ -800,6 +808,19 @@ export default function DeskPage() {
       contextBar={<ContextBar cells={contextCells} />}
       center={
         <>
+          <DashboardBriefStrip
+            marketOpen={marketOpen}
+            regimeLabel={regime.label ?? regime.regime}
+            symbol={symbol.ticker}
+            quote={quote}
+            selectedStrategyName={selectedStrategy?.name ?? "No strategy"}
+            activeStrategyCount={activeStrategyCount}
+            totalStrategyCount={rail.length}
+            positionsCount={positionRows.length}
+            openOrders={orderCount}
+            dayPnl={contextCells[1]}
+            buyingPower={contextCells[2]}
+          />
           <PriceChartPanel
             symbol={symbol}
             quote={quote}
@@ -884,6 +905,105 @@ export default function DeskPage() {
         />
       }
     />
+  );
+}
+
+function DashboardBriefStrip({
+  marketOpen,
+  regimeLabel,
+  symbol,
+  quote,
+  selectedStrategyName,
+  activeStrategyCount,
+  totalStrategyCount,
+  positionsCount,
+  openOrders,
+  dayPnl,
+  buyingPower,
+}: {
+  marketOpen: boolean;
+  regimeLabel: string;
+  symbol: string;
+  quote: ReturnType<typeof toQuote>;
+  selectedStrategyName: string;
+  activeStrategyCount: number;
+  totalStrategyCount: number;
+  positionsCount: number;
+  openOrders: number;
+  dayPnl?: ReturnType<typeof toContextCells>[number];
+  buyingPower?: ReturnType<typeof toContextCells>[number];
+}) {
+  const quoteTone =
+    quote.change > 0 ? "text-up-500" : quote.change < 0 ? "text-down-500" : "text-fg-muted";
+  const quoteMeta = quote.last > 0
+    ? `${quote.last.toFixed(2)} · ${(quote.changePct >= 0 ? "+" : "")}${quote.changePct.toFixed(2)}%`
+    : "No quote yet";
+  const dayTone =
+    dayPnl?.valueTone === "profit"
+      ? "text-up-500"
+      : dayPnl?.valueTone === "loss"
+        ? "text-down-500"
+        : "text-fg";
+
+  return (
+    <section
+      data-slot="dashboard-brief-strip"
+      aria-label="Dashboard decision summary"
+      className="grid shrink-0 grid-cols-2 border-b border-border bg-bg lg:grid-cols-4"
+    >
+      <div className="min-w-0 border-r border-b border-border-hair px-4 py-3 lg:border-b-0">
+        <span className="t-label text-fg-hint">Session</span>
+        <div className="mt-1 flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={marketOpen ? "h-2 w-2 rounded-full bg-up-500" : "h-2 w-2 rounded-full bg-fg-hint"}
+          />
+          <b className="font-mono text-[15px] font-medium text-ink-1000">
+            {marketOpen ? "Open" : "Closed"}
+          </b>
+        </div>
+        <p className="mt-1 truncate text-[12px] text-fg-muted">{regimeLabel}</p>
+      </div>
+
+      <div className="min-w-0 border-b border-border-hair px-4 py-3 lg:border-r lg:border-b-0">
+        <span className="t-label text-fg-hint">Focus</span>
+        <div className="mt-1 flex items-baseline gap-2">
+          <b className="font-mono text-[15px] font-medium text-ink-1000">{symbol}</b>
+          <span className={`font-mono text-[12px] ${quoteTone}`}>{quoteMeta}</span>
+        </div>
+        <p className="mt-1 truncate text-[12px] text-fg-muted">{selectedStrategyName}</p>
+      </div>
+
+      <div className="min-w-0 border-r border-border-hair px-4 py-3">
+        <span className="t-label text-fg-hint">Book posture</span>
+        <div className="mt-1 flex items-baseline gap-2">
+          <b className="font-mono text-[15px] font-medium text-ink-1000">
+            {positionsCount} positions
+          </b>
+          <span className="font-mono text-[12px] text-fg-muted">
+            {openOrders} working
+          </span>
+        </div>
+        <p className="mt-1 truncate text-[12px] text-fg-muted">
+          {activeStrategyCount}/{totalStrategyCount} strategies active
+        </p>
+      </div>
+
+      <div className="min-w-0 px-4 py-3">
+        <span className="t-label text-fg-hint">Capital</span>
+        <div className="mt-1 flex items-baseline gap-2">
+          <b className={`font-mono text-[15px] font-medium ${dayTone}`}>
+            {dayPnl?.value ?? "—"}
+          </b>
+          <span className="font-mono text-[12px] text-fg-muted">
+            {buyingPower?.value ?? "—"} BP
+          </span>
+        </div>
+        <p className="mt-1 truncate text-[12px] text-fg-muted">
+          {dayPnl?.delta ?? "Realized/unrealized split unavailable"}
+        </p>
+      </div>
+    </section>
   );
 }
 

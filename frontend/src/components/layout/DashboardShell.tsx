@@ -2,18 +2,15 @@
 
 import type { ReactNode } from "react";
 import { TopBar } from "@/components/layout/TopBar";
-import { TickerTape } from "@/components/layout/TickerTape";
 import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { ShortcutOverlay } from "@/components/ui/shortcut-overlay";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { usePreferencesStore } from "@/stores/preferences";
 
 export default function DashboardShell({ children }: { children: ReactNode }) {
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
-  const tickerTapeOn = usePreferencesStore((s) => s.display.tickerTapeOn);
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
@@ -27,7 +24,6 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
       </a>
 
       <TopBar />
-      {tickerTapeOn && <TickerTape />}
       <StatusStrip />
       <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
         {children}

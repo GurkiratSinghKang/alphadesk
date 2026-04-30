@@ -21,14 +21,19 @@ export interface NotificationPrefs {
 export type ThemePreference = "system" | "dark" | "light";
 
 export interface DisplayPrefs {
+  /**
+   * @deprecated The dashboard ticker tape was removed from the product
+   * chrome. Kept in the persisted shape so older localStorage payloads
+   * migrate without throwing, but no UI reads it anymore.
+   */
   tickerTapeOn: boolean;
   compactStrategyView: boolean;
   /**
    * Colour scheme preference. ``"system"`` defers to the OS via the
    * ``prefers-color-scheme`` media query; ``"dark"`` / ``"light"`` force the
    * matching ``class="dark"`` / ``class="light"`` attribute on ``<html>``.
-   * Phase 2 will ship proper light-mode surface tokens — for now the toggle
-   * exists so users have agency over the switch.
+   * The token layer ships tuned dark and light palettes; ``system`` follows
+   * the current OS preference.
    */
   theme: ThemePreference;
   // animationSpeed: REMOVED (persona-8 #2) — no consumer. Wiring a single
@@ -69,11 +74,10 @@ const defaultNotifications: NotificationPrefs = {
 };
 
 const defaultDisplay: DisplayPrefs = {
-  tickerTapeOn: true,
+  tickerTapeOn: false,
   compactStrategyView: false,
-  // Default to "dark" (matches the pre-existing hardcoded `<html class="dark">`
-  // behaviour) so existing users see no visual change until they opt in to
-  // "system" or "light". New users can switch in Settings.
+  // Default to "dark" to preserve the established desk look for existing
+  // users; the header toggle and Settings page now expose light mode.
   theme: "dark",
 };
 
