@@ -43,7 +43,13 @@ async def run_aggregate_risk_check(
     rejection shows the exact same string regardless of which surface
     triggered it.
     """
-    from api.routes.trades import _aggregate_risk_check
+    from api.routes.trades import _aggregate_risk_check, _is_trading_halted
+
+    if await _is_trading_halted():
+        return (
+            False,
+            "Emergency halt active. Use POST /api/v1/trades/resume to resume.",
+        )
     return await _aggregate_risk_check(request, username=username)
 
 

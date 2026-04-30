@@ -77,6 +77,20 @@ describe("Trade page deep-link pre-fill", () => {
     });
   });
 
+  it("pre-fills a plain equity limit ticket from chart deep-links", async () => {
+    setSearch("?symbol=AAPL&side=sell&qty=3&type=limit&limit=123.45&strategy=earnings-options-play");
+    const { getByLabelText, getByRole } = render(<TradePage />, { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect((getByLabelText("Symbol") as HTMLInputElement).value).toBe("AAPL");
+      expect((getByLabelText("Quantity") as HTMLInputElement).value).toBe("3");
+      expect((getByLabelText("Order type") as HTMLSelectElement).value).toBe("limit");
+      expect((getByLabelText("Price") as HTMLInputElement).value).toBe("123.45");
+      expect((getByLabelText("Strategy") as HTMLSelectElement).value).toBe("earnings-options-play");
+      expect(getByRole("radio", { name: "Sell" })).toHaveAttribute("aria-checked", "true");
+    });
+  });
+
   // ─── Task 23 — multi-leg / strangle pre-staging ───────────────────────────
 
   describe("multi-leg ?legs= param pre-staging", () => {

@@ -133,6 +133,15 @@ interface ActiveLeg {
   limitPrice?: number;
 }
 
+interface PlainEquityPrefill {
+  symbol: string;
+  side: "buy" | "sell";
+  qty: number;
+  type: "market" | "limit" | "stop" | "stop_limit";
+  price?: number;
+  stop?: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 function rangeToLimit(r: ChartRange): number {
@@ -177,6 +186,8 @@ export default function TradePage() {
   // recognises a defined-risk spread. Round-5 F-14.
   const [comboType, setComboType] = useState<string | null>(null);
   const [quoteAtFillTs, setQuoteAtFillTs] = useState<number | null>(null);
+  const [plainEquityPrefill, setPlainEquityPrefill] =
+    useState<PlainEquityPrefill | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -188,9 +199,12 @@ export default function TradePage() {
     const underlyingFromUrl = normalizeUnderlyingSymbol(params.get("symbol"));
     let firstParsedUnderlying: string | null = null;
 
-    if (strategyParam) setUrlStrategy(strategyParam);
-    if (comboParam) setComboType(comboParam);
+    setUrlStrategy(strategyParam || null);
+    setComboType(comboParam || null);
     setQuoteAtFillTs(quoteTsParam);
+    setActiveContract(null);
+    setActiveLegs([]);
+    setPlainEquityPrefill(null);
 
     if (contractOcc) {
       // Single-leg deep-link.
@@ -226,6 +240,31 @@ export default function TradePage() {
         legs.push({ occ, ...parsed, orderSide, qty, limitPrice });
       }
       if (legs.length > 0) setActiveLegs(legs);
+    } else if (underlyingFromUrl) {
+      const rawSide = params.get("side") ?? "buy";
+      const side: "buy" | "sell" = rawSide === "sell" ? "sell" : "buy";
+      const qtyRaw = Number(params.get("qty") ?? "1");
+      const qty = Number.isInteger(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1;
+      const rawType = params.get("type");
+      const type: PlainEquityPrefill["type"] =
+        rawType === "limit" ||
+        rawType === "stop" ||
+        rawType === "stop_limit" ||
+        rawType === "market"
+          ? rawType
+          : "market";
+      const rawLimit = params.get("limit") ?? params.get("price");
+      const limit = rawLimit ? Number(rawLimit) : NaN;
+      const rawStop = params.get("stop") ?? params.get("stop_price");
+      const stop = rawStop ? Number(rawStop) : NaN;
+      setPlainEquityPrefill({
+        symbol: underlyingFromUrl,
+        side,
+        qty,
+        type,
+        price: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+        stop: Number.isFinite(stop) && stop > 0 ? String(stop) : undefined,
+      });
     }
     const nextUnderlying = underlyingFromUrl ?? firstParsedUnderlying;
     if (nextUnderlying) {
@@ -323,8 +362,11 @@ export default function TradePage() {
         stop_price: stopNum,
         quote_at_fill_ts: quoteAtFillTs ?? undefined,
         // Round-5 F-1: thread the URL's strategy tag through to the
-        // backend `CreateOrderRequest.strategy` field.
-        strategy: urlStrategy ?? undefined,
+        // backend `CreateOrderRequest.strategy` field. When the user
+        // changes the Strategy select on /trade, the current ticket
+        // selection wins so reports reflect the intent they actually
+        // submitted instead of the original deep-link default.
+        strategy: order.strategyId || urlStrategy || undefined,
         // Round-5 F-14: forward combo metadata when present.
         combo_type: comboType ?? undefined,
         ...(hasLegs
@@ -381,7 +423,7 @@ export default function TradePage() {
     if (activeContract) {
       return {
         ...ORDER_BAR_DEFAULTS,
-        strategyId: rail[0]?.id ?? "",
+        strategyId: urlStrategy ?? rail[0]?.id ?? "",
         symbol: activeContract.occ,
         side: activeContract.orderSide,
         quantity: activeContract.qty,
@@ -396,7 +438,7 @@ export default function TradePage() {
       const first = activeLegs[0];
       return {
         ...ORDER_BAR_DEFAULTS,
-        strategyId: rail[0]?.id ?? "",
+        strategyId: urlStrategy ?? rail[0]?.id ?? "",
         symbol: first.occ,
         side: first.orderSide,
         quantity: first.qty,
@@ -407,11 +449,23 @@ export default function TradePage() {
         price: first.limitPrice,
       };
     }
+    if (plainEquityPrefill) {
+      return {
+        ...ORDER_BAR_DEFAULTS,
+        strategyId: urlStrategy ?? rail[0]?.id ?? "",
+        symbol: plainEquityPrefill.symbol,
+        side: plainEquityPrefill.side,
+        quantity: plainEquityPrefill.qty,
+        type: plainEquityPrefill.type,
+        price: plainEquityPrefill.price,
+        stop: plainEquityPrefill.stop,
+      };
+    }
     return {
       ...ORDER_BAR_DEFAULTS,
-      strategyId: rail[0]?.id ?? "",
+      strategyId: urlStrategy ?? rail[0]?.id ?? "",
     };
-  }, [activeContract, activeLegs, rail]);
+  }, [activeContract, activeLegs, plainEquityPrefill, rail, urlStrategy]);
 
   // Viewport audit r5 #9: 100vh jumps on iOS Safari when the address bar
   // collapses — use dvh for the dynamic-viewport unit (Safari 15.4+).

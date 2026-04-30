@@ -1085,6 +1085,45 @@ describe('placeOrder', () => {
     expect(body.legs[0].asset_class).toBe('option');
     expect(body.quote_at_fill_ts).toBe(1_777_000_000);
   });
+
+  it('preserves each explicit leg price even when the ticket has a top-level price', async () => {
+    const order = { id: 'ord-6', symbol: 'NVDA260424P00200000', side: 'sell' as const, type: 'limit' as const, quantity: 1, status: 'pending' as const, createdAt: '2026-04-10T09:30:00Z', legs: [] };
+    mockFetch.mockReturnValueOnce(ok(order));
+
+    await placeOrder({
+      symbol: 'NVDA260424P00200000',
+      side: 'sell',
+      type: 'limit',
+      quantity: 1,
+      price: 1.45,
+      quote_at_fill_ts: 1_777_000_000,
+      legs: [
+        { symbol: 'NVDA260424P00200000', side: 'sell', quantity: 1, price: 1.45 },
+        { symbol: 'NVDA260424P00195000', side: 'buy', quantity: 1, price: 0.95 },
+      ],
+    });
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.legs[0].limit_price).toBe(1.45);
+    expect(body.legs[1].limit_price).toBe(0.95);
+  });
+
+  it('does not fabricate quote freshness timestamps for option orders', async () => {
+    const order = { id: 'ord-7', symbol: 'AAPL260417C00200000', side: 'buy' as const, type: 'limit' as const, quantity: 1, status: 'pending' as const, createdAt: '2026-04-10T09:30:00Z', legs: [] };
+    mockFetch.mockReturnValueOnce(ok(order));
+
+    await placeOrder({
+      symbol: 'AAPL260417C00200000',
+      side: 'buy',
+      type: 'limit',
+      quantity: 1,
+      price: 5,
+    });
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.legs[0].asset_class).toBe('option');
+    expect(body.quote_at_fill_ts).toBeUndefined();
+  });
 });
 
 // ─── cancelOrder ─────────────────────────────────────────────────────────────

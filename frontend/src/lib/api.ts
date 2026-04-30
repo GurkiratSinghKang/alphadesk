@@ -1255,15 +1255,18 @@ export interface PlaceOrderOptions {
 
 export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
   // Transform frontend payload to backend CreateOrderRequest format.
+  const explicitLegs = payload.legs != null;
   const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => {
     const symbol = leg.symbol.trim().toUpperCase();
+    const limitSource = explicitLegs ? leg.price : (leg.price ?? payload.price);
+    const stopSource = explicitLegs ? leg.price : (payload.stop_price ?? leg.price);
     return {
       symbol,
       side: leg.side,
       qty: leg.quantity,
       order_type: payload.type,
-      limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (payload.price ?? leg.price ?? null) : null,
-      stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (payload.stop_price ?? leg.price ?? null) : null,
+      limit_price: payload.type === "limit" || payload.type === "stop_limit" ? (limitSource ?? null) : null,
+      stop_price: payload.type === "stop" || payload.type === "stop_limit" ? (stopSource ?? null) : null,
       asset_class: isOccOptionSymbol(symbol) ? "option" : "equity",
     };
   });
@@ -1297,15 +1300,18 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
   if (payload.strategy) reqBody.strategy = payload.strategy;
   if (payload.combo_type) reqBody.combo_type = payload.combo_type;
   if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
-  const requiresFreshQuote =
-    payload.type !== "market" || legs.some((leg) => leg.asset_class === "option");
+  const hasOptionLeg = legs.some((leg) => leg.asset_class === "option");
+  const requiresFreshQuote = payload.type !== "market" || hasOptionLeg;
   if (payload.quote_at_fill_ts != null) {
     reqBody.quote_at_fill_ts = normalizeQuoteTimestamp(payload.quote_at_fill_ts);
-  } else if (requiresFreshQuote) {
+  } else if (requiresFreshQuote && !hasOptionLeg) {
     // Direct UI submissions always include a timestamp so the backend's
     // stale-quote gate runs instead of silently skipping. Callers that own
     // a real quote snapshot should pass it; this fallback preserves older
-    // manual flows while still enabling server-side drift checks.
+    // manual equity flows while still enabling server-side drift checks.
+    // Option tickets must carry a real chain snapshot timestamp from the
+    // source surface; fabricating Date.now() would make a stale option chain
+    // look fresh and defeat the backend's fail-closed option gate.
     reqBody.quote_at_fill_ts = Date.now() / 1000;
   }
 

@@ -153,6 +153,8 @@ describe("Trade page parses Round-5 deep-link contract", () => {
       const stratChip = container.querySelector("[data-slot='trade-strategy-tag']");
       expect(stratChip).not.toBeNull();
       expect(stratChip!.textContent).toContain("earnings-options-play");
+      expect((container.querySelector("[aria-label='Strategy']") as HTMLSelectElement | null)?.value)
+        .toBe("earnings-options-play");
 
       // The visual trade context should follow the URL underlying, not
       // the previously-selected desk symbol. The ticket can still carry
@@ -208,6 +210,29 @@ describe("Trade page parses Round-5 deep-link contract", () => {
     await waitFor(() => expect(placeOrder).toHaveBeenCalledTimes(1));
     expect(vi.mocked(placeOrder).mock.calls[0][0]).toMatchObject({
       quote_at_fill_ts: Date.parse(quoteIso) / 1000,
+      strategy: "earnings-options-play",
+    });
+  });
+
+  it("forwards the selected /trade strategy for manual ticket submissions", async () => {
+    setSearch("?symbol=SPY");
+    const { container } = render(<TradePage />, { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      const select = container.querySelector("[aria-label='Strategy']") as HTMLSelectElement | null;
+      expect(select).not.toBeNull();
+      expect([...select!.options].some((o) => o.value === "earnings-options-play")).toBe(true);
+    });
+
+    fireEvent.change(container.querySelector("[aria-label='Strategy']") as HTMLSelectElement, {
+      target: { value: "earnings-options-play" },
+    });
+    fireEvent.click(container.querySelector("[data-testid='order-bar-submit']") as HTMLButtonElement);
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(placeOrder).mock.calls[0][0]).toMatchObject({
+      symbol: "SPY",
+      strategy: "earnings-options-play",
     });
   });
 

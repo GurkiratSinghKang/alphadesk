@@ -513,6 +513,7 @@ export default function DeskPage() {
         quantity: qty,
         price: order.price,
         stop_price: stopNum,
+        strategy: order.strategyId || undefined,
       });
       usePortfolioStore.getState().addOrder(placed);
 

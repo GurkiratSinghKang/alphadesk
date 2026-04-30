@@ -3452,13 +3452,14 @@ async def _aggregate_risk_check(
         except HTTPException:
             raise
         except Exception:
-            # Chain probe is best-effort; if it fails for transient
-            # reasons we don't want to block legitimate traders. Log
-            # and let the order proceed — broker-side checks will
-            # catch a truly malformed contract.
-            logger.debug(
-                "chain demo-gate probe failed; allowing order through",
+            logger.warning(
+                "chain demo-gate probe failed; refusing option order fail-closed",
                 exc_info=True,
+            )
+            return False, (
+                "Options chain verification unavailable. Option orders are "
+                "blocked until live chain provenance can be confirmed; refresh "
+                "the ticket and try again."
             )
 
     # J-7 (Round-6): quote-staleness gate. Skipped when caller didn't

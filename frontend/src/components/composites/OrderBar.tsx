@@ -83,6 +83,18 @@ export default function OrderBar({
     defaults?.strategyId ?? strategies[0]?.id ?? ""
   );
   const strategyId = controlledStrategyId ?? internalStrategyId;
+  const lastDefaultStrategyIdRef = React.useRef<string | undefined>(defaults?.strategyId);
+  React.useEffect(() => {
+    if (
+      controlledStrategyId == null &&
+      defaults?.strategyId &&
+      defaults.strategyId !== lastDefaultStrategyIdRef.current
+    ) {
+      lastDefaultStrategyIdRef.current = defaults.strategyId;
+      setInternalStrategyId(defaults.strategyId);
+      onStrategyChange?.(defaults.strategyId);
+    }
+  }, [controlledStrategyId, defaults?.strategyId, onStrategyChange]);
   // When strategies resolve later (React Query), adopt the first one as
   // the sensible default so the select doesn't stay on an empty string.
   React.useEffect(() => {
@@ -194,6 +206,14 @@ export default function OrderBar({
       setPrice(String(defaults.price));
     }
   }, [defaults?.price]);
+
+  const lastDefaultStopRef = React.useRef<string | undefined>(defaults?.stop);
+  React.useEffect(() => {
+    if (defaults?.stop != null && defaults.stop !== lastDefaultStopRef.current) {
+      lastDefaultStopRef.current = defaults.stop;
+      setStop(defaults.stop);
+    }
+  }, [defaults?.stop]);
 
   // persona-99 #2 — Sell confirmation on mobile. At 375px the Buy/Sell
   // buttons are shoulder-to-shoulder; a mis-tap on Sell is catastrophic.

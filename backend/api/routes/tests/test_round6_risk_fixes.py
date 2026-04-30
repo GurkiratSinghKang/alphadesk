@@ -157,6 +157,39 @@ async def test_quote_staleness_requires_ts_for_option_orders() -> None:
     assert "Quote freshness required" in reason
 
 
+@pytest.mark.asyncio
+async def test_aggregate_risk_rejects_option_when_chain_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Option provenance must fail closed when chain freshness is unknown."""
+
+    async def _tradable(_symbol: str) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.delenv("TRADES_ALLOW_DEMO_CHAIN_ORDERS", raising=False)
+    monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
+    with patch(
+        "services.options.fetch_chain",
+        new=AsyncMock(side_effect=RuntimeError("polygon unavailable")),
+    ):
+        leg = OrderLeg(
+            symbol="AAPL260417C00200000",
+            side=OrderSide.BUY,
+            qty=1,
+            order_type=OrderType.LIMIT,
+            limit_price=5.0,
+            asset_class="option",
+        )
+        req = CreateOrderRequest(
+            legs=[leg],
+            quote_at_fill_ts=time.time(),
+        )
+        passed, reason = await trades_mod._aggregate_risk_check(req)
+
+    assert passed is False
+    assert "Options chain verification unavailable" in reason
+
+
 def test_occ_symbol_infers_option_asset_class() -> None:
     """Legacy callers cannot leave OCC legs classified as equity."""
     leg = OrderLeg(
