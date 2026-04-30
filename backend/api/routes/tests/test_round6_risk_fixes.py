@@ -169,6 +169,105 @@ def test_occ_symbol_infers_option_asset_class() -> None:
     assert leg.asset_class == "option"
 
 
+# --------------------------------------------------------------------------- #
+# J-6 — live account preflight                                                #
+# --------------------------------------------------------------------------- #
+
+
+def _single_equity_limit_order() -> CreateOrderRequest:
+    return CreateOrderRequest(
+        legs=[
+            OrderLeg(
+                symbol="AAPL",
+                side=OrderSide.BUY,
+                qty=1,
+                order_type=OrderType.LIMIT,
+                limit_price=100.0,
+            )
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_aggregate_risk_rejects_when_account_preflight_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live mode must not approve orders without current account data."""
+
+    async def _tradable(_symbol: str) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
+    monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
+    monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
+    monkeypatch.setattr(
+        trades_mod,
+        "_get_account_equity_and_buying_power",
+        AsyncMock(return_value=(0.0, 0.0)),
+    )
+
+    passed, reason = await trades_mod._aggregate_risk_check(_single_equity_limit_order())
+
+    assert passed is False
+    assert "Account preflight unavailable" in reason
+
+
+@pytest.mark.asyncio
+async def test_live_aggregate_risk_rejects_buy_when_buying_power_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live buy orders require a positive buying-power snapshot."""
+
+    async def _tradable(_symbol: str) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
+    monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
+    monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
+    monkeypatch.setattr(
+        trades_mod,
+        "_get_account_equity_and_buying_power",
+        AsyncMock(return_value=(100_000.0, 0.0)),
+    )
+
+    passed, reason = await trades_mod._aggregate_risk_check(_single_equity_limit_order())
+
+    assert passed is False
+    assert "Buying-power preflight unavailable" in reason
+
+
+@pytest.mark.asyncio
+async def test_paper_aggregate_risk_keeps_legacy_account_preflight_skip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Paper/dev flows can still run without live broker account data."""
+
+    async def _tradable(_symbol: str) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: False)
+    monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
+    monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
+    monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
+    monkeypatch.setattr(
+        trades_mod,
+        "_get_account_equity_and_buying_power",
+        AsyncMock(return_value=(0.0, 0.0)),
+    )
+    monkeypatch.setattr(
+        trades_mod,
+        "_get_open_position_count_and_sector_exposure",
+        AsyncMock(return_value=(0, {}, 0.0)),
+    )
+
+    passed, reason = await trades_mod._aggregate_risk_check(_single_equity_limit_order())
+
+    assert passed is True
+    assert reason == "passed"
+
+
 @pytest.mark.asyncio
 async def test_quote_staleness_rejects_old_snapshot() -> None:
     """Snapshot older than 30s → rejected."""

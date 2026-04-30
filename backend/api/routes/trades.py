@@ -3043,6 +3043,19 @@ async def _get_account_equity_and_buying_power() -> tuple[float, float]:
     return 0.0, 0.0
 
 
+def _live_broker_intent_enabled() -> bool:
+    """Return True only when the operator explicitly armed the live broker."""
+    try:
+        from core.config import is_live_alpaca_base_url, settings as _s
+        return bool(
+            getattr(_s, "LIVE_TRADING_ENABLED", False)
+            and is_live_alpaca_base_url(getattr(_s, "ALPACA_BASE_URL", None))
+        )
+    except Exception:
+        logger.warning("Failed to evaluate live broker intent", exc_info=True)
+        return False
+
+
 async def _get_realized_pnl_today() -> float:
     """J-3 — realized P&L for trades closed today (ET).
 
@@ -3469,8 +3482,19 @@ async def _aggregate_risk_check(
     # for the daily-loss gate below.
     bp_equity, buying_power = await _get_account_equity_and_buying_power()
     first_leg_for_bp = request.legs[0]
+    live_broker_enabled = _live_broker_intent_enabled()
+    if live_broker_enabled and bp_equity <= 0:
+        return False, (
+            "Account preflight unavailable: live trading requires current "
+            "broker equity and buying power before any order can be approved."
+        )
     if bp_equity > 0:
         if first_leg_for_bp.side == OrderSide.BUY:
+            if live_broker_enabled and buying_power <= 0:
+                return False, (
+                    "Buying-power preflight unavailable: live buy orders require "
+                    "positive current buying power before submission."
+                )
             if buying_power > 0 and incoming > buying_power:
                 return False, (
                     f"Buying-power preflight: order notional ${incoming:,.0f} "
