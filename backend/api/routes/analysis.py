@@ -608,10 +608,8 @@ def _symbol_seed(symbol: str) -> int:
 
 
 def _claude_unavailable() -> bool:
-    from agents.base import CLAUDE_CLI
-    if CLAUDE_CLI:
-        return False
-    return not settings.ANTHROPIC_API_KEY.get_secret_value()
+    from agents.base import claude_runtime_available
+    return not claude_runtime_available()
 
 
 def _demo_analysis(symbol: str, request: AnalysisRequest) -> AnalysisResponse:

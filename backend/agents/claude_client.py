@@ -39,10 +39,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from agents.base import _CLAUDE_SEMAPHORE
+from agents.claude_audit import new_claude_audit_id, write_claude_audit_record
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -50,8 +52,8 @@ logger = logging.getLogger(__name__)
 
 _MODEL_MAP = {
     "opus": "claude-opus-4-7",
-    "sonnet": "claude-sonnet-4-7",
-    "haiku": "claude-haiku-4-7",
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5-20251001",
 }
 
 
@@ -72,14 +74,15 @@ class ClaudeTimeoutError(TimeoutError):
     other upstream timeouts."""
 
 
-# USD per-1M-token list prices as of 2026-04. Kept here rather than in
+# USD per-1M-token list prices. Kept here rather than in
 # core/config so the pricing change is reviewed as a code change (audit
 # trail for finance) rather than an env flip.
 _MODEL_PRICING_PER_1M: dict[str, tuple[float, float]] = {
     # (input_usd_per_1m, output_usd_per_1m)
-    "claude-opus-4-7":   (15.00, 75.00),
-    "claude-sonnet-4-7": ( 3.00, 15.00),
-    "claude-haiku-4-7":  ( 0.80,  4.00),
+    "claude-opus-4-7":             (15.00, 75.00),
+    "claude-sonnet-4-6":           ( 3.00, 15.00),
+    # Conservative estimate for the account's current Haiku 4.5 model.
+    "claude-haiku-4-5-20251001":   ( 1.00,  5.00),
 }
 _FALLBACK_PRICING = (15.00, 75.00)  # conservative overestimate for unknown models
 
@@ -177,7 +180,8 @@ class ClaudeClient:
     """Minimal async Claude wrapper exposing a single ``complete()`` method."""
 
     def __init__(self, api_key: str | None = None) -> None:
-        key = api_key or settings.ANTHROPIC_API_KEY.get_secret_value()
+        api_secret = getattr(settings, "ANTHROPIC_API_KEY", None)
+        key = api_key or (api_secret.get_secret_value() if api_secret else "")
         if not key:
             raise RuntimeError(
                 "ANTHROPIC_API_KEY is not configured; ClaudeClient unavailable"
@@ -262,6 +266,9 @@ class ClaudeClient:
             )
 
         async with _CLAUDE_SEMAPHORE:
+            request_id = new_claude_audit_id()
+            request_payload: dict[str, Any] | None = None
+            started = time.monotonic()
             try:
                 # Round-17 / persona-11 + Round-21 cost: wrap the system
                 # prompt in a ``cache_control: ephemeral`` block so the
@@ -280,12 +287,19 @@ class ClaudeClient:
                     ]
                 else:
                     system_param = system
+                messages = [{"role": "user", "content": user}]
+                request_payload = {
+                    "model": resolved,
+                    "max_tokens": max_tokens,
+                    "system": system_param,
+                    "messages": messages,
+                }
                 resp = await asyncio.wait_for(
                     self._client.messages.create(
                         model=resolved,
                         max_tokens=max_tokens,
                         system=system_param,
-                        messages=[{"role": "user", "content": user}],
+                        messages=messages,
                     ),
                     timeout=t,
                 )
@@ -316,20 +330,53 @@ class ClaudeClient:
                     or "-",
                     extra=log_ctx,
                 )
+                await write_claude_audit_record(
+                    request_id=request_id,
+                    source="agents.claude_client.complete",
+                    request=request_payload or {
+                        "model": resolved,
+                        "max_tokens": max_tokens,
+                        "system": system,
+                        "messages": [{"role": "user", "content": user}],
+                    },
+                    status="timeout",
+                    context=context,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    error={
+                        "type": type(exc).__name__,
+                        "message": f"exceeded {t:.1f}s deadline",
+                    },
+                )
                 raise ClaudeTimeoutError(
                     f"Claude completion exceeded {t:.1f}s deadline (model={resolved})"
                 ) from exc
-            except Exception:
+            except Exception as exc:
                 # Round-5 H-2: any other failure — also reverse the
                 # estimate. Anthropic almost certainly didn't bill us
                 # for a 4xx/5xx; reversing the estimate keeps the
                 # accumulator honest.
                 await _reconcile_spend(pre_estimate_usd, 0.0)
+                await write_claude_audit_record(
+                    request_id=request_id,
+                    source="agents.claude_client.complete",
+                    request=request_payload or {
+                        "model": resolved,
+                        "max_tokens": max_tokens,
+                        "system": system,
+                        "messages": [{"role": "user", "content": user}],
+                    },
+                    status="error",
+                    context=context,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    error={"type": type(exc).__name__, "message": str(exc)},
+                )
                 raise
 
-        input_tokens = int(getattr(resp.usage, "input_tokens", 0) or 0)
-        output_tokens = int(getattr(resp.usage, "output_tokens", 0) or 0)
+        usage = getattr(resp, "usage", None)
+        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
         cost_usd = _estimate_cost_usd(resolved, input_tokens, output_tokens)
+        text = "".join(b.text for b in resp.content if hasattr(b, "text"))
         # Round-5 H-2: reconcile the pre-call estimate against the actual
         # cost. Best-effort — Redis blips don't fail the request.
         await _reconcile_spend(pre_estimate_usd, cost_usd)
@@ -352,8 +399,31 @@ class ClaudeClient:
             {k: v for k, v in log_ctx.items() if k not in {"event", "model", "max_tokens", "input_tokens", "output_tokens", "cost_usd"}} or "-",
             extra=log_ctx,
         )
+        await write_claude_audit_record(
+            request_id=request_id,
+            source="agents.claude_client.complete",
+            request=request_payload or {
+                "model": resolved,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+            response={
+                "model": getattr(resp, "model", resolved),
+                "stop_reason": getattr(resp, "stop_reason", None),
+                "content": text,
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                "cost_usd": cost_usd,
+            },
+            status="success",
+            context=context,
+            duration_ms=int((time.monotonic() - started) * 1000),
+        )
 
-        return "".join(b.text for b in resp.content if hasattr(b, "text"))
+        return text
 
 
 # Round-4 CLUSTER 2 #9: shared async client singleton. Each ClaudeClient

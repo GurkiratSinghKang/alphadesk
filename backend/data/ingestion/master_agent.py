@@ -1132,17 +1132,90 @@ class MasterAgent:
         )
 
         try:
-            claude_cli = shutil.which("claude")
-            if not claude_cli:
-                return {"claude_decision": "approve", "claude_reason": "Claude CLI not found, rules-based approval", "size_adjustment": 1.0}
-            proc = await asyncio.create_subprocess_exec(
-                claude_cli, "--print", "--model", "haiku", "--output-format", "json", prompt,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            raw = stdout.decode(errors="replace").strip()
-            data = json.loads(raw)
-            result_text = data.get("result", raw) if isinstance(data, dict) else raw
+            result_text: str | None = None
+            mode = "auto"
+            try:
+                from agents.claude_client import get_client
+                from core.config import settings
+
+                api_secret = getattr(settings, "ANTHROPIC_API_KEY", None)
+                api_key = api_secret.get_secret_value() if api_secret else ""
+                mode = (getattr(settings, "CLAUDE_BACKEND", "auto") or "auto").lower()
+                if api_key and mode in {"auto", "api"}:
+                    result_text = await get_client().complete(
+                        system="You are AlphaDesk's risk reviewer. Return only JSON.",
+                        user=prompt,
+                        model="haiku",
+                        max_tokens=800,
+                        timeout=30,
+                        context={"endpoint": "master_agent.smart_review", "symbol": symbol},
+                    )
+            except Exception:
+                logger.warning(
+                    "master_agent: Claude API smart-review failed for %s; trying CLI fallback",
+                    symbol, exc_info=True,
+                )
+
+            if result_text is None:
+                if mode == "api":
+                    return {"claude_decision": "approve", "claude_reason": "Claude API unavailable, rules-based approval", "size_adjustment": 1.0}
+                claude_cli = shutil.which("claude")
+                if not claude_cli:
+                    return {"claude_decision": "approve", "claude_reason": "Claude unavailable, rules-based approval", "size_adjustment": 1.0}
+                from agents.claude_audit import new_claude_audit_id, write_claude_audit_record
+
+                request_id = new_claude_audit_id()
+                request_payload = {
+                    "runtime": "cli",
+                    "model": "haiku",
+                    "system": "AlphaDesk master-agent trade risk review",
+                    "prompt": prompt,
+                }
+                t0 = asyncio.get_running_loop().time()
+                proc = await asyncio.create_subprocess_exec(
+                    claude_cli, "--print", "--model", "haiku", "--output-format", "json", prompt,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+                except asyncio.TimeoutError:
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source="master_agent.smart_review.cli",
+                        request=request_payload,
+                        status="timeout",
+                        context={"endpoint": "master_agent.smart_review", "symbol": symbol},
+                        duration_ms=int((asyncio.get_running_loop().time() - t0) * 1000),
+                        error={"type": "TimeoutError", "message": "Claude CLI exceeded 30s"},
+                    )
+                    raise
+                elapsed_ms = int((asyncio.get_running_loop().time() - t0) * 1000)
+                raw = stdout.decode(errors="replace").strip()
+                err = stderr.decode(errors="replace").strip()
+                if proc.returncode != 0:
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source="master_agent.smart_review.cli",
+                        request=request_payload,
+                        response={"raw": raw, "stderr": err},
+                        status="error",
+                        context={"endpoint": "master_agent.smart_review", "symbol": symbol},
+                        duration_ms=elapsed_ms,
+                        error={"type": "ClaudeCLIError", "message": err or "non-zero exit"},
+                    )
+                    return {"claude_decision": "approve", "claude_reason": "Claude unavailable, rules-based approval", "size_adjustment": 1.0}
+
+                data = json.loads(raw)
+                result_text = data.get("result", raw) if isinstance(data, dict) else raw
+                await write_claude_audit_record(
+                    request_id=request_id,
+                    source="master_agent.smart_review.cli",
+                    request=request_payload,
+                    response={"raw": raw, "result_text": result_text},
+                    status="success",
+                    context={"endpoint": "master_agent.smart_review", "symbol": symbol},
+                    duration_ms=elapsed_ms,
+                )
 
             # Try to find JSON in the response
             json_match = re.search(r'\{[^}]*"decision"[^}]*\}', result_text)

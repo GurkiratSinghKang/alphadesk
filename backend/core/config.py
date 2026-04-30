@@ -75,6 +75,16 @@ class Settings(BaseSettings):
 
     # --- AI ---
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
+    # Claude runtime used by BaseAgent chat/analysis paths:
+    #   auto -> Anthropic API when ANTHROPIC_API_KEY is set, otherwise CLI
+    #   api  -> require Anthropic API key
+    #   cli  -> require local Claude CLI
+    CLAUDE_BACKEND: str = "auto"
+    # Raw Anthropic request/response JSONL audit trail. Disabled by default
+    # because prompts can contain account, order, and user context.
+    CLAUDE_AUDIT_LOG_ENABLED: bool = False
+    CLAUDE_AUDIT_LOG_DIR: str = "logs/claude"
+    CLAUDE_AUDIT_LOG_MAX_CHARS: int = 200_000
 
     # --- News ---
     NEWSDATA_API_KEY: SecretStr = SecretStr("")

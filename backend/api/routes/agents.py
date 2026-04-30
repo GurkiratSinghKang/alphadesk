@@ -199,12 +199,9 @@ _AGENT_NAMES = [
 
 
 def _claude_unavailable() -> bool:
-    """Check if neither Claude CLI nor API key is available."""
-    from agents.base import CLAUDE_CLI
-    if CLAUDE_CLI:
-        return False  # CLI is available
-    from core.config import settings
-    return not settings.ANTHROPIC_API_KEY.get_secret_value()
+    """Check whether the configured Claude backend is available."""
+    from agents.base import claude_runtime_available
+    return not claude_runtime_available()
 
 
 # ---------------------------------------------------------------------------

@@ -159,6 +159,24 @@ def _scrub_pii(text: str) -> str:
 # Locate the claude CLI binary
 CLAUDE_CLI = shutil.which("claude")
 
+
+def claude_backend_mode() -> str:
+    mode = (settings.CLAUDE_BACKEND or "auto").strip().lower()
+    return mode if mode in {"auto", "api", "cli"} else "auto"
+
+
+def claude_runtime_available() -> bool:
+    """Return whether the configured Claude runtime is available."""
+    api_secret = getattr(settings, "ANTHROPIC_API_KEY", None)
+    api_available = bool(api_secret.get_secret_value() if api_secret else "")
+    cli_available = CLAUDE_CLI is not None
+    mode = claude_backend_mode()
+    if mode == "api":
+        return api_available
+    if mode == "cli":
+        return cli_available
+    return api_available or cli_available
+
 # Wave 3L Fix 9 (persona-86/90): concurrency ceiling on Claude calls.
 # Without this, a burst of agent requests (e.g. 50 screener triggers
 # firing on a market event) would spawn 50 concurrent ``claude`` CLI
@@ -195,9 +213,9 @@ def _parse_retry_after_seconds(exc: Exception) -> float | None:
 class BaseAgent(ABC):
     """Base class for all AlphaDesk agents.
 
-    Uses Claude CLI subprocess (Option 2) as the primary execution method.
-    This leverages the user's existing Claude Code subscription — no separate
-    API key required. Falls back to the Anthropic API if CLI is unavailable.
+    Uses the Anthropic API when ``ANTHROPIC_API_KEY`` is configured, falling
+    back to the Claude CLI only in ``CLAUDE_BACKEND=auto`` mode when the API
+    key is absent. ``CLAUDE_BACKEND=api`` or ``cli`` can force either runtime.
     """
 
     name: str = "base"
@@ -209,27 +227,32 @@ class BaseAgent(ABC):
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(f"agent.{self.name}")
-        self._use_cli = CLAUDE_CLI is not None
+        self._use_cli = False
         self._api_client = None
+        api_secret = getattr(settings, "ANTHROPIC_API_KEY", None)
+        api_key = api_secret.get_secret_value() if api_secret else ""
+        mode = claude_backend_mode()
 
-        if self._use_cli:
+        if api_key and mode in {"auto", "api"}:
+            import anthropic
+            self._api_client = anthropic.AsyncAnthropic(api_key=api_key)
+            self.logger.info("Agent '%s' using Anthropic API", self.name)
+        elif CLAUDE_CLI and mode in {"auto", "cli"}:
+            self._use_cli = True
             self.logger.info("Agent '%s' using Claude CLI at %s", self.name, CLAUDE_CLI)
         else:
-            # Fallback to API
-            api_key = settings.ANTHROPIC_API_KEY.get_secret_value()
-            if api_key:
-                import anthropic
-                self._api_client = anthropic.AsyncAnthropic(api_key=api_key)
-                self.logger.info("Agent '%s' using Anthropic API", self.name)
-            else:
-                self.logger.warning("Agent '%s': no CLI or API key — unavailable", self.name)
+            self.logger.warning(
+                "Agent '%s': configured Claude backend '%s' unavailable "
+                "(api_key=%s cli=%s)",
+                self.name, mode, bool(api_key), bool(CLAUDE_CLI),
+            )
 
     @property
     def available(self) -> bool:
         return self._use_cli or self._api_client is not None
 
     async def run(self, task: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Execute a task. Tries CLI first, falls back to API."""
+        """Execute a task through the configured Claude runtime."""
         if not self.available:
             return {"response": f"Agent '{self.name}' unavailable (no Claude CLI or API key).", "error": True}
 
@@ -270,6 +293,8 @@ class BaseAgent(ABC):
         allowed_tools: list[str] | None = None,
     ) -> dict[str, Any]:
         """Run via Claude CLI subprocess with --print and --output-format json."""
+        from agents.claude_audit import new_claude_audit_id, write_claude_audit_record
+
         cmd = [
             CLAUDE_CLI,
             "--print",
@@ -289,6 +314,14 @@ class BaseAgent(ABC):
         # of agent triggers would OOM the container.
         async with _CLAUDE_SEMAPHORE:
             for attempt in range(1, self.max_retries + 1):
+                request_id = new_claude_audit_id()
+                request_payload = {
+                    "runtime": "cli",
+                    "model": self.model,
+                    "system": self.system_prompt,
+                    "prompt": prompt,
+                    "allowed_tools": allowed_tools or [],
+                }
                 try:
                     t0 = time.monotonic()
                     proc = await asyncio.create_subprocess_exec(
@@ -304,6 +337,15 @@ class BaseAgent(ABC):
                     if proc.returncode != 0:
                         err = stderr.decode(errors="replace").strip()
                         self.logger.error("CLI error (attempt %d): %s", attempt, err[:200])
+                        await write_claude_audit_record(
+                            request_id=request_id,
+                            source=f"agent.{self.name}.cli",
+                            request=request_payload,
+                            status="error",
+                            context={"agent": self.name, "attempt": attempt},
+                            duration_ms=int(elapsed * 1000),
+                            error={"type": "ClaudeCLIError", "message": err},
+                        )
                         if attempt < self.max_retries:
                             await asyncio.sleep(self.retry_delay)
                             continue
@@ -312,10 +354,28 @@ class BaseAgent(ABC):
                     raw = stdout.decode(errors="replace").strip()
                     self.logger.info("CLI completed in %.1fs (%d chars)", elapsed, len(raw))
 
-                    return self._parse_cli_response(raw)
+                    parsed = self._parse_cli_response(raw)
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.cli",
+                        request=request_payload,
+                        response={"raw": raw, "parsed": parsed},
+                        status="success",
+                        context={"agent": self.name, "attempt": attempt},
+                        duration_ms=int(elapsed * 1000),
+                    )
+                    return parsed
 
                 except asyncio.TimeoutError:
                     self.logger.warning("CLI timeout (attempt %d)", attempt)
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.cli",
+                        request=request_payload,
+                        status="timeout",
+                        context={"agent": self.name, "attempt": attempt},
+                        error={"type": "TimeoutError", "message": "Claude CLI exceeded 120s"},
+                    )
                     if attempt < self.max_retries:
                         await asyncio.sleep(self.retry_delay)
                         continue
@@ -323,6 +383,14 @@ class BaseAgent(ABC):
 
                 except Exception as exc:
                     self.logger.error("CLI exception (attempt %d): %s", attempt, exc)
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.cli",
+                        request=request_payload,
+                        status="error",
+                        context={"agent": self.name, "attempt": attempt},
+                        error={"type": type(exc).__name__, "message": str(exc)},
+                    )
                     if attempt < self.max_retries:
                         await asyncio.sleep(self.retry_delay)
                         continue
@@ -360,15 +428,14 @@ class BaseAgent(ABC):
     async def _run_api(self, prompt: str) -> dict[str, Any]:
         """Fallback: run via Anthropic API."""
         import anthropic
+        from agents.claude_audit import new_claude_audit_id, write_claude_audit_record
 
-        # Map CLI model aliases to CURRENT API model IDs. Previous values
-        # (``claude-opus-4-20250514`` etc.) were retired in 2025 and now 404
-        # at the API — every API-fallback call silently failed. Updated to
-        # the Opus 4.7 family (current as of 2026).
+        # Map CLI model aliases to Anthropic API model IDs returned by the
+        # account's /v1/models endpoint (verified 2026-04-29).
         model_map = {
             "opus": "claude-opus-4-7",
-            "sonnet": "claude-sonnet-4-7",
-            "haiku": "claude-haiku-4-7",
+            "sonnet": "claude-sonnet-4-6",
+            "haiku": "claude-haiku-4-5-20251001",
         }
         model_id = model_map.get(self.model, self.model)
 
@@ -389,18 +456,46 @@ class BaseAgent(ABC):
                         if self.system_prompt
                         else self.system_prompt
                     )
+                    messages = [{"role": "user", "content": prompt}]
+                    request_id = new_claude_audit_id()
+                    request_payload = {
+                        "model": model_id,
+                        "max_tokens": 4096,
+                        "system": system_param,
+                        "messages": messages,
+                    }
                     response = await self._api_client.messages.create(
                         model=model_id,
                         max_tokens=4096,
                         system=system_param,
-                        messages=[{"role": "user", "content": prompt}],
+                        messages=messages,
                     )
                     elapsed = time.monotonic() - t0
+                    usage = getattr(response, "usage", None)
                     self.logger.info(
                         "API completed in %.1fs (tokens: %d in / %d out)",
-                        elapsed, response.usage.input_tokens, response.usage.output_tokens,
+                        elapsed,
+                        getattr(usage, "input_tokens", 0),
+                        getattr(usage, "output_tokens", 0),
                     )
                     text = "".join(b.text for b in response.content if hasattr(b, "text"))
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.run",
+                        request=request_payload,
+                        response={
+                            "model": getattr(response, "model", model_id),
+                            "stop_reason": getattr(response, "stop_reason", None),
+                            "content": text,
+                            "usage": {
+                                "input_tokens": getattr(usage, "input_tokens", 0),
+                                "output_tokens": getattr(usage, "output_tokens", 0),
+                            },
+                        },
+                        status="success",
+                        context={"agent": self.name, "attempt": attempt},
+                        duration_ms=int(elapsed * 1000),
+                    )
                     return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
 
                 except anthropic.RateLimitError as rl_exc:
@@ -415,9 +510,33 @@ class BaseAgent(ABC):
                         "Rate limited (retry-after=%s); sleeping %.1fs",
                         retry_after_s, wait,
                     )
+                    await write_claude_audit_record(
+                        request_id=new_claude_audit_id(),
+                        source=f"agent.{self.name}.run",
+                        request={
+                            "model": model_id,
+                            "max_tokens": 4096,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                        status="rate_limited",
+                        context={"agent": self.name, "attempt": attempt},
+                        error={"type": type(rl_exc).__name__, "message": str(rl_exc)},
+                    )
                     await asyncio.sleep(wait)
                 except anthropic.APIError as exc:
                     self.logger.error("API error (attempt %d): %s", attempt, exc)
+                    await write_claude_audit_record(
+                        request_id=new_claude_audit_id(),
+                        source=f"agent.{self.name}.run",
+                        request={
+                            "model": model_id,
+                            "max_tokens": 4096,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                        status="error",
+                        context={"agent": self.name, "attempt": attempt},
+                        error={"type": type(exc).__name__, "message": str(exc)},
+                    )
                     if attempt == self.max_retries:
                         return {"response": f"API error: {exc}", "error": True}
                     await asyncio.sleep(self.retry_delay)
@@ -428,11 +547,13 @@ class BaseAgent(ABC):
         self, prompt: str, tools: list[dict[str, Any]], max_iterations: int
     ) -> dict[str, Any]:
         """API tool loop fallback."""
-        # Current model IDs (Opus 4.7 family, 2026). Prior IDs were retired.
+        from agents.claude_audit import new_claude_audit_id, write_claude_audit_record
+
+        # Current Anthropic API model IDs returned by /v1/models.
         model_map = {
             "opus": "claude-opus-4-7",
-            "sonnet": "claude-sonnet-4-7",
-            "haiku": "claude-haiku-4-7",
+            "sonnet": "claude-sonnet-4-6",
+            "haiku": "claude-haiku-4-5-20251001",
         }
         model_id = model_map.get(self.model, self.model)
         messages = [{"role": "user", "content": prompt}]
@@ -452,19 +573,60 @@ class BaseAgent(ABC):
                 else self.system_prompt
             )
             for _ in range(max_iterations):
-                response = await self._api_client.messages.create(
-                    model=model_id, max_tokens=4096,
-                    system=tool_system_param, messages=messages, tools=tools,
-                )
+                request_id = new_claude_audit_id()
+                request_payload = {
+                    "model": model_id,
+                    "max_tokens": 4096,
+                    "system": tool_system_param,
+                    "messages": messages,
+                    "tools": tools,
+                }
+                t0 = time.monotonic()
+                try:
+                    response = await self._api_client.messages.create(
+                        model=model_id, max_tokens=4096,
+                        system=tool_system_param, messages=messages, tools=tools,
+                    )
+                except Exception as exc:
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.tools",
+                        request=request_payload,
+                        status="error",
+                        context={"agent": self.name},
+                        duration_ms=int((time.monotonic() - t0) * 1000),
+                        error={"type": type(exc).__name__, "message": str(exc)},
+                    )
+                    raise
+                elapsed = time.monotonic() - t0
                 text_parts, tool_calls = [], []
                 for block in response.content:
                     if block.type == "text":
                         text_parts.append(block.text)
                     elif block.type == "tool_use":
                         tool_calls.append({"id": block.id, "name": block.name, "input": block.input})
+                usage = getattr(response, "usage", None)
 
                 if not tool_calls:
                     text = "".join(text_parts)
+                    await write_claude_audit_record(
+                        request_id=request_id,
+                        source=f"agent.{self.name}.tools",
+                        request=request_payload,
+                        response={
+                            "model": getattr(response, "model", model_id),
+                            "stop_reason": getattr(response, "stop_reason", None),
+                            "content": text,
+                            "tool_calls": tool_calls,
+                            "usage": {
+                                "input_tokens": getattr(usage, "input_tokens", 0),
+                                "output_tokens": getattr(usage, "output_tokens", 0),
+                            },
+                        },
+                        status="success",
+                        context={"agent": self.name},
+                        duration_ms=int(elapsed * 1000),
+                    )
                     return {"response": text, "model": response.model, "stop_reason": response.stop_reason}
 
                 serialized = [
@@ -472,6 +634,25 @@ class BaseAgent(ABC):
                     else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
                     for b in response.content
                 ]
+                usage = getattr(response, "usage", None)
+                await write_claude_audit_record(
+                    request_id=request_id,
+                    source=f"agent.{self.name}.tools",
+                    request=request_payload,
+                    response={
+                        "model": getattr(response, "model", model_id),
+                        "stop_reason": getattr(response, "stop_reason", None),
+                        "content": "".join(text_parts),
+                        "tool_calls": tool_calls,
+                        "usage": {
+                            "input_tokens": getattr(usage, "input_tokens", 0),
+                            "output_tokens": getattr(usage, "output_tokens", 0),
+                        },
+                    },
+                    status="tool_use",
+                    context={"agent": self.name},
+                    duration_ms=int(elapsed * 1000),
+                )
                 messages.append({"role": "assistant", "content": serialized})
 
                 tool_results = []

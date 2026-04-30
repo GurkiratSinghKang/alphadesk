@@ -98,11 +98,15 @@ services:
       LIVE_TRADING_ENABLED: ${LIVE_TRADING_ENABLED:-false}
     volumes:
       - /var/lib/alphadesk/pipeline_logs:/app/data/pipeline_logs
-      # Claude Code CLI OAuth creds (Max subscription). The agents in
-      # backend/agents/base.py shell out to `claude -p` via subprocess;
-      # if ANTHROPIC_API_KEY is unset (or empty) the CLI falls back to
-      # these creds. The refresh token rotates automatically — mount
-      # read-write so the CLI can update the file on renewal.
+      # Optional raw Claude request/response audit trail. Enable with
+      # CLAUDE_AUDIT_LOG_ENABLED=true in .env.prod; keep this host path
+      # root/operator-readable only because prompts can contain trading
+      # context and user identifiers.
+      - /var/log/alphadesk/claude:/app/logs/claude
+      # Claude Code CLI OAuth creds (fallback only). BaseAgent now prefers
+      # the Anthropic API whenever ANTHROPIC_API_KEY is configured; the CLI
+      # path remains available for CLAUDE_BACKEND=cli or auto mode without
+      # an API key. Mount read-write so the CLI can refresh OAuth tokens.
       - /root/.claude:/root/.claude
     healthcheck:
       # Probe /readyz (not /health): /health is a pure-Python liveness ping

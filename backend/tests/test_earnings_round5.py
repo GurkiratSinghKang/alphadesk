@@ -112,7 +112,7 @@ async def test_get_detail_emits_chain_demo_in_error_codes():
         "thesis": "x", "catalysts": [], "risks": [],
         # Round-12 / DR-1: replaced "short call" with a defined-risk setup.
         "suggested_play": "iron condor", "suggested_play_reason": "x",
-        "confidence": 0.5, "model": "claude-haiku-4-7",
+        "confidence": 0.5, "model": "claude-haiku-4-5-20251001",
         "generated_at": datetime.now(timezone.utc),
     }
     fake_news = {"articles": [], "is_demo": False}
@@ -527,7 +527,7 @@ async def test_claude_budget_kill_switch_logs_when_over_but_does_not_raise(monke
     fake_resp.usage.output_tokens = 1
     fake_resp.usage.cache_creation_input_tokens = 0
     fake_resp.usage.cache_read_input_tokens = 0
-    fake_resp.model = "claude-haiku-4-7"
+    fake_resp.model = "claude-haiku-4-5-20251001"
     fake_anthropic = AsyncMock()
     fake_anthropic.messages.create = AsyncMock(return_value=fake_resp)
 
@@ -535,7 +535,7 @@ async def test_claude_budget_kill_switch_logs_when_over_but_does_not_raise(monke
     client._client = fake_anthropic
 
     with caplog.at_level(logging.WARNING, logger="agents.claude_client"):
-        result = await client.complete(system="s", user="u", model="claude-haiku-4-7")
+        result = await client.complete(system="s", user="u", model="claude-haiku-4-5-20251001")
 
     # Soft-cap log fired but call proceeded.
     assert any(
@@ -577,7 +577,7 @@ async def test_claude_budget_kill_switch_disabled_via_setting(monkeypatch):
     client = cc.ClaudeClient.__new__(cc.ClaudeClient)
     client._client = fake_anthropic
 
-    out = await client.complete(system="s", user="u", model="claude-haiku-4-7")
+    out = await client.complete(system="s", user="u", model="claude-haiku-4-5-20251001")
     assert out == "ok"
 
 
@@ -616,7 +616,7 @@ async def test_claude_call_log_includes_user_id(monkeypatch, caplog):
 
     caplog.set_level(logging.INFO, logger="agents.claude_client")
     await client.complete(
-        system="s", user="u", model="claude-haiku-4-7",
+        system="s", user="u", model="claude-haiku-4-5-20251001",
         context={"user_id": "alice", "endpoint": "earnings.detail"},
     )
 
