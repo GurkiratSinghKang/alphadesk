@@ -120,7 +120,9 @@ async def test_webhook_rejects_unknown_strategy_on_live(
 
 @pytest.mark.asyncio
 async def test_webhook_allows_manual_none_strategy(
-    live_armed: None, trap_agent: dict[str, Any],
+    live_armed: None,
+    trap_agent: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A TV alert with no ``strategy`` field (manual) bypasses the gate.
 
@@ -129,7 +131,13 @@ async def test_webhook_allows_manual_none_strategy(
     without a strategy tag is the manual/discretionary case. The gate
     passes those through to the execution agent.
     """
+    from api.routes import _risk_pipeline as risk_pipeline
     from api.routes.webhooks import TradingViewAlert, _handle_trade_signal
+
+    async def _risk_passes(*_args: Any, **_kwargs: Any) -> tuple[bool, str]:
+        return True, "passed"
+
+    monkeypatch.setattr(risk_pipeline, "run_aggregate_risk_check", _risk_passes)
 
     alert = TradingViewAlert(
         ticker="AAPL", action="buy", price=150.0, message="manual alert",
