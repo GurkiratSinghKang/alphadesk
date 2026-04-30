@@ -33,6 +33,7 @@ break out of the wrapper by injecting their own closing tag.
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Sequence
 
@@ -129,10 +130,10 @@ def build_structured_prompt(
     report_date: str,
     report_time: str,
     price: float,
-    iv_rank: float,
-    iv_percentile: float,
-    hv_20: float,
-    expected_move_pct: float,
+    iv_rank: float | None,
+    iv_percentile: float | None,
+    hv_20: float | None,
+    expected_move_pct: float | None,
     hist_avg_abs_move_pct: float | None,
     recent_beats_misses: Sequence[tuple[str, str]],
     headlines: Sequence[str],
@@ -149,6 +150,16 @@ def build_structured_prompt(
     each wrapped in a named XML-style tag and the system prompt carries
     the explicit DATA VS INSTRUCTIONS PROTOCOL.
     """
+    def _num_text(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unavailable"
+        return f"{float(value):.0f}"
+
+    def _pct_text(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unavailable"
+        return f"{float(value):.2%}"
+
     beats_block = "\n".join(f"  · {d}: {s}" for d, s in recent_beats_misses[:4])
     if headlines:
         news_block = "\n".join(
@@ -189,8 +200,8 @@ def build_structured_prompt(
         f"Earnings setup — {_wrap('company', str(company))} "
         f"({symbol}), {_wrap('sector', str(sector))}.\n"
         f"Reports: {report_date} {report_time}.\n"
-        f"Price: {price:.2f}. IV rank: {iv_rank:.0f} · IV pctl: {iv_percentile:.0f}.\n"
-        f"HV 20d: {hv_20:.2%}. IV-implied expected move (straddle): ±{expected_move_pct:.2%}."
+        f"Price: {price:.2f}. IV rank: {_num_text(iv_rank)} · IV pctl: {_num_text(iv_percentile)}.\n"
+        f"HV 20d: {_pct_text(hv_20)}. IV-implied expected move (straddle): ±{_pct_text(expected_move_pct)}."
         f"{hist_line}\n"
         f"Recent earnings:\n{beats_block}\n"
         f"Top news:\n{news_block}\n"
@@ -234,9 +245,9 @@ def build_full_prompt(
     report_date: str,
     report_time: str,
     price: float,
-    iv_rank: float,
-    iv_percentile: float,
-    expected_move_pct: float,
+    iv_rank: float | None,
+    iv_percentile: float | None,
+    expected_move_pct: float | None,
     historical_quarters: Sequence[dict],
     headlines: Sequence[str],
     market_regime: str,
@@ -246,6 +257,16 @@ def build_full_prompt(
 
     Round-6 L-1: same data-tag wrapping as ``build_structured_prompt``.
     """
+    def _num_text(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unavailable"
+        return f"{float(value):.0f}"
+
+    def _pct_value_text(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unavailable"
+        return f"±{float(value):.2%}"
+
     def _pct_text(value: object) -> str:
         try:
             f = float(value)  # type: ignore[arg-type]
@@ -287,8 +308,8 @@ def build_full_prompt(
     user = (
         f"{_wrap('company', str(company))} ({symbol}) · "
         f"{_wrap('sector', str(sector))} · reports {report_date} {report_time}.\n"
-        f"Price {price:.2f}. IV rank {iv_rank:.0f}, IV pctl {iv_percentile:.0f}. "
-        f"Implied move ±{expected_move_pct:.2%}.\n"
+        f"Price {price:.2f}. IV rank {_num_text(iv_rank)}, IV pctl {_num_text(iv_percentile)}. "
+        f"Implied move {_pct_value_text(expected_move_pct)}.\n"
         f"Last 8 earnings:\n{quarters_block}\n"
         f"Sector peers 5d: {peers_block}\n"
         f"Top news: {headlines_block}\n"

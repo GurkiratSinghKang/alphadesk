@@ -94,6 +94,7 @@ export function CommandPalette() {
   const [confirmLiveOpen, setConfirmLiveOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
+  const deskActionsAvailable = pathname === "/";
 
   // Close command palette on navigation
   useEffect(() => {
@@ -231,19 +232,24 @@ export function CommandPalette() {
     });
   }
 
-  // Focus chart panel — scroll the desk chart into view
+  function tradeUrl(): string {
+    const sym = useMarketStore.getState().selectedSymbol;
+    return sym ? `/trade?symbol=${encodeURIComponent(sym)}` : "/trade";
+  }
+
+  // Open the dedicated trade surface; on /trade, focus the mounted chart.
   function handleFocusChart() {
     setCommandPaletteOpen(false);
-    setTimeout(() => {
+    if (pathname !== "/trade") {
+      router.push(tradeUrl());
+      return;
+    }
+    window.setTimeout(() => {
       const el =
         document.querySelector("[data-slot='price-chart-panel']") ??
         document.querySelector("[data-slot='chart-panel']") ??
         document.querySelector(".tradingview-widget-container");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      } else {
-        toast({ type: "info", message: "Chart not mounted on this page" });
-      }
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
   }
 
@@ -252,6 +258,10 @@ export function CommandPalette() {
   // These are the high-leverage trading actions the brief calls out.
   function handleCancelAllOrders() {
     setCommandPaletteOpen(false);
+    if (!deskActionsAvailable) {
+      toast({ type: "info", message: "Open the Dashboard to cancel working orders." });
+      return;
+    }
     // Dispatch an event the dashboard listens for; the actual API call
     // lives in the page-level handler so it can show the right toast +
     // optimistic update + react-query invalidation.
@@ -273,6 +283,10 @@ export function CommandPalette() {
     // from the store at click time, mirroring ``handleSwitchLive``.
     const sym = useMarketStore.getState().selectedSymbol;
     setCommandPaletteOpen(false);
+    if (!deskActionsAvailable) {
+      toast({ type: "info", message: "Open the Dashboard to flatten the selected symbol." });
+      return;
+    }
     if (!sym) {
       toast({ type: "info", message: "No symbol selected — pick one first." });
       return;
@@ -297,6 +311,10 @@ export function CommandPalette() {
 
   function handlePauseAllStrategies() {
     setCommandPaletteOpen(false);
+    if (!deskActionsAvailable) {
+      toast({ type: "info", message: "Open the Dashboard to pause all strategies." });
+      return;
+    }
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:pause-all-strategies"));
     }
@@ -306,7 +324,8 @@ export function CommandPalette() {
     });
   }
 
-  // Focus options chain — router.push rather than hard nav
+  // Focus options chain; from the dashboard this moves to the trade workspace
+  // instead of promising a chartless dashboard panel that no longer exists.
   function handleFocusOptions() {
     setCommandPaletteOpen(false);
     const el = document.querySelector("[data-slot='options-panel']");
@@ -314,8 +333,7 @@ export function CommandPalette() {
       el.scrollIntoView({ behavior: "smooth" });
       return;
     }
-    // No options surface today — toast rather than loop via /trade.
-    toast({ type: "info", message: "Options chain — coming soon" });
+    router.push(tradeUrl());
   }
 
   return (
@@ -448,12 +466,12 @@ export function CommandPalette() {
             >
               <CommandItem
                 icon={<LineChart className="h-4 w-4" />}
-                label="Focus chart panel"
+                label={pathname === "/trade" ? "Focus chart panel" : "Open trade chart"}
                 onSelect={handleFocusChart}
               />
               <CommandItem
                 icon={<BarChart3 className="h-4 w-4" />}
-                label="Focus options chain"
+                label={pathname === "/trade" ? "Focus options chain" : "Open options chain"}
                 onSelect={handleFocusOptions}
               />
             </Command.Group>

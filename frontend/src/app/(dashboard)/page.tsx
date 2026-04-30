@@ -1,33 +1,41 @@
 "use client";
 
 /**
- * Trading Desk — flagship page (Layer 4)
- * ──────────────────────────────────────
- * Composes the Layer-3 `DeskLayout` shell with the Layer-2 composites.
- * This file is intentionally thin: it reads data from stores/queries,
- * shapes it through `_desk/selectors.ts`, and renders. Styling lives
- * entirely in the primitives/composites/typography — this page invents
- * no colors and holds no markup beyond slot wiring.
+ * AlphaDesk root dashboard.
+ *
+ * This route is the graphless operating picture: account state, risk posture,
+ * strategy health, and next actions. The full chart and order ticket live on
+ * /trade so the dashboard can stay focused on decision support.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ElementType, ReactNode, RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowRight,
+  BarChart3,
+  BriefcaseBusiness,
+  Clock3,
+  LineChart,
+  ListChecks,
+  Radio,
+  ShieldCheck,
+  Target,
+  WalletCards,
+} from "lucide-react";
 
 import {
   AIMemoPanel,
   ContextBar,
-  OrderBar,
   PositionsList,
-  PriceChartPanel,
   StatusBar,
   TopBar,
-  Watchlist,
-  type ChartBar,
-  type ChartRange,
   type OrderRow,
   type PositionTab,
-  type StagedOrder,
+  Watchlist,
 } from "@/components/composites";
 import { DashboardLayout } from "@/components/layouts";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { Button } from "@/components/ui/button";
 // Wave 6α Fix 6 (persona-124 P0): MorningBrief was previously dead code —
 // the component + its `useMorningBrief` query existed but nothing rendered
 // it. Mount in the right-hand column above the Positions list, where the
@@ -37,16 +45,17 @@ import { DashboardLayout } from "@/components/layouts";
 import { MorningBrief } from "@/components/dashboard/MorningBrief";
 import {
   cancelOrder,
-  getBars,
   getOrders,
   getPortfolioSummary,
   getPositions,
   getStrategies,
   placeOrder,
   toggleStrategy,
+  type PipelineStatus,
 } from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
-import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
+import { isWorkingOrderStatus } from "@/lib/orders";
+import { cn, formatCurrency, formatGreek, formatPercent } from "@/lib/utils";
 // `computeStrategyCounts` was used to render a "N / M" pill inside the
 // dashboard's StrategyRail header; the rail is no longer on the
 // dashboard (2026-04-20 redesign — it duplicated `/strategies`). The
@@ -58,25 +67,22 @@ import {
   useRegime,
   useStrategies,
 } from "@/hooks/useQueries";
-import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import { useMarketStore, useQuote, getFreshestQuoteTimestamp } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useUIStore } from "@/stores/ui";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { useToast } from "@/hooks/useToast";
-import type { Position, Order } from "@/types";
+import type { Position, Order, PortfolioGreeks, PortfolioSummary } from "@/types";
 
 import {
   emptyMemo,
   toContextCells,
-  toMarketSymbol,
-  toMetaCells,
   toPositionRows,
   toQuote,
   toRailItems,
   toRegime,
   toStatusPills,
-  toStrategyOptions,
+  type RawStrategy,
 } from "./_desk/selectors";
 import { useDeskClock } from "./_desk/useDeskClock";
 
@@ -112,6 +118,7 @@ export default function DeskPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const bookPanelRef = useRef<HTMLDivElement | null>(null);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   // Wave 14 perf-audit-r3 P0 #3: `useQuote(selectedSymbol)` only rerenders
@@ -122,6 +129,7 @@ export default function DeskPage() {
   const portfolioSummary = usePortfolioStore((s) => s.summary);
   const positions = usePortfolioStore((s) => s.positions);
   const ordersFromStore = usePortfolioStore((s) => s.orders);
+  const greeks = usePortfolioStore((s) => s.greeks);
 
   // Shape the portfolio store's `Order[]` onto the OrderRow contract the
   // PositionsList expects. Previously the Book panel's Orders tab was
@@ -165,12 +173,12 @@ export default function DeskPage() {
   // via `fetchPortfolioData()`. The store is the single source of truth
   // here — the pipeline effect keeps it fresh on its own interval.
   const { data: regimeResp } = useRegime();
-  useIndices(); // warms the indices cache so the context bar stays fresh
+  const { data: indicesResp } = useIndices();
   const { data: strategiesResp } = useStrategies();
+  const { data: pipelineStatus } = usePipelineStatus();
 
-  /* ─── Selected strategy for rail highlight + order bar ── */
+  /* ─── Selected strategy for dashboard focus + deep links ─ */
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
-  const strategyOptions = useMemo(() => toStrategyOptions(rail), [rail]);
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>(
     () => rail[0]?.id ?? ""
   );
@@ -199,62 +207,6 @@ export default function DeskPage() {
     }
   }, [searchParams, rail]);
 
-  /* ─── Chart bars — daily + current range toggle ─────────── */
-  const [range, setRange] = useState<ChartRange>("1M");
-  const [series, setSeries] = useState<ChartBar[]>([]);
-  const [barsLoading, setBarsLoading] = useState(false);
-  const [barsError, setBarsError] = useState(false);
-
-  // Wave 32 persona-6 #1: number-key timeframes (1-8) dispatch
-  // `chart:set-range:<RANGE>` actions; the desk owns range state, so it
-  // intercepts the family handler and updates `setRange`. Uses the
-  // page-scoped registry exported from `useKeyboardShortcuts`, which
-  // rescues the previously-dead `useShortcutHandler` export.
-  const handleChartRangeShortcut = useCallback((actionId: string) => {
-    const value = actionId.split(":")[2];
-    const valid: ChartRange[] = ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "ALL"];
-    if (valid.includes(value as ChartRange)) {
-      setRange(value as ChartRange);
-    }
-  }, []);
-  useShortcutHandler("chart:set-range", handleChartRangeShortcut);
-  // Nonce bumped by `retryBars` so the fetch effect re-runs without needing
-  // the symbol or range to change. PriceChartPanel calls it from the
-  // error-state Retry button.
-  const [barsNonce, setBarsNonce] = useState(0);
-  const retryBars = useCallback(() => setBarsNonce((n) => n + 1), []);
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchBars() {
-      setBarsLoading(true);
-      setBarsError(false);
-      try {
-        // 2026-04-20 round 2: switched from always-daily to a
-        // range-aware timeframe so zooming in on the chart actually
-        // shows MORE granular data, not a compressed-daily view of
-        // the same 2 bars. A user selecting `1D` now gets 5-minute
-        // candles (≈78 bars across the 6.5h session); `1M` gets
-        // 1-hour candles; `6M+` stays daily. Matches the behaviour
-        // on TradingView / ToS / Webull where each timeframe pill
-        // loads its own granularity.
-        const [tf, limit] = rangeToTimeframe(range);
-        const bars = await getBars(selectedSymbol, tf, limit);
-        if (!cancelled) setSeries(bars);
-      } catch {
-        if (!cancelled) {
-          setSeries([]);
-          setBarsError(true);
-        }
-      } finally {
-        if (!cancelled) setBarsLoading(false);
-      }
-    }
-    fetchBars();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSymbol, range, barsNonce]);
-
   /* ─── Book tab + live orders count for context bar ─────── */
   const [bookTab, setBookTab] = useState<PositionTab>("positions");
   const [orderCount, setOrderCount] = useState(0);
@@ -271,9 +223,9 @@ export default function DeskPage() {
       // That cuts the desk page's per-minute order-endpoint footprint in
       // half and lets us use the freshly-fetched list to update the store
       // too (so the OrderBar's Orders tab doesn't need its own poll).
-      let orders: Array<{ status?: string }> | null;
+      let orders: Order[] | null;
       try {
-        orders = (await getOrders()) as Array<{ status?: string }>;
+        orders = await getOrders();
       } catch (err) {
         if (!hasWarned) {
           console.error(`[desk] getOrders() failed:`, err);
@@ -304,17 +256,8 @@ export default function DeskPage() {
       }
 
       hasWarned = false;
-      // Round-11 / Y-3 (P0): include both ``partial`` and the raw
-      // Alpaca-event name ``partial_fill`` — the OrderStatus union has
-      // both variants but the working-set check used to match only one.
-      // A partially-filled order would silently fall out of the count.
-      const working = orders.filter(
-        (o) =>
-          o.status === "pending" ||
-          o.status === "open" ||
-          o.status === "partial" ||
-          o.status === "partial_fill",
-      );
+      usePortfolioStore.getState().setOrders(orders);
+      const working = orders.filter((o) => isWorkingOrderStatus(o.status));
       setOrderCount(working.length);
     }
     fetchCounts();
@@ -336,14 +279,6 @@ export default function DeskPage() {
   const marketOpen = isMarketOpen();
   const regime = useMemo(() => toRegime(regimeResp?.regime), [regimeResp?.regime]);
   const quote = useMemo(() => toQuote(selectedQuote ?? undefined), [selectedQuote]);
-  // BUG-032: pass marketOpen so `toMetaCells` can render "unavailable"
-  // instead of "—" when the session is closed and the cells will never
-  // populate for this tape.
-  const meta = useMemo(
-    () => toMetaCells(selectedQuote ?? undefined, { marketOpen }),
-    [selectedQuote, marketOpen],
-  );
-  const symbol = useMemo(() => toMarketSymbol(selectedSymbol), [selectedSymbol]);
   const contextCells = useMemo(
     () => toContextCells(portfolioSummary, positions as Position[], orderCount),
     [portfolioSummary, positions, orderCount],
@@ -381,6 +316,12 @@ export default function DeskPage() {
   // surface in the chrome — it's the user's only visual anchor that
   // the system is in PAPER vs LIVE state.
   const tradingMode = useUIStore((s) => s.tradingMode);
+  const brokerStatus =
+    portfolioSummary.is_demo === true || portfolioSummary.source === "demo"
+      ? "not_linked"
+      : portfolioSummary.source === "alpaca" || portfolioSummary.is_demo === false
+        ? "connected"
+        : "pending";
 
   // SB-1 pipeline pill: the live running count is owned by the
   // ``LastTickStatusBar`` leaf below — ``usePipelineStatus`` lives
@@ -389,21 +330,32 @@ export default function DeskPage() {
   const statusPillsBase = useMemo(
     () =>
       toStatusPills({
-        brokerConnected: !portfolioSummary.is_demo,
+        brokerConnected: brokerStatus === "connected",
+        brokerStatus,
         marketOpen,
         claudeHealthy: true,
         // initial value; LastTickStatusPills will refresh in place
         lastTickSec: undefined,
         pipelineRunning: 0,
-        pipelineTotal: 12,
+        pipelineTotal: rail.length,
         tradingMode,
       }),
-    [portfolioSummary.is_demo, marketOpen, tradingMode],
+    [brokerStatus, marketOpen, rail.length, tradingMode],
   );
 
   /* ─── Event handlers — kept inline because they're trivial ─ */
   function handleNavigate(href: string) {
     router.push(href);
+  }
+
+  function handleOpenOrders() {
+    setBookTab("orders");
+    window.requestAnimationFrame(() => {
+      const panel = bookPanelRef.current;
+      if (!panel) return;
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      panel.focus({ preventScroll: true });
+    });
   }
 
   function handleSelectStrategy(id: string) {
@@ -417,13 +369,6 @@ export default function DeskPage() {
   function handleSelectSymbol(symbol: string) {
     setSelectedSymbol(symbol);
   }
-
-  const [orderBarResetTick, setOrderBarResetTick] = useState(0);
-  const [submittingOrder, setSubmittingOrder] = useState(false);
-  // BUG-002 — inline-error state for the OrderBar. Parent owns this so a
-  // 422/4xx from the backend renders both a toast AND a persistent red
-  // message under the Place button. Cleared on every new submit attempt.
-  const [orderError, setOrderError] = useState<string | null>(null);
 
   /**
    * Refresh positions / orders / summary from the REST API.
@@ -449,13 +394,9 @@ export default function DeskPage() {
     }
     if (results[1].status === "fulfilled") {
       usePortfolioStore.getState().setOrders(results[1].value);
-      // Round-11 / Y-3: keep the working set in sync with the cancel-
-      // count predicate above. Both the legacy ``partial`` and the raw
-      // Alpaca ``partial_fill`` count.
-      const workingStatuses = new Set(["pending", "open", "partial", "partial_fill"]);
       setOrderCount(
-        (results[1].value as Array<{ status?: string }>).filter(
-          (o) => o.status != null && workingStatuses.has(o.status),
+        (results[1].value as Array<{ status?: string }>).filter((o) =>
+          isWorkingOrderStatus(o.status),
         ).length,
       );
     }
@@ -469,94 +410,6 @@ export default function DeskPage() {
       window.dispatchEvent(new CustomEvent("alphadesk:refresh-portfolio"));
     }
   }, []);
-
-  async function handleStageOrder(order: StagedOrder) {
-    // Submit the staged order to the real trading API. On success,
-    // push the returned order into the local store, clear the OrderBar,
-    // and toast. On failure, keep the form state and toast the error.
-    if (submittingOrder) return;
-    // Reset any previous inline error on a fresh submit attempt.
-    setOrderError(null);
-    // Basic client-side validation — the OrderBar's inputs should already
-    // have enforced most of this, but a last-line-of-defense guard keeps
-    // us from firing a 422 at the backend.
-    const symbol = (order.symbol || "").trim().toUpperCase();
-    const qty = Number(order.quantity);
-    const fail = (msg: string) => {
-      toast({ type: "error", message: msg });
-      setOrderError(msg);
-    };
-    if (!symbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol)) {
-      fail("Enter a valid symbol (1–10 letters/digits)");
-      return;
-    }
-    if (!isValidOrderQty(qty)) {
-      fail("Quantity must be a whole number between 1 and 999,999,999");
-      return;
-    }
-    if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
-      fail("Limit orders require a price");
-      return;
-    }
-    const stopNum = order.stop ? Number(order.stop) : undefined;
-    if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
-      fail("Stop orders require a stop price");
-      return;
-    }
-
-    setSubmittingOrder(true);
-    try {
-      const placed: Order = await placeOrder({
-        symbol,
-        side: order.side,
-        type: order.type,
-        quantity: qty,
-        price: order.price,
-        stop_price: stopNum,
-        strategy: order.strategyId || undefined,
-      });
-      usePortfolioStore.getState().addOrder(placed);
-
-      // Round-16 / persona-12 P1: backend can return 201 with a
-      // ``rejected`` status (risk gate, halt, insufficient buying
-      // power). Pre-fix the toast was unconditionally a "success" with
-      // copy "Order placed: 1 SPY market — rejected" — visually green
-      // for an order that never lived. Branch on the actual status.
-      const placedStatus = (placed.status ?? "pending").toLowerCase();
-      const failed = placedStatus === "rejected" || placedStatus === "canceled" || placedStatus === "cancelled";
-      toast({
-        type: failed ? "error" : "success",
-        message: failed
-          ? `Order ${placedStatus}: ${qty} ${symbol} ${order.type}`
-          : `Order placed: ${qty} ${symbol} ${order.type} — ${placedStatus}`,
-        action: failed
-          ? undefined
-          : {
-              label: "View orders",
-              onClick: () => setBookTab("orders"),
-            },
-      });
-
-      // Bump a tick so OrderBar resets its internal field state via `key`.
-      setOrderBarResetTick((t) => t + 1);
-
-      // Post-fill refresh (persona-3 P0 #5). Kick off in the background
-      // so we don't block the submit flow — the toast already fired.
-      refreshPortfolio().catch(() => {
-        /* already logged in each individual fetch helper */
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Order submission failed";
-      toast({ type: "error", message });
-      // BUG-002 — mirror the toast as an inline error on the OrderBar so
-      // the user sees *why* their click did nothing even if the toast
-      // stack was missed (timing, cursor off-screen, etc.).
-      setOrderError(message);
-      // Keep the OrderBar populated so the user can correct + retry.
-    } finally {
-      setSubmittingOrder(false);
-    }
-  }
 
   /**
    * Cancel a working order from the Orders tab.
@@ -591,12 +444,7 @@ export default function DeskPage() {
   useEffect(() => {
     function onCancelAll() {
       const working = (ordersFromStore as Order[] | undefined)?.filter(
-        (o) =>
-          o.status === "pending" ||
-          o.status === "submitted" ||
-          o.status === "open" ||
-          o.status === "partial" ||
-          o.status === "partial_fill",
+        (o) => isWorkingOrderStatus(o.status),
       ) ?? [];
       if (working.length === 0) {
         toast({ type: "info", message: "No working orders to cancel." });
@@ -783,7 +631,19 @@ export default function DeskPage() {
       topBar={
         <div
           onClickCapture={(e) => {
+            if (
+              e.defaultPrevented ||
+              e.button !== 0 ||
+              e.metaKey ||
+              e.ctrlKey ||
+              e.shiftKey ||
+              e.altKey
+            ) {
+              return;
+            }
             const a = (e.target as HTMLElement).closest("a[href]");
+            const target = a?.getAttribute("target");
+            if (target && target !== "_self") return;
             if (a) {
               e.preventDefault();
               handleNavigate(a.getAttribute("href")!);
@@ -808,206 +668,893 @@ export default function DeskPage() {
       }
       contextBar={<ContextBar cells={contextCells} />}
       center={
-        <>
-          <DashboardBriefStrip
-            marketOpen={marketOpen}
-            regimeLabel={regime.label ?? regime.regime}
-            symbol={symbol.ticker}
-            quote={quote}
-            selectedStrategyName={selectedStrategy?.name ?? "No strategy"}
-            activeStrategyCount={activeStrategyCount}
-            totalStrategyCount={rail.length}
-            positionsCount={positionRows.length}
-            openOrders={orderCount}
-            dayPnl={contextCells[1]}
-            buyingPower={contextCells[2]}
-          />
-          <PriceChartPanel
-            symbol={symbol}
-            quote={quote}
-            meta={meta}
-            series={series}
-            activeRange={range}
-            onRangeChange={setRange}
-            isLoading={barsLoading}
-            error={barsError}
-            onRetry={retryBars}
-            className="flex-1 min-h-0"
-          />
-          <OrderBar
-            key={`orderbar-${orderBarResetTick}`}
-            symbol={selectedSymbol}
-            strategies={strategyOptions}
-            strategyId={selectedStrategyId}
-            onStrategyChange={setSelectedStrategyId}
-            onSubmit={handleStageOrder}
-            submitting={submittingOrder}
-            errorMessage={orderError}
-            // BUG-006 — defaults unified across `/` and `/trade` via
-            // `ORDER_BAR_DEFAULTS` so a user bouncing between the two
-            // pages sees the same pre-filled qty / type. Keep the
-            // per-page `strategyId` wiring because that's data-derived.
-            defaults={{
-              ...ORDER_BAR_DEFAULTS,
-              strategyId: selectedStrategyId,
-            }}
-            // The Alpaca base URL is always the paper endpoint in this
-            // deployment (see backend config), so the button label is
-            // accurate. If/when a LIVE config lands this string is a
-            // one-line change.
-            submitDestination="Submits to paper account"
-            submitLabel="Place order"
-          />
-        </>
+        <DashboardCommandCenter
+          summary={portfolioSummary}
+          positions={positions as Position[]}
+          orders={ordersFromStore as Order[]}
+          greeks={greeks}
+          openOrders={orderCount}
+          marketOpen={marketOpen}
+          regimeLabel={regime.label ?? regime.regime}
+          regimeTone={regime.regime}
+          selectedSymbol={selectedSymbol}
+          selectedQuote={quote}
+          selectedStrategyName={selectedStrategy?.name ?? "No strategy selected"}
+          activeStrategyCount={activeStrategyCount}
+          totalStrategyCount={rail.length}
+          strategies={strategiesResp ?? []}
+          pipelineStatus={pipelineStatus}
+          indices={indicesResp?.indices ?? []}
+          clockEt={clock}
+          onTrade={() => router.push(`/trade?symbol=${encodeURIComponent(selectedSymbol)}`)}
+          onAnalytics={() => router.push("/analytics")}
+          onPipeline={() => router.push("/pipeline")}
+          onStrategies={() => router.push("/strategies")}
+          onStrategyClick={handleSelectStrategy}
+          onOpenOrders={handleOpenOrders}
+        />
       }
       right={
-        <>
-          {/* Round-8 killer-move 1: Watchlist + Positions are the ONLY
-              always-visible right-rail panels. MorningBrief and the
-              AI Memo footer used to live here too — they both consume
-              ~120-180 px of vertical chrome whether or not they have
-              content, which violated the "calm, single-hero per page"
-              principle. They now live in the BriefDrawer below
-              (collapsed by default; toggleable per-session). The
-              dashboard right rail breathes. */}
-          <div className="shrink-0 max-h-[34vh] overflow-auto p-2">
-            <Watchlist />
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto">
-            <PositionsList
-              positions={positionRows}
-              // Wire the Orders tab to real data (persona-3 #8) —
-              // previously this tab rendered an empty state even when
-              // the store had working orders. Cancel + tab click work
-              // without a page navigation.
-              orders={orderRows}
-              onCancelOrder={handleCancelOrder}
-              activeTab={bookTab}
-              onTabChange={setBookTab}
-              onRowClick={(id) => {
-                // Orders tab passes the symbol directly; Positions tab
-                // passes the composite row id (symbol-index).
-                const pos = positionRows.find((r) => r.id === id);
-                if (pos) {
-                  handleSelectSymbol(pos.symbol);
-                  return;
-                }
-                // Fallback: treat the id as a symbol (Orders tab path).
-                handleSelectSymbol(id);
-              }}
-            />
-          </div>
-          <BriefDrawer memo={memo} />
-        </>
+        <DashboardInsightRail
+          memo={memo}
+          positions={positionRows}
+          orders={orderRows}
+          activeTab={bookTab}
+          onTabChange={setBookTab}
+          onCancelOrder={handleCancelOrder}
+          bookPanelRef={bookPanelRef}
+          onSelectSymbol={(id) => {
+            const pos = positionRows.find((r) => r.id === id);
+            handleSelectSymbol(pos?.symbol ?? id);
+          }}
+        />
       }
       statusBar={
         <LastTickStatusBar
           base={statusPillsBase}
           buildVersion={BUILD_VERSION}
           marketOpen={marketOpen}
+          pipelineTotal={rail.length}
         />
       }
     />
   );
 }
 
-function DashboardBriefStrip({
+type IndexSnapshot = {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  prev_close?: number;
+  is_demo?: boolean;
+};
+
+function DashboardCommandCenter({
+  summary,
+  positions,
+  orders,
+  greeks,
+  openOrders,
   marketOpen,
   regimeLabel,
-  symbol,
-  quote,
+  regimeTone,
+  selectedSymbol,
+  selectedQuote,
   selectedStrategyName,
   activeStrategyCount,
   totalStrategyCount,
-  positionsCount,
-  openOrders,
-  dayPnl,
-  buyingPower,
+  strategies,
+  pipelineStatus,
+  indices,
+  clockEt,
+  onTrade,
+  onAnalytics,
+  onPipeline,
+  onStrategies,
+  onStrategyClick,
+  onOpenOrders,
 }: {
+  summary: PortfolioSummary;
+  positions: Position[];
+  orders: Order[];
+  greeks: PortfolioGreeks;
+  openOrders: number;
   marketOpen: boolean;
   regimeLabel: string;
-  symbol: string;
-  quote: ReturnType<typeof toQuote>;
+  regimeTone: ReturnType<typeof toRegime>["regime"];
+  selectedSymbol: string;
+  selectedQuote: ReturnType<typeof toQuote>;
   selectedStrategyName: string;
   activeStrategyCount: number;
   totalStrategyCount: number;
-  positionsCount: number;
-  openOrders: number;
-  dayPnl?: ReturnType<typeof toContextCells>[number];
-  buyingPower?: ReturnType<typeof toContextCells>[number];
+  strategies: RawStrategy[];
+  pipelineStatus?: PipelineStatus;
+  indices: IndexSnapshot[];
+  clockEt: string;
+  onTrade: () => void;
+  onAnalytics: () => void;
+  onPipeline: () => void;
+  onStrategies: () => void;
+  onStrategyClick: (id: string) => void;
+  onOpenOrders: () => void;
 }) {
+  const account = useMemo(() => buildAccountSnapshot(summary, positions), [summary, positions]);
+  const strategyCards = useMemo(
+    () => buildStrategyCards(strategies).slice(0, 5),
+    [strategies],
+  );
+  const marketRows = useMemo(
+    () => normalizeIndices(indices).slice(0, 5),
+    [indices],
+  );
+  const actionItems = useMemo(
+    () =>
+      buildActionItems({
+        marketOpen,
+        openOrders,
+        positions,
+        orders,
+        activeStrategyCount,
+        totalStrategyCount,
+        pipelineStatus,
+      }),
+    [marketOpen, openOrders, positions, orders, activeStrategyCount, totalStrategyCount, pipelineStatus],
+  );
   const quoteTone =
-    quote.change > 0 ? "text-up-500" : quote.change < 0 ? "text-down-500" : "text-fg-muted";
-  const quoteMeta = quote.last > 0
-    ? `${quote.last.toFixed(2)} · ${(quote.changePct >= 0 ? "+" : "")}${quote.changePct.toFixed(2)}%`
-    : "No quote yet";
+    selectedQuote.change > 0
+      ? "text-profit"
+      : selectedQuote.change < 0
+        ? "text-loss"
+        : "text-fg-muted";
   const dayTone =
-    dayPnl?.valueTone === "profit"
-      ? "text-up-500"
-      : dayPnl?.valueTone === "loss"
-        ? "text-down-500"
+    account.dayPnl > 0
+      ? "text-profit"
+      : account.dayPnl < 0
+        ? "text-loss"
         : "text-fg";
 
   return (
-    <section
-      data-slot="dashboard-brief-strip"
-      aria-label="Dashboard decision summary"
-      className="grid shrink-0 grid-cols-2 border-b border-border bg-bg lg:grid-cols-4"
+    <div
+      data-slot="dashboard-command-center"
+      className="min-h-0 flex-1 overflow-y-auto bg-bg"
     >
-      <div className="min-w-0 border-r border-b border-border-hair px-4 py-3 lg:border-b-0">
-        <span className="t-label text-fg-hint">Session</span>
-        <div className="mt-1 flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={marketOpen ? "h-2 w-2 rounded-full bg-up-500" : "h-2 w-2 rounded-full bg-fg-hint"}
+      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 pb-8 xl:p-5">
+        <section
+          aria-labelledby="dashboard-command-title"
+          className="dashboard-hero overflow-hidden rounded-md border border-border bg-bg-elev-1"
+        >
+          <div className="grid gap-px bg-border-hair lg:grid-cols-[1.25fr_0.75fr]">
+            <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="t-label text-fg-hint">Command center</span>
+                    <StatusChip
+                      tone={marketOpen ? "profit" : "muted"}
+                      label={marketOpen ? "Market open" : "Market closed"}
+                    />
+                    <StatusChip tone={regimeTone === "bear" || regimeTone === "crisis" ? "loss" : regimeTone === "bull" ? "profit" : "amber"} label={regimeLabel} />
+                  </div>
+                  <h2
+                    id="dashboard-command-title"
+                    className="mt-3 font-display text-[34px] italic leading-none text-ink-1000 md:text-[44px]"
+                    style={{ letterSpacing: 0 }}
+                  >
+                    Today&apos;s operating picture
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-fg-muted md:text-[15px]">
+                    Account state, risk posture, strategy readiness, and the next useful action in one calm surface.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="secondary" onClick={onAnalytics}>
+                    <BarChart3 aria-hidden /> Analytics
+                  </Button>
+                  <Button variant="secondary" onClick={onStrategies}>
+                    <Target aria-hidden /> Strategies
+                  </Button>
+                  <Button onClick={onTrade}>
+                    <LineChart aria-hidden /> Trade
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricCard
+                  label="Book equity"
+                  value={
+                    account.ready ? (
+                      <AnimatedNumber
+                        value={account.equity}
+                        format={formatCurrency}
+                        className="t-num-xl text-gold-300"
+                      />
+                    ) : (
+                      <span className="t-num-xl text-fg-muted">—</span>
+                    )
+                  }
+                  detail={account.ready ? (summary.source ? `Source ${summary.source}` : "Live account value") : "Waiting for broker snapshot"}
+                  icon={WalletCards}
+                />
+                <MetricCard
+                  label="Day P&L"
+                  value={
+                    account.ready ? (
+                      <AnimatedNumber
+                        value={account.dayPnl}
+                        format={(v) => `${v >= 0 ? "+" : "-"}${formatCurrency(Math.abs(v))}`}
+                        className={cn("t-num-xl", dayTone)}
+                      />
+                    ) : (
+                      <span className="t-num-xl text-fg-muted">—</span>
+                    )
+                  }
+                  detail={account.ready ? `${formatCurrency(summary.realizedPnlToday)} realized · ${formatCurrency(summary.unrealizedPnl)} unrealized` : "Waiting for broker snapshot"}
+                  icon={ActivityIcon}
+                />
+                <MetricCard
+                  label="Buying power"
+                  value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatCurrency(summary.buyingPower) : "—"}</span>}
+                  detail={account.ready ? `${formatPercent(account.cashPct)} cash buffer` : "Waiting for broker snapshot"}
+                  icon={BriefcaseBusiness}
+                />
+                <MetricCard
+                  label="Open risk"
+                  value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatPercent(account.grossExposurePct) : "—"}</span>}
+                  detail={account.ready ? `${positions.length} positions · ${openOrders} working` : "Waiting for broker snapshot"}
+                  icon={ShieldCheck}
+                />
+              </div>
+            </div>
+
+            <div className="relative min-w-0 overflow-hidden bg-bg-elev-2 p-5 md:p-6">
+              <div className="dashboard-signal-sweep" aria-hidden />
+              <div className="relative">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="t-label text-fg-hint">Now</span>
+                  <span className="t-meta text-fg-muted">{clockEt}</span>
+                </div>
+                <div className="mt-5 space-y-4">
+                  <LivePulse
+                    label="Selected ticker"
+                    title={selectedSymbol}
+                    value={
+                      selectedQuote.last > 0
+                        ? `${formatCurrency(selectedQuote.last)} · ${selectedQuote.changePct >= 0 ? "+" : ""}${selectedQuote.changePct.toFixed(2)}%`
+                        : "Waiting for quote"
+                    }
+                    toneClass={quoteTone}
+                  />
+                  <LivePulse
+                    label="Strategy focus"
+                    title={selectedStrategyName}
+                    value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
+                    toneClass="text-brand"
+                  />
+                  <LivePulse
+                    label="Pipeline"
+                    title={pipelineStatus?.running ? "Running" : "Idle"}
+                    value={pipelineStatus?.stage ?? pipelineStatus?.last_result ?? "Ready"}
+                    toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 2xl:grid-cols-[0.95fr_1.05fr]">
+          <ActionPanel
+            items={actionItems}
+            onTrade={onTrade}
+            onOpenOrders={onOpenOrders}
+            onPipeline={onPipeline}
           />
-          <b className="font-mono text-[15px] font-medium text-ink-1000">
-            {marketOpen ? "Open" : "Closed"}
-          </b>
-        </div>
-        <p className="mt-1 truncate text-[12px] text-fg-muted">{regimeLabel}</p>
-      </div>
+          <RiskPanel account={account} greeks={greeks} />
+        </section>
 
-      <div className="min-w-0 border-b border-border-hair px-4 py-3 lg:border-r lg:border-b-0">
-        <span className="t-label text-fg-hint">Focus</span>
-        <div className="mt-1 flex items-baseline gap-2">
-          <b className="font-mono text-[15px] font-medium text-ink-1000">{symbol}</b>
-          <span className={`font-mono text-[12px] ${quoteTone}`}>{quoteMeta}</span>
-        </div>
-        <p className="mt-1 truncate text-[12px] text-fg-muted">{selectedStrategyName}</p>
+        <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <StrategyPanel
+            strategies={strategyCards}
+            activeStrategyCount={activeStrategyCount}
+            totalStrategyCount={totalStrategyCount}
+            onStrategyClick={onStrategyClick}
+            onStrategies={onStrategies}
+          />
+          <MarketPulsePanel
+            indices={marketRows}
+            marketOpen={marketOpen}
+            regimeLabel={regimeLabel}
+            onTrade={onTrade}
+          />
+        </section>
       </div>
+    </div>
+  );
+}
 
-      <div className="min-w-0 border-r border-border-hair px-4 py-3">
-        <span className="t-label text-fg-hint">Book posture</span>
-        <div className="mt-1 flex items-baseline gap-2">
-          <b className="font-mono text-[15px] font-medium text-ink-1000">
-            {positionsCount} positions
-          </b>
-          <span className="font-mono text-[12px] text-fg-muted">
-            {openOrders} working
-          </span>
-        </div>
-        <p className="mt-1 truncate text-[12px] text-fg-muted">
-          {activeStrategyCount}/{totalStrategyCount} strategies active
-        </p>
+function DashboardInsightRail({
+  memo,
+  positions,
+  orders,
+  activeTab,
+  onTabChange,
+  onCancelOrder,
+  bookPanelRef,
+  onSelectSymbol,
+}: {
+  memo: Parameters<typeof AIMemoPanel>[0]["memo"];
+  positions: ReturnType<typeof toPositionRows>;
+  orders: OrderRow[];
+  activeTab: PositionTab;
+  onTabChange: (tab: PositionTab) => void;
+  onCancelOrder: (id: string) => void;
+  bookPanelRef: RefObject<HTMLDivElement | null>;
+  onSelectSymbol: (id: string) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-col overflow-hidden bg-bg">
+      <MorningBrief rail className="max-h-[34vh] shrink-0 overflow-auto border-b border-border-hair p-2" />
+      <div className="max-h-[30vh] shrink-0 overflow-auto border-b border-border-hair p-2">
+        <Watchlist />
       </div>
+      <div
+        ref={bookPanelRef}
+        data-slot="dashboard-book"
+        tabIndex={-1}
+        className="min-h-[260px] flex-1 overflow-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-brand/70"
+      >
+        <PositionsList
+          positions={positions}
+          orders={orders}
+          onCancelOrder={onCancelOrder}
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          onRowClick={onSelectSymbol}
+        />
+      </div>
+      <MemoDrawer memo={memo} />
+    </div>
+  );
+}
 
-      <div className="min-w-0 px-4 py-3">
-        <span className="t-label text-fg-hint">Capital</span>
-        <div className="mt-1 flex items-baseline gap-2">
-          <b className={`font-mono text-[15px] font-medium ${dayTone}`}>
-            {dayPnl?.value ?? "—"}
-          </b>
-          <span className="font-mono text-[12px] text-fg-muted">
-            {buyingPower?.value ?? "—"} BP
-          </span>
-        </div>
-        <p className="mt-1 truncate text-[12px] text-fg-muted">
-          {dayPnl?.delta ?? "Realized/unrealized split unavailable"}
-        </p>
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: ReactNode;
+  detail: string;
+  icon: ElementType;
+}) {
+  return (
+    <div className="dashboard-card card-stagger min-w-0 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="t-label text-fg-hint">{label}</span>
+        <Icon className="size-4 text-fg-muted" aria-hidden />
+      </div>
+      <div className="mt-3 min-w-0 truncate">{value}</div>
+      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
+function ActionPanel({
+  items,
+  onTrade,
+  onOpenOrders,
+  onPipeline,
+}: {
+  items: readonly ActionItem[];
+  onTrade: () => void;
+  onOpenOrders: () => void;
+  onPipeline: () => void;
+}) {
+  return (
+    <section aria-labelledby="next-actions-title" className="dashboard-section">
+      <PanelHeader
+        id="next-actions-title"
+        icon={ListChecks}
+        title="Next actions"
+        detail="Triage before execution"
+      />
+      <div className="grid gap-2 p-3 md:grid-cols-3 2xl:grid-cols-1">
+        {items.map((item, index) => {
+          const onClick =
+            item.action === "orders" ? onOpenOrders : item.action === "pipeline" ? onPipeline : onTrade;
+          return (
+            <button
+              key={item.title}
+              type="button"
+              onClick={onClick}
+              className="dashboard-row card-stagger group text-left"
+              style={{ animationDelay: `${index * 45}ms` }}
+            >
+              <div className="flex items-start gap-3">
+                <span className={cn("mt-1 size-2 rounded-full", item.tone === "profit" ? "bg-profit" : item.tone === "loss" ? "bg-loss" : item.tone === "amber" ? "bg-amber" : "bg-fg-muted")} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-[14px] font-medium text-ink-1000">{item.title}</p>
+                    <ArrowRight className="size-4 shrink-0 text-fg-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
+}
+
+function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: PortfolioGreeks }) {
+  const hasGreekExposure =
+    Math.abs(greeks.betaWeightedDelta) > 0 ||
+    Math.abs(greeks.netTheta) > 0 ||
+    Math.abs(greeks.netVega) > 0;
+  const betaDetail = greeks.isDemo
+    ? "Greeks unavailable from broker"
+    : hasGreekExposure
+      ? "SPY-adjusted delta exposure"
+      : "No option/equity delta exposure";
+
+  return (
+    <section aria-labelledby="risk-posture-title" className="dashboard-section">
+      <PanelHeader
+        id="risk-posture-title"
+        icon={ShieldCheck}
+        title="Risk posture"
+        detail="Exposure, concentration, Greeks"
+      />
+      <div className="grid gap-3 p-3 md:grid-cols-3">
+        {account.ready ? (
+          <>
+            <RiskMeter label="Gross exposure" value={account.grossExposurePct} detail={`${formatCurrency(account.grossMarketValue)} at work`} />
+            <RiskMeter label="Cash buffer" value={account.cashPct} detail={formatCurrency(account.cash)} />
+            <RiskStat label="Largest position" value={account.largestPosition?.symbol ?? "—"} detail={account.largestPosition ? `${formatPercent(account.largestPosition.pct)} of equity` : "No open positions"} />
+            <RiskStat
+              label="Beta-weighted Δ"
+              value={greeks.isDemo ? "—" : formatGreek(greeks.betaWeightedDelta, 2)}
+              detail={betaDetail}
+              tone={greeks.isDemo ? "muted" : Math.abs(greeks.betaWeightedDelta) > account.equity * 0.5 ? "loss" : "default"}
+            />
+            <RiskStat
+              label="Net θ / ν"
+              value={greeks.isDemo ? "—" : `${formatGreek(greeks.netTheta, 2)} / ${formatGreek(greeks.netVega, 2)}`}
+              detail={greeks.isDemo ? "Options risk feed unavailable" : "Daily decay / vol sensitivity"}
+              tone={greeks.isDemo ? "muted" : "default"}
+            />
+            <RiskStat label="2% shock estimate" value={formatCurrency(account.twoPctShock)} detail="Gross exposure stress loss" tone={account.twoPctShock > 0 ? "loss" : "muted"} />
+          </>
+        ) : (
+          <>
+            <RiskStat label="Gross exposure" value="—" detail="Waiting for broker snapshot" tone="muted" />
+            <RiskStat label="Cash buffer" value="—" detail="Waiting for broker snapshot" tone="muted" />
+            <RiskStat label="Largest position" value="—" detail="Waiting for positions" tone="muted" />
+            <RiskStat label="Beta-weighted Δ" value="—" detail="Waiting for Greeks" tone="muted" />
+            <RiskStat label="Net θ / ν" value="—" detail="Waiting for options risk feed" tone="muted" />
+            <RiskStat label="2% shock estimate" value="—" detail="Waiting for exposure" tone="muted" />
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StrategyPanel({
+  strategies,
+  activeStrategyCount,
+  totalStrategyCount,
+  onStrategyClick,
+  onStrategies,
+}: {
+  strategies: StrategyCardData[];
+  activeStrategyCount: number;
+  totalStrategyCount: number;
+  onStrategyClick: (id: string) => void;
+  onStrategies: () => void;
+}) {
+  return (
+    <section aria-labelledby="strategy-ops-title" className="dashboard-section">
+      <PanelHeader
+        id="strategy-ops-title"
+        icon={Target}
+        title="Strategy ops"
+        detail={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
+        actionLabel="Open all"
+        onAction={onStrategies}
+      />
+      <div className="grid gap-2 p-3 md:grid-cols-2">
+        {strategies.length > 0 ? (
+          strategies.map((strategy, index) => (
+            <button
+              key={strategy.id}
+              type="button"
+              onClick={() => onStrategyClick(strategy.id)}
+              className="dashboard-row card-stagger group text-left"
+              style={{ animationDelay: `${index * 40}ms` }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-medium text-ink-1000">{strategy.name}</p>
+                  <p className="mt-1 truncate text-[13px] text-fg-muted">
+                    {strategy.positions} positions · {formatCurrency(strategy.invested, true)} invested
+                  </p>
+                </div>
+                <span className={cn("font-mono text-[13px]", strategy.returnPct > 0 ? "text-profit" : strategy.returnPct < 0 ? "text-loss" : "text-fg-muted")}>
+                  {strategy.returnPct === 0 ? "—" : formatPercent(strategy.returnPct)}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusChip tone={strategy.readinessTone} label={strategy.readinessLabel} />
+                <span className="min-w-0 truncate text-[12px] text-fg-muted">{strategy.readinessDetail}</span>
+              </div>
+            </button>
+          ))
+        ) : (
+          <div className="col-span-full px-3 py-8 text-center text-[13px] text-fg-muted">
+            Strategy data is still loading.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MarketPulsePanel({
+  indices,
+  marketOpen,
+  regimeLabel,
+  onTrade,
+}: {
+  indices: MarketIndexRow[];
+  marketOpen: boolean;
+  regimeLabel: string;
+  onTrade: () => void;
+}) {
+  return (
+    <section aria-labelledby="market-pulse-title" className="dashboard-section">
+      <PanelHeader
+        id="market-pulse-title"
+        icon={Radio}
+        title="Market pulse"
+        detail={marketOpen ? "Live session" : "Closed session"}
+        actionLabel="Open trade"
+        onAction={onTrade}
+      />
+      <div className="grid gap-px bg-border-hair md:grid-cols-[0.8fr_1.2fr]">
+        <div className="bg-bg-elev-1 p-4">
+          <span className="t-label text-fg-hint">Regime</span>
+          <p className="mt-2 text-[22px] font-medium text-ink-1000">{regimeLabel}</p>
+          <p className="mt-2 text-[13px] leading-snug text-fg-muted">
+            Use the strategy pages for thesis depth; this surface keeps the day&apos;s operating state visible.
+          </p>
+        </div>
+        <div className="divide-y divide-border-hair bg-bg-elev-1">
+          {indices.length > 0 ? (
+            indices.map((idx) => (
+              <div key={idx.symbol} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[14px] font-medium text-ink-1000">{idx.symbol}</p>
+                  <p className="truncate text-[12px] text-fg-muted">{idx.name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-[14px] text-ink-1000">{idx.price > 0 ? formatCurrency(idx.price) : "—"}</p>
+                  <p className={cn("font-mono text-[12px]", idx.changePct >= 0 ? "text-profit" : "text-loss")}>
+                    {idx.changePct >= 0 ? "+" : ""}{idx.changePct.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-8 text-center text-[13px] text-fg-muted">Index data is loading.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PanelHeader({
+  id,
+  icon: Icon,
+  title,
+  detail,
+  actionLabel,
+  onAction,
+}: {
+  id: string;
+  icon: ElementType;
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon className="size-4 shrink-0 text-fg-muted" aria-hidden />
+        <div className="min-w-0">
+          <h3 id={id} className="truncate text-[14px] font-semibold text-ink-1000">{title}</h3>
+          <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
+        </div>
+      </div>
+      {actionLabel && onAction ? (
+        <Button variant="ghost" size="sm" onClick={onAction}>
+          {actionLabel}
+          <ArrowRight aria-hidden />
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
+function LivePulse({
+  label,
+  title,
+  value,
+  toneClass,
+}: {
+  label: string;
+  title: string;
+  value: string;
+  toneClass: string;
+}) {
+  return (
+    <div className="rounded-md border border-border-hair bg-bg/55 p-3">
+      <span className="t-label text-fg-hint">{label}</span>
+      <div className="mt-2 flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-[15px] font-medium text-ink-1000">{title}</p>
+        <p className={cn("shrink-0 truncate font-mono text-[13px]", toneClass)}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function RiskMeter({ label, value, detail }: { label: string; value: number; detail: string }) {
+  const clamped = Math.max(0, Math.min(100, value));
+  return (
+    <div className="dashboard-card p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="t-label text-fg-hint">{label}</span>
+        <span className="font-mono text-[13px] text-ink-1000">{formatPercent(value)}</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
+        <div className="h-full rounded-sm bg-brand transition-all duration-500" style={{ width: `${clamped}%` }} />
+      </div>
+      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
+function RiskStat({
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "default" | "loss" | "muted";
+}) {
+  return (
+    <div className="dashboard-card p-4">
+      <span className="t-label text-fg-hint">{label}</span>
+      <p className={cn("mt-3 truncate font-mono text-[20px]", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
+        {value}
+      </p>
+      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
+function StatusChip({ label, tone }: { label: string; tone: "profit" | "loss" | "amber" | "muted" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[11px]",
+        tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
+        tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
+        tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
+        tone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", tone === "profit" ? "bg-profit" : tone === "loss" ? "bg-loss" : tone === "amber" ? "bg-amber" : "bg-fg-muted")} aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+const ActivityIcon = Clock3;
+
+type AccountSnapshot = ReturnType<typeof buildAccountSnapshot>;
+type StrategyCardData = ReturnType<typeof buildStrategyCards>[number];
+type MarketIndexRow = ReturnType<typeof normalizeIndices>[number];
+type ActionItem = ReturnType<typeof buildActionItems>[number];
+
+function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) {
+  const equity = Number.isFinite(summary.equity) ? summary.equity : 0;
+  const cash = Number.isFinite(summary.cash) ? summary.cash : 0;
+  const ready = Boolean(
+    summary.lastUpdated ||
+      summary.source ||
+      summary.is_demo !== undefined ||
+      positions.length > 0 ||
+      [summary.equity, summary.cash, summary.buyingPower, summary.totalMarketValue].some(
+        (value) => Number.isFinite(value) && value !== 0,
+      ),
+  );
+  const grossMarketValue = positions.reduce((sum, p) => sum + Math.abs(p.marketValue ?? 0), 0);
+  const grossExposurePct = equity > 0 ? (grossMarketValue / equity) * 100 : 0;
+  const cashPct = equity > 0 ? (cash / equity) * 100 : 0;
+  const dayPnl =
+    Number.isFinite(summary.dayPnl)
+      ? summary.dayPnl
+      : (summary.realizedPnlToday ?? 0) + (summary.unrealizedPnl ?? 0);
+  const largestPosition = positions.reduce<null | { symbol: string; pct: number; value: number }>((best, p) => {
+    const value = Math.abs(p.marketValue ?? 0);
+    if (!best || value > best.value) {
+      return {
+        symbol: p.symbol,
+        pct: equity > 0 ? (value / equity) * 100 : 0,
+        value,
+      };
+    }
+    return best;
+  }, null);
+
+  return {
+    ready,
+    equity,
+    cash,
+    dayPnl,
+    grossMarketValue,
+    grossExposurePct,
+    cashPct,
+    twoPctShock: grossMarketValue * 0.02,
+    largestPosition,
+  };
+}
+
+function buildStrategyCards(strategies: RawStrategy[]) {
+  return [...strategies]
+    .sort((a, b) => {
+      const activeDelta = Number((b.status ?? "").toLowerCase() === "active") - Number((a.status ?? "").toLowerCase() === "active");
+      if (activeDelta !== 0) return activeDelta;
+      const riskDelta = Number(Boolean(b.live_disabled || b.paper_only)) - Number(Boolean(a.live_disabled || a.paper_only));
+      if (riskDelta !== 0) return riskDelta;
+      return Math.abs(b.invested_amount ?? 0) - Math.abs(a.invested_amount ?? 0);
+    })
+    .map((strategy) => {
+      const returnPct = Number.isFinite(strategy.total_return_pct) ? strategy.total_return_pct : 0;
+      const positions = Number.isFinite(strategy.active_positions_count) ? strategy.active_positions_count : 0;
+      const winRate = Number.isFinite(strategy.win_rate) ? strategy.win_rate : -1;
+      const status = (strategy.status ?? "").toLowerCase() === "active" ? "active" : "paused";
+      const readiness = strategyReadiness({
+        liveDisabled: strategy.live_disabled === true,
+        paperOnly: strategy.paper_only === true,
+        status,
+        winRate,
+        positions,
+        sharpe: strategy.sharpe_ratio,
+      });
+      return {
+        id: strategy.id,
+        name: strategy.name || strategy.id,
+        status,
+        returnPct,
+        positions,
+        invested: Number.isFinite(strategy.invested_amount) ? strategy.invested_amount : 0,
+        ...readiness,
+      };
+    });
+}
+
+function strategyReadiness({
+  liveDisabled,
+  paperOnly,
+  status,
+  winRate,
+  positions,
+  sharpe,
+}: {
+  liveDisabled: boolean;
+  paperOnly: boolean;
+  status: "active" | "paused";
+  winRate: number;
+  positions: number;
+  sharpe?: number | null;
+}): { readinessLabel: string; readinessDetail: string; readinessTone: "profit" | "loss" | "amber" | "muted" } {
+  if (liveDisabled) {
+    return {
+      readinessLabel: "Live blocked",
+      readinessDetail: "Risk gate requires review before live capital.",
+      readinessTone: "loss",
+    };
+  }
+  if (paperOnly) {
+    return {
+      readinessLabel: "Paper only",
+      readinessDetail: "Tracked, but not promoted to live execution.",
+      readinessTone: "amber",
+    };
+  }
+  if (status !== "active") {
+    return {
+      readinessLabel: "Paused",
+      readinessDetail: "Disabled until the strategy is re-enabled.",
+      readinessTone: "amber",
+    };
+  }
+  if (winRate < 0) {
+    return {
+      readinessLabel: positions > 0 ? "Open only" : "No closed trades",
+      readinessDetail: positions > 0 ? "Exposure exists; no closed-trade hit rate yet." : "Waiting for enough ledger history.",
+      readinessTone: "muted",
+    };
+  }
+  const sharpeText = typeof sharpe === "number" && Number.isFinite(sharpe) && sharpe !== 0 ? ` · Sharpe ${sharpe.toFixed(2)}` : "";
+  return {
+    readinessLabel: `${winRate.toFixed(0)}% win rate`,
+    readinessDetail: `${positions} open position${positions === 1 ? "" : "s"}${sharpeText}`,
+    readinessTone: winRate >= 55 ? "profit" : winRate >= 45 ? "amber" : "loss",
+  };
+}
+
+function normalizeIndices(indices: IndexSnapshot[]) {
+  return indices.map((idx) => ({
+    symbol: idx.symbol,
+    name: idx.name,
+    price: Number.isFinite(idx.price) ? idx.price : 0,
+    changePct: Number.isFinite(idx.change_pct) ? idx.change_pct : 0,
+  }));
+}
+
+function buildActionItems({
+  marketOpen,
+  openOrders,
+  positions,
+  orders,
+  activeStrategyCount,
+  totalStrategyCount,
+  pipelineStatus,
+}: {
+  marketOpen: boolean;
+  openOrders: number;
+  positions: Position[];
+  orders: Order[];
+  activeStrategyCount: number;
+  totalStrategyCount: number;
+  pipelineStatus?: PipelineStatus;
+}) {
+  const rejected = orders.filter((o) => o.status === "rejected").length;
+  const activeRatio = totalStrategyCount > 0 ? activeStrategyCount / totalStrategyCount : 0;
+  return [
+    {
+      title: openOrders > 0 ? `Review ${openOrders} working order${openOrders === 1 ? "" : "s"}` : "Trade from the dedicated ticket",
+      detail: openOrders > 0 ? "Confirm stale limits, partial fills, and cancels before adding risk." : "The full chart and order ticket now live on the Trade page.",
+      tone: openOrders > 0 ? "amber" : marketOpen ? "profit" : "muted",
+      action: openOrders > 0 ? "orders" : "trade",
+    },
+    {
+      title: rejected > 0 ? `${rejected} rejected order${rejected === 1 ? "" : "s"}` : `${positions.length} open position${positions.length === 1 ? "" : "s"}`,
+      detail: rejected > 0 ? "Open the book and inspect broker/risk-gate reasons." : "Scan concentration and cash before the next strategy run.",
+      tone: rejected > 0 ? "loss" : "muted",
+      action: rejected > 0 ? "orders" : "trade",
+    },
+    {
+      title: pipelineStatus?.running ? "Pipeline running" : activeRatio < 0.5 ? "Strategies mostly paused" : "Strategy pipeline ready",
+      detail: pipelineStatus?.stage ?? pipelineStatus?.last_result ?? `${activeStrategyCount}/${totalStrategyCount || 0} strategies are enabled.`,
+      tone: pipelineStatus?.running ? "profit" : activeRatio < 0.5 ? "amber" : "muted",
+      action: "pipeline",
+    },
+  ] as const;
 }
 
 /**
@@ -1022,10 +1569,12 @@ function LastTickStatusBar({
   base,
   buildVersion,
   marketOpen,
+  pipelineTotal: fallbackPipelineTotal,
 }: {
   base: ReturnType<typeof import("./_desk/selectors").toStatusPills>;
   buildVersion: string;
   marketOpen: boolean;
+  pipelineTotal: number;
 }) {
   // Round-15 / persona-10 P0: pipeline poller lives in the leaf, not
   // the parent — the 60s refetch only re-renders this small subtree
@@ -1036,8 +1585,11 @@ function LastTickStatusBar({
     : pipelineStatus?.running
       ? 1
       : 0;
+  const pipelineTotal = pipelineStatus?.progress
+    ? Object.keys(pipelineStatus.progress).length
+    : fallbackPipelineTotal;
 
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
     // Round-10 / V-1.12 (P2): pause the heartbeat when the tab is
     // hidden so we don't wake up the CPU 30 times/minute on background
@@ -1045,7 +1597,8 @@ function LastTickStatusBar({
     let id: ReturnType<typeof setInterval> | null = null;
     const start = () => {
       if (id != null) return;
-      id = setInterval(() => setTick((t) => t + 1), 2_000);
+      setNowMs(Date.now());
+      id = setInterval(() => setNowMs(Date.now()), 2_000);
     };
     const stop = () => {
       if (id != null) {
@@ -1068,13 +1621,12 @@ function LastTickStatusBar({
   }, []);
 
   const lastTickSec = useMemo(() => {
-    void tick; // dep so the value is recomputed on each heartbeat
     const ts = getFreshestQuoteTimestamp();
-    if (!ts) return undefined;
+    if (!ts || nowMs <= 0) return undefined;
     const epochMs = ts > 1e12 ? ts : ts * 1000;
-    const delta = (Date.now() - epochMs) / 1000;
+    const delta = (nowMs - epochMs) / 1000;
     return delta >= 0 && delta < 86_400 ? delta : undefined;
-  }, [tick]);
+  }, [nowMs]);
 
   const pills = useMemo(() => {
     // Anchor pill rewrites by label prefix — index drift after insertion
@@ -1104,32 +1656,25 @@ function LastTickStatusBar({
     if (pipeIdx !== -1) {
       next[pipeIdx] = {
         ...next[pipeIdx],
-        label: `Pipeline ${pipelineRunningCount}/12`,
+        label: `Pipeline ${pipelineRunningCount}/${pipelineTotal}`,
       };
     }
     return next;
-  }, [base, lastTickSec, marketOpen, pipelineRunningCount]);
+  }, [base, lastTickSec, marketOpen, pipelineRunningCount, pipelineTotal]);
 
   return <StatusBar pills={pills} buildVersion={buildVersion} />;
 }
 
 /**
- * Round-8 killer-move 1: collapsible "Today's brief" drawer that hosts
- * MorningBrief + AI Memo. Pinned at the bottom of the right rail,
- * collapsed by default — gives the user a single line of context
- * ("View today's brief →") without consuming the 120-180 px the two
- * panels needed when they were always-mounted. Expansion state is
- * per-session (does not persist) so the user gets a clean rail every
- * morning by default but can keep the brief open for the rest of a
- * working session. The MorningBrief component still self-dismisses
- * once read, so opening the drawer twice in a day is a no-op for
- * dismissed sessions.
+ * Collapsed AI memo drawer. The MorningBrief is now promoted into the
+ * insight rail above the watchlist; the memo stays opt-in because it is
+ * secondary until a user asks for a deeper note.
  */
-function BriefDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"] }) {
+function MemoDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"] }) {
   const [open, setOpen] = useState(false);
   return (
     <div
-      data-slot="brief-drawer"
+      data-slot="memo-drawer"
       className="shrink-0 border-t border-border-hair bg-bg"
     >
       <button
@@ -1142,14 +1687,13 @@ function BriefDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"]
         className="flex w-full min-h-11 items-center justify-between px-4 py-2 text-left t-meta hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-gold-300"
       >
         <span>
-          <span className="u-brand">Today&apos;s brief</span>
-          <span className="ml-2 u-muted">— overnight + AI memo</span>
+          <span className="u-brand">AI memo</span>
+          <span className="ml-2 u-muted">— structured note</span>
         </span>
         <span aria-hidden="true" className="u-muted">{open ? "−" : "+"}</span>
       </button>
       {open && (
         <div className="border-t border-border-hair">
-          <MorningBrief />
           <AIMemoPanel memo={memo} />
         </div>
       )}
@@ -1158,35 +1702,6 @@ function BriefDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"]
 }
 
 /* ─── Tiny helpers kept inline ──────────────────────────── */
-
-// Range pill → (timeframe, bar-limit) lookup. Shorter ranges intentionally
-// request finer timeframes so a user zooming to 1D sees the day's
-// 5-minute candles, not a two-bar daily compression. Limits are calibrated
-// to comfortably cover the range's calendar span:
-//   1D  → 5-min bars, 78 bars per 6.5-hour session × some headroom
-//   5D  → 15-min bars
-//   1M  → 1-hour bars (~7 × 22 trading days)
-//   3M+ → daily bars (`D`)
-//   ALL → weekly bars so we don't pull 10 years of 1D data
-//
-// This mirrors the default stepping used by TradingView / ToS / Webull.
-// The backend's `/api/v1/market/bars/<sym>` endpoint accepts the
-// TimeFrame codes `1m, 5m, 15m, 1H, 4H, D, W, M` — see the mapping in
-// `getBars` at lib/api.ts.
-function rangeToTimeframe(
-  r: ChartRange,
-): [import("@/types").TimeFrame, number] {
-  switch (r) {
-    case "1D":  return ["5m",  100];   // ~6.5h session, some pre/post
-    case "5D":  return ["15m", 140];   // 5 sessions × ~26 fifteen-min bars
-    case "1M":  return ["1H",  160];   // 22 days × 7 hours
-    case "3M":  return ["D",   66];
-    case "6M":  return ["D",   132];
-    case "YTD": return ["D",   260];
-    case "1Y":  return ["D",   260];
-    case "ALL": return ["W",   520];
-  }
-}
 
 // isMarketOpen now lives in @/lib/marketHours and uses Intl America/New_York
 // so it handles EST/EDT correctly year-round. See wave-8 audit finding.

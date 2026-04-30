@@ -80,7 +80,11 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
           </button>
         )}
       </div>
-      <button onClick={() => onDismiss(toast.id)} className="shrink-0 rounded-sm p-0.5 text-fg-muted hover:text-fg">
+      <button
+        onClick={() => onDismiss(toast.id)}
+        className="shrink-0 rounded-sm p-0.5 text-fg-muted hover:text-fg"
+        aria-label="Dismiss notification"
+      >
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -103,7 +107,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   // pill rather than a vanishing-act stack. Reset whenever the
   // visible stack drains to empty (the burst is over and the
   // pill no longer carries useful info).
-  const droppedRef = useState<{ count: number }>({ count: 0 })[0];
+  const droppedRef = useRef<{ count: number }>({ count: 0 });
   const [droppedCount, setDroppedCount] = useState(0);
 
   const addToast = useCallback(
@@ -114,8 +118,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const next = [entry, ...prev];
         if (next.length > 3) {
           // Round-11 / BB-14: count the overflow so the user sees it.
-          droppedRef.count += next.length - 3;
-          setDroppedCount(droppedRef.count);
+          droppedRef.current.count += next.length - 3;
+          setDroppedCount(droppedRef.current.count);
         }
         return next.slice(0, 3);
       });
@@ -131,16 +135,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   // the burst is over and "+N more" no longer reflects current
   // reality.
   useEffect(() => {
-    if (toasts.length === 0 && droppedRef.count > 0) {
-      droppedRef.count = 0;
-      setDroppedCount(0);
+    if (toasts.length === 0 && droppedRef.current.count > 0) {
+      droppedRef.current.count = 0;
+      const timer = window.setTimeout(() => setDroppedCount(0), 0);
+      return () => window.clearTimeout(timer);
     }
-  }, [toasts.length, droppedRef]);
+    return undefined;
+  }, [toasts.length]);
 
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      timersRef.current.forEach((timer) => clearTimeout(timer));
-      timersRef.current.clear();
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
     };
   }, []);
 
@@ -156,7 +163,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-label="Notifications"
         aria-live="polite"
         aria-atomic="false"
-        className="fixed bottom-4 right-4 z-[55] flex flex-col-reverse gap-2 w-[380px] pointer-events-none"
+        className="fixed bottom-4 right-4 z-[55] flex w-[calc(100vw-2rem)] max-w-[380px] flex-col-reverse gap-2 pointer-events-none sm:w-[380px]"
       >
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">

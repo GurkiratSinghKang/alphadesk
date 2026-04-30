@@ -167,6 +167,101 @@ def test_full_research_404_does_not_charge_rate_bucket():
     assert r.status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_full_research_cache_hit_does_not_charge_rate_bucket(monkeypatch: pytest.MonkeyPatch):
+    """Warm full-research cache returns before the expensive Claude limiter."""
+    from api.routes import earnings as earnings_route
+    from api.schemas.earnings import ClaudeFullResearch
+
+    fake_payload = ClaudeFullResearch(
+        thesis_paragraph="cached",
+        comparable_setups=[],
+        post_earnings_drift_playbook="cached",
+        sector_backdrop="cached",
+        analyst_consensus_delta="cached",
+        what_would_change_my_mind="cached",
+        confidence=0.5,
+        model="claude-stub",
+        generated_at=datetime.now(timezone.utc),
+    )
+
+    async def _boom_rate(ip: str) -> None:
+        raise AssertionError("rate limiter should not run on cache hit")
+
+    monkeypatch.setattr(
+        earnings_route.earnings_screener,
+        "_load_earnings_meta",
+        AsyncMock(return_value={
+            "symbol": "AAPL",
+            "company": "Apple",
+            "sector": "Tech",
+            "report_date": "2026-04-30",
+            "report_time": "AMC",
+        }),
+    )
+    monkeypatch.setattr(
+        earnings_route.earnings_screener,
+        "load_cached_full_research",
+        AsyncMock(return_value=fake_payload),
+    )
+    monkeypatch.setattr(earnings_route, "check_full_research_rate", _boom_rate)
+
+    result = await earnings_route.post_full_research("AAPL", object(), username="alice")
+
+    assert result.thesis_paragraph == "cached"
+
+
+@pytest.mark.asyncio
+async def test_full_research_user_rate_limit_sets_retry_after(monkeypatch: pytest.MonkeyPatch):
+    """Per-user limiter must include Retry-After so the UI shows a real cooldown."""
+    from api.routes import earnings as earnings_route
+    from core import redis as redis_module
+
+    class _Redis:
+        async def incr(self, key: str) -> int:
+            return 11
+
+        async def expire(self, key: str, ttl: int) -> None:
+            return None
+
+    async def _ok_ip_rate(ip: str) -> None:
+        return None
+
+    async def _redis() -> _Redis:
+        return _Redis()
+
+    monkeypatch.setattr(
+        earnings_route.earnings_screener,
+        "_load_earnings_meta",
+        AsyncMock(return_value={
+            "symbol": "AAPL",
+            "company": "Apple",
+            "sector": "Tech",
+            "report_date": "2026-04-30",
+            "report_time": "AMC",
+        }),
+    )
+    monkeypatch.setattr(
+        earnings_route.earnings_screener,
+        "load_cached_full_research",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(earnings_route, "check_full_research_rate", _ok_ip_rate)
+    monkeypatch.setattr(redis_module, "get_redis", _redis)
+
+    class _Request:
+        class _Client:
+            host = "10.0.0.88"
+
+        client = _Client()
+
+    with pytest.raises(HTTPException) as excinfo:
+        await earnings_route.post_full_research("AAPL", _Request(), username="alice")
+
+    assert excinfo.value.status_code == 429
+    assert int((excinfo.value.headers or {})["Retry-After"]) >= 1
+
+
 # ───────────────────────── Round-4 detail rate-limit tests ─────────────────────────
 
 

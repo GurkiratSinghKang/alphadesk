@@ -6,7 +6,7 @@ import { useMarketStore } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useAlertsStore } from "@/stores/alerts";
 import { getSnapshot, getPositions, getOrders, getPortfolioSummary, getPortfolioGreeks } from "@/lib/api";
-import type { Quote, Alert } from "@/types";
+import type { Quote, Alert, Position, Order, PortfolioSummary, PortfolioGreeks } from "@/types";
 
 /**
  * Module-level so the initial-fetch effect and the polling effect
@@ -51,6 +51,112 @@ export function fetchPortfolioData() {
     .catch((err) => {
       console.warn("[DataPipeline] Greeks fetch failed:", err.message);
     });
+}
+
+function firstNumber(raw: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function firstString(raw: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+function normalizeWsPosition(raw: Record<string, unknown>): Position {
+  return {
+    symbol: firstString(raw, "symbol") ?? "",
+    quantity: firstNumber(raw, "quantity", "qty"),
+    side: (firstString(raw, "side") as Position["side"]) ?? undefined,
+    avgCost: firstNumber(raw, "avgCost", "avg_cost"),
+    currentPrice: firstNumber(raw, "currentPrice", "current_price"),
+    unrealizedPnl: firstNumber(raw, "unrealizedPnl", "unrealized_pnl"),
+    marketValue: firstNumber(raw, "marketValue", "market_value"),
+    sector: firstString(raw, "sector"),
+    strategy: firstString(raw, "strategy") ?? null,
+  };
+}
+
+function normalizeWsOrder(raw: Record<string, unknown>): Order {
+  const legsRaw = Array.isArray(raw.legs)
+    ? (raw.legs as Array<Record<string, unknown>>)
+    : [];
+  const firstLeg = legsRaw[0] ?? {};
+  return {
+    id: firstString(raw, "id", "order_id") ?? "",
+    symbol: firstString(firstLeg, "symbol") ?? firstString(raw, "symbol") ?? "",
+    side: ((firstString(firstLeg, "side") ?? firstString(raw, "side") ?? "buy") as Order["side"]),
+    type: ((firstString(firstLeg, "order_type", "type") ?? firstString(raw, "type") ?? "market") as Order["type"]),
+    quantity: firstNumber(firstLeg, "qty", "quantity") || firstNumber(raw, "quantity", "qty"),
+    price: firstNumber(firstLeg, "limit_price", "price") || firstNumber(raw, "price", "limit_price") || undefined,
+    status: ((firstString(raw, "status") ?? "pending") as Order["status"]),
+    legs: legsRaw.map((leg) => ({
+      symbol: firstString(leg, "symbol") ?? "",
+      side: ((firstString(leg, "side") ?? "buy") as "buy" | "sell"),
+      quantity: firstNumber(leg, "qty", "quantity"),
+      price: firstNumber(leg, "price", "limit_price") || undefined,
+    })),
+    strategy: firstString(raw, "strategy") ?? null,
+    comboType: firstString(raw, "comboType", "combo_type") ?? null,
+    rejectReason: firstString(raw, "rejectReason", "reject_reason") ?? null,
+    filledAt: firstString(raw, "filledAt", "filled_at"),
+    createdAt:
+      firstString(raw, "createdAt", "created_at", "submitted_at") ??
+      new Date().toISOString(),
+  };
+}
+
+function normalizeWsSummary(raw: Record<string, unknown>): PortfolioSummary {
+  const dayPnl = firstNumber(raw, "dayPnl", "day_pnl", "profit_loss", "realizedPnlToday", "realized_pnl_today");
+  const equity = firstNumber(raw, "equity");
+  const rawDayPnlPct = firstNumber(raw, "dayPnlPct", "day_pnl_pct");
+  const lastEquity = equity - dayPnl;
+  return {
+    equity,
+    cash: firstNumber(raw, "cash"),
+    buyingPower: firstNumber(raw, "buyingPower", "buying_power"),
+    totalMarketValue: firstNumber(raw, "totalMarketValue", "total_market_value"),
+    unrealizedPnl: firstNumber(raw, "unrealizedPnl", "unrealized_pnl"),
+    unrealizedPnlPct: firstNumber(raw, "unrealizedPnlPct", "unrealized_pnl_pct"),
+    realizedPnlToday: firstNumber(raw, "realizedPnlToday", "realized_pnl_today"),
+    positionsCount: firstNumber(raw, "positionsCount", "positions_count"),
+    dayPnl,
+    dayPnlPct: rawDayPnlPct || (lastEquity > 0 ? (dayPnl / lastEquity) * 100 : 0),
+    is_demo: raw.is_demo === true || raw.source === "demo",
+    lastUpdated: firstString(raw, "lastUpdated", "last_updated"),
+    source: firstString(raw, "source"),
+  };
+}
+
+function normalizeWsGreeks(raw: Record<string, unknown>): PortfolioGreeks {
+  const byPositionRaw = raw.byPosition ?? raw.by_position;
+  const byPosition = Array.isArray(byPositionRaw)
+    ? byPositionRaw.map((entry) => {
+        const p = entry as Record<string, unknown>;
+        return {
+          symbol: firstString(p, "symbol") ?? "",
+          delta: firstNumber(p, "delta"),
+          gamma: firstNumber(p, "gamma"),
+          theta: firstNumber(p, "theta"),
+          vega: firstNumber(p, "vega"),
+        };
+      })
+    : undefined;
+  return {
+    netDelta: firstNumber(raw, "netDelta", "net_delta"),
+    netGamma: firstNumber(raw, "netGamma", "net_gamma"),
+    netTheta: firstNumber(raw, "netTheta", "net_theta"),
+    netVega: firstNumber(raw, "netVega", "net_vega"),
+    betaWeightedDelta: firstNumber(raw, "betaWeightedDelta", "beta_weighted_delta"),
+    byPosition,
+    isDemo: raw.is_demo === true,
+  };
 }
 
 /**
@@ -191,33 +297,28 @@ export function useDataPipeline(enabled: boolean = true) {
         const payload = msg.data as Record<string, unknown>;
         if (payload?.positions) {
           const rawPositions = payload.positions as Record<string, unknown>[];
-          const mapped = rawPositions.map((p) => ({
-            symbol: (p.symbol as string) ?? "",
-            quantity: (p.quantity as number) ?? (p.qty as number) ?? 0,
-            side: (p.side as "long" | "short") ?? undefined,
-            avgCost: (p.avg_cost as number) ?? (p.avgCost as number) ?? 0,
-            currentPrice: (p.current_price as number) ?? (p.currentPrice as number) ?? 0,
-            unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,
-            marketValue: (p.market_value as number) ?? (p.marketValue as number) ?? 0,
-          }));
+          const mapped = rawPositions.map(normalizeWsPosition);
           usePortfolioStore
             .getState()
-            .setPositions(mapped as import("@/types").Position[]);
+            .setPositions(mapped);
         }
         if (payload?.orders) {
+          const rawOrders = payload.orders as Record<string, unknown>[];
           usePortfolioStore
             .getState()
-            .setOrders(payload.orders as import("@/types").Order[]);
+            .setOrders(rawOrders.map(normalizeWsOrder));
         }
         if (payload?.summary) {
+          const rawSummary = payload.summary as Record<string, unknown>;
           usePortfolioStore
             .getState()
-            .setSummary(payload.summary as import("@/types").PortfolioSummary);
+            .setSummary(normalizeWsSummary(rawSummary));
         }
         if (payload?.greeks) {
+          const rawGreeks = payload.greeks as Record<string, unknown>;
           usePortfolioStore
             .getState()
-            .setGreeks(payload.greeks as import("@/types").PortfolioGreeks);
+            .setGreeks(normalizeWsGreeks(rawGreeks));
         }
       })
     );

@@ -178,6 +178,7 @@ def compute_earnings_edge_score(
     reasons: list[str] = []
     evidence_count = 0
     setup = (top_setup or "").strip().lower()
+    setup_known = bool(setup)
     directional_debit_side = {
         "long call": "call",
         "bull call spread": "call",
@@ -189,7 +190,10 @@ def compute_earnings_edge_score(
 
     if iv_rank is not None:
         iv = clamp(float(iv_rank), 0.0, 100.0)
-        if is_debit_setup:
+        if not setup_known:
+            score += clamp(100.0 - abs(iv - 55.0) * 1.4, 0.0, 100.0) * 0.10
+            reasons.append(f"IV rank {iv:.0f}; setup not selected yet")
+        elif is_debit_setup:
             score += (100.0 - iv) * 0.25
             if iv <= 35:
                 reasons.append(f"IV rank {iv:.0f} keeps debit moderate")
@@ -205,7 +209,11 @@ def compute_earnings_edge_score(
     ]
     if premiums:
         premium_evidence = True
-        if is_straddle_debit:
+        if not setup_known:
+            premium = max(float(p) for p in premiums)
+            score += clamp(premium / 0.06, 0.0, 1.0) * 10.0
+            reasons.append(f"ATM option yield {premium:.1%}; needs setup")
+        elif is_straddle_debit:
             debit = sum(float(p) for p in premiums)
             score += clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
             if debit <= 0.06:
@@ -238,7 +246,14 @@ def compute_earnings_edge_score(
     ):
         expected = float(expected_move_pct)
         hist = float(hist_avg_abs_move_pct)
-        if is_debit_setup:
+        if not setup_known:
+            mismatch = abs(expected - hist) / hist
+            score += clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
+            relation = "above" if expected > hist else "below"
+            reasons.append(
+                f"Implied move {relation} {hist:.1%} historical avg; setup pending"
+            )
+        elif is_debit_setup:
             underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
             if underprice_ratio > 0:
                 score += clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
@@ -283,6 +298,17 @@ def compute_earnings_edge_score(
         elif days_until < 0:
             score -= 20.0
             reasons.append("Already reported; edge decays")
+
+    if setup_known and (
+        expected_move_pct is None
+        or hist_avg_abs_move_pct is None
+        or float(hist_avg_abs_move_pct) <= 0
+    ):
+        score = min(score, 60.0)
+        reasons.insert(0, "Historical earnings move unavailable; edge capped")
+
+    if not setup_known:
+        score = min(score, 55.0)
 
     return {
         "edge_score": round(clamp(score, 0.0, 100.0), 1),
@@ -958,6 +984,7 @@ async def _load_quote(symbol: str) -> dict | None:
             "last": float(q.last),
             "change": float(q.change),
             "change_pct": float(q.changePct),
+            "timestamp": q.timestamp,
         }
     except Exception as e:
         # B-69: demoted to DEBUG. During an Alpaca outage this was
@@ -2280,6 +2307,12 @@ async def get_detail(symbol: str) -> EarningsDetail:
         or "iv_term_partial" in error_codes
     )
 
+    def _metric_or_none(key: str) -> float | None:
+        if not metrics:
+            return None
+        value = metrics.get(key)
+        return value if value is not None else None
+
     claude_ctx = {
         "symbol": symbol,
         "company": meta["company"],
@@ -2287,10 +2320,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "report_date": meta["report_date"],
         "report_time": meta["report_time"],
         "price": quote["last"] if quote else 0.0,
-        "iv_rank": metrics.get("iv_rank") or 0 if metrics else 0,
-        "iv_percentile": metrics.get("iv_percentile") or 0 if metrics else 0,
-        "hv_20": metrics.get("hv_20") or 0 if metrics else 0,
-        "expected_move_pct": metrics.get("expected_move_pct") or 0 if metrics else 0,
+        "iv_rank": _metric_or_none("iv_rank"),
+        "iv_percentile": _metric_or_none("iv_percentile"),
+        "hv_20": _metric_or_none("hv_20"),
+        "expected_move_pct": _metric_or_none("expected_move_pct"),
         "hist_avg_abs_move_pct": (
             metrics.get("hist_avg_abs_move_pct") if metrics else None
         ),
@@ -2423,13 +2456,13 @@ async def _run_full_research_uncached(
         report_time=meta["report_time"],
         price=quote["last"] if isinstance(quote, dict) else 0.0,
         iv_rank=(
-            metrics.get("iv_rank") or 0 if isinstance(metrics, dict) else 0
+            metrics.get("iv_rank") if isinstance(metrics, dict) else None
         ),
         iv_percentile=(
-            metrics.get("iv_percentile") or 0 if isinstance(metrics, dict) else 0
+            metrics.get("iv_percentile") if isinstance(metrics, dict) else None
         ),
         expected_move_pct=(
-            metrics.get("expected_move_pct") or 0 if isinstance(metrics, dict) else 0
+            metrics.get("expected_move_pct") if isinstance(metrics, dict) else None
         ),
         historical_quarters=(
             metrics.get("historical_quarters", []) if isinstance(metrics, dict) else []
@@ -2457,3 +2490,20 @@ async def _run_full_research_uncached(
     }
     await cache.set(key, payload, ttl_seconds=24 * 3600)
     return ClaudeFullResearch(**payload)
+
+
+async def load_cached_full_research(
+    symbol: str,
+    *,
+    meta: dict,
+) -> ClaudeFullResearch | None:
+    """Return a cached full-research note without creating a Claude task."""
+    try:
+        from core.cache import get_cache
+
+        cache = get_cache()
+        cached = await cache.get(f"earnings:claude-full:{symbol}:{meta['report_date']}")
+        return ClaudeFullResearch(**cached) if cached else None
+    except Exception:
+        log.debug("full-research cache preflight failed for %s", symbol, exc_info=True)
+        return None

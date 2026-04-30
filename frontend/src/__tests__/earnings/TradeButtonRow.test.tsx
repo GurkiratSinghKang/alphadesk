@@ -138,4 +138,26 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={null} />);
     expect(container.textContent).toMatch(/unavailable|no chain/i);
   });
+
+  it("disables trade links for synthetic option chains", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={{ ...ladder, isDemo: true }} />);
+    expect(container.textContent).toMatch(/synthetic options chain/i);
+    expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
+  });
+
+  it("normalizes dot share-class tickers before building OCC symbols", () => {
+    const { container } = render(<TradeButtonRow symbol="BRK.B" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-long-call"]') as HTMLAnchorElement;
+    const href = decodeURIComponent(btn.getAttribute("href")!);
+    expect(href).toContain("contract=BRKB260425C00205000");
+    expect(href).not.toContain("BRK.B260425");
+  });
+
+  it("includes max-loss copy in the link description", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const btn = container.querySelector('a[data-slot="trade-button-bull-put-spread"]') as HTMLAnchorElement;
+    const describedBy = btn.getAttribute("aria-describedby") ?? "";
+    expect(describedBy).toContain("trade-button-bull-put-spread-risk-copy");
+    expect(container.textContent).toMatch(/max loss/i);
+  });
 });

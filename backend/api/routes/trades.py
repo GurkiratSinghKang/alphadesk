@@ -7,7 +7,8 @@ import logging
 import re
 import unicodedata
 import uuid as _uuid
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -532,11 +533,6 @@ class CreateOrderRequest(BaseModel):
         """
         if (_os.environ.get("TRADES_ALLOW_NAKED_OPTION_LEGS", "") or "").lower() in {"1", "true", "yes"}:
             return self
-        # When combo_type is set, the new field validator already
-        # restricted it to defined-risk values — short legs inside a
-        # defined-risk combo are wing-protected by definition.
-        if self.combo_type is not None:
-            return self
         # Inspect every leg for short option exposure. OCC-shaped symbols are
         # considered options even if a legacy caller omitted asset_class.
         for leg in self.legs:
@@ -548,46 +544,63 @@ class CreateOrderRequest(BaseModel):
             side_value = getattr(side, "value", side)
             if not is_option or side_value != "sell":
                 continue
-            # OCC parse to extract option type + expiry. Symbol shape:
-            # ``SYMBOL + YYMMDD + (C|P) + 8-digit-strike``. The leg
-            # validator at OrderLeg.model_validator already verified
-            # this for option legs, so a malformed symbol shouldn't
-            # reach here.
-            occ = leg.symbol
-            try:
-                # Find the C/P pivot — last 9 chars are PXXXXXXXX or
-                # CXXXXXXXX, preceded by 6-digit YYMMDD.
-                opt_type_idx = len(occ) - 9
-                opt_type = occ[opt_type_idx]
-                expiry = occ[opt_type_idx - 6:opt_type_idx]
-            except Exception:
+            parsed = _parse_occ_symbol(leg.symbol)
+            if parsed is None:
                 # Defensive: if parsing fails treat the whole order
                 # as suspect and refuse it.
                 raise ValueError(
                     "could not parse option leg OCC symbol; refusing as a "
                     "defence-in-depth measure (DR-1 / RD-2)"
                 )
-            # Require a covering LONG leg of the same type + expiry.
-            covered = any(
-                (other_leg.symbol != leg.symbol)
-                and (
-                    (getattr(other_leg, "asset_class", "equity") or "equity").lower() == "option"
-                    or _parse_occ_symbol(other_leg.symbol) is not None
+            opt_type = "C" if parsed["call_put"] == "call" else "P"
+            expiry = (parsed["expiry_yy"], parsed["expiry_mm"], parsed["expiry_dd"])
+
+            collateral_combo = (self.combo_type or "").lower()
+            if collateral_combo in {"covered_call", "cash_secured_put"}:
+                raise ValueError(
+                    f"{collateral_combo} requires portfolio collateral checks "
+                    "that are not available on this endpoint yet. Submit a "
+                    "defined-risk spread with an explicit long option leg."
                 )
-                and (getattr(getattr(other_leg, "side", None), "value", getattr(other_leg, "side", None)) == "buy")
-                and len(other_leg.symbol) >= 9
-                and other_leg.symbol[-9] == opt_type  # same call/put
-                and other_leg.symbol[-15:-9] == expiry  # same expiry
-                for other_leg in self.legs
-            )
-            if not covered:
+
+            # Require enough covering LONG quantity. A SELL 10 + BUY 1
+            # ratio is still undefined risk for nine contracts. Calendar /
+            # diagonal spreads can cover with a different expiry; same-expiry
+            # combos must cover with the same expiry and option type.
+            covering_qty = 0.0
+            for other_leg in self.legs:
+                if other_leg.symbol == leg.symbol:
+                    continue
+                other_side = getattr(
+                    getattr(other_leg, "side", None),
+                    "value",
+                    getattr(other_leg, "side", None),
+                )
+                if other_side != "buy":
+                    continue
+                other_parsed = _parse_occ_symbol(other_leg.symbol)
+                if other_parsed is None:
+                    continue
+                other_type = "C" if other_parsed["call_put"] == "call" else "P"
+                if other_type != opt_type:
+                    continue
+                other_expiry = (
+                    other_parsed["expiry_yy"],
+                    other_parsed["expiry_mm"],
+                    other_parsed["expiry_dd"],
+                )
+                if collateral_combo not in {"calendar_spread", "diagonal_spread"} and other_expiry != expiry:
+                    continue
+                covering_qty += float(other_leg.qty)
+
+            if covering_qty < float(leg.qty):
                 raise ValueError(
                     "naked short option leg not permitted: "
-                    f"{leg.symbol} (sell {opt_type}) has no covering long leg "
-                    "in the same request. Submit a defined-risk combo "
+                    f"{leg.symbol} (sell {opt_type}) has covering long qty "
+                    f"{covering_qty:g} for short qty {float(leg.qty):g}. "
+                    "Submit a defined-risk combo "
                     "(vertical_spread, iron_condor, iron_butterfly, "
-                    "calendar_spread, diagonal_spread, covered_call, "
-                    "cash_secured_put, or married_put) — naked options are "
+                    "calendar_spread, or diagonal_spread) — naked options are "
                     "blocked by the DR-1 risk policy."
                 )
         return self
@@ -635,6 +648,143 @@ class OrderResponse(BaseModel):
     # ``cancelled`` and the reason was discarded — a trader could not tell
     # "I cancelled it" from "broker refused it" nor why it was refused.
     reject_reason: str | None = None
+
+
+def _optional_broker_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _required_broker_qty(value: Any) -> float:
+    try:
+        parsed = abs(float(value))
+    except (TypeError, ValueError):
+        return 0.0
+    return parsed
+
+
+def _broker_order_type(raw_type: Any, *, limit_price: float | None, stop_price: float | None) -> OrderType:
+    text = str(raw_type or "").strip().lower()
+    if text in {member.value for member in OrderType}:
+        candidate = OrderType(text)
+    elif limit_price is not None and stop_price is not None:
+        candidate = OrderType.STOP_LIMIT
+    elif stop_price is not None:
+        candidate = OrderType.STOP
+    elif limit_price is not None:
+        candidate = OrderType.LIMIT
+    else:
+        candidate = OrderType.MARKET
+
+    # OrderLeg is used for both requests and responses and validates that
+    # limit/stop-style legs include their trigger prices. Alpaca can omit
+    # per-leg limit prices on native mleg responses when the net order limit is
+    # top-level only, so keep the response renderable instead of failing the
+    # entire order list on one missing child field.
+    if candidate == OrderType.LIMIT and limit_price is None:
+        return OrderType.MARKET
+    if candidate == OrderType.STOP and stop_price is None:
+        return OrderType.MARKET
+    if candidate == OrderType.STOP_LIMIT:
+        if limit_price is None and stop_price is None:
+            return OrderType.MARKET
+        if limit_price is None:
+            return OrderType.STOP
+        if stop_price is None:
+            return OrderType.LIMIT
+    return candidate
+
+
+def _alpaca_order_leg(raw: Mapping[str, Any], fallback: Mapping[str, Any]) -> OrderLeg | None:
+    symbol = str(raw.get("symbol") or fallback.get("symbol") or "").upper()
+    side = str(raw.get("side") or fallback.get("side") or "buy").strip().lower()
+    qty = _required_broker_qty(raw.get("qty") or raw.get("filled_qty") or fallback.get("qty"))
+    if not symbol or side not in {OrderSide.BUY.value, OrderSide.SELL.value} or qty <= 0:
+        return None
+
+    limit_price = _optional_broker_float(raw.get("limit_price"))
+    stop_price = _optional_broker_float(raw.get("stop_price"))
+    order_type = _broker_order_type(
+        raw.get("type") or raw.get("order_type") or fallback.get("type"),
+        limit_price=limit_price,
+        stop_price=stop_price,
+    )
+    asset_class = str(raw.get("asset_class") or raw.get("class") or fallback.get("asset_class") or "equity").lower()
+    if asset_class in {"us_option", "option_contract"}:
+        asset_class = "option"
+
+    return OrderLeg(
+        symbol=symbol,
+        side=OrderSide(side),
+        qty=qty,
+        order_type=order_type,
+        limit_price=limit_price,
+        stop_price=stop_price,
+        asset_class=asset_class,
+    )
+
+
+def _alpaca_mleg_ratio_qtys(legs: list[OrderLeg]) -> tuple[int, list[int]]:
+    """Return parent quantity and reduced per-leg ratios for Alpaca MLeg."""
+    from math import gcd
+
+    int_qtys: list[int] = []
+    for leg in legs:
+        qty = float(leg.qty)
+        if not qty.is_integer():
+            raise HTTPException(
+                status_code=422,
+                detail="Multi-leg option quantities must be whole contracts",
+            )
+        int_qty = int(qty)
+        if int_qty <= 0:
+            raise HTTPException(status_code=422, detail="Order leg quantity must be positive")
+        int_qtys.append(int_qty)
+
+    parent_qty = int_qtys[0]
+    for qty in int_qtys[1:]:
+        parent_qty = gcd(parent_qty, qty)
+    if parent_qty <= 0:
+        raise HTTPException(status_code=422, detail="Invalid multi-leg option quantity")
+    return parent_qty, [qty // parent_qty for qty in int_qtys]
+
+
+def _alpaca_mleg_order_type(legs: list[OrderLeg], ratios: list[int]) -> tuple[str, float | None]:
+    """Collapse per-leg UI prices into Alpaca's top-level MLeg order price."""
+    order_types = {leg.order_type for leg in legs}
+    if order_types == {OrderType.MARKET}:
+        return OrderType.MARKET.value, None
+    if order_types != {OrderType.LIMIT}:
+        raise HTTPException(
+            status_code=422,
+            detail="Multi-leg option orders support either all market legs or all limit legs",
+        )
+
+    net_limit = 0.0
+    for leg, ratio_qty in zip(legs, ratios, strict=True):
+        if leg.limit_price is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Limit multi-leg option orders require a limit price for every leg",
+            )
+        sign = 1.0 if leg.side == OrderSide.BUY else -1.0
+        net_limit += sign * float(leg.limit_price) * float(ratio_qty)
+    limit_price = round(abs(net_limit), 2)
+    if limit_price <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Limit multi-leg option orders require a non-zero net limit price",
+        )
+    return OrderType.LIMIT.value, limit_price
+
+
+def _alpaca_mleg_position_intent(leg: OrderLeg) -> str:
+    return "buy_to_open" if leg.side == OrderSide.BUY else "sell_to_open"
 
 
 class PositionResponse(BaseModel):
@@ -923,12 +1073,6 @@ async def create_order(
     Missing / empty header falls back to the payload-hash dedup (30 s
     window) for legacy clients.
     """
-    # Security audit R6: per-user order-submission rate limit. Caps a
-    # compromised-session blast radius BEFORE we touch halt / broker / risk.
-    # Applied first so a token-spray attack gets a 429 instead of burning
-    # CPU on every downstream check.
-    await _enforce_order_rate_limit(username)
-
     # persona-16 P0-1: halt MUST gate every single manual order before any
     # side-effecting check (risk, dedup, broker POST). Previously the halt
     # check was here but the halt gate is now also the first thing that runs
@@ -1012,6 +1156,7 @@ async def create_order(
     _PENDING_SENTINEL = "__PENDING__"
     idem_cache_key: str | None = None
     idem_key_short: str | None = None
+    idem_claimed = False
     if idempotency_key:
         # Bound the key length so a pathological client can't DOS Redis
         # with a 1MB header value; 128 chars is far more than a uuid4().
@@ -1059,6 +1204,8 @@ async def create_order(
                 claimed = await redis.set(
                     idem_cache_key, _PENDING_SENTINEL, nx=True, ex=600,
                 )
+                if claimed:
+                    idem_claimed = True
                 if not claimed:
                     cached = await redis.get(idem_cache_key)
                     if cached:
@@ -1105,6 +1252,24 @@ async def create_order(
                     "request with the same Idempotency-Key when ready."
                 ),
             )
+
+    # Security audit R6: per-user order-submission rate limit. Caps a
+    # compromised-session blast radius before market-hours / broker / risk.
+    # Run it after terminal Idempotency-Key cache hits so harmless client
+    # retries receive the original response instead of burning fresh order
+    # tokens and eventually getting a false 429.
+    try:
+        await _enforce_order_rate_limit(username)
+    except HTTPException:
+        if idem_claimed and idem_cache_key:
+            try:
+                from core.redis import get_redis
+                redis = await get_redis()
+                if redis is not None:
+                    await redis.delete(idem_cache_key)
+            except Exception:
+                logger.debug("Failed to clear pending idempotency marker after rate-limit rejection", exc_info=True)
+        raise
 
     # J-10 (Round-6) — the gate now applies to ALL order types
     # (market / limit / stop / stop_limit). A limit order placed on a
@@ -1486,6 +1651,7 @@ async def create_order(
                     side=persisted_side,
                     trade_kind=trade_kind,
                     client_order_id=client_order_id,
+                    broker_order_id=order_id,
                     account_env=_env,
                 )
                 db.add(trade)
@@ -1638,26 +1804,39 @@ async def list_orders(
                 if not (status == OrderStatus.SUBMITTED and mapped_status == OrderStatus.PENDING):
                     continue
 
-            # Round-trip Alpaca's stop_price + limit_price onto the leg so
-            # the UI can show at what price a stop will trigger. Previously
-            # only limit_price was copied and 5 live stop orders returned
-            # ``stop_price: null`` — a silent data loss.
-            leg = OrderLeg(
-                symbol=o["symbol"],
-                side=OrderSide(o["side"]),
-                qty=float(o.get("qty", 0)),
-                order_type=OrderType(o.get("type", "market")),
-                limit_price=float(o["limit_price"]) if o.get("limit_price") else None,
-                stop_price=float(o["stop_price"]) if o.get("stop_price") else None,
-            )
+            # Round-trip Alpaca's stop_price + limit_price onto each leg so
+            # the UI can show at what price a stop will trigger. For native
+            # multi-leg option orders Alpaca returns the real child legs under
+            # ``legs`` when ``nested=true``; do not collapse those spreads back
+            # to a single top-level pseudo-leg.
+            raw_legs = o.get("legs") if isinstance(o.get("legs"), list) else []
+            legs = [
+                leg
+                for raw_leg in raw_legs
+                if isinstance(raw_leg, Mapping)
+                for leg in [_alpaca_order_leg(raw_leg, o)]
+                if leg is not None
+            ]
+            if not legs:
+                fallback_leg = _alpaca_order_leg(o, o)
+                if fallback_leg is not None:
+                    legs = [fallback_leg]
+            if not legs:
+                logger.warning(
+                    "Skipping Alpaca order with no usable legs",
+                    extra={"order_id": o.get("id"), "symbol": o.get("symbol")},
+                )
+                continue
 
             reject_reason = o.get("reject_reason") or o.get("message")
+            order_class = str(o.get("order_class") or "").lower()
 
             results.append(OrderResponse(
                 id=o["id"],
                 status=mapped_status,
-                legs=[leg],
+                legs=legs,
                 time_in_force=TimeInForce(o.get("time_in_force", "day")),
+                combo_type="mleg" if order_class == "mleg" or len(legs) > 1 else None,
                 submitted_at=o.get("submitted_at") or datetime.now(timezone.utc).isoformat(),
                 filled_at=o.get("filled_at"),
                 avg_fill_price=float(o["filled_avg_price"]) if o.get("filled_avg_price") else None,
@@ -2282,6 +2461,45 @@ async def _get_current_price(symbol: str) -> float:
     except Exception:
         logger.warning("Failed to fetch price from Alpaca for %s", symbol, exc_info=True)
 
+    return 0.0
+
+
+async def _get_current_option_mid(symbol: str) -> float:
+    """Resolve a live option mid from the options chain service."""
+    parsed = _parse_occ_symbol(symbol)
+    if parsed is None:
+        return 0.0
+    try:
+        from services.options import fetch_chain
+        expiry = date(
+            2000 + int(parsed["expiry_yy"]),
+            int(parsed["expiry_mm"]),
+            int(parsed["expiry_dd"]),
+        )
+        chain = await fetch_chain(str(parsed["underlying"]), expiry=expiry)
+        if getattr(chain, "is_demo", False):
+            return 0.0
+        target_type = parsed["call_put"]
+        target_strike = float(parsed["strike"])
+        for contract in getattr(chain, "contracts", []) or []:
+            contract_symbol = str(getattr(contract, "symbol", "") or "").upper()
+            contract_type = getattr(getattr(contract, "option_type", None), "value", getattr(contract, "option_type", None))
+            if contract_symbol and contract_symbol != symbol.upper():
+                continue
+            if not contract_symbol:
+                if contract_type != target_type:
+                    continue
+                if abs(float(getattr(contract, "strike", 0) or 0) - target_strike) > 0.001:
+                    continue
+            bid = float(getattr(contract, "bid", 0) or 0)
+            ask = float(getattr(contract, "ask", 0) or 0)
+            if bid > 0 and ask > 0:
+                return (bid + ask) / 2.0
+            last = float(getattr(contract, "last", 0) or 0)
+            if last > 0:
+                return last
+    except Exception:
+        logger.debug("Failed to resolve option mid for %s", symbol, exc_info=True)
     return 0.0
 
 
@@ -2922,6 +3140,39 @@ def _combo_strangle_max_notional(request: CreateOrderRequest) -> float:
     return max(notionals["C"], notionals["P"])
 
 
+def _broker_open_order_notional(order: dict[str, Any]) -> float:
+    """Best-effort risk notional for broker-side open orders.
+
+    Alpaca option prices are quoted per-share while contracts settle with a
+    100 multiplier. The daily gross gate previously counted a $5.00 option
+    order for 1 contract as $5 instead of $500 until the fill hit the local
+    ledger. For simple spreads, prefer the strike-width risk envelope.
+    """
+    def _num(value: Any) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    qty = _num(order.get("qty") or order.get("total_qty") or 0)
+    price = _num(order.get("limit_price") or order.get("filled_avg_price") or 0)
+    legs = order.get("legs") if isinstance(order.get("legs"), list) else []
+    symbols = [str(order.get("symbol") or "")]
+    symbols.extend(str(leg.get("symbol") or "") for leg in legs if isinstance(leg, dict))
+    option_symbols = [s for s in symbols if _parse_occ_symbol(s) is not None]
+
+    if option_symbols:
+        parsed = [_parse_occ_symbol(s) for s in option_symbols]
+        strikes = [float(p["strike"]) for p in parsed if p is not None]
+        # Defined-risk MLeg/vertical/condor approximation: max wing width × qty × 100.
+        if len(strikes) >= 2:
+            width = max(strikes) - min(strikes)
+            if width > 0:
+                return abs(width * qty * 100.0)
+        return abs(price * qty * 100.0)
+    return abs(price * qty)
+
+
 async def _get_todays_gross_notional() -> float:
     """Sum today's deployed notional from the trade ledger + broker-pending.
 
@@ -2972,15 +3223,8 @@ async def _get_todays_gross_notional() -> float:
                 )
                 if resp.status_code == 200:
                     for o in resp.json():
-                        try:
-                            qty = float(o.get("qty", 0) or 0)
-                            price = (
-                                float(o.get("limit_price") or 0)
-                                or float(o.get("filled_avg_price") or 0)
-                            )
-                            total += abs(price * qty)
-                        except (TypeError, ValueError):
-                            continue
+                        if isinstance(o, dict):
+                            total += _broker_open_order_notional(o)
         except Exception:
             logger.debug("Alpaca unavailable for daily-notional aggregation", exc_info=True)
 
@@ -3200,8 +3444,22 @@ async def _quote_staleness_check(
     for leg in request.legs:
         if not leg.limit_price:
             continue
-        current = await _get_current_price(leg.symbol)
+        is_option_leg = (
+            (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+            or _parse_occ_symbol(leg.symbol) is not None
+        )
+        current = (
+            await _get_current_option_mid(leg.symbol)
+            if is_option_leg
+            else await _get_current_price(leg.symbol)
+        )
         if current <= 0:
+            if is_option_leg:
+                return False, (
+                    f"Quote drift: live option quote unavailable for {leg.symbol}. "
+                    "Option limit orders fail closed; refresh the chain from live "
+                    "OPRA data and resubmit."
+                )
             continue
         limit = float(leg.limit_price)
         drift = abs(limit - current) / current
@@ -4912,26 +5170,40 @@ async def _submit_to_broker(
             body["stop_loss"] = {"stop_price": str(request.bracket.stop_loss)}
             body["take_profit"] = {"limit_price": str(request.bracket.take_profit)}
     else:
-        # Multi-leg order (options combo) (BUG-027)
+        # Native Alpaca Level-3 MLeg order. Alpaca expects the order type and
+        # limit price at the parent level, with reduced ``ratio_qty`` and
+        # ``position_intent`` on each leg.
+        if any((leg.asset_class or "").lower() != "option" for leg in request.legs):
+            raise HTTPException(
+                status_code=422,
+                detail="Alpaca multi-leg orders currently require option-only legs",
+            )
+        if request.bracket is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Bracket exits are not supported for multi-leg option orders",
+            )
+        parent_qty, ratio_qtys = _alpaca_mleg_ratio_qtys(request.legs)
+        order_type, net_limit_price = _alpaca_mleg_order_type(request.legs, ratio_qtys)
         body = {
-            "symbol": request.legs[0].symbol,
             "order_class": "mleg",
+            "qty": str(parent_qty),
+            "type": order_type,
             "time_in_force": request.time_in_force.value,
             "legs": [
                 {
                     "symbol": leg.symbol,
-                    "qty": str(leg.qty),
+                    "ratio_qty": str(ratio_qty),
                     "side": leg.side.value,
-                    "type": leg.order_type.value,
-                    **({"limit_price": str(leg.limit_price)} if leg.limit_price is not None else {}),
-                    **({"stop_price": str(leg.stop_price)} if leg.stop_price is not None else {}),
+                    "position_intent": _alpaca_mleg_position_intent(leg),
                 }
-                for leg in request.legs
+                for leg, ratio_qty in zip(request.legs, ratio_qtys, strict=True)
             ],
         }
+        if net_limit_price is not None:
+            body["limit_price"] = f"{net_limit_price:.2f}"
         if client_order_id:
             body["client_order_id"] = client_order_id
-        # J-10 (Round-6) — extended-hours forwarding for mleg too.
         if request.extended_hours:
             body["extended_hours"] = True
 

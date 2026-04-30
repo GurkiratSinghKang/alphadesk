@@ -214,7 +214,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         {...swipeHandlers}
       >
         <span id="candidate-swipe-card-hint" className="sr-only">
-          On touch screens, swipe left to discard, right to save, or up to queue an order, then advance.
+          On touch screens, swipe left to discard or right to save, then advance. Use the visible button to mark for order review.
         </span>
         <CandidateDecisionBar
           decision={candidateDecision}
@@ -341,9 +341,6 @@ function useCandidateDecisionSwipe(
       commitSwipeDecision(dx > 0 ? "saved" : "discarded");
       return;
     }
-    if (dy <= -SWIPE_MIN_PX && absY >= absX * SWIPE_AXIS_RATIO) {
-      commitSwipeDecision("order");
-    }
   }
 
   function commitSwipeDecision(decision: EarningsCandidateDecision) {
@@ -405,7 +402,7 @@ function CandidateDecisionBar({
       />
       <CandidateDecisionButton
         active={decision === "order"}
-        label="Queue order"
+        label="Mark for order review"
         icon={<ArrowUpCircle className="h-3.5 w-3.5" aria-hidden />}
         onClick={() => commitDecision("order")}
       />
@@ -589,7 +586,7 @@ function _ExpectedMoveStrip({
   const priceMin = underlying - sigma * 2;
   const priceMax = underlying + sigma * 2;
   const reportLabel = reportDate
-    ? new Date(reportDate).toLocaleDateString("en-US", {
+    ? formatDateOnly(reportDate, {
         month: "short",
         day: "numeric",
       })
@@ -615,4 +612,19 @@ function _ExpectedMoveStrip({
       />
     </section>
   );
+}
+
+function formatDateOnly(
+  value: string | Date,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  if (value instanceof Date) {
+    return value.toLocaleDateString("en-US", options);
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) {
+    const localDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return localDate.toLocaleDateString("en-US", options);
+  }
+  return new Date(value).toLocaleDateString("en-US", options);
 }

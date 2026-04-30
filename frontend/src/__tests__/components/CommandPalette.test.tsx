@@ -98,6 +98,15 @@ describe('CommandPalette', () => {
     expect(screen.getByText('Navigation')).toBeDefined();
   });
 
+  it('routes chart/options commands to the trade workspace from the dashboard', async () => {
+    useUIStore.setState({ commandPaletteOpen: true });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+    expect(screen.getByText('Open trade chart')).toBeDefined();
+    expect(screen.getByText('Open options chain')).toBeDefined();
+    expect(screen.queryByText('Focus chart panel')).toBeNull();
+  });
+
   it('shows search input with placeholder', async () => {
     useUIStore.setState({ commandPaletteOpen: true });
     const { CommandPalette } = await import('@/components/layout/CommandPalette');

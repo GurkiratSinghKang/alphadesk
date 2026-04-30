@@ -58,11 +58,13 @@ export default function TradeButtonRow({
   // state instead.
   const expiryValid =
     !!ladder && /^\d{4}-\d{2}-\d{2}$/.test(ladder.expiry);
-  if (!ladder || ladder.rows.length === 0 || !expiryValid) {
+  if (!ladder || ladder.rows.length === 0 || !expiryValid || ladder.isDemo === true) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
         <p className="t-mono text-[12px] u-muted">
-          {ladder && !expiryValid
+          {ladder?.isDemo === true
+            ? "— synthetic options chain, trade links disabled until live OPRA quotes are available."
+            : ladder && !expiryValid
             ? "— expiry unavailable, trade buttons disabled."
             : "— options chain unavailable, trade buttons disabled."}
         </p>
@@ -354,7 +356,7 @@ function DefinedRiskTradeLink({
       data-slot={dataSlot}
       href={href}
       title={riskCopy}
-      aria-describedby={`${dataSlot}-risk`}
+      aria-describedby={`${dataSlot}-risk ${dataSlot}-risk-copy`}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
       onFocus={onHoverEnter}
@@ -375,6 +377,9 @@ function DefinedRiskTradeLink({
         className="text-[9.5px] uppercase tracking-wider u-profit"
       >
         {recommended ? "✓ Suggested · defined risk" : "✓ Defined risk"}
+      </span>
+      <span id={`${dataSlot}-risk-copy`} className="sr-only">
+        {riskCopy}
       </span>
     </Link>
   );
@@ -413,6 +418,14 @@ function maxLossLongOption(mid: number, label: string): string {
  * non-finite strike, which would otherwise stringify to
  * ``"00000NaN"`` and ride through the URL builder undetected.
  */
+function occRoot(symbol: string): string {
+  const root = symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!root || root.length > 6) {
+    throw new Error(`occSymbol: invalid root ${symbol}`);
+  }
+  return root;
+}
+
 function occSymbol(symbol: string, expiry: string, side: "call" | "put", strike: number): string {
   if (!Number.isFinite(strike) || strike <= 0) {
     throw new Error(`occSymbol: invalid strike ${strike}`);
@@ -420,7 +433,7 @@ function occSymbol(symbol: string, expiry: string, side: "call" | "put", strike:
   const yymmdd = expiry.slice(2, 4) + expiry.slice(5, 7) + expiry.slice(8, 10);
   const side_char = side === "call" ? "C" : "P";
   const strike_padded = String(Math.round(strike * 1000)).padStart(8, "0");
-  return `${symbol}${yymmdd}${side_char}${strike_padded}`;
+  return `${occRoot(symbol)}${yymmdd}${side_char}${strike_padded}`;
 }
 
 function fmtMid(mid: number): string {

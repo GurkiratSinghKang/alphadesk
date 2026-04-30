@@ -170,7 +170,7 @@ export default function EarningsCalendarSidebar({
                 candidateDecisions[candidateDecisionKey(r.symbol, r.reportDate)] ?? null;
               const candidateDecisionLabel =
                 candidateDecision === "order"
-                  ? "Order queued"
+                  ? "Marked for order review"
                   : candidateDecision === "saved"
                   ? "Saved"
                   : candidateDecision === "discarded"
@@ -210,7 +210,6 @@ export default function EarningsCalendarSidebar({
                       }
                     }}
                     title={`${r.symbol} — ${candidateDecisionLabel ? `${candidateDecisionLabel}. ` : ""}${edgeScore != null ? `${edgeTitle}. ` : ""}⌘/Ctrl-click to open in a new tab`}
-                    aria-description="Hold ⌘ or Ctrl and click to open this symbol in a new tab."
                     aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${candidateDecisionLabel ? ' · ' + candidateDecisionLabel : ''}${edgeScore != null ? ' · edge score ' + Math.round(edgeScore) : ''}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
                     // Round-8 / AX-04: ``aria-current="true"`` on the
                     // selected calendar row is the canonical SR cue

@@ -185,6 +185,10 @@ async def post_full_research(
             status_code=404,
             detail=f"symbol {sym!r} has no current earnings candidate",
         )
+    cached_full = await earnings_screener.load_cached_full_research(sym, meta=meta)
+    if cached_full is not None:
+        return cached_full
+
     # Per-IP rate limit (B-50) — /full-research invokes Opus and costs
     # real money; 5 calls per 10 min is the cap. XFF-aware client IP
     # matters — otherwise Caddy's address buckets every user together
@@ -207,6 +211,7 @@ async def post_full_research(
             count = await redis.incr(user_key)
             await redis.expire(user_key, 600)
             if int(count) > 10:
+                retry_after = max(1, 600 - (int(time.time()) % 600))
                 raise HTTPException(
                     status_code=429,
                     detail=(
@@ -214,6 +219,7 @@ async def post_full_research(
                         "Claude full-research. Cool down ~10 min — Opus "
                         "calls are billed against the shared daily budget."
                     ),
+                    headers={"Retry-After": str(retry_after)},
                 )
     except HTTPException:
         raise

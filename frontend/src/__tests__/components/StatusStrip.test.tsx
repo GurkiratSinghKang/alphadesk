@@ -25,35 +25,44 @@ beforeEach(() => {
 });
 
 describe('StatusStrip', () => {
-  it('renders P&L label', () => {
+  it('renders P&L label', async () => {
     render(<StatusStrip />);
-    expect(screen.getByText('P&L')).toBeDefined();
+    expect(await screen.findByText('P&L')).toBeDefined();
   });
 
-  it('renders Regime label', () => {
+  it('renders Regime label', async () => {
     render(<StatusStrip />);
-    expect(screen.getByText('Regime')).toBeDefined();
+    expect(await screen.findByText('Regime')).toBeDefined();
   });
 
-  it('renders VIX label', () => {
+  it('renders VIX label', async () => {
     render(<StatusStrip />);
-    expect(screen.getByText('VIX')).toBeDefined();
+    expect(await screen.findByText('VIX')).toBeDefined();
   });
 
-  it('renders STREAMING indicator when connected', () => {
+  it('renders STREAMING indicator when connected', async () => {
     // BUG-007: pill was renamed from "LIVE" to "STREAMING" so it can't be
     // mistaken for real-money live-trading mode.
     render(<StatusStrip />);
-    expect(screen.getByText('STREAMING')).toBeDefined();
+    expect(await screen.findByText('STREAMING')).toBeDefined();
   });
 
-  it('renders Alpaca Paper label', () => {
+  it('renders Alpaca Paper label', async () => {
     render(<StatusStrip />);
-    expect(screen.getByText(/Alpaca/)).toBeDefined();
+    expect(await screen.findByText(/Alpaca/)).toBeDefined();
   });
 
-  it('shows day P&L value', () => {
+  it('shows day P&L value', async () => {
     render(<StatusStrip />);
-    expect(screen.getByText(/\$30\.00/)).toBeDefined();
+    expect(await screen.findByText(/\$30\.00/)).toBeDefined();
+  });
+
+  it('shows a visible minus sign for negative day P&L', async () => {
+    usePortfolioStore.setState({
+      summary: { equity: 100000, cash: 95000, buyingPower: 200000, totalMarketValue: 5000, unrealizedPnl: -50, unrealizedPnlPct: -1, realizedPnlToday: -20, positionsCount: 1, dayPnl: -30, dayPnlPct: -0.03 },
+    });
+    render(<StatusStrip />);
+    expect(await screen.findByText(/-\$30\.00/)).toBeDefined();
+    expect(await screen.findByText(/-0\.03/)).toBeDefined();
   });
 });

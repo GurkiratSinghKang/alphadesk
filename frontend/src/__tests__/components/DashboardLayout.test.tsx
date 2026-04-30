@@ -19,5 +19,10 @@ describe('DashboardLayout', () => {
     const rightRail = container.querySelector('[data-slot="dashboard-right"]');
     expect(rightRail?.className).toContain('lg:col-start-2');
     expect(rightRail?.className).not.toContain('md:col-start-2');
+    expect(container.querySelector('[data-slot="dashboard-center"]')).toHaveAttribute(
+      'aria-label',
+      'Dashboard command center',
+    );
+    expect(rightRail).toHaveAttribute('aria-label', 'Dashboard insight rail');
   });
 });

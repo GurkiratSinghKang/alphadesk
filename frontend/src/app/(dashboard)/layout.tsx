@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { StatusStrip } from "@/components/layout/StatusStrip";
@@ -32,6 +32,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
+  const recentApiErrorsRef = useRef<Map<string, number>>(new Map());
   // Mount the notification producer exactly once at the dashboard root.
   // It subscribes to WS channels (portfolio, alerts) and global custom
   // events (alphadesk:pipeline-status, alphadesk:system-notify) and
@@ -46,10 +47,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       // Hardened against missing detail (audit P1). The dispatch sites in
       // api.ts always set { status, message } but a custom consumer could
       // fire a bare event.
-      const detail = (e?.detail ?? {}) as { status?: number; message?: string };
+      const detail = (e?.detail ?? {}) as { status?: number; message?: string; path?: string };
       const status = detail.status;
       const message = detail.message;
       if (status !== 401) {
+        const dedupeKey = `${status ?? "unknown"}:${detail.path ?? ""}:${message ?? ""}`;
+        const now = Date.now();
+        const lastSeen = recentApiErrorsRef.current.get(dedupeKey) ?? 0;
+        if (now - lastSeen < 30_000) return;
+        recentApiErrorsRef.current.set(dedupeKey, now);
         toast({ type: "error", message: message || "An API error occurred" });
         // Also surface a durable system notification — toasts disappear after
         // a few seconds; the bell keeps a record the user can review later.

@@ -3,6 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import Sparkline from "@/components/primitives/Sparkline";
+import { isWorkingOrderStatus } from "@/lib/orders";
 import type { PositionRow, PositionTab } from "./types";
 
 // A lightweight shape for Orders tab rows. Kept narrow on purpose — the
@@ -33,11 +34,11 @@ export interface OrderRow {
 const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
   positions: {
     title: "No open positions.",
-    hint: "Stage an order below to open one.",
+    hint: "Open Trade to place one.",
   },
   orders: {
     title: "No working orders.",
-    hint: "Place an order from the ticket to see it here.",
+    hint: "Queued and working orders appear here.",
   },
   journal: {
     title: "Journal — coming soon.",
@@ -319,15 +320,7 @@ export default function PositionsList({
           <tbody>
             {orders.map((o) => {
               const priceLabel = orderPriceLabel(o);
-              // Round-11 / Y-3 (P0): also accept ``partial_fill`` —
-              // the raw Alpaca event name. Without this branch a
-              // partially-filled order rendered the cancel button
-              // disabled despite still being a working order the
-              // broker would accept a cancel on.
-              const cancellable =
-                o.status === "pending" ||
-                o.status === "partial" ||
-                o.status === "partial_fill";
+              const cancellable = isWorkingOrderStatus(o.status);
               return (
                 <tr
                   key={o.id}
@@ -376,6 +369,7 @@ export default function PositionsList({
                       {cancellable && onCancelOrder && (
                         <button
                           type="button"
+                          aria-label={`Cancel ${o.symbol} ${o.type} order ${o.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             onCancelOrder(o.id);

@@ -329,6 +329,18 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
         sym_prices = await asyncio.to_thread(
             _latest_prices, providers, [s.symbol for s in signals],
         )
+        try:
+            live_positions = await _live_positions_for(date.today())
+        except Exception:
+            logger.warning(
+                "strategy_runner: could not load live positions for exits",
+                exc_info=True,
+            )
+            live_positions = []
+        live_qty_by_symbol = {
+            p.symbol: int(p.quantity)
+            for p in live_positions
+        }
 
         for sig in signals:
             price = sym_prices.get(sig.symbol, 0.0)
@@ -342,12 +354,6 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             analyses.append(analysis)
 
             side = analysis["signal"]
-            # Only "buy" is currently routed through master.request_trade;
-            # "sell"/"short" signals are handled by MasterAgent directly
-            # and by the exit-check phase downstream. This preserves the
-            # legacy adapter's single-sided submission behaviour.
-            if side != "buy":
-                continue
             conviction = int(analysis["conviction"])
             if conviction < 50:
                 continue
@@ -361,22 +367,49 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
                 vol_notional = MAX_POSITION_DOLLAR
             import math as _math
             per_share_cap = price * _math.floor(vol_notional / price) if price > 0 else 0
-            notional = min(vol_notional, per_share_cap)
-            shares = _math.floor(notional / price) if price > 0 else 0
+            if side == "sell":
+                shares = int(abs(sig.quantity or live_qty_by_symbol.get(sig.symbol, 0)))
+                notional = round(shares * price, 2)
+            elif sig.quantity is not None:
+                shares = int(abs(sig.quantity))
+                notional = round(shares * price, 2)
+            else:
+                notional = min(vol_notional, per_share_cap)
+                shares = _math.floor(notional / price) if price > 0 else 0
             if shares < 1:
                 continue
             notional = round(shares * price, 2)
 
-            stop_loss = analysis.get("stop_loss") or round(price * 0.95, 2)
-            take_profit = analysis.get("take_profit") or round(price * 1.10, 2)
+            stop_loss = analysis.get("stop_loss")
+            take_profit = analysis.get("take_profit")
+            if side == "short":
+                stop_loss = stop_loss or round(price * 1.05, 2)
+                take_profit = take_profit or round(price * 0.90, 2)
+            elif side == "buy":
+                stop_loss = stop_loss or round(price * 0.95, 2)
+                take_profit = take_profit or round(price * 1.10, 2)
             sector = analysis.get("sector", "Unknown")
             legs = analysis.get("legs")
 
-            if self.use_smart_review and hasattr(master, "request_trade_smart"):
+            if side == "sell":
+                trade = master.request_trade(
+                    strategy=self.name,
+                    symbol=sig.symbol,
+                    side=side,
+                    notional=notional,
+                    conviction=conviction,
+                    rationale=analysis.get("rationale", ""),
+                    shares=shares,
+                    entry_price=price,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit,
+                    sector=sector,
+                )
+            elif self.use_smart_review and hasattr(master, "request_trade_smart"):
                 trade = await master.request_trade_smart(
                     strategy=self.name,
                     symbol=sig.symbol,
-                    side="buy",
+                    side=side,
                     notional=notional,
                     conviction=conviction,
                     rationale=analysis.get("rationale", ""),
@@ -390,7 +423,7 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
                 trade = master.request_trade(
                     strategy=self.name,
                     symbol=sig.symbol,
-                    side="buy",
+                    side=side,
                     notional=notional,
                     conviction=conviction,
                     rationale=analysis.get("rationale", ""),
@@ -402,6 +435,7 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
                 )
             trade["symbol"] = sig.symbol
             trade["strategy"] = self.name
+            trade["side"] = side
             trade["shares"] = shares
             trade["notional"] = notional
             trade["conviction"] = conviction

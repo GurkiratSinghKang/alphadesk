@@ -16,11 +16,10 @@ import { cn } from "@/lib/utils";
  *
  * Grid:
  *   rows     48 (topBar) / 36 (contextBar) / 1fr (main) / 22 (status)
- *   main     1fr / 388px — chart+ticket on the left, Book rail on right.
+ *   main     1fr / 388px — command center on the left, insight rail on right.
  *
- * Chart-side drawing-tools toolbar lives INSIDE the center column so the
- * chart can own its own vertical strip without spending a top-level grid
- * column on it.
+ * Charting and execution now live on `/trade`; the root route is the
+ * graphless operating dashboard.
  *
  * Reflow:
  *   - lg+ : 1fr | 388px (default above)
@@ -33,9 +32,9 @@ export interface DashboardLayoutProps {
   topBar: React.ReactNode;
   /** 36px strip — ContextBar composite. */
   contextBar: React.ReactNode;
-  /** Center column (1fr). Chart pane + OrderBar stacked vertically. */
+  /** Center column (1fr). Account/risk/strategy command center. */
   center: React.ReactNode;
-  /** Right column (388px at lg+, 340px at md). Watchlist + Book + optional AI memo. */
+  /** Right column (388px at lg+). Briefing, watchlist, book, optional AI memo. */
   right: React.ReactNode;
   /** 22px strip — StatusBar composite. */
   statusBar: React.ReactNode;
@@ -61,7 +60,7 @@ export default function DashboardLayout({
         // Round-8 killer-move 1: ContextBar grew 36→56px to host the
         // promoted Book Equity hero (28px display). The other 3 rows
         // (TopBar 48, main 1fr, StatusBar 22) are unchanged.
-        "grid grid-rows-[48px_56px_1fr_22px]",
+        "grid grid-cols-[minmax(0,1fr)] grid-rows-[48px_56px_1fr_22px]",
         className,
       )}
     >
@@ -71,7 +70,7 @@ export default function DashboardLayout({
       <div
         data-slot="dashboard-main"
         className={cn(
-          "min-h-0 overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-[var(--border)]",
+          "min-h-0 min-w-0 w-full overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-[var(--border)]",
           // Round-10 / X-5 (P0): previously ``md:grid-cols-[1fr_340px]``
           // forced iPad Air portrait (820 px) into a side-by-side layout
           // — the chart got squeezed to ~430 px which barely cleared its
@@ -79,17 +78,17 @@ export default function DashboardLayout({
           // unreadable line. iPad portrait now stays single-column
           // (chart on top, rail beneath) and the side-by-side kicks in
           // only at ``lg`` (1024+). lg+ still gets the full 388 px rail.
-          "grid grid-cols-1 lg:grid-cols-[1fr_388px] gap-px",
+          "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_388px] gap-px",
           "grid-rows-[auto] lg:grid-rows-[1fr]",
         )}
       >
         <main
           id="main-content"
           data-slot="dashboard-center"
-          aria-label="Trading chart and order ticket"
+          aria-label="Dashboard command center"
           tabIndex={-1}
           className={cn(
-            "flex min-h-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg",
+            "flex min-h-0 min-w-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg",
             "md:row-start-1 md:col-start-1",
           )}
         >
@@ -98,9 +97,9 @@ export default function DashboardLayout({
 
         <aside
           data-slot="dashboard-right"
-          aria-label="Watchlist and open positions"
+          aria-label="Dashboard insight rail"
           className={cn(
-            "flex min-h-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
+            "flex min-h-0 min-w-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
             // Rejoin as the 2nd column only once the parent grid actually
             // switches to two columns. At md widths the layout is intentionally
             // single-column; placing the aside at md:col-start-2 creates an

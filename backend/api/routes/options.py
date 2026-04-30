@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import math
+import re
 from datetime import date
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 # Models, demo helpers, Alpaca-OPRA helpers, and TTL caches live in the
 # service layer so non-HTTP callers (e.g. ``services.earnings_screener``)
@@ -31,6 +33,7 @@ from services.options import (  # noqa: F401 — re-exported for tests/back-comp
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_SYMBOL_RE = re.compile(r"^[A-Z]{1,6}(?:\.[A-Z])?$")
 
 
 # ---------------------------------------------------------------------------
@@ -68,27 +71,41 @@ async def get_greeks(
     symbol: str,
     strike: float,
     expiry: date,
-    option_type: OptionType = Query(OptionType.CALL),
-    risk_free_rate: float = Query(0.05, description="Annualised risk-free rate"),
+    option_type: Annotated[OptionType, Query()] = OptionType.CALL,
+    risk_free_rate: Annotated[float, Query(description="Annualised risk-free rate")] = 0.05,
 ) -> Greeks:
     """Compute option greeks using Black-Scholes-Merton.
 
     Accepts spot price from cache/market data and computes theoretical
     values for the specified contract.
     """
-    from scipy.stats import norm
     import numpy as np
+    from scipy.stats import norm
     from core.redis import cache_get
 
     symbol = symbol.upper()
+    if not _SYMBOL_RE.fullmatch(symbol):
+        raise HTTPException(status_code=422, detail="Invalid option symbol")
+    if not math.isfinite(strike) or strike <= 0:
+        raise HTTPException(status_code=422, detail="Strike must be greater than 0")
+    if not math.isfinite(risk_free_rate):
+        raise HTTPException(status_code=422, detail="Risk-free rate must be finite")
 
     # Get spot price
     quote = await cache_get(f"quote:{symbol}") or {}
-    spot = quote.get("last", 0) or await _demo_spot(symbol)
+    spot = quote.get("last", 0)
+    if not spot:
+        if symbol not in _DEMO_BASE_IV:
+            raise HTTPException(status_code=404, detail=f"Unknown option symbol: {symbol}")
+        spot = await _demo_spot(symbol)
+    if not math.isfinite(float(spot)) or float(spot) <= 0:
+        raise HTTPException(status_code=422, detail="Spot price must be greater than 0")
 
     # Get IV
     iv_data = await cache_get(f"iv:{symbol}") or {}
     sigma = iv_data.get("current_iv", 0) or _DEMO_BASE_IV.get(symbol, 0.30)
+    if not math.isfinite(float(sigma)) or float(sigma) <= 0:
+        raise HTTPException(status_code=422, detail="Implied volatility must be greater than 0")
 
     # Time to expiry in years
     days = (expiry - date.today()).days

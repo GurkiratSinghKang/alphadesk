@@ -147,6 +147,19 @@ def test_share_mismatch_updates_shares(memory_ledger):
     assert open_after[0]["shares"] == 15
 
 
+def test_share_mismatch_updates_short_side(memory_ledger):
+    _seed_open_trade(memory_ledger, "TSLA", shares=10, price=200.0)
+    alpaca_resp = [{"symbol": "TSLA", "qty": "-15", "avg_entry_price": "200"}]
+
+    summary = memory_ledger.sync_with_alpaca(alpaca_resp)
+
+    assert "TSLA" in summary["updated"]
+    open_after = memory_ledger.get_open_positions()
+    assert len(open_after) == 1
+    assert open_after[0]["shares"] == 15
+    assert open_after[0]["side"] == "short"
+
+
 def test_untracked_alpaca_position_creates_ledger_entry(memory_ledger):
     alpaca_resp = [{"symbol": "NVDA", "qty": "5", "avg_entry_price": "500"}]
 
@@ -157,6 +170,19 @@ def test_untracked_alpaca_position_creates_ledger_entry(memory_ledger):
     assert len(open_after) == 1
     assert open_after[0]["symbol"] == "NVDA"
     assert open_after[0]["shares"] == 5
+
+
+def test_untracked_alpaca_short_creates_short_ledger_entry(memory_ledger):
+    alpaca_resp = [{"symbol": "TSLA", "qty": "-7", "avg_entry_price": "200"}]
+
+    summary = memory_ledger.sync_with_alpaca(alpaca_resp)
+
+    assert "TSLA" in summary["created"]
+    open_after = memory_ledger.get_open_positions()
+    assert len(open_after) == 1
+    assert open_after[0]["symbol"] == "TSLA"
+    assert open_after[0]["shares"] == 7
+    assert open_after[0]["side"] == "short"
 
 
 def test_api_surface_add_update_get_list(memory_ledger):

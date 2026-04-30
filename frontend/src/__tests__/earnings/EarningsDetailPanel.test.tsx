@@ -76,7 +76,7 @@ describe("EarningsDetailPanel", () => {
 
     expect(getByRole("button", { name: /save/i })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(getByRole("button", { name: /discard/i }));
-    fireEvent.click(getByRole("button", { name: /queue order/i }));
+    fireEvent.click(getByRole("button", { name: /mark for order review/i }));
     fireEvent.click(getByRole("button", { name: /save/i }));
 
     expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
@@ -86,7 +86,7 @@ describe("EarningsDetailPanel", () => {
     window.removeEventListener("alphadesk:earnings-select-next", onNext);
   });
 
-  it("maps mobile card swipes to discard, save, and queue actions", () => {
+  it("maps horizontal mobile card swipes to discard/save and ignores vertical scroll", () => {
     const onCandidateDecision = vi.fn();
     const onNext = vi.fn();
     window.addEventListener("alphadesk:earnings-select-next", onNext);
@@ -144,8 +144,8 @@ describe("EarningsDetailPanel", () => {
 
     expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
     expect(onCandidateDecision).toHaveBeenNthCalledWith(2, "saved");
-    expect(onCandidateDecision).toHaveBeenNthCalledWith(3, "order");
-    expect(onNext).toHaveBeenCalledTimes(3);
+    expect(onCandidateDecision).toHaveBeenCalledTimes(2);
+    expect(onNext).toHaveBeenCalledTimes(2);
     window.removeEventListener("alphadesk:earnings-select-next", onNext);
   });
 

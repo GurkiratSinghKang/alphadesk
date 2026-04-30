@@ -912,6 +912,8 @@ describe('getOptionsChain', () => {
     const payload = {
       underlying: 'AAPL',
       expirations: ['2026-04-17', '2026-04-24'],
+      fetched_at: '2026-04-16T14:30:00Z',
+      is_demo: true,
       contracts: [
         { symbol: 'AAPL260417C00175000', option_type: 'call', expiry: '2026-04-17', strike: 175, bid: 2.5, ask: 2.7, last: 2.6, volume: 5000, open_interest: 10000, iv: 0.25, delta: 0.5, gamma: 0.02, theta: -0.05, vega: 0.15 },
         { symbol: 'AAPL260417P00175000', option_type: 'put', expiry: '2026-04-17', strike: 175, bid: 2.3, ask: 2.5, last: 2.4, volume: 4000, open_interest: 8000, iv: 0.27, delta: -0.5, gamma: 0.02, theta: -0.04, vega: 0.14 },
@@ -930,6 +932,8 @@ describe('getOptionsChain', () => {
     expect(result.puts[0].oi).toBe(8000);
     expect(result.calls[0].delta).toBe(0.5);
     expect(result.puts[0].delta).toBe(-0.5);
+    expect(result.fetchedAt).toBe('2026-04-16T14:30:00Z');
+    expect(result.isDemo).toBe(true);
   });
 
   it('falls back to passed symbol when underlying is missing', async () => {
@@ -978,15 +982,14 @@ describe('getIVData', () => {
     expect(result.hvRatio).toBeCloseTo(0.30 / 0.20, 5);
   });
 
-  it('defaults missing fields to 0', async () => {
+  it('preserves missing fields as null', async () => {
     mockFetch.mockReturnValueOnce(ok({}));
 
     const result = await getIVData('XYZ');
-    expect(result.ivRank).toBe(0);
-    expect(result.ivPctl).toBe(0);
-    expect(result.currentIV).toBe(0);
-    // hvRatio: 0 / max(0, 0.01) = 0
-    expect(result.hvRatio).toBe(0);
+    expect(result.ivRank).toBeNull();
+    expect(result.ivPctl).toBeNull();
+    expect(result.currentIV).toBeNull();
+    expect(result.hvRatio).toBeNull();
   });
 
   it('guards against zero hv_20 to avoid division by zero', async () => {
@@ -1292,9 +1295,9 @@ describe('getPortfolioSummary', () => {
     expect(result.unrealizedPnlPct).toBe(2);
     expect(result.realizedPnlToday).toBe(-50);
     expect(result.positionsCount).toBe(1);
-    expect(result.dayPnl).toBe(-50); // realized_pnl_today only (no day_pnl/profit_loss in response)
-    // lastEquity = 100000 - (-50) = 100050; dayPnlPct = -50/100050*100
-    expect(result.dayPnlPct).toBeCloseTo(-0.04998, 3);
+    expect(result.dayPnl).toBe(50); // realized + unrealized when backend day_pnl is absent
+    // lastEquity = 100000 - 50 = 99950; dayPnlPct = 50/99950*100
+    expect(result.dayPnlPct).toBeCloseTo(0.05003, 3);
   });
 
   it('computes dayPnl as 0 when both pnl fields are 0', async () => {
@@ -1331,7 +1334,7 @@ describe('getPortfolioSummary', () => {
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await getPortfolioSummary();
-    expect(result.dayPnl).toBe(-200); // realized_pnl_today only (no day_pnl/profit_loss in response)
+    expect(result.dayPnl).toBe(300); // realized + unrealized when backend day_pnl is absent
   });
 });
 

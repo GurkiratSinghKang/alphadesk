@@ -241,10 +241,9 @@ export default function EarningsOptionsPlayPage() {
   // render an inline alert (and a live RateLimitError countdown).
   const fullResearchMutation = useMutation({
     mutationFn: (symbol: string) => postEarningsFullResearch(symbol),
-    onSuccess: (full) => {
-      if (!selectedSymbol) return;
+    onSuccess: (full, symbol) => {
       queryClient.setQueryData(
-        ["earnings-detail", selectedSymbol],
+        ["earnings-detail", symbol],
         (prev: EarningsDetail | undefined) =>
           prev ? { ...prev, claudeFullResearch: full } : prev,
       );
@@ -329,7 +328,7 @@ export default function EarningsOptionsPlayPage() {
       const rows = visibleRows;
       if (rows.length === 0) return;
       const currentIdx = rows.findIndex((r) => r.symbol === selectedSymbol);
-      const base = currentIdx === -1 ? 0 : currentIdx;
+      const base = currentIdx === -1 ? (dir === 1 ? -1 : 0) : currentIdx;
       const nextIdx = (base + dir + rows.length) % rows.length;
       // Round-4 (B-NEW-4): keyboard nav allows DetailHeader to refocus.
       // Round-5 (NEW-Y4 / G-19): keyboard navigation also counts as a
@@ -420,7 +419,7 @@ export default function EarningsOptionsPlayPage() {
       {calendar
         ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}${
             decisionCounts.total > 0
-              ? ` · ${decisionCounts.saved} saved · ${decisionCounts.order} queued`
+              ? ` · ${decisionCounts.saved} saved · ${decisionCounts.order} marked for order review`
               : ""
           }`
         : "Loading…"}
@@ -513,17 +512,20 @@ export default function EarningsOptionsPlayPage() {
 /**
  * Round-8 / NV-01: dismissible plain-language explainer for first-time
  * users. The page previously dropped novices straight into a calendar
- * with no orientation — they had no idea the strategy SELLS premium
- * (vs. the more intuitive "buy a call before earnings" mental model).
+ * with no orientation on how defined-risk earnings structures differ
+ * across premium-selling, debit, and long-volatility theses.
  * Dismissal persists in localStorage so power users see it once.
  */
 const INTRO_DISMISS_KEY = "alphadesk:earnings-intro-dismissed";
 
 function StrategyIntroCard() {
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage?.getItem(INTRO_DISMISS_KEY) === "1";
-  });
+  const [mounted, setMounted] = useState(false);
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    setDismissed(safeGetItem(INTRO_DISMISS_KEY) === "1");
+    setMounted(true);
+  }, []);
+  if (!mounted) return null;
   if (dismissed) return null;
   return (
     <aside
@@ -531,16 +533,16 @@ function StrategyIntroCard() {
       className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-[13px] leading-relaxed"
     >
       <p>
-        <strong className="u-brand">This strategy sells volatility into earnings.</strong>{" "}
-        When IV rank is high the market pays you a credit because everyone&apos;s anxious. You{" "}
-        <em>profit</em> if the stock moves <em>less</em> than the implied move; you{" "}
-        <em>lose</em> if it moves more. Naked short calls have <span className="u-loss">unlimited risk</span>;
-        defined-risk variants (iron condors, vertical spreads) cap the loss but earn less.
+        <strong className="u-brand">This strategy looks for defined-risk earnings option trades.</strong>{" "}
+        High IV often favors credit spreads or iron condors that profit if the move stays inside the
+        implied range; lower IV or a strong catalyst can favor debit spreads, long calls/puts, or long
+        straddles. Naked short calls have <span className="u-loss">unlimited risk</span>; every actionable
+        setup here should cap max loss before it becomes tradable.
       </p>
       <button
         type="button"
         onClick={() => {
-          window.localStorage?.setItem(INTRO_DISMISS_KEY, "1");
+          safeSetItem(INTRO_DISMISS_KEY, "1");
           setDismissed(true);
         }}
         className="mt-2 t-meta underline u-muted hover:u-brand"

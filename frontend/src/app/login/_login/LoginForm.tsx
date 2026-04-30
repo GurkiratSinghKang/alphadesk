@@ -164,6 +164,7 @@ export default function LoginForm() {
         // banner shouldn't follow them around.
         try {
           sessionStorage.removeItem("alphadesk.session_expired");
+          sessionStorage.setItem("alphadesk.run-tour-after-login", "1");
         } catch {
           // ignore
         }

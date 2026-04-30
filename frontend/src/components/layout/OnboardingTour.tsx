@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui";
 import { safeSetItem, safeGetItem } from "@/lib/storage";
@@ -19,6 +20,7 @@ const STORAGE_KEY = "alphadesk-tour-complete";
 // New key used by the QA harness (see qa/harness/helpers.mjs::login).
 // Either key dismisses the tour; the new key is preferred for fresh writes.
 const DISMISSED_KEY = "alphadesk.onboarding_dismissed";
+const RUN_AFTER_LOGIN_KEY = "alphadesk.run-tour-after-login";
 
 // Selectors target composites mounted by the flagship `DeskLayout`. The
 // audit (R2) caught the old selectors still pointing at legacy dashboard
@@ -34,31 +36,31 @@ const TOUR_STEPS: TourStep[] = [
     position: "bottom",
   },
   {
-    title: "Automated Strategies",
+    title: "Operating Dashboard",
     description:
-      "The rail on the left lists every strategy. Click one to highlight it and see its positions in the panel.",
-    selector: "[data-slot='strategy-rail']",
-    position: "right",
-  },
-  {
-    title: "Chart & Execution",
-    description:
-      "Pick a range with the chart buttons; stage orders below with the symbol, qty, and type you need.",
-    selector: "[data-slot='price-chart-panel']",
+      "The dashboard is your graphless daily cockpit: account state, risk posture, strategy health, and next actions.",
+    selector: "[data-slot='dashboard-command-center']",
     position: "bottom",
   },
   {
-    title: "Order Bar",
+    title: "Triage First",
     description:
-      "Buy, sell, limits, stops — all from the same row. Press B or S for a quick buy/sell at market.",
-    selector: "[data-tour='order-bar']",
-    position: "top",
+      "Start with next actions and risk. The full chart and order ticket stay one click away on Trade.",
+    selector: "section[aria-labelledby='next-actions-title']",
+    position: "bottom",
+  },
+  {
+    title: "Briefing Rail",
+    description:
+      "Morning brief, watchlist, and book stay in the right rail so the center can remain calm.",
+    selector: "[data-slot='dashboard-right']",
+    position: "left",
   },
   {
     title: "Command Palette",
     description:
       "Press Cmd+K (or Ctrl+K) to instantly search symbols, run commands, or navigate anywhere in the app.",
-    selector: "[data-tour='profile-menu']",
+    selector: "[aria-label='Open command palette']",
     position: "bottom",
   },
 ];
@@ -79,6 +81,8 @@ export function OnboardingTour() {
   const rafRef = useRef<number>(0);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+  const isDashboardRoute = pathname === "/";
 
   // Wave 3N persona-94 #7: gate the tour on actual login events, not a
   // bare mount. Listen for the `alphadesk:auth-login-success` event the
@@ -96,15 +100,29 @@ export function OnboardingTour() {
   const SHOWN_THIS_LOGIN_KEY = "alphadesk.tour-shown-this-login";
 
   useEffect(() => {
+    if (!isDashboardRoute) return undefined;
+    try {
+      if (sessionStorage.getItem(RUN_AFTER_LOGIN_KEY) === "1") {
+        sessionStorage.removeItem(RUN_AFTER_LOGIN_KEY);
+        sessionStorage.setItem(SHOWN_THIS_LOGIN_KEY, "1");
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(DISMISSED_KEY);
+        const timer = setTimeout(() => setActive(true), 1500);
+        return () => clearTimeout(timer);
+      }
+    } catch {
+      // Storage unavailable — fall through to the normal mount path.
+    }
     // Mount path — honour the original contract.
     if (!alreadyCompleted) {
       const timer = setTimeout(() => setActive(true), 1500);
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [alreadyCompleted]);
+  }, [alreadyCompleted, isDashboardRoute]);
 
   useEffect(() => {
+    if (!isDashboardRoute) return undefined;
     if (typeof window === "undefined") return undefined;
     // Auth path — every login resets dismissal markers and re-shows the
     // tour once, unless we've already shown it for THIS login session.
@@ -129,7 +147,7 @@ export function OnboardingTour() {
     return () => {
       window.removeEventListener("alphadesk:auth-login-success", handler as EventListener);
     };
-  }, []);
+  }, [isDashboardRoute]);
 
   // Position the spotlight on the current step's element. If the target
   // element isn't on the page, advance to the next step that *is* (up to
@@ -160,7 +178,7 @@ export function OnboardingTour() {
   }, [active, currentStep]);
 
   useEffect(() => {
-    updateSpotlight();
+    const initialFrame = requestAnimationFrame(updateSpotlight);
 
     // Update on scroll/resize
     const handleUpdate = () => {
@@ -172,6 +190,7 @@ export function OnboardingTour() {
     return () => {
       window.removeEventListener("scroll", handleUpdate, true);
       window.removeEventListener("resize", handleUpdate);
+      cancelAnimationFrame(initialFrame);
       cancelAnimationFrame(rafRef.current);
     };
   }, [updateSpotlight]);
@@ -346,6 +365,8 @@ export function OnboardingTour() {
     <div
       className="fixed inset-0 z-[100]"
       aria-modal="true"
+      aria-labelledby="onboarding-tour-title"
+      aria-describedby="onboarding-tour-description"
       role="dialog"
       data-testid="onboarding-tour"
     >
@@ -401,10 +422,10 @@ export function OnboardingTour() {
           ))}
         </div>
 
-        <h3 className="text-sm font-bold text-foreground mb-1.5">
+        <h3 id="onboarding-tour-title" className="text-sm font-bold text-foreground mb-1.5">
           {step.title}
         </h3>
-        <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+        <p id="onboarding-tour-description" className="text-xs text-muted-foreground leading-relaxed mb-4">
           {step.description}
         </p>
 

@@ -640,6 +640,8 @@ def _alpaca_snapshot_to_model(symbol: str, data: dict) -> Snapshot | None:
 
 @router.get("/snapshots", response_model=dict[str, Snapshot])
 async def get_snapshots(
+    request: Request,
+    response: Response,
     symbols: str = Query(..., description="Comma-separated symbols (max 100), e.g. AAPL,NVDA,TSLA"),
 ) -> dict[str, Snapshot]:
     """Fetch snapshots for up to 100 symbols in a single request.
@@ -650,6 +652,8 @@ async def get_snapshots(
     erroring the whole request. Authentication is already enforced by the
     router-level ``require_auth`` dependency registered in main.py.
     """
+    await _market_rate_limit_or_429(request, response)
+
     symbol_list = _parse_and_validate_symbols(symbols)
     results: dict[str, Snapshot] = {}
 

@@ -1,3 +1,4 @@
+import "../setup-mocks";
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import TopBar from "@/components/composites/TopBar";

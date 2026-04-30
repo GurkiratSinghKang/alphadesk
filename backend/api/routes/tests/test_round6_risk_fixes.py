@@ -88,6 +88,25 @@ def test_combo_strangle_rejected_as_undefined_risk() -> None:
         CreateOrderRequest(legs=legs, combo_type="strangle")
 
 
+def test_short_option_coverage_is_quantity_aware() -> None:
+    from pydantic import ValidationError
+
+    legs = [
+        _occ_leg("AAPL260424C00200000", OrderSide.SELL, 10, 5.0),
+        _occ_leg("AAPL260424C00210000", OrderSide.BUY, 1, 1.5),
+    ]
+    with pytest.raises(ValidationError, match="covering long qty 1"):
+        CreateOrderRequest(legs=legs, combo_type="vertical_spread")
+
+
+def test_fake_covered_call_combo_does_not_bypass_short_option_gate() -> None:
+    from pydantic import ValidationError
+
+    legs = [_occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0)]
+    with pytest.raises(ValidationError, match="portfolio collateral checks"):
+        CreateOrderRequest(legs=legs, combo_type="covered_call")
+
+
 # --------------------------------------------------------------------------- #
 # J-3 — daily loss check                                                      #
 # --------------------------------------------------------------------------- #
@@ -336,6 +355,52 @@ async def test_quote_drift_rejects_distant_limit() -> None:
     assert "Quote drift" in reason
 
 
+@pytest.mark.asyncio
+async def test_quote_drift_fails_closed_when_option_quote_unavailable() -> None:
+    """Fresh timestamp is not enough if an OCC leg has no live option quote."""
+    leg = OrderLeg(
+        symbol="AAPL260417C00200000",
+        side=OrderSide.BUY,
+        qty=1,
+        order_type=OrderType.LIMIT,
+        limit_price=2.0,
+    )
+    req = CreateOrderRequest(
+        legs=[leg],
+        quote_at_fill_ts=time.time() - 5,
+    )
+    with patch.object(
+        trades_mod, "_get_current_option_mid", new=AsyncMock(return_value=0.0),
+    ):
+        passed, reason = await trades_mod._quote_staleness_check(req)
+    assert passed is False
+    assert "live option quote unavailable" in reason
+
+
+@pytest.mark.asyncio
+async def test_quote_drift_uses_option_mid_for_occ_legs() -> None:
+    """OCC drift compares against option NBBO mid, not the equity quote path."""
+    leg = OrderLeg(
+        symbol="AAPL260417C00200000",
+        side=OrderSide.BUY,
+        qty=1,
+        order_type=OrderType.LIMIT,
+        limit_price=2.01,
+    )
+    req = CreateOrderRequest(
+        legs=[leg],
+        quote_at_fill_ts=time.time() - 5,
+    )
+    with patch.object(
+        trades_mod, "_get_current_option_mid", new=AsyncMock(return_value=2.0),
+    ), patch.object(
+        trades_mod, "_get_current_price", new=AsyncMock(side_effect=AssertionError("equity quote path used for OCC")),
+    ):
+        passed, reason = await trades_mod._quote_staleness_check(req)
+    assert passed is True
+    assert reason == "passed"
+
+
 # --------------------------------------------------------------------------- #
 # J-11 — symbol halt / tradability                                            #
 # --------------------------------------------------------------------------- #
@@ -484,3 +549,25 @@ async def test_reconcile_positions_on_boot_keys_missing_returns_zero_counts() ->
         "drift_orphan_local": 0,
         "drift_orphan_broker": 0,
     }
+
+
+def test_broker_open_order_notional_uses_option_multiplier() -> None:
+    order = {
+        "symbol": "AAPL260501C00270000",
+        "qty": "2",
+        "limit_price": "1.25",
+    }
+    assert trades_mod._broker_open_order_notional(order) == 250.0
+
+
+def test_broker_open_order_notional_uses_spread_width_for_mleg() -> None:
+    order = {
+        "order_class": "mleg",
+        "qty": "1",
+        "limit_price": "0.85",
+        "legs": [
+            {"symbol": "AAPL260501C00270000", "side": "buy"},
+            {"symbol": "AAPL260501C00275000", "side": "sell"},
+        ],
+    }
+    assert trades_mod._broker_open_order_notional(order) == 500.0

@@ -355,7 +355,16 @@ async def _run_window(
             "%s window complete: %d approved, %d rejected",
             window_name, len(approved), len(rejected),
         )
-        state[state_key] = today
+        if result.get("skipped"):
+            state[f"{state_key}_skipped_at"] = datetime.now(timezone.utc).isoformat()
+            state[f"{state_key}_skipped_reason"] = result.get("reason", "skipped")
+            logger.warning(
+                "%s window skipped; leaving %s unset so scheduler can retry later today: %s",
+                window_name, state_key, state.get(f"{state_key}_skipped_reason"),
+            )
+        else:
+            state[state_key] = today
+            state.pop(f"{state_key}_skipped_reason", None)
         state.pop(in_progress_key, None)
         await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
     except Exception:

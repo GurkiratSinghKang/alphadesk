@@ -128,6 +128,9 @@ class QuoteBlock(BaseModel):
     last: float
     change: float
     change_pct: float
+    # Provider quote timestamp. Distinct from EarningsDetail.generated_at,
+    # which is when the backend assembled the full detail payload.
+    timestamp: datetime | None = None
 
 
 class MetricsBlock(BaseModel):

@@ -80,6 +80,20 @@ _EVENT_TO_STATUS: dict[str, str] = {
     "expired": "expired",
 }
 
+# Fill events can beat the create-order DB commit by a few milliseconds:
+# broker ACK returns, the stream publishes the fill, and only then the submit
+# route finishes writing ``Trade``. Retry a missing local row briefly before
+# declaring the event orphaned.
+_MISSING_ROW_RETRY_DELAYS = (0.05, 0.1, 0.25, 0.5, 1.0)
+
+
+class _MissingTradeRowRetry(Exception):
+    """Signal a missing-row retry after releasing the DB session."""
+
+    def __init__(self, delay: float) -> None:
+        super().__init__(f"retry missing trade row in {delay:.2f}s")
+        self.delay = delay
+
 
 async def _compute_trade_kind(
     *, symbol: str, side: str, filled_qty: float, pre_fill_qty: float | None,
@@ -350,7 +364,7 @@ async def _apply_event(event: dict[str, Any]) -> None:
     # for > 60s the supervisor will log and the next event will try again
     # from scratch.
     backoff = 0.5
-    for attempt in range(6):
+    for attempt in range(max(6, len(_MISSING_ROW_RETRY_DELAYS) + 1)):
         try:
             from core.config import settings
             if settings.SKIP_DB_INIT:
@@ -402,6 +416,14 @@ async def _apply_event(event: dict[str, Any]) -> None:
                             break
 
                 if trade is None:
+                    if attempt < len(_MISSING_ROW_RETRY_DELAYS):
+                        delay = _MISSING_ROW_RETRY_DELAYS[attempt]
+                        logger.debug(
+                            "fill_reconciler: no ledger row yet for client_order_id=%s "
+                            "broker_order_id=%s event=%s — retrying in %.2fs",
+                            client_order_id, broker_order_id, event_name, delay,
+                        )
+                        raise _MissingTradeRowRetry(delay)
                     logger.warning(
                         "fill_reconciler: no ledger row for client_order_id=%s "
                         "broker_order_id=%s event=%s — dropped",
@@ -565,6 +587,9 @@ async def _apply_event(event: dict[str, Any]) -> None:
                         position_id_for_cancel, exc_info=True,
                     )
             return
+        except _MissingTradeRowRetry as retry:
+            await asyncio.sleep(retry.delay)
+            continue
         except Exception:
             logger.warning(
                 "fill_reconciler: DB apply failed for event=%s client_order_id=%s "

@@ -357,7 +357,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
 // ─── Strategies ─────────────────────────────────────────────
 
 export function getStrategies() {
-  return apiFetch<{ id: string; name: string; status: string; invested_amount: number; invested_amount_precise?: number; total_return_pct: number; win_rate: number; active_positions_count: number; sparkline: number[] }[]>(
+  return apiFetch<{ id: string; name: string; description?: string; status: string; invested_amount: number; invested_amount_precise?: number; total_return_pct: number; sharpe_ratio?: number | null; win_rate: number; active_positions_count: number; sparkline: number[]; live_disabled?: boolean; paper_only?: boolean }[]>(
     `/api/v1/strategies/`
   );
 }
@@ -1146,20 +1146,24 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
   // rather than collapsing to 0, which would let hardcoded constants hide.
   const pickGreek = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
+  const pickNumber = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : 0;
+  const pickNullableNumber = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
   const calls = contracts
     .filter((c) => c.option_type === "call")
     .map((c) => ({
       symbol: (c.symbol as string) ?? "",
       expiry: (c.expiry as string) ?? "",
-      strike: (c.strike as number) ?? 0,
+      strike: pickNumber(c.strike),
       type: "call" as const,
-      bid: (c.bid as number) ?? 0,
-      ask: (c.ask as number) ?? 0,
-      last: (c.last as number) ?? 0,
-      volume: (c.volume as number) ?? 0,
-      oi: (c.open_interest as number) ?? 0,
-      iv: (c.iv as number) ?? 0,
-      delta: (c.delta as number) ?? 0,
+      bid: pickNumber(c.bid),
+      ask: pickNumber(c.ask),
+      last: pickNumber(c.last),
+      volume: pickNumber(c.volume),
+      oi: pickNumber(c.open_interest),
+      iv: pickNullableNumber(c.iv),
+      delta: pickNullableNumber(c.delta),
       gamma: pickGreek(c.gamma),
       theta: pickGreek(c.theta),
       vega: pickGreek(c.vega),
@@ -1169,15 +1173,15 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     .map((c) => ({
       symbol: (c.symbol as string) ?? "",
       expiry: (c.expiry as string) ?? "",
-      strike: (c.strike as number) ?? 0,
+      strike: pickNumber(c.strike),
       type: "put" as const,
-      bid: (c.bid as number) ?? 0,
-      ask: (c.ask as number) ?? 0,
-      last: (c.last as number) ?? 0,
-      volume: (c.volume as number) ?? 0,
-      oi: (c.open_interest as number) ?? 0,
-      iv: (c.iv as number) ?? 0,
-      delta: (c.delta as number) ?? 0,
+      bid: pickNumber(c.bid),
+      ask: pickNumber(c.ask),
+      last: pickNumber(c.last),
+      volume: pickNumber(c.volume),
+      oi: pickNumber(c.open_interest),
+      iv: pickNullableNumber(c.iv),
+      delta: pickNullableNumber(c.delta),
       gamma: pickGreek(c.gamma),
       theta: pickGreek(c.theta),
       vega: pickGreek(c.vega),
@@ -1187,17 +1191,25 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     expirations: (raw.expirations as string[]) ?? [],
     calls,
     puts,
+    fetchedAt: (raw.fetched_at as string | null | undefined) ?? null,
+    isDemo: raw.is_demo === true,
   };
 }
 
 export async function getIVData(symbol: string) {
   // Backend returns snake_case: iv_rank, iv_percentile, current_iv
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/options/iv/${symbol}`);
+  const numOrNull = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const currentIV = numOrNull(raw.current_iv);
+  const hv20 = numOrNull(raw.hv_20);
   return {
-    ivRank: (raw.iv_rank as number) ?? 0,
-    ivPctl: (raw.iv_percentile as number) ?? 0,
-    currentIV: (raw.current_iv as number) ?? 0,
-    hvRatio: ((raw.current_iv as number) ?? 0) / Math.max((raw.hv_20 as number) ?? 1, 0.01),
+    ivRank: numOrNull(raw.iv_rank),
+    ivPctl: numOrNull(raw.iv_percentile),
+    currentIV,
+    hvRatio: currentIV != null && hv20 != null ? currentIV / Math.max(hv20, 0.01) : null,
+    fetchedAt: (raw.fetched_at as string | null | undefined) ?? null,
+    isDemo: raw.is_demo === true,
   };
 }
 
@@ -1388,6 +1400,7 @@ export async function getPositions(): Promise<Position[]> {
     unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,
     marketValue: (p.market_value as number) ?? (p.marketValue as number) ?? 0,
     side: (p.side as "long" | "short") ?? undefined,
+    sector: (p.sector as string) ?? undefined,
     // Round-5 F-6 — strategy attribution. The backend joins on the
     // latest fill's `strategy` column and returns a string or null.
     strategy: (p.strategy as string) ?? null,
@@ -1426,18 +1439,27 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`, {
     timeoutMs: 30_000,
   });
-  // Use backend-provided day P&L if available; fall back to realized-only to avoid
-  // double-counting accumulated unrealized P&L from positions held across days.
+  // Prefer backend-provided true day P&L. When older backends omit it,
+  // show the best live account picture available from the payload instead
+  // of labeling realized-only P&L as total day P&L.
   const rawAny = raw as unknown as Record<string, unknown>;
-  const dayPnl = (rawAny.day_pnl as number) ?? (rawAny.profit_loss as number) ?? (raw.realized_pnl_today ?? 0);
+  const dayPnl =
+    (rawAny.day_pnl as number | undefined) ??
+    (rawAny.profit_loss as number | undefined) ??
+    ((raw.realized_pnl_today ?? 0) + (raw.unrealized_pnl ?? 0));
   const lastEquity = (raw.equity ?? 0) - dayPnl;
   const dayPnlPct = lastEquity > 0 ? (dayPnl / lastEquity) * 100 : 0;
-  const isDemo = raw.is_demo === true || raw.source === "demo";
+  const isDemo =
+    raw.is_demo === true || raw.source === "demo"
+      ? true
+      : raw.is_demo === false || raw.source === "alpaca"
+        ? false
+        : undefined;
   // Fire the global event so the dashboard chrome can surface a
   // broker-unavailable banner. Only when the flag is explicitly true —
   // the UI should not flash DEMO on a live response that happened to
   // omit the field.
-  maybeDispatchBrokerDegraded(`/api/v1/portfolio/summary`, isDemo);
+  maybeDispatchBrokerDegraded(`/api/v1/portfolio/summary`, isDemo === true);
   return {
     equity: raw.equity,
     cash: raw.cash,
@@ -2206,7 +2228,7 @@ interface RawEarningsDetail {
   sector: string;
   report_date: string;
   report_time: EarningsReportTime;
-  quote: { last: number; change: number; change_pct: number } | null;
+  quote: { last: number; change: number; change_pct: number; timestamp?: string } | null;
   metrics: RawEarningsMetricsBlock | null;
   strike_ladder: RawStrikeLadder | null;
   claude_structured: RawClaudeStructured | null;
@@ -2458,7 +2480,12 @@ export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     reportDate: raw.report_date,
     reportTime: raw.report_time,
     quote: raw.quote
-      ? { last: raw.quote.last, change: raw.quote.change, changePct: raw.quote.change_pct }
+      ? {
+          last: raw.quote.last,
+          change: raw.quote.change,
+          changePct: raw.quote.change_pct,
+          timestamp: raw.quote.timestamp,
+        }
       : null,
     metrics: raw.metrics ? mapMetrics(raw.metrics) : null,
     strikeLadder: raw.strike_ladder ? mapStrikeLadder(raw.strike_ladder) : null,

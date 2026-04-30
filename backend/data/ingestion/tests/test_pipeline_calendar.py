@@ -153,6 +153,37 @@ def test_is_within_trading_window_accepts_half_day_mid_session(
     assert _is_within_trading_window() is True
 
 
+@pytest.mark.asyncio
+async def test_run_window_does_not_mark_skipped_pipeline_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A skipped daily pipeline run should be retryable later the same day."""
+    import data.ingestion.pipeline_runner as pr
+
+    async def _skipped_pipeline(*, only_strategies: list[str]) -> dict:
+        return {
+            "skipped": True,
+            "reason": "market not open for MOO execution",
+            "approved": [],
+            "rejected": [],
+        }
+
+    writes: list[dict] = []
+
+    async def _cache_set(key: str, value: dict, ttl_seconds: int) -> None:
+        writes.append(dict(value))
+
+    monkeypatch.setattr(pr, "run_daily_pipeline", _skipped_pipeline)
+
+    state: dict = {}
+    await pr._run_window("open", ["pead"], state, _cache_set)
+
+    assert "last_open" not in state
+    assert state["last_open_skipped_reason"] == "market not open for MOO execution"
+    assert "last_open_in_progress" not in state
+    assert writes[-1]["last_open_skipped_reason"] == "market not open for MOO execution"
+
+
 # ---------------------------------------------------------------------------
 # Fix 2 — calendar module wrappers
 # ---------------------------------------------------------------------------

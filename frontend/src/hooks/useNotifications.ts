@@ -24,6 +24,7 @@ import { useWs } from "@/lib/providers";
 import { useToast } from "@/hooks/useToast";
 import { useNotificationsStore, type NotificationCategory } from "@/stores/notifications";
 import { shouldNotify } from "@/lib/notificationPrefs";
+import { fetchPortfolioData } from "@/hooks/useDataPipeline";
 
 type FillPayload = {
   symbol?: string;
@@ -34,6 +35,7 @@ type FillPayload = {
   fill_price?: number;
   order_id?: string;
   status?: string;
+  message?: string;
 };
 
 /**
@@ -70,9 +72,15 @@ type PipelinePayload = {
   completed_at?: string;
 };
 
-function safeSymbol(p: FillPayload | AlertPayload | PipelinePayload | null | undefined): string {
+function safeSymbol(
+  p: FillPayload | AlertPayload | PipelinePayload | null | undefined,
+): string {
   if (!p) return "";
-  return (p as any).symbol ?? "";
+  return "symbol" in p ? p.symbol ?? "" : "";
+}
+
+function wsEvent(msg: { event?: string }): string {
+  return msg.event ?? "";
 }
 
 export function useNotifications() {
@@ -92,15 +100,18 @@ export function useNotifications() {
   // screen.
   const queryClient = useQueryClient();
   const queryClientRef = useRef(queryClient);
-  queryClientRef.current = queryClient;
 
   // Keep a ref so listeners capture the latest pusher without re-subscribing
   const pushRef = useRef(addNotification);
-  pushRef.current = addNotification;
   // Same trick for toast() — captured in a ref so the trade_updates listener
   // doesn't re-subscribe every render.
   const toastRef = useRef(toast);
-  toastRef.current = toast;
+
+  useEffect(() => {
+    queryClientRef.current = queryClient;
+    pushRef.current = addNotification;
+    toastRef.current = toast;
+  }, [addNotification, queryClient, toast]);
 
   // Helper to push one notification of a category with its gating pref
   const maybePush = (
@@ -130,7 +141,7 @@ export function useNotifications() {
   // ─── Trade fills (portfolio channel) ─────────────────────────
   useEffect(() => {
     const unsub = onMessage("portfolio", (msg) => {
-      const event = (msg as any).event ?? "";
+      const event = wsEvent(msg);
       const data = (msg.data ?? {}) as FillPayload;
       // Portfolio channel is multiplexed — only react to the "fill"/"order-filled"
       // style events. Unknown events are ignored, not turned into noise.
@@ -173,7 +184,7 @@ export function useNotifications() {
           "trades",
           "orderFills", // rejected counts under order fills bucket
           `Order rejected: ${sym}`,
-          (data as any).message || "Broker rejected the order",
+          data.message || "Broker rejected the order",
           "rejected"
         );
       }
@@ -184,7 +195,7 @@ export function useNotifications() {
   // ─── Alert triggers ──────────────────────────────────────────
   useEffect(() => {
     const unsub = onMessage("alerts", (msg) => {
-      const event = (msg as any).event ?? "";
+      const event = wsEvent(msg);
       const data = (msg.data ?? {}) as AlertPayload;
       if (event === "alert_triggered" || event === "triggered" || event === "alert") {
         const sym = safeSymbol(data) || "—";
@@ -214,7 +225,7 @@ export function useNotifications() {
   useEffect(() => {
     const unsub = onMessage("trade_updates", (msg) => {
       // Server may send the event on either `msg.event` or inside `data`.
-      const topEvent = (msg as any).event ?? "";
+      const topEvent = wsEvent(msg);
       const data = (msg.data ?? {}) as TradeUpdatePayload;
       const event = (data.event ?? topEvent ?? "").toLowerCase();
       if (!event) return;
@@ -245,6 +256,10 @@ export function useNotifications() {
         qc.invalidateQueries({ queryKey: ["portfolioSummary"] });
         qc.invalidateQueries({ queryKey: ["positions"] });
         qc.invalidateQueries({ queryKey: ["orders"] });
+        // Dashboard/store consumers read broker state from Zustand, not these
+        // query keys. Hydrate the store immediately so the visible book moves
+        // with the fill/reject toast instead of waiting for reconnect/manual refresh.
+        fetchPortfolioData();
       }
 
       const sym = (data.symbol ?? "").toUpperCase() || "—";

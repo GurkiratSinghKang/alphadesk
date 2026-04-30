@@ -407,6 +407,55 @@ button:active { transform: scale(0.98); }
   animation: card-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.dashboard-section,
+.dashboard-card,
+.dashboard-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-elev-1) 92%, var(--brand) 8%), var(--bg-elev-1));
+  box-shadow: var(--shadow-1);
+}
+
+.dashboard-card,
+.dashboard-row {
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.dashboard-row {
+  padding: 0.875rem;
+}
+
+.dashboard-card:hover,
+.dashboard-row:hover {
+  border-color: color-mix(in oklab, var(--brand) 42%, var(--border));
+  box-shadow: var(--shadow-2);
+}
+
+.dashboard-hero {
+  box-shadow: var(--shadow-2);
+}
+
+@keyframes dashboard-sweep {
+  from { transform: translateX(-120%); opacity: 0; }
+  18% { opacity: 0.28; }
+  52% { opacity: 0.16; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+.dashboard-signal-sweep {
+  position: absolute;
+  inset: -30% auto -30% 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, var(--brand-tint), transparent);
+  animation: dashboard-sweep 6s var(--ease) infinite;
+  pointer-events: none;
+}
+
 /* Phase-1 / SK-1 (2026 design brief): shimmer for content-shape skeleton
    placeholders — Stripe / Linear / Notion convention. The wave runs
    ``-translate-x-full`` to ``translate-x-full`` so the gradient

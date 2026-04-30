@@ -349,6 +349,7 @@ export default function StrategyDetailPage() {
   // the effect below only fires on ``strategyId`` change so repeated
   // in-page interactions don't re-steal focus.
   const focusTargetRef = useRef<HTMLDivElement>(null);
+  const fetchSeqRef = useRef(0);
   useEffect(() => {
     focusTargetRef.current?.focus();
   }, [strategyId]);
@@ -367,12 +368,18 @@ export default function StrategyDetailPage() {
   const categoryLabel = GROUP_LABEL[meta.group] ?? "Strategy";
 
   const fetchData = useCallback(async () => {
+    const requestId = ++fetchSeqRef.current;
     setLoading(true);
+    setPerf(null);
+    setTrades([]);
+    setPositions([]);
+    setBenchmark([]);
     const [p, t, pos] = await Promise.allSettled([
       getStrategyPerformance(strategyId),
       getStrategyTrades(strategyId),
       getStrategyPositions(strategyId),
     ]);
+    if (requestId !== fetchSeqRef.current) return;
     if (p.status === "fulfilled") {
       setPerf(p.value);
     }
@@ -386,7 +393,13 @@ export default function StrategyDetailPage() {
   }, [strategyId]);
 
   useEffect(() => {
-    fetchData();
+    const timeout = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+    return () => {
+      window.clearTimeout(timeout);
+      fetchSeqRef.current += 1;
+    };
   }, [fetchData]);
 
   // SPY benchmark pull once we know equity-curve length

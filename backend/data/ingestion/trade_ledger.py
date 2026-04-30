@@ -954,13 +954,21 @@ class TradeLedger:
                     })
                     closed.append(sym)
                     logger.info("Ledger sync: closed %s (Alpaca qty=0)", sym)
-                elif trade["shares"] != alpaca_qty and alpaca_qty > 0:
-                    self.update(trade["id"], {"shares": alpaca_qty})
-                    updated.append(sym)
-                    logger.info(
-                        "Ledger sync: updating %s shares %d -> %d",
-                        sym, trade["shares"], alpaca_qty,
-                    )
+                elif alpaca_qty != 0:
+                    abs_qty = abs(alpaca_qty)
+                    side = "short" if alpaca_qty < 0 else "long"
+                    patch: dict[str, Any] = {}
+                    if trade["shares"] != abs_qty:
+                        patch["shares"] = abs_qty
+                    if str(trade.get("side") or "long").lower() != side:
+                        patch["side"] = side
+                    if patch:
+                        self.update(trade["id"], patch)
+                        updated.append(sym)
+                        logger.info(
+                            "Ledger sync: updating %s shares/side -> %d/%s",
+                            sym, abs_qty, side,
+                        )
             else:
                 # Position absent from Alpaca. We only close if Alpaca gave
                 # us an otherwise-non-empty response — "absent" is a
@@ -1001,8 +1009,10 @@ class TradeLedger:
                     qty = int(float(pos.get("qty", 0)))
                 except (TypeError, ValueError):
                     continue
-                if qty <= 0:
+                if qty == 0:
                     continue
+                side = "short" if qty < 0 else "long"
+                abs_qty = abs(qty)
                 matched_strategy = self._match_strategy_for_symbol(sym)
                 # Per-symbol ms offset: deterministic, bounded <1s. Each symbol
                 # in this sync gets its index × 100ms added so 7 positions
@@ -1016,7 +1026,7 @@ class TradeLedger:
                 ).isoformat()
                 self.add({
                     "symbol": sym,
-                    "shares": qty,
+                    "shares": abs_qty,
                     "entry_price": avg_price,
                     "entry_time": entry_ts,
                     "stop_loss": None,
@@ -1025,6 +1035,7 @@ class TradeLedger:
                     "rationale": f"Auto-created by Alpaca sync (matched to {matched_strategy})",
                     "strategy": matched_strategy,
                     "status": "open",
+                    "side": side,
                 })
                 created.append(sym)
                 logger.info(

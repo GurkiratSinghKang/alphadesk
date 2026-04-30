@@ -604,6 +604,7 @@ async def _place_order(
     )
     resp.raise_for_status()
     order = resp.json()
+    order.setdefault("client_order_id", client_order_id)
     logger.info(
         "Order placed: %s %s %d shares  strategy=%s  order_id=%s  client_id=%s",
         side.upper(), symbol, qty, strategy, order.get("id"), client_order_id,
@@ -666,6 +667,7 @@ async def _place_bracket_order(
     )
     resp.raise_for_status()
     order = resp.json()
+    order.setdefault("client_order_id", client_order_id)
     logger.info(
         "Bracket order placed: BUY %s %d  stop=$%.2f  tp=%s  strategy=%s  order_id=%s",
         symbol, qty, stop_price,
@@ -675,12 +677,26 @@ async def _place_bracket_order(
     return order
 
 
-async def _place_stop_order(client: httpx.AsyncClient, symbol: str, qty: int, stop_price: float) -> dict[str, Any]:
-    """Place a stop-loss sell order on Alpaca."""
+async def _place_stop_order(
+    client: httpx.AsyncClient,
+    symbol: str,
+    qty: int,
+    stop_price: float,
+    side: str = "sell",
+    strategy: str = "unknown",
+) -> dict[str, Any]:
+    """Place a protective stop order on Alpaca."""
+    from core.trading_gate import reject_if_live_forbidden
+    _gate_strategy = strategy if strategy and strategy != "unknown" else None
+    reject_if_live_forbidden(
+        _gate_strategy,
+        caller="daily_pipeline._place_stop_order",
+        http_context=False,
+    )
     body = {
         "symbol": symbol,
         "qty": str(qty),
-        "side": "sell",
+        "side": side,
         "type": "stop",
         "stop_price": str(round(stop_price, 2)),
         "time_in_force": "gtc",  # Good-til-cancelled
@@ -692,17 +708,33 @@ async def _place_stop_order(client: httpx.AsyncClient, symbol: str, qty: int, st
     )
     resp.raise_for_status()
     order = resp.json()
-    logger.info("Stop-loss order placed: SELL %s %d shares @ $%.2f  order_id=%s",
-                symbol, qty, stop_price, order.get("id"))
+    logger.info(
+        "Stop-loss order placed: %s %s %d shares @ $%.2f  strategy=%s  order_id=%s",
+        side.upper(), symbol, qty, stop_price, strategy, order.get("id"),
+    )
     return order
 
 
-async def _place_limit_order(client: httpx.AsyncClient, symbol: str, qty: int, limit_price: float) -> dict[str, Any]:
-    """Place a take-profit limit sell order on Alpaca."""
+async def _place_limit_order(
+    client: httpx.AsyncClient,
+    symbol: str,
+    qty: int,
+    limit_price: float,
+    side: str = "sell",
+    strategy: str = "unknown",
+) -> dict[str, Any]:
+    """Place a take-profit limit order on Alpaca."""
+    from core.trading_gate import reject_if_live_forbidden
+    _gate_strategy = strategy if strategy and strategy != "unknown" else None
+    reject_if_live_forbidden(
+        _gate_strategy,
+        caller="daily_pipeline._place_limit_order",
+        http_context=False,
+    )
     body = {
         "symbol": symbol,
         "qty": str(qty),
-        "side": "sell",
+        "side": side,
         "type": "limit",
         "limit_price": str(round(limit_price, 2)),
         "time_in_force": "gtc",
@@ -714,8 +746,10 @@ async def _place_limit_order(client: httpx.AsyncClient, symbol: str, qty: int, l
     )
     resp.raise_for_status()
     order = resp.json()
-    logger.info("Take-profit order placed: SELL %s %d shares @ $%.2f  order_id=%s",
-                symbol, qty, limit_price, order.get("id"))
+    logger.info(
+        "Take-profit order placed: %s %s %d shares @ $%.2f  strategy=%s  order_id=%s",
+        side.upper(), symbol, qty, limit_price, strategy, order.get("id"),
+    )
     return order
 
 
@@ -727,22 +761,37 @@ async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) ->
     # Get existing orders to avoid duplicates
     resp = await client.get(f"{_base_url()}/v2/orders?status=open", headers=_alpaca_headers())
     existing_orders = resp.json() if resp.status_code == 200 else []
-    symbols_with_stops = {o["symbol"] for o in existing_orders if o.get("type") == "stop" and o.get("side") == "sell"}
+    symbols_with_stops = {
+        (o.get("symbol"), o.get("side"))
+        for o in existing_orders
+        if o.get("type") == "stop"
+    }
 
     for trade in open_positions:
         sym = trade["symbol"]
-        if sym in symbols_with_stops:
+        is_short = str(trade.get("side") or "long").lower() in {"short", "sell", "s"}
+        protective_side = "buy" if is_short else "sell"
+        if (sym, protective_side) in symbols_with_stops:
             continue  # already has a stop
 
         stop_price = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss")
         if not stop_price:
-            # Default stop: 5% below entry
-            stop_price = trade.get("entry_price", 0) * 0.95
+            # Default stop: long = 5% below entry, short = 5% above entry.
+            stop_price = trade.get("entry_price", 0) * (1.05 if is_short else 0.95)
 
         if stop_price and stop_price > 0:
             try:
-                order = await _place_stop_order(client, sym, trade["shares"], stop_price)
-                placed.append({"symbol": sym, "stop_price": stop_price, "order_id": order.get("id")})
+                order = await _place_stop_order(
+                    client, sym, trade["shares"], stop_price,
+                    side=protective_side,
+                    strategy=trade.get("strategy", "unknown"),
+                )
+                placed.append({
+                    "symbol": sym,
+                    "side": protective_side,
+                    "stop_price": stop_price,
+                    "order_id": order.get("id"),
+                })
             except Exception:
                 logger.error("Failed to place stop for %s", sym, exc_info=True)
 
@@ -973,6 +1022,8 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                 qty = int(plan.get("qty", 0))
                 stop = plan.get("stop")
                 entry_order_id = plan.get("entry_order_id")
+                entry_side = str(plan.get("side") or "long").lower()
+                stop_side = "buy" if entry_side in {"short", "sell", "s"} else "sell"
                 if not sym or qty <= 0:
                     await redis.delete(key)
                     actions.append({"id": outbox_id, "action": "discard_invalid"})
@@ -1005,7 +1056,7 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                         )
                         if r.status_code == 200:
                             for o in r.json():
-                                if o.get("type") == "stop" and o.get("side") == "sell":
+                                if o.get("type") == "stop" and o.get("side") == stop_side:
                                     has_stop = True
                                     break
                     except Exception:
@@ -1016,7 +1067,11 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
 
                     if entry_filled and not has_stop and stop and stop > 0:
                         try:
-                            await _place_stop_order(client, sym, qty, float(stop))
+                            await _place_stop_order(
+                                client, sym, qty, float(stop),
+                                side=stop_side,
+                                strategy=strategy,
+                            )
                             await redis.delete(key)
                             actions.append({
                                 "id": outbox_id, "action": "placed_stop",
@@ -1069,22 +1124,253 @@ async def _execute_approved_orders(
     """Place buy orders for all approved pending orders from the master agent."""
     orders_placed: list[dict[str, Any]] = []
 
-    # Enforce daily trade limit
-    today_count = ledger.count_today_trades()
-    if today_count >= MAX_DAILY_TRADES:
+    # Enforce daily trade limit. Track orders submitted in this batch too;
+    # a run that starts at 29/30 must not submit two more orders.
+    executed_today = ledger.count_today_trades()
+    if executed_today >= MAX_DAILY_TRADES:
         logger.warning(
             "Daily trade limit reached (%d/%d), skipping remaining orders",
-            today_count, MAX_DAILY_TRADES,
+            executed_today, MAX_DAILY_TRADES,
         )
         return orders_placed
 
+    try:
+        open_positions_by_symbol = {
+            str(p.get("symbol")): p
+            for p in ledger.get_open_positions()
+        }
+    except Exception:
+        logger.warning(
+            "Could not load open positions before order execution",
+            exc_info=True,
+        )
+        open_positions_by_symbol = {}
+
     for order in list(master.pending_orders):
-        if order["side"] != "buy":
+        if executed_today >= MAX_DAILY_TRADES:
+            logger.warning(
+                "Daily trade limit reached during batch (%d/%d), skipping remaining orders",
+                executed_today, MAX_DAILY_TRADES,
+            )
+            break
+        requested_side = str(order.get("side", "buy")).lower()
+        if requested_side not in {"buy", "sell", "short"}:
             continue
         sym = order["symbol"]
         shares = order.get("shares", 0)
         if shares < 1:
             continue
+        strategy_name = order.get("strategy", "unknown")
+
+        if requested_side == "sell":
+            position = open_positions_by_symbol.get(sym)
+            if not position:
+                msg = (
+                    "sell signal refused: no tracked open position for "
+                    f"{sym}; use side='short' for new short exposure"
+                )
+                logger.warning(msg)
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "error": msg,
+                })
+                continue
+            try:
+                open_shares = int(float(position.get("shares") or position.get("quantity") or 0))
+            except (TypeError, ValueError):
+                open_shares = 0
+            if open_shares < int(shares):
+                msg = (
+                    f"sell signal refused: requested {shares} shares of {sym} "
+                    f"but only {open_shares} are tracked open"
+                )
+                logger.warning(msg)
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "error": msg,
+                })
+                continue
+            try:
+                position_side = str(position.get("side") or "long").lower()
+                broker_side = "buy" if position_side in {"short", "sell", "s"} else "sell"
+                result = await _place_order(
+                    client, sym, shares, broker_side,
+                    strategy=strategy_name,
+                )
+                order_id = result.get("id")
+                fill_price = await _poll_fill_price(client, order_id) if order_id else None
+                exit_price = (
+                    fill_price
+                    if fill_price is not None
+                    else float(order.get("entry_price") or position.get("entry_price") or 0)
+                )
+                ledger.record_exit(
+                    sym, shares, exit_price,
+                    order.get("rationale", "strategy_exit"),
+                    side=position_side,
+                )
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "broker_side": broker_side,
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "conviction": order.get("conviction"),
+                    "order_id": order_id,
+                    "status": result.get("status"),
+                })
+                executed_today += 1
+            except Exception as e:
+                logger.error("Exit order failed for %s", sym, exc_info=True)
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "sell",
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "error": str(e),
+                })
+            continue
+
+        if requested_side == "short":
+            order_entry_estimate = order.get("entry_price", 0)
+            effective_stop = order.get("stop_loss")
+            if not effective_stop or effective_stop <= 0:
+                effective_stop = (
+                    round(order_entry_estimate * 1.05, 2)
+                    if order_entry_estimate > 0
+                    else None
+                )
+            tp_estimate = order.get("take_profit")
+            if (not tp_estimate or tp_estimate <= 0) and order_entry_estimate > 0:
+                tp_estimate = round(order_entry_estimate * 0.90, 2)
+
+            order_id: str | None = None
+            fill_price: float | None = None
+            outbox_id = uuid.uuid4().hex
+            await _outbox_create(outbox_id, {
+                "outbox_id": outbox_id,
+                "strategy": strategy_name,
+                "symbol": sym,
+                "qty": shares,
+                "side": "short",
+                "entry": order_entry_estimate,
+                "stop": effective_stop,
+                "tp": tp_estimate,
+            })
+
+            try:
+                result = await _place_order(
+                    client, sym, shares, "sell",
+                    strategy=strategy_name,
+                )
+                order_id = result.get("id")
+                await _outbox_update(outbox_id, {
+                    "status": "entry_submitted_no_stop",
+                    "entry_order_id": order_id,
+                })
+
+                ledger.record_entry(
+                    symbol=sym,
+                    shares=shares,
+                    price=order_entry_estimate,
+                    signal={
+                        "stop_loss": effective_stop,
+                        "take_profit": tp_estimate,
+                        "conviction": order.get("conviction", 0),
+                    },
+                    rationale=order.get("rationale", ""),
+                    strategy=strategy_name,
+                    side="short",
+                )
+
+                if order_id:
+                    fill_price = await _poll_fill_price(client, order_id)
+                    if fill_price is not None:
+                        ledger.update_entry_price(sym, fill_price)
+
+                if effective_stop and effective_stop > 0:
+                    try:
+                        stop_oid = await _place_stop_order(
+                            client, sym, shares, effective_stop,
+                            side="buy", strategy=strategy_name,
+                        )
+                        await _outbox_update(outbox_id, {
+                            "status": "entry_and_stop_submitted",
+                            "stop_order_id": stop_oid.get("id") if isinstance(stop_oid, dict) else None,
+                        })
+                    except Exception as stop_err:
+                        logger.critical(
+                            "CRITICAL: short stop order FAILED for %s after entry "
+                            "filled — attempting emergency cover. Error: %s",
+                            sym, stop_err, exc_info=True,
+                        )
+                        try:
+                            cover = await _place_order(
+                                client, sym, shares, "buy",
+                                strategy=f"{strategy_name}_unwind",
+                            )
+                            logger.critical(
+                                "Emergency short cover submitted for %s order_id=%s",
+                                sym, cover.get("id"),
+                            )
+                            ledger.record_exit(
+                                sym, shares,
+                                fill_price if fill_price is not None else order_entry_estimate,
+                                "stop_loss_failed_unwind",
+                                side="short",
+                            )
+                        except Exception as cover_err:
+                            logger.critical(
+                                "CRITICAL: emergency short cover ALSO failed for %s: %s. "
+                                "POSITION IS NAKED — operator intervention required.",
+                                sym, cover_err, exc_info=True,
+                            )
+                        raise RuntimeError(
+                            f"Short stop placement failed for {sym}: {stop_err}"
+                        ) from stop_err
+
+                if tp_estimate and tp_estimate > 0:
+                    try:
+                        await _place_limit_order(
+                            client, sym, shares, tp_estimate,
+                            side="buy", strategy=strategy_name,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Short take-profit order failed for %s: %s",
+                            sym, e, exc_info=True,
+                        )
+
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "short",
+                    "broker_side": "sell",
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "conviction": order.get("conviction"),
+                    "order_id": order_id,
+                    "status": result.get("status"),
+                    "bracket": False,
+                })
+                executed_today += 1
+                await _outbox_delete(outbox_id)
+            except Exception as e:
+                logger.error("Short order failed for %s", sym, exc_info=True)
+                orders_placed.append({
+                    "symbol": sym,
+                    "side": "short",
+                    "shares": shares,
+                    "strategy": strategy_name,
+                    "error": str(e),
+                })
+            continue
+
         try:
             # Compute effective stop_loss up front so we can submit a bracket
             # order atomically. If we don't have a stop, fall back to 5% below
@@ -1101,7 +1387,6 @@ async def _execute_approved_orders(
                     else None
                 )
             tp_estimate = order.get("take_profit")
-            strategy_name = order.get("strategy", "unknown")
 
             order_id: str | None = None
             result: dict[str, Any]
@@ -1246,6 +1531,7 @@ async def _execute_approved_orders(
                     try:
                         stop_oid = await _place_stop_order(
                             client, sym, shares, effective_stop,
+                            strategy=strategy_name,
                         )
                         logger.info(
                             "Stop-loss order placed for %s: %s",
@@ -1296,7 +1582,10 @@ async def _execute_approved_orders(
                 # Place take-profit limit order on Alpaca immediately
                 if order.get("take_profit"):
                     try:
-                        tp_oid = await _place_limit_order(client, sym, shares, order["take_profit"])
+                        tp_oid = await _place_limit_order(
+                            client, sym, shares, order["take_profit"],
+                            strategy=strategy_name,
+                        )
                         logger.info(
                             "Take-profit order placed for %s: %s",
                             sym,
@@ -1320,6 +1609,7 @@ async def _execute_approved_orders(
                 "status": result.get("status"),
                 "bracket": used_bracket,
             })
+            executed_today += 1
             # All legs are either at the broker or explicitly abandoned —
             # the outbox row has served its purpose. Deleting it here keeps
             # the Redis set bounded and makes the next ``replay_pending_brackets``
@@ -1391,12 +1681,20 @@ async def _check_exits(
         stop = trade.get("stop_loss")
         target = trade.get("take_profit")
         entry_price = trade.get("entry_price", 0)
+        is_short = str(trade.get("side") or "long").lower() in {"short", "sell", "s"}
+        exit_side = "buy" if is_short else "sell"
 
         reason = None
-        if stop and current_price <= stop:
-            reason = "stop_loss"
-        elif target and current_price >= target:
-            reason = "take_profit"
+        if is_short:
+            if stop and current_price >= stop:
+                reason = "stop_loss"
+            elif target and current_price <= target:
+                reason = "take_profit"
+        else:
+            if stop and current_price <= stop:
+                reason = "stop_loss"
+            elif target and current_price >= target:
+                reason = "take_profit"
 
         # Time-based exit: Close positions held > 20 trading days (~28 calendar days)
         if not reason:
@@ -1416,11 +1714,19 @@ async def _check_exits(
                 if days_held > 28:
                     reason = f"time_exit: held {days_held} days (max 20 trading days)"
 
-        # Trailing stop: If position is up > 5%, move stop to breakeven + buffer
-        if not reason and entry_price > 0 and current_price > entry_price * 1.05:
-            new_stop = entry_price * 1.01  # Move stop to 1% above entry (breakeven + buffer)
+        # Trailing stop: if position is up > 5%, move stop to breakeven + buffer.
+        if (
+            not reason
+            and entry_price > 0
+            and (
+                (not is_short and current_price > entry_price * 1.05)
+                or (is_short and current_price < entry_price * 0.95)
+            )
+        ):
+            new_stop = entry_price * (0.99 if is_short else 1.01)
             old_stop = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss", 0) or 0
-            if new_stop > old_stop:
+            should_move_stop = new_stop < old_stop if is_short else new_stop > old_stop
+            if should_move_stop:
                 # Persist the updated stop level via the ledger update API.
                 # Previously this called the long-removed ``ledger._persist()``
                 # method (left over from the JSON-file ledger) which raised
@@ -1455,12 +1761,16 @@ async def _check_exits(
                     )
                     if resp.status_code == 200:
                         for existing_order in resp.json():
-                            if existing_order.get("type") == "stop" and existing_order.get("side") == "sell":
+                            if existing_order.get("type") == "stop" and existing_order.get("side") == exit_side:
                                 await client.delete(
                                     f"{_base_url()}/v2/orders/{existing_order['id']}",
                                     headers=_alpaca_headers(),
                                 )
-                    await _place_stop_order(client, sym, trade["shares"], rounded_new_stop)
+                    await _place_stop_order(
+                        client, sym, trade["shares"], rounded_new_stop,
+                        side=exit_side,
+                        strategy=trade.get("strategy", "unknown"),
+                    )
                     logger.info(
                         "Trailing stop updated for %s: raised from $%.2f to $%.2f",
                         sym, old_stop, new_stop,
@@ -1475,17 +1785,29 @@ async def _check_exits(
 
         if reason:
             try:
-                order = await _place_order(client, sym, trade["shares"], "sell")
+                order = await _place_order(
+                    client, sym, trade["shares"], exit_side,
+                    strategy=trade.get("strategy", "unknown"),
+                )
                 order_id = order.get("id")
                 if order_id:
                     fill_price = await _poll_fill_price(client, order_id)
                     if fill_price is not None:
-                        ledger.record_exit(sym, trade["shares"], fill_price, reason)
+                        ledger.record_exit(
+                            sym, trade["shares"], fill_price, reason,
+                            side="short" if is_short else "long",
+                        )
                     else:
                         logger.warning("Sell order for %s may not have filled (order %s) — recording exit at snapshot price", sym, order_id)
-                        ledger.record_exit(sym, trade["shares"], current_price, reason)
+                        ledger.record_exit(
+                            sym, trade["shares"], current_price, reason,
+                            side="short" if is_short else "long",
+                        )
                 else:
-                    ledger.record_exit(sym, trade["shares"], current_price, reason)
+                    ledger.record_exit(
+                        sym, trade["shares"], current_price, reason,
+                        side="short" if is_short else "long",
+                    )
 
                 # --- Bracket order cleanup ---
                 # When one leg fills (stop-loss or take-profit), cancel
@@ -1500,7 +1822,7 @@ async def _check_exits(
                             otype = open_order.get("type", "")
                             oside = open_order.get("side", "")
                             oid = open_order.get("id")
-                            if oside == "sell" and otype in ("stop", "limit") and oid:
+                            if oside == exit_side and otype in ("stop", "limit") and oid:
                                 await client.delete(
                                     f"{_base_url()}/v2/orders/{oid}",
                                     headers=_alpaca_headers(),
@@ -1517,7 +1839,8 @@ async def _check_exits(
 
                 closed_orders.append({
                     "symbol": sym,
-                    "side": "sell",
+                    "side": "short" if is_short else "sell",
+                    "broker_side": exit_side,
                     "shares": trade["shares"],
                     "price": current_price,
                     "reason": reason,
@@ -1528,7 +1851,8 @@ async def _check_exits(
                 logger.error("Exit order failed for %s", sym, exc_info=True)
                 closed_orders.append({
                     "symbol": sym,
-                    "side": "sell",
+                    "side": "short" if is_short else "sell",
+                    "broker_side": exit_side,
                     "error": str(e),
                 })
 

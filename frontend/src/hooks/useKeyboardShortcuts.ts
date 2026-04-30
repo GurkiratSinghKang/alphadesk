@@ -139,6 +139,19 @@ function loadBindings(): Record<string, string> {
   return { ...DEFAULT_BINDINGS };
 }
 
+function isShortcutInteractiveTarget(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : null;
+  if (!el) return false;
+  if (el instanceof HTMLElement && el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(
+    el.closest(
+      "input, textarea, select, button, a, [role='button'], [role='combobox'], [role='listbox'], [role='menu'], [role='slider'], [contenteditable='true']",
+    ),
+  );
+}
+
 // Wave 32 persona-6 #7: full coverage of TopBar nav targets so n/p cycles
 // every primary tab instead of skipping /strategies and /reports.
 const TAB_ORDER = [
@@ -323,8 +336,7 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
+      if (isShortcutInteractiveTarget(e.target)) {
         return;
       }
 

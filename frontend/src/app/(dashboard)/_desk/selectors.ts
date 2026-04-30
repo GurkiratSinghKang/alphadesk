@@ -70,12 +70,16 @@ export function toRegime(raw: RawRegime | null | undefined): {
 export interface RawStrategy {
   id: string;
   name: string;
+  description?: string;
   status: string;
   invested_amount: number;
   total_return_pct: number;
+  sharpe_ratio?: number | null;
   win_rate: number;
   active_positions_count: number;
   sparkline: number[];
+  live_disabled?: boolean;
+  paper_only?: boolean;
 }
 
 /**
@@ -168,6 +172,16 @@ export function toContextCells(
   const s = summary;
   const equity = s?.equity ?? 0;
   const cash = s?.cash ?? 0;
+  const ready = Boolean(
+    s?.lastUpdated ||
+      s?.source ||
+      s?.is_demo !== undefined ||
+      positions.length > 0 ||
+      orderCount > 0 ||
+      [s?.equity, s?.cash, s?.buyingPower, s?.totalMarketValue].some(
+        (value) => Number.isFinite(value) && value !== 0,
+      ),
+  );
   const longVal = positions
     .filter((p) => (p.quantity ?? 0) >= 0)
     .reduce((t, p) => t + (p.marketValue ?? 0), 0);
@@ -183,7 +197,6 @@ export function toContextCells(
   // `realized_pnl_today`. The former is the live P&L running on open
   // positions; the latter is today's closed-trade P&L.
   const unrealizedPnl = s?.unrealizedPnl ?? 0;
-  const unrealizedPnlPct = s?.unrealizedPnlPct ?? 0;
   const realizedToday = s?.realizedPnlToday ?? 0;
 
   // Day P&L reconciliation (persona-3 P0 #8):
@@ -235,27 +248,27 @@ export function toContextCells(
   return [
     {
       label: "Book equity",
-      value: equity > 0 ? fmtDollars(equity) : "—",
-      delta: equity > 0 && dayPnlPct !== 0 ? fmtPct(dayPnlPct) : undefined,
+      value: ready && equity > 0 ? fmtDollars(equity) : "—",
+      delta: ready && equity > 0 && dayPnlPct !== 0 ? fmtPct(dayPnlPct) : undefined,
       deltaTone: dayPnl >= 0 ? "profit" : "loss",
       emphasis: true,
     },
     {
       label: "Day P&L",
-      value: s ? (dayPnl >= 0 ? `+${fmtDollars(dayPnl)}` : `−${fmtDollars(Math.abs(dayPnl))}`) : "—",
+      value: ready ? (dayPnl >= 0 ? `+${fmtDollars(dayPnl)}` : `−${fmtDollars(Math.abs(dayPnl))}`) : "—",
       // Surface the realized/unrealized split so the reader can reconcile
       // the number with the underlying Unrealized / Realized lines without
       // mental math (and without dedicated cells that duplicate the data).
       delta: dayPnlBreakdown,
       // Tone the value itself so negatives render coral and positives chartreuse.
       // Treat an exact zero as muted so it doesn't flash green for no movement.
-      valueTone: !s ? "muted" : dayPnl > 0 ? "profit" : dayPnl < 0 ? "loss" : "muted",
+      valueTone: !ready ? "muted" : dayPnl > 0 ? "profit" : dayPnl < 0 ? "loss" : "muted",
     },
     {
       // Buying power tells a trader what they CAN do; cash alone
       // understates capacity in a margin-enabled account.
       label: "Buying power",
-      value: s ? fmtDollars(buyingPower) : "—",
+      value: ready ? fmtDollars(buyingPower) : "—",
     },
     {
       // BUG-008: the right-panel Book tabs also show an "Orders" count, but
@@ -263,7 +276,7 @@ export function toContextCells(
       // shows "open orders only" (pending + open). Distinct labels so users
       // don't read them as the same number with two values.
       label: "Positions · Open Orders",
-      value: `${positions.length} · ${orderCount}`,
+      value: ready ? `${positions.length} · ${orderCount}` : "— · —",
       // Exposure as the secondary context line: shows long/short tilt
       // without taking a full cell. Quants want it; novices ignore it.
       delta: positions.length && equity > 0
@@ -370,9 +383,9 @@ export function toPositionRows(positions: Position[]): PositionRow[] {
       symbol: p.symbol,
       quantity: p.quantity ?? 0,
       entryPrice: p.avgCost ?? 0,
-      // Positions API doesn't echo the strategy → show sector as a
-      // secondary italic label; falls back to em-dash if missing.
-      strategyName: p.sector ?? "—",
+      // Prefer strategy attribution when the backend provides it; sector
+      // remains a useful fallback for older broker snapshots.
+      strategyName: p.strategy ?? p.sector ?? "—",
       progress: Math.max(-1, Math.min(1, pnlPct / 10)),
       pnl,
       pnlPct,
@@ -384,6 +397,7 @@ export function toPositionRows(positions: Position[]): PositionRow[] {
 
 export function toStatusPills(opts: {
   brokerConnected: boolean;
+  brokerStatus?: "connected" | "pending" | "not_linked";
   marketOpen: boolean;
   closeCountdown?: string;
   claudeHealthy: boolean;
@@ -397,23 +411,34 @@ export function toStatusPills(opts: {
   tradingMode?: "paper" | "live";
 }): StatusPill[] {
   const pills: StatusPill[] = [];
+  const brokerStatus =
+    opts.brokerStatus ?? (opts.brokerConnected ? "connected" : "not_linked");
   // Wave 3N persona-94 #1: a first-time user with no Alpaca creds sees
   // the offline pill with no remediation. Distinguish "not linked yet"
   // from the old "offline" state and surface a one-click fix link into
-  // /settings. When `brokerConnected === false` we intentionally read it
-  // as "broker not linked" since the backend's `is_demo` flag is the
-  // signal — a configured key that's temporarily unreachable would not
-  // flip `is_demo` back on.
+  // /settings. A third "pending" state covers first paint before the
+  // portfolio summary has confirmed either live Alpaca or demo fallback.
   pills.push({
-    label: opts.brokerConnected
-      ? "Alpaca paper · connected"
-      : "Broker not linked",
-    tone: opts.brokerConnected ? "profit" : "amber",
-    href: opts.brokerConnected ? undefined : "/settings",
-    hrefLabel: opts.brokerConnected ? undefined : "Configure Alpaca keys",
-    title: opts.brokerConnected
-      ? undefined
-      : "AlphaDesk hasn't seen Alpaca credentials yet. Open /settings to paste your keys.",
+    label:
+      brokerStatus === "connected"
+        ? "Alpaca paper · connected"
+        : brokerStatus === "pending"
+          ? "Broker status pending"
+          : "Broker not linked",
+    tone:
+      brokerStatus === "connected"
+        ? "profit"
+        : brokerStatus === "pending"
+          ? "muted"
+          : "amber",
+    href: brokerStatus === "not_linked" ? "/settings" : undefined,
+    hrefLabel: brokerStatus === "not_linked" ? "Configure Alpaca keys" : undefined,
+    title:
+      brokerStatus === "connected"
+        ? undefined
+        : brokerStatus === "pending"
+          ? "Waiting for the portfolio summary before declaring broker state."
+          : "AlphaDesk hasn't seen Alpaca credentials yet. Open /settings to paste your keys.",
   });
   pills.push({
     label: opts.marketOpen

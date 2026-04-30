@@ -24,7 +24,7 @@ import logging
 import math
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -478,10 +478,95 @@ async def _check_pairs_zscore() -> None:
             _pairs_setups = remaining + new_setups
 
         for setup in triggered:
-            await _execute_triggered_setup(setup)
+            logger.warning(
+                "Pairs z-score trigger requires multi-leg execution; "
+                "single-order realtime executor skipped %s/%s",
+                setup.get("sym_a", ""), setup.get("sym_b", ""),
+            )
+            try:
+                from core.redis import publish
+                await publish("alerts", {
+                    "type": "realtime_signal_manual_review",
+                    "strategy": "pairs_zscore",
+                    "symbol": f"{setup.get('sym_a', '')}/{setup.get('sym_b', '')}",
+                    "signal_type": "pairs_zscore",
+                    "direction": "multi_leg",
+                    "conviction": setup.get("conviction", 0),
+                    "rationale": (
+                        "Pairs z-score trigger fired, but automatic realtime "
+                        "execution is disabled until both hedge legs can be "
+                        "submitted atomically."
+                    ),
+                })
+            except Exception:
+                logger.debug("Pairs manual-review alert publish failed", exc_info=True)
 
     except Exception:
         logger.error("Pairs z-score check error", exc_info=True)
+
+
+async def _persist_realtime_trade_for_reconciliation(
+    *,
+    result: dict[str, Any],
+    symbol: str,
+    shares: int,
+    price: float,
+    broker_side: str,
+    ledger_side: str,
+    strategy: str,
+    stop_loss: float | None,
+    take_profit: float | None,
+    rationale: str,
+) -> None:
+    """Create the Trade row the fill reconciler needs for scanner orders."""
+    broker_order_id = result.get("id")
+    client_order_id = result.get("client_order_id")
+    if not broker_order_id and not client_order_id:
+        logger.warning(
+            "Realtime order for %s returned no broker/client id; fill reconciliation disabled",
+            symbol,
+        )
+        return
+    try:
+        from core.config import settings
+        if settings.SKIP_DB_INIT:
+            return
+        from core.database import _get_session_factory
+        from data.storage.models import Trade
+
+        live_flag = getattr(settings, "LIVE_TRADING_ENABLED", False)
+        account_env = "live" if bool(live_flag) else "paper"
+        legs = [{
+            "symbol": symbol,
+            "side": broker_side,
+            "qty": shares,
+            "order_type": "market",
+            "limit_price": None,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "client_order_id": client_order_id,
+        }]
+        factory = _get_session_factory()
+        async with factory() as db:
+            db.add(Trade(
+                symbol=symbol,
+                strategy=strategy,
+                legs=legs,
+                entry_time=datetime.now(timezone.utc),
+                entry_price=price,
+                status="submitted",
+                notes=f"[REALTIME] {rationale}",
+                side=ledger_side,
+                broker_order_id=broker_order_id,
+                client_order_id=client_order_id,
+                account_env=account_env,
+            ))
+            await db.commit()
+    except Exception:
+        logger.warning(
+            "Failed to persist realtime Trade row for %s order_id=%s client_order_id=%s",
+            symbol, broker_order_id, client_order_id, exc_info=True,
+        )
 
 
 async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
@@ -497,16 +582,24 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
 
     try:
         from data.ingestion.trade_ledger import TradeLedger
-        from data.ingestion.master_agent import MasterAgent
 
         strategy = setup.get("strategy", "unknown")
         symbol = setup.get("symbol", "")
         price = setup.get("fill_price", setup.get("trigger_price", 0))
         shares = setup.get("shares", 0)
         conviction = setup.get("conviction", 60)
-        stop_loss = setup.get("stop_loss", round(price * 0.95, 2))
-        take_profit = setup.get("take_profit", round(price * 1.10, 2))
         rationale = setup.get("rationale", f"Real-time {setup.get('type', '')} trigger")
+        direction = str(setup.get("direction") or "long").lower()
+        broker_side = "sell" if direction in {"short", "sell", "bearish"} else "buy"
+        ledger_side = "short" if broker_side == "sell" else "long"
+        stop_loss = setup.get(
+            "stop_loss",
+            round(price * (1.05 if ledger_side == "short" else 0.95), 2),
+        )
+        take_profit = setup.get(
+            "take_profit",
+            round(price * (0.90 if ledger_side == "short" else 1.10), 2),
+        )
 
         if shares < 1 or price <= 0:
             logger.warning("Skipping setup with invalid shares=%d or price=%.2f", shares, price)
@@ -555,6 +648,61 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
             )
             return
 
+        from api.routes.trades import (
+            CreateOrderRequest,
+            OrderLeg,
+            OrderSide,
+            OrderType,
+            TimeInForce,
+            _aggregate_risk_check,
+            _enforce_order_rate_limit,
+            _is_trading_halted,
+            _risk_check,
+        )
+
+        if await _is_trading_halted():
+            logger.warning(
+                "Realtime setup refused by global halt: strategy=%s symbol=%s",
+                strategy,
+                symbol,
+            )
+            return
+
+        order_request = CreateOrderRequest(
+            legs=[
+                OrderLeg(
+                    symbol=symbol,
+                    side=OrderSide(broker_side),
+                    qty=float(shares),
+                    order_type=OrderType.MARKET,
+                )
+            ],
+            time_in_force=TimeInForce.DAY,
+            strategy=strategy,
+        )
+        await _enforce_order_rate_limit("realtime_scanner")
+        agg_ok, agg_reason = await _aggregate_risk_check(
+            order_request,
+            username="realtime_scanner",
+        )
+        if not agg_ok:
+            logger.warning(
+                "Realtime setup refused by aggregate risk: strategy=%s symbol=%s reason=%s",
+                strategy,
+                symbol,
+                agg_reason,
+            )
+            return
+        risk_ok, risk_reason = await _risk_check(order_request)
+        if not risk_ok:
+            logger.warning(
+                "Realtime setup refused by per-order risk: strategy=%s symbol=%s reason=%s",
+                strategy,
+                symbol,
+                risk_reason,
+            )
+            return
+
         logger.info(
             "Executing real-time trade: %s %s %d shares @ $%.2f (%s)",
             strategy, symbol, shares, price, setup.get("type", ""),
@@ -573,13 +721,37 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
             "rationale": rationale,
         })
 
-        # Place order through the daily pipeline's order function
+        # Place order through the daily pipeline's order function. Long setups
+        # use Alpaca's atomic bracket envelope so the protective stop and
+        # optional take-profit are accepted or rejected with the entry.
         import httpx
-        from core.config import settings
-        from data.ingestion.daily_pipeline import _place_order
+        from data.ingestion.daily_pipeline import _place_bracket_order, _place_order
 
         async with httpx.AsyncClient(timeout=15) as client:
-            result = await _place_order(client, symbol, shares, "buy", strategy=strategy)
+            if ledger_side == "long":
+                result = await _place_bracket_order(
+                    client,
+                    symbol,
+                    shares,
+                    float(stop_loss),
+                    float(take_profit) if take_profit else None,
+                    strategy=strategy,
+                )
+            else:
+                result = await _place_order(client, symbol, shares, broker_side, strategy=strategy)
+
+            await _persist_realtime_trade_for_reconciliation(
+                result=result,
+                symbol=symbol,
+                shares=shares,
+                price=price,
+                broker_side=broker_side,
+                ledger_side=ledger_side,
+                strategy=strategy,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                rationale=rationale,
+            )
 
             # Record in ledger
             ledger = TradeLedger()
@@ -594,6 +766,7 @@ async def _execute_triggered_setup(setup: dict[str, Any]) -> None:
                 },
                 rationale=f"[REALTIME] {rationale}",
                 strategy=strategy,
+                side=ledger_side,
             )
             logger.info("Real-time trade executed and recorded: %s %s", strategy, symbol)
 

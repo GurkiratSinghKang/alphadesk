@@ -234,3 +234,31 @@ async def test_xff_header_is_honoured(
 
     # B is still clean.
     await _market_rate_limit_or_429(req_b, resp)
+
+
+@pytest.mark.asyncio
+async def test_batched_snapshots_route_invokes_rate_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The batched /snapshots endpoint must share the market-data limiter."""
+    from api.routes import market as market_module
+
+    calls: list[str] = []
+
+    async def _fake_limiter(request: Any, response: Any) -> None:
+        calls.append(request.client.host)
+
+    async def _fake_snapshot(symbol: str) -> Any:
+        return {"symbol": symbol}
+
+    monkeypatch.setattr(market_module, "_market_rate_limit_or_429", _fake_limiter)
+    monkeypatch.setattr(market_module, "_alpaca_keys_available", lambda: False)
+    monkeypatch.setattr(market_module, "_fetch_snapshot_impl", _fake_snapshot)
+
+    req = _FakeRequest(ip="10.0.0.55")
+    resp = _FakeResponse()
+
+    result = await market_module.get_snapshots(req, resp, symbols="AAPL,MSFT")
+
+    assert calls == ["10.0.0.55"]
+    assert sorted(result) == ["AAPL", "MSFT"]

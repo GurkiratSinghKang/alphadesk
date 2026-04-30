@@ -72,6 +72,13 @@ def test_earnings_detail_all_optional():
     assert detail.claude_full_research is None
 
 
+def test_quote_block_carries_provider_timestamp():
+    ts = datetime(2026, 4, 30, 14, 15, tzinfo=timezone.utc)
+    quote = QuoteBlock(last=270.95, change=0.24, change_pct=0.09, timestamp=ts)
+
+    assert quote.timestamp == ts
+
+
 def test_claude_structured_verdict_vocabulary():
     with pytest.raises(ValidationError):
         ClaudeStructured(

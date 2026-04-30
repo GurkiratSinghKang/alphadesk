@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { Sun, Moon, Sunrise, X, TrendingUp, TrendingDown, Zap, BarChart3, Sparkles } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useMorningBrief } from "@/hooks/useQueries";
@@ -55,7 +56,12 @@ function getDismissKey(): string {
 
 // ─── Component ─────────────────────────────────────────────────
 
-export function MorningBrief() {
+interface MorningBriefProps {
+  rail?: boolean;
+  className?: string;
+}
+
+export function MorningBrief({ rail = false, className }: MorningBriefProps = {}) {
   const { data, isLoading, error } = useMorningBrief();
 
   // Always start as false during SSR to avoid hydration mismatch,
@@ -64,8 +70,10 @@ export function MorningBrief() {
   useEffect(() => {
     // Round-11 / BB-22: safeGetItem swallows Safari Private Mode throws.
     if (safeGetItem(getDismissKey()) === "1") {
-      setDismissed(true);
+      const timeout = window.setTimeout(() => setDismissed(true), 0);
+      return () => window.clearTimeout(timeout);
     }
+    return undefined;
   }, []);
 
   // Clean up old dismiss keys on mount
@@ -95,15 +103,22 @@ export function MorningBrief() {
 
   if (dismissed) return null;
 
-  // If query failed or no data after loading, don't show skeleton forever
-  if (error || (!isLoading && !data)) return null;
+  const wrap = (node: ReactNode) => (
+    <div className={className}>{node}</div>
+  );
+
+  // If query failed or no data after loading, don't leave the dashboard rail
+  // with an empty bordered slot. Render a compact, honest fallback instead.
+  if (error || (!isLoading && !data)) {
+    return wrap(<MorningBriefUnavailable onDismiss={handleDismiss} />);
+  }
 
   // Loading skeleton
   if (isLoading) {
-    return (
+    return wrap(
       <div className="relative overflow-hidden rounded-xl border border-border bg-[var(--panel)] p-5 animate-pulse">
         <div className="h-5 w-48 rounded bg-muted/40 mb-3" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={cn("grid gap-4", rail ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3")}>
           <div className="h-20 rounded-lg bg-muted/30" />
           <div className="h-20 rounded-lg bg-muted/30" />
           <div className="h-20 rounded-lg bg-muted/30" />
@@ -113,7 +128,7 @@ export function MorningBrief() {
     );
   }
 
-  return <MorningBriefContent data={data!} onDismiss={handleDismiss} />;
+  return wrap(<MorningBriefContent data={data!} onDismiss={handleDismiss} rail={rail} />);
 }
 
 // ─── Content (separated to avoid hook ordering issues) ─────────
@@ -121,9 +136,11 @@ export function MorningBrief() {
 function MorningBriefContent({
   data,
   onDismiss,
+  rail,
 }: {
   data: MorningBriefData;
   onDismiss: () => void;
+  rail: boolean;
 }) {
   const greeting = getGreeting();
   const market = getMarketStatus();
@@ -180,7 +197,7 @@ function MorningBriefContent({
         </div>
 
         {/* Main grid: Portfolio | Movers | Market */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className={cn("grid gap-4 mb-4", rail ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3")}>
           {/* Portfolio Overnight Change */}
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
@@ -346,6 +363,40 @@ function MorningBriefContent({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function MorningBriefUnavailable({ onDismiss }: { onDismiss: () => void }) {
+  const greeting = getGreeting();
+  const market = getMarketStatus();
+  const GreetingIcon = greeting.icon;
+
+  return (
+    <div className="rounded-md border border-border bg-[var(--panel)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <GreetingIcon className="h-3.5 w-3.5 text-amber" aria-hidden />
+            <h3 className="truncate text-[15px] font-medium text-foreground">
+              {greeting.text}
+            </h3>
+          </div>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            {market.label} · morning brief unavailable
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          aria-label="Dismiss morning brief"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+        Briefing data did not load. Watchlist, positions, and strategy status are still available below.
+      </p>
     </div>
   );
 }

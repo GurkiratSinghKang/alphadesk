@@ -11,7 +11,10 @@ import { useRegime, usePortfolioSummary } from "@/hooks/useQueries";
 
 export function StatusStrip() {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   const summary = usePortfolioStore((s) => s.summary);
   const { isConnected } = useWs();
@@ -24,9 +27,27 @@ export function StatusStrip() {
   // banner regardless of whether regime data has loaded yet.
   const { data: portfolioResp } = usePortfolioSummary();
 
+  const hasSummary =
+    summary.is_demo !== undefined ||
+    Boolean(summary.lastUpdated) ||
+    summary.equity > 0 ||
+    summary.buyingPower > 0 ||
+    summary.positionsCount > 0;
   const dayPnl = Number.isFinite(summary.dayPnl) ? summary.dayPnl : 0;
   const dayPnlPct = Number.isFinite(summary.dayPnlPct) ? summary.dayPnlPct : 0;
-  const hasPnl = Number.isFinite(summary.dayPnl);
+  const hasPnl = hasSummary && Number.isFinite(summary.dayPnl);
+  const signedCurrency = (n: number) => {
+    const value = Number.isFinite(n) ? n : 0;
+    if (value > 0) return `+${formatCurrency(value)}`;
+    if (value < 0) return `-${formatCurrency(Math.abs(value))}`;
+    return formatCurrency(0);
+  };
+  const signedPercent = (n: number) => {
+    const value = Number.isFinite(n) ? n : 0;
+    if (value > 0) return `+${value.toFixed(2)}`;
+    if (value < 0) return `-${Math.abs(value).toFixed(2)}`;
+    return value.toFixed(2);
+  };
 
   const regimeColor = regime?.label === "bull" ? "text-[var(--profit)]" : regime?.label === "bear" ? "text-[var(--loss)]" : "text-amber";
   const isDemo =
@@ -44,8 +65,8 @@ export function StatusStrip() {
         {hasPnl ? (
           <span aria-live="polite" aria-atomic="true" className={cn("font-semibold tabular-nums", dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground")}>
             <span className="sr-only">{dayPnl > 0 ? "gain" : dayPnl < 0 ? "loss" : "flat"}</span>
-            {dayPnl > 0 ? "+" : dayPnl < 0 ? "" : ""}<AnimatedNumber value={dayPnl} format={(n) => formatCurrency(Math.abs(n))} />
-            <span className="text-muted-foreground ml-1">({dayPnlPct > 0 ? "+" : dayPnlPct < 0 ? "" : ""}<AnimatedNumber value={dayPnlPct} format={(n) => (n ?? 0).toFixed(2)} />%)</span>
+            <AnimatedNumber value={dayPnl} format={signedCurrency} />
+            <span className="text-muted-foreground ml-1">(<AnimatedNumber value={dayPnlPct} format={signedPercent} />%)</span>
           </span>
         ) : (
           <span aria-live="polite" aria-atomic="true" className="text-fg-muted tabular-nums">$--.--</span>

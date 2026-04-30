@@ -439,12 +439,14 @@ async def test_canceled_and_expired_events_persist(db_patches) -> None:
 async def test_unmatched_event_is_dropped_with_warning(
     db_patches,
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An event whose correlation id doesn't match any row logs WARN."""
     from data.ingestion import fill_reconciler as fr
 
     # No row returned from the session.
     db_patches["trade_row"] = None
+    monkeypatch.setattr(fr, "_MISSING_ROW_RETRY_DELAYS", ())
 
     caplog.set_level("WARNING", logger="data.ingestion.fill_reconciler")
     await fr._apply_event({
@@ -458,6 +460,41 @@ async def test_unmatched_event_is_dropped_with_warning(
     assert any("no ledger row" in r.getMessage() for r in caplog.records), caplog.records
     # Importantly: no commit happened — we didn't thrash any row.
     assert db_patches["commits"] == 0
+
+
+@pytest.mark.asyncio
+async def test_missing_trade_row_is_retried_before_event_is_dropped(
+    db_patches,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fast fill event can arrive before the submit path commits Trade."""
+    from data.ingestion import fill_reconciler as fr
+
+    trade_row = _make_trade_row(status="submitted")
+    db_patches["trade_row"] = None
+    monkeypatch.setattr(fr, "_MISSING_ROW_RETRY_DELAYS", (0.0,))
+
+    async def _materialize_row(_delay: float) -> None:
+        db_patches["trade_row"] = trade_row
+
+    monkeypatch.setattr(fr.asyncio, "sleep", _materialize_row)
+
+    await fr._apply_event({
+        "event": "fill",
+        "order_id": "alp_race",
+        "fill_price": 101.25,
+        "raw": {"order": {
+            "id": "alp_race",
+            "client_order_id": trade_row.client_order_id,
+            "filled_avg_price": "101.25",
+            "filled_at": "2026-04-19T13:30:00.125Z",
+        }},
+    })
+
+    assert trade_row.status == "filled"
+    assert trade_row.broker_order_id == "alp_race"
+    assert trade_row.filled_avg_price == Decimal("101.25")
+    assert db_patches["commits"] == 1
 
 
 @pytest.mark.asyncio

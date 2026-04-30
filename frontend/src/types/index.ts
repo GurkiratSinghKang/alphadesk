@@ -178,8 +178,8 @@ export interface OptionsContract {
   last: number;
   volume: number;
   oi: number;
-  iv: number;
-  delta: number;
+  iv: number | null;
+  delta: number | null;
   /**
    * Greeks from the live chain. Nullable — when the data provider does not
    * emit a greek for a contract we carry `null` through. Callers must render
@@ -195,6 +195,8 @@ export interface OptionsChain {
   expirations: string[];
   calls: OptionsContract[];
   puts: OptionsContract[];
+  fetchedAt?: string | null;
+  isDemo?: boolean;
 }
 
 // ─── Analysis ─────────────────────────────────────────────────
@@ -658,7 +660,7 @@ export interface EarningsDetail {
   // current FMP calendar slice and has no known next-report date (B-41).
   reportDate: string | null;
   reportTime: EarningsReportTime;
-  quote: { last: number; change: number; changePct: number } | null;
+  quote: { last: number; change: number; changePct: number; timestamp?: string } | null;
   metrics: EarningsMetricsBlock | null;
   strikeLadder: StrikeLadder | null;
   claudeStructured: ClaudeStructured | null;

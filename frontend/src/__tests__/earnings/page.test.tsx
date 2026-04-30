@@ -19,7 +19,7 @@ function withQueryClient(children: ReactNode) {
 }
 
 describe("Earnings Options Play page", () => {
-  it("counts saved and queued decisions only for the visible calendar window", () => {
+  it("counts saved and order-review decisions only for the visible calendar window", () => {
     expect(
       countVisibleCandidateDecisions(
         [
@@ -233,27 +233,27 @@ describe("Earnings Options Play page", () => {
     await waitFor(() => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
-    // Phase-2 / EP-3: no auto-select. First Next event picks row 1 (TSLA)
-    // because currentIdx=-1 falls back to base=0 (NVDA), then dir=1 → idx=1.
+    // Phase-2 / EP-3: no auto-select. First Next event picks the first
+    // visible row; Prev from row 2 wraps back through row 1.
+    act(() => {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    });
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
+    });
+    // Next → TSLA
     act(() => {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
     });
     await waitFor(() => {
       expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA", expect.anything());
     });
-    // Next → META
-    act(() => {
-      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
-    });
-    await waitFor(() => {
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("META", expect.anything());
-    });
-    // Prev → TSLA
+    // Prev → NVDA
     act(() => {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-prev"));
     });
     await waitFor(() => {
-      expect(api.getEarningsDetail).toHaveBeenCalledWith("TSLA", expect.anything());
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
     });
   });
 

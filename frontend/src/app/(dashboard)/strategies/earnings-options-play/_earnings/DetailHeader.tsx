@@ -13,7 +13,7 @@ export interface DetailHeaderProps {
   // Nullable for stub-detail responses — see B-41 in earnings_screener.py.
   reportDate: string | null;
   reportTime: EarningsReportTime;
-  quote: { last: number; change: number; changePct: number } | null;
+  quote: { last: number; change: number; changePct: number; timestamp?: string } | null;
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
    *  "Updated 5 m ago" label in the header. */
   generatedAt?: string;
@@ -31,6 +31,7 @@ export default function DetailHeader({
   const changePct = quote?.changePct ?? null;
   const isNeg = (change ?? 0) < 0;
   const reportTiming = describeReportTiming(reportTime);
+  const quoteTimestamp = quote?.timestamp ?? generatedAt;
 
   // Round-4 (CLUSTER E/14): 15s tick re-evaluates the freshness/relative
   // text without refetching the detail payload. Don't tick MetricsStrip
@@ -45,7 +46,7 @@ export default function DetailHeader({
   // perception for a price-decision affordance. Cost is one extra
   // re-render every 5s of an unchanged header — negligible.
   useTick(5_000);
-  const freshness = getFreshness(generatedAt);
+  const freshness = getFreshness(quoteTimestamp);
 
   // Round-4 (B-NEW-4): autofocus the H2 only on keyboard / URL selection
   // sources. Pointer-driven selections shouldn't rip focus off the
@@ -98,7 +99,7 @@ export default function DetailHeader({
           {freshness && (
             <span
               data-slot="freshness-pill"
-              title={generatedAt}
+              title={quoteTimestamp}
               aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
               className={
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[10px] uppercase tracking-wide " +

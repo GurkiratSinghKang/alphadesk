@@ -48,8 +48,11 @@ export function ProfileMenu() {
   // readable, so this is best-effort and falls back to "Account".
   const [displayName, setDisplayName] = useState<string>("Account");
   useEffect(() => {
-    const sub = decodeJwtSub();
-    if (sub) setDisplayName(sub);
+    const timer = window.setTimeout(() => {
+      const sub = decodeJwtSub();
+      if (sub) setDisplayName(sub);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   const avatarInitial = useMemo(() => {
     const trimmed = (displayName || "A").trim();
@@ -57,8 +60,11 @@ export function ProfileMenu() {
   }, [displayName]);
 
   useEffect(() => {
-    setSettingsOpen(false);
-    setModeConfirmOpen(false);
+    const timer = window.setTimeout(() => {
+      setSettingsOpen(false);
+      setModeConfirmOpen(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [pathname]);
 
   // Wave 29 persona-1 #7: clicking Live used to flip local Zustand state
@@ -109,20 +115,20 @@ export function ProfileMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger data-tour="profile-menu" className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors" aria-label="User menu">
+        <DropdownMenuTrigger data-tour="profile-menu" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors sm:h-8 sm:w-8" aria-label="User menu">
           {avatarInitial}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">
           <div className="px-3 py-2 space-y-1">
             <p className="text-xs font-medium text-foreground truncate" title={displayName}>{displayName}</p>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-[#8a8a95]">Equity</span>
+              <span className="text-muted-foreground">Equity</span>
               <span className="text-foreground tabular-nums">{formatCurrency(summary.equity > 0 ? summary.equity : 0)}</span>
             </div>
           </div>
           <DropdownMenuSeparator />
           <div className="px-3 py-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-[#8a8a95] mb-1.5">Trading Mode</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Trading Mode</p>
             <div className="flex gap-1.5">
               <button onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
               <button onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>

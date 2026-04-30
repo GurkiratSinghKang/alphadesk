@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Menu, LogOut, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import RegimePill from "@/components/primitives/RegimePill";
 import Mono from "@/components/typography/Mono";
 import { Button } from "@/components/ui/button";
+import { NotificationCenter } from "@/components/layout/NotificationCenter";
+import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
   Sheet,
@@ -48,10 +50,14 @@ export default function TopBar({
   routes,
   regime,
   clockEt,
-  avatarInitial,
   onOpenSearch,
 }: TopBarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const shortcutLabel = React.useMemo(() => {
+    if (typeof navigator === "undefined") return "⌘K";
+    return /Mac|iPhone|iPad|iPod/i.test(navigator.platform) ? "⌘K" : "Ctrl+K";
+  }, []);
+  const hasReportsRoute = routes.some((route) => route.href === "/reports");
   return (
     <div
       data-slot="top-bar"
@@ -111,27 +117,21 @@ export default function TopBar({
               );
             })}
             {/* Additional mobile-only nav shortcuts */}
-            <a
-              href="/reports"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-[44px]"
-            >
-              Reports
-            </a>
+            {!hasReportsRoute && (
+              <a
+                href="/reports"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-[44px]"
+              >
+                Reports
+              </a>
+            )}
             <a
               href="/settings"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-[44px]"
             >
               Settings
-            </a>
-            <a
-              href="/logout"
-              onClick={() => setMobileMenuOpen(false)}
-              className="mt-2 flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium no-underline text-down-500 hover:bg-down-500/10 transition-colors min-h-[44px]"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
             </a>
           </nav>
         </SheetContent>
@@ -216,7 +216,7 @@ export default function TopBar({
             aria-hidden="true"
             className="ml-1 rounded-sm border border-border bg-bg px-1 font-mono text-[13px] leading-none text-fg-muted"
           >
-            ⌘K
+            {shortcutLabel}
           </kbd>
         </button>
       )}
@@ -231,21 +231,8 @@ export default function TopBar({
         {clockEt}
       </Mono>
 
-      <span
-        data-slot="avatar"
-        aria-label="Account"
-        className={cn(
-          "flex items-center justify-center h-[26px] w-[26px] rounded-full",
-          "border border-border-strong font-display italic text-[13px]"
-        )}
-        style={{
-          background:
-            "linear-gradient(135deg, var(--gold-600), var(--gold-300))",
-          color: "var(--color-primary-foreground)",
-        }}
-      >
-        {avatarInitial}
-      </span>
+      <NotificationCenter />
+      <ProfileMenu />
     </div>
   );
 }

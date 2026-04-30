@@ -83,8 +83,10 @@ export function AICopilot() {
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const summary = usePortfolioStore((s) => s.summary);
   const pathname = usePathname();
+  const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   // Track whether we've finished the initial load so the save effect
   // doesn't race with the load effect on first mount and write an
   // empty array over a persisted thread.
@@ -146,6 +148,12 @@ export function AICopilot() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        const target = e.target as HTMLElement | null;
+        const editing =
+          target?.tagName === "INPUT" ||
+          target?.tagName === "TEXTAREA" ||
+          target?.isContentEditable;
+        if (!editing) return;
         e.preventDefault();
         setOpen((o) => !o);
       }
@@ -165,11 +173,49 @@ export function AICopilot() {
     return () => window.removeEventListener("alphadesk:shortcut", onShortcut);
   }, []);
 
-  // Focus input when opened
+  // Modal semantics: remember the trigger/focused element, focus the composer
+  // on open, trap Tab inside the panel, close on Escape, then restore focus.
   useEffect(() => {
     if (open) {
+      restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setTimeout(() => inputRef.current?.focus(), 350);
+      return undefined;
     }
+    restoreFocusRef.current?.focus();
+    restoreFocusRef.current = null;
+    return undefined;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = panelRef.current;
+      if (!root) return;
+      const focusables = root.querySelectorAll<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !root.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
   // Auto-scroll on new messages
@@ -247,16 +293,18 @@ export function AICopilot() {
           [...prev, assistantMsg].slice(-AICOPILOT_MAX_PERSISTED_MESSAGES),
         );
       } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            content:
-              "I'm having trouble connecting. Please try again in a moment.",
-            timestamp: new Date(),
-          },
-        ]);
+        setMessages((prev) =>
+          [
+            ...prev,
+            {
+              id: `a-${Date.now()}`,
+              role: "assistant" as const,
+              content:
+                "I'm having trouble connecting. Please try again in a moment.",
+              timestamp: new Date(),
+            },
+          ].slice(-AICOPILOT_MAX_PERSISTED_MESSAGES),
+        );
       } finally {
         setLoading(false);
       }
@@ -290,12 +338,13 @@ export function AICopilot() {
       )}
 
       {/* Sidebar panel */}
+      {open && (
       <div
-        className={cn(
-          "fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] sm:w-[400px] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-2xl transition-transform duration-300 ease-in-out",
-          open ? "translate-x-0" : "translate-x-full"
-        )}
-        role="complementary"
+        ref={panelRef}
+        className="fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] sm:w-[400px] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-2xl transition-transform duration-300 ease-in-out"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-copilot-title"
         aria-label="AI Copilot"
       >
         {/* Header */}
@@ -305,7 +354,7 @@ export function AICopilot() {
               <Brain className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 id="ai-copilot-title" className="text-sm font-semibold text-foreground">
                 AI Copilot
               </h2>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -451,6 +500,7 @@ export function AICopilot() {
           </div>
         </div>
       </div>
+      )}
     </>
   );
 }

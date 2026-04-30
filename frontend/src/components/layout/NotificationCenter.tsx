@@ -10,7 +10,6 @@ import {
   LogIn,
   Clock,
   ShoppingCart,
-  XCircle,
   CheckCheck,
   Trash2,
 } from "lucide-react";
@@ -133,8 +132,9 @@ export function NotificationCenter() {
 
   return (
     <Popover>
-      <PopoverTrigger>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8" aria-label="Notifications">
+      <PopoverTrigger
+        render={
+        <Button variant="ghost" size="icon" className="relative h-11 w-11 sm:h-8 sm:w-8" aria-label="Notifications">
           <Bell className="h-4 w-4 text-muted-foreground" />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
@@ -142,7 +142,8 @@ export function NotificationCenter() {
             </span>
           )}
         </Button>
-      </PopoverTrigger>
+        }
+      />
       <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--surface)] border-border p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">

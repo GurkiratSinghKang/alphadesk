@@ -20,8 +20,8 @@ interface ChainRow {
     ask: number;
     vol: number;
     oi: number;
-    iv: number;
-    delta: number;
+    iv: number | null;
+    delta: number | null;
     gamma?: number | null;
     theta?: number | null;
     vega?: number | null;
@@ -32,8 +32,8 @@ interface ChainRow {
     ask: number;
     vol: number;
     oi: number;
-    iv: number;
-    delta: number;
+    iv: number | null;
+    delta: number | null;
     gamma?: number | null;
     theta?: number | null;
     vega?: number | null;
@@ -78,7 +78,7 @@ function Cell({
   onClick,
   displayDash = false,
 }: {
-  value: number;
+  value: number | null;
   className?: string;
   format?: "price" | "number" | "pct" | "greek";
   onClick?: () => void;
@@ -165,7 +165,7 @@ export function OptionsPanel() {
       // Backend returns IV as a decimal (e.g. 0.25 = 25%), convert to percentage for display
       existing.call = {
         last: c.last, bid: c.bid, ask: c.ask,
-        vol: c.volume, oi: c.oi, iv: c.iv * 100, delta: c.delta,
+        vol: c.volume, oi: c.oi, iv: c.iv != null ? c.iv * 100 : null, delta: c.delta ?? null,
         gamma: typeof c.gamma === "number" ? c.gamma : null,
         theta: typeof c.theta === "number" ? c.theta : null,
         vega: typeof c.vega === "number" ? c.vega : null,
@@ -177,7 +177,7 @@ export function OptionsPanel() {
       // Backend returns IV as a decimal (e.g. 0.25 = 25%), convert to percentage for display
       existing.put = {
         last: p.last, bid: p.bid, ask: p.ask,
-        vol: p.volume, oi: p.oi, iv: p.iv * 100, delta: p.delta,
+        vol: p.volume, oi: p.oi, iv: p.iv != null ? p.iv * 100 : null, delta: p.delta ?? null,
         gamma: typeof p.gamma === "number" ? p.gamma : null,
         theta: typeof p.theta === "number" ? p.theta : null,
         vega: typeof p.vega === "number" ? p.vega : null,
@@ -220,7 +220,7 @@ export function OptionsPanel() {
       type: "call",
       expiry: selectedExpiry,
       price: row.call.last,
-      delta: row.call.delta,
+        delta: row.call.delta ?? 0,
       gamma: row.call.gamma ?? null,
       theta: row.call.theta ?? null,
       vega: row.call.vega ?? null,
@@ -234,7 +234,7 @@ export function OptionsPanel() {
       type: "put",
       expiry: selectedExpiry,
       price: row.put.last,
-      delta: Math.abs(row.put.delta),
+        delta: Math.abs(row.put.delta ?? 0),
       gamma: row.put.gamma ?? null,
       theta: row.put.theta ?? null,
       vega: row.put.vega ?? null,
@@ -251,6 +251,14 @@ export function OptionsPanel() {
           <span className="text-xs font-bold text-foreground">
             {selectedSymbol} Options
           </span>
+          {chainData?.isDemo && (
+            <Badge
+              variant="outline"
+              className="border-amber/50 bg-amber/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber"
+            >
+              Synthetic
+            </Badge>
+          )}
           <HelpCircle text="Full options chain for the selected symbol. Click calls/puts to add legs to your trade builder." />
           <Badge
             variant="outline"

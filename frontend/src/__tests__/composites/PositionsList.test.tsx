@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import PositionsList from "@/components/composites/PositionsList";
 
 const rows = [
@@ -58,5 +58,35 @@ describe("PositionsList", () => {
     // include the per-tab count when non-zero — assert on the visible
     // prefix to stay resilient to that formatting.
     expect(selected?.textContent?.toLowerCase()).toContain("orders");
+  });
+
+  it("allows submitted and open orders to be cancelled", () => {
+    render(
+      <PositionsList
+        positions={[]}
+        activeTab="orders"
+        onCancelOrder={() => {}}
+        orders={[
+          {
+            id: "submitted-1",
+            symbol: "AAPL",
+            side: "buy",
+            type: "limit",
+            quantity: 1,
+            status: "submitted",
+          },
+          {
+            id: "open-1",
+            symbol: "MSFT",
+            side: "sell",
+            type: "limit",
+            quantity: 2,
+            status: "open",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: /^Cancel .* order / })).toHaveLength(2);
   });
 });
