@@ -174,10 +174,19 @@ async def post_full_research(
             status_code=404,
             detail=f"symbol {sym!r} not in curated earnings universe",
         )
+    # Validate that the symbol is actually on the current earnings surface
+    # before charging the expensive Claude rate bucket. Pre-fix, a provider
+    # calendar gap could make AAPL look off-calendar; repeated failed clicks
+    # burned the 5-call full-research allowance and then showed a confusing
+    # rate-limit popup.
+    meta = await earnings_screener._load_earnings_meta(sym)
+    if not meta:
+        raise HTTPException(
+            status_code=404,
+            detail=f"symbol {sym!r} has no current earnings candidate",
+        )
     # Per-IP rate limit (B-50) — /full-research invokes Opus and costs
-    # real money; 5 calls per 10 min is the cap. Runs BEFORE the service
-    # so a stream of requests from a stuck client can't queue up Claude
-    # calls waiting on the shared client lock. XFF-aware IP resolution
+    # real money; 5 calls per 10 min is the cap. XFF-aware client IP
     # matters — otherwise Caddy's address buckets every user together
     # and the cap is useless in production.
     await check_full_research_rate(client_ip(request))
@@ -219,7 +228,7 @@ async def post_full_research(
     from agents.claude_client import ClaudeBudgetExceeded, ClaudeTimeoutError
 
     try:
-        return await earnings_screener.run_full_research(sym)
+        return await earnings_screener.run_full_research(sym, meta=meta)
     except ValueError as e:
         # Curated-universe miss / pre-condition violation.
         raise HTTPException(status_code=404, detail=str(e))

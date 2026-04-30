@@ -56,6 +56,8 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export interface ApiFetchOptions extends RequestInit {
   /** Override the default 15s request timeout. */
   timeoutMs?: number;
+  /** Caller renders its own error state; do not emit global error toasts. */
+  suppressGlobalError?: boolean;
 }
 
 /**
@@ -209,7 +211,12 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     ...((init?.headers as Record<string, string>) ?? {}),
   };
 
-  const { timeoutMs, signal: callerSignal, ...rest } = init ?? {};
+  const {
+    timeoutMs,
+    signal: callerSignal,
+    suppressGlobalError = false,
+    ...rest
+  } = init ?? {};
   const effectiveTimeout = typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS;
 
   // Combine the caller's signal (if any) with our timeout signal so either
@@ -243,7 +250,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     // toast system + React Query can decide how to react. Other network
     // failures propagate unchanged.
     if (err instanceof DOMException && err.name === "TimeoutError") {
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !suppressGlobalError) {
         window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
           detail: { status: 0, message: `Request timed out after ${effectiveTimeout}ms`, path },
         }));
@@ -317,7 +324,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
       const msg = typeof retryAfter === "number"
         ? `Rate-limited. Try again in ${retryAfter}s.`
         : "Rate-limited. Please slow down.";
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !suppressGlobalError) {
         window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
           detail: { status: 429, message: msg, path, retryAfter },
         }));
@@ -330,7 +337,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     const parsedDetail = parseApiErrorBody(body);
     const friendly = parsedDetail ?? `API ${res.status}: ${res.statusText}`;
     // Dispatch error event for toast system to catch
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !suppressGlobalError) {
       window.dispatchEvent(new CustomEvent("alphadesk:api-error", {
         detail: { status: res.status, message: friendly, path },
       }));
@@ -2539,7 +2546,7 @@ export async function postEarningsFullResearch(symbol: string): Promise<ClaudeFu
   // breathing room to either return a useful error or the research itself.
   const raw = await apiFetch<RawClaudeFullResearch>(
     `/api/v1/earnings/${encodeURIComponent(symbol)}/full-research`,
-    { method: "POST", timeoutMs: 120_000 },
+    { method: "POST", timeoutMs: 120_000, suppressGlobalError: true },
   );
   return mapClaudeFullResearch(raw);
 }

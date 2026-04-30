@@ -103,6 +103,15 @@ def test_route_allows_up_to_bucket_max_then_429s():
     )
 
     with patch(
+        "services.earnings_screener._load_earnings_meta",
+        AsyncMock(return_value={
+            "symbol": "AAPL",
+            "company": "Apple",
+            "sector": "Tech",
+            "report_date": "2026-04-30",
+            "report_time": "AMC",
+        }),
+    ), patch(
         "services.earnings_screener.run_full_research",
         AsyncMock(return_value=fake_payload),
     ):
@@ -114,6 +123,48 @@ def test_route_allows_up_to_bucket_max_then_429s():
         r = client.post("/api/v1/earnings/AAPL/full-research")
         assert r.status_code == 429
         assert "retry-after" in {k.lower() for k in r.headers.keys()}
+
+
+def test_full_research_404_does_not_charge_rate_bucket():
+    """Off-calendar metadata misses should not burn the Claude quota."""
+    from api.schemas.earnings import ClaudeFullResearch
+    from api.routes._rate_limit import _BUCKET_MAX
+
+    fake_payload = ClaudeFullResearch(
+        thesis_paragraph="stub",
+        comparable_setups=[],
+        post_earnings_drift_playbook="stub",
+        sector_backdrop="stub",
+        analyst_consensus_delta="stub",
+        what_would_change_my_mind="stub",
+        confidence=0.5,
+        model="claude-stub",
+        generated_at=datetime.now(timezone.utc),
+    )
+
+    with patch(
+        "services.earnings_screener._load_earnings_meta",
+        AsyncMock(return_value=None),
+    ):
+        for _ in range(_BUCKET_MAX + 1):
+            r = client.post("/api/v1/earnings/AAPL/full-research")
+            assert r.status_code == 404
+
+    with patch(
+        "services.earnings_screener._load_earnings_meta",
+        AsyncMock(return_value={
+            "symbol": "AAPL",
+            "company": "Apple",
+            "sector": "Tech",
+            "report_date": "2026-04-30",
+            "report_time": "AMC",
+        }),
+    ), patch(
+        "services.earnings_screener.run_full_research",
+        AsyncMock(return_value=fake_payload),
+    ):
+        r = client.post("/api/v1/earnings/AAPL/full-research")
+    assert r.status_code == 200
 
 
 # ───────────────────────── Round-4 detail rate-limit tests ─────────────────────────

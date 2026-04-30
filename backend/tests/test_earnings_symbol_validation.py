@@ -158,6 +158,15 @@ def test_full_research_accepts_plain_symbol():
         generated_at=datetime.now(timezone.utc),
     )
     with patch(
+        "services.earnings_screener._load_earnings_meta",
+        AsyncMock(return_value={
+            "symbol": "AAPL",
+            "company": "Apple",
+            "sector": "Tech",
+            "report_date": "2026-04-30",
+            "report_time": "AMC",
+        }),
+    ), patch(
         "services.earnings_screener.run_full_research",
         AsyncMock(return_value=fake),
     ):

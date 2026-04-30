@@ -328,6 +328,31 @@ async def test_list_upcoming_rescues_headline_rows_before_cap(monkeypatch):
     assert resp.meta["rescued_count"] == 4
 
 
+@pytest.mark.asyncio
+async def test_load_earnings_meta_uses_rescued_headline_rows():
+    """Detail/full-research must resolve the same rescued row the sidebar shows."""
+    from services import earnings_screener as svc
+
+    rescued = [
+        {"symbol": "AAPL", "company": "AAPL", "sector": "",
+         "report_date": "2026-04-30", "report_time": "AMC"},
+    ]
+
+    with patch.object(svc, "market_today", return_value=date(2026, 4, 29)), \
+         patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=[])), \
+         patch.object(
+             svc,
+             "_fmp_headline_earnings_rescue",
+             AsyncMock(return_value=rescued),
+         ):
+        meta = await svc._load_earnings_meta("AAPL")
+
+    assert meta is not None
+    assert meta["symbol"] == "AAPL"
+    assert meta["report_date"] == "2026-04-30"
+    assert meta["report_time"] == "AMC"
+
+
 # ─── Cluster B — _inflight_structured race ──────────────────
 
 

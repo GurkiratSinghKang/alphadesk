@@ -1673,9 +1673,43 @@ async def _news_payload(symbol: str, *, limit: int = 10) -> dict:
 
 
 async def _load_earnings_meta(symbol: str) -> dict | None:
-    """Fetch company + sector + upcoming earnings row for this symbol."""
-    rows = await _fmp_upcoming("both")
-    return next((r for r in rows if r["symbol"] == symbol), None)
+    """Fetch company + sector + current earnings row for this symbol.
+
+    Keep this in lockstep with :func:`list_upcoming`: the detail and
+    full-research paths must see headline rows rescued from FMP's
+    per-symbol earnings feed, otherwise the sidebar can show AAPL/MSFT
+    while the detail panel treats the same ticker as an off-calendar stub.
+    """
+    wanted = symbol.upper()
+    try:
+        rows = [
+            r for r in await _fmp_upcoming("both")
+            if _in_curated_universe(r.get("symbol", ""))
+        ]
+        rescued = await _fmp_headline_earnings_rescue(
+            "both",
+            extra_symbols=[wanted],
+        )
+        rows = _merge_calendar_rows(rows, rescued)
+    except Exception as e:
+        log.warning(
+            "earnings meta lookup failed for %s: %s",
+            wanted,
+            _scrub_fmp_error(str(e)),
+            extra=_log_ctx(
+                endpoint="earnings._load_earnings_meta",
+                symbol=wanted,
+                error=_scrub_fmp_error(str(e)),
+            ),
+        )
+        return None
+
+    matches = [r for r in rows if str(r.get("symbol", "")).upper() == wanted]
+    if not matches:
+        return None
+    today = market_today()
+    matches.sort(key=lambda r: _calendar_candidate_priority(r, today))
+    return matches[0]
 
 
 async def _fetch_next_earnings_date(symbol: str) -> date | None:
@@ -2303,7 +2337,11 @@ async def get_detail(symbol: str) -> EarningsDetail:
     )
 
 
-async def run_full_research(symbol: str) -> ClaudeFullResearch:
+async def run_full_research(
+    symbol: str,
+    *,
+    meta: dict | None = None,
+) -> ClaudeFullResearch:
     """24h-cached full Claude research note for one symbol.
 
     Cache hit → return parsed payload straight. Cache miss → gather context,
@@ -2319,7 +2357,8 @@ async def run_full_research(symbol: str) -> ClaudeFullResearch:
     """
     from core.cache import get_cache
 
-    meta = await _load_earnings_meta(symbol)
+    if meta is None:
+        meta = await _load_earnings_meta(symbol)
     if not meta:
         raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
 
