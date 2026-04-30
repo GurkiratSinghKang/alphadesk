@@ -53,6 +53,7 @@ Closed after the first remediation batch:
 - The related `earnings_vol` research strategy now honors `after_close_only` and minimum underlying price filters in candidate diagnostics.
 - The related `vrp_harvest` research strategy now keeps the executable gate closed when no options chain is available, instead of exposing a misleading open entry gate.
 - `pead` now exposes skipped-entry reason counts for held/pending names, SUE threshold failures, disabled shorts, liquidity, and overlapping earnings.
+- Mobile detail headers now stack the symbol/metadata and quote block, preventing the live price from clipping on 390px screens after a candidate is selected.
 
 Cross-strategy reliability fixes completed in the same pass:
 
@@ -71,6 +72,8 @@ Validation for this follow-up pass:
 
 - `PYTHONPATH=backend .venv/bin/python -m pytest backend/strategies/*/tests/test_strategy.py -q`: 173 passed.
 - `PYTHONPATH=backend .venv/bin/python -m pytest backend/tests/_core/test_backtest_runner.py -q`: 3 passed.
+- `npm --prefix frontend test -- src/__tests__/earnings src/__tests__/earnings-trade-flow.test.tsx src/__tests__/hooks/useKeyboardShortcuts-earnings.test.tsx`: 123 passed.
+- `npm --prefix frontend run typecheck -- --pretty false`: passed.
 - Targeted suites for each touched strategy passed before commit.
 
 ## Evidence Collected

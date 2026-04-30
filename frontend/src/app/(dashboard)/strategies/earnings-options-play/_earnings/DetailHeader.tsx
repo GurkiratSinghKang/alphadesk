@@ -63,9 +63,9 @@ export default function DetailHeader({
   return (
     <header
       data-slot="detail-header"
-      className="flex items-baseline justify-between gap-6 border-b border-[color:var(--border)] pb-3"
+      className="flex flex-col gap-3 border-b border-[color:var(--border)] pb-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
     >
-      <div>
+      <div className="min-w-0">
         <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
         {/* B-56 headingRef + tabIndex={-1}: parent moves focus here after a
             filter-driven symbol change so SR users land on the new symbol.
@@ -75,7 +75,7 @@ export default function DetailHeader({
           id="detail-header-title"
           ref={headingRef}
           tabIndex={-1}
-          className="t-display-section italic mt-1 outline-none"
+          className="t-display-section italic mt-1 break-words outline-none"
         >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
@@ -93,8 +93,8 @@ export default function DetailHeader({
           </p>
         )}
       </div>
-      <div className="text-right">
-        <div className="flex items-center justify-end gap-2">
+      <div className="min-w-0 text-left sm:text-right">
+        <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end">
           {freshness && (
             <span
               data-slot="freshness-pill"
@@ -119,7 +119,7 @@ export default function DetailHeader({
               {freshness.kind === "live" ? "LIVE" : `DELAYED ${freshness.age}`}
             </span>
           )}
-          <div className="t-num-hero">
+          <div className="t-num-hero min-w-0 max-w-full text-[40px] tracking-[0] sm:text-[48px]">
             {quote ? fmtCurrency(quote.last, "USD") : "—"}
           </div>
         </div>

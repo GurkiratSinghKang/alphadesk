@@ -44,4 +44,21 @@ describe("DetailHeader", () => {
     expect(container.textContent).toContain("DMT (unconfirmed)");
     expect(container.querySelector('[title*="verify before placing"]')).not.toBeNull();
   });
+
+  it("stacks the quote block on narrow viewports instead of clipping it", () => {
+    const { container } = render(
+      <DetailHeader
+        symbol="AMGN"
+        company="Amgen"
+        sector="Healthcare"
+        reportDate="2026-04-30"
+        reportTime="DMT"
+        quote={{ last: 335.11, change: -4.46, changePct: -1.31 }}
+      />,
+    );
+    const header = container.querySelector('[data-slot="detail-header"]');
+    expect(header?.className).toContain("flex-col");
+    expect(header?.className).toContain("sm:flex-row");
+    expect(container.querySelector(".t-num-hero")?.className).toContain("text-[40px]");
+  });
 });
