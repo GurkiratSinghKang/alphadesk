@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     # weeks where many mega caps report in parallel — each row fans out to
     # Alpaca chain + IV + Claude, so uncapped parallelism eats the
     # provider budgets fast.
-    EARNINGS_CALENDAR_MAX_ROWS: int = 8
+    EARNINGS_CALENDAR_MAX_ROWS: int = 16
     # Per-request concurrency cap on per-symbol hydration fan-out. Alpaca's
     # rate limit is ~200 req/min across the whole backend, so 10 in-flight
     # hydrations keeps headroom for the rest of the app.

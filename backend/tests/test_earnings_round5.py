@@ -259,6 +259,75 @@ async def test_list_upcoming_watchlist_off_no_filtering(monkeypatch):
     assert {r.symbol for r in resp.earnings} == {"NVDA", "AAPL"}
 
 
+@pytest.mark.asyncio
+async def test_list_upcoming_rescues_headline_rows_before_cap(monkeypatch):
+    """Same-day mega-cap reports must not disappear behind the row cap.
+
+    FMP's calendar feed can roll AMC reports off after the print while the
+    per-symbol earnings endpoint still has them. The rescue rows should be
+    merged and prioritized before we cap hydration candidates.
+    """
+    from core.config import settings
+    from services import earnings_screener as svc
+
+    monkeypatch.setattr(settings, "EARNINGS_CALENDAR_MAX_ROWS", 6)
+    monkeypatch.setattr(settings, "EARNINGS_HYDRATE_CONCURRENCY", 6)
+
+    raw = [
+        {"symbol": "AMT", "company": "AMT", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+        {"symbol": "BKNG", "company": "BKNG", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+        {"symbol": "GM", "company": "GM", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+        {"symbol": "KO", "company": "KO", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+        {"symbol": "MDLZ", "company": "MDLZ", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+        {"symbol": "SBUX", "company": "SBUX", "sector": "",
+         "report_date": "2026-04-29", "report_time": "DMT"},
+    ]
+    rescued = [
+        {"symbol": "MSFT", "company": "MSFT", "sector": "",
+         "report_date": "2026-04-29", "report_time": "AMC"},
+        {"symbol": "AMZN", "company": "AMZN", "sector": "",
+         "report_date": "2026-04-29", "report_time": "AMC"},
+        {"symbol": "GOOGL", "company": "GOOGL", "sector": "",
+         "report_date": "2026-04-29", "report_time": "AMC"},
+        {"symbol": "GOOG", "company": "GOOG", "sector": "",
+         "report_date": "2026-04-29", "report_time": "AMC"},
+    ]
+
+    async def _hydrate(row, *, min_iv_rank: float = 0,
+                       client_host=None, today=None):
+        return {
+            **row,
+            "price": 100.0,
+            "iv_rank": 50,
+            "days_until": 0,
+            "report_state": "today_done",
+            "edge_score": 0,
+            "edge_score_reasons": [],
+        }
+
+    with patch.object(svc, "market_today", return_value=date(2026, 4, 29)), \
+         patch.object(svc, "_fmp_upcoming", AsyncMock(return_value=raw)), \
+         patch.object(
+             svc,
+             "_fmp_headline_earnings_rescue",
+             AsyncMock(return_value=rescued),
+         ), \
+         patch.object(svc, "_hydrate_row", AsyncMock(side_effect=_hydrate)):
+        resp = await svc.list_upcoming(window="both", sort="date")
+
+    symbols = [r.symbol for r in resp.earnings]
+    assert symbols[:4] == ["MSFT", "AMZN", "GOOGL", "GOOG"]
+    assert len(symbols) == 6
+    assert {"AMT", "BKNG"}.issubset(symbols)
+    assert {"GM", "KO", "MDLZ", "SBUX"}.isdisjoint(symbols)
+    assert resp.meta["rescued_count"] == 4
+
+
 # ─── Cluster B — _inflight_structured race ──────────────────
 
 

@@ -599,6 +599,92 @@ def _in_curated_universe(symbol: str) -> bool:
     return symbol.upper() in CURATED_OPTIONABLE_UNIVERSE
 
 
+# The calendar is a decision surface, not a raw feed. FMP's
+# /earnings-calendar endpoint can roll same-day AMC reports off the feed
+# soon after they print, while /earnings still keeps the event row. Rescue
+# a small headline/default-watchlist subset from that per-symbol endpoint
+# so crowded mega-cap days don't show as if MSFT/AMZN/GOOG never reported.
+_HEADLINE_EARNINGS_SYMBOLS: tuple[str, ...] = (
+    "MSFT", "AMZN", "GOOGL", "GOOG", "AAPL", "META", "NVDA", "TSLA",
+)
+_HEADLINE_SYMBOL_RANK: dict[str, int] = {
+    symbol: idx for idx, symbol in enumerate(_HEADLINE_EARNINGS_SYMBOLS)
+}
+_HEADLINE_REPORT_TIME_DEFAULTS: dict[str, str] = {
+    symbol: "AMC" for symbol in _HEADLINE_EARNINGS_SYMBOLS
+}
+
+
+def _symbol_display_priority(symbol: str) -> int:
+    """Lower numbers should appear first within the same report day."""
+    return _HEADLINE_SYMBOL_RANK.get(symbol.upper(), len(_HEADLINE_SYMBOL_RANK) + 100)
+
+
+def _coerce_report_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _calendar_candidate_priority(row: Mapping[str, Any], today: date) -> tuple:
+    """Rank raw calendar rows before the hydration cap is applied.
+
+    Today's events are the highest-value screen real estate, followed by
+    yesterday's retained post-earnings rows, then future rows. Within a
+    report date, headline symbols win over lower-priority names so a busy
+    earnings day cannot hide the names users most expect to see.
+    """
+    symbol = str(row.get("symbol") or "").upper()
+    report_date = _coerce_report_date(row.get("report_date"))
+    if report_date is None:
+        return (99, date.max, _symbol_display_priority(symbol), symbol)
+    days_until = (report_date - today).days
+    if days_until == 0:
+        bucket = 0
+    elif days_until == -1:
+        bucket = 1
+    elif days_until > 0:
+        bucket = 2
+    else:
+        bucket = 3
+    return (
+        bucket,
+        abs(days_until),
+        report_date,
+        _symbol_display_priority(symbol),
+        symbol,
+    )
+
+
+def _merge_calendar_rows(primary: Sequence[dict], rescued: Sequence[dict]) -> list[dict]:
+    """Append rescued rows that are missing from the primary calendar feed."""
+    merged = list(primary)
+    seen = {
+        (
+            str(row.get("symbol") or "").upper(),
+            str(row.get("report_date") or ""),
+        )
+        for row in merged
+    }
+    for row in rescued:
+        key = (
+            str(row.get("symbol") or "").upper(),
+            str(row.get("report_date") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(row)
+    return merged
+
+
 # ─── Upstream adapters (thin wrappers; fan-outs call these) ──
 
 # Round-4 CLUSTER 5 #16: per-window cache + thundering-herd guard. The
@@ -759,6 +845,108 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         if not in_test:
             await cache.set(cache_key, rows, ttl_seconds=_FMP_UPCOMING_TTL_S)
         return rows
+
+
+async def _fmp_headline_earnings_rescue(
+    window: str,
+    *,
+    extra_symbols: Sequence[str] | None = None,
+) -> list[dict]:
+    """Rescue high-priority rows missing from /earnings-calendar.
+
+    FMP's calendar endpoint is optimized for upcoming events. On the day
+    after a high-profile AMC report, or even the evening it prints, that
+    endpoint can omit the row while the per-symbol /earnings endpoint still
+    has it. We use this small, cached per-symbol pass only for headline
+    names and explicit watchlist symbols, bounded to yesterday/today/tomorrow.
+    """
+    from core.config import settings
+    from data.providers.fmp_earnings import FMPEarningsProvider
+
+    today = market_today()
+    window_start, window_end = _resolve_window_dates(window)
+    rescue_start = max(window_start, today - timedelta(days=1))
+    rescue_end = min(window_end, today + timedelta(days=1))
+    if rescue_start > rescue_end:
+        return []
+
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for raw in (*_HEADLINE_EARNINGS_SYMBOLS, *(extra_symbols or ())):
+        symbol = str(raw or "").strip().upper()
+        if not symbol or symbol in seen or not _in_curated_universe(symbol):
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+        # Keep the cold-cache worst case bounded. The headline set always
+        # fits; only very large explicit watchlists are truncated.
+        if len(symbols) >= max(16, len(_HEADLINE_EARNINGS_SYMBOLS)):
+            break
+
+    def _load() -> list[dict]:
+        rows: list[dict] = []
+        with FMPEarningsProvider(timeout=settings.EARNINGS_FMP_TIMEOUT_S) as provider:
+            for symbol in symbols:
+                try:
+                    df = provider.surprises(
+                        symbol,
+                        start=rescue_start,
+                        end=rescue_end,
+                    )
+                except Exception as e:
+                    log.debug(
+                        "FMP headline earnings rescue failed for %s: %s",
+                        symbol,
+                        _scrub_fmp_error(str(e)),
+                        extra=_log_ctx(
+                            endpoint="earnings._fmp_headline_earnings_rescue",
+                            symbol=symbol,
+                            error=_scrub_fmp_error(str(e)),
+                        ),
+                    )
+                    continue
+                if df is None or df.empty:
+                    continue
+                for _, item in df.iterrows():
+                    report_date_obj = _coerce_report_date(item.get("date"))
+                    if (
+                        report_date_obj is None
+                        or report_date_obj < rescue_start
+                        or report_date_obj > rescue_end
+                    ):
+                        continue
+                    rows.append({
+                        "symbol": symbol,
+                        "company": symbol,
+                        "sector": "",
+                        "report_date": report_date_obj.isoformat(),
+                        "report_time": _HEADLINE_REPORT_TIME_DEFAULTS.get(
+                            symbol, "DMT"
+                        ),
+                    })
+        return rows
+
+    try:
+        timeout = max(2.0, settings.EARNINGS_FMP_TIMEOUT_S * 2)
+        return await asyncio.wait_for(asyncio.to_thread(_load), timeout=timeout)
+    except asyncio.TimeoutError:
+        log.warning(
+            "FMP headline earnings rescue timed out for window=%s symbols=%s",
+            window,
+            symbols,
+        )
+    except Exception as e:
+        log.warning(
+            "FMP headline earnings rescue failed for window=%s: %s",
+            window,
+            _scrub_fmp_error(str(e)),
+            extra=_log_ctx(
+                endpoint="earnings._fmp_headline_earnings_rescue",
+                window=window,
+                error=_scrub_fmp_error(str(e)),
+            ),
+        )
+    return []
 
 
 async def _load_quote(symbol: str) -> dict | None:
@@ -1677,6 +1865,23 @@ async def list_upcoming(
         len(raw_rows), before_count, window,
     )
 
+    rescued_count = 0
+    rescue_extra = watchlist_symbols if watchlist_symbols is not None else None
+    rescued_rows = await _fmp_headline_earnings_rescue(
+        window,
+        extra_symbols=rescue_extra,
+    )
+    if rescued_rows:
+        before_rescue_merge = len(raw_rows)
+        raw_rows = _merge_calendar_rows(raw_rows, rescued_rows)
+        rescued_count = len(raw_rows) - before_rescue_merge
+        if rescued_count:
+            log.info(
+                "earnings calendar: rescued %d headline rows from per-symbol earnings (window=%s)",
+                rescued_count,
+                window,
+            )
+
     # Prefer the explicit per-user watchlist threaded from the frontend. If
     # older clients send only ``watchlist_only=true``, fall back to the
     # operator default so the flag remains useful for compatibility.
@@ -1719,7 +1924,7 @@ async def list_upcoming(
     # tradeable names per week typical), but protects us on weeks where
     # many mega caps report in parallel. Operator-tunable via
     # ``settings.EARNINGS_CALENDAR_MAX_ROWS`` (B-85).
-    raw_rows.sort(key=lambda r: (r.get("report_date", ""), r.get("symbol", "")))
+    raw_rows.sort(key=lambda r: _calendar_candidate_priority(r, today))
     MAX_ROWS = settings.EARNINGS_CALENDAR_MAX_ROWS
     if len(raw_rows) > MAX_ROWS:
         log.info(
@@ -1852,7 +2057,11 @@ async def list_upcoming(
     rows = [r for r in rows if _is_visible(r)]
 
     if sort == "date":
-        rows.sort(key=lambda r: (r.report_date, r.symbol))
+        rows.sort(key=lambda r: (
+            r.report_date,
+            _symbol_display_priority(r.symbol),
+            r.symbol,
+        ))
     elif sort == "iv_rank":
         rows.sort(key=lambda r: r.iv_rank or 0, reverse=True)
     elif sort == "yield":
@@ -1891,7 +2100,11 @@ async def list_upcoming(
         window_start=window_start,
         window_end=window_end,
         window_label=window_label,
-        meta={"reason": reason, "before_curated": before_count},
+        meta={
+            "reason": reason,
+            "before_curated": before_count,
+            "rescued_count": rescued_count,
+        },
     )
 
 
