@@ -1970,11 +1970,20 @@ async def start_daily_pipeline_async(
         _outcome = "success"
         _error_repr: str | None = None
         try:
-            await run_daily_pipeline(
+            result = await run_daily_pipeline(
                 screen_limit=screen_limit,
                 analyze_limit=analyze_limit,
                 only_strategies=only_strategies,
             )
+            if isinstance(result, dict):
+                if result.get("skipped"):
+                    _outcome = f"skipped:{result.get('reason', 'unknown')}"
+                elif result.get("halted_by_admin"):
+                    _outcome = "halted_by_admin"
+                elif result.get("errors"):
+                    _outcome = "completed_with_errors"
+                else:
+                    _outcome = str(_pipeline_status.get("last_result") or "success")
         except _PipelineCancelled:
             # Already logged + last_result set inside the inner function.
             _outcome = "cancelled"
@@ -2010,6 +2019,7 @@ async def _run_pipeline_inner(
     global _pipeline_status, CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
 
     _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
+    _pipeline_status["last_result"] = "running"
     CURRENT_STAGE = "init"
     CURRENT_STRATEGY = None
     CURRENT_PROGRESS = None
@@ -2525,11 +2535,15 @@ async def _run_pipeline_inner(
         logger.exception("Pipeline failed")
         errors.append(f"Pipeline exception: {e}")
     finally:
+        current_result = _pipeline_status.get("last_result")
         # Don't double-save in the cancel path (it returned above) —
         # the cancel branch already persisted its log + result.
-        if _pipeline_status.get("last_result") != "cancelled":
+        if current_result != "cancelled":
             _save_log(log)
-            _pipeline_status["last_result"] = "success" if not errors else "completed_with_errors"
+            if current_result in {None, "running"}:
+                _pipeline_status["last_result"] = (
+                    "success" if not errors else "completed_with_errors"
+                )
 
     return log
 
