@@ -356,6 +356,33 @@ def test_structured_prompt_restricts_fresh_setups_to_actionable_vocab():
         assert unsupported not in system
 
 
+def test_structured_prompt_contains_expert_weighting_protocol():
+    prompt = build_structured_prompt(
+        symbol="AAPL",
+        company="Apple",
+        sector="Technology",
+        report_date="2026-04-30",
+        report_time="AMC",
+        price=270.95,
+        iv_rank=49,
+        iv_percentile=75,
+        hv_20=0.25,
+        expected_move_pct=0.034,
+        hist_avg_abs_move_pct=0.027,
+        recent_beats_misses=[],
+        headlines=["Apple earnings preview [source=Reuters; category=earnings; relevance=0.92]"],
+        market_regime="Bull - Low Volatility; confidence=75%",
+    )
+
+    system = prompt["system"]
+    user = prompt["user"]
+    assert "EXPERT ANALYSIS PROTOCOL" in system
+    assert "earnings-volatility trader" in system
+    assert "news headlines and market regime must NOT dominate" in system
+    assert "corroborative only" in user
+    assert "risk/confidence modifier only" in user
+
+
 def test_parse_structured_response_happy_path():
     # Round-12 / DR-1: vocab now defined-risk-only. ``iron condor`` is the
     # closest non-directional premium-selling shape to the prior ``short
@@ -659,6 +686,22 @@ async def test_list_upcoming_filters_stale_earnings():
     assert "NVDA" not in symbols  # past date — stale, filtered
 
 
+@pytest.mark.asyncio
+async def test_headline_rescue_returns_empty_in_test_mode():
+    """Unit tests that mock the calendar must not hit live per-symbol FMP."""
+    from core.config import settings
+    from services import earnings_screener as svc
+
+    original = settings.SKIP_EARNINGS_FMP_CACHE
+    settings.SKIP_EARNINGS_FMP_CACHE = True
+    try:
+        rows = await svc._fmp_headline_earnings_rescue("both")
+    finally:
+        settings.SKIP_EARNINGS_FMP_CACHE = original
+
+    assert rows == []
+
+
 # B-62: the _StubRequest pattern that B-33 stitched together is gone —
 # `services.earnings_screener._load_quote` now calls
 # `services.market.fetch_quote` directly, no FastAPI request faking. Per-IP
@@ -710,6 +753,41 @@ async def test_hydrate_row_continues_when_metrics_raises():
     assert result["symbol"] == "NVDA"
     assert result["price"] == 200.0
     assert result["iv_rank"] is None
+
+
+@pytest.mark.asyncio
+async def test_hydrate_row_does_not_rank_synthetic_chain_metrics():
+    """Calendar Edge/IV chips should not look actionable on demo chains."""
+    from services import earnings_screener as svc
+
+    future = (date.today() + timedelta(days=3)).isoformat()
+    row = {"symbol": "AAPL", "company": "Apple", "sector": "Tech",
+           "report_date": future, "report_time": "AMC"}
+    metrics = {
+        "iv_rank": 91,
+        "expected_move_pct": 0.08,
+        "premium_yield_call_atm": 0.04,
+        "premium_yield_put_atm": 0.05,
+        "hist_avg_abs_move_pct": 0.04,
+        "chain_is_demo": True,
+        "iv_is_demo": True,
+    }
+
+    with patch.object(
+        svc,
+        "_load_quote",
+        AsyncMock(return_value={"last": 200.0, "change": 1.0, "change_pct": 0.5}),
+    ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value=metrics)), \
+         patch.object(svc, "_load_claude_structured_cached", AsyncMock(return_value=None)):
+        result = await svc._hydrate_row(row, min_iv_rank=0)
+
+    assert result is not None
+    assert result["iv_rank"] is None
+    assert result["expected_move_pct"] is None
+    assert result["premium_yield_call_atm"] is None
+    assert result["premium_yield_put_atm"] is None
+    assert result["edge_score"] is None
 
 
 @pytest.mark.asyncio
@@ -1005,7 +1083,7 @@ async def test_run_full_research_calls_opus_and_caches():
     assert result.confidence == 0.72
     fake_cache.set.assert_called_once()
     args, kwargs = fake_cache.set.call_args
-    assert "earnings:claude-full:NVDA" in args[0]
+    assert "earnings:claude-full:v2-news-regime-expert:NVDA" in args[0]
     assert kwargs.get("ttl_seconds") == 24 * 3600
 
 
@@ -1099,6 +1177,30 @@ async def test_demo_iv_marks_is_demo_true_async():
 
 
 @pytest.mark.asyncio
+async def test_legacy_iv_history_keeps_hv_none_when_prices_insufficient():
+    """Missing price history must not masquerade as valid 0% HV."""
+    from services.options import fetch_iv_analysis
+
+    async def fake_cache_get(key):
+        if key == "iv:AAPL":
+            return None
+        if key == "iv_history:AAPL":
+            return {"values": [0.30, 0.32, 0.35, 0.34, 0.36]}
+        if key == "prices:AAPL":
+            return {"close": [100.0, 101.0, 100.5]}
+        return None
+
+    with patch("services.options._fetch_real_iv", AsyncMock(return_value=None)), \
+         patch("core.redis.cache_get", fake_cache_get):
+        iv = await fetch_iv_analysis("AAPL")
+
+    assert iv.is_demo is False
+    assert iv.hv_20 is None
+    assert iv.hv_50 is None
+    assert iv.hv_100 is None
+
+
+@pytest.mark.asyncio
 async def test_demo_chain_marks_is_demo_true():
     """Round-4 CLUSTER 3 #12: demo OptionChain must flag is_demo=True."""
     from services.options import _demo_chain
@@ -1143,7 +1245,98 @@ async def test_news_payload_returns_unavailable_when_demo():
         payload = await svc._news_payload("AAPL", limit=5)
 
     assert payload["is_demo"] is True
+    assert payload["status"] == "demo"
     assert payload["articles"] == []
+
+
+@pytest.mark.asyncio
+async def test_symbol_news_keeps_clean_empty_result_when_filter_drops_generic_rows():
+    """A provider response with no symbol/company-relevant rows is not an outage."""
+    from services.news import fetch_symbol_news
+
+    raw = [
+        {
+            "title": "Stock futures drift before Fed decision",
+            "description": "Broad market story without the company.",
+            "link": "https://example.com/market",
+            "source_name": "Reuters",
+            "pubDate": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    ]
+
+    with patch("services.news._fetch_newsdata", AsyncMock(return_value=raw)), \
+         patch("core.redis.cache_get", AsyncMock(return_value=None)), \
+         patch("core.redis.cache_set", AsyncMock()):
+        resp = await fetch_symbol_news("AAPL", limit=5)
+
+    assert resp.is_demo is False
+    assert resp.count == 0
+    assert resp.articles == []
+
+
+@pytest.mark.asyncio
+async def test_news_payload_marks_empty_relevant_news_as_ok_empty():
+    from services import earnings_screener as svc
+    from services.news import NewsResponse
+
+    fake_resp = NewsResponse(articles=[], query="AAPL", count=0, is_demo=False)
+
+    with patch("services.news.fetch_symbol_news", AsyncMock(return_value=fake_resp)):
+        payload = await svc._news_payload("AAPL", limit=5)
+
+    assert payload == {"articles": [], "is_demo": False, "status": "ok_empty"}
+
+
+def test_news_relevance_keeps_company_name_headlines_without_ticker():
+    """Apple/Google/etc. stories often omit the ticker in the headline.
+
+    Regression: the old filter only matched "AAPL", so a real "Apple
+    earnings" headline was discarded and Claude received no top news. GOOG
+    also needs the Google/Alphabet alias, not just GOOGL.
+    """
+    from services.news import _parse_articles
+
+    articles = _parse_articles(
+        [
+            {
+                "title": "Apple shares rise as investors brace for earnings",
+                "description": "Analysts focus on iPhone demand and services revenue.",
+                "link": "https://example.com/apple-earnings",
+                "source_name": "Reuters",
+                "pubDate": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            {
+                "title": "Stock futures drift before Fed decision",
+                "description": "Broad market story without the company.",
+                "link": "https://example.com/market",
+                "source_name": "Reuters",
+                "pubDate": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        ],
+        symbols=["AAPL"],
+    )
+
+    assert [a.title for a in articles] == [
+        "Apple shares rise as investors brace for earnings"
+    ]
+    assert articles[0].category == "earnings"
+
+    goog_articles = _parse_articles(
+        [
+            {
+                "title": "Google revenue beats as cloud growth accelerates",
+                "description": "Alphabet shares moved after the quarterly report.",
+                "link": "https://example.com/google-earnings",
+                "source_name": "Reuters",
+                "pubDate": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        ],
+        symbols=["GOOG"],
+    )
+
+    assert [a.title for a in goog_articles] == [
+        "Google revenue beats as cloud growth accelerates"
+    ]
 
 
 @pytest.mark.asyncio
@@ -1164,8 +1357,9 @@ async def test_get_detail_attaches_news_unavailable_code_when_rate_limited():
          patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_market_regime", AsyncMock(return_value="Neutral - Low Volatility")), \
          patch.object(svc, "_news_payload",
-                      AsyncMock(return_value={"articles": [], "is_demo": True})), \
+                      AsyncMock(return_value={"articles": [], "is_demo": True, "status": "demo"})), \
          patch.object(
              svc, "_load_earnings_meta",
              AsyncMock(return_value={
@@ -1178,6 +1372,246 @@ async def test_get_detail_attaches_news_unavailable_code_when_rate_limited():
     assert "news_unavailable" in detail.error_codes
     assert detail.partial is True
     assert detail.news == []
+
+
+@pytest.mark.asyncio
+async def test_get_detail_attaches_news_error_code_when_provider_throws():
+    """Provider errors should use news_error, not the clean demo/unavailable code."""
+    from services import earnings_screener as svc
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value={
+             "iv_rank": 50, "hv_20": 0.2, "current_iv": 0.4,
+         })), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_market_regime", AsyncMock(return_value="Neutral - Low Volatility")), \
+         patch.object(svc, "_news_payload", AsyncMock(return_value={
+             "articles": [],
+             "is_demo": True,
+             "status": "provider_error",
+         })), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Nvidia", "sector": "Semis",
+                 "report_date": future_date, "report_time": "AMC",
+             }),
+         ):
+        detail = await svc.get_detail("NVDA")
+
+    assert "news_error" in detail.error_codes
+    assert "news_unavailable" not in detail.error_codes
+    assert detail.partial is True
+
+
+@pytest.mark.asyncio
+async def test_get_detail_marks_chain_demo_from_metrics_when_ladder_missing():
+    """Synthetic chain use must be visible even if the ladder block is absent."""
+    from services import earnings_screener as svc
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 200.0, "change": -1.0, "change_pct": -0.5}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value={
+             "iv_rank": None,
+             "hv_20": None,
+             "current_iv": 0.4,
+             "chain_is_demo": True,
+         })), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_market_regime", AsyncMock(return_value="Neutral - Low Volatility")), \
+         patch.object(svc, "_news_payload", AsyncMock(return_value={
+             "articles": [], "is_demo": False, "status": "ok_empty",
+         })), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Nvidia", "sector": "Semis",
+                 "report_date": future_date, "report_time": "AMC",
+             }),
+         ):
+        detail = await svc.get_detail("NVDA")
+
+    assert "chain_demo" in detail.error_codes
+    assert detail.partial is True
+
+
+@pytest.mark.asyncio
+async def test_get_detail_sends_ranked_news_and_regime_to_claude_context():
+    from services import earnings_screener as svc
+
+    captured: dict = {}
+
+    async def fake_claude(symbol: str, *, context: dict):
+        captured.update(context)
+        return None
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    with patch.object(
+         svc, "_load_quote",
+         AsyncMock(return_value={"last": 270.95, "change": 0.24, "change_pct": 0.09}),
+         ), \
+         patch.object(svc, "_load_metrics", AsyncMock(return_value={
+             "iv_rank": 49, "iv_percentile": 75, "hv_20": 0.25,
+             "expected_move_pct": 0.034, "hist_avg_abs_move_pct": 0.027,
+             "historical_quarters": [],
+         })), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(side_effect=fake_claude)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=(None, False))), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_market_regime", AsyncMock(return_value=(
+             "Bull - Low Volatility; confidence=75%; vix_proxy=16.4; "
+             "SPY_day_change=+0.42%"
+         ))), \
+         patch.object(svc, "_news_payload", AsyncMock(return_value={
+             "articles": [
+                 {
+                     "title": "Apple earnings preview focuses on iPhone demand",
+                     "source": "Reuters",
+                     "published_at": datetime.now(timezone.utc),
+                     "url": "https://example.com/aapl",
+                     "relevance_score": 0.92,
+                     "category": "earnings",
+                     "tier": 1,
+                     "sentiment": "neutral",
+                 }
+             ],
+             "is_demo": False,
+         })), \
+         patch.object(
+             svc, "_load_earnings_meta",
+             AsyncMock(return_value={
+                 "company": "Apple", "sector": "Technology",
+                 "report_date": future_date, "report_time": "AMC",
+             }),
+         ):
+        await svc.get_detail("AAPL")
+
+    assert captured["market_regime"].startswith("Bull - Low Volatility")
+    assert captured["headlines"] == [
+        "Apple earnings preview focuses on iPhone demand "
+        "[source=Reuters; category=earnings; tier=1; relevance=0.92; sentiment=neutral]"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_market_regime_uses_ttl_cache():
+    import time as _time
+
+    from services import earnings_screener as svc
+
+    previous = svc._market_regime_cache
+    try:
+        svc._market_regime_cache = (
+            _time.monotonic(),
+            "Bull - Low Volatility; confidence=75%; vix_proxy=16.4",
+        )
+        result = await svc._load_market_regime()
+    finally:
+        svc._market_regime_cache = previous
+
+    assert result.startswith("Bull - Low Volatility")
+
+
+def test_format_market_regime_context_labels_vixy_proxy():
+    from services import earnings_screener as svc
+
+    text = svc._format_market_regime_context({
+        "regime": "Bull - Low Volatility",
+        "confidence": 0.75,
+        "vix_level": 16.4,
+        "description": "test",
+        "indicators": {
+            "spy_change_pct": 0.42,
+            "vix_proxy_change_pct": -1.25,
+            "vix_proxy_source": "VIXY ETF change, not VIX index points",
+        },
+    })
+
+    assert "VIXY_day_change=-1.25%" in text
+    assert "not VIX index points" in text
+
+
+def test_ground_full_research_response_drops_ungrounded_comparables():
+    from services import earnings_screener as svc
+
+    grounded = svc._ground_full_research_response(
+        {
+            "comparable_setups": [
+                {
+                    "report_date": "2026-01-30",
+                    "iv_rank": 120,
+                    "setup": "iron condor",
+                    "outcome": "won",
+                    "similarity_score": 1.4,
+                },
+                {
+                    "report_date": "2025-01-30",
+                    "iv_rank": 70,
+                    "setup": "iron condor",
+                    "outcome": "not supplied to Claude",
+                    "similarity_score": 0.8,
+                },
+            ],
+        },
+        [{"report_date": "2026-01-30"}],
+    )
+
+    assert grounded["comparable_setups"] == [
+        {
+            "report_date": "2026-01-30",
+            "iv_rank": 100.0,
+            "setup": "iron condor",
+            "outcome": "won",
+            "similarity_score": 1.0,
+        }
+    ]
+
+
+def test_ground_full_research_response_drops_comparables_without_history():
+    from services import earnings_screener as svc
+
+    grounded = svc._ground_full_research_response(
+        {
+            "comparable_setups": [
+                {
+                    "report_date": "2025-01-30",
+                    "iv_rank": 70,
+                    "setup": "iron condor",
+                    "outcome": "not supplied to Claude",
+                    "similarity_score": 0.8,
+                }
+            ],
+        },
+        [],
+    )
+
+    assert grounded["comparable_setups"] == []
+
+
+def test_select_event_expiry_returns_none_when_no_expiry_captures_event():
+    from services import earnings_screener as svc
+
+    report_date = date(2026, 5, 1)
+
+    assert svc._select_event_expiry(
+        [date(2026, 4, 24), date(2026, 5, 1)],
+        report_date=report_date,
+        report_time="AMC",
+    ) is None
 
 
 def test_scrub_fmp_error_redacts_apikey():
@@ -1258,6 +1692,77 @@ async def test_load_iv_term_runs_chain_fetches_in_parallel():
     # One fails; the rest still produce points.
     assert result is not None
     assert len(result) >= 1
+
+
+@pytest.mark.asyncio
+async def test_load_iv_term_filters_reused_first_chain_to_its_expiry():
+    from services import earnings_screener as svc
+
+    exp1 = date(2026, 5, 1)
+    exp2 = date(2026, 5, 8)
+
+    class _Contract:
+        def __init__(self, expiry, strike, iv):
+            self.expiry = expiry
+            self.strike = strike
+            self.iv = iv
+            self.option_type = "call"
+
+    class _Chain:
+        spot_price = 100.0
+        expirations = [exp1, exp2]
+
+        def __init__(self, contracts):
+            self.contracts = contracts
+
+    async def fake_chain(symbol, expiry=None):
+        if expiry == exp2:
+            return _Chain([_Contract(exp2, 100.0, 0.90)])
+        return _Chain([
+            _Contract(exp2, 100.0, 0.90),
+            _Contract(exp1, 110.0, 0.30),
+        ])
+
+    with patch("services.options.fetch_chain", fake_chain):
+        points, is_partial = await svc._load_iv_term("NVDA")
+
+    assert is_partial is False
+    assert points is not None
+    first = next(p for p in points if p["expiry"] == exp1)
+    assert first["atm_iv"] == 0.30
+
+
+@pytest.mark.asyncio
+async def test_load_skew_filters_to_nearest_expiry():
+    from services import earnings_screener as svc
+
+    exp1 = date(2026, 5, 1)
+    exp2 = date(2026, 5, 8)
+
+    class _Contract:
+        def __init__(self, expiry, side, delta, iv):
+            self.expiry = expiry
+            self.option_type = side
+            self.delta = delta
+            self.iv = iv
+
+    class _Chain:
+        expirations = [exp1, exp2]
+        contracts = [
+            _Contract(exp1, "put", -0.25, 0.50),
+            _Contract(exp2, "call", 0.25, 0.10),
+            _Contract(exp1, "call", 0.26, 0.40),
+        ]
+
+    async def fake_chain(symbol, expiry=None):
+        return _Chain()
+
+    with patch("services.options.fetch_chain", fake_chain):
+        skew = await svc._load_skew("NVDA")
+
+    assert skew is not None
+    assert skew["put_iv_25d"] == 0.50
+    assert skew["call_iv_25d"] == 0.40
 
 
 @pytest.mark.asyncio
@@ -1513,6 +2018,123 @@ async def test_load_metrics_populates_atm_premium_yields():
     assert metrics["hist_avg_abs_move_pct"] == 0.04
     assert metrics["beat_rate"] == 1.0
     assert metrics["historical_quarters"] == historical["quarters"]
+
+
+@pytest.mark.asyncio
+async def test_load_metrics_uses_post_earnings_expiry_for_amc_reports():
+    """AMC earnings need the next expiry after report day, not same-day expiry."""
+    from services import earnings_screener as svc
+    from services.options import IVData
+
+    class _FakeContract:
+        def __init__(self, option_type, expiry, strike, mid):
+            self.option_type = option_type
+            self.expiry = expiry
+            self.strike = strike
+            self.bid = mid
+            self.ask = mid
+            self.last = mid
+
+    class _FakeChain:
+        spot_price = 100.0
+        expirations = [date(2026, 4, 30), date(2026, 5, 1)]
+
+        def __init__(self):
+            self.contracts = [
+                _FakeContract("call", date(2026, 4, 30), 100.0, 10.0),
+                _FakeContract("put", date(2026, 4, 30), 100.0, 10.0),
+                _FakeContract("call", date(2026, 5, 1), 100.0, 2.0),
+                _FakeContract("put", date(2026, 5, 1), 100.0, 3.0),
+            ]
+
+    fake_iv = IVData(
+        symbol="AAPL",
+        current_iv=0.45,
+        iv_rank=72,
+        iv_percentile=75,
+        hv_20=0.30,
+        hv_50=0.28,
+        hv_100=0.25,
+        is_demo=False,
+        fetched_at=datetime.now(timezone.utc),
+    )
+    expiries_requested: list[date | None] = []
+
+    async def fake_iv_analysis(symbol, client_host=None):
+        return fake_iv
+
+    async def fake_chain(symbol, expiry=None):
+        expiries_requested.append(expiry)
+        return _FakeChain()
+
+    with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
+         patch("services.options.fetch_chain", fake_chain), \
+         patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=None)):
+        metrics = await svc._load_metrics(
+            "AAPL",
+            report_date=date(2026, 4, 30),
+            report_time="AMC",
+        )
+
+    assert metrics is not None
+    assert metrics["option_expiry"] == date(2026, 5, 1)
+    assert metrics["expected_move_pct"] == 0.05
+    assert date(2026, 5, 1) in expiries_requested
+
+
+@pytest.mark.asyncio
+async def test_load_strike_ladder_filters_rows_to_event_expiry():
+    from services import earnings_screener as svc
+
+    class _FakeContract:
+        def __init__(self, option_type, expiry, strike, delta):
+            self.option_type = option_type
+            self.expiry = expiry
+            self.strike = strike
+            self.delta = delta
+            self.bid = 1.0
+            self.ask = 1.2
+            self.last = 1.1
+            self.iv = 0.4
+            self.theta = -0.1
+            self.gamma = 0.01
+            self.vega = 0.2
+            self.open_interest = 100
+            self.volume = 10
+
+    class _FakeChain:
+        spot_price = 100.0
+        expirations = [date(2026, 4, 30), date(2026, 5, 1)]
+        fetched_at = datetime.now(timezone.utc)
+        is_demo = False
+
+        def __init__(self):
+            self.contracts = [
+                _FakeContract("call", date(2026, 4, 30), 100.0, 0.5),
+                _FakeContract("put", date(2026, 4, 30), 100.0, -0.5),
+                _FakeContract("call", date(2026, 5, 1), 100.0, 0.5),
+                _FakeContract("put", date(2026, 5, 1), 100.0, -0.5),
+                _FakeContract("call", date(2026, 5, 1), 105.0, 0.3),
+                _FakeContract("put", date(2026, 5, 1), 95.0, -0.3),
+                _FakeContract("call", date(2026, 5, 1), 110.0, 0.15),
+                _FakeContract("put", date(2026, 5, 1), 90.0, -0.15),
+            ]
+
+    async def fake_chain(symbol, expiry=None):
+        return _FakeChain()
+
+    with patch("services.options.fetch_chain", fake_chain):
+        ladder = await svc._load_strike_ladder(
+            "AAPL",
+            expiry=None,
+            report_date=date(2026, 4, 30),
+            report_time="AMC",
+        )
+
+    assert ladder is not None
+    assert ladder["expiry"] == date(2026, 5, 1)
+    assert ladder["rows"]
+    assert {row["expiry"] for row in ladder["rows"]} == {date(2026, 5, 1)}
 
 
 def test_option_mid_uses_one_sided_quotes_before_last():

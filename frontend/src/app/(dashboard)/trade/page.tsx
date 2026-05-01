@@ -555,6 +555,7 @@ export default function TradePage() {
                 ? `Place ${activeLegs.length}-leg combo`
                 : "Place order"
             }
+            ticketLocked={activeLegs.length > 0}
           />
         </section>
       </div>

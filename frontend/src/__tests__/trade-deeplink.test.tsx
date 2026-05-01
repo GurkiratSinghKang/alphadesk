@@ -113,5 +113,18 @@ describe("Trade page deep-link pre-fill", () => {
         expect(legEls[1].textContent).toMatch(/210/);
       });
     });
+
+    it("locks summary ticket fields for combo deep-links", async () => {
+      setSearch(
+        "?symbol=NVDA&legs=NVDA260425P00195000:sell:1,NVDA260425C00210000:sell:1"
+      );
+      const { getByLabelText } = render(<TradePage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getByLabelText("Symbol")).toBeDisabled();
+        expect(getByLabelText("Quantity")).toBeDisabled();
+        expect(getByLabelText("Order type")).toBeDisabled();
+      });
+    });
   });
 });

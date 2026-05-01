@@ -14,12 +14,18 @@ import asyncio
 import logging
 import math
 import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from core.time import market_now, market_today
 
 log = logging.getLogger(__name__)
+
+_CLAUDE_PROMPT_CACHE_VERSION = "v2-news-regime-expert"
+_MARKET_REGIME_CACHE_TTL_SECONDS = 120
+_MARKET_REGIME_ERROR_CACHE_TTL_SECONDS = 30
+_market_regime_cache: tuple[float, str] | None = None
 
 
 # Round-4 CLUSTER 4 #15: scrub FMP API keys out of any error string we log.
@@ -487,6 +493,45 @@ def _recent_beats_misses(quarters: Sequence[Mapping]) -> list[tuple[str, str]]:
     return rows
 
 
+def _ground_full_research_response(
+    parsed: Mapping[str, Any],
+    historical_quarters: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Drop Claude comparable setups that are not in the supplied history."""
+    allowed_dates = {
+        str(q.get("report_date"))
+        for q in historical_quarters
+        if q.get("report_date") is not None
+    }
+    out = dict(parsed)
+    if not allowed_dates:
+        out["comparable_setups"] = []
+        return out
+
+    grounded: list[dict[str, Any]] = []
+    for item in parsed.get("comparable_setups", []) or []:
+        if not isinstance(item, Mapping):
+            continue
+        report_date = str(item.get("report_date", ""))
+        if report_date not in allowed_dates:
+            continue
+        row = dict(item)
+        try:
+            row["iv_rank"] = max(0.0, min(100.0, float(row.get("iv_rank", 0))))
+        except (TypeError, ValueError):
+            continue
+        try:
+            row["similarity_score"] = max(
+                0.0,
+                min(1.0, float(row.get("similarity_score", 0))),
+            )
+        except (TypeError, ValueError):
+            row["similarity_score"] = 0.0
+        grounded.append(row)
+    out["comparable_setups"] = grounded
+    return out
+
+
 # ─── Schemas (local imports kept at call sites for lighter boot) ──
 
 from api.schemas.earnings import (  # noqa: E402 — after helpers by design
@@ -721,12 +766,24 @@ def _merge_calendar_rows(primary: Sequence[dict], rescued: Sequence[dict]) -> li
 # refills on cold-cache.
 _FMP_UPCOMING_LOCKS: dict[str, asyncio.Lock] = {}
 _FMP_UPCOMING_TTL_S = 300  # 5 min
+_FMP_RESCUE_LOCKS: dict[str, asyncio.Lock] = {}
+_FMP_RESCUE_TTL_S = 300  # 5 min
 
 
 def _fmp_upcoming_cache_key(window: str, start: date, end: date) -> str:
     """Cache-key includes the resolved date range so a window-boundary
     crossing (e.g. 23:55 ET → 00:05 ET) doesn't serve yesterday's data."""
     return f"earnings:fmp:upcoming:{window}:{start.isoformat()}:{end.isoformat()}"
+
+
+def _fmp_rescue_cache_key(
+    window: str,
+    start: date,
+    end: date,
+    symbols: Sequence[str],
+) -> str:
+    joined = ",".join(sorted({s.upper() for s in symbols}))
+    return f"earnings:fmp:rescue:{window}:{start.isoformat()}:{end.isoformat()}:{joined}"
 
 
 async def _fmp_upcoming(window: str) -> list[dict]:
@@ -886,6 +943,7 @@ async def _fmp_headline_earnings_rescue(
     has it. We use this small, cached per-symbol pass only for headline
     names and explicit watchlist symbols, bounded to yesterday/today/tomorrow.
     """
+    from core.cache import get_cache
     from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
 
@@ -908,6 +966,18 @@ async def _fmp_headline_earnings_rescue(
         # fits; only very large explicit watchlists are truncated.
         if len(symbols) >= max(16, len(_HEADLINE_EARNINGS_SYMBOLS)):
             break
+
+    if not symbols:
+        return []
+
+    if settings.SKIP_EARNINGS_FMP_CACHE:
+        return []
+
+    cache_key = _fmp_rescue_cache_key(window, rescue_start, rescue_end, symbols)
+    cache = get_cache()
+    cached = await cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
 
     def _load() -> list[dict]:
         rows: list[dict] = []
@@ -952,26 +1022,33 @@ async def _fmp_headline_earnings_rescue(
                     })
         return rows
 
-    try:
-        timeout = max(2.0, settings.EARNINGS_FMP_TIMEOUT_S * 2)
-        return await asyncio.wait_for(asyncio.to_thread(_load), timeout=timeout)
-    except asyncio.TimeoutError:
-        log.warning(
-            "FMP headline earnings rescue timed out for window=%s symbols=%s",
-            window,
-            symbols,
-        )
-    except Exception as e:
-        log.warning(
-            "FMP headline earnings rescue failed for window=%s: %s",
-            window,
-            _scrub_fmp_error(str(e)),
-            extra=_log_ctx(
-                endpoint="earnings._fmp_headline_earnings_rescue",
-                window=window,
-                error=_scrub_fmp_error(str(e)),
-            ),
-        )
+    lock = _FMP_RESCUE_LOCKS.setdefault(cache_key, asyncio.Lock())
+    async with lock:
+        cached = await cache.get(cache_key)
+        if isinstance(cached, list):
+            return cached
+        try:
+            timeout = max(2.0, settings.EARNINGS_FMP_TIMEOUT_S * 2)
+            rows = await asyncio.wait_for(asyncio.to_thread(_load), timeout=timeout)
+            await cache.set(cache_key, rows, ttl_seconds=_FMP_RESCUE_TTL_S)
+            return rows
+        except asyncio.TimeoutError:
+            log.warning(
+                "FMP headline earnings rescue timed out for window=%s symbols=%s",
+                window,
+                symbols,
+            )
+        except Exception as e:
+            log.warning(
+                "FMP headline earnings rescue failed for window=%s: %s",
+                window,
+                _scrub_fmp_error(str(e)),
+                extra=_log_ctx(
+                    endpoint="earnings._fmp_headline_earnings_rescue",
+                    window=window,
+                    error=_scrub_fmp_error(str(e)),
+                ),
+            )
     return []
 
 
@@ -1012,6 +1089,47 @@ def _filter_chain(chain: Any, option_type: str) -> list:
     return [c for c in chain.contracts if getattr(c.option_type, "value", c.option_type) == option_type]
 
 
+def _select_event_expiry(
+    expirations: Sequence[Any],
+    report_date: date | None = None,
+    report_time: str | None = None,
+) -> date | None:
+    """Pick the option expiry that actually captures the earnings event."""
+    parsed: list[date] = []
+    for exp in expirations:
+        if isinstance(exp, date):
+            parsed.append(exp)
+        elif isinstance(exp, str):
+            try:
+                parsed.append(date.fromisoformat(exp))
+            except ValueError:
+                continue
+    if not parsed:
+        return None
+    parsed = sorted(set(parsed))
+    if report_date is None:
+        return parsed[0]
+
+    # AMC reports print after same-day options expire, so the first usable
+    # expiry is strictly after the report date. BMO/DMT events can be captured
+    # by same-day expiry if it exists.
+    floor = report_date + timedelta(days=1) if (report_time or "").upper() == "AMC" else report_date
+    for exp in parsed:
+        if exp >= floor:
+            return exp
+    return None
+
+
+def _contracts_for_expiry(chain: Any, expiry: date | None) -> list:
+    contracts = list(getattr(chain, "contracts", []) or [])
+    if expiry is None:
+        return contracts
+    # Older unit-test doubles predate OptionContract.expiry. Treat those rows
+    # as matching the selected expiry so tests can keep minimal stubs, while
+    # real chains are filtered strictly.
+    return [c for c in contracts if getattr(c, "expiry", expiry) == expiry]
+
+
 def _option_mid(contract: Any | None) -> float:
     """Return the best usable mid for a single option contract."""
     if contract is None:
@@ -1034,6 +1152,7 @@ def _option_mid(contract: Any | None) -> float:
 async def _load_metrics(
     symbol: str,
     report_date: date | None = None,
+    report_time: str | None = None,
     expiry: date | None = None,
     client_host: str | None = None,  # B-33 — accepted for API parity; unused today
 ) -> dict | None:
@@ -1042,9 +1161,30 @@ async def _load_metrics(
     try:
         iv = await fetch_iv_analysis(symbol)
         chain = await fetch_chain(symbol, expiry=expiry)
+        chain_expirations = getattr(chain, "expirations", []) or []
+        selected_expiry = expiry or _select_event_expiry(
+            chain_expirations,
+            report_date=report_date,
+            report_time=report_time,
+        )
+        if expiry is None and selected_expiry is not None:
+            try:
+                chain = await fetch_chain(symbol, expiry=selected_expiry)
+            except Exception:
+                # The unfiltered chain already has the contracts. If the
+                # provider rejects the narrower request, filter locally rather
+                # than falling back to mixed-expiry math.
+                log.debug("event-expiry chain refetch failed for %s", symbol, exc_info=True)
         underlying = chain.spot_price
-        calls = _filter_chain(chain, "call")
-        puts = _filter_chain(chain, "put")
+        no_valid_event_expiry = (
+            report_date is not None
+            and selected_expiry is None
+            and bool(chain_expirations)
+        )
+        event_contracts = [] if no_valid_event_expiry else _contracts_for_expiry(chain, selected_expiry)
+        event_chain = type("_EventChain", (), {"contracts": event_contracts})()
+        calls = _filter_chain(event_chain, "call")
+        puts = _filter_chain(event_chain, "put")
         atm_call = min(calls, key=lambda c: abs(c.strike - underlying), default=None)
         atm_put = min(puts, key=lambda p: abs(p.strike - underlying), default=None)
         em_pct = None
@@ -1064,7 +1204,7 @@ async def _load_metrics(
             premium_yield_put_atm = put_mid / underlying
         today = market_today()
         days_to_earnings = (report_date - today).days if report_date else None
-        days_to_expiry = (expiry - today).days if expiry else None
+        days_to_expiry = (selected_expiry - today).days if selected_expiry else None
         # Round-4 CLUSTER 3 #11: hv_iv_ratio is None whenever either input
         # is missing. Real-data IV now returns hv_20=None until the
         # historical-vol pipeline lands; making the ratio None is more
@@ -1097,6 +1237,9 @@ async def _load_metrics(
             "historical_quarters": historical.get("quarters", []) if historical else [],
             "days_to_earnings": days_to_earnings,
             "days_to_expiry": days_to_expiry,
+            "option_expiry": selected_expiry,
+            "chain_is_demo": bool(getattr(chain, "is_demo", False)),
+            "iv_is_demo": bool(getattr(iv, "is_demo", False)),
         }
     except Exception as e:
         # B-69: demoted to DEBUG — a provider outage would otherwise emit
@@ -1137,15 +1280,35 @@ def _historical_block_from_metrics(metrics: Mapping[str, Any] | None) -> Histori
     return HistoricalBlock(**payload)
 
 
-async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
+async def _load_strike_ladder(
+    symbol: str,
+    expiry: date | None,
+    report_date: date | None = None,
+    report_time: str | None = None,
+) -> dict | None:
     """Pull ATM / 30Δ / 15Δ rows (both sides) from the OPRA chain."""
     from services.options import fetch_chain
 
     try:
         chain = await fetch_chain(symbol, expiry=expiry)
+        chain_expirations = getattr(chain, "expirations", []) or []
+        resolved_expiry = expiry or _select_event_expiry(
+            chain_expirations,
+            report_date=report_date,
+            report_time=report_time,
+        )
+        if expiry is None and resolved_expiry is not None:
+            try:
+                chain = await fetch_chain(symbol, expiry=resolved_expiry)
+            except Exception:
+                log.debug("event-expiry ladder refetch failed for %s", symbol, exc_info=True)
         underlying = chain.spot_price
-        calls = _filter_chain(chain, "call")
-        puts = _filter_chain(chain, "put")
+        if report_date is not None and resolved_expiry is None and chain_expirations:
+            return None
+        event_contracts = _contracts_for_expiry(chain, resolved_expiry)
+        event_chain = type("_EventChain", (), {"contracts": event_contracts})()
+        calls = _filter_chain(event_chain, "call")
+        puts = _filter_chain(event_chain, "put")
         rows: list[dict] = []
         # Round-8 visual-bug SL1: previously every bucket selected by
         # ``abs(c.delta or 0.5) - target_delta``. Two problems:
@@ -1213,6 +1376,7 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
                 pop = max(0.0, min(1.0, 1 - abs(contract.delta or 0.5)))
                 rows.append({
                     "strike": contract.strike,
+                    "expiry": getattr(contract, "expiry", resolved_expiry),
                     "side": side,
                     "bucket": bucket,
                     "delta": contract.delta or 0,
@@ -1228,9 +1392,8 @@ async def _load_strike_ladder(symbol: str, expiry: date | None) -> dict | None:
                     "oi": contract.open_interest or 0,
                     "volume": contract.volume or 0,
                 })
-        resolved_expiry = (
-            expiry
-            or (chain.expirations[0] if chain.expirations else market_today())
+        resolved_expiry = resolved_expiry or (
+            chain.expirations[0] if chain.expirations else market_today()
         )
         # Round-5 Cluster A E-1: thread the underlying chain's demo flag
         # through to the wire schema. ``getattr`` defends against test
@@ -1328,7 +1491,10 @@ async def _load_claude_structured(symbol: str, context: dict) -> dict | None:
     from core.cache import get_cache
 
     cache = get_cache()
-    key = f"earnings:claude-structured:{symbol}:{context['report_date']}"
+    key = (
+        f"earnings:claude-structured:{_CLAUDE_PROMPT_CACHE_VERSION}:"
+        f"{symbol}:{context['report_date']}"
+    )
     cached = await cache.get(key)
     if cached:
         return cached
@@ -1364,7 +1530,10 @@ async def _load_claude_structured_cached(symbol: str, report_date: date | str) -
 
     report_key = report_date.isoformat() if hasattr(report_date, "isoformat") else str(report_date)
     cache = get_cache()
-    cached = await cache.get(f"earnings:claude-structured:{symbol}:{report_key}")
+    cached = await cache.get(
+        f"earnings:claude-structured:{_CLAUDE_PROMPT_CACHE_VERSION}:"
+        f"{symbol}:{report_key}"
+    )
     return cached if isinstance(cached, dict) else None
 
 
@@ -1571,7 +1740,9 @@ async def _load_iv_term(symbol: str) -> tuple[list[dict] | None, bool]:
 
         term: list[dict] = []
         for exp_date, exp_chain in chains:
-            calls = _filter_chain(exp_chain, "call")
+            exp_contracts = _contracts_for_expiry(exp_chain, exp_date)
+            scoped_chain = type("_ExpiryChain", (), {"contracts": exp_contracts})()
+            calls = _filter_chain(scoped_chain, "call")
             atm = min(
                 calls,
                 key=lambda c: abs(c.strike - exp_chain.spot_price),
@@ -1600,8 +1771,12 @@ async def _load_skew(symbol: str) -> dict | None:
 
     try:
         chain = await fetch_chain(symbol)
-        calls = _filter_chain(chain, "call")
-        puts = _filter_chain(chain, "put")
+        expirations = getattr(chain, "expirations", []) or []
+        expiry = _select_event_expiry(expirations)
+        scoped_contracts = _contracts_for_expiry(chain, expiry)
+        scoped_chain = type("_SkewChain", (), {"contracts": scoped_contracts})()
+        calls = _filter_chain(scoped_chain, "call")
+        puts = _filter_chain(scoped_chain, "put")
         put_25d = min(
             puts,
             key=lambda p: abs(abs(p.delta or 0.5) - 0.25),
@@ -1672,10 +1847,10 @@ async def _news_payload(symbol: str, *, limit: int = 10) -> dict:
         resp = await fetch_symbol_news(symbol, limit=limit)
     except Exception as e:
         log.warning("news load failed for %s: %s", symbol, _scrub_fmp_error(str(e)))
-        return {"articles": [], "is_demo": True}
+        return {"articles": [], "is_demo": True, "status": "provider_error"}
 
     if resp.is_demo:
-        return {"articles": [], "is_demo": True}
+        return {"articles": [], "is_demo": True, "status": "demo"}
 
     # Round-13 / RD-5 (P1): forward all stage-1 ranking fields the
     # NewsArticle model now carries. Pre-fix this projection only
@@ -1697,7 +1872,138 @@ async def _news_payload(symbol: str, *, limit: int = 10) -> dict:
         for a in resp.articles
         if a.url  # Schema requires a URL; drop rows with empty links
     ]
-    return {"articles": articles, "is_demo": False}
+    status = "ok" if articles else "ok_empty"
+    return {"articles": articles, "is_demo": False, "status": status}
+
+
+def _format_news_for_prompt(news: Sequence[Mapping[str, Any]], *, limit: int = 5) -> list[str]:
+    """Return compact, source-aware news snippets for Claude.
+
+    Claude should see the best price-driving headlines, but not treat news
+    as the whole thesis. Include source/category/relevance metadata so the
+    prompt can distinguish a Reuters earnings headline from a generic or
+    low-relevance mention.
+    """
+    formatted: list[str] = []
+    for item in list(news)[:limit]:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        meta: list[str] = []
+        source = item.get("source")
+        if source:
+            meta.append(f"source={source}")
+        category = item.get("category")
+        if category:
+            meta.append(f"category={category}")
+        tier = item.get("tier")
+        if tier is not None:
+            meta.append(f"tier={tier}")
+        relevance = item.get("relevance_score")
+        try:
+            if relevance is not None:
+                meta.append(f"relevance={float(relevance):.2f}")
+        except (TypeError, ValueError):
+            pass
+        sentiment = item.get("sentiment")
+        if sentiment:
+            meta.append(f"sentiment={sentiment}")
+        formatted.append(f"{title} [{'; '.join(meta)}]" if meta else title)
+    return formatted
+
+
+def _format_market_regime_context(data: Mapping[str, Any] | None) -> str:
+    if not data:
+        return "Unavailable (regime service returned no live data; treat as neutral)"
+    regime = str(data.get("regime") or "Unavailable")
+    parts = [regime]
+    confidence = data.get("confidence")
+    try:
+        if confidence is not None:
+            parts.append(f"confidence={float(confidence):.0%}")
+    except (TypeError, ValueError):
+        pass
+    vix_level = data.get("vix_level")
+    try:
+        if vix_level is not None:
+            parts.append(f"vix_proxy={float(vix_level):.1f}")
+    except (TypeError, ValueError):
+        pass
+    indicators = data.get("indicators") if isinstance(data.get("indicators"), dict) else {}
+    spy_change = indicators.get("spy_change_pct") if isinstance(indicators, dict) else None
+    try:
+        if spy_change is not None:
+            parts.append(f"SPY_day_change={float(spy_change):+.2f}%")
+    except (TypeError, ValueError):
+        pass
+    vix_proxy_change = indicators.get("vix_proxy_change_pct") if isinstance(indicators, dict) else None
+    try:
+        if vix_proxy_change is not None:
+            parts.append(f"VIXY_day_change={float(vix_proxy_change):+.2f}%")
+    except (TypeError, ValueError):
+        pass
+    vix_source = indicators.get("vix_proxy_source") if isinstance(indicators, dict) else None
+    if vix_source:
+        parts.append(str(vix_source))
+    description = data.get("description")
+    if description:
+        parts.append(str(description))
+    return "; ".join(parts)
+
+
+async def _load_market_regime() -> str:
+    """Fetch the live market-regime context for Claude.
+
+    Previous implementation passed a hardcoded ``Unknown``. This helper
+    uses the same live SPY/VIXY regime detector that backs the market
+    overview endpoint, with a short timeout so a regime-provider issue
+    cannot make earnings detail feel hung.
+    """
+    global _market_regime_cache
+
+    now = time.monotonic()
+    if _market_regime_cache is not None:
+        cached_at, cached_value = _market_regime_cache
+        ttl = (
+            _MARKET_REGIME_ERROR_CACHE_TTL_SECONDS
+            if cached_value.startswith("Unavailable")
+            else _MARKET_REGIME_CACHE_TTL_SECONDS
+        )
+        if now - cached_at < ttl:
+            return cached_value
+
+    try:
+        from core.config import settings
+
+        if (
+            not settings.ALPACA_API_KEY.get_secret_value()
+            or not settings.ALPACA_SECRET_KEY.get_secret_value()
+        ):
+            result = "Unavailable (Alpaca credentials missing; treat as neutral)"
+            _market_regime_cache = (now, result)
+            return result
+    except Exception:
+        result = "Unavailable (configuration unreadable; treat as neutral)"
+        _market_regime_cache = (now, result)
+        return result
+
+    try:
+        from api.routes.market_overview import _get_regime_data
+
+        data = await asyncio.wait_for(_get_regime_data(), timeout=3.0)
+        result = _format_market_regime_context(data)
+        _market_regime_cache = (time.monotonic(), result)
+        return result
+    except asyncio.TimeoutError:
+        log.warning("market regime load timed out")
+        result = "Unavailable (regime service timed out; treat as neutral)"
+        _market_regime_cache = (time.monotonic(), result)
+        return result
+    except Exception as e:
+        log.warning("market regime load failed: %s", _scrub_fmp_error(str(e)))
+        result = "Unavailable (regime service failed; treat as neutral)"
+        _market_regime_cache = (time.monotonic(), result)
+        return result
 
 
 async def _load_earnings_meta(symbol: str) -> dict | None:
@@ -1812,6 +2118,7 @@ async def _hydrate_row(
         _load_metrics(
             symbol,
             report_date=report_date_obj,
+            report_time=row.get("report_time", "DMT"),
             client_host=client_host,
         ),
         _load_claude_structured_cached(symbol, report_date_obj),
@@ -1832,16 +2139,26 @@ async def _hydrate_row(
         claude = None
     else:
         claude = claude_result if isinstance(claude_result, dict) else None
-    iv_rank = metrics.get("iv_rank") if metrics else None
+    chain_is_demo = bool(metrics and metrics.get("chain_is_demo"))
+    iv_is_demo = bool(metrics and metrics.get("iv_is_demo"))
+    synthetic_ranking_inputs = chain_is_demo or iv_is_demo
+    iv_rank = None if synthetic_ranking_inputs else (metrics.get("iv_rank") if metrics else None)
     if iv_rank is not None and iv_rank < min_iv_rank:
         return None
+    expected_move_pct = None if chain_is_demo else (metrics.get("expected_move_pct") if metrics else None)
+    premium_yield_call_atm = None if chain_is_demo else (
+        metrics.get("premium_yield_call_atm") if metrics else None
+    )
+    premium_yield_put_atm = None if chain_is_demo else (
+        metrics.get("premium_yield_put_atm") if metrics else None
+    )
     days_until = (report_date_obj - today).days
     report_state = _classify_report_state(report_date_obj, row.get("report_time", "DMT"))
     edge = compute_earnings_edge_score(
         iv_rank=iv_rank,
-        premium_yield_call_atm=metrics.get("premium_yield_call_atm") if metrics else None,
-        premium_yield_put_atm=metrics.get("premium_yield_put_atm") if metrics else None,
-        expected_move_pct=metrics.get("expected_move_pct") if metrics else None,
+        premium_yield_call_atm=premium_yield_call_atm,
+        premium_yield_put_atm=premium_yield_put_atm,
+        expected_move_pct=expected_move_pct,
         hist_avg_abs_move_pct=metrics.get("hist_avg_abs_move_pct") if metrics else None,
         claude_confidence=claude.get("confidence") if claude else None,
         days_until=days_until,
@@ -1853,9 +2170,9 @@ async def _hydrate_row(
         "change": quote["change"] if quote else None,
         "change_pct": quote["change_pct"] if quote else None,
         "iv_rank": iv_rank,
-        "expected_move_pct": metrics.get("expected_move_pct") if metrics else None,
-        "premium_yield_call_atm": metrics.get("premium_yield_call_atm") if metrics else None,
-        "premium_yield_put_atm": metrics.get("premium_yield_put_atm") if metrics else None,
+        "expected_move_pct": expected_move_pct,
+        "premium_yield_call_atm": premium_yield_call_atm,
+        "premium_yield_put_atm": premium_yield_put_atm,
         "hist_avg_abs_move_pct": metrics.get("hist_avg_abs_move_pct") if metrics else None,
         "claude_verdict": claude.get("verdict") if claude else None,
         "claude_confidence": claude.get("confidence") if claude else None,
@@ -2223,12 +2540,22 @@ async def get_detail(symbol: str) -> EarningsDetail:
     if not meta:
         return await _build_stub_detail(symbol)
 
-    quote_t, metrics_t, ladder_t, news_payload_t, iv_term_t, skew_t = (
+    quote_t, metrics_t, ladder_t, news_payload_t, regime_t, iv_term_t, skew_t = (
         await asyncio.gather(
             _load_quote(symbol),
-            _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
-            _load_strike_ladder(symbol, expiry=None),
+            _load_metrics(
+                symbol,
+                report_date=date.fromisoformat(meta["report_date"]),
+                report_time=meta["report_time"],
+            ),
+            _load_strike_ladder(
+                symbol,
+                expiry=None,
+                report_date=date.fromisoformat(meta["report_date"]),
+                report_time=meta["report_time"],
+            ),
             _news_payload(symbol),
+            _load_market_regime(),
             _load_iv_term(symbol),
             _load_skew(symbol),
             return_exceptions=True,
@@ -2255,19 +2582,35 @@ async def get_detail(symbol: str) -> EarningsDetail:
     error_codes: list[str] = []
     news: list[dict] = []
     news_unavailable = False
+    news_error = False
     if isinstance(news_payload_t, dict):
         news = news_payload_t.get("articles", []) or []
-        news_unavailable = bool(news_payload_t.get("is_demo"))
+        news_status = str(news_payload_t.get("status") or "")
+        news_error = news_status == "provider_error"
+        news_unavailable = bool(news_payload_t.get("is_demo")) and not news_error
     else:
-        news_unavailable = True
+        news_error = True
 
+    if news_error:
+        error_codes.append("news_error")
     if news_unavailable:
         error_codes.append("news_unavailable")
 
+    if isinstance(regime_t, str):
+        market_regime = regime_t
+    else:
+        market_regime = "Unavailable (regime service failed; treat as neutral)"
+    if market_regime.startswith("Unavailable"):
+        error_codes.append("regime_unavailable")
+
     # Round-5 Cluster A E-1: surface chain-demo state through error_codes
     # so the frontend banner can fire even when other blocks are healthy.
-    # The demo flag comes from OptionChain.is_demo via _load_strike_ladder.
-    if ladder is not None and ladder.get("is_demo"):
+    # Check both ladder and metrics because either fetch can be the one that
+    # touched the demo fallback.
+    if (
+        (ladder is not None and ladder.get("is_demo"))
+        or (metrics is not None and metrics.get("chain_is_demo"))
+    ):
         error_codes.append("chain_demo")
 
     # Round-5 Cluster C E-11: majority-failed IV term gather signals
@@ -2294,9 +2637,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
     partial = (
         any(
             isinstance(x, Exception)
-            for x in [quote_t, metrics_t, ladder_t, news_payload_t, iv_term_t, skew_t]
+            for x in [quote_t, metrics_t, ladder_t, news_payload_t, regime_t, iv_term_t, skew_t]
         )
         or news_unavailable
+        or news_error
         or "metrics_unavailable" in error_codes
         or "hv_unavailable" in error_codes
         or "iv_unavailable" in error_codes
@@ -2305,6 +2649,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         or "chain_demo" in error_codes
         # Round-5 Cluster C E-11: iv_term_partial flips partial too.
         or "iv_term_partial" in error_codes
+        or "regime_unavailable" in error_codes
     )
 
     def _metric_or_none(key: str) -> float | None:
@@ -2330,8 +2675,8 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "recent_beats_misses": _recent_beats_misses(
             metrics.get("historical_quarters", []) if metrics else []
         ),
-        "headlines": [n["title"] for n in news],
-        "market_regime": "Unknown",  # wire once regime service is exposed
+        "headlines": _format_news_for_prompt(news),
+        "market_regime": market_regime,
     }
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)
@@ -2356,6 +2701,11 @@ async def get_detail(symbol: str) -> EarningsDetail:
         sector=meta["sector"],
         report_date=date.fromisoformat(meta["report_date"]),
         report_time=meta["report_time"],
+        days_until=(date.fromisoformat(meta["report_date"]) - market_today()).days,
+        report_state=_classify_report_state(
+            date.fromisoformat(meta["report_date"]),
+            meta["report_time"],
+        ),
         quote=QuoteBlock(**quote) if quote else None,
         metrics=MetricsBlock(**metrics) if metrics else None,
         strike_ladder=StrikeLadder(**ladder) if ladder else None,
@@ -2397,7 +2747,10 @@ async def run_full_research(
         raise ValueError(f"symbol {symbol!r} has no upcoming earnings")
 
     cache = get_cache()
-    key = f"earnings:claude-full:{symbol}:{meta['report_date']}"
+    key = (
+        f"earnings:claude-full:{_CLAUDE_PROMPT_CACHE_VERSION}:"
+        f"{symbol}:{meta['report_date']}"
+    )
     cached = await cache.get(key)
     if cached:
         return ClaudeFullResearch(**cached)
@@ -2435,19 +2788,28 @@ async def _run_full_research_uncached(
         parse_full_response,
     )
 
-    quote, metrics, news = await asyncio.gather(
+    quote, metrics, news, regime = await asyncio.gather(
         _load_quote(symbol),
-        _load_metrics(symbol, report_date=date.fromisoformat(meta["report_date"])),
+        _load_metrics(
+            symbol,
+            report_date=date.fromisoformat(meta["report_date"]),
+            report_time=meta["report_time"],
+        ),
         _load_news(symbol),
+        _load_market_regime(),
         return_exceptions=True,
     )
     # Round-4 CLUSTER 6 #24: scrub upstream-supplied strings before they
     # land in the prompt. Headlines, sector, and company name are all
     # untrusted (Newsdata + FMP free-form fields).
-    headlines = [n["title"] for n in news] if isinstance(news, list) else []
+    news_items = news if isinstance(news, list) else []
+    headlines = _format_news_for_prompt(news_items)
     safe_company = _sanitize_for_prompt(meta["company"], max_len=200)
     safe_sector = _sanitize_for_prompt(meta["sector"], max_len=200)
     safe_headlines = [_sanitize_for_prompt(h, max_len=200) for h in headlines[:5]]
+    historical_quarters = (
+        metrics.get("historical_quarters", []) if isinstance(metrics, dict) else []
+    )
     prompt = build_full_prompt(
         symbol=symbol,
         company=safe_company,
@@ -2464,11 +2826,13 @@ async def _run_full_research_uncached(
         expected_move_pct=(
             metrics.get("expected_move_pct") if isinstance(metrics, dict) else None
         ),
-        historical_quarters=(
-            metrics.get("historical_quarters", []) if isinstance(metrics, dict) else []
-        ),
+        historical_quarters=historical_quarters,
         headlines=safe_headlines,
-        market_regime="Unknown",  # wire once regime service is exposed
+        market_regime=(
+            regime
+            if isinstance(regime, str)
+            else "Unavailable (regime service failed; treat as neutral)"
+        ),
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists
     )
     # Round-4 CLUSTER 2 #9: shared singleton client. Constructing a fresh
@@ -2482,7 +2846,10 @@ async def _run_full_research_uncached(
             "endpoint": "earnings.full_research",
         },
     )
-    parsed = parse_full_response(raw)
+    parsed = _ground_full_research_response(
+        parse_full_response(raw),
+        historical_quarters,
+    )
     payload = {
         **parsed,
         "model": MODEL_FULL,
@@ -2502,7 +2869,10 @@ async def load_cached_full_research(
         from core.cache import get_cache
 
         cache = get_cache()
-        cached = await cache.get(f"earnings:claude-full:{symbol}:{meta['report_date']}")
+        cached = await cache.get(
+            f"earnings:claude-full:{_CLAUDE_PROMPT_CACHE_VERSION}:"
+            f"{symbol}:{meta['report_date']}"
+        )
         return ClaudeFullResearch(**cached) if cached else None
     except Exception:
         log.debug("full-research cache preflight failed for %s", symbol, exc_info=True)

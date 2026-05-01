@@ -169,7 +169,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
             setDraftSymbol("");
           }}
           className={cn(
-            "inline-flex items-center justify-center h-7 w-7 rounded-sm",
+            "inline-flex items-center justify-center h-9 w-9 rounded-sm md:h-8 md:w-8",
             "text-fg-muted hover:text-ink-1000 hover:bg-bg-elev-2 transition-colors",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
             (usesExternalSymbols || (!isAdding && list.length >= MAX_SYMBOLS))

@@ -706,7 +706,7 @@ export default function StrategiesListingPage() {
           </div>
         )}
 
-        {!loading && (
+        {!loading && !loadError && (
           <>
             <Section
               data-section="active"

@@ -33,7 +33,7 @@ describe('BacktestPanel', () => {
     const { BacktestPanel } = await import('@/components/panels/BacktestPanel');
     const { container } = render(<BacktestPanel />);
     const inputs = container.querySelectorAll('input');
-    const symbolInput = Array.from(inputs).find((i) => i.value === 'SPY');
+    const symbolInput = Array.from(inputs).find((i) => (i as HTMLInputElement).value === 'SPY');
     expect(symbolInput).toBeDefined();
   });
 
@@ -41,7 +41,7 @@ describe('BacktestPanel', () => {
     const { BacktestPanel } = await import('@/components/panels/BacktestPanel');
     const { container } = render(<BacktestPanel />);
     const inputs = container.querySelectorAll('input[type="number"]');
-    const capitalInput = Array.from(inputs).find((i) => i.value === '100000');
+    const capitalInput = Array.from(inputs).find((i) => (i as HTMLInputElement).value === '100000');
     expect(capitalInput).toBeDefined();
   });
 

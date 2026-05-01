@@ -42,4 +42,15 @@ describe("DecisionStrip", () => {
     const verdict = getByText("NEUTRAL-BULL");
     expect(verdict).toHaveStyle({ letterSpacing: "0" });
   });
+
+  it("labels cached legacy undefined-risk plays as not tradeable", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={{ ...structured, suggestedPlay: "short strangle" }}
+        metrics={metrics}
+      />,
+    );
+
+    expect(container.textContent).toMatch(/legacy, not tradeable/i);
+  });
 });

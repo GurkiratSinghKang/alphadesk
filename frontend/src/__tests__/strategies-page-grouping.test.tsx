@@ -24,4 +24,16 @@ describe("/strategies kind grouping", () => {
       expect(activeHeader?.textContent).toContain("Post-Earnings Announcement Drift");
     });
   });
+
+  it("does not render paused/static buckets when catalogue load fails", async () => {
+    vi.mocked(api.getStrategies).mockRejectedValue(new Error("backend down"));
+    vi.mocked(api.getStrategyCatalog).mockResolvedValue([] as any);
+
+    const { container } = render(<StrategiesPage />);
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/Couldn't load catalogue/i);
+      expect(container.querySelector('[data-section="active"]')).toBeNull();
+      expect(container.querySelector('[data-section="paused"]')).toBeNull();
+    });
+  });
 });

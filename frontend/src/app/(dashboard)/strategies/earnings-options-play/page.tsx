@@ -249,8 +249,12 @@ export default function EarningsOptionsPlayPage() {
       );
     },
   });
-  const runningFull = fullResearchMutation.isPending;
-  const fullError = fullResearchMutation.error as Error | null;
+  const fullResearchSymbol = fullResearchMutation.variables ?? null;
+  const fullResearchAppliesToSelection = fullResearchSymbol === selectedSymbol;
+  const runningFull = fullResearchMutation.isPending && fullResearchAppliesToSelection;
+  const fullError = fullResearchAppliesToSelection
+    ? (fullResearchMutation.error as Error | null)
+    : null;
   const runFull = useCallback(() => {
     if (!selectedSymbol) return;
     fullResearchMutation.mutate(selectedSymbol);
@@ -592,7 +596,10 @@ function useIsWideViewport(): boolean {
   // hydrated. Defaulting false means desktop pays one re-render on
   // hydration to flip back to true (negligible) but mobile gets a
   // correct first paint.
-  const [wide, setWide] = useState(false);
+  const [wide, setWide] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia?.("(min-width: 1024px)")?.matches ?? false;
+  });
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia?.("(min-width: 1024px)");

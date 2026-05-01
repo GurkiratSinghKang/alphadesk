@@ -145,6 +145,35 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
   });
 
+  it("disables trade links when backend error codes mark a synthetic chain", () => {
+    const { container } = render(
+      <TradeButtonRow symbol="NVDA" ladder={ladder} syntheticChain />,
+    );
+    expect(container.textContent).toMatch(/synthetic options chain/i);
+    expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
+  });
+
+  it("disables trade links after the earnings event has passed", () => {
+    const { container } = render(
+      <TradeButtonRow symbol="NVDA" ladder={ladder} reportState="today_done" />,
+    );
+    expect(container.textContent).toMatch(/already passed/i);
+    expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
+  });
+
+  it("disables trade links when row expiries do not match the ladder expiry", () => {
+    const mismatched: StrikeLadder = {
+      ...ladder,
+      rows: ladder.rows.map((row, idx) => ({
+        ...row,
+        expiry: idx === 0 ? "2026-05-01" : ladder.expiry,
+      })),
+    };
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={mismatched} />);
+    expect(container.textContent).toMatch(/expiry mismatch/i);
+    expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
+  });
+
   it("normalizes dot share-class tickers before building OCC symbols", () => {
     const { container } = render(<TradeButtonRow symbol="BRK.B" ladder={ladder} />);
     const btn = container.querySelector('a[data-slot="trade-button-long-call"]') as HTMLAnchorElement;

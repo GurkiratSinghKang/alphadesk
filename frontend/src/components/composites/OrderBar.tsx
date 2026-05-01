@@ -50,6 +50,8 @@ export interface OrderBarProps {
   submitDestination?: string;
   /** Primary button label. Defaults to "Place order". */
   submitLabel?: string;
+  /** Lock ticket fields when another control owns the executable order legs. */
+  ticketLocked?: boolean;
   /** Controlled strategy selection, used when parent chrome summarizes the ticket. */
   strategyId?: string;
   /** Fires when the Strategy select changes in controlled or uncontrolled mode. */
@@ -74,6 +76,7 @@ export default function OrderBar({
   errorMessage = null,
   submitDestination = "Submits to paper account",
   submitLabel = "Place order",
+  ticketLocked = false,
   strategyId: controlledStrategyId,
   onStrategyChange,
   className,
@@ -412,6 +415,7 @@ export default function OrderBar({
             aria-checked={side === "buy"}
             data-active={side === "buy" || undefined}
             aria-pressed={side === "buy"}
+            disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
               "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
@@ -430,6 +434,7 @@ export default function OrderBar({
             aria-checked={side === "sell"}
             data-active={side === "sell" || undefined}
             aria-pressed={side === "sell"}
+            disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
               "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
@@ -449,6 +454,7 @@ export default function OrderBar({
           data-testid="order-bar-symbol"
           value={symbolValue}
           onChange={(e) => setSymbolValue(e.target.value.toUpperCase())}
+          disabled={ticketLocked}
           inputMode="text"
           autoCapitalize="characters"
           spellCheck={false}
@@ -472,6 +478,7 @@ export default function OrderBar({
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           onFocus={handleQtyFocus}
+          disabled={ticketLocked}
           inputMode="numeric"
           pattern="[0-9]*"
           aria-invalid={qtyInvalid || undefined}
@@ -485,6 +492,7 @@ export default function OrderBar({
           aria-label="Order type"
           value={type}
           onChange={(e) => setType(e.target.value as OrderTypeOption)}
+          disabled={ticketLocked}
           className={cn(
             "h-11 md:h-10 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             // iOS autozoom guard — see Strategy select above.
@@ -509,10 +517,10 @@ export default function OrderBar({
           onChange={(e) => setPrice(e.target.value)}
           inputMode="decimal"
           placeholder={priceRequired ? undefined : "—"}
-          disabled={!priceRequired}
+          disabled={ticketLocked || !priceRequired}
           className={cn(
             "min-w-[90px] w-full h-11 md:h-10",
-            !priceRequired && "opacity-50 cursor-not-allowed"
+            (ticketLocked || !priceRequired) && "opacity-50 cursor-not-allowed"
           )}
         />
       </Field>
@@ -524,10 +532,10 @@ export default function OrderBar({
           onChange={(e) => setStop(e.target.value)}
           inputMode="decimal"
           placeholder={stopRequired ? undefined : "—"}
-          disabled={!stopRequired}
+          disabled={ticketLocked || !stopRequired}
           className={cn(
             "min-w-[90px] w-full h-11 md:h-10 text-down-500",
-            !stopRequired && "opacity-50 cursor-not-allowed"
+            (ticketLocked || !stopRequired) && "opacity-50 cursor-not-allowed"
           )}
         />
       </Field>

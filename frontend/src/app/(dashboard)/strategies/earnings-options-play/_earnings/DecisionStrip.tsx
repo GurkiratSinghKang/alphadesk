@@ -3,6 +3,8 @@
 import type { ClaudeStructured, EarningsMetricsBlock } from "@/types";
 import { fmtPct } from "@/lib/intl";
 
+const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
+
 /**
  * DecisionStrip — Round-8 single-view bundle B.
  *
@@ -39,6 +41,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
   const confPct = Math.round(structured.confidence * 100);
   const highConfidence = confPct >= 70;
   const expMovePct = metrics?.expectedMovePct ?? null;
+  const legacyUnsupported = LEGACY_UNSUPPORTED_PLAYS.has(structured.suggestedPlay);
 
   return (
     <section
@@ -57,6 +60,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
         </span>
         <span className="t-meta u-muted mt-0.5">
           {structured.suggestedPlay}
+          {legacyUnsupported ? " · legacy, not tradeable" : ""}
         </span>
       </div>
 

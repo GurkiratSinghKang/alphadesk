@@ -97,8 +97,8 @@ describe('Strategy Content', () => {
       const c = STRATEGY_CONTENT[id];
       expect(c.thesis, id).toContain('not an implemented AlphaDesk backend strategy yet');
       expect(c.parameters.maxPositions, id).toContain('0 live');
-      expect(c.howItWorks[0], id).toContain('Do not emit live orders today');
-      expect(c.risks[0], id).toContain('No backend implementation');
+      expect(c.howItWorks![0], id).toContain('Do not emit live orders today');
+      expect(c.risks![0], id).toContain('No backend implementation');
     }
   });
 
@@ -111,7 +111,7 @@ describe('Strategy Content', () => {
     expect(c.thesis).toContain('planned catalogue concept');
     expect(c.thesis).toContain('rsi2-reversal');
     expect(c.parameters.maxPositions).toContain('0 live');
-    expect(c.risks[0]).toContain('No backend implementation');
+    expect(c.risks![0]).toContain('No backend implementation');
   });
 
   it('pead has Medium risk', () => {
@@ -127,7 +127,7 @@ describe('Strategy Content', () => {
     const c = STRATEGY_CONTENT['momentum-quality'];
     expect(c.thesis).toContain('checked-in 2023-2024 OOS tune used momentum_skip_m=0');
     expect(c.parameters.entryCriteria).toContain('checked-in OOS artifact used momentum_skip_m=0');
-    expect(c.howItWorks.join(' ')).toContain('12-1 month by backend default, 12-0 month in the checked-in OOS tune');
+    expect(c.howItWorks!.join(' ')).toContain('12-1 month by backend default, 12-0 month in the checked-in OOS tune');
   });
 
   it('ts-momentum copy caveats crisis alpha when shorts are disabled', () => {
@@ -149,7 +149,7 @@ describe('Strategy Content', () => {
   });
 
   it('pead workflow copy distinguishes AMC and BMO timing', () => {
-    const copy = STRATEGY_CONTENT['pead'].howItWorks.join(' ');
+    const copy = STRATEGY_CONTENT['pead'].howItWorks!.join(' ');
     expect(copy).toContain('AMC rows from the prior session');
     expect(copy).toContain('BMO rows dated today');
   });
@@ -162,7 +162,7 @@ describe('Strategy Content', () => {
   it('vrp-harvesting copy makes research-shell status explicit', () => {
     const c = STRATEGY_CONTENT['vrp-harvesting'];
     expect(c.thesis.toLowerCase()).toContain('research-only');
-    expect(c.howItWorks.join(' ')).toContain('options_chain_available=false');
+    expect(c.howItWorks!.join(' ')).toContain('options_chain_available=false');
     expect(c.parameters.maxPositions).toContain('0 live');
   });
 
@@ -178,8 +178,8 @@ describe('Strategy Content', () => {
     const c = STRATEGY_CONTENT['kama-breakout'];
     expect(c.thesis).toContain('structured OOS artifact is now checked in');
     expect(c.thesis).toContain('paper-only');
-    expect(c.howItWorks.join(' ')).toContain('No pyramiding in the current backend');
-    expect(c.howItWorks.join(' ')).not.toContain('Pyramid at +1 ATR');
+    expect(c.howItWorks!.join(' ')).toContain('No pyramiding in the current backend');
+    expect(c.howItWorks!.join(' ')).not.toContain('Pyramid at +1 ATR');
   });
 
   it('orb copy is explicit that the registered backend is research-only', () => {
@@ -195,7 +195,7 @@ describe('Strategy Content', () => {
     expect(c.thesis).toContain('research-only registered strategy');
     expect(c.thesis).toContain('2024-H1 Sharpe 0.95');
     expect(c.parameters.maxPositions).toContain('0 live');
-    expect(c.howItWorks[0]).toContain('emits no signals');
+    expect(c.howItWorks![0]).toContain('emits no signals');
   });
 
   it('claude-alpha mentions LLM or Claude', () => {
@@ -207,7 +207,7 @@ describe('Strategy Content', () => {
     const c = STRATEGY_CONTENT['claude-alpha'];
     expect(c.thesis).toContain('planned research concept');
     expect(c.parameters.maxPositions).toContain('0 live');
-    expect(c.risks[0]).toContain('No backend implementation');
+    expect(c.risks![0]).toContain('No backend implementation');
   });
 
   it('all strategies have non-empty thesis (at least 100 chars)', () => {

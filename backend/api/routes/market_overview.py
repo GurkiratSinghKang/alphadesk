@@ -304,16 +304,22 @@ async def _get_regime_data() -> dict[str, Any] | None:
         if not spy_price or not spy_prev_close:
             return None
 
-        # Use VIXY from the same snapshot batch
-        vix_level = 18.0  # default mid-range
+        # Use VIXY from the same snapshot batch as a volatility-pressure proxy.
+        # VIXY is an ETF, not the VIX index, so do not apply VIX point
+        # thresholds directly to its price.
+        vix_level = 18.0  # display fallback only; see indicators.vix_proxy_source
+        vixy_change_pct = 0.0
         vixy_snap = snapshots.get("VIXY", {})
         vixy_price = vixy_snap.get("latestTrade", {}).get("p", 0)
+        vixy_prev_close = vixy_snap.get("prevDailyBar", {}).get("c", 0)
         if vixy_price > 0:
             vix_level = vixy_price
+        if vixy_price > 0 and vixy_prev_close:
+            vixy_change_pct = (vixy_price - vixy_prev_close) / vixy_prev_close * 100
 
         # Determine regime
         spy_up = spy_price > spy_prev_close
-        vol_high = vix_level >= 20
+        vol_high = vixy_change_pct >= 3.0
 
         if spy_up and not vol_high:
             regime_str = "Bull - Low Volatility"
@@ -349,6 +355,8 @@ async def _get_regime_data() -> dict[str, Any] | None:
                 "spy_prev_close": round(spy_prev_close, 2),
                 "spy_change_pct": spy_change_pct,
                 "vix_proxy": round(vix_level, 1),
+                "vix_proxy_change_pct": round(vixy_change_pct, 2),
+                "vix_proxy_source": "VIXY ETF change, not VIX index points",
             },
         }
 

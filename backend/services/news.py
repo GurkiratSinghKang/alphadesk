@@ -18,6 +18,7 @@ import logging
 import random
 import re
 from datetime import datetime, timezone
+from typing import Sequence
 
 import httpx
 from pydantic import BaseModel
@@ -77,6 +78,7 @@ _TICKER_NAMES: dict[str, str] = {
     "AAPL": "Apple",
     "MSFT": "Microsoft",
     "GOOGL": "Google Alphabet",
+    "GOOG": "Google Alphabet",
     "AMZN": "Amazon",
     "TSLA": "Tesla",
     "NVDA": "NVIDIA",
@@ -206,6 +208,35 @@ async def _fetch_newsdata(query: str, limit: int = 10) -> list[dict]:
         return []
 
 
+def _match_terms_for_symbol(symbol: str | None) -> list[str]:
+    """Return ticker + company aliases used to decide if a story is about a symbol.
+
+    Newsdata queries include both ticker and company name (for example
+    ``"AAPL Apple"``), but many publisher headlines use only the company
+    name. The old relevance filter only looked for the ticker itself, so a
+    perfectly relevant "Apple reports earnings" headline was dropped before
+    it reached the earnings-options Claude prompt.
+    """
+    if not symbol:
+        return []
+    sym = symbol.upper().strip()
+    terms: list[str] = [sym]
+    company_query = _company_query(sym)
+    for part in company_query.split():
+        cleaned = part.strip()
+        if cleaned and cleaned.upper() != sym:
+            terms.append(cleaned)
+    # Stable de-dupe while preserving ticker-first priority.
+    seen: set[str] = set()
+    out: list[str] = []
+    for term in terms:
+        key = term.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(term)
+    return out
+
+
 def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[NewsArticle]:
     """Convert raw newsdata.io results to NewsArticle models, scored
     and filtered for stock-price relevance.
@@ -226,9 +257,10 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
          keep the highest-scored item per canonical URL (catches
          syndicated reposts).
 
-    The ``symbols`` parameter (when given) lets the symbol-density
-    check use the actual ticker rather than guessing from the article
-    body — earnings-detail callers thread the symbol through here.
+    The ``symbols`` parameter (when given) lets the relevance check use
+    the actual ticker plus known company aliases. This keeps company-name
+    headlines, while still dropping generic market stories that do not
+    mention the ticker or company anywhere meaningful.
     """
     articles: list[NewsArticle] = []
     for item in raw:
@@ -248,6 +280,7 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
                 source=source,
                 tier=tier,
                 symbol=symbols[0] if symbols else None,
+                match_terms=_match_terms_for_symbol(symbols[0] if symbols else None),
                 published_at=item.get("pubDate") or "",
             )
             # Stage 1.2: drop rows whose symbol density is zero — no
@@ -336,6 +369,7 @@ def _score_relevance(
     source: str,
     tier: int,
     symbol: str | None,
+    match_terms: Sequence[str] | None = None,
     published_at: str,
 ) -> tuple[float, str | None]:
     """Compute (score in 0..1, category or None).
@@ -347,13 +381,25 @@ def _score_relevance(
     title_l = title.lower()
     desc_l = (description or "").lower()
     sym_density = 0
-    if symbol:
-        sym_l = symbol.lower()
-        # Title hit is highest signal — a story about the stock leads
-        # with the ticker or company name.
-        if sym_l in title_l:
-            sym_density += 2
-        sym_density += min(2, desc_l.count(sym_l))
+    terms = [t.lower() for t in (match_terms or ([symbol] if symbol else [])) if t]
+    if terms:
+        # Title hit is highest signal — a story about the stock often leads
+        # with either the ticker ("AAPL") or company name ("Apple").
+        title_hits = 0
+        desc_hits = 0
+        for term in terms:
+            if len(term) <= 2:
+                pat = re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+                if pat.search(title):
+                    title_hits += 1
+                desc_hits += len(pat.findall(description or ""))
+            else:
+                if term in title_l:
+                    title_hits += 1
+                desc_hits += desc_l.count(term)
+        if title_hits:
+            sym_density += min(3, title_hits * 2)
+        sym_density += min(2, desc_hits)
         if sym_density == 0:
             return 0.0, None  # not about this stock
     # Category match boost
@@ -586,7 +632,13 @@ async def fetch_symbol_news(
     query = _company_query(symbol)
     raw = await _fetch_newsdata(query, limit)
     articles = _parse_articles(raw, symbols=[symbol])
-    if not articles:
+    if raw and not articles:
+        # The provider answered, but none of the rows survived the
+        # relevance filter. Treat that as a clean empty result so callers
+        # don't show a provider-unavailable warning or feed demo headlines
+        # into the earnings thesis.
+        log.info("No relevant real news for symbol=%s after filtering", symbol)
+    elif not articles:
         log.info("No real news for symbol=%s, serving demo headlines", symbol)
         articles = _generate_demo_articles(symbol=symbol, limit=limit)
         is_demo = True

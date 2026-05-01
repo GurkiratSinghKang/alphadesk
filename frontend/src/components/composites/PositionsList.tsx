@@ -70,6 +70,7 @@ export interface PositionsListProps {
   activeTab: PositionTab;
   onTabChange?: (t: PositionTab) => void;
   onRowClick?: (id: string) => void;
+  showJournal?: boolean;
   className?: string;
 }
 
@@ -95,6 +96,7 @@ export default function PositionsList({
   activeTab,
   onTabChange,
   onRowClick,
+  showJournal = true,
   className,
 }: PositionsListProps) {
   // Journal is still gated — the data source (closed-trade notifications
@@ -111,6 +113,7 @@ export default function PositionsList({
         : 0;
   const isEmpty = count === 0;
   const empty = EMPTY_COPY[activeTab];
+  const tabs = showJournal ? TABS : TABS.filter((t) => t !== "journal");
 
   return (
     <div
@@ -128,7 +131,7 @@ export default function PositionsList({
           // buttons touched each other on focus rings.
           className="flex gap-1 ml-auto mr-2.5"
         >
-          {TABS.map((t) => {
+          {tabs.map((t) => {
             const active = t === activeTab;
             // The Journal tab is visually present but non-interactive
             // until the data source is wired. Rendering it as a disabled

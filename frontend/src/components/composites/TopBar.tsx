@@ -221,7 +221,7 @@ export default function TopBar({
         </button>
       )}
 
-      <ThemeToggle className="hidden sm:inline-flex" />
+      <ThemeToggle />
 
       <div className="hidden sm:block">
         <RegimePill regime={regime.regime} vol={regime.vol} label={regime.label} />

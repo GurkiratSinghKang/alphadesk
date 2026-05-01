@@ -6,17 +6,17 @@ vi.mock('@tanstack/react-query', () => {
   const spy = vi.fn().mockReturnValue({ data: null, isLoading: true, error: null });
   return {
     useQuery: spy,
-    __mockUseQuery: spy,
   };
 });
 
-// Now import the spy via the module
-import { __mockUseQuery as mockUseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useRegime, useIndices, useStrategies, usePortfolioSummary, usePipelineStatus } from '@/hooks/useQueries';
+
+const mockUseQuery = vi.mocked(useQuery);
 
 describe('useQueries hooks', () => {
   beforeEach(() => {
-    (mockUseQuery as ReturnType<typeof vi.fn>).mockClear();
+    mockUseQuery.mockClear();
   });
 
   it('useRegime has correct queryKey and staleTime', () => {

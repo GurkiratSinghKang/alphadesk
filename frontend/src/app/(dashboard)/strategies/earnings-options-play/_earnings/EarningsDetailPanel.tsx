@@ -291,6 +291,8 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         ladder={detail.strikeLadder}
         onHoverStrategy={setHoveredStrategyZone}
         recommendedSetup={detail.claudeStructured?.suggestedPlay ?? null}
+        reportState={detail.reportState}
+        syntheticChain={detail.errorCodes?.includes("chain_demo") ?? false}
       />
 
       <p
@@ -466,6 +468,8 @@ export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
   metrics_unavailable:
     "Volatility metrics unavailable — HV pipeline output missing for this symbol",
   hv_unavailable: "Historical volatility unavailable — daily HV job hasn't completed",
+  regime_unavailable:
+    "Market regime unavailable — Alpaca/SPY/VIXY context failed; Claude treats regime as neutral",
   claude_unavailable:
     "AI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
 };

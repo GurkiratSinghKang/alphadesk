@@ -28,8 +28,8 @@ jobs:
       - name: Install frontend dependencies
         run: cd frontend && npm ci
 
-      - name: Run frontend tests
-        run: cd frontend && npm run test -- --run
+      - name: Run frontend checks
+        run: cd frontend && npm run ci
 
   # Backend pytest was previously not exercised in CI, so the full backend
   # suite could regress silently between deploys (persona-78 audit, #1
@@ -65,18 +65,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Install backend dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-          # Test-only deps that aren't in the production requirements.
-          # ``fakeredis`` backs the Idempotency-Key tests so CI doesn't need
-          # the Redis service for the pure-unit paths; ``pytest-asyncio`` is
-          # pinned to match the interpreter-level fixture style used by the
-          # existing tests under ``data/ingestion/tests``.
-          pip install fakeredis pytest-asyncio
+          pip install -r requirements-dev.txt
 
       - name: Run backend tests
         run: |

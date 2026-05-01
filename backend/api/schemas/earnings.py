@@ -151,6 +151,10 @@ class MetricsBlock(BaseModel):
 
 class LadderRow(BaseModel):
     strike: float
+    # Actual contract expiration for this row. The parent ladder expiry is the
+    # intended event-cycle expiry; carrying row expiry too catches provider or
+    # cache drift before trade links are built.
+    expiry: date | None = None
     side: OptionSide
     bucket: Bucket
     delta: float
@@ -319,6 +323,8 @@ class EarningsDetail(BaseModel):
     # deep-link for a symbol reporting next quarter). See B-41.
     report_date: date | None = None
     report_time: ReportTime
+    days_until: int | None = None
+    report_state: ReportState = "upcoming"
     quote: QuoteBlock | None = None
     metrics: MetricsBlock | None = None
     strike_ladder: StrikeLadder | None = None

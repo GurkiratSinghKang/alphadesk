@@ -195,6 +195,35 @@ describe("EarningsDetailPanel", () => {
     expect(items[0].textContent).toMatch(/Polygon options feed unavailable/i);
   });
 
+  it("disables trade links when errorCodes include chain_demo even if ladder flag is missing", () => {
+    const partialDetail: EarningsDetail = {
+      ...detail,
+      partial: true,
+      errorCodes: ["chain_demo"],
+      strikeLadder: {
+        expiry: "2026-04-25",
+        underlyingPrice: 201.7,
+        rows: [
+          { strike: 200, side: "put", bucket: "ATM", delta: -0.5, bid: 5.5, ask: 5.7, mid: 5.6, iv: 0.79, yieldPct: 0.028, pop: 0.5, theta: -0.3, gamma: 0.022, vega: 0.4, oi: 2000, volume: 900 },
+          { strike: 205, side: "call", bucket: "ATM", delta: 0.5, bid: 6.1, ask: 6.3, mid: 6.2, iv: 0.78, yieldPct: 0.031, pop: 0.5, theta: -0.29, gamma: 0.021, vega: 0.41, oi: 1800, volume: 700 },
+        ],
+      },
+    };
+
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={partialDetail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+
+    expect(container.textContent).toMatch(/synthetic options chain/i);
+    expect(container.querySelectorAll('a[href^="/trade"]').length).toBe(0);
+  });
+
   it("dims and sets aria-busy when refetching=true (CLUSTER D/10)", () => {
     const { container } = render(
       <EarningsDetailPanel
@@ -212,12 +241,14 @@ describe("EarningsDetailPanel", () => {
   });
 
   // ── Round-12 / PD-1: actionable error copy. ─────────────────
-  it("ERROR_CODE_COPY surfaces actionable details for claude_unavailable / news_error / iv_term_partial", () => {
+  it("ERROR_CODE_COPY surfaces actionable details for claude_unavailable / news_error / iv_term_partial / regime_unavailable", () => {
     // Each string identifies the upstream provider + likely cause + retry hint.
     expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/AI thesis unavailable/i);
     expect(ERROR_CODE_COPY.claude_unavailable).toMatch(/retry/i);
     expect(ERROR_CODE_COPY.news_error).toMatch(/newsdata/i);
     expect(ERROR_CODE_COPY.iv_term_partial).toMatch(/term structure/i);
+    expect(ERROR_CODE_COPY.regime_unavailable).toMatch(/market regime unavailable/i);
+    expect(ERROR_CODE_COPY.regime_unavailable).toMatch(/neutral/i);
   });
 
   it("renders the new error_codes copy in the partial-data banner (NEW-Y8)", () => {

@@ -349,6 +349,8 @@ describe('API Types', () => {
       hold_time_stats: { avg_win_days: 12, avg_loss_days: 6, median_hold_days: 10 },
       correlations: { SPY: 0.65 },
       rolling_beta: [{ date: '2026-04-01', beta: 1.1 }],
+      best_trade: { symbol: 'AAPL', pnl: 120, pnl_pct: 2.4 },
+      worst_trade: null,
     };
     expect(analytics.strategy_id).toBe('momentum-quality');
     expect(analytics.streaks.current.type).toBe('win');

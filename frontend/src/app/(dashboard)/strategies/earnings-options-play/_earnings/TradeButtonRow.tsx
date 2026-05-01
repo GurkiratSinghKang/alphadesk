@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { EarningsTopSetup, StrikeLadder, LadderRow } from "@/types";
+import type { EarningsReportState, EarningsTopSetup, StrikeLadder, LadderRow } from "@/types";
 import { fmtNumber } from "@/lib/intl";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,10 @@ export interface TradeButtonRowProps {
   onHoverStrategy?: (zone: [number, number] | null) => void;
   /** Claude's recommended setup, used to visually prioritize one button. */
   recommendedSetup?: EarningsTopSetup | null;
+  /** Earnings report state; reported/past events should not expose event-entry links. */
+  reportState?: EarningsReportState;
+  /** True when backend error_codes says the option chain came from demo/synthetic data. */
+  syntheticChain?: boolean;
 }
 
 const STRATEGY_TAG = "earnings-options-play";
@@ -48,6 +52,8 @@ export default function TradeButtonRow({
   ladder,
   onHoverStrategy,
   recommendedSetup = null,
+  reportState = "upcoming",
+  syntheticChain = false,
 }: TradeButtonRowProps) {
   // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
   // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
@@ -58,12 +64,28 @@ export default function TradeButtonRow({
   // state instead.
   const expiryValid =
     !!ladder && /^\d{4}-\d{2}-\d{2}$/.test(ladder.expiry);
-  if (!ladder || ladder.rows.length === 0 || !expiryValid || ladder.isDemo === true) {
+  const rowExpiryMismatch = !!ladder && ladder.rows.some(
+    (r) => r.expiry && r.expiry !== ladder.expiry,
+  );
+  const eventAlreadyPassed = reportState === "today_done" || reportState === "past";
+  if (
+    !ladder
+    || ladder.rows.length === 0
+    || !expiryValid
+    || rowExpiryMismatch
+    || ladder.isDemo === true
+    || syntheticChain
+    || eventAlreadyPassed
+  ) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
         <p className="t-mono text-[12px] u-muted">
-          {ladder?.isDemo === true
+          {ladder?.isDemo === true || syntheticChain
             ? "— synthetic options chain, trade links disabled until live OPRA quotes are available."
+            : eventAlreadyPassed
+            ? "— earnings event already passed, event-entry trade links disabled."
+            : rowExpiryMismatch
+            ? "— option expiry mismatch, trade links disabled until the ladder refreshes."
             : ladder && !expiryValid
             ? "— expiry unavailable, trade buttons disabled."
             : "— options chain unavailable, trade buttons disabled."}

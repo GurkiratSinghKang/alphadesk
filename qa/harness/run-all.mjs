@@ -87,13 +87,12 @@ async function loadSpecs(filter) {
     try {
       const mod = await import(modUrl);
       if (!mod.spec) {
-        console.warn(`[warn] ${f} does not export \`spec\` — skipping`);
-        continue;
+        throw new Error(`${f} does not export \`spec\``);
       }
       if (filter && !filter.includes(mod.spec.name)) continue;
       specs.push(mod.spec);
     } catch (e) {
-      console.warn(`[warn] failed to load ${f}: ${e?.message} — skipping`);
+      throw new Error(`failed to load ${f}: ${e?.message}`);
     }
   }
   return specs;
@@ -156,8 +155,9 @@ async function main() {
       for (const vpName of viewports) {
         const vp = VIEWPORTS[vpName];
         if (!vp) {
-          console.warn(`[warn] unknown viewport ${vpName} on spec ${spec.name} — skipping`);
-          continue;
+          console.error(`[fatal] unknown viewport ${vpName} on spec ${spec.name}`);
+          fatal = true;
+          break;
         }
 
         let context;
@@ -233,13 +233,16 @@ async function main() {
     r.steps.some((s) => s.status === "fail"),
   );
   const hasFatalPage = manifest.results.some((r) => r.fatal);
+  if (manifest.results.length === 0) {
+    console.error("[fatal] no page results were recorded.");
+    fatal = true;
+  }
   if (fatal || hasFatalPage) {
     process.exit(1);
   }
-  // Soft fail: step-level fails do NOT block the exit code by default; they
-  // show up in the summary and manifest. Flip below to `1` if you want CI to
-  // treat any step-fail as a breakage.
-  process.exit(hasFailStep ? 0 : 0);
+  // Step-level failures are test failures. Returning success here made the
+  // harness useful for screenshots but unsafe for regression gates.
+  process.exit(hasFailStep ? 1 : 0);
 }
 
 main().catch((e) => {

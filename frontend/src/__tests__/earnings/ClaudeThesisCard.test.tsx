@@ -31,6 +31,15 @@ describe("ClaudeThesisCard", () => {
     expect(container.textContent).toMatch(/short strangle/i);
   });
 
+  it("warns when cached structured analysis recommends a legacy undefined-risk play", () => {
+    const { container } = render(
+      <ClaudeThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
+    );
+    const warning = container.querySelector('[data-slot="legacy-unsupported-play"]');
+    expect(warning?.textContent).toMatch(/legacy undefined-risk play/i);
+    expect(warning?.textContent).toMatch(/defined-risk trade buttons/i);
+  });
+
   it("calls onRunFull when 'Run full research' clicked", () => {
     const onRunFull = vi.fn();
     const { getByRole } = render(

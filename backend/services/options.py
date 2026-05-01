@@ -179,12 +179,8 @@ def _symbol_seed(symbol: str) -> int:
     return int(hashlib.md5(symbol.upper().encode()).hexdigest()[:8], 16)
 
 
-async def _demo_spot(symbol: str) -> float:
-    """Get spot price -- tries real Alpaca price first, falls back to demo.
-
-    Async: uses httpx.AsyncClient so callers in async routes don't block the
-    event loop on a slow Alpaca response.
-    """
+async def _fetch_alpaca_spot(symbol: str) -> float | None:
+    """Return the latest real Alpaca trade price, or None when unavailable."""
     s = symbol.upper()
 
     # Check cache first
@@ -193,7 +189,6 @@ async def _demo_spot(symbol: str) -> float:
     if cached and (now - cached[1]) < _SPOT_CACHE_TTL:
         return cached[0]
 
-    # Try to fetch real price from Alpaca (non-blocking)
     try:
         headers = _alpaca_headers()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -210,6 +205,20 @@ async def _demo_spot(symbol: str) -> float:
         log.warning("Alpaca spot-price request timed out for %s", s)
     except Exception:
         log.debug("Alpaca spot-price fetch failed for %s", s, exc_info=True)
+    return None
+
+
+async def _demo_spot(symbol: str) -> float:
+    """Get spot price -- tries real Alpaca price first, falls back to demo.
+
+    Async: uses httpx.AsyncClient so callers in async routes don't block the
+    event loop on a slow Alpaca response.
+    """
+    s = symbol.upper()
+
+    real_spot = await _fetch_alpaca_spot(s)
+    if real_spot is not None:
+        return real_spot
 
     # Round-11 / BB-11 (P0): the demo fallback used to log at DEBUG
     # only. Downstream callers (chain valuation, Greek sizing) received
@@ -537,6 +546,11 @@ async def _fetch_real_chain(
             return chain
 
     try:
+        spot_price = await _fetch_alpaca_spot(s)
+        if spot_price is None:
+            log.warning("Alpaca options spot unavailable for %s — falling back", s)
+            return None
+
         headers = _alpaca_headers()
         params: dict[str, str] = {"feed": "opra"}
         if expiry_filter:
@@ -569,23 +583,6 @@ async def _fetch_real_chain(
         if not data or not isinstance(data, dict):
             log.warning("Alpaca options returned empty/unexpected payload for %s", s)
             return None
-
-        # Also fetch current spot price
-        spot_price = await _demo_spot(s)  # async fallback
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                spot_resp = await client.get(
-                    f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
-                    headers=headers,
-                )
-            if spot_resp.status_code == 200:
-                trade_price = spot_resp.json().get("trade", {}).get("p", 0)
-                if trade_price > 0:
-                    spot_price = trade_price
-        except Exception:
-            # Keep the demo spot as fallback; log at DEBUG so it's visible
-            # when something is actually broken rather than silent.
-            log.debug("options: spot-price fetch failed", exc_info=True)
 
         contracts: list[OptionContract] = []
         expirations: set[date] = set()
@@ -720,13 +717,9 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         # tripping the partial-data warning even when chain + Greeks
         # were fine. This wires HV inline using log-returns × sqrt(252).
         #
-        # IV rank requires a real 252-day IV time series — until that
-        # back-fill ships, fall back to the within-chain percentile of
-        # current IV against the strike-IV distribution. NOT a true
-        # IV rank, but it's a directional signal (50 = neutral, ≥75 =
-        # rich, ≤25 = cheap relative to today's smile) and is honest
-        # within those bounds. Front-end can keep rendering the value
-        # while a true historical IV-rank pipeline is built.
+        # IV rank requires a real 252-day IV time series. Do not backfill
+        # it from the same option-chain snapshot: that is only smile
+        # dispersion, not historical richness, and it can distort ranking.
         iv_rank: float | None = None
         iv_percentile: float | None = None
         hv_20: float | None = None
@@ -760,20 +753,6 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
                     hv_50 = round(float(np.std(returns[-50:]) * np.sqrt(252)), 4)
                 if len(returns) >= 100:
                     hv_100 = round(float(np.std(returns[-100:]) * np.sqrt(252)), 4)
-            # Within-chain IV-rank approximation (NOT a 252d IV percentile).
-            # current_iv is the spread of nearest-expiry ATM contracts.
-            chain_ivs = [c.iv for c in chain.contracts if c.iv > 0]
-            if len(chain_ivs) >= 5 and current_iv > 0:
-                arr_iv = np.array(chain_ivs, dtype=float)
-                if arr_iv.max() != arr_iv.min():
-                    iv_rank = round(
-                        float((current_iv - arr_iv.min()) / (arr_iv.max() - arr_iv.min()) * 100),
-                        1,
-                    )
-                    iv_percentile = round(
-                        float(np.sum(arr_iv < current_iv) / len(arr_iv) * 100),
-                        1,
-                    )
         except Exception:
             log.debug("HV/IV-rank inline computation failed for %s", s, exc_info=True)
 
@@ -908,16 +887,16 @@ async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVDa
             hv_50 = float(np.std(returns[-50:]) * np.sqrt(252))
             hv_100 = float(np.std(returns[-100:]) * np.sqrt(252))
         else:
-            hv_20 = hv_50 = hv_100 = 0.0
+            hv_20 = hv_50 = hv_100 = None
 
         return IVData(
             symbol=symbol,
             current_iv=current_iv,
             iv_rank=round(iv_rank, 1),
             iv_percentile=round(iv_percentile, 1),
-            hv_20=round(hv_20, 4),
-            hv_50=round(hv_50, 4),
-            hv_100=round(hv_100, 4),
+            hv_20=round(hv_20, 4) if hv_20 is not None else None,
+            hv_50=round(hv_50, 4) if hv_50 is not None else None,
+            hv_100=round(hv_100, 4) if hv_100 is not None else None,
             is_demo=False,
             fetched_at=datetime.now(timezone.utc),
         )

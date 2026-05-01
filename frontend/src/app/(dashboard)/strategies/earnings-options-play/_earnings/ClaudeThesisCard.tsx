@@ -23,6 +23,8 @@ export interface ClaudeThesisCardProps {
   symbol?: string;
 }
 
+const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
+
 export default function ClaudeThesisCard({ structured, full, running, error = null, onRunFull, symbol }: ClaudeThesisCardProps) {
   if (!structured) {
     return (
@@ -111,6 +113,14 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
         <span className="u-brand">{structured.suggestedPlay}</span>
         <span className="u-muted"> — {structured.suggestedPlayReason}</span>
       </p>
+      {LEGACY_UNSUPPORTED_PLAYS.has(structured.suggestedPlay) && (
+        <p
+          data-slot="legacy-unsupported-play"
+          className="mt-2 rounded border border-[color:var(--loss)]/50 px-2 py-1 t-mono text-[11.5px] u-loss"
+        >
+          Legacy undefined-risk play. Use the defined-risk trade buttons below instead.
+        </p>
+      )}
 
       <div className="mt-3 border-t border-[color:var(--border)] pt-3">
         {full ? (

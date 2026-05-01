@@ -76,6 +76,7 @@ def _clear_earnings_locks():
     try:
         from services import earnings_screener as svc  # type: ignore[import-not-found]
         svc._FMP_UPCOMING_LOCKS.clear()
+        svc._FMP_RESCUE_LOCKS.clear()
     except Exception:  # pragma: no cover — defensive
         pass
 

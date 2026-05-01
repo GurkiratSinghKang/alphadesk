@@ -2069,6 +2069,7 @@ interface RawCalendarResponse {
 
 interface RawLadderRow {
   strike: number;
+  expiry?: string | null;
   side: LadderRow["side"];
   bucket: LadderRow["bucket"];
   delta: number;
@@ -2228,6 +2229,8 @@ interface RawEarningsDetail {
   sector: string;
   report_date: string;
   report_time: EarningsReportTime;
+  days_until?: number | null;
+  report_state?: import("@/types").EarningsReportState;
   quote: { last: number; change: number; change_pct: number; timestamp?: string } | null;
   metrics: RawEarningsMetricsBlock | null;
   strike_ladder: RawStrikeLadder | null;
@@ -2280,6 +2283,7 @@ function mapCalendarRow(r: RawCalendarRow): CalendarRow {
 function mapLadderRow(r: RawLadderRow): LadderRow {
   return {
     strike: r.strike,
+    expiry: r.expiry ?? null,
     side: r.side,
     bucket: r.bucket,
     delta: r.delta,
@@ -2479,6 +2483,8 @@ export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     sector: raw.sector,
     reportDate: raw.report_date,
     reportTime: raw.report_time,
+    daysUntil: raw.days_until ?? null,
+    ...(raw.report_state !== undefined ? { reportState: raw.report_state } : {}),
     quote: raw.quote
       ? {
           last: raw.quote.last,

@@ -436,6 +436,8 @@ export interface CalendarResponse {
 
 export interface LadderRow {
   strike: number;
+  /** Actual contract expiry for this row; should match ladder.expiry. */
+  expiry?: string | null;
   side: EarningsOptionSide;
   bucket: EarningsBucket;
   delta: number;
@@ -637,8 +639,9 @@ export interface EarningsNewsArticle {
  * Round-5 (NEW-Y8): backend now distinguishes a transient "news cooldown"
  * (`news_unavailable`) from a hard upstream error (`news_error`); also
  * surfaces `claude_unavailable` when the budget tripped, and
- * `iv_term_partial` when only some expiries returned. New codes added
- * verbatim — UI's ERROR_CODE_COPY map renders friendly labels;
+ * `iv_term_partial` when only some expiries returned. Regime context is
+ * also surfaced separately so AI-context gaps do not look like quote or
+ * options-chain failures. New codes added verbatim — UI's ERROR_CODE_COPY map renders friendly labels;
  * unknown-but-string codes still pass through raw.
  */
 export type EarningsErrorCode =
@@ -650,6 +653,7 @@ export type EarningsErrorCode =
   | "iv_term_partial"
   | "metrics_unavailable"
   | "hv_unavailable"
+  | "regime_unavailable"
   | "claude_unavailable";
 
 export interface EarningsDetail {
@@ -660,6 +664,8 @@ export interface EarningsDetail {
   // current FMP calendar slice and has no known next-report date (B-41).
   reportDate: string | null;
   reportTime: EarningsReportTime;
+  daysUntil?: number | null;
+  reportState?: EarningsReportState;
   quote: { last: number; change: number; changePct: number; timestamp?: string } | null;
   metrics: EarningsMetricsBlock | null;
   strikeLadder: StrikeLadder | null;

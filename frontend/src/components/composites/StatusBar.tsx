@@ -43,7 +43,7 @@ export default function StatusBar({
   return (
     <div
       data-slot="status-bar"
-      role="status"
+      aria-label="System status"
       className={cn(
         // Wave 29 persona-5 #2: the bar packs 4 pills + Build + ⌘K + Commands
         // into a single 22px row. At 390px viewport the right cluster clipped

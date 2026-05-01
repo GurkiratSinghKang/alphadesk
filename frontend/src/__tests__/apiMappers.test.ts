@@ -655,12 +655,12 @@ describe('searchSymbols', () => {
 
 describe('getQuote', () => {
   it('returns quote data unchanged', async () => {
-    const payload = { symbol: 'AAPL', price: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
+    const payload = { symbol: 'AAPL', last: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await getQuote('AAPL');
     expect(result.symbol).toBe('AAPL');
-    expect(result.price).toBe(175);
+    expect(result.last).toBe(175);
   });
 });
 
@@ -745,18 +745,18 @@ describe('getBars', () => {
 
 describe('getSnapshot', () => {
   it('returns a map of symbol to quote', async () => {
-    const aaplQuote = { symbol: 'AAPL', price: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
-    const msftQuote = { symbol: 'MSFT', price: 380, bid: 379.5, ask: 380.5, volume: 30000000, change: 1, changePct: 0.26 };
+    const aaplQuote = { symbol: 'AAPL', last: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
+    const msftQuote = { symbol: 'MSFT', last: 380, bid: 379.5, ask: 380.5, volume: 30000000, change: 1, changePct: 0.26 };
     mockFetch.mockReturnValueOnce(ok(aaplQuote));
     mockFetch.mockReturnValueOnce(ok(msftQuote));
 
     const result = await getSnapshot(['AAPL', 'MSFT']);
-    expect(result['AAPL'].price).toBe(175);
-    expect(result['MSFT'].price).toBe(380);
+    expect(result['AAPL'].last).toBe(175);
+    expect(result['MSFT'].last).toBe(380);
   });
 
   it('skips failed symbols silently', async () => {
-    mockFetch.mockReturnValueOnce(ok({ symbol: 'AAPL', price: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 }));
+    mockFetch.mockReturnValueOnce(ok({ symbol: 'AAPL', last: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 }));
     mockFetch.mockReturnValueOnce(Promise.reject(new Error('symbol not found')));
 
     const result = await getSnapshot(['AAPL', 'INVALID']);

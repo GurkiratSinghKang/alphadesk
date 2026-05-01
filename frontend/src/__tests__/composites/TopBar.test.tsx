@@ -49,4 +49,18 @@ describe("TopBar", () => {
     expect(active.length).toBe(1);
     expect(active[0].textContent).toBe("Desk");
   });
+
+  it("keeps the theme toggle available in the dashboard top bar", () => {
+    const { getByRole } = render(
+      <TopBar
+        currentRoute="/"
+        routes={[{ label: "Desk", href: "/", active: true }]}
+        regime={baseRegime}
+        clockEt="14:32:08 ET"
+        avatarInitial="α"
+      />,
+    );
+
+    expect(getByRole("button", { name: /switch to .* mode/i })).toBeDefined();
+  });
 });

@@ -83,6 +83,26 @@ _DATA_TAG_PROTOCOL = (
 )
 
 
+_EXPERT_SIGNAL_PROTOCOL = (
+    "EXPERT ANALYSIS PROTOCOL:\n"
+    "Act as a small expert committee: earnings-volatility trader, options "
+    "market-maker, event-driven equity analyst, and risk manager. Internally "
+    "cross-check the setup using: (1) option-implied move versus historical "
+    "earnings moves, (2) IV rank/percentile versus realized volatility, "
+    "(3) recent earnings reaction pattern, (4) defined-risk payoff fit, "
+    "(5) news and market regime as contextual modifiers only. Do not reveal "
+    "private chain-of-thought; return only the requested JSON.\n"
+    "Weighting rule: news headlines and market regime must NOT dominate the "
+    "verdict. Treat them as corroborating or risk-adjusting evidence unless "
+    "they are recent, company-specific, price-driving, and consistent with "
+    "the options/history evidence. If news is missing, low-tier, stale, or "
+    "generic, treat it as neutral and lower confidence rather than inventing "
+    "a catalyst. If market regime is unavailable or low confidence, treat it "
+    "as neutral; if available, use it mainly to size confidence and risk, not "
+    "to override stock/event-specific data.\n\n"
+)
+
+
 # Tags that wrap untrusted scalars. Used by ``_escape_tags_in_untrusted``
 # to strip any literal tag-like substrings inside an untrusted value so
 # attackers cannot break out of the wrapper.
@@ -189,6 +209,7 @@ def build_structured_prompt(
         "If non-directional + IV elevated, prefer an iron condor. "
         "If directional + IV cheap, prefer a long call/put or vertical debit spread.\n\n"
         "No markdown. No prose outside the JSON.\n\n"
+        + _EXPERT_SIGNAL_PROTOCOL
         + _DATA_TAG_PROTOCOL
     )
     hist_line = (
@@ -204,12 +225,15 @@ def build_structured_prompt(
         f"HV 20d: {_pct_text(hv_20)}. IV-implied expected move (straddle): ±{_pct_text(expected_move_pct)}."
         f"{hist_line}\n"
         f"Recent earnings:\n{beats_block}\n"
-        f"Top news:\n{news_block}\n"
-        f"Market regime: {_wrap('market_regime', str(market_regime))}.\n\n"
+        f"News context (corroborative only; do not overweight):\n{news_block}\n"
+        f"Market regime context (risk/confidence modifier only): "
+        f"{_wrap('market_regime', str(market_regime))}.\n\n"
         "Based on this, return the JSON described in the system prompt. "
         "Favor premium-selling setups when IV rank is elevated relative to "
         "historical realized; favor directional plays when there's a clear "
-        "catalyst + low IV. Suggested play must come from the fixed vocab."
+        "catalyst + low IV. Suggested play must come from the fixed vocab. "
+        "Use news/regime to adjust confidence and risks only when they are "
+        "strongly supported by the rest of the data."
     )
     return {"system": system, "user": user}
 
@@ -303,6 +327,7 @@ def build_full_prompt(
         ' "what_would_change_my_mind": str,\n'
         ' "confidence": float}\n'
         "No markdown. No prose outside the JSON.\n\n"
+        + _EXPERT_SIGNAL_PROTOCOL
         + _DATA_TAG_PROTOCOL
     )
     user = (
@@ -312,11 +337,14 @@ def build_full_prompt(
         f"Implied move {_pct_value_text(expected_move_pct)}.\n"
         f"Last 8 earnings:\n{quarters_block}\n"
         f"Sector peers 5d: {peers_block}\n"
-        f"Top news: {headlines_block}\n"
-        f"Market regime: {_wrap('market_regime', str(market_regime))}\n\n"
+        f"News context (corroborative only; do not overweight): {headlines_block}\n"
+        f"Market regime context (risk/confidence modifier only): "
+        f"{_wrap('market_regime', str(market_regime))}\n\n"
         "Produce the JSON described. Comparable setups must draw from the "
         "provided history — find 2-3 past quarters with similar IV rank + "
-        "setup and describe the outcome."
+        "setup and describe the outcome. Use news/regime to adjust confidence "
+        "and risk framing only when they are supported by price, vol, and "
+        "historical-reaction evidence."
     )
     return {"system": system, "user": user}
 

@@ -12,10 +12,8 @@ import type { ElementType, ReactNode, RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
-  BarChart3,
   BriefcaseBusiness,
   Clock3,
-  LineChart,
   ListChecks,
   Radio,
   ShieldCheck,
@@ -24,7 +22,6 @@ import {
 } from "lucide-react";
 
 import {
-  AIMemoPanel,
   ContextBar,
   PositionsList,
   StatusBar,
@@ -36,13 +33,6 @@ import {
 import { DashboardLayout } from "@/components/layouts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Button } from "@/components/ui/button";
-// Wave 6α Fix 6 (persona-124 P0): MorningBrief was previously dead code —
-// the component + its `useMorningBrief` query existed but nothing rendered
-// it. Mount in the right-hand column above the Positions list, where the
-// user's "what happened overnight" context naturally lives next to their
-// book. Self-dismissing per-day (see MorningBrief.getDismissKey) so a
-// trader who closes it doesn't see it resurrected on every nav.
-import { MorningBrief } from "@/components/dashboard/MorningBrief";
 import {
   cancelOrder,
   getOrders,
@@ -75,7 +65,6 @@ import { useToast } from "@/hooks/useToast";
 import type { Position, Order, PortfolioGreeks, PortfolioSummary } from "@/types";
 
 import {
-  emptyMemo,
   toContextCells,
   toPositionRows,
   toQuote,
@@ -174,7 +163,8 @@ export default function DeskPage() {
   // here — the pipeline effect keeps it fresh on its own interval.
   const { data: regimeResp } = useRegime();
   const { data: indicesResp } = useIndices();
-  const { data: strategiesResp } = useStrategies();
+  const strategiesQuery = useStrategies();
+  const strategiesResp = strategiesQuery.data;
   const { data: pipelineStatus } = usePipelineStatus();
 
   /* ─── Selected strategy for dashboard focus + deep links ─ */
@@ -301,7 +291,6 @@ export default function DeskPage() {
     [positions, positionSparks],
   );
   const clock = useDeskClock();
-  const memo = useMemo(() => emptyMemo(clock.slice(0, 8)), [clock]);
 
   // Round-10 / V-1.02 (P0): the 2s tickHeartbeat used to live here
   // and re-render the ENTIRE DeskPage just to keep the "Last tick"
@@ -683,11 +672,12 @@ export default function DeskPage() {
           activeStrategyCount={activeStrategyCount}
           totalStrategyCount={rail.length}
           strategies={strategiesResp ?? []}
+          strategiesLoading={strategiesQuery.isLoading}
+          strategiesError={strategiesQuery.isError}
           pipelineStatus={pipelineStatus}
           indices={indicesResp?.indices ?? []}
           clockEt={clock}
           onTrade={() => router.push(`/trade?symbol=${encodeURIComponent(selectedSymbol)}`)}
-          onAnalytics={() => router.push("/analytics")}
           onPipeline={() => router.push("/pipeline")}
           onStrategies={() => router.push("/strategies")}
           onStrategyClick={handleSelectStrategy}
@@ -696,7 +686,6 @@ export default function DeskPage() {
       }
       right={
         <DashboardInsightRail
-          memo={memo}
           positions={positionRows}
           orders={orderRows}
           activeTab={bookTab}
@@ -746,11 +735,12 @@ function DashboardCommandCenter({
   activeStrategyCount,
   totalStrategyCount,
   strategies,
+  strategiesLoading,
+  strategiesError,
   pipelineStatus,
   indices,
   clockEt,
   onTrade,
-  onAnalytics,
   onPipeline,
   onStrategies,
   onStrategyClick,
@@ -770,11 +760,12 @@ function DashboardCommandCenter({
   activeStrategyCount: number;
   totalStrategyCount: number;
   strategies: RawStrategy[];
+  strategiesLoading: boolean;
+  strategiesError: boolean;
   pipelineStatus?: PipelineStatus;
   indices: IndexSnapshot[];
   clockEt: string;
   onTrade: () => void;
-  onAnalytics: () => void;
   onPipeline: () => void;
   onStrategies: () => void;
   onStrategyClick: (id: string) => void;
@@ -782,7 +773,7 @@ function DashboardCommandCenter({
 }) {
   const account = useMemo(() => buildAccountSnapshot(summary, positions), [summary, positions]);
   const strategyCards = useMemo(
-    () => buildStrategyCards(strategies).slice(0, 5),
+    () => buildStrategyCards(strategies).slice(0, 4),
     [strategies],
   );
   const marketRows = useMemo(
@@ -808,61 +799,69 @@ function DashboardCommandCenter({
       : selectedQuote.change < 0
         ? "text-loss"
         : "text-fg-muted";
+  const regimeChipTone =
+    regimeTone === "bear" || regimeTone === "crisis"
+      ? "loss"
+      : regimeTone === "bull"
+        ? "profit"
+        : "amber";
   const dayTone =
     account.dayPnl > 0
       ? "text-profit"
       : account.dayPnl < 0
         ? "text-loss"
         : "text-fg";
+  const quoteValue =
+    selectedQuote.last > 0
+      ? `${formatCurrency(selectedQuote.last)} · ${selectedQuote.changePct >= 0 ? "+" : ""}${selectedQuote.changePct.toFixed(2)}%`
+      : "Waiting for quote";
+  const pipelineValue = pipelineStatus?.stage ?? pipelineStatus?.last_result ?? "Ready";
 
   return (
     <div
       data-slot="dashboard-command-center"
       className="min-h-0 flex-1 overflow-y-auto bg-bg"
     >
-      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 pb-8 xl:p-5">
+      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-3 p-4 pb-8 xl:p-5">
         <section
           aria-labelledby="dashboard-command-title"
-          className="dashboard-hero overflow-hidden rounded-md border border-border bg-bg-elev-1"
+          className="dashboard-hero dashboard-section overflow-hidden"
         >
-          <div className="grid gap-px bg-border-hair lg:grid-cols-[1.25fr_0.75fr]">
-            <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="t-label text-fg-hint">Command center</span>
-                    <StatusChip
-                      tone={marketOpen ? "profit" : "muted"}
-                      label={marketOpen ? "Market open" : "Market closed"}
-                    />
-                    <StatusChip tone={regimeTone === "bear" || regimeTone === "crisis" ? "loss" : regimeTone === "bull" ? "profit" : "amber"} label={regimeLabel} />
-                  </div>
-                  <h2
-                    id="dashboard-command-title"
-                    className="mt-3 font-display text-[34px] italic leading-none text-ink-1000 md:text-[44px]"
-                    style={{ letterSpacing: 0 }}
-                  >
-                    Today&apos;s operating picture
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-fg-muted md:text-[15px]">
-                    Account state, risk posture, strategy readiness, and the next useful action in one calm surface.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="secondary" onClick={onAnalytics}>
-                    <BarChart3 aria-hidden /> Analytics
-                  </Button>
-                  <Button variant="secondary" onClick={onStrategies}>
-                    <Target aria-hidden /> Strategies
-                  </Button>
-                  <Button onClick={onTrade}>
-                    <LineChart aria-hidden /> Trade
-                  </Button>
-                </div>
+          <header className="flex flex-col gap-3 border-b border-border-hair px-5 py-4 md:flex-row md:items-end md:justify-between md:px-6">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="t-label text-fg-hint">Dashboard</span>
+                <StatusChip
+                  tone={marketOpen ? "profit" : "muted"}
+                  label={marketOpen ? "Market open" : "Market closed"}
+                />
+                <StatusChip tone={regimeChipTone} label={regimeLabel} />
               </div>
+              <h2
+                id="dashboard-command-title"
+                className="mt-2 text-[22px] font-semibold leading-tight text-ink-1000 md:text-[26px]"
+                style={{ letterSpacing: 0 }}
+              >
+                Operating picture
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-[13.5px] leading-relaxed text-fg-muted">
+                Review attention, risk, and strategy gates before opening the trade ticket.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-muted">
+              <span className="rounded-sm border border-border-hair bg-bg-elev-2 px-2.5 py-1 font-mono">
+                {clockEt}
+              </span>
+              <span className="rounded-sm border border-border-hair bg-bg-elev-2 px-2.5 py-1 font-mono">
+                {summary.source ? `Source ${summary.source}` : account.ready ? "Broker snapshot" : "Waiting for broker"}
+              </span>
+            </div>
+          </header>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
+          <div className="grid gap-px bg-border-hair lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
+              <div className="grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-2 xl:grid-cols-4">
+                <SummaryMetric
                   label="Book equity"
                   value={
                     account.ready ? (
@@ -875,10 +874,10 @@ function DashboardCommandCenter({
                       <span className="t-num-xl text-fg-muted">—</span>
                     )
                   }
-                  detail={account.ready ? (summary.source ? `Source ${summary.source}` : "Live account value") : "Waiting for broker snapshot"}
+                  detail={account.ready ? "Current account value" : "Awaiting broker"}
                   icon={WalletCards}
                 />
-                <MetricCard
+                <SummaryMetric
                   label="Day P&L"
                   value={
                     account.ready ? (
@@ -891,55 +890,50 @@ function DashboardCommandCenter({
                       <span className="t-num-xl text-fg-muted">—</span>
                     )
                   }
-                  detail={account.ready ? `${formatCurrency(summary.realizedPnlToday)} realized · ${formatCurrency(summary.unrealizedPnl)} unrealized` : "Waiting for broker snapshot"}
+                  detail={account.ready ? `${formatCurrency(summary.realizedPnlToday)} realized · ${formatCurrency(summary.unrealizedPnl)} unrealized` : "Awaiting broker"}
                   icon={ActivityIcon}
                 />
-                <MetricCard
+                <SummaryMetric
                   label="Buying power"
                   value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatCurrency(summary.buyingPower) : "—"}</span>}
-                  detail={account.ready ? `${formatPercent(account.cashPct)} cash buffer` : "Waiting for broker snapshot"}
+                  detail={account.ready ? `${formatPercent(account.cashPct)} cash buffer` : "Awaiting broker"}
                   icon={BriefcaseBusiness}
                 />
-                <MetricCard
+                <SummaryMetric
                   label="Open risk"
                   value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatPercent(account.grossExposurePct) : "—"}</span>}
-                  detail={account.ready ? `${positions.length} positions · ${openOrders} working` : "Waiting for broker snapshot"}
+                  detail={account.ready ? `${positions.length} positions · ${openOrders} working` : "Awaiting broker"}
                   icon={ShieldCheck}
                 />
               </div>
             </div>
 
-            <div className="relative min-w-0 overflow-hidden bg-bg-elev-2 p-5 md:p-6">
-              <div className="dashboard-signal-sweep" aria-hidden />
-              <div className="relative">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="t-label text-fg-hint">Now</span>
-                  <span className="t-meta text-fg-muted">{clockEt}</span>
-                </div>
-                <div className="mt-5 space-y-4">
-                  <LivePulse
-                    label="Selected ticker"
-                    title={selectedSymbol}
-                    value={
-                      selectedQuote.last > 0
-                        ? `${formatCurrency(selectedQuote.last)} · ${selectedQuote.changePct >= 0 ? "+" : ""}${selectedQuote.changePct.toFixed(2)}%`
-                        : "Waiting for quote"
-                    }
-                    toneClass={quoteTone}
-                  />
-                  <LivePulse
-                    label="Strategy focus"
-                    title={selectedStrategyName}
-                    value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
-                    toneClass="text-brand"
-                  />
-                  <LivePulse
-                    label="Pipeline"
-                    title={pipelineStatus?.running ? "Running" : "Idle"}
-                    value={pipelineStatus?.stage ?? pipelineStatus?.last_result ?? "Ready"}
-                    toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
-                  />
-                </div>
+            <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="t-label text-fg-hint">Session</span>
+                <span className={cn("rounded-sm px-2 py-1 font-mono text-[11px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
+                  {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
+                </span>
+              </div>
+              <div className="mt-3 divide-y divide-border-hair rounded-md border border-border-hair">
+                <SessionRow
+                  label="Selected ticker"
+                  title={selectedSymbol}
+                  value={quoteValue}
+                  toneClass={quoteTone}
+                />
+                <SessionRow
+                  label="Strategy focus"
+                  title={selectedStrategyName}
+                  value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
+                  toneClass="text-brand"
+                />
+                <SessionRow
+                  label="Pipeline"
+                  title={pipelineStatus?.running ? "Running" : "Idle"}
+                  value={pipelineValue}
+                  toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
+                />
               </div>
             </div>
           </div>
@@ -960,6 +954,8 @@ function DashboardCommandCenter({
             strategies={strategyCards}
             activeStrategyCount={activeStrategyCount}
             totalStrategyCount={totalStrategyCount}
+            loading={strategiesLoading}
+            error={strategiesError}
             onStrategyClick={onStrategyClick}
             onStrategies={onStrategies}
           />
@@ -967,7 +963,6 @@ function DashboardCommandCenter({
             indices={marketRows}
             marketOpen={marketOpen}
             regimeLabel={regimeLabel}
-            onTrade={onTrade}
           />
         </section>
       </div>
@@ -976,7 +971,6 @@ function DashboardCommandCenter({
 }
 
 function DashboardInsightRail({
-  memo,
   positions,
   orders,
   activeTab,
@@ -985,7 +979,6 @@ function DashboardInsightRail({
   bookPanelRef,
   onSelectSymbol,
 }: {
-  memo: Parameters<typeof AIMemoPanel>[0]["memo"];
   positions: ReturnType<typeof toPositionRows>;
   orders: OrderRow[];
   activeTab: PositionTab;
@@ -996,31 +989,33 @@ function DashboardInsightRail({
 }) {
   return (
     <div className="flex min-h-0 flex-col overflow-hidden bg-bg">
-      <MorningBrief rail className="max-h-[34vh] shrink-0 overflow-auto border-b border-border-hair p-2" />
-      <div className="max-h-[30vh] shrink-0 overflow-auto border-b border-border-hair p-2">
+      <div
+        data-slot="dashboard-rail-scroll"
+        className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
+      >
+        <div
+          ref={bookPanelRef}
+          data-slot="dashboard-book"
+          tabIndex={-1}
+          className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-brand/70"
+        >
+          <PositionsList
+            positions={positions}
+            orders={orders}
+            onCancelOrder={onCancelOrder}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            onRowClick={onSelectSymbol}
+            showJournal={false}
+          />
+        </div>
         <Watchlist />
       </div>
-      <div
-        ref={bookPanelRef}
-        data-slot="dashboard-book"
-        tabIndex={-1}
-        className="min-h-[260px] flex-1 overflow-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-brand/70"
-      >
-        <PositionsList
-          positions={positions}
-          orders={orders}
-          onCancelOrder={onCancelOrder}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          onRowClick={onSelectSymbol}
-        />
-      </div>
-      <MemoDrawer memo={memo} />
     </div>
   );
 }
 
-function MetricCard({
+function SummaryMetric({
   label,
   value,
   detail,
@@ -1032,13 +1027,13 @@ function MetricCard({
   icon: ElementType;
 }) {
   return (
-    <div className="dashboard-card card-stagger min-w-0 p-4">
+    <div className="min-w-0 bg-bg-elev-1 p-3.5">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
-        <Icon className="size-4 text-fg-muted" aria-hidden />
+        <Icon className="size-3.5 text-fg-muted" aria-hidden />
       </div>
-      <div className="mt-3 min-w-0 truncate">{value}</div>
-      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+      <div className="mt-2 min-w-0 truncate">{value}</div>
+      <p className="mt-1.5 truncate text-[13px] text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1059,8 +1054,8 @@ function ActionPanel({
       <PanelHeader
         id="next-actions-title"
         icon={ListChecks}
-        title="Next actions"
-        detail="Triage before execution"
+        title="Needs attention"
+        detail="Highest priority first"
       />
       <div className="grid gap-2 p-3 md:grid-cols-3 2xl:grid-cols-1">
         {items.map((item, index) => {
@@ -1146,27 +1141,37 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
   );
 }
 
-function StrategyPanel({
+export function StrategyPanel({
   strategies,
   activeStrategyCount,
   totalStrategyCount,
+  loading = false,
+  error = false,
   onStrategyClick,
   onStrategies,
 }: {
   strategies: StrategyCardData[];
   activeStrategyCount: number;
   totalStrategyCount: number;
+  loading?: boolean;
+  error?: boolean;
   onStrategyClick: (id: string) => void;
   onStrategies: () => void;
 }) {
+  const emptyCopy = error
+    ? "Strategy data unavailable. Open Strategies for the full status page."
+    : loading
+    ? "Strategy data is loading."
+    : "No strategies configured yet.";
+
   return (
     <section aria-labelledby="strategy-ops-title" className="dashboard-section">
       <PanelHeader
         id="strategy-ops-title"
         icon={Target}
-        title="Strategy ops"
+        title="Strategy exceptions"
         detail={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
-        actionLabel="Open all"
+        actionLabel="Strategies"
         onAction={onStrategies}
       />
       <div className="grid gap-2 p-3 md:grid-cols-2">
@@ -1198,7 +1203,7 @@ function StrategyPanel({
           ))
         ) : (
           <div className="col-span-full px-3 py-8 text-center text-[13px] text-fg-muted">
-            Strategy data is still loading.
+            {emptyCopy}
           </div>
         )}
       </div>
@@ -1210,22 +1215,18 @@ function MarketPulsePanel({
   indices,
   marketOpen,
   regimeLabel,
-  onTrade,
 }: {
   indices: MarketIndexRow[];
   marketOpen: boolean;
   regimeLabel: string;
-  onTrade: () => void;
 }) {
   return (
     <section aria-labelledby="market-pulse-title" className="dashboard-section">
       <PanelHeader
         id="market-pulse-title"
         icon={Radio}
-        title="Market pulse"
+        title="Market context"
         detail={marketOpen ? "Live session" : "Closed session"}
-        actionLabel="Open trade"
-        onAction={onTrade}
       />
       <div className="grid gap-px bg-border-hair md:grid-cols-[0.8fr_1.2fr]">
         <div className="bg-bg-elev-1 p-4">
@@ -1294,7 +1295,7 @@ function PanelHeader({
   );
 }
 
-function LivePulse({
+function SessionRow({
   label,
   title,
   value,
@@ -1306,11 +1307,13 @@ function LivePulse({
   toneClass: string;
 }) {
   return (
-    <div className="rounded-md border border-border-hair bg-bg/55 p-3">
-      <span className="t-label text-fg-hint">{label}</span>
-      <div className="mt-2 flex items-baseline justify-between gap-3">
-        <p className="min-w-0 truncate text-[15px] font-medium text-ink-1000">{title}</p>
-        <p className={cn("shrink-0 truncate font-mono text-[13px]", toneClass)}>{value}</p>
+    <div className="bg-bg-elev-1 px-3.5 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="t-label text-fg-hint">{label}</span>
+        <p className={cn("shrink-0 truncate font-mono text-[12px]", toneClass)}>{value}</p>
+      </div>
+      <div className="mt-1 flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-[14px] font-medium text-ink-1000">{title}</p>
       </div>
     </div>
   );
@@ -1425,10 +1428,8 @@ function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) 
 function buildStrategyCards(strategies: RawStrategy[]) {
   return [...strategies]
     .sort((a, b) => {
-      const activeDelta = Number((b.status ?? "").toLowerCase() === "active") - Number((a.status ?? "").toLowerCase() === "active");
-      if (activeDelta !== 0) return activeDelta;
-      const riskDelta = Number(Boolean(b.live_disabled || b.paper_only)) - Number(Boolean(a.live_disabled || a.paper_only));
-      if (riskDelta !== 0) return riskDelta;
+      const severityDelta = strategySeverity(b) - strategySeverity(a);
+      if (severityDelta !== 0) return severityDelta;
       return Math.abs(b.invested_amount ?? 0) - Math.abs(a.invested_amount ?? 0);
     })
     .map((strategy) => {
@@ -1454,6 +1455,17 @@ function buildStrategyCards(strategies: RawStrategy[]) {
         ...readiness,
       };
     });
+}
+
+function strategySeverity(strategy: RawStrategy) {
+  const status = (strategy.status ?? "").toLowerCase();
+  const winRate = Number.isFinite(strategy.win_rate) ? strategy.win_rate : 100;
+  if (strategy.live_disabled === true) return 6;
+  if (strategy.paper_only === true) return 5;
+  if (status !== "active") return 4;
+  if (winRate < 45) return 3;
+  if ((strategy.active_positions_count ?? 0) > 0) return 2;
+  return 1;
 }
 
 function strategyReadiness({
@@ -1535,26 +1547,51 @@ function buildActionItems({
 }) {
   const rejected = orders.filter((o) => o.status === "rejected").length;
   const activeRatio = totalStrategyCount > 0 ? activeStrategyCount / totalStrategyCount : 0;
-  return [
-    {
-      title: openOrders > 0 ? `Review ${openOrders} working order${openOrders === 1 ? "" : "s"}` : "Trade from the dedicated ticket",
-      detail: openOrders > 0 ? "Confirm stale limits, partial fills, and cancels before adding risk." : "The full chart and order ticket now live on the Trade page.",
-      tone: openOrders > 0 ? "amber" : marketOpen ? "profit" : "muted",
-      action: openOrders > 0 ? "orders" : "trade",
-    },
-    {
-      title: rejected > 0 ? `${rejected} rejected order${rejected === 1 ? "" : "s"}` : `${positions.length} open position${positions.length === 1 ? "" : "s"}`,
-      detail: rejected > 0 ? "Open the book and inspect broker/risk-gate reasons." : "Scan concentration and cash before the next strategy run.",
-      tone: rejected > 0 ? "loss" : "muted",
-      action: rejected > 0 ? "orders" : "trade",
-    },
-    {
-      title: pipelineStatus?.running ? "Pipeline running" : activeRatio < 0.5 ? "Strategies mostly paused" : "Strategy pipeline ready",
-      detail: pipelineStatus?.stage ?? pipelineStatus?.last_result ?? `${activeStrategyCount}/${totalStrategyCount || 0} strategies are enabled.`,
-      tone: pipelineStatus?.running ? "profit" : activeRatio < 0.5 ? "amber" : "muted",
-      action: "pipeline",
-    },
-  ] as const;
+  const largest = positions.reduce<Position | null>((best, pos) => {
+    if (!best) return pos;
+    return Math.abs(pos.marketValue ?? 0) > Math.abs(best.marketValue ?? 0) ? pos : best;
+  }, null);
+  const items: Array<{ title: string; detail: string; tone: "profit" | "loss" | "amber" | "muted"; action: "orders" | "trade" | "pipeline" }> = [];
+
+  if (rejected > 0) {
+    items.push({
+      title: `${rejected} rejected order${rejected === 1 ? "" : "s"}`,
+      detail: "Open the book and inspect broker or risk-gate reasons before submitting again.",
+      tone: "loss",
+      action: "orders",
+    });
+  }
+  if (openOrders > 0) {
+    items.push({
+      title: `Review ${openOrders} working order${openOrders === 1 ? "" : "s"}`,
+      detail: "Confirm stale limits, partial fills, and cancels before adding risk.",
+      tone: "amber",
+      action: "orders",
+    });
+  }
+  if (largest && Math.abs(largest.marketValue ?? 0) > 0) {
+    items.push({
+      title: `${largest.symbol} is the largest exposure`,
+      detail: `${formatCurrency(Math.abs(largest.marketValue ?? 0))} market value. Check concentration before new entries.`,
+      tone: "muted",
+      action: "trade",
+    });
+  }
+  items.push({
+    title: pipelineStatus?.running ? "Pipeline running" : activeRatio < 0.5 ? "Strategies mostly paused" : "Strategy pipeline ready",
+    detail: pipelineStatus?.stage ?? pipelineStatus?.last_result ?? `${activeStrategyCount}/${totalStrategyCount || 0} strategies are enabled.`,
+    tone: pipelineStatus?.running ? "profit" : activeRatio < 0.5 ? "amber" : "muted",
+    action: "pipeline",
+  });
+  if (items.length < 3) {
+    items.push({
+      title: marketOpen ? "Trade from the dedicated ticket" : "Market is closed",
+      detail: marketOpen ? "Open Trade for charting, staging, and broker confirmation." : "Use the dashboard for review; queue only when intentional.",
+      tone: marketOpen ? "profit" : "muted",
+      action: "trade",
+    });
+  }
+  return items.slice(0, 3);
 }
 
 /**
@@ -1663,42 +1700,6 @@ function LastTickStatusBar({
   }, [base, lastTickSec, marketOpen, pipelineRunningCount, pipelineTotal]);
 
   return <StatusBar pills={pills} buildVersion={buildVersion} />;
-}
-
-/**
- * Collapsed AI memo drawer. The MorningBrief is now promoted into the
- * insight rail above the watchlist; the memo stays opt-in because it is
- * secondary until a user asks for a deeper note.
- */
-function MemoDrawer({ memo }: { memo: Parameters<typeof AIMemoPanel>[0]["memo"] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div
-      data-slot="memo-drawer"
-      className="shrink-0 border-t border-border-hair bg-bg"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        // Round-10 / X-9 (P1): ``min-h-11`` (44px) hits Apple HIG +
-        // WCAG 2.5.5 touch-target floor. ``py-2`` alone gave ~36-40px
-        // which was below the threshold on phones.
-        className="flex w-full min-h-11 items-center justify-between px-4 py-2 text-left t-meta hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-gold-300"
-      >
-        <span>
-          <span className="u-brand">AI memo</span>
-          <span className="ml-2 u-muted">— structured note</span>
-        </span>
-        <span aria-hidden="true" className="u-muted">{open ? "−" : "+"}</span>
-      </button>
-      {open && (
-        <div className="border-t border-border-hair">
-          <AIMemoPanel memo={memo} />
-        </div>
-      )}
-    </div>
-  );
 }
 
 /* ─── Tiny helpers kept inline ──────────────────────────── */

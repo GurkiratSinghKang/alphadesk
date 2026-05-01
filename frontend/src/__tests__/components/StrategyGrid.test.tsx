@@ -1,11 +1,12 @@
 import '../setup-mocks';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { Activity } from 'lucide-react';
 import { StrategyGrid } from '@/components/dashboard/StrategyGrid';
 
 const strategies = [
-  { id: 'pead', name: 'PEAD', shortName: 'PEAD', status: 'active' as const, returnPct: 6.6, positions: 1, winRate: 0, invested: 5000, icon: () => null, sparkline: [100, 102, 105, 103, 106] },
-  { id: 'momentum-quality', name: 'Momentum + Quality', shortName: 'Momentum', status: 'active' as const, returnPct: 0, positions: 0, winRate: 0, invested: 0, icon: () => null, sparkline: [] },
+  { id: 'pead', name: 'PEAD', shortName: 'PEAD', status: 'active' as const, returnPct: 6.6, positions: 1, winRate: 0, invested: 5000, icon: Activity, sparkline: [100, 102, 105, 103, 106] },
+  { id: 'momentum-quality', name: 'Momentum + Quality', shortName: 'Momentum', status: 'active' as const, returnPct: 0, positions: 0, winRate: 0, invested: 0, icon: Activity, sparkline: [] },
 ];
 
 describe('StrategyGrid', () => {

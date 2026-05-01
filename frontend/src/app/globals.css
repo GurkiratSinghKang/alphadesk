@@ -410,11 +410,14 @@ button:active { transform: scale(0.98); }
 .dashboard-section,
 .dashboard-card,
 .dashboard-row {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-hair);
   border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--bg-elev-1) 92%, var(--brand) 8%), var(--bg-elev-1));
-  box-shadow: var(--shadow-1);
+  background: var(--bg-elev-1);
+  box-shadow: none;
+}
+
+.dashboard-section {
+  overflow: hidden;
 }
 
 .dashboard-card,
@@ -422,38 +425,23 @@ button:active { transform: scale(0.98); }
   transition:
     border-color var(--dur-2) var(--ease),
     background-color var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease);
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
 }
 
 .dashboard-row {
   padding: 0.875rem;
+  background: color-mix(in oklab, var(--bg-elev-1) 94%, var(--bg) 6%);
 }
 
 .dashboard-card:hover,
 .dashboard-row:hover {
-  border-color: color-mix(in oklab, var(--brand) 42%, var(--border));
-  box-shadow: var(--shadow-2);
+  border-color: color-mix(in oklab, var(--brand) 28%, var(--border-hair));
+  background: color-mix(in oklab, var(--bg-elev-1) 90%, var(--brand) 10%);
 }
 
 .dashboard-hero {
-  box-shadow: var(--shadow-2);
-}
-
-@keyframes dashboard-sweep {
-  from { transform: translateX(-120%); opacity: 0; }
-  18% { opacity: 0.28; }
-  52% { opacity: 0.16; }
-  to { transform: translateX(120%); opacity: 0; }
-}
-
-.dashboard-signal-sweep {
-  position: absolute;
-  inset: -30% auto -30% 0;
-  width: 42%;
-  background: linear-gradient(90deg, transparent, var(--brand-tint), transparent);
-  animation: dashboard-sweep 6s var(--ease) infinite;
-  pointer-events: none;
+  box-shadow: none;
 }
 
 /* Phase-1 / SK-1 (2026 design brief): shimmer for content-shape skeleton
