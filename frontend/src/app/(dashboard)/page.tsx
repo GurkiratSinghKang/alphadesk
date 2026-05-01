@@ -8,17 +8,14 @@
  * /trade so the dashboard can stay focused on decision support.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ElementType, ReactNode, RefObject } from "react";
+import type { ElementType, RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
-  BriefcaseBusiness,
-  Clock3,
   ListChecks,
   Radio,
   ShieldCheck,
   Target,
-  WalletCards,
 } from "lucide-react";
 
 import {
@@ -31,7 +28,6 @@ import {
   Watchlist,
 } from "@/components/composites";
 import { DashboardLayout } from "@/components/layouts";
-import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Button } from "@/components/ui/button";
 import {
   cancelOrder,
@@ -805,12 +801,6 @@ function DashboardCommandCenter({
       : regimeTone === "bull"
         ? "profit"
         : "amber";
-  const dayTone =
-    account.dayPnl > 0
-      ? "text-profit"
-      : account.dayPnl < 0
-        ? "text-loss"
-        : "text-fg";
   const quoteValue =
     selectedQuote.last > 0
       ? `${formatCurrency(selectedQuote.last)} · ${selectedQuote.changePct >= 0 ? "+" : ""}${selectedQuote.changePct.toFixed(2)}%`
@@ -858,113 +848,46 @@ function DashboardCommandCenter({
             </div>
           </header>
 
-          <div className="grid gap-px bg-border-hair lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
-              <div className="grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryMetric
-                  label="Book equity"
-                  value={
-                    account.ready ? (
-                      <AnimatedNumber
-                        value={account.equity}
-                        format={formatCurrency}
-                        className="t-num-xl text-gold-300"
-                      />
-                    ) : (
-                      <span className="t-num-xl text-fg-muted">—</span>
-                    )
-                  }
-                  detail={account.ready ? "Current account value" : "Awaiting broker"}
-                  icon={WalletCards}
-                />
-                <SummaryMetric
-                  label="Day P&L"
-                  value={
-                    account.ready ? (
-                      <AnimatedNumber
-                        value={account.dayPnl}
-                        format={(v) => `${v >= 0 ? "+" : "-"}${formatCurrency(Math.abs(v))}`}
-                        className={cn("t-num-xl", dayTone)}
-                      />
-                    ) : (
-                      <span className="t-num-xl text-fg-muted">—</span>
-                    )
-                  }
-                  detail={account.ready ? `${formatCurrency(summary.realizedPnlToday)} realized · ${formatCurrency(summary.unrealizedPnl)} unrealized` : "Awaiting broker"}
-                  icon={ActivityIcon}
-                />
-                <SummaryMetric
-                  label="Buying power"
-                  value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatCurrency(summary.buyingPower) : "—"}</span>}
-                  detail={account.ready ? `${formatPercent(account.cashPct)} cash buffer` : "Awaiting broker"}
-                  icon={BriefcaseBusiness}
-                />
-                <SummaryMetric
-                  label="Open risk"
-                  value={<span className={cn("t-num-xl", account.ready ? "text-ink-1000" : "text-fg-muted")}>{account.ready ? formatPercent(account.grossExposurePct) : "—"}</span>}
-                  detail={account.ready ? `${positions.length} positions · ${openOrders} working` : "Awaiting broker"}
-                  icon={ShieldCheck}
-                />
-              </div>
-            </div>
-
-            <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="t-label text-fg-hint">Session</span>
-                <span className={cn("rounded-sm px-2 py-1 font-mono text-[11px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
-                  {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
-                </span>
-              </div>
-              <div className="mt-3 divide-y divide-border-hair rounded-md border border-border-hair">
-                <SessionRow
-                  label="Selected ticker"
-                  title={selectedSymbol}
-                  value={quoteValue}
-                  toneClass={quoteTone}
-                />
-                <SessionRow
-                  label="Strategy focus"
-                  title={selectedStrategyName}
-                  value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
-                  toneClass="text-brand"
-                />
-                <SessionRow
-                  label="Pipeline"
-                  title={pipelineStatus?.running ? "Running" : "Idle"}
-                  value={pipelineValue}
-                  toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
-                />
-              </div>
-            </div>
+          <div className="grid gap-px bg-border-hair xl:grid-cols-[minmax(0,1fr)_330px]">
+            <DecisionQueue
+              items={actionItems}
+              onTrade={onTrade}
+              onOpenOrders={onOpenOrders}
+              onPipeline={onPipeline}
+            />
+            <SessionSnapshot
+              account={account}
+              selectedSymbol={selectedSymbol}
+              quoteValue={quoteValue}
+              quoteTone={quoteTone}
+              selectedStrategyName={selectedStrategyName}
+              activeStrategyCount={activeStrategyCount}
+              totalStrategyCount={totalStrategyCount}
+              pipelineStatus={pipelineStatus}
+              pipelineValue={pipelineValue}
+              openOrders={openOrders}
+            />
           </div>
         </section>
 
-        <section className="grid gap-4 2xl:grid-cols-[0.95fr_1.05fr]">
-          <ActionPanel
-            items={actionItems}
-            onTrade={onTrade}
-            onOpenOrders={onOpenOrders}
-            onPipeline={onPipeline}
-          />
+        <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
           <RiskPanel account={account} greeks={greeks} />
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-          <StrategyPanel
-            strategies={strategyCards}
-            activeStrategyCount={activeStrategyCount}
-            totalStrategyCount={totalStrategyCount}
-            loading={strategiesLoading}
-            error={strategiesError}
-            onStrategyClick={onStrategyClick}
-            onStrategies={onStrategies}
-          />
           <MarketPulsePanel
             indices={marketRows}
             marketOpen={marketOpen}
             regimeLabel={regimeLabel}
           />
         </section>
+
+        <StrategyPanel
+          strategies={strategyCards}
+          activeStrategyCount={activeStrategyCount}
+          totalStrategyCount={totalStrategyCount}
+          loading={strategiesLoading}
+          error={strategiesError}
+          onStrategyClick={onStrategyClick}
+          onStrategies={onStrategies}
+        />
       </div>
     </div>
   );
@@ -1015,30 +938,7 @@ function DashboardInsightRail({
   );
 }
 
-function SummaryMetric({
-  label,
-  value,
-  detail,
-  icon: Icon,
-}: {
-  label: string;
-  value: ReactNode;
-  detail: string;
-  icon: ElementType;
-}) {
-  return (
-    <div className="min-w-0 bg-bg-elev-1 p-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="t-label text-fg-hint">{label}</span>
-        <Icon className="size-3.5 text-fg-muted" aria-hidden />
-      </div>
-      <div className="mt-2 min-w-0 truncate">{value}</div>
-      <p className="mt-1.5 truncate text-[13px] text-fg-muted">{detail}</p>
-    </div>
-  );
-}
-
-function ActionPanel({
+function DecisionQueue({
   items,
   onTrade,
   onOpenOrders,
@@ -1050,14 +950,19 @@ function ActionPanel({
   onPipeline: () => void;
 }) {
   return (
-    <section aria-labelledby="next-actions-title" className="dashboard-section">
-      <PanelHeader
-        id="next-actions-title"
-        icon={ListChecks}
-        title="Needs attention"
-        detail="Highest priority first"
-      />
-      <div className="grid gap-2 p-3 md:grid-cols-3 2xl:grid-cols-1">
+    <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <ListChecks className="size-4 shrink-0 text-fg-muted" aria-hidden />
+          <div className="min-w-0">
+            <p className="t-label text-fg-hint">Decision queue</p>
+            <p className="mt-1 text-[13px] text-fg-muted">
+              Highest priority first, with direct routes to the next screen.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3 xl:grid-cols-1">
         {items.map((item, index) => {
           const onClick =
             item.action === "orders" ? onOpenOrders : item.action === "pipeline" ? onPipeline : onTrade;
@@ -1083,7 +988,84 @@ function ActionPanel({
           );
         })}
       </div>
-    </section>
+    </div>
+  );
+}
+
+function SessionSnapshot({
+  account,
+  selectedSymbol,
+  quoteValue,
+  quoteTone,
+  selectedStrategyName,
+  activeStrategyCount,
+  totalStrategyCount,
+  pipelineStatus,
+  pipelineValue,
+  openOrders,
+}: {
+  account: AccountSnapshot;
+  selectedSymbol: string;
+  quoteValue: string;
+  quoteTone: string;
+  selectedStrategyName: string;
+  activeStrategyCount: number;
+  totalStrategyCount: number;
+  pipelineStatus?: PipelineStatus;
+  pipelineValue: string;
+  openOrders: number;
+}) {
+  return (
+    <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="t-label text-fg-hint">Session</span>
+        <span className={cn("rounded-sm px-2 py-1 font-mono text-[11px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
+          {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
+        </span>
+      </div>
+      <div className="mt-3 divide-y divide-border-hair rounded-md border border-border-hair">
+        <SessionRow
+          label="Selected ticker"
+          title={selectedSymbol}
+          value={quoteValue}
+          toneClass={quoteTone}
+        />
+        <SessionRow
+          label="Strategy focus"
+          title={selectedStrategyName}
+          value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
+          toneClass="text-brand"
+        />
+        <SessionRow
+          label="Pipeline"
+          title={pipelineStatus?.running ? "Running" : "Idle"}
+          value={pipelineValue}
+          toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MiniStat
+          label="Open risk"
+          value={account.ready ? formatPercent(account.grossExposurePct) : "—"}
+          detail={`${account.ready ? account.positionsCount : 0} positions`}
+        />
+        <MiniStat
+          label="Cash buffer"
+          value={account.ready ? formatPercent(account.cashPct) : "—"}
+          detail={account.ready ? formatCurrency(account.cash) : "Awaiting broker"}
+        />
+        <MiniStat
+          label="Largest"
+          value={account.largestPosition?.symbol ?? "—"}
+          detail={account.largestPosition ? formatPercent(account.largestPosition.pct) : "No open risk"}
+        />
+        <MiniStat
+          label="Working"
+          value={`${openOrders}`}
+          detail={openOrders === 1 ? "open order" : "open orders"}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -1357,6 +1339,16 @@ function RiskStat({
   );
 }
 
+function MiniStat({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-sm border border-border-hair bg-bg-elev-2 px-3 py-2.5">
+      <span className="t-label text-fg-hint">{label}</span>
+      <p className="mt-1 truncate font-mono text-[16px] text-ink-1000">{value}</p>
+      <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
 function StatusChip({ label, tone }: { label: string; tone: "profit" | "loss" | "amber" | "muted" }) {
   return (
     <span
@@ -1373,8 +1365,6 @@ function StatusChip({ label, tone }: { label: string; tone: "profit" | "loss" | 
     </span>
   );
 }
-
-const ActivityIcon = Clock3;
 
 type AccountSnapshot = ReturnType<typeof buildAccountSnapshot>;
 type StrategyCardData = ReturnType<typeof buildStrategyCards>[number];
@@ -1417,6 +1407,7 @@ function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) 
     equity,
     cash,
     dayPnl,
+    positionsCount: positions.length,
     grossMarketValue,
     grossExposurePct,
     cashPct,
