@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -123,6 +124,213 @@ def summarize_decision(decision_text: str, max_lines: int) -> list[str]:
         if len(lines) >= max_lines:
             break
     return lines
+
+
+def text_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def compact_markdown_line(value: str) -> str:
+    line = value.strip().strip("-").strip()
+    line = line.replace("**", "").replace("__", "").replace("`", "")
+    line = line.lstrip("#").strip()
+    while "  " in line:
+        line = line.replace("  ", " ")
+    return line
+
+
+def truncate_text(value: Any, max_chars: int) -> str:
+    text = text_value(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n\n[truncated - full text is available in final_state.json]"
+
+
+def nested_text(mapping: dict[str, Any], *keys: str) -> str:
+    current: Any = mapping
+    for key in keys:
+        if not isinstance(current, dict):
+            return ""
+        current = current.get(key)
+    return text_value(current)
+
+
+def extract_rating(final_decision: str, processed_signal: str) -> str:
+    patterns = (
+        r"RATING:\s*\**([A-Za-z][A-Za-z\s/_-]{1,40})\**",
+        r"Rating:\s*\**([A-Za-z][A-Za-z\s/_-]{1,40})\**",
+        r"\b(Overweight|Underweight|Neutral|Hold|Buy|Sell|Reduce|Accumulate)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, final_decision, flags=re.IGNORECASE)
+        if match:
+            return compact_markdown_line(match.group(1)).upper()
+    return compact_markdown_line(processed_signal).upper()
+
+
+def summarize_research_state(
+    final_state: dict[str, Any],
+    processed_signal: str,
+    max_lines: int,
+) -> list[str]:
+    final_decision = text_value(final_state.get("final_trade_decision"))
+    trader_plan = text_value(final_state.get("trader_investment_plan"))
+    source = final_decision or trader_plan or processed_signal
+    rating = extract_rating(source, processed_signal)
+
+    candidates: list[str] = []
+    if rating:
+        candidates.append(f"Rating: {rating}")
+
+    useful_markers = (
+        "current price",
+        "time horizon",
+        "action plan",
+        "currently long",
+        "currently flat",
+        "preferred entry",
+        "position sizing",
+        "support",
+        "resistance",
+        "stop",
+        "target",
+        "trim",
+        "do not initiate",
+    )
+    for raw in source.splitlines():
+        line = compact_markdown_line(raw)
+        if not line or len(line) < 12:
+            continue
+        lowered = line.lower()
+        if any(marker in lowered for marker in useful_markers):
+            candidates.append(line)
+        if len(candidates) >= max_lines * 2:
+            break
+
+    if len(candidates) < 3:
+        for raw in trader_plan.splitlines():
+            line = compact_markdown_line(raw)
+            if not line or len(line) < 24:
+                continue
+            lowered = line.lower()
+            if "bull case" in lowered or "bear case" in lowered or "recommend" in lowered:
+                candidates.append(line)
+            if len(candidates) >= max_lines * 2:
+                break
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        clean = item[:220].rstrip()
+        key = clean.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(clean)
+        if len(deduped) >= max_lines:
+            break
+    return deduped or summarize_decision(processed_signal, max_lines)
+
+
+def add_section(parts: list[str], heading: str, body: Any, *, max_chars: int) -> None:
+    text = truncate_text(body, max_chars)
+    if not text:
+        return
+    parts.append(f"## {heading}\n\n{text}")
+
+
+def add_subsection(parts: list[str], heading: str, body: Any, *, max_chars: int) -> None:
+    text = truncate_text(body, max_chars)
+    if not text:
+        return
+    parts.append(f"### {heading}\n\n{text}")
+
+
+def build_research_memo(
+    *,
+    ticker: str,
+    trade_date: str,
+    final_state: dict[str, Any],
+    processed_signal: str,
+) -> str:
+    rating = extract_rating(text_value(final_state.get("final_trade_decision")), processed_signal)
+    parts = [
+        f"# {ticker} TradingAgents Research Brief",
+        f"- Trade date: `{trade_date}`",
+        f"- Processed signal: `{rating or processed_signal}`",
+        "- Source: TradingAgents multi-agent graph",
+    ]
+
+    add_section(
+        parts,
+        "Portfolio Manager Decision",
+        final_state.get("final_trade_decision") or processed_signal,
+        max_chars=8_000,
+    )
+    add_section(parts, "Trader Plan", final_state.get("trader_investment_plan"), max_chars=3_500)
+    add_section(parts, "Investment Committee Decision", final_state.get("investment_plan"), max_chars=3_500)
+
+    analyst_parts: list[str] = []
+    add_subsection(analyst_parts, "Market Analyst", final_state.get("market_report"), max_chars=2_400)
+    add_subsection(analyst_parts, "Social Analyst", final_state.get("sentiment_report"), max_chars=1_800)
+    add_subsection(analyst_parts, "News Analyst", final_state.get("news_report"), max_chars=2_400)
+    add_subsection(analyst_parts, "Fundamentals Analyst", final_state.get("fundamentals_report"), max_chars=2_400)
+    if analyst_parts:
+        parts.append("## Analyst Evidence\n\n" + "\n\n".join(analyst_parts))
+
+    debate_parts: list[str] = []
+    add_subsection(
+        debate_parts,
+        "Bull Case",
+        nested_text(final_state, "investment_debate_state", "bull_history"),
+        max_chars=2_400,
+    )
+    add_subsection(
+        debate_parts,
+        "Bear Case",
+        nested_text(final_state, "investment_debate_state", "bear_history"),
+        max_chars=2_400,
+    )
+    add_subsection(
+        debate_parts,
+        "Research Manager Decision",
+        nested_text(final_state, "investment_debate_state", "judge_decision"),
+        max_chars=2_800,
+    )
+    if debate_parts:
+        parts.append("## Investment Debate\n\n" + "\n\n".join(debate_parts))
+
+    risk_parts: list[str] = []
+    add_subsection(
+        risk_parts,
+        "Aggressive Risk View",
+        nested_text(final_state, "risk_debate_state", "aggressive_history"),
+        max_chars=2_000,
+    )
+    add_subsection(
+        risk_parts,
+        "Conservative Risk View",
+        nested_text(final_state, "risk_debate_state", "conservative_history"),
+        max_chars=2_000,
+    )
+    add_subsection(
+        risk_parts,
+        "Neutral Risk View",
+        nested_text(final_state, "risk_debate_state", "neutral_history"),
+        max_chars=2_000,
+    )
+    add_subsection(
+        risk_parts,
+        "Risk Committee Decision",
+        nested_text(final_state, "risk_debate_state", "judge_decision"),
+        max_chars=3_000,
+    )
+    if risk_parts:
+        parts.append("## Risk Debate\n\n" + "\n\n".join(risk_parts))
+
+    return "\n\n".join(part for part in parts if part).strip()
 
 
 def ensure_runtime_imports():
@@ -295,8 +503,17 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     final_state, decision = graph.propagate(args.ticker, args.trade_date)
-    decision_text = str(decision).strip()
-    summary_lines = summarize_decision(decision_text, args.summary_lines)
+    safe_final_state = make_json_safe(final_state)
+    if not isinstance(safe_final_state, dict):
+        safe_final_state = {}
+    processed_signal = str(decision).strip()
+    decision_text = build_research_memo(
+        ticker=args.ticker,
+        trade_date=args.trade_date,
+        final_state=safe_final_state,
+        processed_signal=processed_signal,
+    )
+    summary_lines = summarize_research_state(safe_final_state, processed_signal, args.summary_lines)
 
     summary_path = run_dir / "summary.md"
     decision_path = run_dir / "decision.txt"
@@ -336,11 +553,12 @@ def main(argv: list[str] | None = None) -> int:
             "effective_config": config,
         },
     )
-    write_json(final_state_path, final_state)
+    write_json(final_state_path, safe_final_state)
 
     payload = {
         "ticker": args.ticker,
         "trade_date": args.trade_date,
+        "processed_signal": processed_signal,
         "run_dir": str(run_dir),
         "summary_path": str(summary_path),
         "decision_path": str(decision_path),
