@@ -16,6 +16,17 @@ function createWrapper() {
   };
 }
 
+function getETDateParts(now: Date = new Date()): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: 'long',
+  }).formatToParts(now);
+  const month = parts.find((p) => p.type === 'month')?.value ?? '';
+  const year = Number(parts.find((p) => p.type === 'year')?.value ?? now.getFullYear());
+  return { month: new Date(`${month} 1, ${year}`).getMonth(), year };
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
 });
@@ -45,10 +56,12 @@ describe('PnlCalendar', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    // The component shows the current month name and year
-    const now = new Date();
-    const monthName = now.toLocaleString('en-US', { month: 'long' });
-    const year = now.getFullYear().toString();
+    // PnlCalendar uses the New York trading date, not the runner's
+    // local/UTC date. This matters near midnight UTC when ET is still
+    // the prior session.
+    const et = getETDateParts();
+    const monthName = new Date(et.year, et.month, 1).toLocaleString('en-US', { month: 'long' });
+    const year = et.year.toString();
     const bodyText = document.body.textContent ?? '';
     expect(bodyText.includes(monthName)).toBe(true);
     expect(bodyText.includes(year)).toBe(true);
