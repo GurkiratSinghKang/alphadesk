@@ -55,6 +55,8 @@ def test_research_memo_uses_final_state_not_processed_signal_only() -> None:
     assert "Portfolio Manager Decision" in memo
     assert "Analyst Evidence" in memo
     assert "Investment Debate" in memo
+    assert "\n## 1. RATING" not in memo
+    assert "\n#### 1. RATING" in memo
     assert "UNDERWEIGHT" != memo.strip()
     assert summary[0] == "Rating: UNDERWEIGHT"
     assert any("$274-$276" in line for line in summary)

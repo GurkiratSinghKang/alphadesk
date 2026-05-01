@@ -148,6 +148,14 @@ def truncate_text(value: Any, max_chars: int) -> str:
     return text[:max_chars].rstrip() + "\n\n[truncated - full text is available in final_state.json]"
 
 
+def demote_markdown_headings(value: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        hashes = match.group(1)
+        return "#" * min(6, max(3, len(hashes) + 2)) + match.group(2)
+
+    return re.sub(r"^(#{1,6})(\s+)", repl, value, flags=re.MULTILINE)
+
+
 def nested_text(mapping: dict[str, Any], *keys: str) -> str:
     current: Any = mapping
     for key in keys:
@@ -159,8 +167,8 @@ def nested_text(mapping: dict[str, Any], *keys: str) -> str:
 
 def extract_rating(final_decision: str, processed_signal: str) -> str:
     patterns = (
-        r"RATING:\s*\**([A-Za-z][A-Za-z\s/_-]{1,40})\**",
-        r"Rating:\s*\**([A-Za-z][A-Za-z\s/_-]{1,40})\**",
+        r"RATING:\s*\**([A-Za-z][A-Za-z /_-]{1,40})\**",
+        r"Rating:\s*\**([A-Za-z][A-Za-z /_-]{1,40})\**",
         r"\b(Overweight|Underweight|Neutral|Hold|Buy|Sell|Reduce|Accumulate)\b",
     )
     for pattern in patterns:
@@ -235,14 +243,14 @@ def summarize_research_state(
 
 
 def add_section(parts: list[str], heading: str, body: Any, *, max_chars: int) -> None:
-    text = truncate_text(body, max_chars)
+    text = demote_markdown_headings(truncate_text(body, max_chars))
     if not text:
         return
     parts.append(f"## {heading}\n\n{text}")
 
 
 def add_subsection(parts: list[str], heading: str, body: Any, *, max_chars: int) -> None:
-    text = truncate_text(body, max_chars)
+    text = demote_markdown_headings(truncate_text(body, max_chars))
     if not text:
         return
     parts.append(f"### {heading}\n\n{text}")
