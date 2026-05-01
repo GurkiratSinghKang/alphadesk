@@ -94,8 +94,8 @@ class Settings(BaseSettings):
     TRADINGAGENTS_SCRIPT_PATH: str = ""
     TRADINGAGENTS_SKILL_HOME: str = ""
     TRADINGAGENTS_PROVIDER: str = "anthropic"
-    TRADINGAGENTS_DEEP_MODEL: str = "gpt-5.4"
-    TRADINGAGENTS_QUICK_MODEL: str = "gpt-5.4-mini"
+    TRADINGAGENTS_DEEP_MODEL: str = "claude-sonnet-4-6"
+    TRADINGAGENTS_QUICK_MODEL: str = "claude-haiku-4-5"
     TRADINGAGENTS_OUTPUT_LANGUAGE: str = "English"
     TRADINGAGENTS_TIMEOUT_S: int = 600
     TRADINGAGENTS_HISTORY_LIMIT: int = 20
