@@ -156,7 +156,7 @@ export default function PositionsList({
                   // kept the tighter `md:h-auto md:px-2.5 md:py-1` on
                   // desktop where a pointer is available.
                   "font-sans font-semibold uppercase rounded-xs transition-colors",
-                  "h-8 px-3 text-[11px] md:h-9 md:px-2.5 md:py-1 md:text-xs",
+                  "h-8 px-3 text-[12px] md:h-9 md:px-2.5 md:py-1 md:text-xs",
                   "flex items-center gap-1.5",
                   active
                     ? "text-ink-1000 bg-bg-elev-1"
@@ -206,7 +206,7 @@ export default function PositionsList({
             <path d="M7 10h10M7 14h6" />
           </svg>
           <p
-            className="font-display italic text-[14px] text-fg"
+            className="font-display italic text-[15px] text-fg"
             style={{ letterSpacing: 0 }}
           >
             {empty.title}
@@ -247,7 +247,7 @@ export default function PositionsList({
                     <button
                       type="button"
                       onClick={() => onRowClick?.(p.id)}
-                      className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                      className="text-left font-sans font-medium text-[13px] text-ink-1000 hover:text-brand"
                       style={{ letterSpacing: 0 }}
                     >
                       {p.symbol}
@@ -260,7 +260,7 @@ export default function PositionsList({
                   <td className="align-middle py-2.5 pr-2.5">
                     <div className="flex flex-col gap-[2px]">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-display italic text-[11.5px] text-fg-dim truncate">
+                        <span className="font-display italic text-[12px] text-fg-dim truncate">
                           {p.strategyName}
                         </span>
                         {/* Phase-2 / SP-1 (Tufte): 30-day sparkline gives
@@ -333,7 +333,7 @@ export default function PositionsList({
                     <button
                       type="button"
                       onClick={() => onRowClick?.(o.symbol)}
-                      className="text-left font-sans font-medium text-[12.5px] text-ink-1000 hover:text-brand"
+                      className="text-left font-sans font-medium text-[13px] text-ink-1000 hover:text-brand"
                       style={{ letterSpacing: 0 }}
                     >
                       {o.symbol}

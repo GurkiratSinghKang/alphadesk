@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 /**
  * Display
  * ───────
- * Newsreader italic display text. Thin semantic wrapper over the
- * `.t-display-*` classes defined in design-tokens.css. Use for hero
- * headlines, strategy names, pull quotes.
+ * Display text. Thin semantic wrapper over the `.t-display-*` classes
+ * defined in design-tokens.css. Use for hero headlines, strategy names,
+ * and pull quotes.
  *
  * Default heading level maps to size if `as` is not specified.
  */

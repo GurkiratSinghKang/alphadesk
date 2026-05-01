@@ -147,10 +147,10 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
   return (
     <div className={cn("rounded-md border border-border bg-[var(--surface)] p-2", className)}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+        <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
           Payoff at Expiration
         </span>
-        <div className="flex items-center gap-3 text-[10px] tabular-nums">
+        <div className="flex items-center gap-3 text-[12px] tabular-nums">
           <span className="text-[var(--profit)]">
             Max Profit: {maxProfit >= 1e7 ? "Unlimited" : formatCurrency(maxProfit)}
           </span>
@@ -339,7 +339,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
 
       {/* Breakeven summary */}
       {breakevens.length > 0 && (
-        <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-2 mt-1 text-[12px] text-muted-foreground">
           <span className="text-[var(--chart-4)]">Breakeven{breakevens.length > 1 ? "s" : ""}:</span>
           {breakevens.map((bx, i) => (
             <span key={i} className="tabular-nums text-foreground">${(bx ?? 0).toFixed(2)}</span>

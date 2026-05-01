@@ -84,7 +84,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
           </h2>
         </div>
         <div className="p-4">
-          <p className="text-[11px] text-muted-foreground">Loading sector data...</p>
+          <p className="text-[12px] text-muted-foreground">Loading sector data...</p>
         </div>
       </div>
     );
@@ -102,7 +102,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
         </div>
         <span
           className={cn(
-            "text-[10px] font-bold uppercase px-2 py-0.5 rounded border",
+            "text-[12px] font-bold uppercase px-2 py-0.5 rounded border",
             getHealthBgClass(health)
           )}
         >
@@ -122,9 +122,9 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
           />
         </div>
         <div className="flex justify-between mt-1">
-          <span className="text-[9px] text-[var(--loss)]">Bearish</span>
-          <span className="text-[9px] text-muted-foreground">Neutral</span>
-          <span className="text-[9px] text-[var(--profit)]">Bullish</span>
+          <span className="text-[12px] text-[var(--loss)]">Bearish</span>
+          <span className="text-[12px] text-muted-foreground">Neutral</span>
+          <span className="text-[12px] text-[var(--profit)]">Bullish</span>
         </div>
       </div>
 
@@ -135,7 +135,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
           <div className="text-lg font-bold tabular-nums text-[var(--profit)]">
             {advancing}
           </div>
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
             Advancing
           </div>
         </div>
@@ -145,7 +145,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
           <div className="text-lg font-bold tabular-nums text-foreground">
             {advDecRatio === Infinity ? "\u221E" : (advDecRatio ?? 0).toFixed(2)}
           </div>
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
             A/D Ratio
           </div>
         </div>
@@ -155,7 +155,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
           <div className="text-lg font-bold tabular-nums text-[var(--loss)]">
             {declining}
           </div>
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
             Declining
           </div>
         </div>
@@ -173,7 +173,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
                   <span
                     key={s.sector}
                     className={cn(
-                      "text-[9px] px-1.5 py-0.5 rounded border",
+                      "text-[12px] px-1.5 py-0.5 rounded border",
                       positive
                         ? "bg-[var(--profit)]/10 text-[var(--profit)] border-[var(--profit)]/20"
                         : "bg-[var(--loss)]/10 text-[var(--loss)] border-[var(--loss)]/20"
@@ -185,7 +185,7 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
                 );
               })}
           </div>
-          <p className="text-[9px] text-muted-foreground/50 mt-2">Breadth measured across GICS sectors, not individual stocks.</p>
+          <p className="text-[12px] text-muted-foreground/50 mt-2">Breadth measured across GICS sectors, not individual stocks.</p>
         </div>
       )}
     </div>

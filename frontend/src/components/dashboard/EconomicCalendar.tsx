@@ -40,7 +40,7 @@ export function EconomicCalendar() {
         </div>
       </div>
       <div className="flex flex-col gap-4 px-4 py-5">
-        <p className="font-display italic text-[13.5px] leading-relaxed text-muted-foreground">
+        <p className="font-display italic text-[13px] leading-relaxed text-muted-foreground">
           Economic calendar not configured. The cadence of the recurring
           releases we track is listed below &mdash; no forecast or previous
           numbers are shown until a provider is connected.
@@ -49,7 +49,7 @@ export function EconomicCalendar() {
           {RECURRING_EVENTS.map((evt) => (
             <li key={evt.name} className="flex items-center justify-between py-2">
               <span className="text-xs font-medium text-foreground">{evt.name}</span>
-              <span className="font-sans text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="font-sans text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
                 {evt.cadence}
               </span>
             </li>
@@ -58,7 +58,7 @@ export function EconomicCalendar() {
       </div>
       <div className="flex items-center gap-1.5 border-t border-border px-4 py-2">
         <Info className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <p className="text-[10.5px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           Connect an economic calendar API to populate forecast and actual values.
         </p>
       </div>

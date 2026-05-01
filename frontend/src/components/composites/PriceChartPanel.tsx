@@ -55,103 +55,9 @@ export interface PriceChartPanelProps {
   error?: boolean;
   /** Retry handler invoked from the error-state button. */
   onRetry?: () => void;
+  /** Execution mode trims header chrome so the chart owns the workspace. */
+  density?: "standard" | "execution";
   className?: string;
-}
-
-function getVar(name: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
-  return v ? v.trim() : fallback;
-}
-
-function ChartCanvas({
-  series,
-  smaSeries,
-  regimeBands,
-}: Pick<PriceChartPanelProps, "series" | "smaSeries" | "regimeBands">) {
-  const ref = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    if (!ref.current || series.length === 0) return;
-    let disposed = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let chart: any = null;
-
-    (async () => {
-      const mod = await import("lightweight-charts");
-      if (disposed || !ref.current) return;
-
-      const gold = getVar("--gold-300", "#e0c070");
-      const up = getVar("--up-500", "#a8d04d");
-      const fgHint = getVar("--fg-hint", "#5b5547");
-      const bg = getVar("--bg", "#0b0a09");
-      const border = getVar("--border", "#2a271d");
-
-      chart = mod.createChart(ref.current, {
-        layout: {
-          background: { type: mod.ColorType.Solid, color: bg },
-          textColor: fgHint,
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 10,
-        },
-        grid: {
-          vertLines: { color: border, style: mod.LineStyle.Dotted },
-          horzLines: { color: border, style: mod.LineStyle.Dotted },
-        },
-        rightPriceScale: { borderColor: border },
-        timeScale: { borderColor: border, timeVisible: true },
-        crosshair: { mode: mod.CrosshairMode.Normal },
-        autoSize: true,
-      });
-
-      const line = chart.addSeries(mod.LineSeries, { color: gold, lineWidth: 2 });
-      line.setData(series.map((b) => ({ time: b.time, value: b.close })));
-
-      if (smaSeries && smaSeries.length > 1) {
-        const sma = chart.addSeries(mod.LineSeries, {
-          color: up,
-          lineWidth: 1,
-          lineStyle: mod.LineStyle.Dashed,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
-        sma.setData(smaSeries.map((p) => ({ time: p.time, value: p.value })));
-      }
-
-      if (regimeBands?.length) {
-        // LWC has no native band-region API; render via price lines
-        // at the band midpoint in tone-specific colors.
-        const mid = (Math.max(...series.map((s) => s.high)) +
-          Math.min(...series.map((s) => s.low))) / 2;
-        regimeBands.forEach((b) => {
-          line.createPriceLine({
-            price: mid,
-            color: b.tone === "bear"
-              ? "rgba(224,120,86,0.18)"
-              : "rgba(141,179,196,0.18)",
-            lineWidth: 1,
-            lineStyle: mod.LineStyle.Dotted,
-            axisLabelVisible: false,
-          });
-        });
-      }
-
-      chart.timeScale().fitContent();
-    })();
-
-    return () => {
-      disposed = true;
-      try { chart?.remove(); } catch { /* no-op */ }
-    };
-  }, [series, smaSeries, regimeBands]);
-
-  return (
-    <div
-      ref={ref}
-      data-slot="price-chart-canvas"
-      className="flex-1 min-h-[220px]"
-    />
-  );
 }
 
 function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit" | "loss" }) {
@@ -171,24 +77,6 @@ function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit
         >{value}</Mono>
       )}
     </div>
-  );
-}
-
-function LegendChip({ swatchColor, label, dashed, block }: { swatchColor: string; label: string; dashed?: boolean; block?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden
-        style={{
-          display: "inline-block",
-          width: 10,
-          height: block ? 10 : 2,
-          background: swatchColor,
-          borderTop: dashed ? `1px dashed ${swatchColor}` : undefined,
-        }}
-      />
-      {label}
-    </span>
   );
 }
 
@@ -223,8 +111,8 @@ function DashSpan({ size = 13 }: { size?: number }) {
 }
 
 export default function PriceChartPanel({
-  symbol, quote, meta, series, smaSeries, regimeBands,
-  activeRange, onRangeChange, isLoading, error, onRetry, className,
+  symbol, quote, meta, series,
+  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -254,9 +142,12 @@ export default function PriceChartPanel({
       })),
     [series],
   );
+  const executionDensity = density === "execution";
 
   return (
     <section data-slot="price-chart-panel" className={cn("flex flex-col overflow-hidden", className)}>
+      {!executionDensity ? (
+        <>
       {/* Viewport audit r5 #8: header is single-row flex with hero (name +
           ticker), price, and 5 meta cells. At 500-700px center-column widths
           (tablet with rail + right) the row overflowed and was clipped by
@@ -293,7 +184,7 @@ export default function PriceChartPanel({
           >
             {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
           </span>
-          <span className={cn("font-mono tabular-nums text-[14px] md:text-[15px]", change == null ? "text-fg-hint" : deltaTone)}>
+          <span className={cn("font-mono tabular-nums text-[15px] md:text-[15px]", change == null ? "text-fg-hint" : deltaTone)}>
             {change == null || changePct == null ? (
               <DashSpan size={14} />
             ) : (
@@ -316,6 +207,8 @@ export default function PriceChartPanel({
           />
         </div>
       </header>
+        </>
+      ) : null}
 
       {/* Slice-4 / CH-2A (chart audit 2026-04-26): the per-row legend chips
           (`Price · 20-SMA · Regime bands`) used to live HERE on the toolbar,
@@ -330,7 +223,14 @@ export default function PriceChartPanel({
 
           Range buttons stay on the toolbar (they're a navigation primitive,
           not a legend). The legend now lives entirely inside the chart. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 md:px-7 py-2.5 border-b border-border-hair">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border-hair",
+          executionDensity
+            ? "border-border-hair bg-bg px-4 py-3"
+            : "px-4 py-2.5 md:px-7",
+        )}
+      >
         <div className="flex flex-wrap gap-0.5">
           {RANGES.map((r) => (
             <button
@@ -341,7 +241,11 @@ export default function PriceChartPanel({
               className={cn(
                 "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px] md:px-3",
                 "font-mono text-[13px] px-2.5 py-1 rounded-xs transition-colors",
-                r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
+                executionDensity
+                  ? r === activeRange
+                    ? "bg-brand text-primary-foreground"
+                    : "text-fg-muted hover:bg-brand/10 hover:text-fg"
+                  : r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
               )}
               style={{ letterSpacing: 0 }}
             >{r}</button>
@@ -349,23 +253,40 @@ export default function PriceChartPanel({
         </div>
       </div>
 
-      <div className="flex-1 relative px-4 md:px-7 py-4 min-h-[220px]">
+      <div
+        className={cn(
+          "relative flex flex-1 flex-col",
+          executionDensity
+            ? "min-h-[420px] bg-bg px-3 py-3 text-fg md:px-4 md:py-4"
+            : "min-h-[220px] px-4 py-4 md:px-7",
+        )}
+      >
         {error ? (
           <div
-            role="alert"
+            role={executionDensity ? "status" : "alert"}
             className="flex flex-col items-center justify-center gap-2.5 h-full min-h-[200px]"
           >
             <span
-              className="font-display italic text-[13px] text-fg-muted"
+              className={cn("font-sans text-[14px] font-medium", executionDensity ? "text-fg" : "italic text-fg-muted")}
               style={{ letterSpacing: 0 }}
             >
-              Failed to load chart data.
+              {executionDensity ? "Chart data is temporarily limited." : "Failed to load chart data."}
             </span>
+            {executionDensity ? (
+              <span className="max-w-sm text-center text-[13px] leading-relaxed text-fg-muted">
+                Quote and ticket checks remain visible while historical bars recover.
+              </span>
+            ) : null}
             {onRetry ? (
               <button
                 type="button"
                 onClick={onRetry}
-                className="font-sans font-semibold text-xs uppercase tracking-normal text-brand hover:text-gold-300 border border-border bg-bg-elev-1 rounded-xs px-3 py-1.5 transition-colors"
+                className={cn(
+                  "rounded-xs border px-3 py-1.5 font-sans text-[12px] font-semibold uppercase tracking-normal transition-colors",
+                  executionDensity
+                    ? "border-border-hair bg-bg-elev-1 text-brand hover:bg-brand/10"
+                    : "border-border bg-bg-elev-1 text-brand hover:text-gold-300",
+                )}
               >
                 Retry
               </button>
@@ -374,12 +295,12 @@ export default function PriceChartPanel({
         ) : isLoading ? (
           <div
             aria-hidden="true"
-            className="w-full h-[200px] rounded-md bg-bg-elev-1 animate-pulse"
+            className={cn("h-[200px] w-full animate-pulse rounded-md", executionDensity ? "bg-bg-elev-2" : "bg-bg-elev-1")}
           />
         ) : series.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
             <span
-              className="font-display italic text-[14px] text-fg-muted"
+              className={cn("font-display text-[15px]", executionDensity ? "text-fg-muted" : "italic text-fg-muted")}
               style={{ letterSpacing: 0 }}
             >
               Not enough price data.

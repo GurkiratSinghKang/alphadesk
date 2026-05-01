@@ -7,7 +7,9 @@
   "scripts": {
     "run": "node run-all.mjs",
     "run:prod": "node run-all.mjs --base=https://tradingalpha.net",
-    "run:login": "node run-all.mjs --filter=login"
+    "run:login": "node run-all.mjs --filter=login",
+    "visual:strict": "node visual-regression.mjs",
+    "visual:baseline": "node visual-regression.mjs --update-baseline"
   },
   "dependencies": {
     "playwright": "^1.59.1"

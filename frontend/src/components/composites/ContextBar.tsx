@@ -33,7 +33,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
         // every breakpoint, but keep the snap fallback for tiny viewports
         // (mobile landscape with side-rail collapsed).
         "overflow-x-auto lg:overflow-visible snap-x snap-mandatory lg:snap-none",
-        "border-b border-border bg-ink-100",
+        "border-b border-border/70 bg-ink-100/95 shadow-[0_12px_38px_-34px_rgba(0,0,0,0.9)]",
         className
       )}
     >

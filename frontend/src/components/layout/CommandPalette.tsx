@@ -79,7 +79,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
       <span className="text-muted-foreground">{icon}</span>
       <span className="flex-1">{label}</span>
       {shortcut && (
-        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[12px] font-mono text-muted-foreground">
           {shortcut}
         </kbd>
       )}
@@ -680,7 +680,7 @@ export function CommandPalette() {
             })()}
           </Command.List>
 
-          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
             <div className="flex gap-3">
               <span>
                 <kbd className="rounded bg-[var(--panel)] px-1 py-0.5 font-mono">

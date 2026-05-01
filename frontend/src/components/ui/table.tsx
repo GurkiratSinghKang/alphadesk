@@ -27,7 +27,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         data-slot="table"
         className={cn(
           "w-full caption-bottom border-collapse",
-          "font-mono text-[12px] tabular-nums text-fg",
+          "font-mono text-[13px] tabular-nums text-fg",
           className
         )}
         {...props}
@@ -84,8 +84,9 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "transition-colors hover:bg-bg-elev-1",
+        "ui-stateful transition-colors hover:bg-bg-elev-1 focus-within:bg-bg-elev-1",
         "data-[state=selected]:bg-bg-elev-1",
+        "data-[state=loading]:cursor-wait data-[state=stale]:bg-amber/5 data-[state=error]:bg-down-500/5",
         className
       )}
       {...props}
@@ -102,8 +103,8 @@ function TableHead({ className, scope, ...props }: React.ComponentProps<"th">) {
       // override by passing a custom scope (e.g. "row" for row-header usage).
       scope={scope ?? "col"}
       className={cn(
-        "px-2 pb-2 align-middle whitespace-nowrap",
-        "font-sans text-[9px] font-semibold tracking-[0.16em] uppercase text-fg-muted",
+        "px-3 py-2 align-middle whitespace-nowrap",
+        "font-sans text-[12px] font-semibold tracking-[0.12em] uppercase text-fg-muted",
         "text-right first:text-left",
         "border-b border-border",
         "[&:has([role=checkbox])]:pr-0",
@@ -119,7 +120,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-2 py-2.5 align-middle whitespace-nowrap",
+        "px-3 py-2.5 align-middle whitespace-nowrap",
         "text-right first:text-left",
         "border-b border-border-hair",
         "[&:has([role=checkbox])]:pr-0",

@@ -57,7 +57,11 @@ export function TopBar() {
   ];
 
   return (
-    <header role="banner" className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-[var(--surface)] px-2 sm:px-4">
+    <header
+      role="banner"
+      data-slot="app-top-bar"
+      className="relative z-20 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-ink-050/94 px-2 shadow-[0_12px_44px_-36px_rgba(0,0,0,0.9)] sm:px-4"
+    >
       <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-4">
         {/* Mobile hamburger menu */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -84,8 +88,10 @@ export function TopBar() {
                   key={path}
                   onClick={() => { router.push(path); setMobileMenuOpen(false); }}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    "flex min-h-11 items-center gap-2.5 rounded-sm border px-3 py-2.5 text-sm font-medium transition-colors",
+                    active
+                      ? "border-brand/30 bg-brand/15 text-brand"
+                      : "border-transparent text-muted-foreground hover:border-border-hair hover:bg-bg-elev-1 hover:text-foreground"
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -99,16 +105,25 @@ export function TopBar() {
         <button
           type="button"
           aria-label="AlphaDesk home"
-          className="flex min-w-0 items-center gap-2 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-11 min-w-0 items-center gap-2 rounded-md px-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8"
           onClick={() => router.push("/")}
         >
           <Zap className="h-5 w-5 text-primary" />
-          <span className="truncate text-base font-bold tracking-tight text-foreground">AlphaDesk</span>
+          <span className="truncate text-base font-semibold tracking-tight text-foreground">AlphaDesk</span>
         </button>
         {/* Desktop navigation -- hidden on mobile */}
         <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 xl:flex">
           {navItems.map(({ path, label, icon: Icon, active }) => (
-            <button key={path} onClick={() => router.push(path)} className={cn("flex items-center gap-1.5 rounded-md px-3 py-2 text-[11px] font-medium transition-colors", active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}>
+            <button
+              key={path}
+              onClick={() => router.push(path)}
+              className={cn(
+                "flex min-h-9 items-center gap-1.5 rounded-sm border px-3 py-2 text-[12px] font-medium transition-colors",
+                active
+                  ? "border-brand/30 bg-brand/15 text-brand"
+                  : "border-transparent text-muted-foreground hover:border-border-hair hover:bg-bg-elev-1 hover:text-foreground"
+              )}
+            >
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
@@ -116,10 +131,10 @@ export function TopBar() {
         {/* Round-11 / W-1: workspace selector removed (was a placebo). */}
       </div>
 
-      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-8 min-w-[180px] flex-1 max-w-[480px] items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground md:flex">
+      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-brand/40 hover:text-foreground md:flex">
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
-        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
+        <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-[12px] font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">

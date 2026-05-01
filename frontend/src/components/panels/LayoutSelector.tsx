@@ -101,7 +101,7 @@ export function LayoutSelector({ layout, onLayoutChange }: LayoutSelectorProps) 
               {opt.icon}
             </span>
             <span>{opt.label}</span>
-            <span className="ml-auto text-[10px] text-muted-foreground">{opt.count} chart{opt.count > 1 ? "s" : ""}</span>
+            <span className="ml-auto text-[12px] text-muted-foreground">{opt.count} chart{opt.count > 1 ? "s" : ""}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

@@ -203,7 +203,7 @@ export function PortfolioHero({
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={cn(
-                  "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  "rounded px-2 py-0.5 text-[12px] font-medium transition-colors",
                   period === p
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:text-foreground"

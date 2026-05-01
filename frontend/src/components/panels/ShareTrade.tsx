@@ -124,7 +124,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
           </div>
           <div>
             <div className="text-base font-bold text-foreground">{data.symbol}</div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-[12px] text-muted-foreground">
               Vol: {formatVolume(data.volume)} | H: {(data.high ?? 0).toFixed(2)} L: {(data.low ?? 0).toFixed(2)}
             </div>
           </div>
@@ -147,7 +147,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
          derived from the live daily bar so the grid stays a tidy 3-col. */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-          <div className="text-[10px] text-muted-foreground mb-0.5">Technical</div>
+          <div className="text-[12px] text-muted-foreground mb-0.5">Technical</div>
           <div className={cn(
             "text-sm font-bold tabular-nums",
             (data.technicalScore ?? 50) >= 60 ? "text-[var(--profit)]"
@@ -159,19 +159,19 @@ function ShareCard({ data }: { data: ShareCardData }) {
         </div>
         {data.rsi != null ? (
           <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-            <div className="text-[10px] text-muted-foreground mb-0.5">RSI (14)</div>
+            <div className="text-[12px] text-muted-foreground mb-0.5">RSI (14)</div>
             <div className="text-sm font-bold text-foreground tabular-nums">{data.rsi}</div>
           </div>
         ) : (
           <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-            <div className="text-[10px] text-muted-foreground mb-0.5">Today's Range</div>
+            <div className="text-[12px] text-muted-foreground mb-0.5">Today's Range</div>
             <div className="text-sm font-bold text-foreground tabular-nums">
               {(data.low ?? 0).toFixed(2)}–{(data.high ?? 0).toFixed(2)}
             </div>
           </div>
         )}
         <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-          <div className="text-[10px] text-muted-foreground mb-0.5">Volume</div>
+          <div className="text-[12px] text-muted-foreground mb-0.5">Volume</div>
           <div className="text-sm font-bold text-foreground tabular-nums">{formatVolume(data.volume)}</div>
         </div>
       </div>
@@ -211,14 +211,14 @@ function ShareCard({ data }: { data: ShareCardData }) {
             : "bg-[var(--loss)]/5 border-[var(--loss)]/20"
         )}>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Unrealized P&L</span>
+            <span className="text-[12px] text-muted-foreground">Unrealized P&L</span>
             <span className={cn(
               "text-sm font-bold tabular-nums",
               data.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"
             )}>
               {data.pnl >= 0 ? "+" : ""}{formatCurrency(data.pnl)}
               {data.pnlPct != null && (
-                <span className="ml-1 text-[10px]">
+                <span className="ml-1 text-[12px]">
                   ({data.pnl >= 0 ? "+" : ""}{(data.pnlPct ?? 0).toFixed(2)}%)
                 </span>
               )}
@@ -230,8 +230,8 @@ function ShareCard({ data }: { data: ShareCardData }) {
       {/* AI Summary */}
       {data.summary && (
         <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-2 mb-4">
-          <div className="text-[10px] text-primary/70 mb-1 font-medium">AI Analysis</div>
-          <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-3">
+          <div className="text-[12px] text-primary/70 mb-1 font-medium">AI Analysis</div>
+          <p className="text-[12px] text-foreground/80 leading-relaxed line-clamp-3">
             {data.summary}
           </p>
         </div>
@@ -241,11 +241,11 @@ function ShareCard({ data }: { data: ShareCardData }) {
       <div className="flex items-center justify-between border-t border-border pt-3 mt-1">
         <div className="flex items-center gap-1.5">
           <div className="h-4 w-4 rounded bg-primary/20 flex items-center justify-center">
-            <span className="text-[8px] font-bold text-primary">A</span>
+            <span className="text-[12px] font-bold text-primary">A</span>
           </div>
-          <span className="text-[10px] font-medium text-muted-foreground">AlphaDesk</span>
+          <span className="text-[12px] font-medium text-muted-foreground">AlphaDesk</span>
         </div>
-        <span className="text-[9px] text-muted-foreground/60">tradingalpha.net</span>
+        <span className="text-[12px] text-muted-foreground/60">tradingalpha.net</span>
       </div>
     </div>
   );
@@ -567,7 +567,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
               <Share2 className="h-4 w-4 text-primary" />
               Share Trade Idea
             </DialogTitle>
-            <DialogDescription className="text-[11px] text-muted-foreground">
+            <DialogDescription className="text-[12px] text-muted-foreground">
               Share your {selectedSymbol} analysis as a card or text summary.
             </DialogDescription>
           </DialogHeader>

@@ -226,7 +226,7 @@ export default function LoginForm() {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 font-mono text-[11.5px] text-amber"
+          className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 font-mono text-[12px] text-amber"
         >
           Your session expired. Please sign in again.
         </div>
@@ -253,7 +253,7 @@ export default function LoginForm() {
           </Eyebrow>
           <Link
             href="/login/reset"
-            className="font-sans text-[10.5px] text-fg-hint transition-colors hover:text-fg"
+            className="font-sans text-[12px] text-fg-hint transition-colors hover:text-fg"
             style={{ letterSpacing: "0.01em" }}
           >
             Forgot password?
@@ -293,7 +293,7 @@ export default function LoginForm() {
           </Button>
         </div>
         {capsLock && (
-          <p className="font-display italic text-[11.5px] text-amber">
+          <p className="font-display italic text-[12px] text-amber">
             Caps lock is on.
           </p>
         )}
@@ -304,7 +304,7 @@ export default function LoginForm() {
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="font-mono text-[11.5px] text-down-500"
+          className="font-mono text-[12px] text-down-500"
         >
           {error}
         </p>
@@ -315,14 +315,14 @@ export default function LoginForm() {
           <p
             role="alert"
             aria-live="assertive"
-            className="font-mono text-[11.5px] text-down-500"
+            className="font-mono text-[12px] text-down-500"
           >
             Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
           </p>
           <button
             type="button"
             onClick={handleResetLockout}
-            className="self-start font-sans text-[10.5px] text-fg-hint underline decoration-fg-hint underline-offset-4 transition-colors hover:text-fg"
+            className="self-start font-sans text-[12px] text-fg-hint underline decoration-fg-hint underline-offset-4 transition-colors hover:text-fg"
             style={{ letterSpacing: "0.02em" }}
           >
             Reset lockout
@@ -331,7 +331,7 @@ export default function LoginForm() {
       )}
 
       {!locked && failCount >= 3 && (
-        <p className="font-mono text-[11px] text-amber">
+        <p className="font-mono text-[12px] text-amber">
           {LOCKOUT_THRESHOLD - failCount} attempt{LOCKOUT_THRESHOLD - failCount === 1 ? "" : "s"} left before lockout.
         </p>
       )}

@@ -214,11 +214,11 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             ⚠ Partial data — some providers were unavailable.
           </p>
           {missingFields && missingFields.length > 0 ? (
-            <p className="mt-1 font-mono text-[11px] u-muted">
+            <p className="mt-1 font-mono text-[12px] u-muted">
               Missing: {missingFields.join(", ")}
             </p>
           ) : (
-            <p className="mt-1 font-mono text-[11px] u-muted">
+            <p className="mt-1 font-mono text-[12px] u-muted">
               Some data unavailable — see fields marked —
             </p>
           )}
@@ -241,7 +241,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         </span>
         <div
           aria-hidden="true"
-          className="mb-2 flex items-center justify-between rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--fg-muted)] md:hidden"
+          className="mb-2 flex items-center justify-between rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 font-mono text-[12px] uppercase tracking-[0.08em] text-[color:var(--fg-muted)] md:hidden"
         >
           <span>Swipe left: discard</span>
           <span>Swipe right: save</span>
@@ -255,7 +255,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             data-slot="candidate-decision-undo"
             role="status"
             aria-live="polite"
-            className="mb-2 flex items-center justify-between gap-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[11px] text-[color:var(--fg-muted)]"
+            className="mb-2 flex items-center justify-between gap-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] text-[color:var(--fg-muted)]"
           >
             <span>
               {undoDecision.next
@@ -348,7 +348,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
 
       <p
         data-slot="data-disclaimer"
-        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-[10.5px] u-muted"
+        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-[12px] u-muted"
       >
         Data from FMP + Alpaca. IV rank may be delayed.{" "}
         <a
@@ -474,7 +474,7 @@ function CandidateDecisionButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-[11px] transition-colors",
+        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-[12px] transition-colors",
         active
           ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] u-brand"
           : "border-[color:var(--border)] bg-transparent u-muted hover:border-[color:var(--brand)] hover:u-brand",
@@ -536,7 +536,7 @@ function PartialDataBanner({ codes }: { codes: EarningsErrorCode[] }) {
       <p className="font-mono text-[12px] text-[color:var(--warn,#d97706)]" aria-hidden="true">
         ⚠ PARTIAL DATA
       </p>
-      <ul className="mt-1 space-y-0.5 font-mono text-[11px] u-muted">
+      <ul className="mt-1 space-y-0.5 font-mono text-[12px] u-muted">
         {codes.map((c) => (
           <li key={c} data-slot="partial-data-banner-item">
             {ERROR_CODE_COPY[c] ?? c}

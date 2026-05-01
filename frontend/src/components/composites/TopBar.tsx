@@ -63,7 +63,7 @@ export default function TopBar({
       data-slot="top-bar"
       className={cn(
         "flex items-center h-12 px-3 md:px-5 gap-2 md:gap-6",
-        "border-b border-border bg-ink-050"
+        "border-b border-border/70 bg-ink-050/95 shadow-[0_12px_44px_-36px_rgba(0,0,0,0.9)]"
       )}
     >
       {/* Mobile hamburger — hidden at md+ */}
@@ -150,7 +150,7 @@ export default function TopBar({
         href="/"
         prefetch={false}
         aria-label="AlphaDesk home"
-        className="flex items-baseline gap-1.5 font-display italic text-[20px] text-ink-1000 no-underline"
+        className="inline-flex min-h-11 items-center gap-1.5 font-display italic text-[20px] text-ink-1000 no-underline md:min-h-8"
         style={{ letterSpacing: 0 }}
       >
         <span className="text-brand">α</span>

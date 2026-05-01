@@ -131,7 +131,7 @@ export default function EquityPanel({
         >
           {RANGES.map((r) => {
             const active = r === activeRange;
-            // 2026-04-21 polish: range chips were 24px tall (text-[11px]
+            // 2026-04-21 polish: range chips were 24px tall (text-[12px]
             // + py-1) — below the 36px desktop hit-target floor and with
             // no visible focus ring. Raised to h-8 / min-w-[40px] and added
             // a focus-visible outline so keyboard users can see where they

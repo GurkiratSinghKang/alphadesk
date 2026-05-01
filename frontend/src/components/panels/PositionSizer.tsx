@@ -50,7 +50,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between w-full px-2.5 py-2 text-left hover:bg-accent/30 transition-colors"
       >
-        <span className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
+        <span className="text-[12px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
           Position Sizer
         </span>
         {expanded ? (
@@ -67,7 +67,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
             <button
               onClick={() => setMode("pct")}
               className={cn(
-                "flex-1 rounded py-1 text-[10px] font-medium transition-colors",
+                "flex-1 rounded py-1 text-[12px] font-medium transition-colors",
                 mode === "pct"
                   ? "bg-primary/15 text-primary ring-1 ring-primary/30"
                   : "bg-[var(--panel)] text-muted-foreground"
@@ -78,7 +78,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
             <button
               onClick={() => setMode("price")}
               className={cn(
-                "flex-1 rounded py-1 text-[10px] font-medium transition-colors",
+                "flex-1 rounded py-1 text-[12px] font-medium transition-colors",
                 mode === "price"
                   ? "bg-primary/15 text-primary ring-1 ring-primary/30"
                   : "bg-[var(--panel)] text-muted-foreground"
@@ -93,7 +93,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
             <div>
               <label
                 htmlFor="position-risk-pct"
-                className="text-[10px] text-muted-foreground"
+                className="text-[12px] text-muted-foreground"
               >
                 Risk %
               </label>
@@ -113,7 +113,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
               <div>
                 <label
                   htmlFor="position-stop-loss"
-                  className="text-[10px] text-muted-foreground"
+                  className="text-[12px] text-muted-foreground"
                 >
                   Stop Loss %
                 </label>
@@ -133,7 +133,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                 <div>
                   <label
                     htmlFor="position-entry-price"
-                    className="text-[10px] text-muted-foreground"
+                    className="text-[12px] text-muted-foreground"
                   >
                     Entry Price
                   </label>
@@ -149,7 +149,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
                 <div className="col-span-2">
                   <label
                     htmlFor="position-stop-price"
-                    className="text-[10px] text-muted-foreground"
+                    className="text-[12px] text-muted-foreground"
                   >
                     Stop Loss Price
                   </label>
@@ -167,7 +167,7 @@ export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
           </div>
 
           {/* Results */}
-          <div className="border-t border-border pt-2 space-y-0.5 text-[11px]">
+          <div className="border-t border-border pt-2 space-y-0.5 text-[12px]">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Shares</span>
               <span className="text-foreground font-semibold tabular-nums">

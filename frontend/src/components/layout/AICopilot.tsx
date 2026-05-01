@@ -14,6 +14,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   suggestions?: string[];
+  provenance?: string;
   timestamp: Date;
 }
 
@@ -31,6 +32,7 @@ interface PersistedCopilotState {
     role: "user" | "assistant";
     content: string;
     suggestions?: string[];
+    provenance?: string;
     // Dates don't survive JSON.stringify. Round-trip as epoch ms.
     timestamp: number;
   }[];
@@ -71,6 +73,33 @@ function getPageContext(pathname: string, symbol: string): string {
   return `User is on ${pathname}`;
 }
 
+function formatDataFreshness(timestamp: unknown): string {
+  const numeric = Number(timestamp);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "quote unavailable";
+  const ms = numeric > 1e12 ? numeric : numeric * 1000;
+  const ageSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (ageSec < 60) return `quote ${Math.max(1, ageSec)}s old`;
+  if (ageSec < 3600) return `quote ${Math.round(ageSec / 60)}m old`;
+  return `quote ${(ageSec / 3600).toFixed(1)}h old`;
+}
+
+function buildCopilotProvenance({
+  symbol,
+  quoteTimestamp,
+  brokerDegraded,
+  portfolioSource,
+  positionsCount,
+}: {
+  symbol: string;
+  quoteTimestamp: unknown;
+  brokerDegraded: boolean;
+  portfolioSource?: string | null;
+  positionsCount: number;
+}) {
+  const dataMode = brokerDegraded ? "fallback/demo data" : portfolioSource ? `${portfolioSource} data` : "broker data unavailable";
+  return `${symbol} · ${formatDataFreshness(quoteTimestamp)} · ${dataMode} · ${positionsCount} position${positionsCount === 1 ? "" : "s"} · analysis only`;
+}
+
 export function AICopilot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -81,7 +110,9 @@ export function AICopilot() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const selectedQuote = useMarketStore((s) => s.quotes[s.selectedSymbol]);
   const summary = usePortfolioStore((s) => s.summary);
+  const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -103,6 +134,7 @@ export function AICopilot() {
           role: m.role,
           content: m.content,
           suggestions: m.suggestions,
+          provenance: m.provenance,
           // Dates don't survive JSON; rehydrate from the epoch ms.
           timestamp: new Date(m.timestamp),
         })),
@@ -128,6 +160,7 @@ export function AICopilot() {
             role: m.role,
             content: m.content,
             suggestions: m.suggestions,
+            provenance: m.provenance,
             timestamp: m.timestamp.getTime(),
           })),
       };
@@ -248,9 +281,17 @@ export function AICopilot() {
       setLoading(true);
 
       const pageContext = getPageContext(pathname ?? "/", selectedSymbol);
+      const provenance = buildCopilotProvenance({
+        symbol: selectedSymbol,
+        quoteTimestamp: selectedQuote?.timestamp,
+        brokerDegraded,
+        portfolioSource: summary.source,
+        positionsCount: summary.positionsCount,
+      });
       const contextParts = [
         pageContext,
         `Portfolio: $${summary.equity.toLocaleString()} equity, ${summary.positionsCount} positions`,
+        `Data provenance: ${provenance}`,
       ];
 
       try {
@@ -287,6 +328,7 @@ export function AICopilot() {
           suggestions: result.suggestions?.length
             ? result.suggestions
             : undefined,
+          provenance,
           timestamp: new Date(),
         };
         setMessages((prev) =>
@@ -301,6 +343,13 @@ export function AICopilot() {
               role: "assistant" as const,
               content:
                 "I'm having trouble connecting. Please try again in a moment.",
+              provenance: buildCopilotProvenance({
+                symbol: selectedSymbol,
+                quoteTimestamp: selectedQuote?.timestamp,
+                brokerDegraded: true,
+                portfolioSource: summary.source,
+                positionsCount: summary.positionsCount,
+              }),
               timestamp: new Date(),
             },
           ].slice(-AICOPILOT_MAX_PERSISTED_MESSAGES),
@@ -315,6 +364,9 @@ export function AICopilot() {
       selectedSymbol,
       summary.equity,
       summary.positionsCount,
+      summary.source,
+      selectedQuote?.timestamp,
+      brokerDegraded,
       conversationId,
     ]
   );
@@ -357,7 +409,7 @@ export function AICopilot() {
               <h2 id="ai-copilot-title" className="text-sm font-semibold text-foreground">
                 AI Copilot
               </h2>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
                 {contextLabel}
               </div>
@@ -365,11 +417,17 @@ export function AICopilot() {
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--panel)] hover:text-foreground"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--panel)] hover:text-foreground sm:min-h-8 sm:min-w-8"
             aria-label="Close AI Copilot"
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+        <div className="border-b border-[var(--border)] bg-amber/10 px-4 py-3 text-[12px] leading-relaxed text-amber">
+          <p className="font-semibold uppercase tracking-wide">Advice boundary</p>
+          <p className="mt-1">
+            Copilot can summarize data and suggest checks. It cannot send orders; verify quote, strategy, size, and ticket inputs yourself.
+          </p>
         </div>
 
         {/* Messages area */}
@@ -393,7 +451,7 @@ export function AICopilot() {
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
                     disabled={loading}
-                    className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2.5 text-left text-xs text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:opacity-50"
+                    className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2.5 text-left text-xs text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:opacity-50"
                   >
                     <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <span>{prompt}</span>
@@ -415,13 +473,18 @@ export function AICopilot() {
                     )}
                   >
                     {msg.role === "assistant" && (
-                      <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-primary">
+                      <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
                         <Brain className="h-3 w-3" />
                         Copilot
                       </div>
                     )}
                     <div className="whitespace-pre-wrap">{msg.content}</div>
-                    <div className="mt-1.5 text-[9px] text-muted-foreground">
+                    {msg.role === "assistant" && msg.provenance ? (
+                      <div className="mt-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 font-mono text-[12px] leading-snug text-muted-foreground">
+                        {msg.provenance}
+                      </div>
+                    ) : null}
+                    <div className="mt-1.5 text-[12px] text-muted-foreground">
                       {msg.timestamp.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -437,7 +500,7 @@ export function AICopilot() {
                           key={s}
                           onClick={() => sendMessage(s)}
                           disabled={loading}
-                          className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                          className="min-h-9 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                         >
                           {s}
                         </button>
@@ -448,7 +511,7 @@ export function AICopilot() {
               ))}
               {loading && (
                 <div className="mr-2 rounded-lg bg-[var(--panel)] px-3 py-2.5">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-primary">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
                     <Brain className="h-3 w-3" />
                     Copilot
                   </div>
@@ -486,14 +549,14 @@ export function AICopilot() {
             <button
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-white transition-colors hover:bg-primary/80 disabled:opacity-30"
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/80 disabled:opacity-30 sm:min-h-8 sm:min-w-8"
               aria-label="Send message"
             >
               <Send className="h-3 w-3" />
             </button>
           </div>
-          <div className="mt-2 text-center text-[9px] text-muted-foreground">
-            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-[9px]">
+          <div className="mt-2 text-center text-[12px] text-muted-foreground">
+            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-[12px]">
               Cmd+J
             </kbd>{" "}
             to toggle

@@ -224,7 +224,7 @@ export default function EarningsCalendarSidebar({
                       // Round-8 / MO-05: explicit ``min-h-[44px]`` floor —
                       // the previous padding-only approach allowed slim rows
                       // (~36px) on phones with compressed line-height.
-                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-[12.5px] text-left transition-colors",
+                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-[13px] text-left transition-colors",
                       r.symbol === selected
                         ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                         : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -236,14 +236,14 @@ export default function EarningsCalendarSidebar({
                   >
                     <span className="flex items-center gap-1.5">
                       <span className="font-semibold text-[color:var(--fg-base)]">{r.symbol}</span>
-                      <span className="text-[10px] text-[color:var(--fg-muted)]" title={reportTimeTitle}>
+                      <span className="text-[12px] text-[color:var(--fg-muted)]" title={reportTimeTitle}>
                         {r.reportTime}
                       </span>
                       {candidateDecisionLabel && (
                         <span
                           data-slot="candidate-decision-pill"
                           data-decision={candidateDecision}
-                          className="rounded border border-[color:var(--border)] px-1 py-px font-mono text-[8.5px] uppercase leading-none text-[color:var(--fg-muted)]"
+                          className="rounded border border-[color:var(--border)] px-1 py-px font-mono text-[12px] uppercase leading-none text-[color:var(--fg-muted)]"
                         >
                           {candidateDecision === "order" ? "Order" : candidateDecisionLabel}
                         </span>
@@ -251,7 +251,7 @@ export default function EarningsCalendarSidebar({
                       {isToday && (
                         <span
                           data-slot="today-pill"
-                          className="rounded bg-[color:var(--brand)] px-1 py-px font-mono text-[8.5px] font-semibold uppercase leading-none text-[color:var(--bg)]"
+                          className="rounded bg-[color:var(--brand)] px-1 py-px font-mono text-[12px] font-semibold uppercase leading-none text-[color:var(--bg)]"
                         >
                           Today
                         </span>
@@ -262,14 +262,14 @@ export default function EarningsCalendarSidebar({
                         {edgeScore != null && (
                           <span
                             data-slot="edge-score-chip"
-                            className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-[10px] tabular-nums text-[color:var(--brand)]"
+                            className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-[12px] tabular-nums text-[color:var(--brand)]"
                             title={edgeTitle}
                           >
                             Edge {Math.round(edgeScore)}
                           </span>
                         )}
                         {r.ivRank != null && (
-                          <span className="text-[10.5px] tabular-nums text-[color:var(--fg-pos)]">
+                          <span className="text-[12px] tabular-nums text-[color:var(--fg-pos)]">
                             IV {Math.round(r.ivRank)}
                           </span>
                         )}

@@ -102,7 +102,7 @@ export default function DetailHeader({
               title={quoteTimestamp}
               aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
               className={
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[10px] uppercase tracking-wide " +
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[12px] uppercase tracking-wide " +
                 (freshness.kind === "live"
                   ? "border-[color:var(--profit)] text-[color:var(--profit)]"
                   : "border-[color:var(--border)] u-muted")

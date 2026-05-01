@@ -129,7 +129,7 @@ function CommandGroup({
       className={cn(
         "overflow-hidden p-1 text-fg",
         "**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5",
-        "**:[[cmdk-group-heading]]:text-[10px] **:[[cmdk-group-heading]]:font-semibold",
+        "**:[[cmdk-group-heading]]:text-[12px] **:[[cmdk-group-heading]]:font-semibold",
         "**:[[cmdk-group-heading]]:tracking-[0.16em] **:[[cmdk-group-heading]]:uppercase",
         "**:[[cmdk-group-heading]]:text-fg-muted",
         className
@@ -185,7 +185,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto font-mono text-[10px] tracking-[0.04em] text-fg-muted",
+        "ml-auto font-mono text-[12px] tracking-[0.04em] text-fg-muted",
         "group-data-selected/command-item:text-fg",
         className
       )}

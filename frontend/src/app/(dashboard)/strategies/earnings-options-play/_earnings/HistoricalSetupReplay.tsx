@@ -240,7 +240,7 @@ function ReplayResult({
     <>
       <div
         data-slot="historical-setup-replay-verdict"
-        className="mt-2 flex flex-wrap items-center gap-2 t-mono text-[11px]"
+        className="mt-2 flex flex-wrap items-center gap-2 t-mono text-[12px]"
       >
         <span
           className={
@@ -309,11 +309,11 @@ function ReplayResult({
         <p className="mt-2 t-mono text-[12px] u-muted">— no replayable events.</p>
       )}
       {data.skipped.length > 0 && (
-        <p data-slot="historical-setup-replay-skipped" className="mt-2 t-mono text-[11px] u-muted">
+        <p data-slot="historical-setup-replay-skipped" className="mt-2 t-mono text-[12px] u-muted">
           {data.skipped.length} skipped
         </p>
       )}
-      <p className="mt-2 t-mono text-[10.5px] u-muted">
+      <p className="mt-2 t-mono text-[12px] u-muted">
         Setup replay only: not point-in-time historical option-chain fills.
       </p>
     </>
@@ -430,7 +430,7 @@ function SetupComparisonRow({
   const metrics = summary.metrics;
   const verdict = getReplayVerdict(metrics);
   return (
-    <li className="grid grid-cols-[minmax(0,1.4fr)_3.25rem_4.25rem_3.5rem] items-center gap-2 py-1.5 t-mono text-[11px]">
+    <li className="grid grid-cols-[minmax(0,1.4fr)_3.25rem_4.25rem_3.5rem] items-center gap-2 py-1.5 t-mono text-[12px]">
       <span className="min-w-0 truncate">
         <span
           className={cn(
@@ -462,7 +462,7 @@ function SetupComparisonRow({
 
 function ReplayTradeRow({ trade }: { trade: EarningsBacktestTrade }) {
   return (
-    <li className="grid grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] gap-2 py-2 t-mono text-[11px]">
+    <li className="grid grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] gap-2 py-2 t-mono text-[12px]">
       <span className="u-muted">{fmtDate(trade.reportDate, { year: "numeric", month: "short", day: "numeric" })}</span>
       <span className={trade.win ? "u-profit" : "u-loss"}>
         {fmtPct(trade.returnPct, 1, { signDisplay: "always" })}

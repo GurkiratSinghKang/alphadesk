@@ -12,11 +12,22 @@ import type { ElementType, RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
+  ChartLineUp,
+  ClockCounterClockwise,
+  ClipboardText,
+  FileText,
+  Fingerprint,
+  Gauge,
   ListChecks,
-  Radio,
+  Pulse,
   ShieldCheck,
+  ShieldWarning,
+  Siren,
+  Sparkle,
+  Stack,
   Target,
-} from "lucide-react";
+  WarningCircle,
+} from "@phosphor-icons/react";
 
 import {
   ContextBar,
@@ -25,7 +36,6 @@ import {
   TopBar,
   type OrderRow,
   type PositionTab,
-  Watchlist,
 } from "@/components/composites";
 import { DashboardLayout } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
@@ -48,7 +58,6 @@ import { cn, formatCurrency, formatGreek, formatPercent } from "@/lib/utils";
 // helper still lives in `@/lib/strategiesSummary` for use on the
 // `/strategies` page header.
 import {
-  useIndices,
   usePipelineStatus,
   useRegime,
   useStrategies,
@@ -158,7 +167,6 @@ export default function DeskPage() {
   // via `fetchPortfolioData()`. The store is the single source of truth
   // here — the pipeline effect keeps it fresh on its own interval.
   const { data: regimeResp } = useRegime();
-  const { data: indicesResp } = useIndices();
   const strategiesQuery = useStrategies();
   const strategiesResp = strategiesQuery.data;
   const { data: pipelineStatus } = usePipelineStatus();
@@ -671,7 +679,6 @@ export default function DeskPage() {
           strategiesLoading={strategiesQuery.isLoading}
           strategiesError={strategiesQuery.isError}
           pipelineStatus={pipelineStatus}
-          indices={indicesResp?.indices ?? []}
           clockEt={clock}
           onTrade={() => router.push(`/trade?symbol=${encodeURIComponent(selectedSymbol)}`)}
           onPipeline={() => router.push("/pipeline")}
@@ -688,6 +695,10 @@ export default function DeskPage() {
           onTabChange={setBookTab}
           onCancelOrder={handleCancelOrder}
           bookPanelRef={bookPanelRef}
+          selectedSymbol={selectedSymbol}
+          selectedQuote={quote}
+          onTrade={() => router.push(`/trade?symbol=${encodeURIComponent(selectedSymbol)}`)}
+          onAlert={() => router.push(`/alerts?prefillSymbol=${encodeURIComponent(selectedSymbol)}`)}
           onSelectSymbol={(id) => {
             const pos = positionRows.find((r) => r.id === id);
             handleSelectSymbol(pos?.symbol ?? id);
@@ -705,16 +716,6 @@ export default function DeskPage() {
     />
   );
 }
-
-type IndexSnapshot = {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  change_pct: number;
-  prev_close?: number;
-  is_demo?: boolean;
-};
 
 function DashboardCommandCenter({
   summary,
@@ -734,7 +735,6 @@ function DashboardCommandCenter({
   strategiesLoading,
   strategiesError,
   pipelineStatus,
-  indices,
   clockEt,
   onTrade,
   onPipeline,
@@ -759,7 +759,6 @@ function DashboardCommandCenter({
   strategiesLoading: boolean;
   strategiesError: boolean;
   pipelineStatus?: PipelineStatus;
-  indices: IndexSnapshot[];
   clockEt: string;
   onTrade: () => void;
   onPipeline: () => void;
@@ -769,17 +768,12 @@ function DashboardCommandCenter({
 }) {
   const account = useMemo(() => buildAccountSnapshot(summary, positions), [summary, positions]);
   const strategyCards = useMemo(
-    () => buildStrategyCards(strategies).slice(0, 4),
+    () => buildStrategyCards(strategies).filter((strategy) => strategy.exception).slice(0, 4),
     [strategies],
-  );
-  const marketRows = useMemo(
-    () => normalizeIndices(indices).slice(0, 5),
-    [indices],
   );
   const actionItems = useMemo(
     () =>
       buildActionItems({
-        marketOpen,
         openOrders,
         positions,
         orders,
@@ -787,7 +781,7 @@ function DashboardCommandCenter({
         totalStrategyCount,
         pipelineStatus,
       }),
-    [marketOpen, openOrders, positions, orders, activeStrategyCount, totalStrategyCount, pipelineStatus],
+    [openOrders, positions, orders, activeStrategyCount, totalStrategyCount, pipelineStatus],
   );
   const quoteTone =
     selectedQuote.change > 0
@@ -806,57 +800,170 @@ function DashboardCommandCenter({
       ? `${formatCurrency(selectedQuote.last)} · ${selectedQuote.changePct >= 0 ? "+" : ""}${selectedQuote.changePct.toFixed(2)}%`
       : "Waiting for quote";
   const pipelineValue = pipelineStatus?.stage ?? pipelineStatus?.last_result ?? "Ready";
+  const pnlTone =
+    account.dayPnl > 0
+      ? "text-profit"
+      : account.dayPnl < 0
+        ? "text-loss"
+        : "text-fg-muted";
+  const pnlSign = account.dayPnl > 0 ? "+" : "";
+  const riskEscalations = useMemo(
+    () => buildRiskEscalations({
+      account,
+      greeks,
+      orders,
+      openOrders,
+      pipelineStatus,
+    }),
+    [account, greeks, orders, openOrders, pipelineStatus],
+  );
+  const dashboardReadiness = useMemo(
+    () =>
+      buildDashboardReadiness({
+        account,
+        selectedQuote,
+        marketOpen,
+        pipelineStatus,
+        strategiesError,
+      }),
+    [account, selectedQuote, marketOpen, pipelineStatus, strategiesError],
+  );
+  const auditItems = useMemo(
+    () =>
+      buildAuditItems({
+        summary,
+        selectedSymbol,
+        selectedQuote,
+        marketOpen,
+        pipelineStatus,
+        clockEt,
+      }),
+    [summary, selectedSymbol, selectedQuote, marketOpen, pipelineStatus, clockEt],
+  );
+  const escalationCount = riskEscalations.filter((item) => item.tone !== "profit").length;
+  const [clockTime, clockDate] = clockEt.split(" · ");
 
   return (
     <div
       data-slot="dashboard-command-center"
-      className="min-h-0 flex-1 overflow-y-auto bg-bg"
+      className="relative min-h-0 flex-1 overflow-y-auto bg-bg"
     >
-      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-3 p-4 pb-8 xl:p-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:72px_72px]"
+      />
+      <div className="relative mx-auto flex w-full max-w-[1500px] flex-col gap-5 p-4 pb-8 md:p-6">
         <section
           aria-labelledby="dashboard-command-title"
-          className="dashboard-hero dashboard-section overflow-hidden"
+          className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-36px_rgba(16,22,17,0.34)]"
         >
-          <header className="flex flex-col gap-3 border-b border-border-hair px-5 py-4 md:flex-row md:items-end md:justify-between md:px-6">
+          <MobilePriorityBrief
+            items={actionItems}
+            risk={riskEscalations[0]}
+            marketOpen={marketOpen}
+            regimeLabel={regimeLabel}
+            escalationCount={escalationCount}
+            grossExposure={account.ready ? formatPercent(account.grossExposurePct) : "Locked"}
+            cashBuffer={account.ready ? formatPercent(account.cashPct) : "Locked"}
+            openOrders={openOrders}
+            readiness={dashboardReadiness}
+            onTrade={onTrade}
+            onOpenOrders={onOpenOrders}
+            onPipeline={onPipeline}
+          />
+          <header className="hidden gap-px bg-border-hair lg:grid lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.22fr)]">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="t-label text-fg-hint">Dashboard</span>
-                <StatusChip
-                  tone={marketOpen ? "profit" : "muted"}
-                  label={marketOpen ? "Market open" : "Market closed"}
-                />
-                <StatusChip tone={regimeChipTone} label={regimeLabel} />
+              <div className="h-full bg-bg-elev-1 px-4 py-4 md:px-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="t-label text-fg-hint">AlphaDesk control room</span>
+                  <StatusChip tone={dashboardReadiness.tone} label={dashboardReadiness.label} />
+                  <StatusChip tone={regimeChipTone} label={regimeLabel} />
+                </div>
+                <h2
+                  id="dashboard-command-title"
+                  className="mt-3 text-[26px] font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[32px]"
+                  style={{ letterSpacing: 0 }}
+                >
+                  Control room
+                </h2>
+                <p className="mt-2 max-w-[44ch] text-[13px] leading-relaxed text-fg-muted">
+                  Exceptions, exposure, and broker state in the first scan.
+                </p>
+                <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
+                  <p className="t-label text-fg-hint">System readiness</p>
+                  <p className="mt-1 text-[14px] font-semibold leading-snug text-ink-1000">
+                    {dashboardReadiness.title}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                    {dashboardReadiness.detail}
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <StatusChip
+                    tone={escalationCount > 0 ? "amber" : "profit"}
+                    label={`${escalationCount} risk gate${escalationCount === 1 ? "" : "s"}`}
+                  />
+                  <StatusChip
+                    tone={pipelineStatus?.running ? "profit" : "muted"}
+                    label={pipelineStatus?.running ? "Pipeline live" : "Pipeline idle"}
+                  />
+                </div>
               </div>
-              <h2
-                id="dashboard-command-title"
-                className="mt-2 text-[22px] font-semibold leading-tight text-ink-1000 md:text-[26px]"
-                style={{ letterSpacing: 0 }}
-              >
-                Operating picture
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-[13.5px] leading-relaxed text-fg-muted">
-                Review attention, risk, and strategy gates before opening the trade ticket.
-              </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-muted">
-              <span className="rounded-sm border border-border-hair bg-bg-elev-2 px-2.5 py-1 font-mono">
-                {clockEt}
-              </span>
-              <span className="rounded-sm border border-border-hair bg-bg-elev-2 px-2.5 py-1 font-mono">
-                {summary.source ? `Source ${summary.source}` : account.ready ? "Broker snapshot" : "Waiting for broker"}
-              </span>
+
+            <div className="hidden gap-px bg-border-hair sm:grid-cols-2 lg:grid xl:grid-cols-4">
+              <CommandMetric
+                label="Book equity"
+                value={account.ready ? formatCurrency(account.equity, true) : "Awaiting"}
+                detail={summary.source ? `Source ${summary.source}` : account.ready ? "Broker snapshot" : "Waiting for broker"}
+              />
+              <CommandMetric
+                label="Day P/L"
+                value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}
+                detail={`${account.positionsCount} open line${account.positionsCount === 1 ? "" : "s"}`}
+                valueClassName={pnlTone}
+              />
+              <CommandMetric
+                label="Clock"
+                value={clockTime ?? clockEt}
+                detail={[clockDate, marketOpen ? "US cash session" : "Off-session"].filter(Boolean).join(" · ")}
+              />
+              <CommandMetric
+                label="Strategies"
+                value={`${activeStrategyCount}/${totalStrategyCount || 0}`}
+                detail="Enabled systems"
+                valueClassName="text-brand"
+              />
             </div>
           </header>
 
-          <div className="grid gap-px bg-border-hair xl:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="hidden gap-px bg-border-hair lg:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(320px,0.72fr)_minmax(0,1.05fr)]">
             <DecisionQueue
               items={actionItems}
               onTrade={onTrade}
               onOpenOrders={onOpenOrders}
               onPipeline={onPipeline}
             />
-            <SessionSnapshot
+            <RiskEscalationPanel
+              items={riskEscalations}
               account={account}
+            />
+            <PortfolioCanvas
+              account={account}
+              greeks={greeks}
+              selectedSymbol={selectedSymbol}
+              quoteValue={quoteValue}
+              quoteTone={quoteTone}
+              onTrade={onTrade}
+            />
+          </div>
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <RiskPanel account={account} greeks={greeks} />
+          <section className="grid gap-5 lg:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)] xl:grid-cols-1">
+            <AuditTrailPanel items={auditItems} />
+            <SessionSnapshot
               selectedSymbol={selectedSymbol}
               quoteValue={quoteValue}
               quoteTone={quoteTone}
@@ -865,30 +972,321 @@ function DashboardCommandCenter({
               totalStrategyCount={totalStrategyCount}
               pipelineStatus={pipelineStatus}
               pipelineValue={pipelineValue}
-              openOrders={openOrders}
+              onPipeline={onPipeline}
+            />
+            <StrategyPanel
+              strategies={strategyCards}
+              activeStrategyCount={activeStrategyCount}
+              totalStrategyCount={totalStrategyCount}
+              loading={strategiesLoading}
+              error={strategiesError}
+              onStrategyClick={onStrategyClick}
+              onStrategies={onStrategies}
+            />
+          </section>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function MobilePriorityBrief({
+  items,
+  risk,
+  marketOpen,
+  regimeLabel,
+  escalationCount,
+  grossExposure,
+  cashBuffer,
+  openOrders,
+  readiness,
+  onTrade,
+  onOpenOrders,
+  onPipeline,
+}: {
+  items: readonly ActionItem[];
+  risk?: RiskEscalation;
+  marketOpen: boolean;
+  regimeLabel: string;
+  escalationCount: number;
+  grossExposure: string;
+  cashBuffer: string;
+  openOrders: number;
+  readiness: DashboardReadiness;
+  onTrade: () => void;
+  onOpenOrders: () => void;
+  onPipeline: () => void;
+}) {
+  const primary = items[0];
+  const actionTone = primary?.tone ?? "profit";
+  const actionTitle = primary?.title ?? "No interventions pending";
+  const actionDetail =
+    primary?.detail ??
+    "Exposure, orders, and strategy state are inside policy bands. Open Trade when you want to act.";
+  const actionLabel =
+    primary?.action === "orders"
+      ? "Review orders"
+      : primary?.action === "pipeline"
+        ? "Open pipeline"
+        : "Open trade";
+  const actionHandler =
+    primary?.action === "orders"
+      ? onOpenOrders
+      : primary?.action === "pipeline"
+        ? onPipeline
+        : onTrade;
+  const ActionIcon =
+    actionTone === "loss"
+      ? WarningCircle
+      : primary?.action === "pipeline"
+        ? Pulse
+        : ListChecks;
+  const riskTone = risk?.tone ?? "profit";
+
+  return (
+    <div
+      data-slot="dashboard-mobile-action-first"
+      className="border-b border-border-hair bg-bg-elev-1 lg:hidden"
+    >
+      <div className="px-4 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="t-label text-fg-hint">Control room</span>
+          <StatusChip tone={readiness.tone} label={readiness.label} />
+          <StatusChip tone={escalationCount > 0 ? "amber" : "profit"} label={`${escalationCount} gate${escalationCount === 1 ? "" : "s"}`} />
+        </div>
+        <div className="mt-3 rounded-md border border-border-hair bg-bg px-3 py-3">
+          <p className="text-[14px] font-semibold leading-snug text-ink-1000">
+            {readiness.title}
+          </p>
+          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">
+            {readiness.detail}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={actionHandler}
+          data-slot="dashboard-mobile-primary-action"
+          className="mt-3 grid min-h-[116px] w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-brand/30 bg-brand/10 px-3.5 py-3.5 text-left transition-[border-color,background-color,transform] active:scale-[0.99]"
+        >
+          <span
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-sm border",
+              actionTone === "profit" && "border-profit/25 bg-profit/10 text-profit",
+              actionTone === "loss" && "border-loss/25 bg-loss/10 text-loss",
+              actionTone === "amber" && "border-amber/25 bg-amber/10 text-amber",
+              actionTone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
+            )}
+          >
+            <ActionIcon className="size-5" aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[15px] font-semibold leading-tight text-ink-1000">
+              {actionTitle}
+            </span>
+            <span className="mt-2 block line-clamp-2 text-[13px] leading-snug text-fg-muted">
+              {actionDetail}
+            </span>
+            <span className="mt-3 inline-flex min-h-8 items-center rounded-sm bg-brand px-3 text-[12px] font-semibold text-primary-foreground">
+              {actionLabel}
+            </span>
+          </span>
+          <ArrowRight className="mt-1 size-4 shrink-0 text-fg-muted" aria-hidden />
+        </button>
+
+        <div
+          data-slot="dashboard-mobile-priority-rail"
+          className="mt-3 grid grid-cols-2 gap-2"
+        >
+          <MobilePriorityDatum
+            label="Risk gate"
+            value={risk?.metric ?? "Clear"}
+            detail={risk?.title ?? "Policy gates clear"}
+            valueClassName={riskTone === "loss" ? "text-loss" : riskTone === "amber" ? "text-amber" : riskTone === "profit" ? "text-profit" : "text-fg-muted"}
+          />
+          <MobilePriorityDatum
+            label="Gross exposure"
+            value={grossExposure}
+            detail="Market value at work"
+          />
+          <MobilePriorityDatum
+            label="Cash buffer"
+            value={cashBuffer}
+            detail="Buying room"
+          />
+          <MobilePriorityDatum
+            label="Session"
+            value={openOrders > 0 ? `${openOrders} open` : marketOpen ? "Cash session" : "Review mode"}
+            detail={openOrders > 0 ? "Orders need review" : regimeLabel === "unknown" ? "No open orders" : regimeLabel}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobilePriorityDatum({
+  label,
+  value,
+  detail,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2.5">
+      <p className="t-label text-fg-hint">{label}</p>
+      <p className={cn("mt-1 truncate font-mono text-[15px] leading-tight text-ink-1000", valueClassName)}>
+        {value}
+      </p>
+      {detail ? <p className="mt-1 truncate text-[12px] text-fg-muted">{detail}</p> : null}
+    </div>
+  );
+}
+
+function CommandMetric({
+  label,
+  value,
+  detail,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md border border-border-hair bg-bg px-4 py-3 shadow-[0_14px_34px_-28px_rgba(16,22,17,0.36)]">
+      <p className="t-label text-fg-hint">{label}</p>
+      <p className={cn("mt-2 whitespace-nowrap font-mono text-[clamp(16px,1.45vw,20px)] leading-tight text-ink-1000", valueClassName)}>
+        {value}
+      </p>
+      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
+function PortfolioCanvas({
+  account,
+  greeks,
+  selectedSymbol,
+  quoteValue,
+  quoteTone,
+  onTrade,
+}: {
+  account: AccountSnapshot;
+  greeks: PortfolioGreeks;
+  selectedSymbol: string;
+  quoteValue: string;
+  quoteTone: string;
+  onTrade: () => void;
+}) {
+  const exposurePct = account.ready ? Math.max(0, Math.min(140, account.grossExposurePct)) : 0;
+  const cashPct = account.ready ? Math.max(0, Math.min(100, account.cashPct)) : 0;
+  const shockTone = account.twoPctShock > account.equity * 0.015 ? "text-loss" : "text-fg-muted";
+
+  return (
+    <div className="surface-scan relative min-h-[360px] overflow-hidden bg-bg p-5 md:p-6">
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--brand),transparent_42%,var(--profit)_64%,transparent)] opacity-70"
+      />
+      <div className="flex h-full min-w-0 flex-col justify-between gap-7">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Sparkle className="size-4 text-brand" aria-hidden />
+            <p className="t-label text-fg-hint">Capital canvas</p>
+          </div>
+          <p className="mt-4 break-words font-mono text-[clamp(34px,3.4vw,52px)] font-medium leading-[0.92] tracking-tight text-ink-1000">
+            {account.ready ? formatCurrency(account.equity) : "Awaiting"}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className={cn("font-mono text-[15px]", account.dayPnl > 0 ? "text-profit" : account.dayPnl < 0 ? "text-loss" : "text-fg-muted")}>
+              {account.ready ? `${account.dayPnl > 0 ? "+" : ""}${formatCurrency(account.dayPnl)} today` : "Waiting for account state"}
+            </span>
+            <span className="h-1 w-1 rounded-full bg-border-strong" aria-hidden />
+            <span className="font-mono text-[15px] text-fg-muted">
+              {account.positionsCount} position{account.positionsCount === 1 ? "" : "s"}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <SmallDatum
+            label="Largest line"
+            value={account.largestPosition?.symbol ?? "None"}
+            detail={account.largestPosition ? `${formatPercent(account.largestPosition.pct)} of equity` : "No dominant exposure"}
+          />
+          <SmallDatum
+            label="Gross market value"
+            value={account.ready ? formatCurrency(account.grossMarketValue, true) : "Locked"}
+            detail="Absolute notional at work"
+          />
+          <SmallDatum
+            label="Beta-weighted delta"
+            value={greeks.isDemo ? "Review" : formatGreek(greeks.betaWeightedDelta, 2)}
+            detail={greeks.isDemo ? "Broker Greeks unavailable" : "Portfolio sensitivity"}
+          />
+        </div>
+
+        <div className="rounded-md border border-border-hair bg-bg-elev-1 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="t-label text-fg-hint">Exposure runway</p>
+              <p className="mt-1 text-[13px] text-fg-muted">
+                {selectedSymbol} handoff · <span className={cn("font-mono", quoteTone)}>{quoteValue}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onTrade}
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm bg-brand px-3 text-[13px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+            >
+              Open execution
+              <ArrowRight className="size-4" aria-hidden />
+            </button>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-sm bg-bg-elev-2">
+            <div
+              className={cn(
+                "h-full rounded-sm transition-[width] duration-500",
+                account.grossExposurePct > 85 ? "bg-loss" : account.grossExposurePct > 55 ? "bg-amber" : "bg-brand",
+              )}
+              style={{ width: `${Math.min(100, exposurePct)}%` }}
             />
           </div>
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-          <RiskPanel account={account} greeks={greeks} />
-          <MarketPulsePanel
-            indices={marketRows}
-            marketOpen={marketOpen}
-            regimeLabel={regimeLabel}
-          />
-        </section>
-
-        <StrategyPanel
-          strategies={strategyCards}
-          activeStrategyCount={activeStrategyCount}
-          totalStrategyCount={totalStrategyCount}
-          loading={strategiesLoading}
-          error={strategiesError}
-          onStrategyClick={onStrategyClick}
-          onStrategies={onStrategies}
-        />
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <SmallDatum label="Gross" value={account.ready ? formatPercent(account.grossExposurePct) : "Locked"} />
+            <SmallDatum label="Cash buffer" value={account.ready ? formatPercent(cashPct) : "Locked"} />
+            <SmallDatum label="2% shock" value={account.ready ? formatCurrency(account.twoPctShock, true) : "Locked"} valueClassName={shockTone} />
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function SmallDatum({
+  label,
+  value,
+  detail,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md border border-border-hair bg-bg px-3 py-3">
+      <p className="t-label text-fg-hint">{label}</p>
+      <p className={cn("mt-2 whitespace-nowrap font-mono text-[clamp(14px,1.08vw,17px)] leading-tight text-ink-1000", valueClassName)}>
+        {value}
+      </p>
+      {detail ? <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-fg-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -900,6 +1298,10 @@ function DashboardInsightRail({
   onTabChange,
   onCancelOrder,
   bookPanelRef,
+  selectedSymbol,
+  selectedQuote,
+  onTrade,
+  onAlert,
   onSelectSymbol,
 }: {
   positions: ReturnType<typeof toPositionRows>;
@@ -908,20 +1310,40 @@ function DashboardInsightRail({
   onTabChange: (tab: PositionTab) => void;
   onCancelOrder: (id: string) => void;
   bookPanelRef: RefObject<HTMLDivElement | null>;
+  selectedSymbol: string;
+  selectedQuote: ReturnType<typeof toQuote>;
+  onTrade: () => void;
+  onAlert: () => void;
   onSelectSymbol: (id: string) => void;
 }) {
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden bg-bg">
+    <div className="relative flex min-h-0 flex-col overflow-hidden bg-bg">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(236,230,210,0.045)_1px,transparent_1px)] bg-[size:100%_56px]"
+      />
       <div
         data-slot="dashboard-rail-scroll"
-        className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
+        className="relative min-h-0 flex-1 space-y-4 overflow-auto p-4"
       >
+        <FocusTickerPanel
+          symbol={selectedSymbol}
+          quote={selectedQuote}
+          onTrade={onTrade}
+          onAlert={onAlert}
+        />
         <div
           ref={bookPanelRef}
           data-slot="dashboard-book"
           tabIndex={-1}
-          className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-brand/70"
+          className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.42)] focus:outline-none focus-visible:ring-1 focus-visible:ring-brand/70"
         >
+          <div className="border-b border-border-hair px-4 py-3">
+            <p className="t-label text-fg-hint">Live book</p>
+            <p className="mt-1 text-[13px] text-fg-muted">
+              Positions and order state stay here so the dashboard can stay decision-led.
+            </p>
+          </div>
           <PositionsList
             positions={positions}
             orders={orders}
@@ -932,9 +1354,74 @@ function DashboardInsightRail({
             showJournal={false}
           />
         </div>
-        <Watchlist />
       </div>
     </div>
+  );
+}
+
+function FocusTickerPanel({
+  symbol,
+  quote,
+  onTrade,
+  onAlert,
+}: {
+  symbol: string;
+  quote: ReturnType<typeof toQuote>;
+  onTrade: () => void;
+  onAlert: () => void;
+}) {
+  const hasQuote = quote.last > 0;
+  const tone = quote.change > 0 ? "text-profit" : quote.change < 0 ? "text-loss" : "text-fg-muted";
+  return (
+    <section
+      aria-label="Selected ticker controls"
+      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 text-fg shadow-[0_18px_48px_-34px_rgba(16,22,17,0.52)]"
+    >
+      <div className="relative px-5 py-5">
+        <div
+          aria-hidden
+          className="absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)]"
+        />
+        <div className="flex items-center justify-between gap-3">
+          <p className="t-label text-fg-hint">Selected ticker</p>
+          <span
+            className={cn(
+              "size-2.5 rounded-full",
+              quote.change > 0 ? "bg-profit" : quote.change < 0 ? "bg-loss" : "bg-fg-muted",
+            )}
+            aria-hidden
+          />
+        </div>
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-mono text-[42px] font-medium leading-none tracking-tight text-fg">{symbol}</p>
+            <p className={cn("mt-2 font-mono text-[15px]", tone)}>
+              {hasQuote
+                ? `${formatCurrency(quote.last)} · ${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`
+                : "Waiting for quote"}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-border-hair">
+        <button
+          type="button"
+          onClick={onTrade}
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+        >
+          <ChartLineUp className="size-4" aria-hidden />
+          Trade
+        </button>
+        <button
+          type="button"
+          onClick={onAlert}
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+        >
+          <ClipboardText className="size-4" aria-hidden />
+          Alert
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -950,50 +1437,179 @@ function DecisionQueue({
   onPipeline: () => void;
 }) {
   return (
-    <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
+    <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <ListChecks className="size-4 shrink-0 text-fg-muted" aria-hidden />
+          <ListChecks className="size-5 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
-            <p className="t-label text-fg-hint">Decision queue</p>
-            <p className="mt-1 text-[13px] text-fg-muted">
-              Highest priority first, with direct routes to the next screen.
+            <p className="t-label text-fg-hint">Action stack</p>
+            <p className="mt-1 text-[13px] leading-snug text-fg-muted">
+              One visible queue, one next screen, no scavenger hunt.
             </p>
           </div>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-3 xl:grid-cols-1">
-        {items.map((item, index) => {
+      <div className="mt-5 grid gap-3">
+        {items.length > 0 ? items.map((item, index) => {
           const onClick =
             item.action === "orders" ? onOpenOrders : item.action === "pipeline" ? onPipeline : onTrade;
+          const Icon = item.tone === "loss" ? WarningCircle : item.action === "pipeline" ? Pulse : Stack;
           return (
             <button
               key={item.title}
               type="button"
               onClick={onClick}
-              className="dashboard-row card-stagger group text-left"
+              className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-border-hair bg-bg px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-brand/35 hover:bg-brand/5"
               style={{ animationDelay: `${index * 45}ms` }}
             >
-              <div className="flex items-start gap-3">
-                <span className={cn("mt-1 size-2 rounded-full", item.tone === "profit" ? "bg-profit" : item.tone === "loss" ? "bg-loss" : item.tone === "amber" ? "bg-amber" : "bg-fg-muted")} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-[14px] font-medium text-ink-1000">{item.title}</p>
-                    <ArrowRight className="size-4 shrink-0 text-fg-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
-                </div>
+              <span className={cn(
+                "flex size-9 items-center justify-center rounded-sm border",
+                item.tone === "profit" && "border-profit/20 bg-profit/10 text-profit",
+                item.tone === "loss" && "border-loss/20 bg-loss/10 text-loss",
+                item.tone === "amber" && "border-amber/20 bg-amber/10 text-amber",
+                item.tone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
+              )}>
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold leading-tight text-ink-1000">{item.title}</p>
+                <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
               </div>
+              <ArrowRight className="mt-1 size-4 shrink-0 text-fg-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>
           );
-        })}
+        }) : (
+          <div className="rounded-md border border-border-hair bg-bg px-4 py-6">
+            <div className="flex size-10 items-center justify-center rounded-sm bg-profit/10 text-profit">
+              <ShieldCheck className="size-5" aria-hidden />
+            </div>
+            <p className="mt-4 text-[15px] font-semibold text-ink-1000">No interventions pending</p>
+            <p className="mt-2 max-w-xl text-[13px] leading-snug text-fg-muted">
+              Orders, exposure, and pipeline state are inside normal bounds. Open Trade when you want to act.
+            </p>
+            <Button variant="ghost" size="sm" className="mt-4" onClick={onTrade}>
+              Open trade
+              <ArrowRight aria-hidden />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function SessionSnapshot({
+function RiskEscalationPanel({
+  items,
   account,
+}: {
+  items: readonly RiskEscalation[];
+  account: AccountSnapshot;
+}) {
+  const hotCount = items.filter((item) => item.tone === "loss" || item.tone === "amber").length;
+
+  return (
+    <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-loss/10 text-loss">
+            {hotCount > 0 ? <Siren className="size-4" aria-hidden /> : <ShieldCheck className="size-4" aria-hidden />}
+          </span>
+          <div className="min-w-0">
+            <p className="t-label text-fg-hint">Risk gates</p>
+            <p className="mt-1 text-[13px] leading-snug text-fg-muted">
+              Thresholds, ownership, and action before more exposure.
+            </p>
+          </div>
+        </div>
+        <span className={cn("rounded-sm px-2 py-1 font-mono text-[12px]", hotCount > 0 ? "bg-amber/10 text-amber" : "bg-profit/10 text-profit")}>
+          {hotCount > 0 ? `${hotCount} active` : "Clear"}
+        </span>
+      </div>
+
+      <div className="mt-5 divide-y divide-border-hair border-y border-border-hair">
+        {items.slice(0, 4).map((item, index) => {
+          const Icon = item.tone === "loss" ? ShieldWarning : item.tone === "amber" ? WarningCircle : ShieldCheck;
+          return (
+            <div
+              key={item.title}
+              className="card-stagger grid grid-cols-[auto_minmax(0,1fr)] gap-3 py-3"
+              style={{ animationDelay: `${index * 45}ms` }}
+            >
+              <span className={cn(
+                "mt-0.5 flex size-8 items-center justify-center rounded-sm border",
+                item.tone === "loss" && "border-loss/25 bg-loss/10 text-loss",
+                item.tone === "amber" && "border-amber/25 bg-amber/10 text-amber",
+                item.tone === "profit" && "border-profit/25 bg-profit/10 text-profit",
+                item.tone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
+              )}>
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[15px] font-semibold leading-tight text-ink-1000">{item.title}</p>
+                  <span className="shrink-0 font-mono text-[12px] uppercase text-fg-hint">{item.owner}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
+                <p className="mt-2 font-mono text-[12px] text-fg">{item.metric}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <SmallDatum label="BP" value={account.ready ? formatCurrency(account.buyingPower, true) : "Locked"} />
+        <SmallDatum label="Cash" value={account.ready ? formatPercent(account.cashPct) : "Locked"} />
+        <SmallDatum label="Shock" value={account.ready ? formatCurrency(account.twoPctShock, true) : "Locked"} />
+      </div>
+    </div>
+  );
+}
+
+function AuditTrailPanel({ items }: { items: readonly AuditItem[] }) {
+  const iconFor = (kind: AuditItem["kind"]) => {
+    if (kind === "broker") return Fingerprint;
+    if (kind === "market") return ClockCounterClockwise;
+    if (kind === "pipeline") return Pulse;
+    return FileText;
+  };
+
+  return (
+    <section
+      aria-labelledby="audit-trail-title"
+      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
+    >
+      <PanelHeader
+        id="audit-trail-title"
+        icon={Fingerprint}
+        title="Provenance ledger"
+        detail="Source, freshness, and operator handoff"
+      />
+      <div className="divide-y divide-border-hair">
+        {items.map((item) => {
+          const Icon = iconFor(item.kind);
+          return (
+            <div key={item.label} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 bg-bg-elev-1 px-4 py-3">
+              <span className="mt-0.5 flex size-8 items-center justify-center rounded-sm border border-border-hair bg-bg text-brand">
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="t-label text-fg-hint">{item.label}</span>
+                  <span className={cn("shrink-0 font-mono text-[12px]", item.toneClass)}>{item.status}</span>
+                </div>
+                <p className="mt-1 truncate text-[15px] font-medium text-ink-1000">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SessionSnapshot({
   selectedSymbol,
   quoteValue,
   quoteTone,
@@ -1002,9 +1618,8 @@ function SessionSnapshot({
   totalStrategyCount,
   pipelineStatus,
   pipelineValue,
-  openOrders,
+  onPipeline,
 }: {
-  account: AccountSnapshot;
   selectedSymbol: string;
   quoteValue: string;
   quoteTone: string;
@@ -1013,17 +1628,23 @@ function SessionSnapshot({
   totalStrategyCount: number;
   pipelineStatus?: PipelineStatus;
   pipelineValue: string;
-  openOrders: number;
+  onPipeline: () => void;
 }) {
   return (
-    <div className="min-w-0 bg-bg-elev-1 p-4 md:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="t-label text-fg-hint">Session</span>
-        <span className={cn("rounded-sm px-2 py-1 font-mono text-[11px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
+    <section className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]">
+      <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Pulse className="size-4 shrink-0 text-brand" aria-hidden />
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-ink-1000">Session telemetry</h3>
+            <p className="mt-0.5 truncate text-[12px] text-fg-muted">Ticker, strategy, and pipeline context</p>
+          </div>
+        </div>
+        <span className={cn("rounded-sm px-2 py-1 font-mono text-[12px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
           {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
         </span>
-      </div>
-      <div className="mt-3 divide-y divide-border-hair rounded-md border border-border-hair">
+      </header>
+      <div className="divide-y divide-border-hair">
         <SessionRow
           label="Selected ticker"
           title={selectedSymbol}
@@ -1043,29 +1664,17 @@ function SessionSnapshot({
           toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
         />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <MiniStat
-          label="Open risk"
-          value={account.ready ? formatPercent(account.grossExposurePct) : "—"}
-          detail={`${account.ready ? account.positionsCount : 0} positions`}
-        />
-        <MiniStat
-          label="Cash buffer"
-          value={account.ready ? formatPercent(account.cashPct) : "—"}
-          detail={account.ready ? formatCurrency(account.cash) : "Awaiting broker"}
-        />
-        <MiniStat
-          label="Largest"
-          value={account.largestPosition?.symbol ?? "—"}
-          detail={account.largestPosition ? formatPercent(account.largestPosition.pct) : "No open risk"}
-        />
-        <MiniStat
-          label="Working"
-          value={`${openOrders}`}
-          detail={openOrders === 1 ? "open order" : "open orders"}
-        />
+      <div className="border-t border-border-hair px-4 py-3">
+        <button
+          type="button"
+          onClick={onPipeline}
+          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:border-brand/40"
+        >
+          Open pipeline
+          <ArrowRight className="size-4" aria-hidden />
+        </button>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1081,19 +1690,36 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
       : "No option/equity delta exposure";
 
   return (
-    <section aria-labelledby="risk-posture-title" className="dashboard-section">
+    <section
+      aria-labelledby="risk-posture-title"
+      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
+    >
       <PanelHeader
         id="risk-posture-title"
-        icon={ShieldCheck}
-        title="Risk posture"
-        detail="Exposure, concentration, Greeks"
+        icon={Gauge}
+        title="Risk runway"
+        detail="Sizing pressure, cash reserve, and shock estimate"
       />
-      <div className="grid gap-3 p-3 md:grid-cols-3">
+      <div className="grid gap-px bg-border-hair md:grid-cols-2">
         {account.ready ? (
           <>
             <RiskMeter label="Gross exposure" value={account.grossExposurePct} detail={`${formatCurrency(account.grossMarketValue)} at work`} />
             <RiskMeter label="Cash buffer" value={account.cashPct} detail={formatCurrency(account.cash)} />
             <RiskStat label="Largest position" value={account.largestPosition?.symbol ?? "—"} detail={account.largestPosition ? `${formatPercent(account.largestPosition.pct)} of equity` : "No open positions"} />
+            <RiskStat label="2% shock estimate" value={formatCurrency(account.twoPctShock)} detail="Gross exposure stress loss" tone={account.twoPctShock > 0 ? "loss" : "muted"} />
+          </>
+        ) : (
+          <>
+            <RiskStat label="Gross exposure" value="—" detail="Waiting for broker snapshot" tone="muted" />
+            <RiskStat label="Cash buffer" value="—" detail="Waiting for broker snapshot" tone="muted" />
+            <RiskStat label="Largest position" value="—" detail="Waiting for positions" tone="muted" />
+            <RiskStat label="2% shock estimate" value="—" detail="Waiting for exposure" tone="muted" />
+          </>
+        )}
+      </div>
+      {(hasGreekExposure || greeks.isDemo) && (
+        <div className="border-t border-border-hair bg-bg-elev-1 px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-2">
             <RiskStat
               label="Beta-weighted Δ"
               value={greeks.isDemo ? "—" : formatGreek(greeks.betaWeightedDelta, 2)}
@@ -1106,19 +1732,9 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
               detail={greeks.isDemo ? "Options risk feed unavailable" : "Daily decay / vol sensitivity"}
               tone={greeks.isDemo ? "muted" : "default"}
             />
-            <RiskStat label="2% shock estimate" value={formatCurrency(account.twoPctShock)} detail="Gross exposure stress loss" tone={account.twoPctShock > 0 ? "loss" : "muted"} />
-          </>
-        ) : (
-          <>
-            <RiskStat label="Gross exposure" value="—" detail="Waiting for broker snapshot" tone="muted" />
-            <RiskStat label="Cash buffer" value="—" detail="Waiting for broker snapshot" tone="muted" />
-            <RiskStat label="Largest position" value="—" detail="Waiting for positions" tone="muted" />
-            <RiskStat label="Beta-weighted Δ" value="—" detail="Waiting for Greeks" tone="muted" />
-            <RiskStat label="Net θ / ν" value="—" detail="Waiting for options risk feed" tone="muted" />
-            <RiskStat label="2% shock estimate" value="—" detail="Waiting for exposure" tone="muted" />
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1144,31 +1760,34 @@ export function StrategyPanel({
     ? "Strategy data unavailable. Open Strategies for the full status page."
     : loading
     ? "Strategy data is loading."
-    : "No strategies configured yet.";
+    : "No strategy exceptions. Active systems are quiet.";
 
   return (
-    <section aria-labelledby="strategy-ops-title" className="dashboard-section">
+    <section
+      aria-labelledby="strategy-ops-title"
+      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
+    >
       <PanelHeader
         id="strategy-ops-title"
         icon={Target}
-        title="Strategy exceptions"
-        detail={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
+        title="Strategy fault line"
+        detail={`${activeStrategyCount}/${totalStrategyCount || 0} active · showing blockers only`}
         actionLabel="Strategies"
         onAction={onStrategies}
       />
-      <div className="grid gap-2 p-3 md:grid-cols-2">
+      <div className="grid gap-px bg-border-hair md:grid-cols-2">
         {strategies.length > 0 ? (
           strategies.map((strategy, index) => (
             <button
               key={strategy.id}
               type="button"
               onClick={() => onStrategyClick(strategy.id)}
-              className="dashboard-row card-stagger group text-left"
+              className="card-stagger group bg-bg-elev-1 px-4 py-4 text-left transition-colors hover:bg-brand/5"
               style={{ animationDelay: `${index * 40}ms` }}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-[14px] font-medium text-ink-1000">{strategy.name}</p>
+                  <p className="truncate text-[15px] font-medium text-ink-1000">{strategy.name}</p>
                   <p className="mt-1 truncate text-[13px] text-fg-muted">
                     {strategy.positions} positions · {formatCurrency(strategy.invested, true)} invested
                   </p>
@@ -1184,60 +1803,18 @@ export function StrategyPanel({
             </button>
           ))
         ) : (
-          <div className="col-span-full px-3 py-8 text-center text-[13px] text-fg-muted">
-            {emptyCopy}
+          <div className="col-span-full bg-bg-elev-1 px-5 py-8">
+            <div className="mx-auto flex max-w-md flex-col items-center text-center">
+              <div className="flex size-10 items-center justify-center rounded-sm bg-profit/10 text-profit">
+                <ShieldCheck className="size-5" aria-hidden />
+              </div>
+              <p className="mt-4 text-[15px] font-semibold text-ink-1000">{emptyCopy}</p>
+              <p className="mt-2 text-[13px] leading-snug text-fg-muted">
+                Only blocked systems appear here; healthy strategies stay out of the way.
+              </p>
+            </div>
           </div>
         )}
-      </div>
-    </section>
-  );
-}
-
-function MarketPulsePanel({
-  indices,
-  marketOpen,
-  regimeLabel,
-}: {
-  indices: MarketIndexRow[];
-  marketOpen: boolean;
-  regimeLabel: string;
-}) {
-  return (
-    <section aria-labelledby="market-pulse-title" className="dashboard-section">
-      <PanelHeader
-        id="market-pulse-title"
-        icon={Radio}
-        title="Market context"
-        detail={marketOpen ? "Live session" : "Closed session"}
-      />
-      <div className="grid gap-px bg-border-hair md:grid-cols-[0.8fr_1.2fr]">
-        <div className="bg-bg-elev-1 p-4">
-          <span className="t-label text-fg-hint">Regime</span>
-          <p className="mt-2 text-[22px] font-medium text-ink-1000">{regimeLabel}</p>
-          <p className="mt-2 text-[13px] leading-snug text-fg-muted">
-            Use the strategy pages for thesis depth; this surface keeps the day&apos;s operating state visible.
-          </p>
-        </div>
-        <div className="divide-y divide-border-hair bg-bg-elev-1">
-          {indices.length > 0 ? (
-            indices.map((idx) => (
-              <div key={idx.symbol} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-[14px] font-medium text-ink-1000">{idx.symbol}</p>
-                  <p className="truncate text-[12px] text-fg-muted">{idx.name}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-[14px] text-ink-1000">{idx.price > 0 ? formatCurrency(idx.price) : "—"}</p>
-                  <p className={cn("font-mono text-[12px]", idx.changePct >= 0 ? "text-profit" : "text-loss")}>
-                    {idx.changePct >= 0 ? "+" : ""}{idx.changePct.toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="px-4 py-8 text-center text-[13px] text-fg-muted">Index data is loading.</div>
-          )}
-        </div>
       </div>
     </section>
   );
@@ -1259,11 +1836,13 @@ function PanelHeader({
   onAction?: () => void;
 }) {
   return (
-    <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+    <header className="flex items-center justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
-        <Icon className="size-4 shrink-0 text-fg-muted" aria-hidden />
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+          <Icon className="size-4" aria-hidden />
+        </span>
         <div className="min-w-0">
-          <h3 id={id} className="truncate text-[14px] font-semibold text-ink-1000">{title}</h3>
+          <h3 id={id} className="truncate text-[15px] font-semibold text-ink-1000">{title}</h3>
           <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
         </div>
       </div>
@@ -1289,13 +1868,13 @@ function SessionRow({
   toneClass: string;
 }) {
   return (
-    <div className="bg-bg-elev-1 px-3.5 py-2.5">
+    <div className="bg-bg-elev-1 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
         <p className={cn("shrink-0 truncate font-mono text-[12px]", toneClass)}>{value}</p>
       </div>
       <div className="mt-1 flex items-baseline justify-between gap-3">
-        <p className="min-w-0 truncate text-[14px] font-medium text-ink-1000">{title}</p>
+        <p className="min-w-0 truncate text-[15px] font-medium text-ink-1000">{title}</p>
       </div>
     </div>
   );
@@ -1304,13 +1883,19 @@ function SessionRow({
 function RiskMeter({ label, value, detail }: { label: string; value: number; detail: string }) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
-    <div className="dashboard-card p-4">
+    <div className="bg-bg-elev-1 p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
         <span className="font-mono text-[13px] text-ink-1000">{formatPercent(value)}</span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
-        <div className="h-full rounded-sm bg-brand transition-all duration-500" style={{ width: `${clamped}%` }} />
+      <div className="mt-4 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
+        <div
+          className={cn(
+            "h-full rounded-sm transition-all duration-500",
+            value > 85 ? "bg-loss" : value > 55 ? "bg-amber" : "bg-brand",
+          )}
+          style={{ width: `${clamped}%` }}
+        />
       </div>
       <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
     </div>
@@ -1329,7 +1914,7 @@ function RiskStat({
   tone?: "default" | "loss" | "muted";
 }) {
   return (
-    <div className="dashboard-card p-4">
+    <div className="bg-bg-elev-1 p-4">
       <span className="t-label text-fg-hint">{label}</span>
       <p className={cn("mt-3 truncate font-mono text-[20px]", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
         {value}
@@ -1339,28 +1924,20 @@ function RiskStat({
   );
 }
 
-function MiniStat({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-sm border border-border-hair bg-bg-elev-2 px-3 py-2.5">
-      <span className="t-label text-fg-hint">{label}</span>
-      <p className="mt-1 truncate font-mono text-[16px] text-ink-1000">{value}</p>
-      <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
-    </div>
-  );
-}
+type StatusTone = "profit" | "loss" | "amber" | "muted";
 
-function StatusChip({ label, tone }: { label: string; tone: "profit" | "loss" | "amber" | "muted" }) {
+function StatusChip({ label, tone }: { label: string; tone: StatusTone }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[11px]",
+        "inline-flex min-h-7 items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[12px]",
         tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
         tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
         tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
         tone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
       )}
     >
-      <span className={cn("size-1.5 rounded-full", tone === "profit" ? "bg-profit" : tone === "loss" ? "bg-loss" : tone === "amber" ? "bg-amber" : "bg-fg-muted")} aria-hidden />
+      <span className={cn("status-breathe size-1.5 rounded-full", tone === "profit" ? "bg-profit" : tone === "loss" ? "bg-loss" : tone === "amber" ? "bg-amber" : "bg-fg-muted")} aria-hidden />
       {label}
     </span>
   );
@@ -1368,12 +1945,22 @@ function StatusChip({ label, tone }: { label: string; tone: "profit" | "loss" | 
 
 type AccountSnapshot = ReturnType<typeof buildAccountSnapshot>;
 type StrategyCardData = ReturnType<typeof buildStrategyCards>[number];
-type MarketIndexRow = ReturnType<typeof normalizeIndices>[number];
 type ActionItem = ReturnType<typeof buildActionItems>[number];
+type RiskEscalation = ReturnType<typeof buildRiskEscalations>[number];
+type AuditItem = ReturnType<typeof buildAuditItems>[number];
+
+interface DashboardReadiness {
+  label: string;
+  tone: StatusTone;
+  title: string;
+  detail: string;
+  allowsSizing: boolean;
+}
 
 function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) {
   const equity = Number.isFinite(summary.equity) ? summary.equity : 0;
   const cash = Number.isFinite(summary.cash) ? summary.cash : 0;
+  const buyingPower = Number.isFinite(summary.buyingPower) ? summary.buyingPower : cash;
   const ready = Boolean(
     summary.lastUpdated ||
       summary.source ||
@@ -1406,7 +1993,9 @@ function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) 
     ready,
     equity,
     cash,
+    buyingPower,
     dayPnl,
+    dayPnlPct: equity > 0 ? (dayPnl / equity) * 100 : 0,
     positionsCount: positions.length,
     grossMarketValue,
     grossExposurePct,
@@ -1414,6 +2003,273 @@ function buildAccountSnapshot(summary: PortfolioSummary, positions: Position[]) 
     twoPctShock: grossMarketValue * 0.02,
     largestPosition,
   };
+}
+
+function buildDashboardReadiness({
+  account,
+  selectedQuote,
+  marketOpen,
+  pipelineStatus,
+  strategiesError,
+}: {
+  account: AccountSnapshot;
+  selectedQuote: ReturnType<typeof toQuote>;
+  marketOpen: boolean;
+  pipelineStatus?: PipelineStatus;
+  strategiesError: boolean;
+}): DashboardReadiness {
+  const hasQuoteContext = selectedQuote.last > 0 || Number.isFinite(selectedQuote.timestamp);
+
+  if (!account.ready) {
+    return {
+      label: "Limited",
+      tone: "amber",
+      title: "Broker snapshot pending",
+      detail: "Sizing, buying power, and shock metrics stay locked until equity and cash refresh. Review queues remain available.",
+      allowsSizing: false,
+    };
+  }
+
+  if (strategiesError) {
+    return {
+      label: "Limited",
+      tone: "amber",
+      title: "Strategy health needs refresh",
+      detail: "Account and risk context are visible, but strategy exceptions may be incomplete until the strategy feed recovers.",
+      allowsSizing: true,
+    };
+  }
+
+  if (!hasQuoteContext) {
+    return {
+      label: "Limited",
+      tone: "amber",
+      title: "Quote context pending",
+      detail: "Book state is usable for triage, but execution should wait for a fresh symbol quote on the Trade page.",
+      allowsSizing: true,
+    };
+  }
+
+  if (pipelineStatus?.running) {
+    return {
+      label: "Syncing",
+      tone: "muted",
+      title: "Pipeline run in progress",
+      detail: pipelineStatus.stage ?? "Strategy pipeline is updating derived state. Let it settle before acting on new signals.",
+      allowsSizing: true,
+    };
+  }
+
+  return {
+    label: marketOpen ? "Ready" : "Review",
+    tone: marketOpen ? "profit" : "muted",
+    title: marketOpen ? "Dashboard ready for triage" : "Off-session review mode",
+    detail: marketOpen
+      ? "Account, risk gates, quote context, and action queues are available for the first scan."
+      : "Markets are closed; use the dashboard for review, cleanup, and next-session preparation.",
+    allowsSizing: true,
+  };
+}
+
+function buildRiskEscalations({
+  account,
+  greeks,
+  orders,
+  openOrders,
+  pipelineStatus,
+}: {
+  account: AccountSnapshot;
+  greeks: PortfolioGreeks;
+  orders: Order[];
+  openOrders: number;
+  pipelineStatus?: PipelineStatus;
+}) {
+  const rejected = orders.filter((o) => o.status === "rejected").length;
+  const items: Array<{
+    title: string;
+    detail: string;
+    metric: string;
+    owner: string;
+    tone: StatusTone;
+  }> = [];
+
+  if (!account.ready) {
+    items.push({
+      title: "Broker snapshot pending",
+      detail: "Sizing is locked until the portfolio endpoint confirms equity, cash, and buying power.",
+      metric: "Sizing locked",
+      owner: "OPS",
+      tone: "amber",
+    });
+    return items;
+  }
+
+  if (rejected > 0) {
+    items.push({
+      title: "Rejected broker events",
+      detail: "Inspect the rejection reason before re-submitting or adding similar risk.",
+      metric: `${rejected} reject${rejected === 1 ? "" : "s"} today`,
+      owner: "TRDR",
+      tone: "loss",
+    });
+  }
+  if (openOrders > 0) {
+    items.push({
+      title: "Working orders need review",
+      detail: "Check stale limits, partial fills, and cancel state before increasing gross exposure.",
+      metric: `${openOrders} open order${openOrders === 1 ? "" : "s"}`,
+      owner: "TRDR",
+      tone: "amber",
+    });
+  }
+  if (account.grossExposurePct >= 85) {
+    items.push({
+      title: "Gross exposure near ceiling",
+      detail: "Require PM approval before opening new risk while the book is this deployed.",
+      metric: `${formatPercent(account.grossExposurePct)} gross`,
+      owner: "PM",
+      tone: "loss",
+    });
+  } else if (account.grossExposurePct >= 62) {
+    items.push({
+      title: "Exposure runway narrowing",
+      detail: "Size new entries against available buying power and current shock loss.",
+      metric: `${formatPercent(account.grossExposurePct)} gross`,
+      owner: "PM",
+      tone: "amber",
+    });
+  }
+  if (account.cashPct < 12) {
+    items.push({
+      title: "Cash buffer below policy",
+      detail: "Free cash is thin; closing or reducing exposure should beat fresh entries.",
+      metric: `${formatPercent(account.cashPct)} cash`,
+      owner: "RISK",
+      tone: "loss",
+    });
+  }
+  if (account.largestPosition && account.largestPosition.pct >= 28) {
+    items.push({
+      title: `${account.largestPosition.symbol} concentration`,
+      detail: "Largest line is beyond the single-name comfort band for this dashboard view.",
+      metric: `${formatPercent(account.largestPosition.pct)} of equity`,
+      owner: "PM",
+      tone: account.largestPosition.pct >= 40 ? "loss" : "amber",
+    });
+  }
+  if (!greeks.isDemo && account.equity > 0 && Math.abs(greeks.betaWeightedDelta) > account.equity * 0.45) {
+    items.push({
+      title: "Beta delta pressure",
+      detail: "Portfolio sensitivity is high enough to warrant hedge or scenario review.",
+      metric: formatGreek(greeks.betaWeightedDelta, 0),
+      owner: "RISK",
+      tone: "amber",
+    });
+  }
+  if (greeks.isDemo) {
+    items.push({
+      title: "Options Greeks unavailable",
+      detail: "Do not infer zero options risk from the fallback feed; verify positions before options execution.",
+      metric: "Risk feed fallback",
+      owner: "QA",
+      tone: "amber",
+    });
+  }
+  if (pipelineStatus?.running) {
+    items.push({
+      title: "Strategy pipeline in flight",
+      detail: pipelineStatus.stage ?? pipelineStatus.current_strategy ?? "Let the active run settle before acting on derived strategy state.",
+      metric: "Live job",
+      owner: "OPS",
+      tone: "muted",
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      title: "Policy gates clear",
+      detail: "Exposure, orders, cash buffer, and Greeks are within the dashboard policy bands.",
+      metric: "No active blockers",
+      owner: "RISK",
+      tone: "profit",
+    });
+  }
+
+  return items;
+}
+
+function buildAuditItems({
+  summary,
+  selectedSymbol,
+  selectedQuote,
+  marketOpen,
+  pipelineStatus,
+  clockEt,
+}: {
+  summary: PortfolioSummary;
+  selectedSymbol: string;
+  selectedQuote: ReturnType<typeof toQuote>;
+  marketOpen: boolean;
+  pipelineStatus?: PipelineStatus;
+  clockEt: string;
+}) {
+  const brokerAge = summary.lastUpdated ? formatAgeFromIso(summary.lastUpdated) : "No timestamp";
+  const quoteAge = Number.isFinite(selectedQuote.timestamp)
+    ? formatAgeFromSeconds(selectedQuote.timestamp)
+    : "No timestamp";
+  const source = summary.source ?? (summary.is_demo ? "demo" : "broker");
+  return [
+    {
+      kind: "broker" as const,
+      label: "Broker",
+      title: source === "demo" ? "Demo portfolio source" : `${source} account source`,
+      detail: summary.lastUpdated ? `Last portfolio refresh ${brokerAge}.` : "Portfolio endpoint has not supplied a refresh time.",
+      status: summary.is_demo ? "Demo" : brokerAge,
+      toneClass: summary.lastUpdated ? "text-fg" : "text-amber",
+    },
+    {
+      kind: "market" as const,
+      label: "Market data",
+      title: `${selectedSymbol} quote`,
+      detail: marketOpen ? "Cash session is open; stale quote age should stay visible." : "Off-session quote may represent last venue update.",
+      status: quoteAge,
+      toneClass: Number.isFinite(selectedQuote.timestamp) ? "text-fg" : "text-amber",
+    },
+    {
+      kind: "pipeline" as const,
+      label: "Strategy pipeline",
+      title: pipelineStatus?.running ? "Run active" : "Idle",
+      detail: pipelineStatus?.stage ?? pipelineStatus?.last_result ?? "No active strategy job; dashboard is reading last-known state.",
+      status: pipelineStatus?.running ? "Live" : "Idle",
+      toneClass: pipelineStatus?.running ? "text-profit" : "text-fg-muted",
+    },
+    {
+      kind: "handoff" as const,
+      label: "Operator clock",
+      title: `${clockEt} ET`,
+      detail: "Use this timestamp when matching dashboard decisions to broker/order logs.",
+      status: marketOpen ? "Session" : "After hours",
+      toneClass: marketOpen ? "text-profit" : "text-fg-muted",
+    },
+  ];
+}
+
+function formatAgeFromIso(value: string) {
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return "invalid time";
+  return formatAgeFromSeconds(ms / 1000);
+}
+
+function formatAgeFromSeconds(value: number | undefined) {
+  if (!Number.isFinite(value)) return "No timestamp";
+  const normalizedSeconds = Number(value) > 1e12 ? Number(value) / 1000 : Number(value);
+  const ageSeconds = Math.max(0, Math.round(Date.now() / 1000 - normalizedSeconds));
+  if (ageSeconds < 60) return `${ageSeconds}s old`;
+  const minutes = Math.round(ageSeconds / 60);
+  if (minutes < 60) return `${minutes}m old`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h old`;
+  return `${Math.round(hours / 24)}d old`;
 }
 
 function buildStrategyCards(strategies: RawStrategy[]) {
@@ -1436,6 +2292,11 @@ function buildStrategyCards(strategies: RawStrategy[]) {
         positions,
         sharpe: strategy.sharpe_ratio,
       });
+      const exception =
+        strategy.live_disabled === true ||
+        strategy.paper_only === true ||
+        status !== "active" ||
+        (winRate >= 0 && winRate < 45);
       return {
         id: strategy.id,
         name: strategy.name || strategy.id,
@@ -1443,6 +2304,7 @@ function buildStrategyCards(strategies: RawStrategy[]) {
         returnPct,
         positions,
         invested: Number.isFinite(strategy.invested_amount) ? strategy.invested_amount : 0,
+        exception,
         ...readiness,
       };
     });
@@ -1510,17 +2372,7 @@ function strategyReadiness({
   };
 }
 
-function normalizeIndices(indices: IndexSnapshot[]) {
-  return indices.map((idx) => ({
-    symbol: idx.symbol,
-    name: idx.name,
-    price: Number.isFinite(idx.price) ? idx.price : 0,
-    changePct: Number.isFinite(idx.change_pct) ? idx.change_pct : 0,
-  }));
-}
-
 function buildActionItems({
-  marketOpen,
   openOrders,
   positions,
   orders,
@@ -1528,7 +2380,6 @@ function buildActionItems({
   totalStrategyCount,
   pipelineStatus,
 }: {
-  marketOpen: boolean;
   openOrders: number;
   positions: Position[];
   orders: Order[];
@@ -1538,7 +2389,7 @@ function buildActionItems({
 }) {
   const rejected = orders.filter((o) => o.status === "rejected").length;
   const activeRatio = totalStrategyCount > 0 ? activeStrategyCount / totalStrategyCount : 0;
-  const largest = positions.reduce<Position | null>((best, pos) => {
+  let largest = positions.reduce<Position | null>((best, pos) => {
     if (!best) return pos;
     return Math.abs(pos.marketValue ?? 0) > Math.abs(best.marketValue ?? 0) ? pos : best;
   }, null);
@@ -1561,6 +2412,19 @@ function buildActionItems({
     });
   }
   if (largest && Math.abs(largest.marketValue ?? 0) > 0) {
+    const largestPct = positions.length
+      ? Math.max(...positions.map((p) => Math.abs(p.marketValue ?? 0))) /
+        Math.max(
+          1,
+          positions.reduce((sum, p) => sum + Math.abs(p.marketValue ?? 0), 0),
+        )
+      : 0;
+    if (largestPct < 0.35) {
+      // Concentration is only an action when one line item dominates the book.
+      largest = null;
+    }
+  }
+  if (largest && Math.abs(largest.marketValue ?? 0) > 0) {
     items.push({
       title: `${largest.symbol} is the largest exposure`,
       detail: `${formatCurrency(Math.abs(largest.marketValue ?? 0))} market value. Check concentration before new entries.`,
@@ -1568,18 +2432,20 @@ function buildActionItems({
       action: "trade",
     });
   }
-  items.push({
-    title: pipelineStatus?.running ? "Pipeline running" : activeRatio < 0.5 ? "Strategies mostly paused" : "Strategy pipeline ready",
-    detail: pipelineStatus?.stage ?? pipelineStatus?.last_result ?? `${activeStrategyCount}/${totalStrategyCount || 0} strategies are enabled.`,
-    tone: pipelineStatus?.running ? "profit" : activeRatio < 0.5 ? "amber" : "muted",
-    action: "pipeline",
-  });
-  if (items.length < 3) {
+  if (pipelineStatus?.running) {
     items.push({
-      title: marketOpen ? "Trade from the dedicated ticket" : "Market is closed",
-      detail: marketOpen ? "Open Trade for charting, staging, and broker confirmation." : "Use the dashboard for review; queue only when intentional.",
-      tone: marketOpen ? "profit" : "muted",
-      action: "trade",
+      title: "Pipeline running",
+      detail: pipelineStatus.stage ?? pipelineStatus.current_strategy ?? "Strategy jobs are still moving.",
+      tone: "profit",
+      action: "pipeline",
+    });
+  }
+  if (!pipelineStatus?.running && totalStrategyCount > 0 && activeRatio < 0.5) {
+    items.push({
+      title: "Strategies mostly paused",
+      detail: `${activeStrategyCount}/${totalStrategyCount} strategies are enabled. Review intentional pauses before market open.`,
+      tone: "amber",
+      action: "pipeline",
     });
   }
   return items.slice(0, 3);

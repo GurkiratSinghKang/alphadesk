@@ -42,12 +42,12 @@ describe("ChartPane — drawing tools rail", () => {
     const zones = screen.getByRole("button", { name: /s\/r/i });
     const blocks = screen.getByRole("button", { name: /blocks/i });
 
-    expect(profile.getAttribute("aria-pressed")).toBe("true");
-    expect(zones.getAttribute("aria-pressed")).toBe("true");
-    expect(blocks.getAttribute("aria-pressed")).toBe("true");
+    expect(profile.getAttribute("aria-pressed")).toBe("false");
+    expect(zones.getAttribute("aria-pressed")).toBe("false");
+    expect(blocks.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(zones);
-    expect(zones.getAttribute("aria-pressed")).toBe("false");
+    expect(zones.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("renders a top-of-book layer without presenting it as full depth", () => {

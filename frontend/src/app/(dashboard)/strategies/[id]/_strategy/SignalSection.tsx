@@ -38,7 +38,7 @@ export default function SignalSection({
         {paragraphs.map((p, i) => (
           <p
             key={i}
-            className="font-display italic text-[15.5px] leading-relaxed text-fg"
+            className="font-display italic text-[15px] leading-relaxed text-fg"
           >
             {p}
           </p>
@@ -68,7 +68,7 @@ export default function SignalSection({
               <Mono className="pt-0.5 text-[12px] text-fg-hint">
                 {String(i + 1).padStart(2, "0")}
               </Mono>
-              <p className="font-sans text-[13.5px] leading-relaxed text-fg-dim">
+              <p className="font-sans text-[13px] leading-relaxed text-fg-dim">
                 {step}
               </p>
             </li>

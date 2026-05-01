@@ -59,7 +59,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
         </span>
       </h3>
       {overflow && (
-        <p className="mt-0.5 t-mono text-[11px] u-muted" data-slot="news-feed-overflow">
+        <p className="mt-0.5 t-mono text-[12px] u-muted" data-slot="news-feed-overflow">
           Showing {visible.length} of {total}
           {" · "}
           <button
@@ -89,7 +89,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
               {a.category && (
                 <span
                   data-slot="news-category"
-                  className="mr-2 inline-block rounded border border-[color:var(--brand)]/40 bg-[color:var(--brand)]/10 px-1.5 py-px text-[10px] uppercase tracking-wider u-brand"
+                  className="mr-2 inline-block rounded border border-[color:var(--brand)]/40 bg-[color:var(--brand)]/10 px-1.5 py-px text-[12px] uppercase tracking-wider u-brand"
                   title={`Category: ${a.category}`}
                 >
                   {a.category}
@@ -100,13 +100,13 @@ export default function NewsFeed({ news }: NewsFeedProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title={`${a.source} — ${rel}${a.relevanceScore != null ? ` · score ${a.relevanceScore.toFixed(2)}` : ""}`}
-                className="t-mono text-[12.5px] hover:u-brand"
+                className="t-mono text-[13px] hover:u-brand"
               >
                 {a.title}
               </a>
               <span
                 aria-hidden="true"
-                className="ml-2 t-mono text-[11px] u-muted"
+                className="ml-2 t-mono text-[12px] u-muted"
               >
                 — {a.source} · {rel}
                 {a.tier === 1 && <span className="ml-1 u-brand" title="Tier-1 newswire">★</span>}

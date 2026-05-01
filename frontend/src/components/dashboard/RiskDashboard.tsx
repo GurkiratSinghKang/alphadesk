@@ -195,7 +195,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
         </div>
         {/* Regime badge */}
         <div className={cn(
-          "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-medium",
+          "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium",
           regimeDisplay.bgColor,
           regimeDisplay.borderColor,
           regimeDisplay.color,
@@ -209,8 +209,8 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
         {/* Exposure bar */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Portfolio Exposure</span>
-            <span className="text-[10px] tabular-nums text-muted-foreground">
+            <span className="text-[12px] uppercase tracking-wider text-muted-foreground font-medium">Portfolio Exposure</span>
+            <span className="text-[12px] tabular-nums text-muted-foreground">
               {(metrics.longExposure ?? 0).toFixed(0)}% invested
             </span>
           </div>
@@ -229,11 +229,11 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="flex items-center gap-3 mt-1">
             <div className="flex items-center gap-1">
               <div className="h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
-              <span className="text-[9px] text-muted-foreground">Long {(metrics.longExposure ?? 0).toFixed(0)}%</span>
+              <span className="text-[12px] text-muted-foreground">Long {(metrics.longExposure ?? 0).toFixed(0)}%</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="h-1.5 w-1.5 rounded-full bg-[var(--neutral)]/40" />
-              <span className="text-[9px] text-muted-foreground">Cash {(metrics.cashPct ?? 0).toFixed(0)}%</span>
+              <span className="text-[12px] text-muted-foreground">Cash {(metrics.cashPct ?? 0).toFixed(0)}%</span>
             </div>
           </div>
         </div>
@@ -251,7 +251,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           >
             <div className="flex items-center gap-1 mb-0.5">
               <Activity className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
                 Beta{metrics.betaEstimate != null ? " (est)" : ""}
               </span>
             </div>
@@ -273,7 +273,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <TrendingDown className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Daily VaR</span>
+              <span className="text-[12px] uppercase tracking-wider text-muted-foreground">Daily VaR</span>
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
@@ -287,7 +287,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <AlertTriangle className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Max Pos</span>
+              <span className="text-[12px] uppercase tracking-wider text-muted-foreground">Max Pos</span>
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
@@ -296,7 +296,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               {positions.length > 0 ? `${(metrics.maxPosPct ?? 0).toFixed(1)}%` : "--"}
             </p>
             {positions.length > 0 && (
-              <p className="text-[9px] text-muted-foreground truncate">{metrics.maxPosSymbol}</p>
+              <p className="text-[12px] text-muted-foreground truncate">{metrics.maxPosSymbol}</p>
             )}
           </div>
 
@@ -304,7 +304,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <Shield className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Top Sector</span>
+              <span className="text-[12px] uppercase tracking-wider text-muted-foreground">Top Sector</span>
             </div>
             <p className={cn(
               "text-lg font-bold tabular-nums",
@@ -313,7 +313,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
               {positions.length > 0 ? `${(metrics.maxSectorPct ?? 0).toFixed(1)}%` : "--"}
             </p>
             {positions.length > 0 && (
-              <p className="text-[9px] text-muted-foreground truncate">{metrics.maxSectorName}</p>
+              <p className="text-[12px] text-muted-foreground truncate">{metrics.maxSectorName}</p>
             )}
           </div>
         </div>
@@ -321,9 +321,9 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
         {/* VIX level if available */}
         {regime && (
           <div className="flex items-center justify-between pt-1 border-t border-border">
-            <span className="text-[10px] text-muted-foreground">VIX Level</span>
+            <span className="text-[12px] text-muted-foreground">VIX Level</span>
             <span className={cn(
-              "text-[11px] font-semibold tabular-nums",
+              "text-[12px] font-semibold tabular-nums",
               regime.vix_level < 18 ? "text-[var(--profit)]" :
               regime.vix_level < 25 ? "text-amber" :
               "text-[var(--loss)]"

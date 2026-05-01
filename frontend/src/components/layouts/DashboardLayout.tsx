@@ -56,7 +56,7 @@ export default function DashboardLayout({
         // iOS: 100dvh > 100vh — URL bar collapses dynamically and vh
         // freezes to the larger layout viewport, clipping the bottom row
         // on scroll. Same trick DeskLayout uses.
-        "min-h-dvh md:h-dvh w-full overflow-x-hidden md:overflow-hidden bg-bg",
+        "alpha-auth-shell min-h-dvh md:h-dvh w-full overflow-x-hidden md:overflow-hidden bg-bg",
         // Round-8 killer-move 1: ContextBar grew 36→56px to host the
         // promoted Book Equity hero (28px display). The other 3 rows
         // (TopBar 48, main 1fr, StatusBar 22) are unchanged.
@@ -70,7 +70,7 @@ export default function DashboardLayout({
       <div
         data-slot="dashboard-main"
         className={cn(
-          "min-h-0 min-w-0 w-full overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-[var(--border)]",
+          "min-h-0 min-w-0 w-full overflow-x-hidden md:overflow-y-auto lg:overflow-hidden bg-border/80",
           // Round-10 / X-5 (P0): previously ``md:grid-cols-[1fr_340px]``
           // forced iPad Air portrait (820 px) into a side-by-side layout
           // — the chart got squeezed to ~430 px which barely cleared its
@@ -88,7 +88,7 @@ export default function DashboardLayout({
           aria-label="Dashboard command center"
           tabIndex={-1}
           className={cn(
-            "flex min-h-0 min-w-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg",
+            "relative z-0 flex min-h-0 min-w-0 flex-col overflow-x-hidden md:overflow-hidden bg-bg",
             "md:row-start-1 md:col-start-1",
           )}
         >
@@ -99,7 +99,7 @@ export default function DashboardLayout({
           data-slot="dashboard-right"
           aria-label="Dashboard insight rail"
           className={cn(
-            "flex min-h-0 min-w-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
+            "relative z-0 flex min-h-0 min-w-0 flex-col overflow-x-hidden lg:overflow-hidden bg-bg",
             // Rejoin as the 2nd column only once the parent grid actually
             // switches to two columns. At md widths the layout is intentionally
             // single-column; placing the aside at md:col-start-2 creates an

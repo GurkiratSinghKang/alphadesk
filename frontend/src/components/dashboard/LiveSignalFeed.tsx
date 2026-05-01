@@ -241,12 +241,12 @@ const SignalCard = React.memo(function SignalCard({
         <div className="flex items-center gap-2">
           <Badge
             variant="outline"
-            className={cn("text-[9px] px-1.5 py-0 h-4 uppercase tracking-wider font-semibold", TYPE_BADGE_CLASS[signal.type])}
+            className={cn("text-[12px] px-1.5 py-0 h-4 uppercase tracking-wider font-semibold", TYPE_BADGE_CLASS[signal.type])}
           >
             {signal.type}
           </Badge>
           <span className="font-medium text-sm text-foreground">{signal.symbol}</span>
-          <span className="text-[10px] text-muted-foreground truncate">{signal.strategy}</span>
+          <span className="text-[12px] text-muted-foreground truncate">{signal.strategy}</span>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5 truncate" title={signal.reasoning}>
           {signal.reasoning}
@@ -264,20 +264,20 @@ const SignalCard = React.memo(function SignalCard({
                 style={{ width: `${signal.confidence}%` }}
               />
             </div>
-            <span className="text-[9px] text-muted-foreground tabular-nums w-7 text-right">
+            <span className="text-[12px] text-muted-foreground tabular-nums w-7 text-right">
               {signal.confidence}%
             </span>
           </div>
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
-        <span className="text-[10px] text-muted-foreground tabular-nums">
+        <span className="text-[12px] text-muted-foreground tabular-nums">
           {relativeTime(signal.timestamp)}
         </span>
         {isViewable && (
           <button
             onClick={handleView}
-            className="text-[10px] text-primary hover:underline"
+            className="text-[12px] text-primary hover:underline"
           >
             View
           </button>
@@ -418,14 +418,14 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
             Live Signal Feed
           </h2>
           {newCount > 0 && (
-            <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+            <Badge variant="outline" className="text-[12px] border-primary/30 text-primary">
               {newCount} new
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-2">
           {lastRefresh && (
-            <span className="text-[10px] text-muted-foreground tabular-nums">
+            <span className="text-[12px] text-muted-foreground tabular-nums">
               {relativeTime(lastRefresh)}
             </span>
           )}
@@ -460,7 +460,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
             <div className="flex flex-col items-center justify-center py-8">
               <Radio className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">No signals yet</p>
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-[12px] text-muted-foreground mt-1">
                 Signals appear after pipeline runs or when watchlist stocks cross thresholds
               </p>
             </div>

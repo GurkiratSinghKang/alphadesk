@@ -64,15 +64,16 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap",
-        "h-[26px] px-3 rounded-sm",
-        "font-sans text-[10px] font-semibold tracking-[0.14em] uppercase",
+        "ui-stateful relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap",
+        "min-h-8 px-3 rounded-sm",
+        "font-sans text-[12px] font-semibold tracking-[0.12em] uppercase",
         "text-fg-muted hover:text-fg",
         "transition-colors",
         "group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start",
-        "focus-visible:ring-1 focus-visible:ring-brand focus-visible:outline-none",
-        "disabled:pointer-events-none disabled:opacity-50",
-        "data-active:bg-bg-elev-1 data-active:text-ink-1000",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+        "disabled:pointer-events-none disabled:opacity-55",
+        "data-active:bg-bg-elev-1 data-active:text-ink-1000 data-active:shadow-[inset_0_-2px_0_var(--brand)]",
+        "data-[state=loading]:cursor-wait data-[state=stale]:border data-[state=stale]:border-amber data-[state=error]:border data-[state=error]:border-down-500",
         "group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         "group-data-[variant=line]/tabs-list:data-active:border-b-2",
         "group-data-[variant=line]/tabs-list:data-active:border-brand",

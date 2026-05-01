@@ -647,7 +647,7 @@ export default function StrategyDetailPage() {
       {showNoBacktestNote ? (
         <p
           data-testid="no-backtest-note"
-          className="-mt-6 font-display italic text-[12.5px] leading-snug text-fg-muted"
+          className="-mt-6 font-display italic text-[13px] leading-snug text-fg-muted"
         >
           No backtest (discretionary) — Sharpe, MaxDD, CAGR and Hit Rate are not shown for manually-traded positions.
         </p>
@@ -686,7 +686,7 @@ export default function StrategyDetailPage() {
       {suspiciousSharpe ? (
         <p
           data-testid="sharpe-caveat"
-          className="-mt-6 font-display italic text-[12.5px] leading-snug text-fg-muted"
+          className="-mt-6 font-display italic text-[13px] leading-snug text-fg-muted"
         >
           Live deployment may diverge from this OOS Sharpe — see in-sample limitations below.
         </p>
@@ -702,7 +702,7 @@ export default function StrategyDetailPage() {
           />
           <div className="flex flex-col">
             <Eyebrow as="span">Last trade</Eyebrow>
-            <Mono className="text-[12.5px] text-fg">
+            <Mono className="text-[13px] text-fg">
               {formatLastTrade(perf?.last_trade_date)}
             </Mono>
           </div>
@@ -801,7 +801,7 @@ export default function StrategyDetailPage() {
             {academicSources.map((src, i) => (
               <li
                 key={i}
-                className="font-display italic text-[13.5px] leading-relaxed text-fg-muted"
+                className="font-display italic text-[13px] leading-relaxed text-fg-muted"
               >
                 {src}
               </li>
@@ -824,7 +824,7 @@ export default function StrategyDetailPage() {
           <Display size="md" as="h2">
             When to deploy
           </Display>
-          <p className="max-w-[640px] font-display italic text-[15.5px] leading-relaxed text-fg">
+          <p className="max-w-[640px] font-display italic text-[15px] leading-relaxed text-fg">
             {content.whenToUse}
           </p>
         </section>
@@ -838,7 +838,7 @@ export default function StrategyDetailPage() {
           reachable with a legible outline. */}
       {!perf ? (
         <div className="flex flex-col items-center gap-3 border-t border-border-hair pt-6">
-          <span className="font-display italic text-[14px] text-fg-muted">
+          <span className="font-display italic text-[15px] text-fg-muted">
             Performance data unavailable.
           </span>
           <button

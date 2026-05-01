@@ -99,6 +99,11 @@ $RECYCLE.BIN/
 # QA harness output
 # =============================================================================
 qa/runs/
+qa/visual/current/
+qa/visual/diff/
+qa/visual/manifest.json
+output/playwright/
+.playwright-cli/
 
 # =============================================================================
 # Local Claude Code state

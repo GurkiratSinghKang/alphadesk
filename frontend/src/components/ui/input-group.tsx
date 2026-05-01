@@ -48,7 +48,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 const inputGroupAddonVariants = cva(
   [
     "flex h-auto cursor-text items-center justify-center gap-2",
-    "font-mono text-[11px] tracking-[0.08em] uppercase text-fg-muted",
+    "font-mono text-[12px] tracking-[0.08em] uppercase text-fg-muted",
     "select-none",
     "group-data-[disabled=true]/input-group:opacity-50",
     "[&>kbd]:rounded-sm",

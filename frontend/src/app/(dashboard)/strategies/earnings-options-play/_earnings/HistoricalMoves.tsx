@@ -48,12 +48,12 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
             className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end"
           >
             <div className="absolute inset-x-0 top-0 border-t border-dashed border-[color:var(--border)]" />
-            <span className="relative z-10 bg-[color:var(--bg-card)] px-1 t-mono text-[10px] u-muted leading-none">
+            <span className="relative z-10 bg-[color:var(--bg-card)] px-1 t-mono text-[12px] u-muted leading-none">
               ±{(maxAbs * 100).toFixed(1)}%
             </span>
           </div>
         </div>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 t-mono text-[11.5px]">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 t-mono text-[12px]">
           <dt className="t-label u-muted">AVG |MV|</dt>
           <dd className="u-brand">±{fmtPct(Math.abs(historical.stats.avgAbsMovePct), 1)}</dd>
           <dt className="t-label u-muted">W / L</dt>

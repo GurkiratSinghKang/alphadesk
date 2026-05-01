@@ -76,7 +76,7 @@ export function SessionExpiryBanner() {
         type="button"
         onClick={() => setState((s) => ({ ...s, visible: false }))}
         aria-label="Dismiss session expiry banner"
-        className="rounded border border-amber/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber/20 focus:outline-none focus:ring-2 focus:ring-amber/50"
+        className="rounded border border-amber/40 px-2 py-0.5 text-[12px] font-medium hover:bg-amber/20 focus:outline-none focus:ring-2 focus:ring-amber/50"
       >
         Dismiss
       </button>

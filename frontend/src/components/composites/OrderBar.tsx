@@ -50,6 +50,10 @@ export interface OrderBarProps {
   submitDestination?: string;
   /** Primary button label. Defaults to "Place order". */
   submitLabel?: string;
+  /** Parent-owned execution gate, used for quote/broker/session blockers. */
+  submitDisabled?: boolean;
+  /** Short human reason rendered beside the submit affordance when gated. */
+  submitDisabledReason?: string | null;
   /** Lock ticket fields when another control owns the executable order legs. */
   ticketLocked?: boolean;
   /** Controlled strategy selection, used when parent chrome summarizes the ticket. */
@@ -76,6 +80,8 @@ export default function OrderBar({
   errorMessage = null,
   submitDestination = "Submits to paper account",
   submitLabel = "Place order",
+  submitDisabled = false,
+  submitDisabledReason = null,
   ticketLocked = false,
   strategyId: controlledStrategyId,
   onStrategyChange,
@@ -173,6 +179,14 @@ export default function OrderBar({
     defaults?.price != null ? String(defaults.price) : ""
   );
   const [stop, setStop] = React.useState<string>(defaults?.stop ?? "");
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const [timeInForce, setTimeInForce] = React.useState("day");
+  const [bracketEnabled, setBracketEnabled] = React.useState(false);
+  const [takeProfit, setTakeProfit] = React.useState("");
+  const [bracketStop, setBracketStop] = React.useState("");
+  const [trailingStop, setTrailingStop] = React.useState("");
+  const [riskPct, setRiskPct] = React.useState("");
+  const [routeVenue, setRouteVenue] = React.useState("smart");
 
   // Round-5 F-2 — adopt late-arriving deep-link defaults for side / qty
   // / type / price too. Each guard tracks the last applied value via a
@@ -293,6 +307,18 @@ export default function OrderBar({
   const stopInvalid =
     stopRequired &&
     (stop === "" || stopNum === undefined || !Number.isFinite(stopNum) || stopNum <= 0);
+  const estimatedPrice =
+    priceNum && Number.isFinite(priceNum) && priceNum > 0
+      ? priceNum
+      : defaults?.price && Number.isFinite(defaults.price) && defaults.price > 0
+        ? defaults.price
+        : undefined;
+  const estimatedNotional =
+    estimatedPrice && !qtyInvalid ? estimatedPrice * qtyNum : undefined;
+  const slippageEstimate =
+    estimatedNotional != null
+      ? `$${Math.max(0.01, estimatedNotional * 0.0005).toFixed(2)} @ 5 bps`
+      : "Needs quote or limit";
   const priceLocalError =
     priceRequired && price !== "" && priceInvalid
       ? "Price must be a positive number"
@@ -319,6 +345,7 @@ export default function OrderBar({
 
   const stage = () => {
     if (submitting || submittingRef.current) return;
+    if (submitDisabled) return;
     if (qtyInvalid || priceInvalid || stopInvalid || symInvalid) return;
     submittingRef.current = true;
     onSubmit({
@@ -414,7 +441,6 @@ export default function OrderBar({
             role="radio"
             aria-checked={side === "buy"}
             data-active={side === "buy" || undefined}
-            aria-pressed={side === "buy"}
             disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
@@ -422,7 +448,7 @@ export default function OrderBar({
               // Desktop falls back to the tinted variant look so we keep
               // the editorial workstation palette at the desk resolutions.
               "md:!bg-up-500/10 md:!text-up-500 md:!border-up-500/30",
-              side !== "buy" && "opacity-70"
+              side !== "buy" && "!border-border-hair !bg-bg-elev-2 !text-fg-muted md:!border-up-500/25 md:!bg-up-500/5 md:!text-up-100"
             )}
           >
             Buy
@@ -433,13 +459,12 @@ export default function OrderBar({
             role="radio"
             aria-checked={side === "sell"}
             data-active={side === "sell" || undefined}
-            aria-pressed={side === "sell"}
             disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
               "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
               "md:!bg-down-500/10 md:!text-down-500 md:!border-down-500/30",
-              side !== "sell" && !sellArming && "opacity-70"
+              side !== "sell" && !sellArming && "!border-border-hair !bg-bg-elev-2 !text-fg-muted md:!border-down-500/25 md:!bg-down-500/5 md:!text-down-100"
             )}
           >
             {sellArming ? "Tap again to confirm" : "Sell"}
@@ -540,6 +565,118 @@ export default function OrderBar({
         />
       </Field>
 
+      <div className="col-span-2 rounded-md border border-border-hair bg-bg-elev-1">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+          className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-bg-elev-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span>
+            <span className="block t-label text-fg-hint">Advanced order</span>
+            <span className="mt-1 block text-[12px] leading-snug text-fg-muted">
+              TIF, bracket/OCO planning, route, slippage, and risk sizing.
+            </span>
+          </span>
+          <span className="shrink-0 font-mono text-[12px] text-brand">
+            {advancedOpen ? "Hide" : "Show"}
+          </span>
+        </button>
+        {advancedOpen ? (
+          <div className="grid gap-3 border-t border-border-hair p-3 md:grid-cols-2">
+            <label className="grid gap-1.5">
+              <span className="t-label text-fg-hint">Time in force</span>
+              <select
+                value={timeInForce}
+                onChange={(e) => setTimeInForce(e.target.value)}
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-[13px]"
+              >
+                <option value="day">DAY</option>
+                <option value="gtc">GTC</option>
+                <option value="ioc">IOC</option>
+                <option value="opg">OPG</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="t-label text-fg-hint">Route / venue</span>
+              <select
+                value={routeVenue}
+                onChange={(e) => setRouteVenue(e.target.value)}
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-[13px]"
+              >
+                <option value="smart">SMART paper route</option>
+                <option value="manual" disabled>Manual venue soon</option>
+                <option value="dark" disabled>Dark/ATS not supported</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="t-label text-fg-hint">Risk size</span>
+              <Input
+                value={riskPct}
+                onChange={(e) => setRiskPct(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.50% of equity"
+                className="h-11 md:h-10"
+              />
+            </label>
+            <div className="rounded-sm border border-border-hair bg-bg px-3 py-2">
+              <p className="t-label text-fg-hint">Slippage estimate</p>
+              <p className="mt-1 font-mono text-[13px] text-ink-1000">{slippageEstimate}</p>
+              <p className="mt-1 text-[12px] leading-snug text-fg-muted">Planning estimate only; broker execution decides the fill.</p>
+            </div>
+            <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3">
+              <input
+                type="checkbox"
+                checked={bracketEnabled}
+                onChange={(e) => setBracketEnabled(e.target.checked)}
+                className="size-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[13px] font-semibold text-fg">Bracket / OCO</span>
+                <span className="block text-[12px] text-fg-muted">Plan attached target and stop before send.</span>
+              </span>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="t-label text-fg-hint">Trailing stop</span>
+              <Input
+                value={trailingStop}
+                onChange={(e) => setTrailingStop(e.target.value)}
+                inputMode="decimal"
+                placeholder="Amount or %"
+                className="h-11 md:h-10"
+              />
+            </label>
+            {bracketEnabled ? (
+              <>
+                <label className="grid gap-1.5">
+                  <span className="t-label text-fg-hint">Take profit</span>
+                  <Input
+                    value={takeProfit}
+                    onChange={(e) => setTakeProfit(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="Limit target"
+                    className="h-11 md:h-10"
+                  />
+                </label>
+                <label className="grid gap-1.5">
+                  <span className="t-label text-fg-hint">OCO stop</span>
+                  <Input
+                    value={bracketStop}
+                    onChange={(e) => setBracketStop(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="Protective stop"
+                    className="h-11 md:h-10"
+                  />
+                </label>
+              </>
+            ) : null}
+            <p className="md:col-span-2 text-[12px] leading-relaxed text-fg-muted">
+              Advanced fields are captured for review today. Backend order placement still sends the base ticket until advanced routing is enabled.
+            </p>
+          </div>
+        ) : null}
+      </div>
+
       <span
         data-slot="order-review"
         className="col-span-2 font-display italic text-[12px] text-fg-muted self-center md:ml-0"
@@ -552,17 +689,29 @@ export default function OrderBar({
           ref={submitButtonRef}
           type="button"
           variant="primary"
-          className="w-full md:w-auto min-h-11"
+          className={cn(
+            "w-full md:w-auto min-h-11",
+            submitDisabled && "!border-amber/50 !bg-bg-elev-2 !text-amber disabled:opacity-100",
+          )}
           onClick={stage}
           // BUG-002 + Round-28 — disable during in-flight POST, empty
           // strategy, and when client-side qty / price / stop / symbol
           // validation fails. Backend 422 is the belt; this is suspenders.
-          disabled={submitting || noStrategies || qtyInvalid || priceInvalid || stopInvalid || symInvalid}
+          data-state={submitDisabled ? "stale" : undefined}
+          disabled={submitting || submitDisabled || noStrategies || qtyInvalid || priceInvalid || stopInvalid || symInvalid}
           aria-busy={submitting || undefined}
           data-testid="order-bar-submit"
         >
           {submitting ? "Submitting…" : submitLabel}
         </Button>
+        {submitDisabledReason ? (
+          <span
+            data-slot="order-submit-blocker"
+            className="max-w-[320px] text-center font-sans text-[13px] leading-snug text-amber md:text-right"
+          >
+            {submitDisabledReason}
+          </span>
+        ) : null}
         <span
           data-slot="order-destination"
           className="font-mono text-[13px] text-fg-hint text-center md:text-right"

@@ -59,8 +59,8 @@ export function StatusStrip() {
   }
 
   return (
-    <div role="status" className="flex h-7 shrink-0 items-center gap-0 border-b border-border bg-[var(--background)] px-4 text-[12px] overflow-x-auto scrollbar-none whitespace-nowrap">
-      <div className="flex items-center gap-1.5 pr-4 border-r border-border/50">
+    <div role="status" className="relative z-10 flex h-7 shrink-0 items-center gap-0 overflow-x-auto whitespace-nowrap border-b border-border/70 bg-ink-100/92 px-3 text-[12px] shadow-[0_12px_34px_-32px_rgba(0,0,0,0.9)] scrollbar-none sm:px-4">
+      <div className="flex items-center gap-1.5 pr-3 border-r border-border/50 sm:pr-4">
         <span className="text-fg-muted font-medium">P&L</span>
         {hasPnl ? (
           <span aria-live="polite" aria-atomic="true" className={cn("font-semibold tabular-nums", dayPnl > 0 ? "text-[var(--profit)] glow-profit" : dayPnl < 0 ? "text-[var(--loss)] glow-loss" : "text-muted-foreground")}>
@@ -88,7 +88,7 @@ export function StatusStrip() {
           not real-money live trading. Reserve "LIVE" for the real live-
           trading mode (see Alpaca (Paper|Live) cell to the right) and
           label this pill STREAMING / OFFLINE so it can't be mistaken. */}
-      <span role="status" aria-live="polite" className="flex items-center gap-1.5 px-4 border-r border-border/50">
+      <span role="status" aria-live="polite" className="flex items-center gap-1.5 px-3 border-r border-border/50 sm:px-4">
         {isConnected ? (
           <>
             <span className="relative flex h-1.5 w-1.5" aria-label="Streaming data connected">
@@ -111,10 +111,10 @@ export function StatusStrip() {
           reserve a hair of right padding against the strip edge so the
           letter spacing doesn't push the last glyph into the overflow
           scroll track. */}
-      <div className="relative isolate flex items-center gap-2 px-4 pr-5">
-        <span className="text-foreground font-medium">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
+      <div className="relative isolate flex items-center gap-2 px-3 sm:px-4 sm:pr-5">
+        <span className="hidden text-foreground font-medium sm:inline">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
         <span className={cn(
-          "inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider leading-none",
+          "inline-flex min-h-5 items-center rounded px-2 py-0.5 text-[12px] font-bold uppercase tracking-[0.1em] leading-none",
           tradingMode === "paper"
             ? "bg-[var(--profit)]/15 text-[var(--profit)]"
             : "bg-[var(--loss)]/15 text-[var(--loss)]"
@@ -137,10 +137,10 @@ export function StatusStrip() {
             className="inline-block h-1.5 w-1.5 rounded-full bg-amber"
             aria-hidden
           />
-          <span className="font-semibold uppercase tracking-wider text-[9px]">
+          <span className="font-semibold uppercase tracking-[0.1em] text-[12px]">
             Demo data
           </span>
-          <span className="hidden sm:inline text-[10px] text-muted-foreground">
+          <span className="hidden sm:inline text-[12px] text-muted-foreground">
             · link Alpaca in /settings
           </span>
         </Link>

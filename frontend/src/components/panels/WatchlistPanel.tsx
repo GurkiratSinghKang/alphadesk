@@ -100,13 +100,13 @@ function ColumnSelector({
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground px-2 py-1 mb-0.5">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground px-2 py-1 mb-0.5">
             Columns
           </div>
           {AVAILABLE_COLUMNS.map((col) => (
             <label
               key={col.id}
-              className="flex items-center gap-2 px-2 py-1 text-[11px] rounded hover:bg-accent/50 cursor-pointer transition-colors"
+              className="flex items-center gap-2 px-2 py-1 text-[12px] rounded hover:bg-accent/50 cursor-pointer transition-colors"
             >
               <input
                 type="checkbox"
@@ -289,13 +289,13 @@ const WatchlistRow = React.memo(function WatchlistRow({
             >
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
-                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[10px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors min-h-[36px] sm:min-h-0"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[12px] font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 BUY
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
-                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[10px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors min-h-[36px] sm:min-h-0"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-[12px] font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 SELL
               </button>
@@ -555,7 +555,7 @@ function ScreenerTab() {
             value={apiPreset}
             onChange={(e) => setApiPreset(e.target.value)}
             aria-label="Screener preset"
-            className="flex-1 h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground"
+            className="flex-1 h-7 rounded border border-border bg-background px-2 text-[12px] text-foreground"
           >
             {apiPresets.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -565,7 +565,7 @@ function ScreenerTab() {
             onClick={() => setShowFilters((v) => !v)}
             aria-label="Toggle filters"
             className={cn(
-              "h-7 px-2 rounded border border-border text-[10px] transition-colors",
+              "h-7 px-2 rounded border border-border text-[12px] transition-colors",
               showFilters ? "bg-primary/20 text-primary border-primary/40" : "bg-background text-muted-foreground hover:text-foreground"
             )}
           >
@@ -586,7 +586,7 @@ function ScreenerTab() {
             <button
               key={p.name}
               onClick={() => applyPreset(p)}
-              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[9px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[12px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
             >
               {p.name}
               {userPresets.some((u) => u.name === p.name) && (
@@ -611,10 +611,10 @@ function ScreenerTab() {
               onChange={(e) => setSaveName(e.target.value)}
               placeholder="Preset name..."
               aria-label="Preset name"
-              className="flex-1 h-6 rounded border border-border bg-background px-2 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="flex-1 h-6 rounded border border-border bg-background px-2 text-[12px] text-foreground placeholder:text-muted-foreground/60"
               onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); }}
             />
-            <button onClick={handleSavePreset} className="h-6 px-2 rounded bg-primary text-primary-foreground text-[10px] font-medium">
+            <button onClick={handleSavePreset} className="h-6 px-2 rounded bg-primary text-primary-foreground text-[12px] font-medium">
               Save
             </button>
           </div>
@@ -629,7 +629,7 @@ function ScreenerTab() {
               value={filters.marketCap}
               onChange={(e) => setFilters((f) => ({ ...f, marketCap: e.target.value }))}
               aria-label="Market cap filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground"
             >
               <option value="">Market Cap</option>
               {MARKET_CAP_OPTIONS.filter(Boolean).map((mc) => (
@@ -640,7 +640,7 @@ function ScreenerTab() {
               value={filters.sector}
               onChange={(e) => setFilters((f) => ({ ...f, sector: e.target.value }))}
               aria-label="Sector filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground"
             >
               <option value="">Sector</option>
               {SECTOR_OPTIONS.filter(Boolean).map((s) => (
@@ -652,40 +652,40 @@ function ScreenerTab() {
               onChange={(e) => setFilters((f) => ({ ...f, minChange: e.target.value }))}
               placeholder="Min Chg%"
               aria-label="Minimum change percentage filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.maxChange}
               onChange={(e) => setFilters((f) => ({ ...f, maxChange: e.target.value }))}
               placeholder="Max Chg%"
               aria-label="Maximum change percentage filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.minPrice}
               onChange={(e) => setFilters((f) => ({ ...f, minPrice: e.target.value }))}
               placeholder="Min Price"
               aria-label="Minimum price filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.maxPrice}
               onChange={(e) => setFilters((f) => ({ ...f, maxPrice: e.target.value }))}
               placeholder="Max Price"
               aria-label="Maximum price filter"
-              className="h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60"
             />
             <input
               value={filters.minVolume}
               onChange={(e) => setFilters((f) => ({ ...f, minVolume: e.target.value }))}
               placeholder="Min Volume"
               aria-label="Minimum volume filter"
-              className="col-span-2 h-6 rounded border border-border bg-background px-1.5 text-[10px] text-foreground placeholder:text-muted-foreground/60"
+              className="col-span-2 h-6 rounded border border-border bg-background px-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60"
             />
           </div>
           <button
             onClick={() => setFilters(EMPTY_FILTERS)}
-            className="mt-1.5 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+            className="mt-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear all filters
           </button>
@@ -693,7 +693,7 @@ function ScreenerTab() {
       )}
 
       {/* Sortable column headers */}
-      <div className="flex items-center gap-2 px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+      <div className="flex items-center gap-2 px-3 py-1 text-[12px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
         <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors">
           Symbol <SortIcon col="symbol" />
         </button>
@@ -729,18 +729,18 @@ function ScreenerTab() {
                 <div className="flex-1 text-left">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-foreground">{r.symbol}</span>
-                    <span className="text-muted-foreground truncate text-[10px]">{r.sector}</span>
+                    <span className="text-muted-foreground truncate text-[12px]">{r.sector}</span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="tabular-nums text-foreground">${(r.price ?? 0).toFixed(2)}</div>
-                  <div className={cn("text-[10px] tabular-nums", (r.changePct ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                  <div className={cn("text-[12px] tabular-nums", (r.changePct ?? 0) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                     {(r.changePct ?? 0) >= 0 ? "+" : ""}{(r.changePct ?? 0).toFixed(1)}%
                   </div>
                 </div>
                 <div className="w-8 text-center">
                   <span className={cn(
-                    "text-[10px] font-bold rounded px-1 py-0.5",
+                    "text-[12px] font-bold rounded px-1 py-0.5",
                     r.compositeScore >= 70 ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
                     r.compositeScore >= 40 ? "bg-amber-500/15 text-amber-400" :
                     "bg-[var(--loss)]/15 text-[var(--loss)]"
@@ -755,7 +755,7 @@ function ScreenerTab() {
       </ScrollArea>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-border text-[9px] text-muted-foreground">
+      <div className="px-3 py-1.5 border-t border-border text-[12px] text-muted-foreground">
         Click to add to watchlist | {sorted.length}/{results.length} results
         {Object.values(filters).some(Boolean) && " (filtered)"}
       </div>
@@ -772,12 +772,12 @@ function SignalsTab() {
   // detected signals. See audit-reports/01-frontend.md [P0-3].
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
-      <p className="font-display italic text-[13.5px] text-muted-foreground">
+      <p className="font-display italic text-[13px] text-muted-foreground">
         No live signals.
       </p>
       <Link
         href="/alerts"
-        className="font-sans text-[11px] uppercase tracking-[0.18em] text-brand transition-colors hover:text-gold-300"
+        className="font-sans text-[12px] uppercase tracking-[0.18em] text-brand transition-colors hover:text-gold-300"
       >
         Configure alerts
       </Link>
@@ -889,13 +889,13 @@ export function WatchlistPanel() {
       >
         <div className="flex items-center justify-between gap-2 mx-2 mt-2 shrink-0">
           <TabsList className="h-10 sm:h-7 bg-[var(--background)] p-0.5 flex-1 border border-border">
-          <TabsTrigger value="watchlist" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="watchlist" className="text-xs sm:text-[12px] h-9 sm:h-6 px-3 sm:px-2.5">
             Watchlist
           </TabsTrigger>
-          <TabsTrigger value="screener" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="screener" className="text-xs sm:text-[12px] h-9 sm:h-6 px-3 sm:px-2.5">
             Screener
           </TabsTrigger>
-          <TabsTrigger value="signals" className="text-xs sm:text-[11px] h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="signals" className="text-xs sm:text-[12px] h-9 sm:h-6 px-3 sm:px-2.5">
             Signals
           </TabsTrigger>
           </TabsList>
@@ -921,7 +921,7 @@ export function WatchlistPanel() {
           </form>
 
           {/* Keyboard hint */}
-          <div className="flex items-center gap-1.5 px-3 py-1 text-[9px] text-muted-foreground/60 bg-[var(--surface)] border-b border-border">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-[12px] text-muted-foreground/60 bg-[var(--surface)] border-b border-border">
             <span>Click to select</span>
             <span className="text-muted-foreground/30">|</span>
             <span>
@@ -930,7 +930,7 @@ export function WatchlistPanel() {
           </div>
 
           {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+          <div className="flex items-center gap-2 px-3 py-1 text-[12px] uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
             <button aria-label="Sort by symbol" onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>
@@ -969,7 +969,7 @@ export function WatchlistPanel() {
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                   <TrendingUp className="h-6 w-6 text-muted-foreground/40 mb-2" />
                   <p className="text-xs text-muted-foreground mb-1">No symbols in watchlist</p>
-                  <p className="text-[10px] text-muted-foreground/60">Type a ticker above and press + to add one</p>
+                  <p className="text-[12px] text-muted-foreground/60">Type a ticker above and press + to add one</p>
                 </div>
               ) : (
                 sortedWatchlist.map((symbol) => (

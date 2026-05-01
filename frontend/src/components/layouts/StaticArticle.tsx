@@ -47,7 +47,7 @@ export default function StaticArticle({
           {title}
         </Display>
         <p
-          className="mt-4 font-mono text-[11px] uppercase text-fg-hint"
+          className="mt-4 font-mono text-[12px] uppercase text-fg-hint"
           style={{ letterSpacing: "0.18em" }}
         >
           Last updated &middot; {lastUpdated}

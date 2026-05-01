@@ -149,7 +149,7 @@ export default function MarketingShell({
           {FOOTER_COLS.map((col) => (
             <div key={col.heading}>
               <div
-                className="mb-4 font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+                className="mb-4 font-sans text-[12px] font-semibold uppercase text-fg-muted"
                 style={{ letterSpacing: "0.18em" }}
               >
                 {col.heading}
@@ -180,7 +180,7 @@ export default function MarketingShell({
         </footer>
 
         <div
-          className="flex items-center justify-between border-t border-border py-5 font-mono text-[10px] uppercase text-fg-hint"
+          className="flex items-center justify-between border-t border-border py-5 font-mono text-[12px] uppercase text-fg-hint"
           style={{ letterSpacing: "0.05em" }}
         >
           <span>&copy; {year} AlphaDesk Labs &middot; Not a broker-dealer</span>

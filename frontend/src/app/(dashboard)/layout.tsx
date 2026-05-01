@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { StatusStrip } from "@/components/layout/StatusStrip";
@@ -14,6 +14,105 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useToast } from "@/hooks/useToast";
 import { useNotifications } from "@/hooks/useNotifications";
 import type { ReactNode } from "react";
+
+const subscribeToHydration = (notify: () => void) => {
+  queueMicrotask(notify);
+  return () => {};
+};
+
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+type ApiServiceKey =
+  | "portfolio"
+  | "market"
+  | "orders"
+  | "strategies"
+  | "pipeline"
+  | "alerts"
+  | "reports"
+  | "assistant"
+  | "backend";
+
+interface ApiServiceIssue {
+  key: ApiServiceKey;
+  label: string;
+  status?: number;
+  message: string;
+  path?: string;
+  count: number;
+  lastSeen: number;
+}
+
+const API_SERVICE_LABELS: Record<ApiServiceKey, string> = {
+  portfolio: "Portfolio",
+  market: "Market data",
+  orders: "Orders",
+  strategies: "Strategies",
+  pipeline: "Pipeline",
+  alerts: "Alerts",
+  reports: "Reports",
+  assistant: "AI assistant",
+  backend: "Backend",
+};
+
+function classifyApiService(path?: string): ApiServiceKey {
+  const p = (path ?? "").toLowerCase();
+  if (p.includes("portfolio") || p.includes("positions")) return "portfolio";
+  if (p.includes("quote") || p.includes("bars") || p.includes("market") || p.includes("options")) return "market";
+  if (p.includes("orders") || p.includes("trades")) return "orders";
+  if (p.includes("strategies") || p.includes("earnings") || p.includes("tradingagents")) return "strategies";
+  if (p.includes("pipeline") || p.includes("scheduler")) return "pipeline";
+  if (p.includes("alerts")) return "alerts";
+  if (p.includes("reports") || p.includes("exports")) return "reports";
+  if (p.includes("agents") || p.includes("chat")) return "assistant";
+  return "backend";
+}
+
+function ApiDegradedBanner({
+  issues,
+  onDismiss,
+}: {
+  issues: ApiServiceIssue[];
+  onDismiss: () => void;
+}) {
+  if (issues.length === 0) return null;
+  const labels = issues.map((issue) => issue.label).join(", ");
+  const count = issues.reduce((sum, issue) => sum + issue.count, 0);
+  const newest = issues[0];
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-slot="api-degraded-banner"
+      className="w-full border-b border-[#6f541f] bg-[#21190d] px-4 py-2 text-[#f8d590]"
+    >
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-2 text-[12px] leading-snug sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <span className="font-semibold uppercase tracking-wide">Data unavailable</span>
+          <span className="mx-2 text-[#d9b165]">·</span>
+          <span className="font-medium">{labels}</span>
+          <span className="mx-2 text-[#d9b165]">·</span>
+          <span className="text-[#e7c477]">
+            grouped {count} backend issue{count === 1 ? "" : "s"}; affected views stay cached, locked, or empty.
+          </span>
+          {newest?.message ? (
+            <span className="ml-2 hidden text-[#d9b165] md:inline">
+              Latest: {newest.message}
+            </span>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-[#8c6a28] px-3 font-sans text-[12px] font-semibold text-[#f8d590] transition-colors hover:bg-[#3a2a12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f8d590] sm:self-auto"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * DashboardLayout — chrome wrapper for non-desk dashboard routes.
@@ -33,14 +132,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
   const recentApiErrorsRef = useRef<Map<string, number>>(new Map());
+  const groupedApiToastRef = useRef(0);
+  const [apiIssues, setApiIssues] = useState<Partial<Record<ApiServiceKey, ApiServiceIssue>>>({});
+  const activeApiIssues = useMemo(
+    () =>
+      Object.values(apiIssues)
+        .filter((issue): issue is ApiServiceIssue => Boolean(issue))
+        .sort((a, b) => b.lastSeen - a.lastSeen),
+    [apiIssues],
+  );
   // Mount the notification producer exactly once at the dashboard root.
   // It subscribes to WS channels (portfolio, alerts) and global custom
   // events (alphadesk:pipeline-status, alphadesk:system-notify) and
   // pushes user-gated notifications into the store consumed by the bell.
   useNotifications();
   // Defer persisted store read to avoid hydration mismatch.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(subscribeToHydration, getClientSnapshot, getServerSnapshot);
 
   useEffect(() => {
     function handleApiError(e: CustomEvent) {
@@ -51,20 +158,44 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       const status = detail.status;
       const message = detail.message;
       if (status !== 401) {
-        const dedupeKey = `${status ?? "unknown"}:${detail.path ?? ""}:${message ?? ""}`;
+        const service = classifyApiService(detail.path);
+        const label = API_SERVICE_LABELS[service];
+        setApiIssues((prev) => {
+          const existing = prev[service];
+          return {
+            ...prev,
+            [service]: {
+              key: service,
+              label,
+              status,
+              message: message || "Request failed",
+              path: detail.path,
+              count: (existing?.count ?? 0) + 1,
+              lastSeen: Date.now(),
+            },
+          };
+        });
+        const dedupeKey = `${service}:${status ?? "unknown"}`;
         const now = Date.now();
         const lastSeen = recentApiErrorsRef.current.get(dedupeKey) ?? 0;
-        if (now - lastSeen < 30_000) return;
         recentApiErrorsRef.current.set(dedupeKey, now);
-        toast({ type: "error", message: message || "An API error occurred" });
-        // Also surface a durable system notification — toasts disappear after
-        // a few seconds; the bell keeps a record the user can review later.
+        if (now - groupedApiToastRef.current > 60_000) {
+          groupedApiToastRef.current = now;
+          toast({
+            type: "warning",
+            message: `Data unavailable: ${label}. Further API errors are grouped in the banner.`,
+            duration: 7000,
+          });
+        }
+        if (now - lastSeen < 60_000) return;
+        // Also surface durable grouped service context — toasts disappear
+        // after a few seconds; the bell keeps a record the user can review.
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("alphadesk:system-notify", {
               detail: {
                 kind: "error",
-                title: status ? `API error (${status})` : "API error",
+                title: status ? `${label} unavailable (${status})` : `${label} unavailable`,
                 message: message || "An API error occurred",
               },
             })
@@ -101,9 +232,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       );
     }
     return (
-      <div className="flex min-h-screen flex-col overflow-x-hidden bg-[var(--background)]">
-        <div className="h-12 border-b border-border bg-[var(--surface)]" />
-        <div className="h-7 border-b border-border bg-[var(--background)]" />
+      <div className="alpha-auth-shell flex min-h-screen flex-col overflow-x-hidden">
+        <div className="h-12 border-b border-border bg-ink-050" />
+        <div className="h-7 border-b border-border bg-ink-100" />
         <main className="flex-1" />
       </div>
     );
@@ -136,6 +267,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             so they can save unsaved order tickets / strategy drafts.
             Render only after refresh failure — null on the happy path. */}
         <SessionExpiryBanner />
+        <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
         {children}
         <CommandPalette />
         <AICopilot />
@@ -147,7 +279,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   // ─── Non-desk dashboard pages keep the pre-F3 chrome. ──────────
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden">
+    <div className="alpha-auth-shell flex min-h-screen flex-col overflow-x-hidden">
       {/* a11y audit r3 — WCAG 1.4.3: previous focus:text-white on gold bg
           was 2.4:1 (fails AA). Use focus:text-primary-foreground (near-black
           on gold ≈ 8:1). */}
@@ -164,6 +296,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <WsStatusBanner />
       {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
       <SessionExpiryBanner />
+      <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
       <TopBar />
       <StatusStrip />
       {/* Non-desk routes use natural document body scroll (simplest, matches
@@ -172,14 +305,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           wheel events from reaching the body when <main> had no internal
           overflow (common case: short page), so the page appeared unscrollable.
           Flex-1 still gives <main> the remaining column height. */}
-      <main id="main-content" role="main" className="flex-1" tabIndex={-1}>
+      <main id="main-content" role="main" className="relative z-0 flex-1" tabIndex={-1}>
         {children}
       </main>
       {/* BUG-037: use the shared build version env so this footer and the
           desk StatusBar quote the same stamp. Without this, non-desk pages
           showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
           (e.g. "2025.10.18-a1b2c3d"). */}
-      <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-[10px] text-muted-foreground text-center">
+      <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-[12px] text-muted-foreground">
         AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />

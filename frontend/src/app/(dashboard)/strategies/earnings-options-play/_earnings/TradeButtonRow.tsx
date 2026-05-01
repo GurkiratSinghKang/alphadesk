@@ -396,7 +396,7 @@ function DefinedRiskTradeLink({
       </span>
       <span
         id={`${dataSlot}-risk`}
-        className="text-[9.5px] uppercase tracking-wider u-profit"
+        className="text-[12px] uppercase tracking-wider u-profit"
       >
         {recommended ? "✓ Suggested · defined risk" : "✓ Defined risk"}
       </span>

@@ -360,7 +360,7 @@ export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedP
               <p className="text-hint mt-1">Events appear when the pipeline runs</p>
               <button
                 onClick={() => onNavigate("/pipeline")}
-                className="mt-2 text-[11px] text-[var(--primary)] hover:underline"
+                className="mt-2 text-[12px] text-[var(--primary)] hover:underline"
               >
                 Run Pipeline &rarr;
               </button>

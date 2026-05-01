@@ -28,8 +28,29 @@
  *     legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32   (NEW — limits)
  *     legs=NVDA260424P00200000:sell:1,NVDA260424C00220000:sell:1             (OLD — still works)
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ElementType } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  ArrowsLeftRight,
+  ArrowsOut,
+  ChartLine,
+  CheckCircle,
+  Clock,
+  Crosshair,
+  FunnelSimple,
+  Gauge,
+  Lightning,
+  ListChecks,
+  LockSimple,
+  Plug,
+  Rows,
+  Scales,
+  ShieldWarning,
+  SlidersHorizontal,
+  TrendUp,
+  WarningCircle,
+} from "@phosphor-icons/react";
 
 import {
   OrderBar,
@@ -41,7 +62,9 @@ import {
 import { getBars, getOrders, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
-import type { Order } from "@/types";
+import { isWorkingOrderStatus } from "@/lib/orders";
+import { cn, formatCurrency } from "@/lib/utils";
+import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useStrategies } from "@/hooks/useQueries";
@@ -150,6 +173,9 @@ export default function TradePage() {
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const portfolioPositions = usePortfolioStore((s) => s.positions);
+  const portfolioSummary = usePortfolioStore((s) => s.summary);
+  const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const [urlUnderlyingSymbol, setUrlUnderlyingSymbol] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
@@ -312,26 +338,64 @@ export default function TradePage() {
 
   const [range, setRange] = useState<ChartRange>("1M");
   const [series, setSeries] = useState<ChartBar[]>([]);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [chartReloadKey, setChartReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setSeriesLoading(true);
+      setSeriesError(null);
       try {
         const { timeframe, limit } = barsRequestForRange(range);
         const bars = await getBars(tradeContextSymbol, timeframe, limit);
         if (!cancelled) setSeries(bars);
-      } catch {
-        if (!cancelled) setSeries([]);
+      } catch (err) {
+        if (!cancelled) {
+          setSeries([]);
+          setSeriesError(err instanceof Error ? err.message : "Chart data unavailable");
+        }
+      } finally {
+        if (!cancelled) setSeriesLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [tradeContextSymbol, range]);
+  }, [tradeContextSymbol, range, chartReloadKey]);
 
   const quote = toQuote(selectedQuote ?? undefined);
   const meta = toMetaCells(selectedQuote ?? undefined);
   const symbol = toMarketSymbol(tradeContextSymbol);
+  const quoteTone = quote.change > 0 ? "text-profit" : quote.change < 0 ? "text-loss" : "text-fg-muted";
+  const [symbolDraft, setSymbolDraft] = useState(tradeContextSymbol);
+  useEffect(() => {
+    setSymbolDraft(tradeContextSymbol);
+  }, [tradeContextSymbol]);
+
+  function commitSymbolDraft() {
+    const next = normalizeUnderlyingSymbol(symbolDraft);
+    if (!next) {
+      setOrderError("Enter a valid ticker before loading the chart");
+      return;
+    }
+    setOrderError(null);
+    setUrlUnderlyingSymbol(next);
+    setSelectedSymbol(next);
+    setActiveContract(null);
+    setActiveLegs([]);
+    setComboType(null);
+    setQuoteAtFillTs(null);
+    setPlainEquityPrefill({
+      symbol: next,
+      side: "buy",
+      qty: 1,
+      type: "market",
+    });
+    router.push(`/trade?symbol=${encodeURIComponent(next)}`);
+  }
 
   /* ─── Recent orders strip ──────────────────────────────── */
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>("working");
   useEffect(() => {
     let cancelled = false;
     async function fetchRecent() {
@@ -346,6 +410,11 @@ export default function TradePage() {
     const id = setInterval(fetchRecent, 20_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
+  const filteredRecentOrders = useMemo(() => {
+    if (orderFilter === "all") return recentOrders;
+    if (orderFilter === "working") return recentOrders.filter((o) => isWorkingOrderStatus(o.status));
+    return recentOrders.filter((o) => o.status === orderFilter);
+  }, [orderFilter, recentOrders]);
 
   /* ─── Submit handler ───────────────────────────────────── */
   const [submitting, setSubmitting] = useState(false);
@@ -381,6 +450,10 @@ export default function TradePage() {
     const stopNum = order.stop ? Number(order.stop) : undefined;
     if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
       fail("Stop orders require a stop price");
+      return;
+    }
+    if (!executionReadiness.canSubmit) {
+      fail(executionReadiness.blocker ?? "Resolve the execution gate before submitting.");
       return;
     }
     setSubmitting(true);
@@ -504,299 +577,1500 @@ export default function TradePage() {
       strategyId: urlStrategy ?? rail[0]?.id ?? "",
     };
   }, [activeContract, activeLegs, plainEquityPrefill, rail, urlStrategy]);
+  const executionQuote = buildExecutionQuote(quote);
+  const tradePreview = useMemo(
+    () =>
+      buildPreTradePreview({
+        defaults: orderBarDefaults,
+        quote: executionQuote,
+        activeContract,
+        activeLegs,
+        comboType,
+        quoteAtFillTs,
+        recentOrders,
+        positions: portfolioPositions,
+        buyingPower: portfolioSummary.buyingPower,
+        brokerDegraded,
+        tradeContextSymbol,
+      }),
+    [
+      orderBarDefaults,
+      executionQuote,
+      activeContract,
+      activeLegs,
+      comboType,
+      quoteAtFillTs,
+      recentOrders,
+      portfolioPositions,
+      portfolioSummary.buyingPower,
+      brokerDegraded,
+      tradeContextSymbol,
+    ],
+  );
+  const executionReadiness = useMemo(
+    () =>
+      buildExecutionReadiness({
+        preview: tradePreview,
+        quote: executionQuote,
+        chartLimited: seriesError != null,
+        chartLoading: seriesLoading,
+        brokerDegraded,
+      }),
+    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded],
+  );
+  function stageLimitPreset(side: "buy" | "sell", price: number) {
+    if (!Number.isFinite(price) || price <= 0) {
+      toast({ type: "error", message: "No executable quote is available for that preset" });
+      return;
+    }
+    const qty = Number(orderBarDefaults.quantity);
+    const normalizedQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+    setActiveContract(null);
+    setActiveLegs([]);
+    setComboType(null);
+    setQuoteAtFillTs(null);
+    setPlainEquityPrefill({
+      symbol: tradeContextSymbol,
+      side,
+      qty: normalizedQty,
+      type: "limit",
+      price: Number(price.toFixed(2)),
+    });
+    setResetTick((tick) => tick + 1);
+    toast({
+      type: "info",
+      message: `Loaded ${side.toUpperCase()} ${tradeContextSymbol} limit @ ${price.toFixed(2)}`,
+    });
+  }
+  const primaryQuoteLabel = executionQuote.hasTwoSided ? (quote.last > 0 ? "Last" : "Mid") : "Quote";
+  const primaryQuoteValue =
+    quote.last > 0
+      ? formatCurrency(quote.last)
+      : executionQuote.mid > 0
+        ? executionQuote.midLabel
+        : "Quote needed";
+  const primaryQuoteTone = executionQuote.hasTwoSided && quote.last > 0 ? quoteTone : executionQuote.spreadTone;
+  const chartStatusLabel = seriesError
+    ? "Chart limited"
+    : seriesLoading
+      ? "Loading bars"
+      : "Chart ready";
+  const intentLabel =
+    activeLegs.length > 0
+      ? `${activeLegs.length}-leg combo`
+      : activeContract
+        ? "Option contract"
+        : "Single ticket";
 
-  // Viewport audit r5 #9: 100vh jumps on iOS Safari when the address bar
-  // collapses — use dvh for the dynamic-viewport unit (Safari 15.4+).
-  // Also the StatusStrip is 22px, not the previous 32px — matches
-  // DeskLayout's grid-rows [48px_38px_1fr_22px].
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 min-h-[calc(100dvh-48px-22px)]">
-      <header className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          {/* Dashboard-wave editorial header — t-label eyebrow + italic
-              display title, matching DashboardPageLayout's rhythm. We
-              don't swap in DashboardPageLayout wholesale because `/trade`
-              runs full-bleed (chart + order bar need the extra pixels),
-              but the typography should read the same as the other
-              polished pages. */}
-          <span className="t-label">§ TRADE</span>
-          <h1 className="t-display-section">
-            Trade <span className="not-italic text-fg-muted">· {symbol.ticker}</span>
-          </h1>
-          {urlStrategy && (
-            // Round-5 F-1 — render the originating strategy as a small
-            // chip so the user (and the test) can see the deep-link's
-            // attribution before submission.
-            <span
-              data-slot="trade-strategy-tag"
-              className="mt-1 inline-flex items-center gap-1 self-start rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-2 py-0.5 font-mono text-[11px] text-fg-muted"
-            >
-              strategy: <span className="text-fg">{urlStrategy}</span>
-              {comboType && (
-                <>
-                  <span aria-hidden> · </span>
-                  combo: <span className="text-fg">{comboType}</span>
-                </>
+    <div className="relative min-h-[calc(100dvh-48px-22px)] overflow-hidden bg-bg px-3 py-3 md:px-5 md:py-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:72px_72px]"
+      />
+      <div className="relative mx-auto grid w-full max-w-[1760px] gap-4">
+        <header
+          id="trade-quote"
+          className="scroll-mt-4 grid overflow-hidden rounded-lg border border-border-hair bg-border-hair shadow-[0_18px_60px_-38px_rgba(16,22,17,0.34)] lg:grid-cols-[minmax(240px,0.58fr)_minmax(0,1fr)_minmax(320px,0.7fr)]"
+        >
+          <div className="min-w-0 bg-bg-elev-1 px-4 py-4 md:px-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="t-label text-fg-hint">Execution cockpit</span>
+              <TradeStatusPill label={executionReadiness.label} tone={executionReadiness.tone} />
+              {seriesError || seriesLoading ? (
+                <TradeStatusPill label={chartStatusLabel} tone={seriesError ? "amber" : "muted"} />
+              ) : null}
+              {urlStrategy && (
+                <span
+                  data-slot="trade-strategy-tag"
+                  className="inline-flex items-center gap-1 rounded-sm border border-border-hair bg-bg px-2 py-1 font-mono text-[12px] text-fg-muted"
+                >
+                  strategy: <span className="text-fg">{urlStrategy}</span>
+                  {comboType && (
+                    <>
+                      <span aria-hidden> · </span>
+                      combo: <span className="text-fg">{comboType}</span>
+                    </>
+                  )}
+                </span>
               )}
+            </div>
+            <h1
+              data-slot="trade-symbol"
+              className="mt-3 text-[28px] font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[34px]"
+              style={{ letterSpacing: 0 }}
+            >
+              Trade · {symbol.ticker}
+            </h1>
+            <p className="mt-2 truncate text-[13px] text-fg-muted">{symbol.venue} · {intentLabel}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-px bg-border-hair xl:grid-cols-4">
+            <TradeTelemetryCard icon={ChartLine} label={primaryQuoteLabel} value={primaryQuoteValue} valueClassName={primaryQuoteTone} />
+            <TradeTelemetryCard icon={Crosshair} label="Bid" value={executionQuote.bidLabel} />
+            <TradeTelemetryCard icon={ArrowsLeftRight} label="Ask" value={executionQuote.askLabel} />
+            <TradeTelemetryCard icon={Rows} label="Spread" value={executionQuote.spreadLabel} valueClassName={executionQuote.spreadTone} />
+          </div>
+
+          <div className="bg-bg-elev-1 p-3 md:p-4">
+            <label className="flex flex-col gap-2">
+              <span className="t-label text-fg-hint">Chart symbol</span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <input
+                  value={symbolDraft}
+                  onChange={(e) => setSymbolDraft(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitSymbolDraft();
+                  }}
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  className="col-span-2 h-11 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 md:text-[15px]"
+                />
+                <button
+                  type="button"
+                  onClick={commitSymbolDraft}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border bg-brand px-4 text-[13px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+                >
+                  Load
+                  <ArrowRight className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1 px-4 text-[13px] font-semibold text-fg-muted transition-transform hover:-translate-y-0.5 hover:text-fg"
+                >
+                  Desk
+                </button>
+              </div>
+            </label>
+          </div>
+        </header>
+
+        <ExecutionReadinessPanel readiness={executionReadiness} />
+
+        <MobileTradeNav />
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+          <section
+            id="trade-chart"
+            aria-label="Primary chart"
+            className="surface-scan relative flex h-[clamp(430px,62dvh,560px)] scroll-mt-20 flex-col overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1 shadow-[0_24px_70px_-42px_rgba(16,22,17,0.58)] md:h-[clamp(680px,calc(100dvh-190px),960px)]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3 text-fg">
+              <div className="flex min-w-0 items-center gap-2">
+                <ArrowsOut className="size-4 shrink-0 text-brand" aria-hidden />
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold text-fg">Full canvas chart</p>
+                  <p className="mt-0.5 line-clamp-2 font-mono text-[12px] text-fg-muted">Structure overlays start off; add only what you need.</p>
+                </div>
+              </div>
+              <TradeStatusPill label={range} tone="muted" />
+            </div>
+            <PriceChartPanel
+              symbol={symbol}
+              quote={quote}
+              meta={meta}
+              series={series}
+              activeRange={range}
+              onRangeChange={setRange}
+              isLoading={seriesLoading}
+              error={seriesError != null}
+              onRetry={() => setChartReloadKey((k) => k + 1)}
+              density="execution"
+              className="h-full min-h-0 bg-bg-elev-1 text-fg"
+            />
+          </section>
+
+          <aside className="flex flex-col gap-4 xl:sticky xl:top-4 xl:self-start">
+            <section
+              id="trade-ticket"
+              data-slot="trade-ticket-panel"
+              className="scroll-mt-20 overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-40px_rgba(16,22,17,0.42)]"
+            >
+              <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+                    <ListChecks className="size-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-[15px] font-semibold text-ink-1000">Execution ticket</h2>
+                    <p className="truncate text-[12px] text-fg-muted">{intentLabel}</p>
+                  </div>
+                </div>
+                <TradeStatusPill label="Paper" tone="muted" />
+              </header>
+              <ExecutionQuotePanel
+                quote={executionQuote}
+                onStageLimit={stageLimitPreset}
+              />
+              <OrderBar
+                key={`trade-orderbar-${resetTick}`}
+                symbol={tradeContextSymbol}
+                strategies={strategyOptions}
+                onSubmit={handleSubmit}
+                submitting={submitting}
+                errorMessage={orderError}
+                defaults={orderBarDefaults}
+                submitLabel={
+                  executionReadiness.submitLabel ??
+                  (activeLegs.length > 0
+                    ? `Place ${activeLegs.length}-leg combo`
+                    : "Place order")
+                }
+                submitDisabled={!executionReadiness.canSubmit}
+                submitDisabledReason={executionReadiness.blocker}
+                submitDestination={executionReadiness.destination}
+                reviewCopy={executionReadiness.reviewCopy}
+                ticketLocked={activeLegs.length > 0}
+                className="border-t-0 bg-transparent"
+              />
+              <PreTradeImpactPanel
+                preview={tradePreview}
+              />
+            </section>
+
+            <TradeIntentPanel
+              activeContract={activeContract}
+              activeLegs={activeLegs}
+              comboType={comboType}
+            />
+          </aside>
+        </div>
+
+        <RecentOrdersPanel
+          orders={filteredRecentOrders}
+          totalOrders={recentOrders.length}
+          activeFilter={orderFilter}
+          onFilterChange={setOrderFilter}
+        />
+      </div>
+    </div>
+  );
+}
+
+type ExecutionQuote = ReturnType<typeof buildExecutionQuote>;
+type PreTradePreview = ReturnType<typeof buildPreTradePreview>;
+type ReadinessTone = "profit" | "loss" | "amber" | "muted";
+
+interface ExecutionReadiness {
+  label: string;
+  tone: ReadinessTone;
+  headline: string;
+  detail: string;
+  canSubmit: boolean;
+  blocker: string | null;
+  submitLabel?: string;
+  destination: string;
+  reviewCopy: string;
+  icon: ElementType;
+}
+
+function ExecutionReadinessPanel({ readiness }: { readiness: ExecutionReadiness }) {
+  const Icon = readiness.icon;
+  return (
+    <section
+      aria-label="Execution readiness"
+      data-slot="trade-execution-readiness"
+      className={cn(
+        "hidden gap-3 rounded-lg border px-4 py-3 md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center",
+        readiness.tone === "profit" && "border-profit/25 bg-profit/10",
+        readiness.tone === "loss" && "border-loss/30 bg-loss/10",
+        readiness.tone === "amber" && "border-amber/30 bg-amber/10",
+        readiness.tone === "muted" && "border-border-hair bg-bg-elev-1/95",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-sm border",
+          readiness.tone === "profit" && "border-profit/25 bg-profit/10 text-profit",
+          readiness.tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
+          readiness.tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
+          readiness.tone === "muted" && "border-border-hair bg-bg text-fg-muted",
+        )}
+      >
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="t-label text-fg-hint">Execution readiness</p>
+          <TradeStatusPill label={readiness.label} tone={readiness.tone} />
+        </div>
+        <h2 className="mt-1 text-[17px] font-semibold leading-snug text-ink-1000">
+          {readiness.headline}
+        </h2>
+        <p className="mt-1 max-w-[78ch] text-[13px] leading-relaxed text-fg-muted">
+          {readiness.detail}
+        </p>
+      </div>
+      <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2 md:min-w-[220px]">
+        <p className="t-label text-fg-hint">{readiness.canSubmit ? "Submit path" : "Submit blocker"}</p>
+        <p className={cn("mt-1 text-[13px] leading-snug", readiness.canSubmit ? "text-profit" : "text-amber")}>
+          {readiness.blocker ?? "Ticket can submit after final review."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function buildExecutionReadiness({
+  preview,
+  quote,
+  chartLimited,
+  chartLoading,
+  brokerDegraded,
+}: {
+  preview: PreTradePreview;
+  quote: ExecutionQuote;
+  chartLimited: boolean;
+  chartLoading: boolean;
+  brokerDegraded: boolean;
+}): ExecutionReadiness {
+  const hardBlock = preview.checks.find((check) => check.tone === "block");
+  const review = preview.checks.find((check) => check.tone === "warn");
+
+  if (brokerDegraded) {
+    return {
+      label: "Limited",
+      tone: "loss",
+      headline: "Broker data is in fallback mode",
+      detail: "Live execution is locked until broker and market data recover. You can still review the paper ticket and inspect risk context.",
+      canSubmit: false,
+      blocker: "Broker/data fallback. Wait for a live broker snapshot before submitting.",
+      submitLabel: "Broker data required",
+      destination: "Submit locked while broker data is degraded",
+      reviewCopy: "Live send locked · broker snapshot required",
+      icon: Plug,
+    };
+  }
+
+  if (hardBlock) {
+    const quoteBlocked = hardBlock.label === "Quote freshness" || !quote.hasTwoSided;
+    return {
+      label: "Blocked",
+      tone: "loss",
+      headline: quoteBlocked ? "Executable quote required before submit" : `${hardBlock.label} blocks submit`,
+      detail: quoteBlocked
+        ? "Bid/ask is incomplete. Load a fresh two-sided quote or stage a priced limit before sending the order."
+        : hardBlock.detail,
+      canSubmit: false,
+      blocker: `${hardBlock.label}: ${hardBlock.value}.`,
+      submitLabel: quoteBlocked ? "Resolve quote first" : "Resolve blocker first",
+      destination: "Submit locked until hard checks pass",
+      reviewCopy: quoteBlocked ? "Cannot submit · quote gate failed" : "Cannot submit · risk gate failed",
+      icon: LockSimple,
+    };
+  }
+
+  if (review) {
+    return {
+      label: "Review",
+      tone: "amber",
+      headline: `${review.label} needs confirmation`,
+      detail: `${review.detail} You may continue in paper mode after confirming the ticket inputs.`,
+      canSubmit: true,
+      blocker: null,
+      submitLabel: "Place after review",
+      destination: "Submits to paper account after review",
+      reviewCopy: `${review.label} review · verify ticket before submit`,
+      icon: WarningCircle,
+    };
+  }
+
+  if (chartLimited || chartLoading) {
+    return {
+      label: chartLoading ? "Syncing" : "Limited",
+      tone: "amber",
+      headline: chartLoading ? "Chart is loading" : "Chart data is limited",
+      detail: "The ticket can rely on the executable quote, but chart history is still recovering. Avoid using the canvas as confirmation until bars load.",
+      canSubmit: true,
+      blocker: null,
+      submitLabel: "Place order",
+      destination: "Submits to paper account; chart context limited",
+      reviewCopy: "Chart context limited · verify quote and ticket",
+      icon: chartLoading ? Clock : WarningCircle,
+    };
+  }
+
+  return {
+    label: "Ready",
+    tone: "profit",
+    headline: "Ticket can submit after final review",
+    detail: "Quote, buying power estimate, session state, open-order collision, and position context are inside the paper execution gate.",
+    canSubmit: true,
+    blocker: null,
+    submitLabel: "Place order",
+    destination: "Submits to paper account",
+    reviewCopy: "Ready after final review · paper account",
+    icon: CheckCircle,
+  };
+}
+
+function MobileTradeNav() {
+  const items: Array<{ href: string; label: string; icon: ElementType }> = [
+    { href: "#trade-quote", label: "Quote", icon: Clock },
+    { href: "#trade-chart", label: "Chart", icon: ChartLine },
+    { href: "#trade-ticket", label: "Ticket", icon: ListChecks },
+    { href: "#trade-orders", label: "Orders", icon: Lightning },
+  ];
+
+  return (
+    <nav
+      aria-label="Mobile trade workspace"
+      className="sticky top-2 z-[2] grid grid-cols-4 gap-1 rounded-lg border border-border-hair bg-bg-elev-1/95 p-1 shadow-[0_18px_48px_-36px_rgba(16,22,17,0.55)] backdrop-blur md:hidden"
+    >
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <a
+            key={item.href}
+            href={item.href}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 font-mono text-[12px] font-medium text-fg-muted transition-[border-color,background-color,color,transform] hover:border-brand/30 hover:bg-brand/10 hover:text-brand focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
+          >
+            <Icon className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{item.label}</span>
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ExecutionQuotePanel({
+  quote,
+  onStageLimit,
+}: {
+  quote: ExecutionQuote;
+  onStageLimit: (side: "buy" | "sell", price: number) => void;
+}) {
+  const presets: Array<{ label: string; side: "buy" | "sell"; price: number; tone: string }> = [
+    { label: "Buy bid", side: "buy", price: quote.bid, tone: "text-profit" },
+    { label: "Buy mid", side: "buy", price: quote.mid, tone: "text-profit" },
+    { label: "Sell mid", side: "sell", price: quote.mid, tone: "text-loss" },
+    { label: "Sell ask", side: "sell", price: quote.ask, tone: "text-loss" },
+  ];
+
+  return (
+    <div className="border-b border-border-hair bg-bg px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Clock className="size-4 shrink-0 text-brand" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-ink-1000">Fast price loader</p>
+            <p className="truncate text-[12px] text-fg-muted">
+              Two-sided quote {quote.hasTwoSided ? "live" : "incomplete"} · spread {quote.spreadLabel}
+            </p>
+          </div>
+        </div>
+        <span className={cn("shrink-0 font-mono text-[12px]", quote.spreadTone)}>{quote.midLabel}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {presets.map((preset) => {
+          const disabled = !Number.isFinite(preset.price) || preset.price <= 0;
+          return (
+            <button
+              key={preset.label}
+              type="button"
+              disabled={disabled}
+              onClick={() => onStageLimit(preset.side, preset.price)}
+              className="min-h-10 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+            >
+              <span className="block truncate text-[12px] font-medium text-fg-muted">{preset.label}</span>
+              <span className={cn("block truncate font-mono text-[13px]", preset.tone)}>
+                {disabled ? "--" : formatCurrency(preset.price)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
+  const priorityChecks = preview.checks.filter((check) => check.tone !== "pass");
+  const visibleChecks = priorityChecks.length > 0 ? priorityChecks : preview.checks.slice(0, 2);
+  const collapsedChecks =
+    priorityChecks.length > 0
+      ? preview.checks.filter((check) => check.tone === "pass")
+      : preview.checks.slice(2);
+  return (
+    <div className="border-t border-border-hair bg-bg-elev-1 px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+            <Scales className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-ink-1000">Pre-submit confidence</p>
+            <p className="truncate text-[12px] text-fg-muted">{preview.subtitle}</p>
+          </div>
+        </div>
+        <TradeStatusPill label={preview.policyLabel} tone={preview.policyTone} />
+      </div>
+
+      <div data-slot="pre-submit-checks" className="mt-4 grid gap-2">
+        {visibleChecks.map((check) => (
+          <ConfidenceCheckRow key={check.label} check={check} />
+        ))}
+        {collapsedChecks.length > 0 ? (
+          <details className="rounded-md border border-border-hair bg-bg px-3 py-2">
+            <summary className="cursor-pointer list-none font-mono text-[12px] font-semibold text-profit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {collapsedChecks.length} passed check{collapsedChecks.length === 1 ? "" : "s"} collapsed
+            </summary>
+            <div className="mt-2 grid gap-2">
+              {collapsedChecks.map((check) => (
+                <ConfidenceCheckRow key={check.label} check={check} compact />
+              ))}
+            </div>
+          </details>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-2">
+        {preview.rows.map((row) => (
+          <div key={row.label} className="bg-bg px-3 py-3">
+            <p className="t-label text-fg-hint">{row.label}</p>
+            <p className={cn("mt-2 truncate font-mono text-[15px] text-ink-1000", row.toneClass)}>{row.value}</p>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-fg-muted">{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceCheckRow({
+  check,
+  compact = false,
+}: {
+  check: ConfidenceCheck;
+  compact?: boolean;
+}) {
+  const Icon = check.icon;
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border px-3 py-3",
+        compact ? "min-h-[58px]" : "min-h-[76px]",
+        confidenceSurfaceClass(check.tone),
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm",
+          confidenceIconClass(check.tone),
+        )}
+      >
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="t-label text-fg-hint">{check.label}</p>
+          <span className={cn("font-mono text-[12px] font-semibold", confidenceTextClass(check.tone))}>
+            {confidenceStatusLabel(check.tone)}
+          </span>
+        </div>
+        <p className={cn("mt-1 truncate font-mono text-[13px]", confidenceTextClass(check.tone))}>{check.value}</p>
+        {!compact ? (
+          <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-fg-muted">{check.detail}</p>
+        ) : null}
+      </div>
+      <span className={cn("mt-1 size-2 rounded-full", confidenceDotClass(check.tone))} aria-hidden />
+    </div>
+  );
+}
+
+function TradeTelemetryCard({
+  icon: Icon,
+  label,
+  value,
+  valueClassName,
+}: {
+  icon: ElementType;
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="bg-bg px-3 py-3">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 shrink-0 text-brand" aria-hidden />
+        <p className="t-label text-fg-hint">{label}</p>
+      </div>
+      <p className={cn("mt-3 truncate font-mono text-[15px] text-ink-1000", valueClassName)}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+type OrderFilter = "all" | "working" | "filled" | "rejected";
+
+function TradeStatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "profit" | "loss" | "amber" | "muted";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[12px]",
+        tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
+        tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
+        tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
+        tone === "muted" && "border-border-hair bg-bg-elev-2 text-fg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "status-breathe size-1.5 rounded-full",
+          tone === "profit" ? "bg-profit" : tone === "loss" ? "bg-loss" : tone === "amber" ? "bg-amber" : "bg-fg-muted",
+        )}
+        aria-hidden
+      />
+      {label}
+    </span>
+  );
+}
+
+function buildExecutionQuote(quote: ReturnType<typeof toQuote>) {
+  const bid = Number(quote.bid ?? 0);
+  const ask = Number(quote.ask ?? 0);
+  const last = Number(quote.last ?? 0);
+  const hasBid = Number.isFinite(bid) && bid > 0;
+  const hasAsk = Number.isFinite(ask) && ask > 0;
+  const hasTwoSided = hasBid && hasAsk && ask >= bid;
+  const mid = hasTwoSided ? (bid + ask) / 2 : last;
+  const spread = hasTwoSided ? ask - bid : 0;
+  const spreadPct = hasTwoSided && mid > 0 ? (spread / mid) * 100 : 0;
+  const spreadTone =
+    !hasTwoSided
+      ? "text-amber"
+      : spreadPct > 1.2
+        ? "text-loss"
+        : spreadPct > 0.45
+          ? "text-amber"
+          : "text-profit";
+
+  return {
+    bid: hasBid ? bid : 0,
+    ask: hasAsk ? ask : 0,
+    last,
+    mid: Number.isFinite(mid) && mid > 0 ? mid : 0,
+    spread,
+    spreadPct,
+    hasTwoSided,
+    bidLabel: hasBid ? formatCurrency(bid) : "--",
+    askLabel: hasAsk ? formatCurrency(ask) : "--",
+    midLabel: Number.isFinite(mid) && mid > 0 ? formatCurrency(mid) : "--",
+    spreadLabel: hasTwoSided ? `${formatCurrency(spread)} · ${spreadPct.toFixed(2)}%` : "Quote needed",
+    spreadTone,
+    timestamp: normalizeEpochSeconds(quote.timestamp),
+  };
+}
+
+type ConfidenceTone = "pass" | "warn" | "block" | "neutral";
+
+interface ConfidenceCheck {
+  label: string;
+  value: string;
+  detail: string;
+  tone: ConfidenceTone;
+  icon: ElementType;
+}
+
+function confidenceStatusLabel(tone: ConfidenceTone): string {
+  if (tone === "pass") return "Pass";
+  if (tone === "block") return "Blocked";
+  if (tone === "warn") return "Review";
+  return "Context";
+}
+
+function confidenceSurfaceClass(tone: ConfidenceTone): string {
+  if (tone === "pass") return "border-profit/25 bg-profit/10";
+  if (tone === "block") return "border-loss/30 bg-loss/10";
+  if (tone === "warn") return "border-amber/30 bg-amber/10";
+  return "border-border-hair bg-bg";
+}
+
+function confidenceIconClass(tone: ConfidenceTone): string {
+  if (tone === "pass") return "bg-profit/15 text-profit";
+  if (tone === "block") return "bg-loss/15 text-loss";
+  if (tone === "warn") return "bg-amber/15 text-amber";
+  return "bg-bg-elev-2 text-fg-muted";
+}
+
+function confidenceTextClass(tone: ConfidenceTone): string {
+  if (tone === "pass") return "text-profit";
+  if (tone === "block") return "text-loss";
+  if (tone === "warn") return "text-amber";
+  return "text-fg";
+}
+
+function confidenceDotClass(tone: ConfidenceTone): string {
+  if (tone === "pass") return "bg-profit";
+  if (tone === "block") return "bg-loss";
+  if (tone === "warn") return "bg-amber";
+  return "bg-fg-muted";
+}
+
+function buildPreTradePreview({
+  defaults,
+  quote,
+  activeContract,
+  activeLegs,
+  comboType,
+  quoteAtFillTs,
+  recentOrders,
+  positions,
+  buyingPower,
+  brokerDegraded,
+  tradeContextSymbol,
+}: {
+  defaults: Partial<StagedOrder>;
+  quote: ExecutionQuote;
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+  comboType: string | null;
+  quoteAtFillTs: number | null;
+  recentOrders: Order[];
+  positions: Position[];
+  buyingPower: number;
+  brokerDegraded: boolean;
+  tradeContextSymbol: string;
+}) {
+  const qty = Number(defaults.quantity);
+  const normalizedQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+  const orderSide = defaults.side === "sell" ? "sell" : "buy";
+  const orderSymbol = normalizeTradeSymbol(String(defaults.symbol ?? tradeContextSymbol));
+  const intentSymbols = getIntentSymbols({
+    orderSymbol,
+    activeContract,
+    activeLegs,
+    tradeContextSymbol,
+  });
+  const underlyingSymbol =
+    activeContract?.symbol ??
+    activeLegs[0]?.symbol ??
+    underlyingFromTradeSymbol(orderSymbol) ??
+    normalizeUnderlyingSymbol(tradeContextSymbol) ??
+    tradeContextSymbol;
+  const limitPrice = Number(defaults.price);
+  const ticketPrice =
+    Number.isFinite(limitPrice) && limitPrice > 0
+      ? limitPrice
+      : quote.mid > 0
+        ? quote.mid
+        : quote.last;
+  const rows: Array<{ label: string; value: string; detail: string; toneClass?: string }> = [];
+  const relatedPositions = positions.filter((position) =>
+    positionTouchesIntent(position, intentSymbols, underlyingSymbol),
+  );
+  const workingCollisions = recentOrders.filter((order) =>
+    isWorkingOrderStatus(order.status) && orderTouchesIntent(order, intentSymbols, underlyingSymbol),
+  );
+  const exposure = estimateTicketExposure({
+    normalizedQty,
+    orderSide,
+    ticketPrice,
+    activeContract,
+    activeLegs,
+  });
+  const checks = buildConfidenceChecks({
+    quote,
+    quoteAtFillTs,
+    buyingPower,
+    brokerDegraded,
+    workingCollisions,
+    relatedPositions,
+    exposure,
+    normalizedQty,
+    orderSide,
+    orderSymbol,
+    underlyingSymbol,
+    activeContract,
+    activeLegs,
+    comboType,
+  });
+  const blocked = checks.some((check) => check.tone === "block");
+  const review = checks.some((check) => check.tone === "warn");
+  const policyLabel = blocked ? "Blocked" : review ? "Review" : "Ready";
+  const policyTone = blocked ? ("loss" as const) : review ? ("amber" as const) : ("profit" as const);
+
+  if (activeLegs.length > 0) {
+    const netCredit = activeLegs.reduce((sum, leg) => {
+      const price = Number.isFinite(leg.limitPrice) && (leg.limitPrice ?? 0) > 0 ? leg.limitPrice ?? 0 : 0;
+      const signed = leg.orderSide === "sell" ? 1 : -1;
+      return sum + signed * price * leg.qty * 100;
+    }, 0);
+    const pricedLegs = activeLegs.filter((leg) => Number.isFinite(leg.limitPrice) && (leg.limitPrice ?? 0) > 0).length;
+    rows.push(
+      {
+        label: "Premium",
+        value: pricedLegs > 0 ? `${netCredit >= 0 ? "Credit" : "Debit"} ${formatCurrency(Math.abs(netCredit))}` : "Unpriced",
+        detail: `${pricedLegs}/${activeLegs.length} legs have limits.`,
+        toneClass: netCredit >= 0 ? "text-profit" : "text-loss",
+      },
+      {
+        label: "Structure",
+        value: comboType ? comboType.replace("_", " ") : `${activeLegs.length} legs`,
+        detail: comboType === "iron_condor" || comboType === "vertical_spread" ? "Defined-risk shape recognized." : "Broker policy must validate margin.",
+      },
+      {
+        label: "Ticket lock",
+        value: "Combo owned",
+        detail: "OrderBar shows the first leg; canonical legs submit together.",
+      },
+      {
+        label: "Liquidity",
+        value: quote.hasTwoSided ? quote.spreadLabel : "Quote needed",
+        detail: "Underlying spread is shown for context; options spread depends on chain data.",
+        toneClass: quote.spreadTone,
+      },
+    );
+    return {
+      subtitle: "Combo checks before send",
+      policyLabel,
+      policyTone,
+      checks,
+      rows,
+    };
+  }
+
+  if (activeContract) {
+    const premium = Number.isFinite(activeContract.limitPrice) && (activeContract.limitPrice ?? 0) > 0 ? activeContract.limitPrice ?? 0 : ticketPrice;
+    const cashImpact = premium * activeContract.qty * 100;
+    rows.push(
+      {
+        label: "Premium",
+        value: formatCurrency(cashImpact),
+        detail: `${activeContract.qty} contract${activeContract.qty === 1 ? "" : "s"} x 100 multiplier.`,
+      },
+      {
+        label: "Contract",
+        value: `${activeContract.side.toUpperCase()} ${activeContract.strike}`,
+        detail: `${activeContract.expiry} expiry.`,
+      },
+      {
+        label: "Max debit",
+        value: activeContract.orderSide === "buy" ? formatCurrency(cashImpact) : "Short option",
+        detail: activeContract.orderSide === "buy" ? "Long premium is the debit at risk." : "Short option risk requires broker margin check.",
+        toneClass: activeContract.orderSide === "buy" ? "text-fg" : "text-amber",
+      },
+      {
+        label: "Liquidity",
+        value: quote.hasTwoSided ? quote.spreadLabel : "Quote needed",
+        detail: "Underlying quote freshness only; option two-sided data remains the execution gate.",
+        toneClass: quote.spreadTone,
+      },
+    );
+    return {
+      subtitle: "Option checks before send",
+      policyLabel,
+      policyTone,
+      checks,
+      rows,
+    };
+  }
+
+  const notional = ticketPrice > 0 ? ticketPrice * normalizedQty : 0;
+  rows.push(
+    {
+      label: "Notional",
+      value: notional > 0 ? formatCurrency(notional) : "Awaiting price",
+      detail: `${normalizedQty} share${normalizedQty === 1 ? "" : "s"} at ${ticketPrice > 0 ? formatCurrency(ticketPrice) : "no quote"}.`,
+    },
+    {
+      label: "Order type",
+      value: String(defaults.type ?? "market").replace("_", " "),
+      detail: defaults.price ? "Limit price is staged." : "Uses current quote context.",
+    },
+    {
+      label: "Spread",
+      value: quote.hasTwoSided ? quote.spreadLabel : "Quote needed",
+      detail: quote.hasTwoSided ? "Use mid when speed is less important than price." : "Do not submit blindly into an incomplete quote.",
+      toneClass: quote.spreadTone,
+    },
+    {
+      label: "Policy",
+      value: quote.hasTwoSided ? "Ready" : "Check quote",
+      detail: "Risk gate still validates buying power and broker state on submit.",
+      toneClass: quote.hasTwoSided ? "text-profit" : "text-amber",
+    },
+  );
+  return {
+    subtitle: "Equity checks before broker validation",
+    policyLabel,
+    policyTone,
+    checks,
+    rows,
+  };
+}
+
+function buildConfidenceChecks({
+  quote,
+  quoteAtFillTs,
+  buyingPower,
+  brokerDegraded,
+  workingCollisions,
+  relatedPositions,
+  exposure,
+  normalizedQty,
+  orderSide,
+  orderSymbol,
+  underlyingSymbol,
+  activeContract,
+  activeLegs,
+  comboType,
+}: {
+  quote: ExecutionQuote;
+  quoteAtFillTs: number | null;
+  buyingPower: number;
+  brokerDegraded: boolean;
+  workingCollisions: Order[];
+  relatedPositions: Position[];
+  exposure: TicketExposure;
+  normalizedQty: number;
+  orderSide: "buy" | "sell";
+  orderSymbol: string;
+  underlyingSymbol: string;
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+  comboType: string | null;
+}): ConfidenceCheck[] {
+  const now = new Date();
+  const nowEpoch = now.getTime() / 1000;
+  const quoteAge = quote.timestamp == null ? null : Math.max(0, nowEpoch - quote.timestamp);
+  const snapshotAge = quoteAtFillTs == null ? null : Math.max(0, nowEpoch - quoteAtFillTs);
+  const session = getMarketSessionState(now);
+  const currentPositionQty = relatedPositions.reduce((sum, position) => sum + (position.quantity ?? 0), 0);
+  const nextPositionQty =
+    activeContract || activeLegs.length > 0
+      ? currentPositionQty
+      : currentPositionQty + (orderSide === "buy" ? normalizedQty : -normalizedQty);
+
+  const quoteTone: ConfidenceTone =
+    brokerDegraded || !quote.hasTwoSided
+      ? "block"
+      : quoteAge == null
+        ? "warn"
+        : quoteAge <= 90
+          ? "pass"
+          : quoteAge <= 300
+            ? "warn"
+            : "block";
+  const quoteValue =
+    brokerDegraded
+      ? "Broker degraded"
+      : !quote.hasTwoSided
+        ? "Quote needed"
+        : quoteAge == null
+          ? "Timestamp missing"
+          : `${formatAgeDuration(quoteAge)} old`;
+  const snapshotCopy =
+    snapshotAge == null
+      ? "No strategy snapshot timestamp."
+      : `Strategy snapshot ${formatAgeDuration(snapshotAge)} old.`;
+
+  const buyingPowerLoaded = Number.isFinite(buyingPower) && buyingPower > 0;
+  const buyingPowerTone: ConfidenceTone =
+    exposure.marginUnknown
+      ? "warn"
+      : !buyingPowerLoaded
+        ? "warn"
+        : exposure.cashDebit > buyingPower
+          ? "block"
+          : "pass";
+  const buyingPowerValue =
+    exposure.marginUnknown
+      ? "Margin check"
+      : exposure.cashDebit > 0
+        ? formatCurrency(exposure.cashDebit)
+        : exposure.label;
+  const buyingPowerDetail =
+    exposure.marginUnknown
+      ? `${exposure.label}. Broker margin validation still decides final capacity.`
+      : buyingPowerLoaded
+        ? `${formatCurrency(buyingPower)} buying power; ${formatCurrency(Math.max(0, buyingPower - exposure.cashDebit))} after estimate.`
+        : "Buying power has not loaded; broker validation remains authoritative.";
+
+  const collisionTone: ConfidenceTone = workingCollisions.length > 0 ? "warn" : "pass";
+  const collisionValue = workingCollisions.length > 0 ? `${workingCollisions.length} working` : "Clear";
+  const collisionDetail =
+    workingCollisions.length > 0
+      ? `Review existing ${underlyingSymbol} working order${workingCollisions.length === 1 ? "" : "s"} before sending another.`
+      : `No working orders detected for ${underlyingSymbol} or staged legs.`;
+
+  const sessionTone: ConfidenceTone = brokerDegraded ? "block" : session.tone;
+  const sessionValue = brokerDegraded ? "Data fallback" : session.label;
+  const sessionDetail = brokerDegraded
+    ? "Broker or data provider is degraded; avoid trusting a new live send."
+    : `${session.detail} ${quote.hasTwoSided ? "Quote is two-sided." : "Quote is incomplete."}`;
+
+  const positionTone: ConfidenceTone =
+    activeContract || activeLegs.length > 0
+      ? activeContract?.orderSide === "sell" || activeLegs.some((leg) => leg.orderSide === "sell")
+        ? "warn"
+        : "pass"
+      : orderSide === "sell" && nextPositionQty < 0
+        ? "warn"
+        : "pass";
+  const positionValue =
+    activeLegs.length > 0
+      ? `${activeLegs.length} legs`
+      : activeContract
+        ? `${activeContract.orderSide.toUpperCase()} ${activeContract.qty}`
+        : `${formatSignedQuantity(currentPositionQty)} -> ${formatSignedQuantity(nextPositionQty)}`;
+  const positionDetail =
+    activeLegs.length > 0
+      ? `${comboType ? comboType.replace("_", " ") : "Combo"} submits canonical legs together; ${relatedPositions.length} related position${relatedPositions.length === 1 ? "" : "s"} found.`
+      : activeContract
+        ? `${activeContract.expiry} ${activeContract.side.toUpperCase()} ${activeContract.strike}; ${relatedPositions.length} related position${relatedPositions.length === 1 ? "" : "s"} found.`
+        : `${orderSymbol} position context before and after a ${normalizedQty} share ${orderSide}.`;
+
+  return [
+    {
+      label: "Quote freshness",
+      value: quoteValue,
+      detail: `${quote.hasTwoSided ? `Spread ${quote.spreadLabel}.` : "Bid/ask is incomplete."} ${snapshotCopy}`,
+      tone: quoteTone,
+      icon: Clock,
+    },
+    {
+      label: "Buying power",
+      value: buyingPowerValue,
+      detail: buyingPowerDetail,
+      tone: buyingPowerTone,
+      icon: Scales,
+    },
+    {
+      label: "Open orders",
+      value: collisionValue,
+      detail: collisionDetail,
+      tone: collisionTone,
+      icon: Rows,
+    },
+    {
+      label: "Session state",
+      value: sessionValue,
+      detail: sessionDetail,
+      tone: sessionTone,
+      icon: Gauge,
+    },
+    {
+      label: activeContract || activeLegs.length > 0 ? "Contract context" : "Position context",
+      value: positionValue,
+      detail: positionDetail,
+      tone: positionTone,
+      icon: TrendUp,
+    },
+  ];
+}
+
+interface TicketExposure {
+  cashDebit: number;
+  label: string;
+  marginUnknown: boolean;
+}
+
+function estimateTicketExposure({
+  normalizedQty,
+  orderSide,
+  ticketPrice,
+  activeContract,
+  activeLegs,
+}: {
+  normalizedQty: number;
+  orderSide: "buy" | "sell";
+  ticketPrice: number;
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+}): TicketExposure {
+  if (activeLegs.length > 0) {
+    const netCredit = activeLegs.reduce((sum, leg) => {
+      const price = Number.isFinite(leg.limitPrice) && (leg.limitPrice ?? 0) > 0 ? leg.limitPrice ?? 0 : 0;
+      return sum + (leg.orderSide === "sell" ? 1 : -1) * price * leg.qty * 100;
+    }, 0);
+    const debit = netCredit < 0 ? Math.abs(netCredit) : 0;
+    const hasShortLeg = activeLegs.some((leg) => leg.orderSide === "sell");
+    return {
+      cashDebit: debit,
+      label: netCredit >= 0 ? `Credit ${formatCurrency(netCredit)}` : `Debit ${formatCurrency(debit)}`,
+      marginUnknown: hasShortLeg,
+    };
+  }
+
+  if (activeContract) {
+    const premium = Number.isFinite(activeContract.limitPrice) && (activeContract.limitPrice ?? 0) > 0
+      ? activeContract.limitPrice ?? 0
+      : ticketPrice;
+    const notional = premium > 0 ? premium * activeContract.qty * 100 : 0;
+    return {
+      cashDebit: activeContract.orderSide === "buy" ? notional : 0,
+      label: activeContract.orderSide === "buy" ? `Debit ${formatCurrency(notional)}` : "Short option margin",
+      marginUnknown: activeContract.orderSide === "sell",
+    };
+  }
+
+  const notional = ticketPrice > 0 ? ticketPrice * normalizedQty : 0;
+  return {
+    cashDebit: orderSide === "buy" ? notional : 0,
+    label: orderSide === "buy" ? `Debit ${formatCurrency(notional)}` : `Sell notional ${formatCurrency(notional)}`,
+    marginUnknown: false,
+  };
+}
+
+function getIntentSymbols({
+  orderSymbol,
+  activeContract,
+  activeLegs,
+  tradeContextSymbol,
+}: {
+  orderSymbol: string;
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+  tradeContextSymbol: string;
+}): Set<string> {
+  const symbols = new Set<string>();
+  if (orderSymbol) symbols.add(orderSymbol);
+  const tradeSymbol = normalizeTradeSymbol(tradeContextSymbol);
+  if (tradeSymbol) symbols.add(tradeSymbol);
+  if (activeContract) symbols.add(normalizeTradeSymbol(activeContract.occ));
+  for (const leg of activeLegs) symbols.add(normalizeTradeSymbol(leg.occ));
+  return symbols;
+}
+
+function normalizeTradeSymbol(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function underlyingFromTradeSymbol(symbol: string): string | null {
+  const normalized = normalizeTradeSymbol(symbol);
+  return parseOccSymbol(normalized)?.symbol ?? normalizeUnderlyingSymbol(normalized);
+}
+
+function orderTouchesIntent(order: Order, intentSymbols: Set<string>, underlyingSymbol: string): boolean {
+  const symbols = [order.symbol, ...(order.legs ?? []).map((leg) => leg.symbol)];
+  return symbols.some((symbol) => symbolTouchesIntent(symbol, intentSymbols, underlyingSymbol));
+}
+
+function positionTouchesIntent(position: Position, intentSymbols: Set<string>, underlyingSymbol: string): boolean {
+  return symbolTouchesIntent(position.symbol, intentSymbols, underlyingSymbol);
+}
+
+function symbolTouchesIntent(symbol: string, intentSymbols: Set<string>, underlyingSymbol: string): boolean {
+  const normalized = normalizeTradeSymbol(symbol.split(/\s+/)[0] ?? symbol);
+  if (!normalized) return false;
+  if (intentSymbols.has(normalized)) return true;
+  const parsedUnderlying = parseOccSymbol(normalized)?.symbol;
+  if (parsedUnderlying && parsedUnderlying === underlyingSymbol) return true;
+  return normalized === underlyingSymbol;
+}
+
+function normalizeEpochSeconds(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric > 1e12 ? numeric / 1000 : numeric;
+}
+
+function formatAgeDuration(seconds: number): string {
+  if (!Number.isFinite(seconds)) return "unavailable";
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+function formatSignedQuantity(quantity: number): string {
+  if (!Number.isFinite(quantity) || quantity === 0) return "Flat";
+  const abs = Math.abs(quantity);
+  return `${quantity > 0 ? "+" : "-"}${abs}`;
+}
+
+function getMarketSessionState(now: Date): {
+  label: string;
+  detail: string;
+  tone: ConfidenceTone;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  const weekday = byType.get("weekday") ?? "Sat";
+  const hour = Number(byType.get("hour"));
+  const minute = Number(byType.get("minute"));
+  const safeHour = Number.isFinite(hour) ? (hour === 24 ? 0 : hour) : 0;
+  const safeMinute = Number.isFinite(minute) ? minute : 0;
+  const minutes = safeHour * 60 + safeMinute;
+  const isWeekday = !["Sat", "Sun"].includes(weekday);
+
+  if (!isWeekday) {
+    return {
+      label: "Market closed",
+      detail: "Weekend session; most orders queue for the next regular open.",
+      tone: "warn",
+    };
+  }
+  if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) {
+    return {
+      label: "Regular session",
+      detail: "US cash market is open.",
+      tone: "pass",
+    };
+  }
+  if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) {
+    return {
+      label: "Premarket",
+      detail: "Liquidity can be thinner before the cash open.",
+      tone: "warn",
+    };
+  }
+  if (minutes >= 16 * 60 && minutes < 20 * 60) {
+    return {
+      label: "After hours",
+      detail: "Extended-hours liquidity can widen spreads.",
+      tone: "warn",
+    };
+  }
+  return {
+    label: "Market closed",
+    detail: "Regular session is closed; broker may queue eligible orders.",
+    tone: "warn",
+  };
+}
+
+function TradeIntentPanel({
+  activeContract,
+  activeLegs,
+  comboType,
+}: {
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+  comboType: string | null;
+}) {
+  if (!activeContract && activeLegs.length === 0) {
+    return (
+      <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 px-4 py-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]">
+        <div className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-sm bg-brand/10 text-brand">
+            <SlidersHorizontal className="size-4" aria-hidden />
+          </span>
+          <h2 className="text-[15px] font-semibold text-ink-1000">Intent rail</h2>
+        </div>
+        <p className="mt-3 text-[13px] leading-snug text-fg-muted">
+          No pre-staged legs. The ticket owns the executable order and the chart stays dedicated to price.
+        </p>
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-border-hair bg-bg px-3 py-2 text-[12px] text-fg-muted">
+          <ShieldWarning className="size-4 shrink-0 text-amber" aria-hidden />
+          Broker and risk policy still run on submit.
+        </div>
+      </section>
+    );
+  }
+
+  if (activeContract) {
+    return (
+      <section
+        className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+        aria-label="Pre-staged option contract"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <TrendUp className="size-4 text-brand" aria-hidden />
+            <h2 className="text-[15px] font-semibold text-ink-1000">Staged contract</h2>
+          </div>
+          <TradeStatusPill label="1 leg" tone="amber" />
+        </div>
+        <div
+          data-order-side={activeContract.orderSide}
+          data-slot="active-contract"
+          className="flex flex-col gap-2 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-[13px]"
+        >
+          <span className="break-all font-semibold text-fg">{activeContract.occ}</span>
+          <span className="text-fg-muted">
+            {activeContract.expiry} · {activeContract.side.toUpperCase()} · ${activeContract.strike}
+          </span>
+          <span className={cn("uppercase font-medium", activeContract.orderSide === "sell" ? "text-loss" : "text-profit")}>
+            {activeContract.orderSide} x {activeContract.qty}
+          </span>
+          {activeContract.limitPrice != null && (
+            <span data-slot="active-contract-limit" className="text-fg-muted">
+              @ ${activeContract.limitPrice.toFixed(2)}
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 h-9 px-2"
-        >
-          Back to desk
-        </button>
-      </header>
+      </section>
+    );
+  }
 
-      {/* Round-8 single-view C: chart + OrderBar are now column-paired
-          at lg+ so the trader's eye doesn't have to dart up-and-down
-          between the chart (decision context) and the ticket (action).
-          Chart spans 7/12, OrderBar 5/12. Both stack on smaller widths.
-          The OrderBar sits at ``lg:sticky top-4`` so it stays visible
-          while the chart scrolls — single-page trade flow per the
-          tastytrade pattern. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <section
-          className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden min-h-[360px] flex flex-col lg:col-span-7"
-        >
-          <PriceChartPanel
-            symbol={symbol}
-            quote={quote}
-            meta={meta}
-            series={series}
-            activeRange={range}
-            onRangeChange={setRange}
-            className="flex-1 min-h-[360px]"
-          />
-        </section>
+  return (
+    <section
+      className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+      aria-label="Pre-staged multi-leg order"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Gauge className="size-4 text-brand" aria-hidden />
+          <h2 className="text-[15px] font-semibold text-ink-1000">Staged combo</h2>
+        </div>
+        <TradeStatusPill label={comboType ?? `${activeLegs.length} legs`} tone="amber" />
+      </div>
+      <div data-slot="active-legs" className="flex flex-col gap-2">
+        {activeLegs.map((leg, i) => (
+          <div
+            key={leg.occ}
+            data-slot="active-leg"
+            data-order-side={leg.orderSide}
+            className="flex flex-col gap-1 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-[13px]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12px] text-fg-muted">Leg {i + 1}</span>
+              <span className={cn("uppercase font-medium", leg.orderSide === "sell" ? "text-loss" : "text-profit")}>
+                {leg.orderSide} x {leg.qty}
+              </span>
+            </div>
+            <span className="break-all font-semibold text-fg">{leg.occ}</span>
+            <span className="text-fg-muted">
+              {leg.expiry} · {leg.side.toUpperCase()} · ${leg.strike}
+            </span>
+            {leg.limitPrice != null && (
+              <span data-slot="active-leg-limit" className="text-fg-muted">
+                @ ${leg.limitPrice.toFixed(2)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-        <section
-          className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden lg:col-span-5 lg:sticky lg:top-4 lg:self-start"
-        >
-          <OrderBar
-            key={`trade-orderbar-${resetTick}`}
-            symbol={tradeContextSymbol}
-            strategies={strategyOptions}
-            onSubmit={handleSubmit}
-            submitting={submitting}
-            errorMessage={orderError}
-            // Round-5 F-2: when a deep-link pre-stages a contract or combo,
-            // bind the OrderBar to the option's OCC symbol + side + qty +
-            // limit so clicking Place actually places the option order. The
-            // single-leg "Pre-staged contract" panel below is informational
-            // only — the form is the source of truth.
-            defaults={orderBarDefaults}
-            submitLabel={
-              activeLegs.length > 0
-                ? `Place ${activeLegs.length}-leg combo`
-                : "Place order"
-            }
-            ticketLocked={activeLegs.length > 0}
-          />
-        </section>
+function RecentOrdersPanel({
+  orders,
+  totalOrders,
+  activeFilter,
+  onFilterChange,
+}: {
+  orders: Order[];
+  totalOrders: number;
+  activeFilter: OrderFilter;
+  onFilterChange: (filter: OrderFilter) => void;
+}) {
+  const filters: Array<{ id: OrderFilter; label: string }> = [
+    { id: "working", label: "Working" },
+    { id: "all", label: "All" },
+    { id: "filled", label: "Filled" },
+    { id: "rejected", label: "Rejected" },
+  ];
+
+  return (
+    <section
+      id="trade-orders"
+      className="scroll-mt-20 overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+    >
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-2 px-4 pt-4 md:py-4">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+            <Lightning className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold text-ink-1000">Execution activity</h2>
+            <p className="mt-0.5 text-[12px] text-fg-muted">{totalOrders} recent broker event{totalOrders === 1 ? "" : "s"}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1 px-4 pb-4 md:py-4">
+          <FunnelSimple className="mr-1 size-4 self-center text-fg-muted" aria-hidden />
+          {filters.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => onFilterChange(filter.id)}
+              data-active={activeFilter === filter.id || undefined}
+              className={cn(
+                "rounded-sm border px-2.5 py-1.5 font-mono text-[12px] transition-colors",
+                activeFilter === filter.id
+                  ? "border-brand/40 bg-brand/15 text-brand"
+                  : "border-border-hair bg-bg-elev-2 text-fg-muted hover:text-fg",
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* ─── Pre-staged contract (single-leg deep-link) ──────────── */}
-      {activeContract && (
-        <section
-          className="rounded-lg border border-border bg-[var(--surface)] p-4"
-          aria-label="Pre-staged option contract"
-        >
-          <h2 className="t-display-section mb-3">Pre-staged contract</h2>
-          <p className="text-xs text-muted-foreground mb-2">
-            Review the contract below before placing. Nothing auto-submits.
+      {orders.length === 0 ? (
+        <div className="border-t border-border-hair bg-bg px-4 py-8 text-center">
+          <p className="text-[15px] font-medium text-fg">
+            {totalOrders === 0 ? "No orders yet today." : "No orders match this view."}
           </p>
-          {/* data-order-side is the test-observable attribute for the staged side */}
-          <div
-            data-order-side={activeContract.orderSide}
-            data-slot="active-contract"
-            className="flex flex-wrap items-center gap-3 rounded border border-border bg-[var(--bg-elev-1)] px-4 py-3 font-mono text-sm"
-          >
-            <span className="font-semibold text-foreground">{activeContract.occ}</span>
-            <span className="text-muted-foreground">
-              {activeContract.symbol} &nbsp;
-              {activeContract.expiry} &nbsp;
-              {activeContract.side.toUpperCase()} &nbsp;
-              ${activeContract.strike}
-            </span>
-            <span
-              className={`uppercase font-medium ${
-                activeContract.orderSide === "sell"
-                  ? "text-[var(--loss)]"
-                  : "text-[var(--profit)]"
-              }`}
-            >
-              {activeContract.orderSide} &times; {activeContract.qty}
-            </span>
-            {activeContract.limitPrice != null && (
-              <span data-slot="active-contract-limit" className="text-fg-muted">
-                @ ${activeContract.limitPrice.toFixed(2)}
-              </span>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ─── Pre-staged legs (multi-leg / strangle deep-link) ────── */}
-      {activeLegs.length > 0 && (
-        <section
-          className="rounded-lg border border-border bg-[var(--surface)] p-4"
-          aria-label="Pre-staged multi-leg order"
-        >
-          <h2 className="t-display-section mb-3">
-            Pre-staged combo order
-            {comboType && (
-              <span className="ml-2 not-italic font-mono text-[12px] text-fg-muted">
-                · {comboType}
-              </span>
-            )}
-          </h2>
-          <p className="text-xs text-muted-foreground mb-2">
-            All {activeLegs.length} legs are submitted as one combo order
-            via the broker&rsquo;s combo lane. Click <em>Place</em> above to
-            stage the entire combo at once.
+          <p className="mt-1 text-[13px] text-fg-muted">
+            {totalOrders === 0 ? "Submitted orders will appear here after broker acknowledgement." : "Switch filters to review other broker states."}
           </p>
-          <div data-slot="active-legs" className="flex flex-col gap-2">
-            {activeLegs.map((leg, i) => (
-              <div
-                key={leg.occ}
-                data-slot="active-leg"
-                data-order-side={leg.orderSide}
-                className="flex flex-wrap items-center gap-3 rounded border border-border bg-[var(--bg-elev-1)] px-4 py-3 font-mono text-sm"
-              >
-                <span className="text-xs text-muted-foreground">Leg {i + 1}</span>
-                <span className="font-semibold text-foreground">{leg.occ}</span>
-                <span className="text-muted-foreground">
-                  {leg.symbol} &nbsp;
-                  {leg.expiry} &nbsp;
-                  {leg.side.toUpperCase()} &nbsp;
-                  ${leg.strike}
-                </span>
-                <span
-                  className={`uppercase font-medium ${
-                    leg.orderSide === "sell"
-                      ? "text-[var(--loss)]"
-                      : "text-[var(--profit)]"
-                  }`}
-                >
-                  {leg.orderSide} &times; {leg.qty}
-                </span>
-                {leg.limitPrice != null && (
-                  <span data-slot="active-leg-limit" className="text-fg-muted">
-                    @ ${leg.limitPrice.toFixed(2)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="rounded-lg border border-border bg-[var(--surface)] p-4">
-        {/* Dashboard-wave typography: section header uses the display
-            italic token so the `/trade` page aligns with the editorial
-            voice the rest of the polished pages share. */}
-        <h2 className="t-display-section mb-3">Recent orders</h2>
-        {recentOrders.length === 0 ? (
-          // Editorial empty-state — mirrors the alerts / analytics voice:
-          // italic-serif headline sentence, sans sentence-case subtitle.
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <p className="font-display italic text-[15px] text-fg">
-              No orders yet today.
-            </p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Stage one above and it&rsquo;ll appear here as soon as the broker acknowledges.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              {/* Persona 71-5 — sr-only caption + scope="col" on every th
-                  so AT can announce the table structure. The on-screen
-                  "Recent orders" heading above supplies the visible
-                  context; this caption duplicates it for screen readers
-                  that only read the table landmark. */}
-              <caption className="sr-only">Recent orders</caption>
-              <thead>
-                {/* t-label token — matches dashboard-wave "eyebrow" style
-                    (caps, tracked 0.12em, 12px sans) so column headers in
-                    `/trade` read the same as every other polished page. */}
-                <tr className="text-left border-b border-border">
-                  {/* BUG-041: Date column added alongside Time so a
-                      multi-day list (pre-market orders, pending orders
-                      that fill tomorrow) is disambiguated at a glance. */}
-                  <th scope="col" className="py-2 px-2 t-label">Date</th>
-                  <th scope="col" className="py-2 px-2 t-label">Time</th>
-                  <th scope="col" className="py-2 px-2 t-label">Symbol</th>
-                  <th scope="col" className="py-2 px-2 t-label">Side</th>
-                  <th scope="col" className="py-2 px-2 t-label">Qty</th>
-                  <th scope="col" className="py-2 px-2 t-label">Type</th>
-                  {/* Round-5 F-13 — Strategy column. Maps to
-                      `order.strategy` (forwarded by the backend after
-                      F-1 lands). Empty (em-dash) when null. */}
-                  <th scope="col" className="py-2 px-2 t-label">Strategy</th>
-                  <th scope="col" className="py-2 px-2 t-label">Status</th>
+        </div>
+      ) : (
+        <div className="overflow-x-auto border-t border-border-hair">
+          <table className="w-full text-xs">
+            <caption className="sr-only">Recent orders</caption>
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th scope="col" className="px-2 py-2 t-label">Date</th>
+                <th scope="col" className="px-2 py-2 t-label">Time</th>
+                <th scope="col" className="px-2 py-2 t-label">Symbol</th>
+                <th scope="col" className="px-2 py-2 t-label">Side</th>
+                <th scope="col" className="px-2 py-2 t-label">Qty</th>
+                <th scope="col" className="px-2 py-2 t-label">Type</th>
+                <th scope="col" className="px-2 py-2 t-label">Strategy</th>
+                <th scope="col" className="px-2 py-2 t-label">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o) => (
+                <tr key={o.id} className="border-b border-border/40">
+                  <td className="px-2 py-2 t-meta">
+                    {o.createdAt
+                      ? new Date(o.createdAt).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "2-digit",
+                        })
+                      : "—"}
+                  </td>
+                  <td className="px-2 py-2 t-meta">
+                    {o.createdAt ? new Date(o.createdAt).toLocaleTimeString() : "—"}
+                  </td>
+                  <td className="px-2 py-2 font-mono text-fg">{o.symbol}</td>
+                  <td className={cn("px-2 py-2 font-medium uppercase", o.side === "buy" ? "text-profit" : "text-loss")}>
+                    {o.side}
+                  </td>
+                  <td className="px-2 py-2 t-num-md text-fg">{o.quantity}</td>
+                  <td className="px-2 py-2 capitalize text-fg-muted">{o.type.replace("_", " ")}</td>
+                  <td className="px-2 py-2 font-mono text-[12px] text-fg">{o.strategy ?? "—"}</td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={cn(
+                        "inline-block rounded-sm px-1.5 py-0.5 text-[12px] font-medium uppercase tracking-wider",
+                        o.status === "filled" && "bg-profit/15 text-profit",
+                        o.status === "rejected" && "bg-loss/15 text-loss",
+                        o.status === "cancelled" && "bg-fg-muted/15 text-fg-muted",
+                        o.status !== "filled" && o.status !== "rejected" && o.status !== "cancelled" && "bg-ice/15 text-ice",
+                      )}
+                    >
+                      {o.status}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((o) => (
-                  <tr key={o.id} className="border-b border-border/40">
-                    <td className="py-2 px-2 t-meta">
-                      {o.createdAt
-                        ? new Date(o.createdAt).toLocaleDateString(undefined, {
-                            year: "numeric",
-                            month: "short",
-                            day: "2-digit",
-                          })
-                        : "—"}
-                    </td>
-                    <td className="py-2 px-2 t-meta">
-                      {o.createdAt ? new Date(o.createdAt).toLocaleTimeString() : "—"}
-                    </td>
-                    <td className="py-2 px-2 font-mono text-foreground">{o.symbol}</td>
-                    <td className={`py-2 px-2 uppercase tracking-wider font-medium ${
-                      o.side === "buy" ? "text-[var(--profit)]" : "text-[var(--loss)]"
-                    }`}>
-                      {o.side}
-                    </td>
-                    <td className="py-2 px-2 t-num-md text-foreground">{o.quantity}</td>
-                    <td className="py-2 px-2 text-muted-foreground capitalize">
-                      {o.type.replace("_", " ")}
-                    </td>
-                    <td className="py-2 px-2 font-mono text-[11px] text-foreground">
-                      {o.strategy ?? "—"}
-                    </td>
-                    <td className="py-2 px-2">
-                      {/* Status pill — legibility upgrade. Raw status
-                          strings blended into body text; a colour-token
-                          chip makes filled vs. rejected vs. working
-                          glanceable without re-reading. Same token map
-                          PositionsList uses (STATUS_CHIP) kept inline to
-                          stay self-contained without importing a shared
-                          composite the brief scoped away. */}
-                      <span
-                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
-                          o.status === "filled"
-                            ? "bg-[var(--profit)]/15 text-[var(--profit)]"
-                            : o.status === "rejected"
-                            ? "bg-[var(--loss)]/15 text-[var(--loss)]"
-                            : o.status === "cancelled"
-                            ? "bg-[var(--neutral)]/15 text-[var(--neutral)]"
-                            : "bg-[var(--chart-4)]/15 text-[var(--chart-4)]"
-                        }`}
-                      >
-                        {o.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

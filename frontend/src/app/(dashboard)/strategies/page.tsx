@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
-import Display from "@/components/typography/Display";
 import Mono from "@/components/typography/Mono";
 import RegimePill from "@/components/primitives/RegimePill";
 import StatusDot from "@/components/primitives/StatusDot";
@@ -74,17 +73,19 @@ interface ListingStrategy {
 }
 
 type Bucket = "active" | "paused" | "coming_soon";
+type ReadinessKey = "ready" | "needs_data" | "needs_review" | "paper_only" | "blocked";
+type ReadinessFilter = "all" | ReadinessKey;
 
 // ─── Formatters ──────────────────────────────────────────────
 
 function signedNumber(n: number | null): string {
-  if (n == null || !Number.isFinite(n)) return "\u2014";
+  if (n == null || !Number.isFinite(n)) return "Needs OOS";
   const sign = n >= 0 ? "+" : "\u2212";
   return `${sign}${Math.abs(n).toFixed(2)}`;
 }
 
 function fractionToPct(n: number | null, digits = 1): string {
-  if (n == null || !Number.isFinite(n)) return "\u2014";
+  if (n == null || !Number.isFinite(n)) return "Backtest pending";
   const pct = n * 100;
   const sign = pct >= 0 ? "+" : "\u2212";
   return `${sign}${Math.abs(pct).toFixed(digits)}%`;
@@ -93,7 +94,7 @@ function fractionToPct(n: number | null, digits = 1): string {
 function drawdownToPct(n: number | null): string {
   // MaxDD is rendered as a signed loss number. Backends emit either a
   // negative or positive fraction; use absolute value then prepend minus.
-  if (n == null || !Number.isFinite(n)) return "\u2014";
+  if (n == null || !Number.isFinite(n)) return "No drawdown yet";
   const pct = Math.abs(n) * 100;
   return `\u2212${pct.toFixed(1)}%`;
 }
@@ -140,6 +141,65 @@ function bucketFor(s: ListingStrategy): Bucket {
   return "paused";
 }
 
+function readinessFor(
+  s: ListingStrategy,
+  bucket: Bucket,
+): { key: ReadinessKey; label: string; reason: string; tone: "profit" | "amber" | "loss" | "muted" } {
+  if (bucket === "coming_soon") {
+    return {
+      key: "blocked",
+      label: "Blocked",
+      reason: "Backend package has not shipped yet.",
+      tone: "muted",
+    };
+  }
+  if (s.liveDisabled) {
+    return {
+      key: "blocked",
+      label: "Not live-ready",
+      reason: "Risk policy blocks live routing; use paper/research only.",
+      tone: "loss",
+    };
+  }
+  if (s.paperOnly) {
+    return {
+      key: "paper_only",
+      label: "Paper-only",
+      reason: "Implementation exists, but evidence is too thin for live.",
+      tone: "amber",
+    };
+  }
+  if (s.apiStatus === "unknown") {
+    return {
+      key: "needs_data",
+      label: "Needs data",
+      reason: "Strategy API has not supplied live status yet.",
+      tone: "amber",
+    };
+  }
+  if (bucket === "active") {
+    return {
+      key: "ready",
+      label: "Ready",
+      reason: "Enabled system with current catalogue metadata.",
+      tone: "profit",
+    };
+  }
+  return {
+    key: "needs_review",
+    label: "Needs review",
+    reason: "Paused or backtest-only until a trader re-enables it.",
+    tone: "amber",
+  };
+}
+
+function readinessChipClass(tone: ReturnType<typeof readinessFor>["tone"]) {
+  if (tone === "profit") return "border-profit/30 bg-profit/10 text-profit";
+  if (tone === "loss") return "border-loss/30 bg-loss/10 text-loss";
+  if (tone === "amber") return "border-amber/30 bg-amber/10 text-amber";
+  return "border-border-hair bg-bg-elev-2 text-fg-muted";
+}
+
 // ─── Strategy card ───────────────────────────────────────────
 
 function StrategyCatalogCard({
@@ -151,6 +211,7 @@ function StrategyCatalogCard({
 }) {
   const comingSoon = bucket === "coming_soon";
   const regime = statusRegime(bucket, s);
+  const readiness = readinessFor(s, bucket);
 
   const labelParts: string[] = [s.displayName, regime.label];
   if (s.sharpe != null) labelParts.push(`OOS Sharpe ${signedNumber(s.sharpe)}`);
@@ -204,7 +265,7 @@ function StrategyCatalogCard({
               aria-label={pillAriaLabel}
               className={cn(
                 "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
-                "font-sans text-[11px] font-semibold uppercase tracking-normal text-amber-100"
+                "font-sans text-[12px] font-semibold uppercase tracking-normal text-amber-100"
               )}
             >
               {pillLabel}
@@ -217,6 +278,15 @@ function StrategyCatalogCard({
           label={regime.label.toUpperCase()}
         />
       </header>
+
+      <div className="rounded-sm border border-border-hair bg-bg px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn("inline-flex rounded-sm border px-2 py-0.5 font-mono text-[12px]", readinessChipClass(readiness.tone))}>
+            {readiness.label}
+          </span>
+          <span className="text-[12px] leading-snug text-fg-muted">{readiness.reason}</span>
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 gap-3 border-t border-border-hair pt-3">
         <MetricCell label="OOS SHARPE" value={signedNumber(s.sharpe)} />
@@ -318,7 +388,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="t-label">{label}</span>
-      <Mono className="text-[13.5px] tabular-nums text-fg">{value}</Mono>
+      <Mono className="text-[13px] tabular-nums text-fg">{value}</Mono>
     </div>
   );
 }
@@ -354,9 +424,84 @@ function researchMetricsFor(id: string): ResearchCardMetric[] {
   }
   return [
     { label: "THIS WEEK", value: 0, hint: "earnings" },
-    { label: "AVG IV RANK", value: "—", hint: "across set" },
-    { label: "TOP SETUP", value: "—", hint: "recommended" },
+    { label: "AVG IV RANK", value: "Needs scan", hint: "across set" },
+    { label: "TOP SETUP", value: "Awaiting data", hint: "recommended" },
   ];
+}
+
+const READINESS_FILTERS: Array<{ value: ReadinessFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "ready", label: "Ready" },
+  { value: "needs_data", label: "Needs data" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "paper_only", label: "Paper-only" },
+  { value: "blocked", label: "Blocked" },
+];
+
+function StrategyReadinessWorkbench({
+  counts,
+  activeFilter,
+  onFilterChange,
+}: {
+  counts: Record<ReadinessKey, number>;
+  activeFilter: ReadinessFilter;
+  onFilterChange: (filter: ReadinessFilter) => void;
+}) {
+  return (
+    <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="t-label text-fg-hint">Strategy readiness workbench</p>
+          <h2 className="mt-2 text-[18px] font-semibold leading-tight text-ink-1000">Scan what can trade, what needs data, and why live is blocked.</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <ReadinessDatum label="Ready" value={counts.ready} tone="profit" />
+          <ReadinessDatum label="Needs data" value={counts.needs_data} tone="amber" />
+          <ReadinessDatum label="Review" value={counts.needs_review} tone="amber" />
+          <ReadinessDatum label="Paper" value={counts.paper_only} tone="muted" />
+          <ReadinessDatum label="Blocked" value={counts.blocked} tone="loss" />
+        </div>
+      </div>
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Filter strategies by readiness">
+        {READINESS_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            role="radio"
+            aria-checked={activeFilter === filter.value}
+            onClick={() => onFilterChange(filter.value)}
+            className={cn(
+              "inline-flex min-h-10 shrink-0 items-center rounded-sm border px-3 font-sans text-[13px] font-semibold transition-colors",
+              activeFilter === filter.value
+                ? "border-brand/40 bg-brand/15 text-brand"
+                : "border-border-hair bg-bg text-fg-muted hover:border-brand/30 hover:text-fg",
+            )}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReadinessDatum({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "profit" | "amber" | "loss" | "muted";
+}) {
+  return (
+    <div className="rounded-md border border-border-hair bg-bg px-3 py-2">
+      <p className="t-label text-fg-hint">{label}</p>
+      <p className={cn("mt-1 font-mono text-[18px] leading-tight", readinessChipClass(tone).split(" ").find((part) => part.startsWith("text-")) ?? "text-fg")}>
+        {value}
+      </p>
+    </div>
+  );
 }
 
 // ─── Section block ───────────────────────────────────────────
@@ -380,16 +525,16 @@ function Section({
     <section className="flex flex-col gap-3" data-section={dataSection}>
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
-          <Display size="md" as="h2" className="text-[22px]">
+          <h2 className="t-h2 text-ink-1000">
             {title}
-          </Display>
+          </h2>
           <Mono size="micro" className="text-fg-hint">
             {String(count).padStart(2, "0")}
           </Mono>
         </div>
       </header>
       {strategies.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border-hair bg-bg-elev-1 px-4 py-8 text-center font-display italic text-[14px] text-fg-muted">
+        <div className="rounded-md border border-dashed border-border-hair bg-bg-elev-1 px-4 py-8 text-center font-display italic text-[15px] text-fg-muted">
           {empty}
         </div>
       ) : (
@@ -411,6 +556,7 @@ export default function StrategiesListingPage() {
   >(null);
   const [perf, setPerf] = useState<Record<string, StrategyPerformance>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
   // A3#2 (Wave 8) — routing-flag catalog. ``null`` during first paint;
   // replaced by the server payload once ``/api/v1/strategies/catalog``
   // resolves. The per-card pill falls back to the shared ``LIVE_DISABLED`` /
@@ -442,9 +588,19 @@ export default function StrategiesListingPage() {
   }, []);
 
   useEffect(() => {
-    const cancel = loadSummaries();
-    return cancel;
-  }, [loadSummaries]);
+    let cancelled = false;
+    getStrategies()
+      .then((rows) => {
+        if (!cancelled) setSummaries(rows);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setLoadError(err?.message ?? "Failed to load strategies");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // A3#2 (Wave 8) — catalog fetch (cheap, no DB). Failure is non-fatal:
   // the shared manifest still lights first-paint routing pills.
@@ -570,6 +726,34 @@ export default function StrategiesListingPage() {
     }
     return g;
   }, [strategies]);
+  const readinessCounts = useMemo(() => {
+    const counts: Record<ReadinessKey, number> = {
+      ready: 0,
+      needs_data: 0,
+      needs_review: 0,
+      paper_only: 0,
+      blocked: 0,
+    };
+    for (const strategy of strategies) {
+      if (metaKind(strategy.id) === "research") continue;
+      counts[readinessFor(strategy, bucketFor(strategy)).key] += 1;
+    }
+    return counts;
+  }, [strategies]);
+  const readinessMatches = useCallback(
+    (strategy: ListingStrategy) =>
+      readinessFilter === "all" ||
+      readinessFor(strategy, bucketFor(strategy)).key === readinessFilter,
+    [readinessFilter],
+  );
+  const filteredGrouped = useMemo<Record<Bucket, ListingStrategy[]>>(
+    () => ({
+      active: grouped.active.filter(readinessMatches),
+      paused: grouped.paused.filter(readinessMatches),
+      coming_soon: grouped.coming_soon.filter(readinessMatches),
+    }),
+    [grouped, readinessMatches],
+  );
 
   // BUG-009: route all three places that display strategy counts (desk
   // rail, this page, /reports) through one aggregator. The old
@@ -711,6 +895,14 @@ export default function StrategiesListingPage() {
           </div>
         )}
 
+        {!loading && (
+          <StrategyReadinessWorkbench
+            counts={readinessCounts}
+            activeFilter={readinessFilter}
+            onFilterChange={setReadinessFilter}
+          />
+        )}
+
         {loading && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -729,16 +921,16 @@ export default function StrategiesListingPage() {
               title="Active"
               count={counts.active}
               bucket="active"
-              strategies={grouped.active}
+              strategies={filteredGrouped.active}
               empty="No strategies currently active."
             />
-            {grouped.paused.length > 0 && (
+            {filteredGrouped.paused.length > 0 && (
               <Section
                 data-section="paused"
                 title="Paused"
                 count={counts.paused}
                 bucket="paused"
-                strategies={grouped.paused}
+                strategies={filteredGrouped.paused}
                 empty="No paused strategies."
               />
             )}
@@ -749,9 +941,9 @@ export default function StrategiesListingPage() {
               >
                 <header className="flex items-baseline justify-between gap-2">
                   <div className="flex items-baseline gap-3">
-                    <Display size="md" as="h2" className="text-[22px]">
+                    <h2 className="t-h2 text-ink-1000">
                       Research
-                    </Display>
+                    </h2>
                     <Mono size="micro" className="text-fg-hint">
                       {String(researchEntries.length).padStart(2, "0")}
                     </Mono>
@@ -770,13 +962,13 @@ export default function StrategiesListingPage() {
                 </div>
               </section>
             )}
-            {grouped.coming_soon.length > 0 && (
+            {filteredGrouped.coming_soon.length > 0 && (
               <Section
                 data-section="coming-soon"
                 title="Coming soon"
                 count={counts.coming_soon}
                 bucket="coming_soon"
-                strategies={grouped.coming_soon}
+                strategies={filteredGrouped.coming_soon}
                 empty="No planned strategies."
               />
             )}

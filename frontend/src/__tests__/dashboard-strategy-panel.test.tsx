@@ -17,7 +17,7 @@ describe("Dashboard StrategyPanel", () => {
       />,
     );
 
-    expect(container.textContent).toMatch(/no strategies configured/i);
+    expect(container.textContent).toMatch(/no strategy exceptions/i);
     expect(container.textContent).not.toMatch(/still loading/i);
   });
 

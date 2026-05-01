@@ -28,13 +28,16 @@ import { cn } from "@/lib/utils"
  */
 const buttonVariants = cva(
   [
-    "group/button inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap",
+    "group/button ui-stateful inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap",
     "font-sans font-medium",
-    "rounded-sm border border-transparent",
+    "relative overflow-hidden rounded-sm border border-transparent",
     "outline-none transition-all select-none",
-    "focus-visible:ring-1 focus-visible:ring-brand focus-visible:border-brand",
+    "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
     "active:scale-[0.98]",
-    "disabled:pointer-events-none disabled:opacity-50",
+    "aria-busy:cursor-wait data-[state=loading]:cursor-wait data-[state=loading]:opacity-90",
+    "data-[state=stale]:border-amber data-[state=stale]:bg-amber/10",
+    "data-[state=error]:border-down-500 data-[state=error]:bg-down-500/10",
+    "disabled:pointer-events-none disabled:opacity-55",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   ].join(" "),
   {
@@ -46,8 +49,8 @@ const buttonVariants = cva(
           "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-brand",
         ghost:
           "bg-transparent text-fg-dim hover:text-fg hover:bg-bg-elev-1",
-        buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-[11px]",
-        sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-[11px]",
+        buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-[12px]",
+        sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-[12px]",
         "buy-solid":
           "bg-profit text-profit-foreground border-transparent hover:bg-up-700 uppercase tracking-[0.08em]",
         "sell-solid":
@@ -63,14 +66,14 @@ const buttonVariants = cva(
           "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20",
       },
       size: {
-        sm: "h-[26px] px-[10px] text-[11px]",
-        default: "h-[34px] px-4 text-[12.5px]",
-        lg: "h-[42px] px-6 text-[13px]",
+        sm: "h-8 px-3 text-[12px]",
+        default: "h-9 px-4 text-[13px]",
+        lg: "h-11 px-6 text-[15px]",
         // Legacy sizes — preserved for existing callers
-        xs: "h-6 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-7 px-2.5 text-[12px] [&_svg:not([class*='size-'])]:size-3",
         icon: "size-[34px] p-0",
-        "icon-xs": "size-6 p-0 [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-[30px] p-0 [&_svg:not([class*='size-'])]:size-4",
+        "icon-xs": "size-7 p-0 [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-8 p-0 [&_svg:not([class*='size-'])]:size-4",
         "icon-lg": "size-[42px] p-0 [&_svg:not([class*='size-'])]:size-5",
       },
     },

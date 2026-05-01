@@ -121,17 +121,17 @@ export function ProfileMenu() {
         <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">
           <div className="px-3 py-2 space-y-1">
             <p className="text-xs font-medium text-foreground truncate" title={displayName}>{displayName}</p>
-            <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center justify-between text-[12px]">
               <span className="text-muted-foreground">Equity</span>
               <span className="text-foreground tabular-nums">{formatCurrency(summary.equity > 0 ? summary.equity : 0)}</span>
             </div>
           </div>
           <DropdownMenuSeparator />
           <div className="px-3 py-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Trading Mode</p>
+            <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1.5">Trading Mode</p>
             <div className="flex gap-1.5">
-              <button onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
-              <button onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-[11px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
+              <button onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-[12px] font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
+              <button onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-[12px] font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
             </div>
           </div>
           <DropdownMenuSeparator />
@@ -164,7 +164,7 @@ export function ProfileMenu() {
                       aria-checked={theme === opt}
                       onClick={() => setDisplayPref("theme", opt)}
                       className={cn(
-                        "min-h-9 rounded-sm px-2 text-[11px] font-medium capitalize transition-colors",
+                        "min-h-9 rounded-sm px-2 text-[12px] font-medium capitalize transition-colors",
                         theme === opt
                           ? "bg-primary/15 text-primary ring-1 ring-primary/25"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -174,7 +174,7 @@ export function ProfileMenu() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
                   Light mode uses the tuned porcelain palette; System follows your OS.
                 </p>
               </div>

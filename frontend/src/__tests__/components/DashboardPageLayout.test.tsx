@@ -10,7 +10,7 @@ describe("DashboardPageLayout", () => {
         <p data-testid="body">body content</p>
       </DashboardPageLayout>
     );
-    expect(container.textContent).toContain("§ ANALYTICS");
+    expect(container.textContent).toContain("ANALYTICS");
     expect(container.textContent).toContain("Portfolio analytics");
     expect(container.querySelector('[data-testid="body"]')?.textContent).toBe(
       "body content"

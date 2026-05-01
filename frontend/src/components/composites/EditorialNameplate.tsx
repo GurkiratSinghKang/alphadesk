@@ -46,31 +46,31 @@ export default function EditorialNameplate({
       </div>
 
       <span
-        className="font-display italic text-[14px] text-fg-muted"
+        className="font-display italic text-[15px] text-fg-muted"
         aria-hidden
       >
         ·
       </span>
 
       <span
-        className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
+        className="font-sans font-semibold text-[12px] uppercase text-fg-muted"
         style={{ letterSpacing: 0 }}
       >
         Vol. {volume}
       </span>
 
-      <span className="font-display italic text-[14px] text-fg-muted" aria-hidden>
+      <span className="font-display italic text-[15px] text-fg-muted" aria-hidden>
         ·
       </span>
 
       <span
-        className="font-sans font-semibold text-[10.5px] uppercase text-fg-muted"
+        className="font-sans font-semibold text-[12px] uppercase text-fg-muted"
         style={{ letterSpacing: 0 }}
       >
         Issue {issue}
       </span>
 
-      <span className="font-display italic text-[14px] text-fg-muted" aria-hidden>
+      <span className="font-display italic text-[15px] text-fg-muted" aria-hidden>
         ·
       </span>
 
@@ -82,7 +82,7 @@ export default function EditorialNameplate({
       </span>
 
       <span
-        className="ml-auto font-mono text-[10.5px] text-fg-hint"
+        className="ml-auto font-mono text-[12px] text-fg-hint"
         style={{ letterSpacing: 0 }}
       >
         {date}

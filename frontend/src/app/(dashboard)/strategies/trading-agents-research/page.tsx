@@ -426,7 +426,7 @@ export default function TradingAgentsResearchPage() {
                     good={runtime.enabled}
                   />
                 </div>
-                <p className="mt-3 truncate font-mono text-[11px] text-fg-hint" title={runtime.skill_home}>
+                <p className="mt-3 truncate font-mono text-[12px] text-fg-hint" title={runtime.skill_home}>
                   {runtime.deep_model} / {runtime.quick_model}
                 </p>
                 {runtime.warnings.length > 0 && (
@@ -486,7 +486,7 @@ export default function TradingAgentsResearchPage() {
                       )}
                     >
                       <span className="min-w-0">
-                        <span className="block font-mono text-[14px] font-semibold text-fg">
+                        <span className="block font-mono text-[15px] font-semibold text-fg">
                           {run.symbol} - {run.trade_date}
                         </span>
                         <span className="block truncate t-meta text-fg-muted">
@@ -597,20 +597,20 @@ export default function TradingAgentsResearchPage() {
 
               <section>
                 <p className="mb-2 t-label text-fg-muted">Decision memo</p>
-                <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-sm border border-border-hair bg-bg-elev-1 p-4 font-mono text-[12.5px] leading-relaxed text-fg">
+                <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-sm border border-border-hair bg-bg-elev-1 p-4 font-mono text-[13px] leading-relaxed text-fg">
                   {decisionText || (isActiveRun ? "Waiting for the TradingAgents memo..." : "No memo available.")}
                 </pre>
               </section>
 
               <footer className="grid grid-cols-1 gap-3 border-t border-border-hair pt-4 md:grid-cols-[1fr_auto] md:items-end">
-                <p className="font-sans text-[12.5px] leading-relaxed text-fg-hint">
+                <p className="font-sans text-[13px] leading-relaxed text-fg-hint">
                   {selectedRun.advisory_disclaimer}
                 </p>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   {selectedRun.artifact_files.map((file) => (
                     <span
                       key={file}
-                      className="rounded-pill border border-border px-2 py-1 font-mono text-[11px] text-fg-muted"
+                      className="rounded-pill border border-border px-2 py-1 font-mono text-[12px] text-fg-muted"
                     >
                       {file}
                     </span>

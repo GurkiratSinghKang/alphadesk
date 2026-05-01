@@ -237,7 +237,7 @@ function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null })
         // WCAG 2.5.5 / Apple HIG: a toggle that controls a backend feature
         // needs a ≥44px tap target. Keep the visible pill compact (px-3)
         // but guarantee the hit box via `min-h-11`.
-        "flex min-h-11 items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[11px] font-semibold transition-colors",
+        "flex min-h-11 items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[12px] font-semibold transition-colors",
         tone,
       )}
       title={
@@ -574,7 +574,7 @@ export default function PipelinePage() {
     return (
       <DashboardPageLayout eyebrow="§ PIPELINE" title="Daily pipeline">
         <div className="flex h-64 items-center justify-center">
-          <p className="font-display italic text-[14px] text-fg-muted">Loading pipeline.</p>
+          <p className="font-display italic text-[15px] text-fg-muted">Loading pipeline.</p>
         </div>
       </DashboardPageLayout>
     );
@@ -669,7 +669,7 @@ export default function PipelinePage() {
         size="sm"
         variant="outline"
         onClick={() => setTemplatesOpen(true)}
-        className="h-7 text-[11px] gap-1.5"
+        className="h-7 text-[12px] gap-1.5"
       >
         <Sparkles className="h-3 w-3" />
         Templates
@@ -679,7 +679,7 @@ export default function PipelinePage() {
         size="sm"
         onClick={handleRunNow}
         disabled={runDisabled}
-        className="h-7 text-[11px] gap-1.5"
+        className="h-7 text-[12px] gap-1.5"
       >
         {submitting || isRunning ? (
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -764,7 +764,7 @@ export default function PipelinePage() {
                           variant="destructive"
                           onClick={handleCancel}
                           disabled={cancelling}
-                          className="h-7 text-[11px] gap-1.5"
+                          className="h-7 text-[12px] gap-1.5"
                         >
                           {cancelling ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1011,7 +1011,7 @@ export default function PipelinePage() {
                       size="sm"
                       onClick={handleRunNow}
                       disabled={runDisabled}
-                      className="h-7 text-[11px] gap-1.5 mt-1"
+                      className="h-7 text-[12px] gap-1.5 mt-1"
                     >
                       {submitting || isRunning ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -1428,7 +1428,7 @@ export default function PipelinePage() {
                 className="rounded-md border border-amber/30 bg-amber/10 p-3 text-[12px] text-amber"
               >
                 <p className="font-semibold mb-1">Warning: {label}.</p>
-                <p className="text-[11px] text-amber/90">
+                <p className="text-[12px] text-amber/90">
                   Any orders the pipeline generates will be queued until
                   the next regular session open and may not fill at the
                   prices the analyzer saw. Consider waiting until 09:30 ET.

@@ -80,7 +80,7 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
         <span className="t-meta">{structured.model}</span>
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="t-mono text-[14px] font-semibold u-brand">
+        <span className="t-mono text-[15px] font-semibold u-brand">
           {structured.verdict.toUpperCase()}
         </span>
         <span className="t-meta">
@@ -99,16 +99,16 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
         {structured.thesis}
       </div>
       {structured.catalysts.length > 0 && (
-        <p className="mt-2 t-mono text-[11.5px] u-muted">
+        <p className="mt-2 t-mono text-[12px] u-muted">
           <span className="u-profit">Catalysts:</span> {structured.catalysts.join(" · ")}
         </p>
       )}
       {structured.risks.length > 0 && (
-        <p className="t-mono text-[11.5px] u-muted">
+        <p className="t-mono text-[12px] u-muted">
           <span className="u-loss">Risks:</span> {structured.risks.join(" · ")}
         </p>
       )}
-      <p className="mt-1 t-mono text-[11.5px]">
+      <p className="mt-1 t-mono text-[12px]">
         <span className="u-muted">Play:</span>{" "}
         <span className="u-brand">{structured.suggestedPlay}</span>
         <span className="u-muted"> — {structured.suggestedPlayReason}</span>
@@ -116,7 +116,7 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
       {LEGACY_UNSUPPORTED_PLAYS.has(structured.suggestedPlay) && (
         <p
           data-slot="legacy-unsupported-play"
-          className="mt-2 rounded border border-[color:var(--loss)]/50 px-2 py-1 t-mono text-[11.5px] u-loss"
+          className="mt-2 rounded border border-[color:var(--loss)]/50 px-2 py-1 t-mono text-[12px] u-loss"
         >
           Legacy undefined-risk play. Use the defined-risk trade buttons below instead.
         </p>
@@ -209,7 +209,7 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
            B-88 hover:text-gold-300 lifts the CTA text from --brand
            (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
            AAA) so the hover state reads distinctly brighter. */
-        className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[11px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
+        className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[12px] u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
       >
         {running ? (
           <>▸ Generating full research<LoadingDots inline /></>
@@ -221,7 +221,7 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
         <p
           role="alert"
           data-slot="claude-thesis-error"
-          className="mt-2 t-mono text-[11.5px] u-loss"
+          className="mt-2 t-mono text-[12px] u-loss"
         >
           {isRateLimit
             ? retrySec > 0
@@ -281,7 +281,7 @@ function FullResearchBlock({ full }: { full: ClaudeFullResearch }) {
       {full.comparableSetups.length > 0 && (
         <div>
           <p className="t-label u-muted">COMPARABLE SETUPS</p>
-          <ul className="mt-1 space-y-1 t-mono text-[11.5px]">
+          <ul className="mt-1 space-y-1 t-mono text-[12px]">
             {full.comparableSetups.map((c, i) => (
               <li key={i} className="u-muted">
                 <span className="">{fmtDate(c.reportDate, { year: "numeric", month: "short", day: "numeric" })}</span> · IVR {fmtNumber(c.ivRank, { maximumFractionDigits: 0 })} · {c.setup} →{" "}

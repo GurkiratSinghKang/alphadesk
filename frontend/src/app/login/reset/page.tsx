@@ -24,7 +24,7 @@ export default function LoginResetPage() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[720px] flex-col gap-10 px-6 py-16">
       <nav
-        className="flex items-center gap-2 font-sans text-[11.5px] text-fg-muted"
+        className="flex items-center gap-2 font-sans text-[12px] text-fg-muted"
         aria-label="Breadcrumb"
       >
         <Link href="/login" className="transition-colors hover:text-fg">
@@ -47,7 +47,7 @@ export default function LoginResetPage() {
 
       <SectionRule tag="§ 02 · How to reset" />
 
-      <section className="flex flex-col gap-4 font-sans text-[14.5px] leading-[1.65] text-fg-dim">
+      <section className="flex flex-col gap-4 font-sans text-[15px] leading-[1.65] text-fg-dim">
         <p>
           Email{" "}
           <a

@@ -102,12 +102,12 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
                 className="w-5 bg-[color:var(--brand)] rounded-sm"
                 style={{ height: `${h}px`, opacity: 0.7 }}
               />
-              <span className="t-mono text-[10px] u-muted">{p.dte}d</span>
+              <span className="t-mono text-[12px] u-muted">{p.dte}d</span>
             </div>
           );
         })}
       </div>
-      <p className="mt-1 t-mono text-[11px] u-muted">
+      <p className="mt-1 t-mono text-[12px] u-muted">
         <span className="tabular-nums">{fmtPct(min, 0)}</span>
         <span aria-hidden="true"> – </span>
         <span className="tabular-nums">{fmtPct(max, 0)}</span>

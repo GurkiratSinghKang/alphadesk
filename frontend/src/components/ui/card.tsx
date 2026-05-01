@@ -41,7 +41,8 @@ function Card({
       className={cn(
         "group/card relative flex flex-col gap-3 overflow-hidden",
         "rounded-md border border-border bg-bg-card text-card-foreground text-sm",
-        "py-4",
+        "px-4 py-4",
+        "has-data-[slot=card-header]:px-0 has-data-[slot=card-content]:px-0 has-data-[slot=card-footer]:px-0",
         "has-data-[slot=card-footer]:pb-0",
         accentClass[leftAccent],
         hoverable &&

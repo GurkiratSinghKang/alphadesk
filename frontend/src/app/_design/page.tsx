@@ -426,8 +426,8 @@ export default function DesignPreviewPage() {
                       <span
                         className={
                           r.side === "Long"
-                            ? "text-up-500 uppercase tracking-[0.14em] text-[9.5px] font-sans font-semibold"
-                            : "text-down-500 uppercase tracking-[0.14em] text-[9.5px] font-sans font-semibold"
+                            ? "text-up-500 uppercase tracking-[0.14em] text-[12px] font-sans font-semibold"
+                            : "text-down-500 uppercase tracking-[0.14em] text-[12px] font-sans font-semibold"
                         }
                       >
                         {r.side}

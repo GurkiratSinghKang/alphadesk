@@ -28,7 +28,7 @@ export default function DocsPage() {
           className="mt-10 border-t border-border pt-6"
         >
           <div
-            className="mb-4 font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+            className="mb-4 font-sans text-[12px] font-semibold uppercase text-fg-muted"
             style={{ letterSpacing: "0.18em" }}
           >
             Contents
@@ -37,14 +37,14 @@ export default function DocsPage() {
             {DOC_SECTIONS.map((s) => (
               <li key={s.id} className="flex items-baseline gap-3">
                 <span
-                  className="font-mono text-[11px] text-fg-hint"
+                  className="font-mono text-[12px] text-fg-hint"
                   style={{ letterSpacing: "0.08em" }}
                 >
                   {s.index}
                 </span>
                 <a
                   href={`#${s.id}`}
-                  className="font-sans text-[14px] text-fg-dim transition-colors hover:text-fg"
+                  className="font-sans text-[15px] text-fg-dim transition-colors hover:text-fg"
                 >
                   {s.title}
                 </a>

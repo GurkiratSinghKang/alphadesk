@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter_Tight, Newsreader, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/lib/providers";
 import WebVitalsReporter from "@/components/layout/WebVitalsReporter";
 import ServiceWorkerRegistrar from "@/components/layout/ServiceWorkerRegistrar";
@@ -18,36 +18,24 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Self-hosted via next/font — no runtime fetch to fonts.googleapis.com,
-// avoids the CSP `style-src` / `font-src` restriction and eliminates the
-// third-party @import in design-tokens.css. next/font injects CSS that
-// assigns each variable on <html> (higher specificity than :root), so the
-// tokens resolve to the self-hosted face and fall back cleanly otherwise.
-const interTight = Inter_Tight({
+// Self-hosted via next/font — no runtime fetch to fonts.googleapis.com.
+// The dashboard/trading surfaces use Geist for both UI and display voice so
+// software screens stay clean, sans-serif, and numerically crisp.
+const geistUi = Geist({
   variable: "--font-ui",
   subsets: ["latin"],
   display: "swap",
   fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
 });
 
-// K-13 (round-6): trimmed unused Newsreader weights / axes.
-//   · `axes: ["opsz"]` was loading the optical-size variation, but no
-//     selector in the codebase uses `font-variation-settings` or the
-//     `font-optical-sizing` shorthand to actually flip between display
-//     and text optical sizes. Loading the axis was paying for a font
-//     subset feature we never reach.
-//   · Both `italic` and `normal` styles are kept because both are used
-//     (search confirmed: `font-display italic` is widespread; the
-//     non-italic style backs serif headings via the design tokens).
-const newsreader = Newsreader({
+const geistDisplay = Geist({
   variable: "--font-display",
   subsets: ["latin"],
-  style: ["italic", "normal"],
   display: "swap",
-  fallback: ["Iowan Old Style", "Times New Roman", "Georgia", "serif"],
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const geistMono = Geist_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
@@ -119,7 +107,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${interTight.variable} ${newsreader.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`dark ${geistUi.variable} ${geistDisplay.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { TrendingDown, BarChart3, Activity, Calendar, Table2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DashboardPageLayout } from "@/components/layouts";
@@ -52,6 +53,14 @@ interface EquityPoint {
   // `equityAtPoint` to fall back to `baseEquity + cumulative_pnl`.
   value?: number;
 }
+
+type TradeHistoryCompat = TradeHistoryEntry & {
+  exitPrice?: number | null;
+  entryPrice?: number | null;
+  realizedPnl?: number | null;
+  entryTime?: string;
+  exitTime?: string | null;
+};
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -155,7 +164,9 @@ function computeMonthlyReturns(curve: EquityPoint[], baseEquity: number): Map<st
 
 function computeTradeStats(trades: TradeHistoryEntry[]) {
   // Normalize field names: accept both snake_case and camelCase from API
-  const normalized = trades.map((t: any) => ({
+  const normalized = trades.map((trade) => {
+    const t = trade as TradeHistoryCompat;
+    return {
     ...t,
     exit_price: t.exit_price ?? t.exitPrice ?? null,
     entry_price: t.entry_price ?? t.entryPrice ?? 0,
@@ -163,7 +174,8 @@ function computeTradeStats(trades: TradeHistoryEntry[]) {
     entry_time: t.entry_time ?? t.entryTime ?? "",
     exit_time: t.exit_time ?? t.exitTime ?? null,
     status: t.status ?? "open",
-  }));
+    };
+  });
 
   // Filter for closed trades: has exit_price or status indicates closed
   const closed = normalized.filter(
@@ -600,7 +612,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                     <td key={mi} className="px-1 py-1 text-center">
                       {val !== undefined ? (
                         <span
-                          className="inline-block w-full rounded-[3px] px-1 py-1 font-mono tabular-nums text-[11.5px]"
+                          className="inline-block w-full rounded-[3px] px-1 py-1 font-mono tabular-nums text-[12px]"
                           title={val === 0 ? "Break-even month" : undefined}
                           style={{
                             backgroundColor: cellColor(val),
@@ -823,7 +835,7 @@ function RangeSelector({
             data-testid={`analytics-range-${r}`}
             onClick={() => onChange(r)}
             className={cn(
-              "font-mono text-[11px] px-2.5 py-1 rounded transition-colors",
+              "font-mono text-[12px] px-2.5 py-1 rounded transition-colors",
               active
                 ? "bg-bg-elev-2 text-fg"
                 : "text-fg-muted hover:text-fg"
@@ -867,7 +879,8 @@ export default function AnalyticsPage() {
         }
         if (tradesRes.status === "fulfilled") {
           const raw = tradesRes.value;
-          const tradeList = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.trades) ? (raw as any).trades : [];
+          const wrapped = raw as { trades?: TradeHistoryEntry[] };
+          const tradeList = Array.isArray(raw) ? raw : Array.isArray(wrapped.trades) ? wrapped.trades : [];
           setTrades(tradeList);
         }
       } catch {
@@ -972,23 +985,58 @@ export default function AnalyticsPage() {
                 monthly heatmap and trade stats will appear here as trades
                 accumulate.
               </p>
-              <div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ["Drawdown", "Unlocks after equity history has at least two points."],
+                  ["Exposure by factor", "Requires live positions with sector or strategy tags."],
+                  ["Strategy attribution", "Requires closed trades with strategy labels."],
+                  ["Trade expectancy", "Requires wins and losses, not just open orders."],
+                  ["Calendar P/L", "Requires dated closed-trade or equity snapshots."],
+                  ["Execution quality", "Requires fills, limits, and quote-at-fill context."],
+                ].map(([label, detail]) => (
+                  <div key={label} className="rounded-md border border-border-hair bg-bg px-3 py-3">
+                    <p className="t-label text-fg-hint">{label}</p>
+                    <p className="mt-1 text-[12px] leading-snug text-fg-muted">{detail}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
                 {/* BUG-analytics-empty-cta — direct link to /trade mirrors
                     the dashboard's "Place your first trade" pattern so the
                     empty state always gives the user a concrete next step
                     instead of being a dead end. */}
-                <a
+                <Link
                   href="/trade"
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
-                    "bg-transparent px-4 py-2 font-sans text-[12.5px] font-medium",
+                    "bg-transparent px-4 py-2 font-sans text-[13px] font-medium",
                     "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
                   Place your first trade
                   <span aria-hidden>&rarr;</span>
-                </a>
+                </Link>
+                <Link
+                  href="/strategies"
+                  className={cn(
+                    "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
+                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  )}
+                >
+                  Run backtest
+                </Link>
+                <Link
+                  href="/reports"
+                  className={cn(
+                    "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
+                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                  )}
+                >
+                  View reports
+                </Link>
               </div>
             </div>
           </div>

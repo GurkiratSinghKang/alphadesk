@@ -59,7 +59,7 @@ export default function StrategyRail({
         >
           Strategies
         </span>
-        <span className="font-mono text-[10px] text-fg-muted" style={{ letterSpacing: 0 }}>
+        <span className="font-mono text-[12px] text-fg-muted" style={{ letterSpacing: 0 }}>
           {countLabel ?? defaultCount(items)}
         </span>
       </header>
@@ -86,7 +86,7 @@ export default function StrategyRail({
               >
                 {compact ? (
                   // Single line: dot · name · return%
-                  <div className="flex items-center justify-between gap-2 font-mono text-[11.5px] md:text-[10.5px] tabular-nums">
+                  <div className="flex items-center justify-between gap-2 font-mono text-[12px] md:text-[12px] tabular-nums">
                     <span className="flex items-center gap-1.5 min-w-0">
                       <StatusDot
                         tone={paused ? "muted" : "profit"}
@@ -94,7 +94,7 @@ export default function StrategyRail({
                       />
                       <span
                         className={cn(
-                          "font-sans font-medium text-[12.5px] truncate",
+                          "font-sans font-medium text-[13px] truncate",
                           paused ? "text-fg-muted" : "text-fg"
                         )}
                         style={{ letterSpacing: 0 }}
@@ -112,21 +112,21 @@ export default function StrategyRail({
                   <>
                     <div className="flex justify-between items-baseline mb-0.5">
                       <span
-                        className="font-sans font-medium text-sm md:text-[12.5px] text-fg"
+                        className="font-sans font-medium text-sm md:text-[13px] text-fg"
                         style={{ letterSpacing: 0 }}
                       >
                         {it.name}
                       </span>
-                      <span className="font-mono text-[11px] md:text-[10px] text-fg-hint">
+                      <span className="font-mono text-[12px] md:text-[12px] text-fg-hint">
                         {it.indexLabel}
                       </span>
                     </div>
 
-                    <div className="font-display italic text-[13px] md:text-[11.5px] text-fg-muted mb-1.5">
+                    <div className="font-display italic text-[13px] md:text-[12px] text-fg-muted mb-1.5">
                       {it.subtitle}
                     </div>
 
-                    <div className="flex justify-between items-center font-mono text-[11.5px] md:text-[10.5px] tabular-nums">
+                    <div className="flex justify-between items-center font-mono text-[12px] md:text-[12px] tabular-nums">
                       <span className="flex items-center gap-1.5">
                         <StatusDot
                           tone={paused ? "muted" : "profit"}

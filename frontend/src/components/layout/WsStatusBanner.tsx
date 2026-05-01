@@ -13,10 +13,10 @@
  * so it covers every authenticated route.
  *
  * State -> treatment (priority order: first match wins)
- *   failed         : loss bg + assertive aria-live + "Reload" button
- *   broker-degraded: loss bg + assertive aria-live ("DEMO DATA — broker unavailable")
- *   reconnecting   : amber bg + polite aria-live ("Reconnecting…")
- *   connecting     : muted bg + polite aria-live ("Connecting to live data…")
+ *   failed         : amber bg + assertive aria-live + "Reload" button
+ *   broker-degraded: amber bg + assertive aria-live ("LIMITED DATA — broker unavailable")
+ *   reconnecting   : amber bg + polite aria-live ("Reconnecting to live data…")
+ *   connecting     : muted bg + polite aria-live ("Market data link starting")
  *   open + live    : render null (happy path — no UI noise)
  *
  * The broker-degraded state is driven by `alphadesk:broker-degraded`
@@ -29,7 +29,7 @@
  * Tokens referenced:
  *   - bg-bg-elev-1 / text-fg-muted: design-token surface for quiet states
  *   - bg-amber/10 / text-amber    : caution state for reconnecting
- *   - bg-loss/10 / text-loss      : error state for failed / degraded
+ *   - bg-loss/10 / text-loss      : legacy severe state token, avoided here unless execution is unsafe
  * These tokens are defined in globals.css / tailwind.config and are already
  * in active use across PnlCalendar, DashboardError, LoginForm, etc.
  */
@@ -49,7 +49,7 @@ const BROKER_DEGRADED_TTL_MS = 60_000;
 /**
  * BUG-027: a client-side nav (prefetch, route change) briefly flickers the
  * WS through `connecting` → `open` before the shared provider reconnects.
- * Users saw a red OFFLINE flash for ~3s on every internal navigation. We
+ * Users saw a severe offline flash for ~3s on every internal navigation. We
  * debounce the transition into the user-visible "failed" / loss-tone
  * banner so a short connect blip never promotes to a scary state.
  *
@@ -65,7 +65,7 @@ export function WsStatusBanner() {
   const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const setBrokerDegraded = usePortfolioStore((s) => s.setBrokerDegraded);
   // BUG-027: gate the "failed" banner on a grace window so a transient
-  // reconnect doesn't flash OFFLINE on every internal navigation.
+  // reconnect doesn't flash an offline banner on every internal navigation.
   const [failedArmed, setFailedArmed] = useState(false);
   const failedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -80,7 +80,9 @@ export function WsStatusBanner() {
         setFailedArmed(true);
       }, FAILED_BANNER_GRACE_MS);
     } else {
-      setFailedArmed(false);
+      failedTimerRef.current = setTimeout(() => {
+        setFailedArmed(false);
+      }, 0);
     }
     return () => {
       if (failedTimerRef.current) {
@@ -120,25 +122,25 @@ export function WsStatusBanner() {
   if (wsStatus === "open" && !brokerDegraded) return null;
 
   // BUG-027: swallow the WS blip on client-side navigation. During the
-  // grace window we fall through to the quieter "Connecting…" branch
-  // below so the user sees a calm status line instead of a red OFFLINE
+  // grace window we fall through to the quieter connecting branch
+  // below so the user sees a calm status line instead of a severe offline
   // flash that self-heals 3s later.
   if (wsStatus === "failed" && failedArmed) {
     return (
       <div
         role="alert"
         aria-live="assertive"
-        className="w-full bg-loss/10 text-loss border-b border-loss/20 px-4 py-1.5 text-xs flex items-center justify-center gap-3"
+        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] flex items-center justify-center gap-3"
       >
         <span className="font-medium">
-          Live data offline — quotes may be stale. Reload to retry.
+          Data link offline. Execution remains locked until quotes recover.
         </span>
         <button
           type="button"
           onClick={() => {
             if (typeof window !== "undefined") window.location.reload();
           }}
-          className="rounded border border-loss/40 px-2 py-0.5 text-[11px] font-medium hover:bg-loss/20 focus:outline-none focus:ring-2 focus:ring-loss/50"
+          className="rounded border border-amber/40 px-2 py-0.5 text-[12px] font-medium hover:bg-amber/20 focus:outline-none focus:ring-2 focus:ring-amber/50"
         >
           Reload
         </button>
@@ -147,19 +149,18 @@ export function WsStatusBanner() {
   }
 
   // Broker unavailable — backend is serving synthetic fallback data
-  // (persona-r P43). Treated with the same loss-tokened severity as the
-  // failed WS branch because the user's P&L, positions and quotes are all
-  // fake until the broker recovers.
+  // (persona-r P43). Treated as amber: visible enough to lock execution,
+  // calmer than a hard app failure.
   if (brokerDegraded) {
     return (
       <div
         role="alert"
         aria-live="assertive"
         data-testid="broker-degraded-banner"
-        className="w-full bg-loss/10 text-loss border-b border-loss/20 px-4 py-1.5 text-xs flex items-center justify-center gap-2"
+        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] flex items-center justify-center gap-2"
       >
-        <span className="font-semibold uppercase tracking-wide">DEMO DATA</span>
-        <span className="font-medium">— broker unavailable, trading is disabled</span>
+        <span className="font-semibold uppercase tracking-wide">LIMITED DATA</span>
+        <span className="font-medium">— broker unavailable, execution locked</span>
       </div>
     );
   }
@@ -169,7 +170,7 @@ export function WsStatusBanner() {
       <div
         role="status"
         aria-live="polite"
-        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-xs text-center"
+        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] text-center"
       >
         Reconnecting to live data…
       </div>
@@ -177,15 +178,15 @@ export function WsStatusBanner() {
   }
 
   // connecting (initial handshake, no prior success) — muted so it doesn't
-  // scream at users on the first paint; degrades to an invisible spacer
-  // after a successful connect when wsStatus flips to "open".
+  // scream at users on the first paint; it reads as readiness context, not
+  // an app-wide failure.
   return (
     <div
       role="status"
       aria-live="polite"
-      className="w-full bg-bg-elev-1 text-fg-muted border-b border-border px-4 py-1.5 text-xs text-center"
+      className="w-full bg-bg-elev-1 text-fg-muted border-b border-border px-4 py-1.5 text-[12px] text-center"
     >
-      Connecting to live data…
+      Market data link starting
     </div>
   );
 }

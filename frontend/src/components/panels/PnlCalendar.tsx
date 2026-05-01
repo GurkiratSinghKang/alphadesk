@@ -178,8 +178,8 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
     : "0";
 
   const cellSize = compact ? "h-12" : "h-16";
-  const textSize = compact ? "text-[9px]" : "text-[10px]";
-  const pnlSize = compact ? "text-[10px]" : "text-xs";
+  const textSize = compact ? "text-[12px]" : "text-[12px]";
+  const pnlSize = compact ? "text-[12px]" : "text-xs";
 
   return (
     <Card className="border-border bg-[var(--surface)]">
@@ -222,7 +222,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
               {DAY_NAMES.map((d, i) => (
                 <div
                   key={i}
-                  className="text-center text-[10px] font-medium text-muted-foreground py-1"
+                  className="text-center text-[12px] font-medium text-muted-foreground py-1"
                 >
                   {d}
                 </div>
@@ -246,7 +246,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                           "rounded-md bg-bg-elev-1 flex flex-col items-center justify-center"
                         )}
                       >
-                        <span className="text-[10px] text-muted-foreground/40">{cell.day}</span>
+                        <span className="text-[12px] text-muted-foreground/40">{cell.day}</span>
                       </div>
                     );
                   }
@@ -261,7 +261,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                           cell.isToday && "ring-2 ring-primary"
                         )}
                       >
-                        <span className="text-[10px] text-muted-foreground/60">{cell.day}</span>
+                        <span className="text-[12px] text-muted-foreground/60">{cell.day}</span>
                       </div>
                     );
                   }
@@ -325,7 +325,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
             <div className={cn("mt-4 pt-4 border-t border-border", compact && "mt-3 pt-3")}>
               <div className={cn("grid gap-3", compact ? "grid-cols-3" : "grid-cols-4")}>
                 <div className="text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <p className="text-[12px] text-muted-foreground uppercase tracking-wider">
                     Month P&L
                   </p>
                   <p
@@ -340,7 +340,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <p className="text-[12px] text-muted-foreground uppercase tracking-wider">
                     Trading Days
                   </p>
                   <p className={cn("font-bold text-foreground tabular-nums", compact ? "text-sm" : "text-base")}>
@@ -348,7 +348,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <p className="text-[12px] text-muted-foreground uppercase tracking-wider">
                     Win Rate
                   </p>
                   <p
@@ -363,7 +363,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                 </div>
                 {!compact && (
                   <div className="text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <p className="text-[12px] text-muted-foreground uppercase tracking-wider">
                       W / L
                     </p>
                     <p className="font-bold text-foreground tabular-nums text-base">
@@ -381,7 +381,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                   {data.bestDay && (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-2 py-0.5 border-[var(--profit)]/30 text-[var(--profit)] gap-1"
+                      className="text-[12px] px-2 py-0.5 border-[var(--profit)]/30 text-[var(--profit)] gap-1"
                     >
                       <Trophy className="h-3 w-3" />
                       Best: {formatCurrency(data.bestDay.pnl)} ({new Date(data.bestDay.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })})
@@ -390,7 +390,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                   {data.worstDay && (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-2 py-0.5 border-[var(--loss)]/30 text-[var(--loss)] gap-1"
+                      className="text-[12px] px-2 py-0.5 border-[var(--loss)]/30 text-[var(--loss)] gap-1"
                     >
                       <Skull className="h-3 w-3" />
                       Worst: {formatCurrency(data.worstDay.pnl)} ({new Date(data.worstDay.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })})

@@ -87,20 +87,20 @@ function MiniChart({
       {/* Header */}
       <div className="flex items-center justify-between mb-1 shrink-0">
         <div className="flex items-center gap-1">
-          <span className="text-[10px] font-bold text-foreground">
+          <span className="text-[12px] font-bold text-foreground">
             {timeframe.label}
           </span>
-          <span className="text-[8px] text-muted-foreground hidden sm:inline">
+          <span className="text-[12px] text-muted-foreground hidden sm:inline">
             {timeframe.description}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[10px] tabular-nums font-medium text-foreground">
+          <span className="text-[12px] tabular-nums font-medium text-foreground">
             ${(current ?? 0).toFixed(2)}
           </span>
           <span
             className={cn(
-              "text-[9px] tabular-nums font-medium",
+              "text-[12px] tabular-nums font-medium",
               trending ? "text-[var(--profit)]" : "text-[var(--loss)]"
             )}
           >
@@ -207,10 +207,10 @@ export function MultiTimeframe() {
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5">
           <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[11px] font-semibold text-foreground">
+          <span className="text-[12px] font-semibold text-foreground">
             Multi-Timeframe
           </span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[12px] text-muted-foreground">
             {selectedSymbol}
           </span>
         </div>

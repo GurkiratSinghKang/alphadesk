@@ -266,7 +266,7 @@ export function StressTest() {
               key={s.id}
               onClick={() => setSelectedScenario(s.id)}
               className={cn(
-                "flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-all",
+                "flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-all",
                 selectedScenario === s.id
                   ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
                   : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
@@ -279,7 +279,7 @@ export function StressTest() {
           <button
             onClick={() => setSelectedScenario("custom")}
             className={cn(
-              "flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-all",
+              "flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-all",
               selectedScenario === "custom"
                 ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
                 : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
@@ -292,7 +292,7 @@ export function StressTest() {
         {/* Custom input */}
         {selectedScenario === "custom" && (
           <div className="flex items-center gap-2">
-            <label className="text-[10px] text-muted-foreground whitespace-nowrap">
+            <label className="text-[12px] text-muted-foreground whitespace-nowrap">
               Apply % Change:
             </label>
             <input
@@ -302,12 +302,12 @@ export function StressTest() {
               className="w-20 rounded border border-border bg-[var(--surface)] px-2 py-1 text-xs tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
               step="1"
             />
-            <span className="text-[10px] text-muted-foreground">%</span>
+            <span className="text-[12px] text-muted-foreground">%</span>
           </div>
         )}
 
         {/* Scenario description */}
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           {activeScenario.description}
         </p>
 
@@ -324,7 +324,7 @@ export function StressTest() {
             {/* Impact summary */}
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   Projected Value
                 </span>
                 <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
@@ -332,7 +332,7 @@ export function StressTest() {
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   Impact
                 </span>
                 <p
@@ -345,7 +345,7 @@ export function StressTest() {
                 >
                   {result.totalImpact >= 0 ? "+" : ""}
                   {formatCurrency(result.totalImpact)}
-                  <span className="text-[10px] ml-1">
+                  <span className="text-[12px] ml-1">
                     ({result.totalImpactPct >= 0 ? "+" : ""}
                     {(result.totalImpactPct ?? 0).toFixed(1)}%)
                   </span>
@@ -356,7 +356,7 @@ export function StressTest() {
             {/* Impact bar visualization */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   Portfolio Change
                 </span>
               </div>
@@ -384,7 +384,7 @@ export function StressTest() {
             <div>
               <button
                 onClick={() => setShowPositions(!showPositions)}
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 {showPositions ? (
                   <ChevronUp className="h-3 w-3" />
@@ -400,16 +400,16 @@ export function StressTest() {
                       key={p.symbol}
                       className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1"
                     >
-                      <span className="text-[10px] font-medium text-foreground">
+                      <span className="text-[12px] font-medium text-foreground">
                         {p.symbol}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] tabular-nums text-muted-foreground">
+                        <span className="text-[12px] tabular-nums text-muted-foreground">
                           {formatCurrency(p.currentValue)}
                         </span>
                         <span
                           className={cn(
-                            "text-[10px] font-medium tabular-nums",
+                            "text-[12px] font-medium tabular-nums",
                             p.impact >= 0
                               ? "text-[var(--profit)]"
                               : "text-[var(--loss)]"
@@ -429,7 +429,7 @@ export function StressTest() {
             <div className="border-t border-border pt-3">
               <div className="flex items-center gap-1 mb-1.5">
                 <Shield className="h-3 w-3 text-[var(--chart-4)]" />
-                <span className="text-[10px] font-semibold text-foreground">
+                <span className="text-[12px] font-semibold text-foreground">
                   Suggested Hedges
                 </span>
               </div>
@@ -437,7 +437,7 @@ export function StressTest() {
                 {result.hedgeSuggestions.map((s, i) => (
                   <li
                     key={i}
-                    className="flex items-start gap-1.5 text-[10px] text-muted-foreground"
+                    className="flex items-start gap-1.5 text-[12px] text-muted-foreground"
                   >
                     <span className="text-[var(--chart-4)] mt-px shrink-0">
                       &bull;
@@ -449,7 +449,7 @@ export function StressTest() {
             </div>
 
             {/* Disclaimer */}
-            <p className="text-[9px] text-muted-foreground/60 pt-2 border-t border-border">
+            <p className="text-[12px] text-muted-foreground/60 pt-2 border-t border-border">
               Scenarios are simplified models using uniform sector-level shocks. Actual drawdowns depend on correlations, liquidity, and timing.
             </p>
           </div>

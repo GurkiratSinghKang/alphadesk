@@ -350,9 +350,9 @@ export default function ChartPane({
   // ships as a volume-at-price liquidity proxy plus inferred S/R ranges and
   // high-volume supply/demand blocks from OHLCV bars.
   const [topOfBookOn, setTopOfBookOn] = React.useState(true);
-  const [liquidityProfileOn, setLiquidityProfileOn] = React.useState(true);
-  const [structureZonesOn, setStructureZonesOn] = React.useState(true);
-  const [orderBlocksOn, setOrderBlocksOn] = React.useState(true);
+  const [liquidityProfileOn, setLiquidityProfileOn] = React.useState(false);
+  const [structureZonesOn, setStructureZonesOn] = React.useState(false);
+  const [orderBlocksOn, setOrderBlocksOn] = React.useState(false);
 
   // Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
   // anchored VWAP. ``avwapAnchor`` is the bar index from which the
@@ -938,7 +938,7 @@ export default function ChartPane({
                 />
                 <button
                   type="submit"
-                  className="t-mono text-[11px] text-[color:var(--brand)] hover:underline"
+                  className="t-mono text-[12px] text-[color:var(--brand)] hover:underline"
                   disabled={compareSymbols.length >= 4}
                 >
                   Add
@@ -1233,7 +1233,7 @@ export default function ChartPane({
                   type="button"
                   onClick={onRetry}
                   className={cn(
-                    "font-sans font-semibold uppercase text-xs tracking-[0.12em]",
+                    "font-sans font-semibold uppercase text-[12px] tracking-[0.12em]",
                     "text-brand hover:text-gold-300 border border-border bg-bg-elev-1",
                     "rounded-xs px-3 h-9 transition-colors",
                   )}
@@ -1284,7 +1284,7 @@ export default function ChartPane({
                           setCompareSymbols((prev) => prev.filter((s) => s !== sym))
                         }
                         title={`Remove ${sym} from compare`}
-                        className="inline-flex items-center gap-1.5 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/80 backdrop-blur-md px-1.5 py-0.5 t-mono text-[10.5px] text-[color:var(--fg)] hover:border-[color:var(--loss)]/60 hover:text-[color:var(--loss)] transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/80 backdrop-blur-md px-1.5 py-0.5 t-mono text-[12px] text-[color:var(--fg)] hover:border-[color:var(--loss)]/60 hover:text-[color:var(--loss)] transition-colors"
                       >
                         <span
                           aria-hidden="true"
@@ -1292,7 +1292,7 @@ export default function ChartPane({
                           style={{ backgroundColor: color }}
                         />
                         <span>{sym}</span>
-                        <span className="opacity-60 text-[11px]">×</span>
+                        <span className="opacity-60 text-[12px]">×</span>
                       </button>
                     );
                   })}
@@ -1301,7 +1301,7 @@ export default function ChartPane({
               {topOfBookOn && topBook && (
                 <div
                   data-slot="chart-top-book-overlay"
-                  className="pointer-events-none absolute right-3 top-3 z-10 hidden w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
+                  className="pointer-events-none absolute right-3 top-3 z-10 hidden w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[12px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <TopOfBookReadout book={topBook} />
                 </div>
@@ -1356,7 +1356,7 @@ export default function ChartPane({
               <div
                 data-slot="chart-ohlc-overlay"
                 aria-hidden="true"
-                className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] overflow-hidden rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2 py-1 t-mono text-[10.5px] backdrop-blur-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1.5 sm:text-[11px]"
+                className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] overflow-hidden rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2 py-1 t-mono text-[12px] backdrop-blur-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
               >
                 <OHLCReadout
                   hover={ohlcHover}
@@ -1367,7 +1367,7 @@ export default function ChartPane({
               {((topOfBookOn && topBook) || liquidityProfileOn || structureZonesOn || orderBlocksOn) && (
                 <div
                   data-slot="market-structure-summary"
-                  className="pointer-events-none absolute left-3 bottom-3 z-10 hidden max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
+                  className="pointer-events-none absolute left-3 bottom-3 z-10 hidden max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[12px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <span className="text-[color:var(--fg)]">Structure map</span>
                   {topOfBookOn && topBook && (
@@ -1405,7 +1405,7 @@ export default function ChartPane({
               {replayEnabled && (
                 <div
                   data-slot="chart-replay-controls"
-                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/90 px-2 py-1 t-mono text-[11px] backdrop-blur-md shadow-sm"
+                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/90 px-2 py-1 t-mono text-[12px] backdrop-blur-md shadow-sm"
                 >
                   <button
                     type="button"
@@ -1567,7 +1567,7 @@ function TopOfBookReadout({ book }: { book: NormalizedTopOfBook }) {
   return (
     <div className="flex flex-col gap-1 leading-tight">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--fg)]">
+        <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--fg)]">
           {book.isL2 ? `Depth ${book.depthLevels}` : "Top book"}
         </span>
         <span className="text-[color:var(--fg-hint)]">
@@ -1692,7 +1692,7 @@ function OHLCReadout({
         <span className="u-muted">— no bar</span>
       )}
       {indicatorLegend.length > 0 && (
-        <div className="flex items-baseline gap-2 u-muted text-[10px] mt-0.5">
+        <div className="flex items-baseline gap-2 u-muted text-[12px] mt-0.5">
           {indicatorLegend.map((label) => (
             <span key={label} className="rounded border border-[color:var(--border)] px-1 py-px">
               {label}

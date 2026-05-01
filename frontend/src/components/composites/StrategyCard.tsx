@@ -107,7 +107,7 @@ export default function StrategyCard({
             {name}
           </div>
           <div
-            className="font-sans font-semibold text-[10px] uppercase text-fg-muted mt-[3px]"
+            className="font-sans font-semibold text-[12px] uppercase text-fg-muted mt-[3px]"
             style={{ letterSpacing: 0 }}
           >
             {subtitle}
@@ -121,7 +121,7 @@ export default function StrategyCard({
           style={{ letterSpacing: 0 }}
         >
           No backtest
-          <span className="block font-sans not-italic text-[10.5px] mt-0.5 text-fg-hint">
+          <span className="block font-sans not-italic text-[12px] mt-0.5 text-fg-hint">
             Discretionary bucket — P&amp;L tracked from trade ledger.
           </span>
         </div>
@@ -148,7 +148,7 @@ export default function StrategyCard({
         />
       )}
 
-      <div className="flex justify-between font-mono text-[10.5px] text-fg-muted">
+      <div className="flex justify-between font-mono text-[12px] text-fg-muted">
         <span>{positions} positions</span>
         {noBacktest ? (
           <span className="italic text-fg-hint">Manual trades</span>

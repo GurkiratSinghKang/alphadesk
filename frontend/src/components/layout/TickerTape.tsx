@@ -56,15 +56,15 @@ export function TickerTape() {
               key={`${item.symbol}-${i}`}
               className="inline-flex items-center gap-1.5 px-4 border-r border-border/10"
             >
-              <span className="text-[11px] font-semibold text-foreground">
+              <span className="text-[12px] font-semibold text-foreground">
                 {item.symbol}
               </span>
-              <span className="text-[11px] tabular-nums text-foreground/80">
+              <span className="text-[12px] tabular-nums text-foreground/80">
                 ${item.price.toFixed(2)}
               </span>
               <span
                 className={cn(
-                  "text-[10px] font-medium tabular-nums",
+                  "text-[12px] font-medium tabular-nums",
                   up ? "text-[var(--profit)]" : "text-[var(--loss)]"
                 )}
               >

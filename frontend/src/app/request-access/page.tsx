@@ -36,7 +36,7 @@ export default function RequestAccessPage() {
         <div className="mt-8 sm:mt-12">
           <SectionRule tag="§ 02 · What we ask for" />
         </div>
-        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[14px] sm:text-[14.5px] leading-[1.65] text-fg-dim">
+        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[15px] sm:text-[15px] leading-[1.65] text-fg-dim">
           <li>
             Your name, firm or context, and the jurisdiction you trade from.
           </li>
@@ -52,7 +52,7 @@ export default function RequestAccessPage() {
         <div className="mt-8 sm:mt-12">
           <SectionRule tag="§ 03 · What happens next" />
         </div>
-        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[14px] sm:text-[14.5px] leading-[1.65] text-fg-dim">
+        <ul className="mt-5 sm:mt-6 flex flex-col gap-3 font-sans text-[15px] sm:text-[15px] leading-[1.65] text-fg-dim">
           <li>
             A human reads the request, usually within a few days.
           </li>

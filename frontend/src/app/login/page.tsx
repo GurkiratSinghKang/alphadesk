@@ -131,7 +131,7 @@ export default function LoginPage() {
 
         <div className="flex flex-col gap-6">
           <span
-            className="font-sans text-[11px] font-semibold uppercase text-brand"
+            className="font-sans text-[12px] font-semibold uppercase text-brand"
             style={{ letterSpacing: "0.2em" }}
           >
             A systematic trading terminal
@@ -148,7 +148,7 @@ export default function LoginPage() {
             <span className="not-italic text-fg-dim">layer.</span>
           </Display>
 
-          <p className="max-w-[560px] font-sans text-[15.5px] leading-[1.55] text-fg-dim">
+          <p className="max-w-[560px] font-sans text-[15px] leading-[1.55] text-fg-dim">
             AlphaDesk is a single workstation for designing, back-testing, and
             executing systematic equity strategies — with Claude as a pre-trade
             second opinion, not a co-pilot on the wheel. Same risk policy across
@@ -167,12 +167,12 @@ export default function LoginPage() {
             >
               <div className="flex items-baseline justify-between">
                 <span
-                  className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+                  className="font-sans text-[12px] font-semibold uppercase text-fg-muted"
                   style={{ letterSpacing: "0.18em" }}
                 >
                   Step
                 </span>
-                <span className="font-mono text-[11px] tabular-nums text-fg-hint">
+                <span className="font-mono text-[12px] tabular-nums text-fg-hint">
                   {step.idx}
                 </span>
               </div>
@@ -195,12 +195,12 @@ export default function LoginPage() {
               className="flex flex-col gap-1 rounded border border-border-hair bg-bg-elev-1/40 px-4 py-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[10.5px] tabular-nums text-fg-hint">
+                <span className="font-mono text-[12px] tabular-nums text-fg-hint">
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <span
                   className={
-                    "font-sans text-[9.5px] font-semibold uppercase tracking-wider " +
+                    "font-sans text-[12px] font-semibold uppercase tracking-wider " +
                     (s.stage === "live"
                       ? "text-[color:var(--up-500,var(--profit))]"
                       : "text-fg-muted")
@@ -212,7 +212,7 @@ export default function LoginPage() {
               <p className="font-display italic text-[16px] text-fg leading-tight">
                 {s.name}
               </p>
-              <p className="font-sans text-[12.5px] leading-[1.45] text-fg-dim">
+              <p className="font-sans text-[13px] leading-[1.45] text-fg-dim">
                 {s.regime}
               </p>
             </li>
@@ -230,7 +230,7 @@ export default function LoginPage() {
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <li className="flex flex-col gap-1.5">
             <span
-              className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+              className="font-sans text-[12px] font-semibold uppercase text-fg-muted"
               style={{ letterSpacing: "0.18em" }}
             >
               Invite-only
@@ -241,7 +241,7 @@ export default function LoginPage() {
           </li>
           <li className="flex flex-col gap-1.5">
             <span
-              className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+              className="font-sans text-[12px] font-semibold uppercase text-fg-muted"
               style={{ letterSpacing: "0.18em" }}
             >
               Paper-first
@@ -257,13 +257,13 @@ export default function LoginPage() {
         <div className="w-full max-w-[380px] rounded-md border border-border bg-bg-elev-1 p-5 sm:p-8">
           <div className="mb-6 flex items-baseline justify-between">
             <span
-              className="font-sans text-[10.5px] font-semibold uppercase text-fg-muted"
+              className="font-sans text-[12px] font-semibold uppercase text-fg-muted"
               style={{ letterSpacing: "0.18em" }}
             >
               Desk &middot; live
             </span>
             <span
-              className="font-mono text-[10.5px] text-fg-hint"
+              className="font-mono text-[12px] text-fg-hint"
               style={{ letterSpacing: "0.05em" }}
             >
               tradingalpha.net

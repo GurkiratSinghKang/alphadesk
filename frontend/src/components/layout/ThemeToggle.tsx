@@ -33,7 +33,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       title={label}
       onClick={() => setDisplayPref("theme", next)}
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+        "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md sm:h-8 sm:w-8",
         "border border-border bg-bg-elev-1 text-fg-muted",
         "hover:border-brand/60 hover:text-brand hover:bg-brand-tint",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

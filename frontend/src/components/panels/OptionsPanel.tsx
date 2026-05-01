@@ -254,7 +254,7 @@ export function OptionsPanel() {
           {chainData?.isDemo && (
             <Badge
               variant="outline"
-              className="border-amber/50 bg-amber/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber"
+              className="border-amber/50 bg-amber/10 px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-amber"
             >
               Synthetic
             </Badge>
@@ -262,17 +262,17 @@ export function OptionsPanel() {
           <HelpCircle text="Full options chain for the selected symbol. Click calls/puts to add legs to your trade builder." />
           <Badge
             variant="outline"
-            className="text-[10px] px-1.5 py-0.5 border-primary/50 text-primary font-semibold bg-primary/10"
+            className="text-[12px] px-1.5 py-0.5 border-primary/50 text-primary font-semibold bg-primary/10"
           >
             IV Rank: {ivRank != null ? ivRank : "\u2014"}
           </Badge>
           <Badge
             variant="outline"
-            className="text-[10px] px-1.5 py-0.5 border-muted-foreground/40 text-foreground font-medium bg-muted-foreground/10"
+            className="text-[12px] px-1.5 py-0.5 border-muted-foreground/40 text-foreground font-medium bg-muted-foreground/10"
           >
             IV Pctl: {ivPctl != null ? ivPctl : "\u2014"}
           </Badge>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[12px] text-muted-foreground">
             Expected Move: {expectedMove != null ? `\u00B1$${(expectedMove ?? 0).toFixed(2)}` : "\u2014"}
           </span>
         </div>
@@ -315,16 +315,16 @@ export function OptionsPanel() {
       )}
       {chainEmpty ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-12 text-center">
-          <p className="font-display italic text-[14px] text-muted-foreground">
+          <p className="font-display italic text-[15px] text-muted-foreground">
             Options data not available for {selectedSymbol}.
           </p>
-          <p className="font-sans text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground/70">
+          <p className="font-sans text-[12px] uppercase tracking-[0.18em] text-muted-foreground/70">
             No invented quotes are shown.
           </p>
         </div>
       ) : chain == null ? null : (
         <ScrollArea className="flex-1 overflow-auto">
-          <table className="w-full text-[11px] min-w-[700px]" aria-label="Options chain">
+          <table className="w-full text-[12px] min-w-[700px]" aria-label="Options chain">
             <thead className="sticky top-0 z-10 bg-bg-elev-2">
               <tr className="border-b border-border">
                 {colHeaders.map((h) => (

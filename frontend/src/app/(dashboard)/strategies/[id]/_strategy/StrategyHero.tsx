@@ -83,7 +83,7 @@ export default function StrategyHero({
           data-slot="strategy-hero-empty"
           className="flex max-w-[520px] items-start border-l border-border-hair pl-5"
         >
-          <p className="font-display italic text-[15.5px] leading-relaxed text-fg-muted">
+          <p className="font-display italic text-[15px] leading-relaxed text-fg-muted">
             This strategy has not traded yet. Metrics will appear after the first closed trade.
           </p>
         </div>

@@ -18,8 +18,8 @@ export interface MonoProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 const sizeClass: Record<MonoSize, string> = {
   micro: "t-mono-micro",
-  hint: "text-[11px]",
-  body: "text-[12px]",
+  hint: "text-[12px]",
+  body: "text-[13px]",
   display: "t-num-display",
 };
 

@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils"
  *  - halted (coral, pulsing dot)
  *  - idle   (muted, ghost border, dim dot)
  *  - ai     (gold, gold dot)
+ *  - loading/stale/error states use the same non-color-only marker language
+ *    as other primitives.
  *
  * Legacy aliases (default/secondary/destructive/outline/ghost/link) still map
  * to the closest semantic tone so prior callers keep rendering. Callers
@@ -23,12 +25,12 @@ import { cn } from "@/lib/utils"
  */
 const badgeVariants = cva(
   [
-    "group/badge inline-flex items-center gap-1.5",
-    "h-[22px] px-2.5 py-0",
-    "rounded-sm border text-[10px] font-semibold tracking-[0.16em] uppercase",
-    "font-sans whitespace-nowrap",
+    "group/badge ui-stateful inline-flex items-center gap-1.5",
+    "min-h-6 px-3 py-0.5",
+    "rounded-sm border text-[12px] font-semibold tracking-[0.12em] uppercase",
+    "relative overflow-hidden font-sans whitespace-nowrap",
     "transition-colors",
-    "focus-visible:ring-1 focus-visible:ring-brand",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
   ].join(" "),
   {
     variants: {
@@ -42,6 +44,14 @@ const badgeVariants = cva(
         idle:
           "text-fg-muted bg-transparent border-border",
         ai: "text-gold-300 bg-brand/10 border-brand/30",
+        loading:
+          "text-ice bg-ice/10 border-ice/25",
+        stale:
+          "text-amber bg-amber/10 border-amber/30 border-dashed",
+        error:
+          "text-down-500 bg-down-500/10 border-down-500/30",
+        disabled:
+          "text-fg-muted bg-transparent border-border opacity-55",
 
         // Legacy aliases
         default:
@@ -70,6 +80,10 @@ const dotToneClass: Record<string, string> = {
   halted: "bg-down-500 animate-pulse",
   idle: "bg-fg-muted",
   ai: "bg-gold-300",
+  loading: "bg-ice",
+  stale: "bg-amber",
+  error: "bg-down-500 animate-pulse",
+  disabled: "bg-fg-muted",
   default: "bg-up-500 shadow-[0_0_6px_var(--up-500)]",
   secondary: "bg-fg-muted",
   destructive: "bg-down-500 animate-pulse",

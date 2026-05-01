@@ -314,10 +314,10 @@ function WatchlistRow({
               value={pct!}
               format="percent"
               tone={tone}
-              className="text-[14px]"
+              className="text-[15px]"
             />
           ) : (
-            <span className="font-mono text-[14px] text-fg-muted">—</span>
+            <span className="font-mono text-[15px] text-fg-muted">—</span>
           )}
         </span>
 

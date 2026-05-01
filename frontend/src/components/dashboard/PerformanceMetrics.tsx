@@ -228,11 +228,11 @@ function MetricCard({
     <div className="rounded-lg border border-border bg-white/[0.02] px-3 py-2.5">
       <div className="flex items-center gap-1.5 mb-1.5">
         <Icon className="h-3 w-3 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground">{label}</span>
+        <span className="text-[12px] text-muted-foreground">{label}</span>
       </div>
       <div className={cn("text-base font-bold tabular-nums", statusColor)}>
         {value}
-        {unit && <span className="text-[10px] font-normal text-muted-foreground ml-0.5">{unit}</span>}
+        {unit && <span className="text-[12px] font-normal text-muted-foreground ml-0.5">{unit}</span>}
       </div>
     </div>
   );
@@ -309,7 +309,7 @@ export function PerformanceMetrics() {
           <Gauge className="h-4 w-4 text-muted-foreground" />
           <div>
             <h2 className="text-sm font-semibold text-foreground">Performance Monitor</h2>
-            <p className="text-[10px] text-muted-foreground">Real-time app performance metrics (admin/debug)</p>
+            <p className="text-[12px] text-muted-foreground">Real-time app performance metrics (admin/debug)</p>
           </div>
         </div>
         <button
@@ -378,22 +378,22 @@ export function PerformanceMetrics() {
       {/* Response Time Chart */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[11px] font-medium text-muted-foreground">
+          <h3 className="text-[12px] font-medium text-muted-foreground">
             Recent API Response Times
           </h3>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
+          <span className="text-[12px] text-muted-foreground tabular-nums">
             {data.apiTimings.length} requests tracked
           </span>
         </div>
         <div className="rounded-lg border border-border bg-black/20 p-2">
           <ResponseTimeBars timings={data.apiTimings} />
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[9px] text-muted-foreground">
+            <span className="text-[12px] text-muted-foreground">
               {data.apiTimings.length > 0
                 ? new Date(data.apiTimings[0].timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
                 : "--:--"}
             </span>
-            <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-1.5 w-3 rounded-sm bg-[var(--profit)]" /> &lt;200ms
               </span>
@@ -404,7 +404,7 @@ export function PerformanceMetrics() {
                 <span className="inline-block h-1.5 w-3 rounded-sm bg-[var(--loss)]" /> &gt;500ms
               </span>
             </div>
-            <span className="text-[9px] text-muted-foreground">
+            <span className="text-[12px] text-muted-foreground">
               {data.apiTimings.length > 0
                 ? new Date(data.apiTimings[data.apiTimings.length - 1].timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
                 : "--:--"}
@@ -416,11 +416,11 @@ export function PerformanceMetrics() {
       {/* Recent Requests Table */}
       {data.apiTimings.length > 0 && (
         <div className="mt-4">
-          <h3 className="text-[11px] font-medium text-muted-foreground mb-2">
+          <h3 className="text-[12px] font-medium text-muted-foreground mb-2">
             Last 10 Requests
           </h3>
           <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-[10px]" role="table" aria-label="Recent API requests with response times and status codes">
+            <table className="w-full text-[12px]" role="table" aria-label="Recent API requests with response times and status codes">
               <thead>
                 <tr className="border-b border-border bg-white/[0.02]">
                   <th scope="col" className="text-left px-2 py-1.5 font-medium text-muted-foreground">Endpoint</th>

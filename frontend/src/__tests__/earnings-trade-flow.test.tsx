@@ -20,7 +20,7 @@ import {
 import TradePage from "@/app/(dashboard)/trade/page";
 import { getBars, placeOrder } from "@/lib/api";
 import { useMarketStore } from "@/stores/market";
-import type { LadderRow } from "@/types";
+import type { LadderRow, Quote } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -59,6 +59,23 @@ function fakeLadderRow(over: Partial<LadderRow> = {}): LadderRow {
     oi: 1234,
     volume: 99,
     ...over,
+  };
+}
+
+function seededQuote(symbol: string, last = 200): Quote {
+  return {
+    symbol,
+    last,
+    bid: last - 0.05,
+    ask: last + 0.05,
+    change: 0,
+    changePct: 0,
+    volume: 1_000_000,
+    high: last + 1,
+    low: last - 1,
+    open: last,
+    close: last,
+    timestamp: Date.now(),
   };
 }
 
@@ -119,7 +136,11 @@ describe("Trade page parses Round-5 deep-link contract", () => {
   beforeEach(() => {
     _origLocation = window.location;
     vi.clearAllMocks();
-    useMarketStore.setState({ selectedSymbol: "SPY" });
+    useMarketStore.setState({ selectedSymbol: "SPY", quotes: {}, freshestTs: 0 });
+    useMarketStore.getState().updateQuotes([
+      seededQuote("SPY", 679),
+      seededQuote("NVDA", 930),
+    ]);
   });
   afterEach(() => {
     Object.defineProperty(window, "location", {

@@ -74,7 +74,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
         {toast.action && (
           <button
             onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
-            className="mt-1 text-xs font-medium text-brand hover:underline"
+            className="mt-1 text-[12px] font-medium text-brand hover:underline"
           >
             {toast.action.label}
           </button>
@@ -82,7 +82,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
       </div>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="shrink-0 rounded-sm p-0.5 text-fg-muted hover:text-fg"
+        className="-m-2.5 inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-sm p-2.5 text-fg-muted hover:text-fg"
         aria-label="Dismiss notification"
       >
         <X className="h-3.5 w-3.5" />
@@ -177,7 +177,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {droppedCount > 0 && (
           <div
             data-slot="toast-overflow-pill"
-            className="pointer-events-none self-end rounded-full border border-border bg-bg-elev-2/90 px-3 py-1 font-mono text-[11px] text-fg-muted shadow-md"
+            className="pointer-events-none self-end rounded-full border border-border bg-bg-elev-2/90 px-3 py-1 font-mono text-[12px] text-fg-muted shadow-md"
           >
             + {droppedCount} more notification{droppedCount === 1 ? "" : "s"} (see bell)
           </div>

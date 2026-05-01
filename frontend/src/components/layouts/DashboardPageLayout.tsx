@@ -3,9 +3,6 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import Display from "@/components/typography/Display";
-import Eyebrow from "@/components/typography/Eyebrow";
-import SectionRule from "@/components/typography/SectionRule";
 
 /**
  * DashboardPageLayout (Layer 3 shell)
@@ -13,11 +10,11 @@ import SectionRule from "@/components/typography/SectionRule";
  * Generic editorial shell for every non-desk dashboard route
  * (analytics, pipeline, reports, alerts, settings).
  *
- * Provides a consistent header:
- *   · tracked-caps Eyebrow ("§ ANALYTICS")
- *   · Newsreader italic Display title ("Portfolio analytics")
+ * Provides a consistent command header:
+ *   · tracked-caps route label ("§ ANALYTICS")
+ *   · compact sans title for scan-heavy tools
  *   · optional right-aligned actions slot
- *   · editorial hairline `<SectionRule />` below the header
+ *   · dark elevated surface matching the trading desk chrome
  *
  * The children slot carries the page's own body — layout stays
  * opinion-free about internal spacing so existing panels keep working.
@@ -26,7 +23,7 @@ import SectionRule from "@/components/typography/SectionRule";
 export interface DashboardPageLayoutProps {
   /** Tracked-caps chapter tag rendered above the title, e.g. "§ ANALYTICS". */
   eyebrow: string;
-  /** Italic-serif page title. */
+  /** Page title. */
   title: string;
   /** Optional right-aligned header slot for CTAs, status pills, filters. */
   actions?: React.ReactNode;
@@ -65,23 +62,30 @@ export default function DashboardPageLayout({
         // Viewport audit r5 #2: the previous 1280px cap wasted 33-50% of the
         // viewport on 1920+/ultrawide monitors (common for quant research).
         // Comfortable reading width on 1440 laptop + use more pixels on 4K.
-        "mx-auto flex w-full max-w-[1480px] 2xl:max-w-[1680px] flex-col gap-6 px-6 py-8",
+        "mx-auto flex w-full max-w-[1480px] 2xl:max-w-[1680px] flex-col gap-5 px-4 py-5 md:px-6 md:py-7",
         className
       )}
     >
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <Eyebrow as="div">{eyebrow}</Eyebrow>
-          <Display size="md" as="h1">
-            {title}
-          </Display>
+      <header className="relative overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/85 px-4 py-4 shadow-[0_18px_60px_-44px_rgba(0,0,0,0.72)] md:px-5">
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-75"
+        />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <div className="t-label text-brand/85">{eyebrow.replace("§ ", "")}</div>
+            <h1
+              className="mt-2 truncate text-[26px] font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[32px]"
+              style={{ letterSpacing: 0 }}
+            >
+              {title}
+            </h1>
+          </div>
+          {actions ? (
+            <div className="flex items-center gap-2">{actions}</div>
+          ) : null}
         </div>
-        {actions ? (
-          <div className="flex items-center gap-2">{actions}</div>
-        ) : null}
       </header>
-
-      <SectionRule />
 
       <div className="flex flex-col gap-6">{children}</div>
     </div>

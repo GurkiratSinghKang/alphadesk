@@ -277,7 +277,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
             <button
               onClick={() => setViewMode("daily")}
               className={cn(
-                "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
+                "px-2 py-0.5 text-[12px] font-medium rounded transition-colors",
                 viewMode === "daily"
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -288,7 +288,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
             <button
               onClick={() => setViewMode("ytd")}
               className={cn(
-                "px-2 py-0.5 text-[10px] font-medium rounded transition-colors",
+                "px-2 py-0.5 text-[12px] font-medium rounded transition-colors",
                 viewMode === "ytd"
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -334,14 +334,14 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
               onMouseLeave={handleMouseLeave}
             >
               {showName && (
-                <span className="text-[10px] font-medium text-white/90 leading-tight text-center px-1 truncate max-w-full">
+                <span className="text-[12px] font-medium text-white/90 leading-tight text-center px-1 truncate max-w-full">
                   {abbrev(rect.sector, tileW)}
                 </span>
               )}
               {showChange && (
                 <span
                   className={cn(
-                    "text-[11px] font-bold tabular-nums leading-tight",
+                    "text-[12px] font-bold tabular-nums leading-tight",
                     displayPct >= 0 ? "text-emerald-200" : "text-red-200"
                   )}
                 >
@@ -349,12 +349,12 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                 </span>
               )}
               {showYtd && viewMode === "daily" && (
-                <span className="text-[9px] text-white/50 tabular-nums leading-tight mt-px">
+                <span className="text-[12px] text-white/50 tabular-nums leading-tight mt-px">
                   YTD {(rect.ytd_pct ?? 0) >= 0 ? "+" : ""}{(rect.ytd_pct ?? 0).toFixed(1)}%
                 </span>
               )}
               {showLeader && (
-                <span className="text-[9px] text-white/40 leading-tight mt-0.5 truncate max-w-full px-1">
+                <span className="text-[12px] text-white/40 leading-tight mt-0.5 truncate max-w-full px-1">
                   {rect.leader}
                 </span>
               )}
@@ -371,29 +371,29 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
               top: Math.max(tooltipPos.y - 60, 0),
             }}
           >
-            <p className="text-[11px] font-semibold text-white">{hoveredRect.sector}</p>
+            <p className="text-[12px] font-semibold text-white">{hoveredRect.sector}</p>
             <div className="mt-0.5 flex items-center gap-2">
               <span className={cn(
-                "text-[11px] font-bold tabular-nums",
+                "text-[12px] font-bold tabular-nums",
                 hoveredRect.change_pct >= 0 ? "text-emerald-400" : "text-red-400"
               )}>
                 {(hoveredRect.change_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.change_pct ?? 0).toFixed(2)}%
               </span>
-              <span className="text-[10px] text-zinc-500">today</span>
+              <span className="text-[12px] text-zinc-500">today</span>
             </div>
             {hoveredRect.ytd_pct != null && (
               <div className="flex items-center gap-2">
                 <span className={cn(
-                  "text-[11px] tabular-nums",
+                  "text-[12px] tabular-nums",
                   hoveredRect.ytd_pct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
                 )}>
                   {(hoveredRect.ytd_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.ytd_pct ?? 0).toFixed(2)}%
                 </span>
-                <span className="text-[10px] text-zinc-500">YTD</span>
+                <span className="text-[12px] text-zinc-500">YTD</span>
               </div>
             )}
             {hoveredRect.leader && (
-              <p className="mt-0.5 text-[10px] text-zinc-400">
+              <p className="mt-0.5 text-[12px] text-zinc-400">
                 Leader: <span className="text-white/80">{hoveredRect.leader}</span>
                 {hoveredRect.leader_change_pct != null && (
                   <span className={cn(

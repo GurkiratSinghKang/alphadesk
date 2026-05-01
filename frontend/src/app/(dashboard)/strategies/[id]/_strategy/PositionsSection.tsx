@@ -127,7 +127,7 @@ export default function PositionsSection({
                   <Link
                     href={`/trade?symbol=${p.symbol}`}
                     className={cn(
-                      "rounded-sm font-sans text-[14px] font-semibold text-fg transition-colors hover:text-brand",
+                      "rounded-sm font-sans text-[15px] font-semibold text-fg transition-colors hover:text-brand",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     )}
                   >
@@ -156,10 +156,10 @@ export default function PositionsSection({
                     digits column-align at the decimal point. Secondary
                     lines (P&L %, stop/take) use 12px for hierarchy. */}
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[14px] text-fg tabular-nums">{Math.abs(p.shares)}</Mono>
+                  <Mono className="text-[15px] text-fg tabular-nums">{Math.abs(p.shares)}</Mono>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[14px] text-fg tabular-nums">
+                  <Mono className="text-[15px] text-fg tabular-nums">
                     {p.entry_price.toFixed(2)}
                   </Mono>
                 </td>
@@ -168,7 +168,7 @@ export default function PositionsSection({
                     <PnLNumber
                       value={p.unrealized_pnl}
                       format="currency"
-                      className="text-[14px]"
+                      className="text-[15px]"
                     />
                     <PnLNumber
                       value={p.unrealized_pnl_pct}
