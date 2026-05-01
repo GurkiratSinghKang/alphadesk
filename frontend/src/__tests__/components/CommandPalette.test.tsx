@@ -1,6 +1,6 @@
 import '../setup-mocks';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useUIStore } from '@/stores/ui';
 import { useMarketStore } from '@/stores/market';
 
@@ -138,6 +138,64 @@ describe('CommandPalette', () => {
     aaplOption.closest('[role="option"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(useUIStore.getState().commandPaletteOpen).toBe(false);
+  });
+
+  it('confirms before cancelling all working orders', async () => {
+    const listener = vi.fn();
+    window.addEventListener('alphadesk:cancel-all-orders', listener);
+    useUIStore.setState({ commandPaletteOpen: true });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+
+    fireEvent.click(screen.getByText('Cancel all working orders').closest('[role="option"]')!);
+
+    expect(useUIStore.getState().commandPaletteOpen).toBe(false);
+    expect(screen.getByTestId('confirm-cancel-all-orders-dialog')).toBeDefined();
+    expect(listener).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('confirm-cancel-all-orders-confirm'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('alphadesk:cancel-all-orders', listener);
+  });
+
+  it('confirms before flattening the selected symbol', async () => {
+    const listener = vi.fn();
+    window.addEventListener('alphadesk:flatten-symbol', listener);
+    useUIStore.setState({ commandPaletteOpen: true });
+    useMarketStore.setState({ selectedSymbol: 'AAPL' });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+
+    fireEvent.click(screen.getByText('Flatten AAPL — close at market').closest('[role="option"]')!);
+
+    expect(screen.getByTestId('confirm-flatten-symbol-dialog')).toBeDefined();
+    expect(screen.getByTestId('confirm-flatten-symbol-cancel')).toBeDefined();
+    expect(listener).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('confirm-flatten-symbol-confirm'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ symbol: 'AAPL' });
+    window.removeEventListener('alphadesk:flatten-symbol', listener);
+  });
+
+  it('confirms before pausing all strategies and cancel keeps it inert', async () => {
+    const listener = vi.fn();
+    window.addEventListener('alphadesk:pause-all-strategies', listener);
+    useUIStore.setState({ commandPaletteOpen: true });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+
+    fireEvent.click(screen.getByText('Pause all strategies').closest('[role="option"]')!);
+
+    expect(screen.getByTestId('confirm-pause-all-strategies-dialog')).toBeDefined();
+    expect(listener).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('confirm-pause-all-strategies-cancel'));
+
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener('alphadesk:pause-all-strategies', listener);
   });
 
   it('shows keyboard shortcut hints in the footer', async () => {

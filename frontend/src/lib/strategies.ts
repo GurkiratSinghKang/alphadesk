@@ -18,6 +18,7 @@ import {
   Gauge,
   Clock,
   CandlestickChart,
+  Network,
 } from "lucide-react";
 
 export type StrategyGroup = "fundamental" | "technical" | "other";
@@ -62,6 +63,14 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     shortName: "Earnings Options",
     icon: CandlestickChart,
     regimeNote: "Research screener · pick your own trade",
+    group: "fundamental",
+    kind: "research",
+  },
+  "trading-agents-research": {
+    name: "TradingAgents Research",
+    shortName: "TradingAgents",
+    icon: Network,
+    regimeNote: "Multi-agent thesis desk - read-only research",
     group: "fundamental",
     kind: "research",
   },
@@ -241,6 +250,7 @@ export const LIVE_DISABLED: ReadonlySet<string> = new Set<string>([
   "vrp-harvesting",
   "earnings-vol-premium",
   "earnings-options-play",
+  "trading-agents-research",
 ]);
 
 /** Strategies routed only to Alpaca paper. Mirror of
@@ -250,6 +260,7 @@ export const PAPER_ONLY: ReadonlySet<string> = new Set<string>([
   "orb",
   "vwap-strategy",
   "earnings-options-play",
+  "trading-agents-research",
 ]);
 
 /** Convenience accessor: treat missing ``stage`` as "live" so callers can
@@ -273,6 +284,7 @@ export function isStrategyLive(id: string): boolean {
 export const STRATEGY_ORDER: string[] = [
   // Research tools (rendered in the Research section, not Active/Coming Soon)
   "earnings-options-play",
+  "trading-agents-research",
   // Fundamental
   "momentum-quality",
   "pead",

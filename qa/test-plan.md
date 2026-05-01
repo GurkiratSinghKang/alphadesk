@@ -14,20 +14,34 @@ This document is the root test plan. Per-page files under `qa/pages/<page>.md` d
 | `/login` | public | `qa/pages/login.md` |
 | `/login/reset` | public | `qa/pages/login-reset.md` |
 | `/request-access` | public | `qa/pages/request-access.md` |
+| `/about` | public | spec needed |
+| `/contact` | public | spec needed |
 | `/docs` | public | `qa/pages/docs.md` |
+| `/help/earnings-data` | public | spec needed |
 | `/privacy` | public | `qa/pages/privacy.md` |
 | `/terms` | public | `qa/pages/terms.md` |
 | `/risk` | public | `qa/pages/risk.md` |
 | `/` | requires-auth (flagship trading desk) | `qa/pages/desk.md` |
-| `/trade` | requires-auth → redirect to `/` | `qa/pages/trade.md` |
+| `/trade` | requires-auth (canonical trade workspace) | `qa/pages/trade.md` |
+| `/strategies` | requires-auth (catalogue) | spec needed |
 | `/strategies/[id]` | requires-auth | `qa/pages/strategies-detail.md` |
+| `/strategies/earnings-options-play` | requires-auth (research workflow) | spec needed |
+| `/strategies/trading-agents-research` | requires-auth (research workflow) | spec needed |
 | `/analytics` | requires-auth | `qa/pages/analytics.md` |
 | `/pipeline` | requires-auth | `qa/pages/pipeline.md` |
 | `/reports` | requires-auth | `qa/pages/reports.md` |
 | `/alerts` | requires-auth | `qa/pages/alerts.md` |
 | `/settings` | requires-auth | `qa/pages/settings.md` |
 | `/_design` | dev-only (must 404 in prod) | `qa/pages/design.md` |
-| `*` (unknown) | public 404 | `qa/pages/not-found.md` |
+| `*` | public 404 | `qa/pages/not-found.md` |
+
+Route/spec drift guard:
+
+```bash
+node qa/harness/check-route-spec-drift.mjs
+```
+
+The guard compares `frontend/src/app/**/page.*` with this table. It fails when a shipped route is missing from the inventory, when an inventory route no longer exists, or when a listed `qa/pages/*.md` file is missing. Routes marked `spec needed` are allowed in the inventory but should become page contracts before full coverage is claimed.
 
 ## 2. Global shell / layout contracts
 
@@ -160,6 +174,7 @@ Pull from `audit-reports/iter-1-frontend.md` for full list. Headline items (test
 - [P2] `/_design` route ships 698 lines of fixture constants in prod bundle.
 - [P2] Login form `action="#"` — no-JS fallback loses creds.
 - [P3] Login password placeholder promises "at least 12 characters" but no client validation.
+- [P0] Keep route/spec drift green with `node qa/harness/check-route-spec-drift.mjs`, especially after adding App Router pages.
 
 ## 13. How to test
 

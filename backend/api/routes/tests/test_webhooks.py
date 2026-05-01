@@ -234,14 +234,34 @@ def _healthy_redis_monkeypatch(monkeypatch: pytest.MonkeyPatch) -> None:
     from api.routes import webhooks as webhooks_mod
 
     class _HealthyRedis:
+        def __init__(self) -> None:
+            self._values: dict[str, str] = {}
+
         async def incr(self, key: str) -> int:
             return 1
 
         async def expire(self, key: str, ttl: int) -> bool:
             return True
 
+        async def set(
+            self,
+            key: str,
+            value: str,
+            ex: int | None = None,
+            nx: bool = False,
+        ) -> bool:
+            if nx and key in self._values:
+                return False
+            self._values[key] = value
+            return True
+
+        async def get(self, key: str) -> str | None:
+            return self._values.get(key)
+
+    redis = _HealthyRedis()
+
     async def _fake_get_redis() -> Any:
-        return _HealthyRedis()
+        return redis
 
     monkeypatch.setattr(webhooks_mod, "get_redis", _fake_get_redis)
 
@@ -400,6 +420,127 @@ async def test_replay_attack_with_different_body_rejected(
         "must be rejected. The signature binds the body; swapping the body "
         "invalidates the HMAC."
     )
+
+
+@pytest.mark.asyncio
+async def test_exact_signed_payload_replay_is_idempotently_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same authenticated payload inside the freshness window runs once.
+
+    Timestamp freshness only rejects stale captures; without an exact replay
+    cache, an attacker who captures a valid signed request can replay it
+    immediately and trigger duplicate webhook side effects.
+    """
+    import hashlib
+    import hmac
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    _healthy_redis_monkeypatch(monkeypatch)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "replay-secret",
+    )
+
+    calls: dict[str, int] = {"handler": 0, "publish": 0}
+
+    async def _handle_info(alert: Any) -> dict[str, Any]:
+        calls["handler"] += 1
+        return {"action": "notification_sent", "ticker": alert.ticker}
+
+    async def _publish(*_args: Any, **_kwargs: Any) -> None:
+        calls["publish"] += 1
+
+    monkeypatch.setattr(webhooks_mod, "_handle_info_alert", _handle_info)
+    monkeypatch.setattr(webhooks_mod, "publish", _publish)
+
+    ts = str(int(time.time()))
+    body = b'{"ticker":"SPY","action":"alert","message":"dedupe"}'
+    signed = f"{ts}:{body.decode()}".encode()
+    sig = hmac.new(b"replay-secret", signed, hashlib.sha256).hexdigest()
+
+    first = await webhooks_mod.receive_tradingview_webhook(
+        request=_request_with_body(body),
+        x_tv_secret=None,
+        x_tv_timestamp=ts,
+        x_tv_signature=sig,
+    )
+    second = await webhooks_mod.receive_tradingview_webhook(
+        request=_request_with_body(body),
+        x_tv_secret=None,
+        x_tv_timestamp=ts,
+        x_tv_signature=sig,
+    )
+
+    assert first.status == "processed"
+    assert second.status == "duplicate"
+    assert second.alert_id == first.alert_id
+    assert second.actions == [{"action": "duplicate_ignored", "ticker": "SPY"}]
+    assert calls == {"handler": 1, "publish": 1}
+
+
+@pytest.mark.asyncio
+async def test_replay_dedupe_redis_error_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay protection state is security-critical, so Redis errors fail closed."""
+    import hashlib
+    import hmac
+    import time
+
+    from api.routes import webhooks as webhooks_mod
+    from core.config import settings as _settings
+
+    class _ReplayBrokenRedis:
+        async def incr(self, key: str) -> int:
+            return 1
+
+        async def expire(self, key: str, ttl: int) -> bool:
+            return True
+
+        async def set(
+            self,
+            key: str,
+            value: str,
+            ex: int | None = None,
+            nx: bool = False,
+        ) -> bool:
+            raise RuntimeError("replay cache unavailable")
+
+    async def _fake_get_redis() -> Any:
+        return _ReplayBrokenRedis()
+
+    monkeypatch.setattr(webhooks_mod, "get_redis", _fake_get_redis)
+    monkeypatch.setattr(
+        _settings.TRADINGVIEW_WEBHOOK_SECRET,
+        "get_secret_value",
+        lambda: "replay-secret",
+    )
+
+    async def _must_not_run(alert: Any) -> dict[str, Any]:
+        raise AssertionError("handler must not run when replay protection fails")
+
+    monkeypatch.setattr(webhooks_mod, "_handle_info_alert", _must_not_run)
+
+    ts = str(int(time.time()))
+    body = b'{"ticker":"SPY","action":"alert","message":"dedupe"}'
+    signed = f"{ts}:{body.decode()}".encode()
+    sig = hmac.new(b"replay-secret", signed, hashlib.sha256).hexdigest()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await webhooks_mod.receive_tradingview_webhook(
+            request=_request_with_body(body),
+            x_tv_secret=None,
+            x_tv_timestamp=ts,
+            x_tv_signature=sig,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "Replay protection unavailable" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     libpq-dev \
     wget \
     curl \
@@ -61,6 +62,7 @@ COPY . .
 # Operators bind-mounting a host directory over that path must ``chown
 # 10001:10001`` on the host side or pass ``--user`` to match.
 RUN useradd -m -u 10001 alphadesk \
+    && mkdir -p /app/data/tradingagents-skill \
     && chown -R alphadesk:alphadesk /app
 USER alphadesk
 

@@ -10,11 +10,11 @@ describe("ResearchStrategyCard", () => {
         id="earnings-options-play"
         name="Earnings Options Play"
         subtitle="Research screener · pick your own trade"
-        metrics={{
-          thisWeekCount: 12,
-          avgIvRank: 68,
-          topSetup: "NVDA",
-        }}
+        metrics={[
+          { label: "THIS WEEK", value: 12, hint: "earnings" },
+          { label: "AVG IV RANK", value: 68, hint: "across set" },
+          { label: "TOP SETUP", value: "NVDA", hint: "recommended" },
+        ]}
       />,
     );
     expect(container.textContent).toContain("Earnings Options Play");
@@ -35,10 +35,33 @@ describe("ResearchStrategyCard", () => {
         id="earnings-options-play"
         name="Earnings Options Play"
         subtitle=""
-        metrics={{ thisWeekCount: 0, avgIvRank: 0, topSetup: null }}
+        metrics={[
+          { label: "THIS WEEK", value: 0, hint: "earnings" },
+          { label: "AVG IV RANK", value: "-", hint: "across set" },
+          { label: "TOP SETUP", value: "-", hint: "recommended" },
+        ]}
       />,
     );
     const link = container.querySelector('a[href="/strategies/earnings-options-play"]');
     expect(link).not.toBeNull();
+  });
+
+  it("links to TradingAgents research", () => {
+    const { container } = render(
+      <ResearchStrategyCard
+        id="trading-agents-research"
+        name="TradingAgents Research"
+        subtitle="Multi-agent thesis desk - read-only research"
+        metrics={[
+          { label: "MODE", value: "Read-only", hint: "no orders" },
+          { label: "AGENTS", value: "6+", hint: "debate stack" },
+          { label: "OUTPUT", value: "Memo", hint: "saved run" },
+        ]}
+      />,
+    );
+    const link = container.querySelector('a[href="/strategies/trading-agents-research"]');
+    expect(link).not.toBeNull();
+    expect(container.textContent).toContain("MODE");
+    expect(container.textContent).toContain("Read-only");
   });
 });

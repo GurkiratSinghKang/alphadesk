@@ -24,7 +24,8 @@ describe('Strategy configuration', () => {
     // the duplicate "pairs-stat-arb" entry (same backend package as
     // "pairs-trading"; rendered twice on /strategies).
     // 2026-04-22: bumped to 20 — added earnings-options-play (research kind).
-    expect(STRATEGY_ORDER.length).toBe(20);
+    // 2026-05-01: bumped to 21 — added TradingAgents Research.
+    expect(STRATEGY_ORDER.length).toBe(21);
   });
 
   it('has unique strategy IDs', () => {
@@ -47,12 +48,14 @@ describe('Strategy configuration', () => {
     expect([...LIVE_DISABLED].sort()).toEqual([
       'earnings-options-play',
       'earnings-vol-premium',
+      'trading-agents-research',
       'vrp-harvesting',
     ]);
     expect([...PAPER_ONLY].sort()).toEqual([
       'earnings-options-play',
       'kama-breakout',
       'orb',
+      'trading-agents-research',
       'vwap-strategy',
     ]);
   });

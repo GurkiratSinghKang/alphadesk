@@ -1,37 +1,102 @@
-# /trade — expected behavior
+# /trade - expected behavior
 
 ## Route
+
 - URL: `/trade`
 - Access: requires-auth
-- Redirects: **always** — the page is a redirect stub (`useEffect(() => router.replace("/"), [])`). Expected behavior: browser lands on `/` within one tick.
-- Metadata: inherits root layout.
+- Redirects: none in the current workspace. This route renders the canonical trade ticket surface.
+- Metadata: inherits the dashboard layout.
+- Source: `frontend/src/app/(dashboard)/trade/page.tsx`
 
 ## Layout
-The page body is a `<TradeRedirect />` client component that renders `null` on mount while `router.replace("/")` fires. The (dashboard) layout may briefly render its skeleton (TopBar + TickerTape + StatusStrip + main empty) before the replace resolves; once the router navigates to `/`, the flagship desk takes over.
 
-## Interactive elements
-- None — no visible DOM from the page itself.
+The page renders a single-column trade workspace with a compact header, chart context, order ticket, optional pre-staged option context, and recent orders.
 
-## Expected states
-- **Transient render (<100ms):** (dashboard) layout skeleton: 44px TopBar strip + 28px status strip + empty main. Replace fires.
-- **Post-redirect:** URL address bar shows `/`; the flagship desk page renders.
+Expected high-level regions:
 
-## Edge cases
-- **Direct link in email / share:** old bookmarks / links to `/trade` must still work — they do, via this redirect.
-- **Back button after redirect:** `router.replace` *replaces* the history entry, so pressing back does not re-enter `/trade` — it goes to whatever preceded the visit to `/trade`. This is intentional.
-- **Slow client JS:** until JS hydrates, the page is genuinely blank (no SSR content). Acceptable because it is a short-lived stub.
-- **Auth expired:** if the backend returns 401 on `/`, the auth guard should redirect to `/login`. Behavior depends on the guard, not this page.
+- Header: `§ TRADE`, `Trade · <symbol>`, optional `data-slot="trade-strategy-tag"`, and "Back to desk".
+- Chart section: `PriceChartPanel` for the selected or URL-prefilled symbol.
+- Ticket section: `OrderBar`, including `data-testid="order-bar-symbol"`, `data-testid="order-bar-qty"`, and `data-testid="order-bar-submit"`.
+- Optional single-leg section: `data-slot="active-contract"` when `?contract=` is valid.
+- Optional multi-leg section: `data-slot="active-legs"` with one `data-slot="active-leg"` per valid leg when `?legs=` is valid.
+- Recent orders section: table or empty state, refreshed from `getOrders`.
+
+## Query prefill contracts
+
+### Equity ticket
+
+Example:
+
+```text
+/trade?symbol=AAPL&side=buy&qty=1&type=limit&limit=123.45&strategy=manual
+```
+
+Expected:
+
+- The selected symbol and chart context use `AAPL`.
+- The order ticket symbol field contains `AAPL`.
+- The order ticket quantity field contains `1`.
+- The order type is `limit`; price is populated from `limit` or `price`.
+- The route does not submit anything on load.
+- If `strategy` is present, the strategy tag is visible and the ticket default uses it when available.
+
+### Single-leg OCC option
+
+Example:
+
+```text
+/trade?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1&limit=1.42&strategy=earnings-options-play
+```
+
+Expected:
+
+- The selected underlying is `NVDA`.
+- `data-slot="active-contract"` is visible.
+- The active contract shows the OCC symbol, expiry, call/put side, strike, order side, quantity, and limit price when present.
+- `data-order-side` matches `buy` or `sell`.
+- The order ticket symbol field is prefilled with the OCC contract, not the equity ticker.
+- The route does not submit anything on load.
+
+### Multi-leg combo
+
+Example:
+
+```text
+/trade?symbol=NVDA&legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32&strategy=earnings-options-play&combo_type=strangle
+```
+
+Expected:
+
+- The selected underlying is the explicit `symbol` or the first valid leg's underlying.
+- `data-slot="active-legs"` is visible.
+- Each valid leg renders as `data-slot="active-leg"` with OCC symbol, side, quantity, and optional limit.
+- The strategy tag includes the strategy and combo type when provided.
+- The order ticket is locked to the first valid leg by convention, including its limit price when present, while the submit payload carries all active legs.
+- The submit label reads as a combo action, for example "Place 2-leg combo".
+- The route does not submit anything on load.
+
+## Validation and safety expectations
+
+- Invalid or malformed symbols should not create an executable ticket.
+- Invalid OCC contracts should not render an active contract or active leg.
+- Quantity must remain a positive whole number within ticket limits.
+- Limit and stop orders require their respective price fields before submission.
+- Tests may intercept the order endpoint to verify payload shape, but must not place real or paper orders in shared environments unless a test-only account and explicit submit scenario are configured.
+- Mobile coverage is required for equity, single-leg, and multi-leg deep links because a wrong tap target or clipped ticket can change order intent.
 
 ## What must NOT happen
-- No flash of the old legacy trade workspace (the pre-F3 panel layout has been retired).
-- No toast, no error, no loading spinner.
-- `/trade` should never render a full page body with contentinfo.
 
-## SEO / meta
-- Not intended to be indexed since it redirects. The root layout title applies briefly.
+- No redirect from `/trade` back to `/`.
+- No automatic order submission on page load.
+- No dashboard-only order-bar assertions; order-entry checks belong to `/trade`.
+- No silent loss of the `strategy`, `combo_type`, `limit`, or `quote_ts` URL context.
 
-## Accessibility (WCAG 2.1 AA)
-- Redirect stub is acceptable a11y-wise as long as it completes quickly. Screen readers may not announce the replace; users rely on the destination page for content.
+## Harness coverage
 
-## Source
-- `frontend/src/app/(dashboard)/trade/page.tsx` — 22-line stub; comment: "Before F3 this page owned the trading workspace. The new flagship desk (at `/`) composes `DeskLayout` with the Layer-2 composites, and the legacy panel-based workspace is deferred to the panel retirement pass (F4). This stub keeps existing bookmarks and internal links working by redirecting on mount."
+- [x] Add `qa/harness/tests/trade.mjs` for desktop and mobile.
+- [x] Cover equity prefill without submit.
+- [x] Cover OCC single-leg prefill without submit.
+- [x] Cover multi-leg combo prefill without submit.
+- [x] Move stale dashboard order-bar fill checks out of `qa/harness/tests/dashboard.mjs`.
+- [ ] Add malformed query fuzz cases for contract, legs, side, qty, limit, and stop.
+- [ ] Add an intercepted-submit payload test only when the environment guarantees no real broker side effects.

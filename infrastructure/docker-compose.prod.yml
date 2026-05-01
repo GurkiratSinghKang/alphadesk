@@ -108,6 +108,10 @@ services:
       # path remains available for CLAUDE_BACKEND=cli or auto mode without
       # an API key. Mount read-write so the CLI can refresh OAuth tokens.
       - /root/.claude:/root/.claude
+      # TradingAgents clones the pinned upstream repo and builds a venv on
+      # first run. Keep that cache out of the container layer so deploys do
+      # not pay the bootstrap cost every time.
+      - tradingagents_skill:/app/data/tradingagents-skill
     healthcheck:
       # Probe /readyz (not /health): /health is a pure-Python liveness ping
       # that returns 200 even when Postgres/Redis are unreachable, so a broken
@@ -209,3 +213,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  tradingagents_skill:

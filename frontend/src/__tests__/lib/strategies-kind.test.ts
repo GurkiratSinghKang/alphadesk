@@ -12,9 +12,15 @@ describe("STRATEGY_META kind flag", () => {
     expect(metaKind("earnings-options-play")).toBe("research");
   });
 
+  it("registers TradingAgents as a read-only research strategy", () => {
+    expect(STRATEGY_META["trading-agents-research"]).toBeDefined();
+    expect(metaKind("trading-agents-research")).toBe("research");
+  });
+
   it("surfaces research name + subtitle for the list card", () => {
     const entry = STRATEGY_META["earnings-options-play"];
     expect(entry.name).toMatch(/Earnings Options Play/i);
     expect(entry.regimeNote).toMatch(/research|screener|decision/i);
+    expect(STRATEGY_META["trading-agents-research"].regimeNote).toMatch(/research|thesis/i);
   });
 });

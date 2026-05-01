@@ -30,6 +30,7 @@ import {
   type StrategyStage,
 } from "@/lib/strategies";
 import ResearchStrategyCard from "@/components/strategies/ResearchStrategyCard";
+import type { ResearchCardMetric } from "@/components/strategies/ResearchStrategyCard";
 import { computeStrategyCounts } from "@/lib/strategiesSummary";
 import { cn } from "@/lib/utils";
 
@@ -341,6 +342,21 @@ function formatUsdPrecise(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
+}
+
+function researchMetricsFor(id: string): ResearchCardMetric[] {
+  if (id === "trading-agents-research") {
+    return [
+      { label: "MODE", value: "Read-only", hint: "no orders" },
+      { label: "AGENTS", value: "6+", hint: "debate stack" },
+      { label: "OUTPUT", value: "Memo", hint: "saved run" },
+    ];
+  }
+  return [
+    { label: "THIS WEEK", value: 0, hint: "earnings" },
+    { label: "AVG IV RANK", value: "—", hint: "across set" },
+    { label: "TOP SETUP", value: "—", hint: "recommended" },
+  ];
 }
 
 // ─── Section block ───────────────────────────────────────────
@@ -748,13 +764,7 @@ export default function StrategiesListingPage() {
                       id={s.id}
                       name={s.displayName}
                       subtitle={STRATEGY_META[s.id]?.regimeNote ?? ""}
-                      metrics={{
-                        // Placeholder zeros — Task 10 wires real values from
-                        // the preview API. Card renders em-dash for 0/null.
-                        thisWeekCount: 0,
-                        avgIvRank: 0,
-                        topSetup: null,
-                      }}
+                      metrics={researchMetricsFor(s.id)}
                     />
                   ))}
                 </div>

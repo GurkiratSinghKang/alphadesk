@@ -1,6 +1,6 @@
 // qa/harness/tests/dashboard.mjs
-// Authenticated root (/). Covers strategy-rail click, order-bar fill, command
-// palette open, and mobile render. Order-bar fill does NOT submit a trade.
+// Authenticated root (/). Covers strategy-rail click, command palette open,
+// and mobile render. Order-entry coverage lives in trade.mjs.
 
 export const spec = {
   name: "dashboard",
@@ -27,11 +27,6 @@ export const spec = {
     // Back to dashboard.
     { kind: "navigate", to: "/" },
     { kind: "wait", for: "networkidle", timeout: 8000 },
-
-    // Order bar — fill symbol + qty but DO NOT submit.
-    { kind: "type", selector: "[data-testid=order-bar-symbol], input[name=symbol]", value: "AAPL" },
-    { kind: "type", selector: "[data-testid=order-bar-qty], input[name=qty], input[name=quantity]", value: "1" },
-    { kind: "snapshot", label: "order-bar-filled" },
 
     // Command palette — Cmd+K / Ctrl+K. Known harness artifact: headless
     // Chromium's `page.keyboard.press("Control+K")` doesn't reliably trigger

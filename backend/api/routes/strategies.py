@@ -207,6 +207,23 @@ class StrategyPosition(BaseModel):
 # ---------------------------------------------------------------------------
 
 _STRATEGIES: dict[str, dict[str, Any]] = {
+    "trading-agents-research": {
+        "name": "TradingAgents Research",
+        "description": (
+            "Multi-agent external research desk for ticker-level thesis generation. "
+            "Runs the pinned TradingAgents wrapper and surfaces a read-only report; "
+            "never emits orders or executable strategy signals."
+        ),
+        "status": StrategyStatus.PAUSED,
+        "invested_amount": 0,
+        "total_return_pct": 0,
+        "sharpe_ratio": None,
+        "win_rate": -1,
+        "max_drawdown": None,
+        "active_positions_count": 0,
+        "annualized_return_pct": 0,
+        "last_trade_date": "",
+    },
     "momentum-quality": {
         "name": "Momentum + Quality",
         "description": "Combines relative strength momentum with quality factor screens (high ROE, low debt, earnings stability). Rebalances monthly.",
@@ -500,6 +517,7 @@ _REGISTRY_TO_ROUTE: dict[str, str] = {
     "orb": "orb",
     "vwap": "vwap-strategy",
     "earnings-options-play": "earnings-options-play",
+    "trading_agents_research": "trading-agents-research",
 }
 _ROUTE_TO_REGISTRY: dict[str, str] = {v: k for k, v in _REGISTRY_TO_ROUTE.items()}
 # A1#7 — ``pairs-stat-arb`` is a legacy catalogue alias for the same Python
@@ -640,6 +658,15 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
         "description": (
             "VWAP session-pullback. Registered backend consumes 5-minute "
             "intraday bars and is paper-only until live evidence graduates it."
+        ),
+    },
+    "trading_agents_research": {
+        "category": "research", "required_bars": [],
+        "required_lookback_days": 0, "min_universe_size": 1,
+        "supports_shorts": False, "supports_options": False,
+        "description": (
+            "Read-only TradingAgents research wrapper. External yfinance-based "
+            "artifact generation with no order-routing contract."
         ),
     },
 }
@@ -1045,6 +1072,8 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
     "vwap_strategy": "vwap-strategy",
     "earnings-options-play": "earnings-options-play",
     "earnings_options_play": "earnings-options-play",
+    "trading-agents-research": "trading-agents-research",
+    "trading_agents_research": "trading-agents-research",
     # Stat arb (pairs_trading already above)
     "pairs_stat_arb": "pairs-stat-arb",
 }

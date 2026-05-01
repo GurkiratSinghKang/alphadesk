@@ -530,6 +530,63 @@ export function getStrategyPositions(strategyId: string) {
   return apiFetch<StrategyPositionDetail[]>(`/api/v1/strategies/${strategyId}/positions`);
 }
 
+export type TradingAgentsRunStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface TradingAgentsRunErrorPayload {
+  code: string;
+  message: string;
+}
+
+export interface TradingAgentsRun {
+  run_id: string;
+  symbol: string;
+  trade_date: string;
+  status: TradingAgentsRunStatus;
+  provider: string;
+  deep_model: string;
+  quick_model: string;
+  research_depth: number;
+  summary_lines: string[];
+  decision_text: string | null;
+  artifact_files: string[];
+  error: TradingAgentsRunErrorPayload | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  advisory_disclaimer: string;
+}
+
+export interface TradingAgentsRunRequest {
+  symbol: string;
+  trade_date?: string | null;
+  provider?: string | null;
+  deep_model?: string | null;
+  quick_model?: string | null;
+  research_depth?: number;
+  reason?: string | null;
+}
+
+export function startTradingAgentsRun(input: TradingAgentsRunRequest) {
+  return apiFetch<TradingAgentsRun>(`/api/v1/tradingagents/runs`, {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeoutMs: 30_000,
+  });
+}
+
+export function getTradingAgentsRuns(limit = 20) {
+  return apiFetch<TradingAgentsRun[]>(
+    `/api/v1/tradingagents/runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export function getTradingAgentsRun(runId: string) {
+  return apiFetch<TradingAgentsRun>(
+    `/api/v1/tradingagents/runs/${encodeURIComponent(runId)}`,
+  );
+}
+
 // ─── Market Overview ────────────────────────────────────────
 
 export function getMarketIndices() {

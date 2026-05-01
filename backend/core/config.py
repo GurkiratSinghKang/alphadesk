@@ -86,6 +86,30 @@ class Settings(BaseSettings):
     CLAUDE_AUDIT_LOG_DIR: str = "logs/claude"
     CLAUDE_AUDIT_LOG_MAX_CHARS: int = 200_000
 
+    # --- TradingAgents research desk ---
+    # Open-source TradingAgents is integrated as an external research artifact
+    # generator, not as an executable strategy. The API launches the stable
+    # skill wrapper and stores only sanitized report excerpts for the UI.
+    TRADINGAGENTS_ENABLED: bool = True
+    TRADINGAGENTS_SCRIPT_PATH: str = ""
+    TRADINGAGENTS_SKILL_HOME: str = ""
+    TRADINGAGENTS_PROVIDER: str = "anthropic"
+    TRADINGAGENTS_DEEP_MODEL: str = "gpt-5.4"
+    TRADINGAGENTS_QUICK_MODEL: str = "gpt-5.4-mini"
+    TRADINGAGENTS_OUTPUT_LANGUAGE: str = "English"
+    TRADINGAGENTS_TIMEOUT_S: int = 600
+    TRADINGAGENTS_HISTORY_LIMIT: int = 20
+    TRADINGAGENTS_MAX_DECISION_CHARS: int = 16_000
+    TRADINGAGENTS_RUNS_PER_HOUR: int = 12
+    OPENAI_API_KEY: SecretStr = SecretStr("")
+    GOOGLE_API_KEY: SecretStr = SecretStr("")
+    XAI_API_KEY: SecretStr = SecretStr("")
+    OPENROUTER_API_KEY: SecretStr = SecretStr("")
+    DEEPSEEK_API_KEY: SecretStr = SecretStr("")
+    DASHSCOPE_API_KEY: SecretStr = SecretStr("")
+    ZHIPU_API_KEY: SecretStr = SecretStr("")
+    AZURE_OPENAI_API_KEY: SecretStr = SecretStr("")
+
     # --- News ---
     NEWSDATA_API_KEY: SecretStr = SecretStr("")
 
@@ -277,7 +301,12 @@ def _derive_live_disabled_from_registry() -> set[str]:
     so we normalise both forms into the set so a lookup with either
     spelling hits.
     """
-    seeds: set[str] = {"earnings-options-play", "earnings_options_play"}
+    seeds: set[str] = {
+        "earnings-options-play",
+        "earnings_options_play",
+        "trading-agents-research",
+        "trading_agents_research",
+    }
     try:
         # Lazy import — ``core.config`` is loaded very early, before
         # ``strategies`` is on the import path in some shells.
@@ -309,6 +338,7 @@ STRATEGY_PAPER_ONLY: set[str] = {
     "orb",
     "vwap",
     "earnings_options_play",
+    "trading_agents_research",
 }
 
 

@@ -26,6 +26,10 @@ TV_REPLAY_WINDOW_SECONDS = 120
 # a few times per minute. 30/min is a comfortable ceiling that still
 # protects against a leaked secret being used to spam us.
 TV_RATE_LIMIT_PER_MIN = 30
+# Exact replay dedupe: keep authenticated payload fingerprints slightly
+# longer than the freshness window so an immediate replay of the same signed
+# body cannot trigger the handler twice.
+TV_REPLAY_DEDUPE_TTL_SECONDS = TV_REPLAY_WINDOW_SECONDS + 30
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +276,49 @@ async def receive_tradingview_webhook(
     except Exception as e:
         logger.error("Failed to parse TradingView alert", exc_info=True)
         raise HTTPException(status_code=422, detail=f"Invalid alert payload: {e}")
+
+    # A fresh timestamp bounds replay age, but does not stop an attacker (or
+    # duplicate TradingView delivery) from replaying the exact same signed
+    # request inside the allowed window. Claim a fingerprint after auth and
+    # schema validation but before side effects; duplicates get a 200 response
+    # so legitimate retries do not keep hammering the endpoint.
+    payload_fingerprint = hashlib.sha256(signed_message).hexdigest()
+    replay_key = f"tradingview_replay:{payload_fingerprint}"
+    try:
+        claimed = await redis.set(
+            replay_key,
+            alert_id,
+            ex=TV_REPLAY_DEDUPE_TTL_SECONDS,
+            nx=True,
+        )
+        if not claimed:
+            existing_alert_id = await redis.get(replay_key)
+            if isinstance(existing_alert_id, bytes):
+                existing_alert_id = existing_alert_id.decode("utf-8", errors="replace")
+            if not isinstance(existing_alert_id, str) or not existing_alert_id:
+                existing_alert_id = alert_id
+            logger.warning(
+                "TradingView webhook exact replay ignored: ip=%s alert_id=%s",
+                client_ip,
+                existing_alert_id,
+            )
+            return WebhookResponse(
+                status="duplicate",
+                alert_id=existing_alert_id,
+                processed_at=datetime.now(timezone.utc),
+                actions=[{"action": "duplicate_ignored", "ticker": alert.ticker}],
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "Replay-dedupe check failed for ip=%s; rejecting request (fail-closed)",
+            client_ip,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Replay protection unavailable; retry later.",
+        )
 
     logger.info(
         "TradingView alert received: %s %s @ %s (strategy: %s)",

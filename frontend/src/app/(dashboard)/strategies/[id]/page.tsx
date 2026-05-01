@@ -49,6 +49,7 @@ const SLUG_TO_ID: Record<string, string> = {
   "pairs-stat-arb": "pairs-trading",
   // Underscore fallbacks — one per canonical strategy id.
   earnings_options_play: "earnings-options-play",
+  trading_agents_research: "trading-agents-research",
   momentum_quality: "momentum-quality",
   vrp_harvesting: "vrp-harvesting",
   earnings_vol_premium: "earnings-vol-premium",

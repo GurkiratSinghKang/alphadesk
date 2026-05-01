@@ -62,6 +62,14 @@ interface CommandItemProps {
   onSelect: () => void;
 }
 
+type DestructiveAction = "cancel-all-orders" | "flatten-symbol" | "pause-all-strategies";
+
+interface PendingDestructiveAction {
+  type: DestructiveAction;
+  symbol?: string;
+  blockedReason?: string;
+}
+
 function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
   return (
     <Command.Item
@@ -92,9 +100,11 @@ export function CommandPalette() {
   // BUG-039: confirmation modal for live-trading flip. paper→live must
   // never be one keystroke away; live→paper is always safe (no gate).
   const [confirmLiveOpen, setConfirmLiveOpen] = useState(false);
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
   const deskActionsAvailable = pathname === "/";
+  const destructiveDialogOpen = pendingDestructiveAction !== null;
 
   // Close command palette on navigation
   useEffect(() => {
@@ -258,10 +268,15 @@ export function CommandPalette() {
   // These are the high-leverage trading actions the brief calls out.
   function handleCancelAllOrders() {
     setCommandPaletteOpen(false);
-    if (!deskActionsAvailable) {
-      toast({ type: "info", message: "Open the Dashboard to cancel working orders." });
-      return;
-    }
+    setPendingDestructiveAction({
+      type: "cancel-all-orders",
+      blockedReason: deskActionsAvailable
+        ? undefined
+        : "Open the Dashboard to cancel working orders.",
+    });
+  }
+
+  function handleConfirmCancelAllOrders() {
     // Dispatch an event the dashboard listens for; the actual API call
     // lives in the page-level handler so it can show the right toast +
     // optimistic update + react-query invalidation.
@@ -283,22 +298,26 @@ export function CommandPalette() {
     // from the store at click time, mirroring ``handleSwitchLive``.
     const sym = useMarketStore.getState().selectedSymbol;
     setCommandPaletteOpen(false);
-    if (!deskActionsAvailable) {
-      toast({ type: "info", message: "Open the Dashboard to flatten the selected symbol." });
-      return;
-    }
-    if (!sym) {
-      toast({ type: "info", message: "No symbol selected — pick one first." });
-      return;
-    }
+    setPendingDestructiveAction({
+      type: "flatten-symbol",
+      symbol: sym || undefined,
+      blockedReason: !deskActionsAvailable
+        ? "Open the Dashboard to flatten the selected symbol."
+        : sym
+          ? undefined
+          : "No symbol selected — pick one first.",
+    });
+  }
+
+  function handleConfirmFlattenCurrentSymbol(symbol: string) {
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("alphadesk:flatten-symbol", { detail: { symbol: sym } }),
+        new CustomEvent("alphadesk:flatten-symbol", { detail: { symbol } }),
       );
     }
     toast({
       type: "info",
-      message: `Flattening ${sym} — closing position at market…`,
+      message: `Flattening ${symbol} — closing position at market…`,
     });
   }
 
@@ -311,10 +330,15 @@ export function CommandPalette() {
 
   function handlePauseAllStrategies() {
     setCommandPaletteOpen(false);
-    if (!deskActionsAvailable) {
-      toast({ type: "info", message: "Open the Dashboard to pause all strategies." });
-      return;
-    }
+    setPendingDestructiveAction({
+      type: "pause-all-strategies",
+      blockedReason: deskActionsAvailable
+        ? undefined
+        : "Open the Dashboard to pause all strategies.",
+    });
+  }
+
+  function handleConfirmPauseAllStrategies() {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:pause-all-strategies"));
     }
@@ -322,6 +346,73 @@ export function CommandPalette() {
       type: "info",
       message: "Pausing all strategies — pipeline will skip the next dispatch.",
     });
+  }
+
+  function destructiveActionCopy(action: PendingDestructiveAction) {
+    if (action.type === "cancel-all-orders") {
+      return {
+        testId: "confirm-cancel-all-orders",
+        title: "Cancel all working orders?",
+        description:
+          "This sends a desk-wide cancel request for every open working order. Filled orders and existing positions are not reversed.",
+        bullets: [
+          "Open limit, stop, and staged working orders may be cancelled.",
+          "Orders that fill before the cancel reaches the broker can still execute.",
+          "No positions are flattened by this action.",
+        ],
+        confirmLabel: "Cancel orders",
+      };
+    }
+
+    if (action.type === "flatten-symbol") {
+      const symbol = action.symbol ?? "the current symbol";
+      return {
+        testId: "confirm-flatten-symbol",
+        title: `Flatten ${symbol}?`,
+        description:
+          "This requests market orders to close the current position for the selected symbol.",
+        bullets: [
+          `${symbol} exposure will be reduced to zero if the broker accepts the closeout orders.`,
+          "Open orders for other symbols are not changed.",
+          "Market orders can fill with slippage during fast conditions.",
+        ],
+        confirmLabel: `Flatten ${symbol}`,
+      };
+    }
+
+    return {
+      testId: "confirm-pause-all-strategies",
+      title: "Pause all strategies?",
+      description:
+        "This pauses automated strategy dispatch across the desk until strategies are resumed.",
+      bullets: [
+        "The strategy pipeline will skip new automated dispatches.",
+        "Existing broker orders and open positions are not cancelled.",
+        "Manual trading remains available.",
+      ],
+      confirmLabel: "Pause strategies",
+    };
+  }
+
+  function handleConfirmDestructiveAction() {
+    if (!pendingDestructiveAction) return;
+    const action = pendingDestructiveAction;
+    if (action.blockedReason) return;
+    setPendingDestructiveAction(null);
+
+    if (action.type === "cancel-all-orders") {
+      handleConfirmCancelAllOrders();
+      return;
+    }
+
+    if (action.type === "flatten-symbol" && action.symbol) {
+      handleConfirmFlattenCurrentSymbol(action.symbol);
+      return;
+    }
+
+    if (action.type === "pause-all-strategies") {
+      handleConfirmPauseAllStrategies();
+    }
   }
 
   // Focus options chain; from the dashboard this moves to the trade workspace
@@ -335,6 +426,10 @@ export function CommandPalette() {
     }
     router.push(tradeUrl());
   }
+
+  const destructiveCopy = pendingDestructiveAction
+    ? destructiveActionCopy(pendingDestructiveAction)
+    : null;
 
   return (
     <>
@@ -653,6 +748,61 @@ export function CommandPalette() {
           </Button>
         </DialogFooter>
       </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={destructiveDialogOpen}
+      onOpenChange={(open) => {
+        if (!open) setPendingDestructiveAction(null);
+      }}
+    >
+      {destructiveCopy && (
+        <DialogContent
+          data-testid={`${destructiveCopy.testId}-dialog`}
+          className="max-w-md bg-[var(--surface)] border-border"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {destructiveCopy.title}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {destructiveCopy.description}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-[12px] text-muted-foreground">
+            {destructiveCopy.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+          {pendingDestructiveAction?.blockedReason && (
+            <p
+              className="rounded-sm border border-border bg-[var(--panel)] px-3 py-2 text-[12px] text-muted-foreground"
+              data-testid={`${destructiveCopy.testId}-blocked-reason`}
+            >
+              {pendingDestructiveAction.blockedReason}
+            </p>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPendingDestructiveAction(null)}
+              data-testid={`${destructiveCopy.testId}-cancel`}
+            >
+              Keep as is
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmDestructiveAction}
+              disabled={Boolean(pendingDestructiveAction?.blockedReason)}
+              data-testid={`${destructiveCopy.testId}-confirm`}
+            >
+              {destructiveCopy.confirmLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      )}
     </Dialog>
     </>
   );
