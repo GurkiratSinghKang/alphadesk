@@ -121,6 +121,11 @@ def _model_defaults(provider: str) -> tuple[str, str]:
             deep = "claude-sonnet-4-6"
         if quick == "gpt-5.4-mini":
             quick = "claude-haiku-4-5"
+    elif provider == "openai":
+        if deep.startswith("claude-"):
+            deep = "gpt-5.4"
+        if quick.startswith("claude-"):
+            quick = "gpt-5.4-mini"
     return deep, quick
 
 
