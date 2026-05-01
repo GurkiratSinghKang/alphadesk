@@ -28,9 +28,35 @@ from strategies._core.contracts import (
 )
 from strategies._core.fills import FillSimulator, Portfolio
 from strategies._core.protocol import Strategy
-from strategies._core.providers import BarProvider, EarningsProvider, FundamentalsProvider
+from strategies._core.providers import (
+    BarProvider,
+    EarningsProvider,
+    FundamentalsProvider,
+    OptionsChainProvider,
+)
 from strategies._core.reproducibility import get_git_sha
 from strategies._core.snapshots import SnapshotWriter
+
+
+def _await_sync(value: Any) -> Any:
+    """Resolve awaitables for the synchronous backtest runner.
+
+    Backtests are intentionally sync so they can run in research scripts and
+    CLI flows. Async option providers are fine from that context, but an
+    already-running event loop would deadlock, so fail loudly instead of
+    silently dropping the option-chain input.
+    """
+    if not hasattr(value, "__await__"):
+        return value
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(value)
+    raise RuntimeError(
+        "BacktestRunner cannot resolve async providers inside an active event loop"
+    )
 
 
 class BacktestRunner:
@@ -41,12 +67,14 @@ class BacktestRunner:
         bar_provider: BarProvider,
         earnings_provider: EarningsProvider | None = None,
         fundamentals_provider: FundamentalsProvider | None = None,
+        options_provider: OptionsChainProvider | None = None,
     ):
         self._strategy = strategy
         self._config = config
         self._bars = bar_provider
         self._earnings = earnings_provider
         self._fundamentals = fundamentals_provider
+        self._options = options_provider
         self._executor = FillSimulator(config)
         self._portfolio = Portfolio(config.starting_cash)
         self._snapshotter = SnapshotWriter(config.snapshot_dir) if config.snapshot_dir else None
@@ -71,9 +99,16 @@ class BacktestRunner:
                 continue
 
             # 2. Pre-fetch data for the declared universe
-            bars_window = self._bars.fetch_window(
-                symbols, asof, self._strategy.META.lookback_days
+            bars_window = self._fetch_bars(
+                symbols, asof, self._strategy.META.lookback_days, "1D"
             )
+            intraday_bars: dict[str, pd.DataFrame] = {}
+            for timeframe in tuple(getattr(self._strategy.META, "required_bars", ("daily",))):
+                if timeframe == "daily":
+                    continue
+                intraday_bars[timeframe] = self._fetch_bars(
+                    symbols, asof, self._strategy.META.lookback_days, timeframe
+                )
             earnings_window = (
                 self._earnings.fetch_window(symbols, asof, self._strategy.META.lookback_days)
                 if self._earnings else None
@@ -81,12 +116,23 @@ class BacktestRunner:
             fundamentals_snap = (
                 self._fundamentals.snapshot(symbols, asof) if self._fundamentals else None
             )
+            options_chains: dict[str, pd.DataFrame] = {}
+            if (
+                getattr(self._strategy.META, "category", None) == "options"
+                and self._options is not None
+                and symbols
+            ):
+                options_chains = dict(
+                    _await_sync(self._options.fetch_chains(symbols, asof))
+                )
 
             # 3. Build frozen input with a deterministically-forked RNG
             bar_seed_seq = seed_seq.spawn(1)[0]
             bar_input = StrategyInput(
                 asof=asof, mode="backtest",
-                bars=bars_window, earnings=earnings_window, fundamentals=fundamentals_snap,
+                bars=bars_window, intraday_bars=intraday_bars,
+                earnings=earnings_window, fundamentals=fundamentals_snap,
+                options_chains=options_chains,
                 cash=self._portfolio.cash, equity=self._portfolio.equity,
                 positions=self._portfolio.positions_snapshot(),
                 state=dict(state),
@@ -142,7 +188,7 @@ class BacktestRunner:
         return days
 
     def _next_bars(self, symbols: list[str], asof: date) -> dict[str, pd.Series]:
-        bars = self._bars.fetch_window(symbols, asof, lookback_days=1)
+        bars = self._fetch_bars(symbols, asof, lookback_days=1, timeframe="1D")
         result: dict[str, pd.Series] = {}
         for sym in symbols:
             try:
@@ -151,6 +197,29 @@ class BacktestRunner:
             except KeyError:
                 continue
         return result
+
+    def _fetch_bars(
+        self,
+        symbols: list[str],
+        asof: date,
+        lookback_days: int,
+        timeframe: str,
+    ) -> pd.DataFrame:
+        """Call old or new BarProvider shims with a timeframe.
+
+        Backtest fixtures and a few local providers still implement the
+        pre-intraday ``fetch_window(symbols, asof, lookback_days)`` shape.
+        Preserve that for daily bars, but require the richer signature for
+        intraday requests so missing provider support fails visibly.
+        """
+        try:
+            return self._bars.fetch_window(
+                symbols, asof, lookback_days, timeframe=timeframe
+            )
+        except TypeError:
+            if timeframe == "1D":
+                return self._bars.fetch_window(symbols, asof, lookback_days)
+            raise
 
     def _size_signals(
         self,

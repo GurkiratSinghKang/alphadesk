@@ -119,6 +119,8 @@ interface TradingChartProps {
    * repaints — diff happens at the caller.
    */
   drawings?: Drawing[];
+  /** Bumps when the active UI theme changes so token-derived chart colors refresh. */
+  themeKey?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -420,7 +422,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings, themeKey },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -486,7 +488,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
       fitContent: () => chartRef.current?.timeScale().fitContent(),
     }), [chartType]);
 
-    // Create chart — recreate when chartType changes
+    // Create chart — recreate when chartType or theme changes
     useEffect(() => {
       if (!containerRef.current) return;
 
@@ -712,7 +714,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         overlaySeriesRef.current = [];
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chartType]);
+    }, [chartType, themeKey]);
 
     // Set data when it changes
     const setChartData = useCallback(
@@ -1121,7 +1123,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
       // a fresh ``[]`` literal which would otherwise reset the zoom on
       // every render via the didFitRef flip.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0]
+      [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0, themeKey]
     );
 
     useEffect(() => {
@@ -1134,7 +1136,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     useEffect(() => {
       didFitRef.current = false;
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0]);
+    }, [chartType, indicators, compareSeries, anchoredVwapIndex, events?.length ?? 0, themeKey]);
 
     // Position indicator lines (entry, stop loss, take profit)
     useEffect(() => {

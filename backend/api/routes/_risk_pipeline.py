@@ -60,6 +60,9 @@ async def build_request_from_webhook(
     qty: float,
     limit_price: float | None = None,
     strategy: str | None = None,
+    order_type: str | None = None,
+    time_in_force: str = "day",
+    extended_hours: bool = False,
 ) -> "CreateOrderRequest":
     """Helper for webhook / MCP callers to build a ``CreateOrderRequest``.
 
@@ -75,16 +78,57 @@ async def build_request_from_webhook(
         TimeInForce,
     )
     side_normalised = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
-    order_type = OrderType.LIMIT if limit_price is not None else OrderType.MARKET
+    order_type_normalised = (
+        OrderType(order_type.lower())
+        if order_type
+        else (OrderType.LIMIT if limit_price is not None else OrderType.MARKET)
+    )
     leg = OrderLeg(
         symbol=ticker.upper(),
         side=side_normalised,
         qty=qty,
-        order_type=order_type,
+        order_type=order_type_normalised,
         limit_price=limit_price,
     )
     return CreateOrderRequest(
         legs=[leg],
-        time_in_force=TimeInForce.DAY,
+        time_in_force=TimeInForce(time_in_force.lower()),
         strategy=strategy,
+        extended_hours=extended_hours,
+    )
+
+
+async def submit_order_via_api(
+    request: "CreateOrderRequest",
+    *,
+    username: str = "mcp",
+    idempotency_key: str | None = None,
+) -> object:
+    """Submit through ``api.routes.trades.create_order`` without HTTP I/O.
+
+    MCP and other in-process automation callers must share the same order
+    route as the web app: halt checks, market-hours gating, idempotency,
+    rate limits, aggregate risk, per-order caps, audit logs, broker submit,
+    ledger persistence, and websocket publication. Calling the route handler
+    directly keeps the path in-process while avoiding the old direct-Alpaca
+    bypass.
+    """
+    from fastapi import Request
+    from api.routes.trades import create_order
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp/broker/submit_order",
+        "headers": [],
+        "client": ("mcp", 0),
+        "server": ("mcp", 0),
+        "scheme": "http",
+    }
+    http_request = Request(scope)
+    return await create_order(
+        request,
+        http_request=http_request,
+        username=username,
+        idempotency_key=idempotency_key,
     )

@@ -81,7 +81,30 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
     ref,
   ) {
   const isWide = useIsWide(1200);
-  const swipeHandlers = useCandidateDecisionSwipe(onCandidateDecision);
+  const [undoDecision, setUndoDecision] = useState<{
+    previous: EarningsCandidateDecision | null;
+    next: EarningsCandidateDecision | null;
+  } | null>(null);
+  const commitCandidateDecision = (
+    next: EarningsCandidateDecision | null,
+  ) => {
+    if (!onCandidateDecision) return;
+    setUndoDecision({ previous: candidateDecision ?? null, next });
+    onCandidateDecision(next);
+    if (next && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
+    }
+  };
+  const undoCandidateDecision = () => {
+    if (!undoDecision || !onCandidateDecision) return;
+    onCandidateDecision(undoDecision.previous);
+    setUndoDecision(null);
+  };
+  const swipeHandlers = useCandidateDecisionSwipe(commitCandidateDecision);
+
+  useEffect(() => {
+    setUndoDecision(null);
+  }, [detail?.symbol]);
 
   // Slice-6 / CH-3F: which defined-risk strategy is the user hovering?
   // Set by ``TradeButtonRow`` via the new ``onHoverStrategy`` callback;
@@ -225,8 +248,29 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         </div>
         <CandidateDecisionBar
           decision={candidateDecision}
-          onDecision={onCandidateDecision}
+          onDecision={commitCandidateDecision}
         />
+        {undoDecision && onCandidateDecision && (
+          <div
+            data-slot="candidate-decision-undo"
+            role="status"
+            aria-live="polite"
+            className="mb-2 flex items-center justify-between gap-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[11px] text-[color:var(--fg-muted)]"
+          >
+            <span>
+              {undoDecision.next
+                ? `Marked ${undoDecision.next.replace("_", " ")}`
+                : "Cleared decision"}
+            </span>
+            <button
+              type="button"
+              onClick={undoCandidateDecision}
+              className="shrink-0 u-brand hover:underline"
+            >
+              Undo
+            </button>
+          </div>
+        )}
         {/* Round-8 single-view B: DECISION STRIP — page hero. Renders
             only when Claude's structured response has loaded; the
             ``claude_unavailable`` partial-data banner above already
@@ -354,9 +398,6 @@ function useCandidateDecisionSwipe(
 
   function commitSwipeDecision(decision: EarningsCandidateDecision) {
     onDecision?.(decision);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
-    }
   }
 
   function onPointerCancel() {
@@ -386,9 +427,6 @@ function CandidateDecisionBar({
   const commitDecision = (nextDecision: EarningsCandidateDecision) => {
     const value = decision === nextDecision ? null : nextDecision;
     onDecision(value);
-    if (value && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
-    }
   };
   return (
     <div

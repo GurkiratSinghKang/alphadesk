@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -241,6 +242,41 @@ async def test_aggregate_risk_rejects_option_when_chain_probe_fails(
 
     assert passed is False
     assert "Options chain verification unavailable" in reason
+
+
+@pytest.mark.asyncio
+async def test_aggregate_risk_verifies_every_option_leg_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later combo leg missing from the live chain must fail closed."""
+
+    async def _tradable(_symbol: str) -> tuple[bool, str]:
+        return True, "passed"
+
+    async def _fetch_chain(_symbol: str, **_kwargs: Any) -> Any:
+        return SimpleNamespace(
+            is_demo=False,
+            contracts=[
+                SimpleNamespace(symbol="AAPL260417C00200000"),
+            ],
+        )
+
+    monkeypatch.delenv("TRADES_ALLOW_DEMO_CHAIN_ORDERS", raising=False)
+    monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
+    with patch("services.options.fetch_chain", new=AsyncMock(side_effect=_fetch_chain)):
+        req = CreateOrderRequest(
+            legs=[
+                _occ_leg("AAPL260417C00200000", OrderSide.BUY, 1, 5.0),
+                _occ_leg("AAPL260417C00210000", OrderSide.SELL, 1, 3.0),
+            ],
+            combo_type="vertical_spread",
+            quote_at_fill_ts=time.time(),
+        )
+        passed, reason = await trades_mod._aggregate_risk_check(req)
+
+    assert passed is False
+    assert "AAPL260417C00210000" in reason
+    assert "not present" in reason
 
 
 def test_occ_symbol_infers_option_asset_class() -> None:

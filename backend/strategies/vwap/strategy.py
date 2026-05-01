@@ -84,11 +84,26 @@ class VWAPStrategy(Strategy):
             "required_bar_interval": "5min",
             "active_symbols": list(UNIVERSE),
             "evaluated": {},
+            "lifecycle_exits": {},
         }
         target_weight = float(min(params.max_allocation / params.max_positions, params.max_allocation))
+        entry_count = 0
 
         for symbol in list(UNIVERSE):
-            if len(signals) >= params.max_positions:
+            session = _session_bars(frame, symbol, input.asof)
+            exit_signal = _lifecycle_exit_signal(
+                symbol=symbol,
+                input=input,
+                params=params,
+                session=session,
+            )
+            if exit_signal is not None:
+                signals.append(exit_signal)
+                diagnostics["lifecycle_exits"][symbol] = exit_signal.tag
+                diagnostics["evaluated"][symbol] = {"exit": exit_signal.tag}
+                continue
+
+            if entry_count >= params.max_positions:
                 break
             if last_signal_dates.get(symbol) == input.asof.isoformat():
                 diagnostics["evaluated"][symbol] = {"skipped": "already_signalled_today"}
@@ -97,7 +112,6 @@ class VWAPStrategy(Strategy):
                 diagnostics["evaluated"][symbol] = {"skipped": "daily_trend_filter"}
                 continue
 
-            session = _session_bars(frame, symbol, input.asof)
             if len(session) < max(params.rsi_period + 2, 4):
                 diagnostics["evaluated"][symbol] = {
                     "skipped": "not_enough_completed_bars",
@@ -137,6 +151,7 @@ class VWAPStrategy(Strategy):
                 )
             )
             next_signal_dates[symbol] = input.asof.isoformat()
+            entry_count += 1
 
         return StrategyResult(
             signals=signals,
@@ -222,6 +237,77 @@ def _daily_trend_ok(bars: pd.DataFrame, symbol: str, period: int) -> bool:
     if len(closes) < period:
         return False
     return float(closes.iloc[-1]) >= float(closes.tail(period).mean())
+
+
+def _lifecycle_exit_signal(
+    *,
+    symbol: str,
+    input: StrategyInput,
+    params: VWAPParams,
+    session: pd.DataFrame,
+) -> Signal | None:
+    """Emit protective VWAP exits for existing paper positions."""
+    if session.empty:
+        return None
+    position = next(
+        (
+            p for p in input.positions
+            if p.symbol.upper() == symbol.upper()
+            and p.quantity != 0
+            and str(p.tag or "").startswith("vwap-entry:")
+        ),
+        None,
+    )
+    if position is None:
+        return None
+
+    enriched = _with_vwap(session)
+    latest = enriched.iloc[-1]
+    latest_ts = pd.Timestamp(latest["ts"])
+    latest_et = (
+        latest_ts.tz_convert(_ET)
+        if latest_ts.tzinfo
+        else latest_ts.tz_localize("UTC").tz_convert(_ET)
+    )
+    close = float(latest["close"])
+    vwap = float(latest["session_vwap"])
+    entry = float(position.avg_entry_price)
+    is_long = position.quantity > 0
+    stop_fraction = float(params.stop_bps_or_atr_max) / 10_000.0
+    reason: str | None = None
+    trigger: float | None = None
+
+    if is_long and close <= entry * (1.0 - stop_fraction):
+        reason, trigger = "stop", entry * (1.0 - stop_fraction)
+    elif not is_long and close >= entry * (1.0 + stop_fraction):
+        reason, trigger = "stop", entry * (1.0 + stop_fraction)
+
+    session_end = (
+        latest_et.hour > 15
+        or (latest_et.hour == 15 and latest_et.minute >= 55)
+    )
+    if reason is None and session_end:
+        reason, trigger = "session_end", close
+    elif reason is None and vwap > 0:
+        if is_long and close >= vwap:
+            reason, trigger = "vwap_reclaim", vwap
+        elif not is_long and close <= vwap:
+            reason, trigger = "vwap_reclaim", vwap
+
+    if reason is None:
+        return None
+
+    return Signal(
+        symbol=symbol,
+        asof=input.asof,
+        order_type=OrderType.MKT,
+        time_in_force=TimeInForce.DAY,
+        quantity=-int(position.quantity),
+        tag=(
+            f"vwap-exit:{symbol}:{reason} "
+            f"trigger={trigger:.2f} close={close:.2f}"
+        ),
+    )
 
 
 __all__ = ["VWAPStrategy"]

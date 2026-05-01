@@ -8,7 +8,7 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 
-from strategies._core.contracts import StrategyInput
+from strategies._core.contracts import Position, StrategyInput
 from strategies._core.protocol import get_meta, get_strategy
 from strategies.orb.config import ORBParams, UNIVERSE_PROFILES
 from strategies.orb.strategy import ORBStrategy
@@ -42,6 +42,33 @@ def _build_intraday_input(asof: date) -> StrategyInput:
         "volume": [1000, 1000, 1000, 1000, 1000, 2000],
     }).set_index(["date", "symbol"])
     return inp.model_copy(update={"intraday_bars": {"1min": intraday}})
+
+
+def _build_eod_position_input(asof: date) -> StrategyInput:
+    inp = _build_input(asof)
+    ts = pd.date_range("2024-04-30 19:50", periods=6, freq="min", tz="UTC")
+    intraday = pd.DataFrame({
+        "date": [asof] * 6,
+        "symbol": ["QQQ"] * 6,
+        "ts": ts,
+        "open": [101.0, 101.1, 101.0, 101.1, 101.0, 101.1],
+        "high": [101.03, 101.04, 101.03, 101.04, 101.03, 101.04],
+        "low": [100.9, 100.9, 100.8, 100.9, 100.8, 100.9],
+        "close": [101.1, 101.0, 101.1, 101.0, 101.1, 101.0],
+        "volume": [1000, 1000, 1000, 1000, 1000, 1000],
+    }).set_index(["date", "symbol"])
+    return inp.model_copy(update={
+        "intraday_bars": {"1min": intraday},
+        "positions": [
+            Position(
+                symbol="QQQ",
+                quantity=10,
+                avg_entry_price=Decimal("101.00"),
+                entry_date=asof,
+                tag="orb-entry:QQQ:breakout or=99.80-100.80 close=101.50",
+            )
+        ],
+    })
 
 
 class TestRegistration:
@@ -89,6 +116,18 @@ class TestRun:
         assert sig.symbol == "QQQ"
         assert sig.target_weight == ORBParams().risk_per_trade
         assert sig.tag.startswith("orb-entry:QQQ:breakout")
+
+    def test_open_position_exits_before_session_end(self):
+        strat = ORBStrategy()
+        result = strat.run(
+            _build_eod_position_input(date(2024, 4, 30)),
+            ORBParams(universe_profile="qqq_tqqq"),
+        )
+        assert len(result.signals) == 1
+        sig = result.signals[0]
+        assert sig.symbol == "QQQ"
+        assert sig.quantity == -10
+        assert sig.tag.startswith("orb-exit:QQQ:session_end")
 
     def test_universe_returns_all_configurable_profile_tickers(self):
         strat = ORBStrategy()

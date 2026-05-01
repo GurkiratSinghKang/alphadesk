@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import httpx
@@ -9,7 +10,7 @@ from mcp_servers.base import BaseMCPServer
 
 
 class BrokerServer(BaseMCPServer):
-    """MCP server for broker operations via Alpaca API."""
+    """MCP server for broker operations via the AlphaDesk order API."""
 
     name = "broker"
 
@@ -155,6 +156,8 @@ class BrokerServer(BaseMCPServer):
                 qty=qty,
                 limit_price=limit_price,
                 strategy=strategy,
+                order_type=order_type,
+                time_in_force=time_in_force,
             )
             passed, reason = await run_aggregate_risk_check(
                 risk_request, username=None,
@@ -186,32 +189,57 @@ class BrokerServer(BaseMCPServer):
                 "type": order_type,
             }
 
-        body: dict[str, Any] = {
-            "symbol": symbol,
-            "qty": str(qty),
-            "side": side,
-            "type": order_type,
-            "time_in_force": time_in_force,
-        }
-        if limit_price is not None:
-            body["limit_price"] = str(limit_price)
+        from api.routes._risk_pipeline import submit_order_via_api
+        from fastapi import HTTPException
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{settings.ALPACA_BASE_URL}/v2/orders",
-                headers=self._headers(),
-                json=body,
+        try:
+            response = await submit_order_via_api(
+                risk_request,
+                username="mcp",
+                idempotency_key=f"mcp-{uuid.uuid4().hex}",
             )
-            resp.raise_for_status()
-            order = resp.json()
+        except HTTPException as exc:
+            return {
+                "error": str(exc.detail),
+                "order_id": None,
+                "status": "rejected_by_api",
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": order_type,
+            }
+        except Exception as exc:
+            self.logger.exception(
+                "mcp.broker.submit_order: API order path raised — failing closed",
+            )
+            return {
+                "error": (
+                    f"Order API unavailable ({type(exc).__name__}); "
+                    "order refused to fail closed."
+                ),
+                "order_id": None,
+                "status": "rejected_by_api_error",
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": order_type,
+            }
 
         return {
-            "order_id": order["id"],
-            "status": order["status"],
-            "symbol": order["symbol"],
-            "qty": order["qty"],
-            "side": order["side"],
-            "type": order["type"],
+            "order_id": getattr(response, "id", None),
+            "status": getattr(getattr(response, "status", None), "value", getattr(response, "status", None)),
+            "symbol": response.legs[0].symbol if getattr(response, "legs", None) else symbol,
+            "qty": str(response.legs[0].qty) if getattr(response, "legs", None) else str(qty),
+            "side": (
+                response.legs[0].side.value
+                if getattr(response, "legs", None)
+                else side
+            ),
+            "type": (
+                response.legs[0].order_type.value
+                if getattr(response, "legs", None)
+                else order_type
+            ),
         }
 
     @BaseMCPServer.tool("cancel_order", "Cancel an existing order by ID", {"order_id": {"type": "string"}})

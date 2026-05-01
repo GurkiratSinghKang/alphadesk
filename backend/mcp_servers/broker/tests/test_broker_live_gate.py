@@ -15,6 +15,7 @@ tool-call response. We assert the rejection shape here.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -204,12 +205,25 @@ async def test_submit_order_allows_manual_explicit_strategy_on_live(
 
     monkeypatch.setattr(_risk_pipeline, "run_aggregate_risk_check", _fake_pass)
 
+    submitted: dict[str, Any] = {}
+
+    async def _fake_submit(request: Any, **_kwargs: Any) -> Any:
+        submitted["request"] = request
+        return SimpleNamespace(
+            id="broker-1",
+            status="accepted",
+            legs=request.legs,
+        )
+
+    monkeypatch.setattr(_risk_pipeline, "submit_order_via_api", _fake_submit)
+
     # Manual / discretionary order — explicit 'manual' strategy.
     result = await broker_server.submit_order(
         symbol="AAPL", qty=10, side="buy", strategy="manual",
     )
     assert result["order_id"] == "broker-1"
     assert result["status"] == "accepted"
+    assert submitted["request"].strategy == "manual"
 
 
 @pytest.mark.asyncio

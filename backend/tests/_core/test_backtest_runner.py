@@ -47,6 +47,89 @@ class FakeBarProvider:
         return self._df.query("date >= @cutoff and date <= @asof")
 
 
+class MultiFrameBarProvider:
+    def __init__(self):
+        self.calls: list[tuple[tuple[str, ...], str]] = []
+
+    def fetch_window(self, symbols, asof, lookback_days, timeframe="1D"):
+        self.calls.append((tuple(symbols), timeframe))
+        if timeframe == "1D":
+            dates = [asof - timedelta(days=1), asof]
+            return pd.DataFrame([
+                {
+                    "date": d,
+                    "symbol": sym,
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": 100.5,
+                    "volume": 1_000_000,
+                }
+                for d in dates
+                for sym in symbols
+            ]).set_index(["date", "symbol"])
+        if timeframe == "5min":
+            ts = pd.date_range("2024-01-03 14:30", periods=2, freq="5min", tz="UTC")
+            return pd.DataFrame([
+                {
+                    "date": asof,
+                    "symbol": sym,
+                    "ts": t,
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": 100.5,
+                    "volume": 10_000,
+                }
+                for sym in symbols
+                for t in ts
+            ]).set_index(["date", "symbol"])
+        raise AssertionError(f"unexpected timeframe {timeframe}")
+
+
+class FakeOptionsProvider:
+    async def fetch_chains(self, symbols, asof):
+        return {
+            sym: pd.DataFrame([
+                {"symbol": f"{sym}260417C00200000", "underlying": sym}
+            ])
+            for sym in symbols
+        }
+
+
+@register_strategy(
+    StrategyMeta(
+        name="provider_aware_backtest",
+        category="options",
+        lookback_days=3,
+        required_bars=("daily", "5min"),
+    )
+)
+class ProviderAwareBacktestStrategy(Strategy):
+    PARAMS_MODEL = SimpleParams
+
+    def universe(self, asof, state):
+        return ["AAPL"]
+
+    def run(self, input, params):
+        tag = (
+            f"daily={len(input.bars)} "
+            f"intraday={len(input.intraday_bars.get('5min', []))} "
+            f"options={len(input.options_chains.get('AAPL', []))}"
+        )
+        return StrategyResult(
+            signals=[
+                Signal(
+                    symbol="AAPL",
+                    asof=input.asof,
+                    order_type=OrderType.MOO,
+                    quantity=1,
+                    tag=tag,
+                )
+            ]
+        )
+
+
 class BuyTheDipStrategy(Strategy):
     """Test double: buys 1 share of SPY whenever close < buy_threshold."""
     PARAMS_MODEL = SimpleParams
@@ -115,6 +198,25 @@ def test_backtest_result_repro_metadata_populated():
     # the constant" not "the constant equals 1.0.0".
     from strategies._core import RUNNER_VERSION
     assert m.runner_version == RUNNER_VERSION
+
+
+def test_backtest_runner_hydrates_declared_intraday_and_options_inputs():
+    cfg = BacktestConfig(
+        start=date(2024, 1, 3), end=date(2024, 1, 3),
+        starting_cash=Decimal("100000"), seed=42,
+    )
+    bars = MultiFrameBarProvider()
+    result = BacktestRunner(
+        ProviderAwareBacktestStrategy(),
+        cfg,
+        bar_provider=bars,
+        options_provider=FakeOptionsProvider(),
+    ).run(SimpleParams())
+
+    assert ("AAPL",) == bars.calls[0][0]
+    assert ("1D" in [tf for _, tf in bars.calls])
+    assert ("5min" in [tf for _, tf in bars.calls])
+    assert result.signals_emitted[0].tag == "daily=2 intraday=2 options=1"
 
 
 def test_metrics_sharpe_excludes_seed_bar_zero_return():

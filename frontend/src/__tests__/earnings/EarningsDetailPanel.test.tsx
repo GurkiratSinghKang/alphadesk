@@ -149,6 +149,27 @@ describe("EarningsDetailPanel", () => {
     window.removeEventListener("alphadesk:earnings-select-next", onNext);
   });
 
+  it("offers undo after a candidate decision", () => {
+    const onCandidateDecision = vi.fn();
+    const { getByRole } = render(
+      <EarningsDetailPanel
+        detail={detail}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+        candidateDecision={null}
+        onCandidateDecision={onCandidateDecision}
+      />,
+    );
+
+    fireEvent.click(getByRole("button", { name: /discard/i }));
+    fireEvent.click(getByRole("button", { name: /undo/i }));
+
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(1, "discarded");
+    expect(onCandidateDecision).toHaveBeenNthCalledWith(2, null);
+  });
+
   // ── Round-4 additions ─────────────────────────────────────
 
   it("surfaces a partial-data banner when partial=true and errorCodes has codes (CLUSTER D/12)", () => {

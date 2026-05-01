@@ -8,7 +8,7 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 
-from strategies._core.contracts import StrategyInput
+from strategies._core.contracts import Position, StrategyInput
 from strategies._core.protocol import get_meta, get_strategy
 from strategies.vwap.config import UNIVERSE, VWAPParams
 from strategies.vwap.strategy import VWAPStrategy
@@ -47,6 +47,33 @@ def _build_intraday_input(asof: date) -> StrategyInput:
         "volume": [1000, 1000, 1000, 1000],
     }).set_index(["date", "symbol"])
     return inp.model_copy(update={"intraday_bars": {"5min": intraday}})
+
+
+def _build_eod_position_input(asof: date) -> StrategyInput:
+    inp = _build_input(asof)
+    ts = pd.date_range("2024-04-30 19:40", periods=4, freq="5min", tz="UTC")
+    intraday = pd.DataFrame({
+        "date": [asof] * 4,
+        "symbol": ["SPY"] * 4,
+        "ts": ts,
+        "open": [100.0, 100.2, 100.4, 100.5],
+        "high": [100.3, 100.5, 100.7, 100.8],
+        "low": [99.9, 100.1, 100.3, 100.4],
+        "close": [100.2, 100.4, 100.5, 100.6],
+        "volume": [1000, 1000, 1000, 1000],
+    }).set_index(["date", "symbol"])
+    return inp.model_copy(update={
+        "intraday_bars": {"5min": intraday},
+        "positions": [
+            Position(
+                symbol="SPY",
+                quantity=10,
+                avg_entry_price=Decimal("100.00"),
+                entry_date=asof,
+                tag="vwap-entry:SPY:pullback close=100.00 vwap=100.20 rsi=10.0",
+            )
+        ],
+    })
 
 
 class TestRegistration:
@@ -94,6 +121,18 @@ class TestRun:
         assert sig.symbol == "SPY"
         assert sig.target_weight == VWAPParams().max_allocation / VWAPParams().max_positions
         assert sig.tag.startswith("vwap-entry:SPY:pullback")
+
+    def test_open_position_exits_before_session_end(self):
+        strat = VWAPStrategy()
+        result = strat.run(
+            _build_eod_position_input(date(2024, 4, 30)),
+            VWAPParams(),
+        )
+        assert len(result.signals) == 1
+        sig = result.signals[0]
+        assert sig.symbol == "SPY"
+        assert sig.quantity == -10
+        assert sig.tag.startswith("vwap-exit:SPY:session_end")
 
     def test_universe_covers_ten_liquid_names(self):
         strat = VWAPStrategy()

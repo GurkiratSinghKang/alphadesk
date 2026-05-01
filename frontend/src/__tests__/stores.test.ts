@@ -4,6 +4,7 @@ import { usePortfolioStore } from '@/stores/portfolio';
 import { useAlertsStore } from '@/stores/alerts';
 import { useUIStore } from '@/stores/ui';
 import { useOptionsStore, type SelectedStrike } from '@/stores/options';
+import { useNotificationsStore } from '@/stores/notifications';
 import type { Quote } from '@/types';
 
 // ─── Market Store ─────────────────────────────────────────────
@@ -378,6 +379,38 @@ describe('UI Store', () => {
     useUIStore.getState().setTheme('light');
     useUIStore.getState().setTheme('dark');
     expect(useUIStore.getState().theme).toBe('dark');
+  });
+});
+
+// ─── Notifications Store ───────────────────────────────────────────────────
+
+describe('Notifications Store', () => {
+  beforeEach(() => {
+    useNotificationsStore.setState({ notifications: [] });
+  });
+
+  it('collapses identical notifications across a burst window', () => {
+    const store = useNotificationsStore.getState();
+    store.addNotification({
+      category: 'trades',
+      title: 'Order rejected',
+      detail: 'AAPL: quote unavailable',
+    });
+    store.addNotification({
+      category: 'system',
+      title: 'Connected',
+      detail: 'Feed resumed',
+    });
+    store.addNotification({
+      category: 'trades',
+      title: 'Order rejected',
+      detail: 'AAPL: quote unavailable',
+    });
+
+    const notifications = useNotificationsStore.getState().notifications;
+    expect(notifications).toHaveLength(2);
+    expect(notifications[0].title).toBe('Order rejected');
+    expect(notifications.filter((n) => n.title === 'Order rejected')).toHaveLength(1);
   });
 });
 

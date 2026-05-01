@@ -91,13 +91,26 @@ class ORBStrategy(Strategy):
             "active_profile": params.universe_profile,
             "active_symbols": profile_symbols,
             "evaluated": {},
+            "lifecycle_exits": {},
         }
 
         for symbol in profile_symbols:
+            session = _session_bars(frame, symbol, input.asof)
+            exit_signal = _lifecycle_exit_signal(
+                symbol=symbol,
+                input=input,
+                params=params,
+                session=session,
+            )
+            if exit_signal is not None:
+                signals.append(exit_signal)
+                diagnostics["lifecycle_exits"][symbol] = exit_signal.tag
+                diagnostics["evaluated"][symbol] = {"exit": exit_signal.tag}
+                continue
+
             if last_signal_dates.get(symbol) == input.asof.isoformat():
                 diagnostics["evaluated"][symbol] = {"skipped": "already_signalled_today"}
                 continue
-            session = _session_bars(frame, symbol, input.asof)
             if len(session) <= params.or_minutes:
                 diagnostics["evaluated"][symbol] = {
                     "skipped": "not_enough_completed_bars",
@@ -205,6 +218,106 @@ def _session_bars(frame: pd.DataFrame, symbol: str, asof: date) -> pd.DataFrame:
         & ((et.dt.hour < 16))
     )
     return df.loc[rth].sort_values("ts").reset_index(drop=True)
+
+
+def _lifecycle_exit_signal(
+    *,
+    symbol: str,
+    input: StrategyInput,
+    params: ORBParams,
+    session: pd.DataFrame,
+) -> Signal | None:
+    """Emit protective ORB exits for an existing paper position."""
+    if session.empty:
+        return None
+    position = next(
+        (
+            p for p in input.positions
+            if p.symbol.upper() == symbol.upper()
+            and p.quantity != 0
+            and str(p.tag or "").startswith("orb-entry:")
+        ),
+        None,
+    )
+    if position is None:
+        return None
+
+    latest = session.iloc[-1]
+    latest_ts = pd.Timestamp(latest["ts"])
+    latest_et = (
+        latest_ts.tz_convert(_ET)
+        if latest_ts.tzinfo
+        else latest_ts.tz_localize("UTC").tz_convert(_ET)
+    )
+    close = float(latest["close"])
+    high = float(latest["high"])
+    low = float(latest["low"])
+
+    range_info = _parse_or_range(str(position.tag or ""))
+    reason: str | None = None
+    trigger: float | None = None
+    if range_info is not None:
+        or_low, or_high = range_info
+        or_mid = (or_low + or_high) / 2.0
+        span = max(0.01, or_high - or_low)
+        is_long = position.quantity > 0
+        stop = or_low if params.stop_method == "or_bound" else or_mid
+        if is_long:
+            target = or_low + span * float(params.tp1_fib)
+            if low <= stop:
+                reason, trigger = "stop", stop
+            elif high >= target:
+                reason, trigger = "target", target
+        else:
+            stop = or_high if params.stop_method == "or_bound" else or_mid
+            target = or_high - span * max(0.1, float(params.tp1_fib) - 1.0)
+            if high >= stop:
+                reason, trigger = "stop", stop
+            elif low <= target:
+                reason, trigger = "target", target
+
+    session_end = (
+        latest_et.hour > params.session_end_hour_et
+        or (
+            latest_et.hour == params.session_end_hour_et
+            and latest_et.minute >= params.session_end_minute_et
+        )
+    )
+    if reason is None and session_end:
+        reason, trigger = "session_end", close
+
+    if reason is None:
+        return None
+
+    return Signal(
+        symbol=symbol,
+        asof=input.asof,
+        order_type=OrderType.MKT,
+        time_in_force=TimeInForce.DAY,
+        quantity=-int(position.quantity),
+        tag=(
+            f"orb-exit:{symbol}:{reason} "
+            f"trigger={trigger:.2f} close={close:.2f}"
+        ),
+    )
+
+
+def _parse_or_range(tag: str) -> tuple[float, float] | None:
+    marker = "or="
+    if marker not in tag:
+        return None
+    tail = tag.split(marker, 1)[1].split(" ", 1)[0]
+    if "-" not in tail:
+        return None
+    lo_raw, hi_raw = tail.split("-", 1)
+    try:
+        lo = float(lo_raw)
+        hi = float(hi_raw)
+    except (TypeError, ValueError):
+        return None
+    if hi <= lo:
+        return None
+    return lo, hi
 
 
 __all__ = ["ORBStrategy"]

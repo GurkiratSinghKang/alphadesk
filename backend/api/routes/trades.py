@@ -3656,6 +3656,140 @@ async def _get_open_position_count_and_sector_exposure() -> tuple[int, dict[str,
     return len(positions), sector_exposure, equity
 
 
+def _is_option_leg(leg: OrderLeg) -> bool:
+    return (
+        (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+        or _parse_occ_symbol(leg.symbol) is not None
+    )
+
+
+def _occ_expiry(parsed: Mapping[str, Any]) -> date:
+    return date(
+        2000 + int(parsed["expiry_yy"]),
+        int(parsed["expiry_mm"]),
+        int(parsed["expiry_dd"]),
+    )
+
+
+def _chain_contains_occ_contract(chain: Any, occ_symbol: str, parsed: Mapping[str, Any]) -> bool:
+    target_symbol = occ_symbol.upper()
+    target_expiry = _occ_expiry(parsed)
+    target_type = str(parsed["call_put"]).lower()
+    target_strike = float(parsed["strike"])
+
+    for contract in getattr(chain, "contracts", []) or []:
+        if isinstance(contract, Mapping):
+            contract_symbol = str(contract.get("symbol", "") or "").upper()
+            contract_expiry = contract.get("expiry") or contract.get("expiration")
+            contract_type = contract.get("option_type") or contract.get("type")
+            contract_strike = contract.get("strike")
+        else:
+            contract_symbol = str(getattr(contract, "symbol", "") or "").upper()
+            contract_expiry = (
+                getattr(contract, "expiry", None)
+                or getattr(contract, "expiration", None)
+            )
+            contract_type = (
+                getattr(contract, "option_type", None)
+                or getattr(contract, "type", None)
+            )
+            contract_strike = getattr(contract, "strike", None)
+
+        if contract_symbol:
+            if contract_symbol == target_symbol:
+                return True
+            continue
+
+        if hasattr(contract_type, "value"):
+            contract_type = contract_type.value
+        try:
+            if isinstance(contract_expiry, datetime):
+                expiry_date = contract_expiry.date()
+            elif isinstance(contract_expiry, date):
+                expiry_date = contract_expiry
+            else:
+                expiry_date = date.fromisoformat(str(contract_expiry))
+            strike = float(contract_strike)
+        except Exception:
+            continue
+
+        if expiry_date != target_expiry:
+            continue
+        if str(contract_type).lower() != target_type:
+            continue
+        if abs(strike - target_strike) > 0.001:
+            continue
+        return True
+    return False
+
+
+async def _verify_option_chain_provenance(request: CreateOrderRequest) -> tuple[bool, str]:
+    """Confirm every option leg is backed by a real chain contract.
+
+    A combo order is only as real as its weakest leg. The previous gate
+    checked the first option leg's underlying for ``is_demo`` and stopped
+    there, which still allowed later legs to reference synthetic or missing
+    contracts. This gate fetches per underlying+expiry, rejects demo chains,
+    and verifies the exact OCC contract is present before any broker submit.
+    """
+    option_legs = [leg for leg in request.legs if _is_option_leg(leg)]
+    if not option_legs:
+        return True, "passed"
+    if (
+        (_os.environ.get("TRADES_ALLOW_DEMO_CHAIN_ORDERS", "") or "").lower()
+        in {"1", "true", "yes"}
+    ):
+        return True, "demo_chain_override"
+
+    try:
+        from services.options import fetch_chain
+
+        chain_cache: dict[tuple[str, date], Any] = {}
+        for leg in option_legs:
+            parsed = _parse_occ_symbol(leg.symbol.upper())
+            if parsed is None:
+                return False, (
+                    f"Option leg {leg.symbol} is not a valid OCC contract. "
+                    "Option submission requires OCC symbols so chain "
+                    "provenance can be verified."
+                )
+            underlying = str(parsed["underlying"]).upper()
+            expiry = _occ_expiry(parsed)
+            cache_key = (underlying, expiry)
+            chain = chain_cache.get(cache_key)
+            if chain is None:
+                chain = await fetch_chain(underlying, expiry=expiry)
+                chain_cache[cache_key] = chain
+            if getattr(chain, "is_demo", False):
+                return False, (
+                    f"Options chain for {underlying} {expiry.isoformat()} is "
+                    "currently SYNTHETIC (BSM-modelled fallback) — live OPRA "
+                    "quotes are unavailable. Trade submission is blocked until "
+                    "live chain provenance returns; equities trades on this "
+                    "symbol are unaffected. Set "
+                    "TRADES_ALLOW_DEMO_CHAIN_ORDERS=1 to override "
+                    "(testing only)."
+                )
+            if not _chain_contains_occ_contract(chain, leg.symbol, parsed):
+                return False, (
+                    f"Option contract {leg.symbol} was not present in the "
+                    f"live {underlying} {expiry.isoformat()} chain. Refresh "
+                    "the chain and rebuild the ticket before submitting."
+                )
+    except Exception:
+        logger.warning(
+            "chain provenance probe failed; refusing option order fail-closed",
+            exc_info=True,
+        )
+        return False, (
+            "Options chain verification unavailable. Option orders are "
+            "blocked until live chain provenance can be confirmed; refresh "
+            "the ticket and try again."
+        )
+
+    return True, "passed"
+
+
 async def _aggregate_risk_check(
     request: CreateOrderRequest,
     username: str | None = None,
@@ -3740,56 +3874,9 @@ async def _aggregate_risk_check(
     # (or 422s on strike/contract mismatch when the broker rejects
     # the synthetic OCC). Operators can opt out per-environment with
     # ``TRADES_ALLOW_DEMO_CHAIN_ORDERS=1`` for testing.
-    has_option_leg = any(
-        (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
-        or _parse_occ_symbol(leg.symbol) is not None
-        for leg in request.legs
-    )
-    if has_option_leg and not (
-        (_os.environ.get("TRADES_ALLOW_DEMO_CHAIN_ORDERS", "") or "").lower()
-        in {"1", "true", "yes"}
-    ):
-        # Probe the chain freshness for the first option leg's
-        # underlying — if the chain is_demo, refuse the entire order.
-        try:
-            from services.options import fetch_chain
-
-            first_option_leg = next(
-                leg
-                for leg in request.legs
-                if (
-                    (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
-                    or _parse_occ_symbol(leg.symbol) is not None
-                )
-            )
-            occ = first_option_leg.symbol
-            # OCC underlying = everything before the 6-digit YYMMDD.
-            # Strip the trailing 15 chars: YYMMDD + (C|P) + 8-digit-strike.
-            underlying = occ[:-15] if len(occ) > 15 else occ
-            chain = await fetch_chain(underlying)
-            if getattr(chain, "is_demo", False):
-                return False, (
-                    f"Options chain for {underlying} is currently SYNTHETIC "
-                    "(BSM-modelled fallback) — Polygon options feed is "
-                    "unavailable. Trade submission is blocked until live "
-                    "OPRA quotes return; equities trades on this symbol "
-                    "are unaffected. Set TRADES_ALLOW_DEMO_CHAIN_ORDERS=1 "
-                    "to override (testing only)."
-                )
-        except StopIteration:
-            pass  # No option legs after all (defensive)
-        except HTTPException:
-            raise
-        except Exception:
-            logger.warning(
-                "chain demo-gate probe failed; refusing option order fail-closed",
-                exc_info=True,
-            )
-            return False, (
-                "Options chain verification unavailable. Option orders are "
-                "blocked until live chain provenance can be confirmed; refresh "
-                "the ticket and try again."
-            )
+    chain_ok, chain_reason = await _verify_option_chain_provenance(request)
+    if not chain_ok:
+        return False, chain_reason
 
     # J-7 (Round-6): quote-staleness gate. Skipped when caller didn't
     # forward a ``quote_at_fill_ts``; otherwise rejects stale snapshots

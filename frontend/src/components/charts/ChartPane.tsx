@@ -8,6 +8,7 @@ import type { ChartType, Indicator, MarketDepthSnapshot, OHLCVBar } from "@/type
 import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
 import { useChartDrawings } from "@/hooks/useChartDrawings";
 import { useMarketStore } from "@/stores/market";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
 import VolumeProfile from "@/components/primitives/VolumeProfile";
@@ -319,6 +320,7 @@ export default function ChartPane({
     }
     return "candle";
   });
+  const chartThemeKey = usePreferencesStore((s) => s.display.theme);
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [indicators, setIndicators] = React.useState<Indicator[]>(() => {
@@ -1299,7 +1301,7 @@ export default function ChartPane({
               {topOfBookOn && topBook && (
                 <div
                   data-slot="chart-top-book-overlay"
-                  className="pointer-events-none absolute right-3 top-3 z-10 w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md"
+                  className="pointer-events-none absolute right-3 top-3 z-10 hidden w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <TopOfBookReadout book={topBook} />
                 </div>
@@ -1312,7 +1314,7 @@ export default function ChartPane({
               {liquidityProfileOn && (
                 <div
                   data-slot="chart-volume-profile-overlay"
-                  className="pointer-events-none absolute right-12 top-3 bottom-12 z-10 opacity-70"
+                  className="pointer-events-none absolute right-12 top-3 bottom-12 z-10 hidden opacity-70 sm:block"
                 >
                   <VolumeProfile
                     bars={visibleData}
@@ -1325,6 +1327,7 @@ export default function ChartPane({
               <TradingChart
                 data={visibleData}
                 chartType={chartType}
+                themeKey={chartThemeKey}
                 compareSeries={compareSeriesProp}
                 anchoredVwapIndex={avwapAnchor}
                 indicators={indicators}
@@ -1353,7 +1356,7 @@ export default function ChartPane({
               <div
                 data-slot="chart-ohlc-overlay"
                 aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2.5 py-1.5 t-mono text-[11px] backdrop-blur-md"
+                className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] overflow-hidden rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2 py-1 t-mono text-[10.5px] backdrop-blur-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1.5 sm:text-[11px]"
               >
                 <OHLCReadout
                   hover={ohlcHover}
@@ -1364,7 +1367,7 @@ export default function ChartPane({
               {((topOfBookOn && topBook) || liquidityProfileOn || structureZonesOn || orderBlocksOn) && (
                 <div
                   data-slot="market-structure-summary"
-                  className="pointer-events-none absolute left-3 bottom-3 z-10 max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md"
+                  className="pointer-events-none absolute left-3 bottom-3 z-10 hidden max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <span className="text-[color:var(--fg)]">Structure map</span>
                   {topOfBookOn && topBook && (

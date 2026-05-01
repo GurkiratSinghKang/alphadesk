@@ -37,27 +37,34 @@ export const useNotificationsStore = create<NotificationsState>()(
           // BUG-033: the bell count drifted +1 between /alerts and
           // /pipeline because the same lifecycle event can arrive on
           // multiple channels (portfolio + trade_updates both fan fills)
-          // and push twice. De-dupe against the most recent notification
-          // on a {category, title, detail} tuple within a 2s window —
-          // short enough that a legitimate re-trigger (user manually
-          // replaying a fill) still lands, long enough to absorb the
-          // multi-channel race that causes the drift.
-          const head = state.notifications[0];
-          if (
-            head &&
-            head.category === n.category &&
-            head.title === n.title &&
-            head.detail === n.detail &&
-            Date.now() - head.timestamp < 2_000
-          ) {
-            return {} as Partial<NotificationsState>;
+          // and push twice. The first pass only checked the head item
+          // inside a 2s window; a burst with one different notification
+          // in between still flooded the bell. Collapse any identical
+          // {category,title,detail} notification seen in the last 30s,
+          // move it back to the top, and mark it unread so the user still
+          // sees that the event reoccurred without getting 20 rows.
+          const now = Date.now();
+          const duplicateIdx = state.notifications.findIndex((existing) =>
+            existing.category === n.category &&
+            existing.title === n.title &&
+            existing.detail === n.detail &&
+            now - existing.timestamp < 30_000
+          );
+          if (duplicateIdx >= 0) {
+            const duplicate = state.notifications[duplicateIdx];
+            return {
+              notifications: [
+                { ...duplicate, timestamp: now, read: false },
+                ...state.notifications.filter((_, i) => i !== duplicateIdx),
+              ].slice(0, 50),
+            };
           }
           return {
             notifications: [
               {
                 ...n,
-                id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                timestamp: Date.now(),
+                id: `notif-${now}-${Math.random().toString(36).slice(2, 8)}`,
+                timestamp: now,
                 read: false,
               },
               ...state.notifications,
