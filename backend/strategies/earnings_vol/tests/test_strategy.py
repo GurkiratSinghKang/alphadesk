@@ -54,9 +54,11 @@ def _build_input(
     bars: pd.DataFrame,
     asof: date,
     earnings: pd.DataFrame | None = None,
+    options_chains: dict[str, pd.DataFrame] | None = None,
 ) -> StrategyInput:
     return StrategyInput(
         asof=asof, mode="backtest", bars=bars, earnings=earnings,
+        options_chains=options_chains or {},
         cash=Decimal("100000"), equity=Decimal("100000"),
         positions=[], state={},
         seed=0, rng=np.random.default_rng(0),
@@ -111,6 +113,49 @@ class TestRun:
         cands = result.diagnostics.get("candidates") or []
         assert any(c["symbol"] == "AAPL" for c in cands)
         assert cands[0]["latest_price"] == pytest.approx(100.0)
+        assert cands[0]["options_chain"]["available"] is False
+
+    def test_options_chain_summary_is_included(self):
+        bars = _build_bars(["AAPL"], date(2024, 4, 30), n_bars=60)
+        earnings = _build_earnings({"AAPL": [date(2024, 5, 2)]})
+        chain = pd.DataFrame([
+            {
+                "symbol": "AAPL240503C00100000",
+                "underlying": "AAPL",
+                "expiry": date(2024, 5, 3),
+                "strike": 100.0,
+                "option_type": "call",
+                "bid": 2.0,
+                "ask": 2.2,
+                "iv": 0.42,
+                "is_demo": False,
+            },
+            {
+                "symbol": "AAPL240503P00100000",
+                "underlying": "AAPL",
+                "expiry": date(2024, 5, 3),
+                "strike": 100.0,
+                "option_type": "put",
+                "bid": 1.9,
+                "ask": 2.1,
+                "iv": 0.40,
+                "is_demo": False,
+            },
+        ])
+        strat = EarningsVolStrategy()
+        result = strat.run(
+            _build_input(
+                bars,
+                date(2024, 4, 30),
+                earnings=earnings,
+                options_chains={"AAPL": chain},
+            ),
+            EarningsVolParams(),
+        )
+        cand = result.diagnostics["candidates"][0]
+        assert cand["options_chain"]["available"] is True
+        assert cand["options_chain"]["target_expiry"] == "2024-05-03"
+        assert cand["options_chain"]["atm_iv"] == pytest.approx(0.41)
 
     def test_non_universe_symbols_filtered_out(self):
         bars = _build_bars(["AAPL", "ZZZZ"], date(2024, 4, 30), n_bars=60)

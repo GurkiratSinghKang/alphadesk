@@ -15,7 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
 async def test_research_only_subset_skips_before_provider_io(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORB/VWAP scheduler window is valid but currently research-only."""
+    """A research-only subset skips before provider IO."""
     from data.ingestion import daily_pipeline as dp
 
     replay_called = False
@@ -33,13 +33,14 @@ async def test_research_only_subset_skips_before_provider_io(
     monkeypatch.setattr(dp, "_base_url", lambda: "https://paper-api.alpaca.markets")
     monkeypatch.setattr(dp, "replay_pending_brackets", _replay_pending_brackets)
 
-    result = await dp._run_pipeline_inner(only_strategies=["orb", "vwap"])
+    requested = ["earnings-options-play", "vrp_harvest"]
+    result = await dp._run_pipeline_inner(only_strategies=requested)
 
     assert result["skipped"] is True
     assert result["no_retry"] is True
     assert result["reason"] == "no_runnable_strategies"
-    assert result["requested_strategies"] == ["orb", "vwap"]
-    assert "rsi2_reversal" in result["runnable_strategies"]
+    assert result["requested_strategies"] == requested
+    assert "orb" in result["runnable_strategies"]
     assert replay_called is False
 
 

@@ -1,4 +1,4 @@
-"""Smoke tests for the ORB strategy — research shell."""
+"""Smoke tests for the ORB strategy."""
 
 from __future__ import annotations
 
@@ -28,14 +28,31 @@ def _build_input(asof: date) -> StrategyInput:
     )
 
 
+def _build_intraday_input(asof: date) -> StrategyInput:
+    inp = _build_input(asof)
+    ts = pd.date_range("2024-04-30 13:30", periods=6, freq="min", tz="UTC")
+    intraday = pd.DataFrame({
+        "date": [asof] * 6,
+        "symbol": ["QQQ"] * 6,
+        "ts": ts,
+        "open": [100, 100.1, 100.2, 100.3, 100.4, 101.0],
+        "high": [100.4, 100.5, 100.6, 100.7, 100.8, 101.6],
+        "low": [99.8, 99.9, 100.0, 100.1, 100.2, 100.9],
+        "close": [100.1, 100.2, 100.3, 100.4, 100.5, 101.5],
+        "volume": [1000, 1000, 1000, 1000, 1000, 2000],
+    }).set_index(["date", "symbol"])
+    return inp.model_copy(update={"intraday_bars": {"1min": intraday}})
+
+
 class TestRegistration:
-    def test_strategy_registered_as_research(self):
+    def test_strategy_registered_as_paper_only_autonomous(self):
         cls = get_strategy("orb")
         assert cls is ORBStrategy
         meta = get_meta("orb")
         assert meta.name == "orb"
         assert meta.category == "intraday"
-        assert meta.kind == "research"
+        assert meta.kind == "autonomous"
+        assert meta.paper_only is True
         assert "1min" in meta.required_bars
 
 
@@ -49,17 +66,29 @@ class TestParams:
 
 
 class TestRun:
-    def test_research_shell_emits_no_signals(self):
+    def test_missing_intraday_emits_no_signals(self):
         strat = ORBStrategy()
         result = strat.run(
             _build_input(date(2024, 4, 30)),
             ORBParams(universe_profile="spy_qqq"),
         )
         assert result.signals == []
-        assert result.diagnostics.get("research_shell") is True
+        assert result.diagnostics.get("data_ready") is False
         assert result.diagnostics["active_profile"] == "spy_qqq"
         assert result.diagnostics["active_symbols"] == ["SPY", "QQQ"]
         assert result.state_update["orb.profile"] == "spy_qqq"
+
+    def test_breakout_emits_paper_signal(self):
+        strat = ORBStrategy()
+        result = strat.run(
+            _build_intraday_input(date(2024, 4, 30)),
+            ORBParams(universe_profile="qqq_tqqq"),
+        )
+        assert len(result.signals) == 1
+        sig = result.signals[0]
+        assert sig.symbol == "QQQ"
+        assert sig.target_weight == ORBParams().risk_per_trade
+        assert sig.tag.startswith("orb-entry:QQQ:breakout")
 
     def test_universe_returns_all_configurable_profile_tickers(self):
         strat = ORBStrategy()

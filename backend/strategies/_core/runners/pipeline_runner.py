@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date
 from decimal import Decimal
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
 
 import numpy as np
 
@@ -129,11 +129,14 @@ class DailyPipelineRunner:
         self,
         params: StrategyParams,
         asof: date | None = None,
+        mode: Literal["paper", "live"] = "live",
     ) -> StrategyResult:
         if asof is None:
             # For production, use a market calendar. Phase 1 uses today.
             from datetime import date as _date
             asof = _date.today()
+        if mode not in ("paper", "live"):
+            raise ValueError(f"mode must be 'paper' or 'live' (got {mode!r})")
 
         # Round-6 / I-1: research-kind strategies are research stubs — they
         # carry no executable signal path and must never be invoked from the
@@ -153,7 +156,7 @@ class DailyPipelineRunner:
         # meta.paper_only = True blocks live-mode emission; the strategy
         # still runs in backtest/paper modes. The runner returns an empty
         # result with a warning so the MasterAgent sees the block reason.
-        if self._strategy.META.paper_only:
+        if self._strategy.META.paper_only and mode == "live":
             return StrategyResult(
                 signals=[], state_update={},
                 diagnostics={"paper_only_blocked": True},
@@ -195,13 +198,58 @@ class DailyPipelineRunner:
 
         state = await self._state_store.load(self._strategy.META.name)
         symbols = self._strategy.universe(asof, state)
-        bars = self._providers.bars.fetch_window(
-            symbols, asof, self._strategy.META.lookback_days
-        )
+        fetch_warnings: list[str] = []
+
+        def _fetch_bars(timeframe: str):
+            try:
+                return self._providers.bars.fetch_window(
+                    symbols,
+                    asof,
+                    self._strategy.META.lookback_days,
+                    timeframe=timeframe,
+                )
+            except TypeError:
+                if timeframe == "1D":
+                    return self._providers.bars.fetch_window(
+                        symbols, asof, self._strategy.META.lookback_days
+                    )
+                raise
+
+        bars = _fetch_bars("1D")
+        intraday_bars = {}
+        for timeframe in tuple(getattr(self._strategy.META, "required_bars", ("daily",))):
+            if timeframe == "daily":
+                continue
+            try:
+                intraday_bars[timeframe] = _fetch_bars(timeframe)
+            except Exception:
+                fetch_warnings.append(
+                    f"{self._strategy.META.name}: could not load {timeframe} bars"
+                )
         earnings = (
             self._providers.earnings.fetch_window(symbols, asof, self._strategy.META.lookback_days)
             if self._providers.earnings else None
         )
+        fundamentals = (
+            self._providers.fundamentals.snapshot(symbols, asof)
+            if self._providers.fundamentals else None
+        )
+        options_chains = {}
+        if (
+            getattr(self._strategy.META, "category", None) == "options"
+            and getattr(self._providers, "options", None) is not None
+            and symbols
+        ):
+            try:
+                maybe_options = self._providers.options.fetch_chains(symbols, asof)
+                if hasattr(maybe_options, "__await__"):
+                    options_chains = await maybe_options  # type: ignore[assignment]
+                else:
+                    options_chains = dict(maybe_options)  # type: ignore[arg-type]
+            except Exception:
+                fetch_warnings.append(
+                    f"{self._strategy.META.name}: could not load options chains"
+                )
 
         # Round-6 / I-13: positions are not optional in live mode. If the
         # provider isn't wired, fail loudly here rather than silently feed
@@ -211,16 +259,17 @@ class DailyPipelineRunner:
         # ledger drifted further every day. Construction-time wiring is the
         # only safe default.
         positions: list[Position] = []
-        if self._positions_provider is None:
+        if mode == "live" and self._positions_provider is None:
             raise RuntimeError(
                 "DailyPipelineRunner cannot run live with empty positions — "
                 "wire positions_provider"
             )
-        maybe_positions = self._positions_provider(asof)
-        if hasattr(maybe_positions, "__await__"):
-            positions = await maybe_positions  # type: ignore[assignment]
-        else:
-            positions = list(maybe_positions)  # type: ignore[arg-type]
+        if self._positions_provider is not None:
+            maybe_positions = self._positions_provider(asof)
+            if hasattr(maybe_positions, "__await__"):
+                positions = await maybe_positions  # type: ignore[assignment]
+            else:
+                positions = list(maybe_positions)  # type: ignore[arg-type]
 
         # Live mode uses a deterministic seed derived from strategy name + date
         # so replay from state_store is stable across process restarts on the same day.
@@ -229,7 +278,9 @@ class DailyPipelineRunner:
         seed = int.from_bytes(seed_bytes, "big")
 
         input = StrategyInput(
-            asof=asof, mode="live", bars=bars, earnings=earnings,
+            asof=asof, mode=mode, bars=bars, intraday_bars=intraday_bars,
+            earnings=earnings, fundamentals=fundamentals,
+            options_chains=options_chains,
             cash=Decimal("0"),  # live-mode cash comes from broker; strategy shouldn't depend on it
             equity=Decimal("0"),
             positions=positions,
@@ -238,6 +289,8 @@ class DailyPipelineRunner:
             rng=np.random.default_rng(seed),
         )
         result = self._strategy.run(input, params)
+        if fetch_warnings:
+            result.warnings = [*fetch_warnings, *(result.warnings or [])]
 
         # Persist state update for the next day's run
         await self._state_store.save(

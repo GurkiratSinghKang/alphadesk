@@ -114,22 +114,22 @@ class TestCatalogueShape:
         assert d["required_lookback_days"] >= 400
         assert fallback["min_universe_size"] >= 3
 
-    def test_orb_meta_matches_research_shell_backend(self) -> None:
+    def test_orb_meta_matches_paper_only_intraday_backend(self) -> None:
         d = strat_mod._STRATEGIES["orb"]
         fallback = strat_mod._FALLBACK_META["orb"]
         copy = f"{d['description']} {fallback['description']}"
 
-        assert "Research" in copy or "research" in copy
-        assert "emits no" in copy
+        assert "paper-only" in copy
+        assert "1-minute" in copy
         assert fallback["supports_shorts"] is False
 
-    def test_vwap_meta_matches_research_shell_backend(self) -> None:
+    def test_vwap_meta_matches_paper_only_intraday_backend(self) -> None:
         d = strat_mod._STRATEGIES["vwap-strategy"]
         fallback = strat_mod._FALLBACK_META["vwap"]
         copy = f"{d['description']} {fallback['description']}"
 
-        assert "Research" in copy or "research" in copy
-        assert "emits no" in copy
+        assert "paper-only" in copy
+        assert "5-minute" in copy
         assert fallback["required_bars"] == ["5min"]
         assert fallback["supports_shorts"] is False
 

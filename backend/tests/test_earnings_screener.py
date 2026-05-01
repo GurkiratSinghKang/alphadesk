@@ -1022,7 +1022,7 @@ async def test_get_detail_news_failure_marks_partial():
          patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_iv_term", AsyncMock(return_value=None)), \
          patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
-         patch.object(svc, "_load_news", AsyncMock(side_effect=RuntimeError("newsdata 503"))), \
+         patch.object(svc, "_news_payload", AsyncMock(side_effect=RuntimeError("newsdata 503"))), \
          patch.object(
              svc, "_load_earnings_meta",
              AsyncMock(return_value={

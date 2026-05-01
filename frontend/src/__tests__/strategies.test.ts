@@ -37,8 +37,8 @@ describe('Strategy configuration', () => {
     expect(STRATEGY_META['ts-momentum'].regimeNote).not.toContain('200-SMA');
     expect(STRATEGY_META['dual-momentum'].regimeNote).toContain('GEM');
     expect(STRATEGY_META['dual-momentum'].regimeNote).not.toContain('Top-quintile');
-    expect(STRATEGY_META.orb.regimeNote).toContain('Research shell');
-    expect(STRATEGY_META['vwap-strategy'].regimeNote).toContain('no live signals');
+    expect(STRATEGY_META.orb.regimeNote).toContain('Paper-only');
+    expect(STRATEGY_META['vwap-strategy'].regimeNote).toContain('Paper-only');
     expect(STRATEGY_META['gap-fill'].regimeNote).toContain('Planned');
     expect(STRATEGY_META['earnings-vol-premium'].regimeNote).toContain('live disabled');
   });
@@ -47,13 +47,13 @@ describe('Strategy configuration', () => {
     expect([...LIVE_DISABLED].sort()).toEqual([
       'earnings-options-play',
       'earnings-vol-premium',
-      'orb',
       'vrp-harvesting',
-      'vwap-strategy',
     ]);
     expect([...PAPER_ONLY].sort()).toEqual([
       'earnings-options-play',
       'kama-breakout',
+      'orb',
+      'vwap-strategy',
     ]);
   });
 });

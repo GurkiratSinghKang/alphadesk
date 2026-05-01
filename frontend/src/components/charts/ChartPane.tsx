@@ -931,7 +931,7 @@ export default function ChartPane({
                   }}
                   placeholder="SPY, QQQ, …"
                   aria-label="Compare symbol ticker"
-                  maxLength={6}
+                  maxLength={10}
                   className="bg-transparent border border-[color:var(--border)] rounded-xs px-2 py-1 t-mono text-[12px] text-[color:var(--fg)] uppercase outline-none focus:border-[color:var(--brand)] w-24"
                 />
                 <button
@@ -1533,7 +1533,7 @@ export default function ChartPane({
                       }
                     }}
                     className={cn(
-                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-5 w-5 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
+                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-11 w-11 md:h-5 md:w-5 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
                       tone,
                     )}
                     style={{ top: alertHover.y }}

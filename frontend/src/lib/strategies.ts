@@ -176,14 +176,14 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     name: "Opening Range Breakout",
     shortName: "ORB",
     icon: Clock,
-    regimeNote: "Research shell · no live signals",
+    regimeNote: "Paper-only intraday breakout",
     group: "technical",
   },
   "vwap-strategy": {
     name: "VWAP Bounce / Breakout",
     shortName: "VWAP Strategy",
     icon: CandlestickChart,
-    regimeNote: "Research shell · no live signals",
+    regimeNote: "Paper-only VWAP pullback",
     group: "technical",
   },
   "mean-reversion": {
@@ -240,8 +240,6 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
 export const LIVE_DISABLED: ReadonlySet<string> = new Set<string>([
   "vrp-harvesting",
   "earnings-vol-premium",
-  "vwap-strategy",
-  "orb",
   "earnings-options-play",
 ]);
 
@@ -249,6 +247,8 @@ export const LIVE_DISABLED: ReadonlySet<string> = new Set<string>([
  *  ``STRATEGY_PAPER_ONLY`` in ``backend/core/config.py``. */
 export const PAPER_ONLY: ReadonlySet<string> = new Set<string>([
   "kama-breakout",
+  "orb",
+  "vwap-strategy",
   "earnings-options-play",
 ]);
 

@@ -454,7 +454,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "orb": {
         "name": "Opening Range Breakout",
-        "description": "Research-only ORB shell pending 1-minute intraday StrategyInput integration. Standalone simulator exists, but the registered strategy emits no live signals today.",
+        "description": "Paper-only opening-range breakout using 1-minute intraday bars. Live routing stays disabled until paper evidence graduates it.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -467,7 +467,7 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "vwap-strategy": {
         "name": "VWAP Bounce / Breakout",
-        "description": "Research-only VWAP session-pullback shell pending 5-minute intraday StrategyInput integration. Standalone OOS artifact exists, but the registered backend emits no live signals today.",
+        "description": "Paper-only VWAP session pullback using 5-minute intraday bars. Live routing stays disabled until paper evidence graduates it.",
         "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -499,6 +499,7 @@ _REGISTRY_TO_ROUTE: dict[str, str] = {
     "kama_breakout": "kama-breakout",
     "orb": "orb",
     "vwap": "vwap-strategy",
+    "earnings-options-play": "earnings-options-play",
 }
 _ROUTE_TO_REGISTRY: dict[str, str] = {v: k for k, v in _REGISTRY_TO_ROUTE.items()}
 # A1#7 — ``pairs-stat-arb`` is a legacy catalogue alias for the same Python
@@ -628,8 +629,8 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
         "required_lookback_days": 0, "min_universe_size": 1,
         "supports_shorts": False, "supports_options": False,
         "description": (
-            "Opening-Range Breakout research shell. Registered backend emits "
-            "no signals until 1-minute intraday bars are wired into StrategyInput."
+            "Opening-Range Breakout. Registered backend consumes 1-minute "
+            "intraday bars and is paper-only until live evidence graduates it."
         ),
     },
     "vwap": {
@@ -637,8 +638,8 @@ _FALLBACK_META: dict[str, dict[str, Any]] = {
         "required_lookback_days": 150, "min_universe_size": 1,
         "supports_shorts": False, "supports_options": False,
         "description": (
-            "VWAP session-pullback research shell. Registered backend emits "
-            "no signals until 5-minute intraday bars are wired into StrategyInput."
+            "VWAP session-pullback. Registered backend consumes 5-minute "
+            "intraday bars and is paper-only until live evidence graduates it."
         ),
     },
 }
@@ -1040,7 +1041,10 @@ _STRATEGY_NAME_TO_ID: dict[str, str] = {
     "dual_momentum": "dual-momentum",
     "kama_breakout": "kama-breakout",
     "orb": "orb",
+    "vwap": "vwap-strategy",
     "vwap_strategy": "vwap-strategy",
+    "earnings-options-play": "earnings-options-play",
+    "earnings_options_play": "earnings-options-play",
     # Stat arb (pairs_trading already above)
     "pairs_stat_arb": "pairs-stat-arb",
 }

@@ -40,9 +40,14 @@ def _build_bars(
     return frame.set_index(["date", "symbol"]).sort_index()
 
 
-def _build_input(bars: pd.DataFrame, asof: date) -> StrategyInput:
+def _build_input(
+    bars: pd.DataFrame,
+    asof: date,
+    options_chains: dict[str, pd.DataFrame] | None = None,
+) -> StrategyInput:
     return StrategyInput(
         asof=asof, mode="backtest", bars=bars,
+        options_chains=options_chains or {},
         cash=Decimal("100000"), equity=Decimal("100000"),
         positions=[], state={},
         seed=0, rng=np.random.default_rng(0),
@@ -97,6 +102,55 @@ class TestRun:
         assert result.diagnostics["entry_gate_open"] is False
         assert result.diagnostics["entry_gate_blocked_reason"] == "options_chain_unavailable"
         assert any("Research shell" in w for w in result.warnings)
+
+    def test_options_chain_diagnostics_are_used_when_available(self):
+        rng = np.random.default_rng(11)
+        closes = 400.0 * np.cumprod(1 + rng.normal(0.0, 0.012, 120))
+        bars = _build_bars(closes, date(2024, 4, 30))
+        chain = pd.DataFrame([
+            {
+                "symbol": "SPY240531P00360000",
+                "underlying": "SPY",
+                "expiry": date(2024, 5, 31),
+                "strike": 360.0,
+                "option_type": "put",
+                "iv": 0.18,
+                "delta": -0.05,
+                "spot_price": 400.0,
+                "is_demo": False,
+            },
+            {
+                "symbol": "SPY240531C00400000",
+                "underlying": "SPY",
+                "expiry": date(2024, 5, 31),
+                "strike": 400.0,
+                "option_type": "call",
+                "iv": 0.20,
+                "delta": 0.50,
+                "spot_price": 400.0,
+                "is_demo": False,
+            },
+            {
+                "symbol": "SPY240628C00400000",
+                "underlying": "SPY",
+                "expiry": date(2024, 6, 28),
+                "strike": 400.0,
+                "option_type": "call",
+                "iv": 0.22,
+                "delta": 0.50,
+                "spot_price": 400.0,
+                "is_demo": False,
+            },
+        ])
+        strat = VRPHarvestStrategy()
+        result = strat.run(
+            _build_input(bars, date(2024, 4, 30), {"SPY": chain}),
+            VRPHarvestParams(),
+        )
+        assert result.signals == []
+        assert result.diagnostics["options_chain_available"] is True
+        assert result.diagnostics["options_chain"]["tail_hedge_available"] is True
+        assert result.diagnostics["entry_gate_open"] is False
 
     def test_warmup_bars_returns_empty(self):
         rng = np.random.default_rng(13)

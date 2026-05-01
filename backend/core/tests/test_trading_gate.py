@@ -279,7 +279,7 @@ def test_reject_emits_warning_log(
     rec = rejects[0]
     assert getattr(rec, "strategy", None) == "orb"
     assert getattr(rec, "caller", None) == "test.live_audit"
-    assert getattr(rec, "reason", None) == "live_disabled"
+    assert getattr(rec, "reason", None) == "paper_only"
     assert getattr(rec, "username", None) == "alice"
 
 

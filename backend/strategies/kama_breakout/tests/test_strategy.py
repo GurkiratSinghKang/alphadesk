@@ -272,6 +272,7 @@ class TestPipelineGate:
             bars = None
             earnings = None
             fundamentals = None
+            options = None
 
         strat = KamaBreakoutStrategy()
         runner = DailyPipelineRunner(strat, _NullProviders(), StateStore())
@@ -281,3 +282,33 @@ class TestPipelineGate:
         )
         assert result.signals == []
         assert result.diagnostics.get("paper_only_blocked") is True
+
+    def test_daily_runner_allows_paper_emission_path(self):
+        """Paper-only strategies should still run in paper mode."""
+        import asyncio
+
+        from strategies._core.runners.pipeline_runner import (
+            DailyPipelineRunner,
+            StateStore,
+        )
+
+        asof = date(2024, 4, 30)
+        bars = _build_uptrend_bars("SPY", asof)
+
+        class _Bars:
+            def fetch_window(self, symbols, asof, lookback_days, timeframe="1D"):
+                return bars
+
+        class _Providers:
+            bars = _Bars()
+            earnings = None
+            fundamentals = None
+            options = None
+
+        strat = KamaBreakoutStrategy()
+        runner = DailyPipelineRunner(strat, _Providers(), StateStore())
+
+        result = asyncio.run(
+            runner.run_today(KamaBreakoutParams(), asof=asof, mode="paper")
+        )
+        assert result.diagnostics.get("paper_only_blocked") is not True

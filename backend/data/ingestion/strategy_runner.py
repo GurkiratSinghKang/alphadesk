@@ -69,6 +69,26 @@ def _get_state_store() -> StateStore:
     return _STATE_STORE
 
 
+def _broker_mode() -> str:
+    """Return the strategy-shell execution mode for the configured broker.
+
+    Paper URLs, disabled live intent, and missing config all run through the
+    paper branch. Only an explicit live Alpaca URL plus LIVE_TRADING_ENABLED
+    lets the runner build live-mode inputs.
+    """
+    try:
+        from core.config import is_live_alpaca_base_url, settings
+
+        if is_live_alpaca_base_url() and bool(settings.LIVE_TRADING_ENABLED):
+            return "live"
+    except Exception:
+        logger.warning(
+            "strategy_runner: could not determine broker mode, falling back to paper",
+            exc_info=True,
+        )
+    return "paper"
+
+
 # --------------------------------------------------------------------------- #
 # Live positions provider                                                     #
 # --------------------------------------------------------------------------- #
@@ -306,7 +326,7 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             positions_provider=_live_positions_for,
         )
         try:
-            result = await runner.run_today(params)
+            result = await runner.run_today(params, mode=_broker_mode())
         except Exception:
             logger.exception("strategy_runner: %s run_today() failed", self.name)
             return empty

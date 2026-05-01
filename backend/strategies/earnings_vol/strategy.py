@@ -3,13 +3,11 @@
 Short-iron-butterfly entered before earnings, exited at post-event IV crush.
 See ``spec.md`` for the academic spec.
 
-Current integration status (2026-04):
-  Full options-chain data is not yet part of ``StrategyInput``. This shell
-  detects upcoming earnings from ``input.earnings`` and emits diagnostics
-  (candidate symbols, richness proxy) but no executable option signals.
-
-When the options chain arrives in ``StrategyInput``, flip ``kind`` to
-``autonomous`` and restore the full butterfly + exit logic from git history.
+Current integration status:
+  ``StrategyInput.options_chains`` is available, so the shell now verifies
+  candidate chain quality and identifies tradable expiries/ATM IV. It still
+  emits diagnostics only until the multi-leg options execution bridge is
+  proven in paper.
 """
 
 from __future__ import annotations
@@ -76,10 +74,12 @@ class EarningsVolStrategy(Strategy):
             timing_filter=params.earnings_timing_filter,
         )
         diagnostics["upcoming_events"] = len(upcoming)
+        diagnostics["options_chains_loaded"] = len(input.options_chains)
 
         latest_prices = _latest_close_by_symbol(input.bars, input.asof)
         filtered_low_price = 0
         missing_price = 0
+        missing_chain = 0
         candidates: list[dict[str, Any]] = []
         for sym, event_date in upcoming:
             latest_price = latest_prices.get(sym)
@@ -92,15 +92,27 @@ class EarningsVolStrategy(Strategy):
             hist_median = _historical_move_median(
                 input.earnings, sym, params.historical_moves_lookback_quarters,
             )
+            chain = _chain_for_symbol(input.options_chains, sym)
+            chain_summary = _options_chain_summary(chain, latest_price, event_date)
+            if not chain_summary["available"]:
+                missing_chain += 1
             candidates.append({
                 "symbol": sym,
                 "event_date": event_date.isoformat() if event_date else None,
                 "latest_price": latest_price,
                 "hist_move_median": hist_median,
+                "options_chain": chain_summary,
             })
         diagnostics["candidates"] = candidates
         diagnostics["filtered_below_min_price"] = filtered_low_price
         diagnostics["missing_price"] = missing_price
+        diagnostics["missing_chain"] = missing_chain
+        diagnostics["execution_bridge_ready"] = False
+        if candidates and missing_chain:
+            warnings.append(
+                "Earnings vol candidates exist but at least one options chain is missing; "
+                "no option signals are emitted."
+            )
 
         return StrategyResult(
             signals=[],
@@ -227,6 +239,57 @@ def _historical_move_median(
         sub = sub.sort_values(["_event_date"])
     tail = sub.tail(lookback_quarters)
     return float(tail[move_col].abs().median())
+
+
+def _chain_for_symbol(
+    chains: dict[str, pd.DataFrame],
+    symbol: str,
+) -> pd.DataFrame | None:
+    chain = chains.get(symbol.upper())
+    if chain is None:
+        chain = chains.get(symbol)
+    if chain is None or getattr(chain, "empty", True):
+        return None
+    return chain
+
+
+def _options_chain_summary(
+    chain: pd.DataFrame | None,
+    spot: float,
+    event_date: date | None,
+) -> dict[str, Any]:
+    if chain is None or getattr(chain, "empty", True):
+        return {"available": False}
+    frame = chain.copy()
+    for col in ("expiry", "strike", "bid", "ask", "iv"):
+        if col not in frame.columns:
+            return {"available": False, "reason": f"missing_{col}"}
+    frame["_expiry"] = pd.to_datetime(frame["expiry"], errors="coerce").dt.date
+    frame["_strike"] = pd.to_numeric(frame["strike"], errors="coerce")
+    frame["_bid"] = pd.to_numeric(frame["bid"], errors="coerce")
+    frame["_ask"] = pd.to_numeric(frame["ask"], errors="coerce")
+    frame["_iv"] = pd.to_numeric(frame["iv"], errors="coerce")
+    frame = frame.dropna(subset=["_expiry", "_strike"])
+    if frame.empty:
+        return {"available": False, "reason": "no_valid_contracts"}
+    target = event_date or min(frame["_expiry"])
+    expiries = sorted({d for d in frame["_expiry"] if d >= target})
+    target_expiry = expiries[0] if expiries else None
+    expiry_frame = frame[frame["_expiry"] == target_expiry] if target_expiry else frame
+    atm = expiry_frame.iloc[(expiry_frame["_strike"] - float(spot)).abs().argsort()[:4]]
+    spreads = (expiry_frame["_ask"] - expiry_frame["_bid"]).clip(lower=0)
+    mids = ((expiry_frame["_ask"] + expiry_frame["_bid"]) / 2.0).replace(0, pd.NA)
+    spread_pct = (spreads / mids).replace([np.inf, -np.inf], pd.NA).dropna()
+    is_demo = bool(frame.get("is_demo", pd.Series([False])).fillna(False).astype(bool).any())
+    return {
+        "available": True,
+        "contracts": int(len(frame)),
+        "is_demo": is_demo,
+        "target_expiry": target_expiry.isoformat() if target_expiry else None,
+        "target_expiry_contracts": int(len(expiry_frame)),
+        "atm_iv": float(atm["_iv"].dropna().mean()) if atm["_iv"].notna().any() else None,
+        "median_spread_pct": float(spread_pct.median()) if not spread_pct.empty else None,
+    }
 
 
 __all__ = ["EarningsVolStrategy"]

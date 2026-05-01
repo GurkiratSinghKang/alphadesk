@@ -216,6 +216,13 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         <span id="candidate-swipe-card-hint" className="sr-only">
           On touch screens, swipe left to discard or right to save, then advance. Use the visible button to mark for order review.
         </span>
+        <div
+          aria-hidden="true"
+          className="mb-2 flex items-center justify-between rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--fg-muted)] md:hidden"
+        >
+          <span>Swipe left: discard</span>
+          <span>Swipe right: save</span>
+        </div>
         <CandidateDecisionBar
           decision={candidateDecision}
           onDecision={onCandidateDecision}

@@ -203,6 +203,8 @@ def test_strategy_input_basic_construction():
     assert inp.mode == "backtest"
     assert inp.seed == 42
     assert len(inp.bars) == 2
+    assert inp.intraday_bars == {}
+    assert inp.options_chains == {}
 
 
 def test_strategy_input_frozen():
@@ -245,6 +247,26 @@ def test_strategy_input_snapshot_id_varies_with_data():
             seed=0, rng=np.random.default_rng(0),
         )
     assert StrategyInput.snapshot_id(_make(b1)) != StrategyInput.snapshot_id(_make(b2))
+
+
+def test_strategy_input_snapshot_id_varies_with_intraday_and_options():
+    bars = pd.DataFrame({"close": [100]}, index=pd.MultiIndex.from_tuples([(date(2024, 1, 1), "NVDA")], names=["date", "symbol"]))
+    intraday = pd.DataFrame(
+        {"close": [100.5], "ts": [pd.Timestamp("2024-01-01 14:30:00Z")]},
+        index=pd.MultiIndex.from_tuples([(date(2024, 1, 1), "NVDA")], names=["date", "symbol"]),
+    )
+    chain = pd.DataFrame({"symbol": ["NVDA240119C00500000"], "bid": [1.0], "ask": [1.1]})
+
+    base = StrategyInput(
+        asof=date(2024, 1, 1), mode="backtest", bars=bars,
+        cash=Decimal("100000"), equity=Decimal("100000"), positions=[],
+        seed=0, rng=np.random.default_rng(0),
+    )
+    with_intraday = base.model_copy(update={"intraday_bars": {"1min": intraday}})
+    with_options = base.model_copy(update={"options_chains": {"NVDA": chain}})
+
+    assert StrategyInput.snapshot_id(base) != StrategyInput.snapshot_id(with_intraday)
+    assert StrategyInput.snapshot_id(base) != StrategyInput.snapshot_id(with_options)
 
 
 # ---------------------------------------------------------------------------

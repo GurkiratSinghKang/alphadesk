@@ -7,6 +7,7 @@ snapshot_id), re-running a strategy produces bitwise-identical results.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -15,6 +16,10 @@ import numpy as np
 import pandas as pd
 
 from strategies._core.contracts import Position, StrategyInput
+
+
+def _safe_key(key: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(key)).strip("._") or "data"
 
 
 class SnapshotWriter:
@@ -71,8 +76,12 @@ class SnapshotWriter:
             pending.append((dest / f"{name}.parquet", tmp))
 
         _stage_parquet("bars", input.bars)
+        for key, df in sorted(input.intraday_bars.items()):
+            _stage_parquet(f"intraday_{_safe_key(key)}", df)
         for name in ("earnings", "fundamentals", "news"):
             _stage_parquet(name, getattr(input, name))
+        for key, df in sorted(input.options_chains.items()):
+            _stage_parquet(f"options_{_safe_key(key)}", df)
 
         meta = {
             "asof": input.asof.isoformat(),
@@ -82,6 +91,8 @@ class SnapshotWriter:
             "cash": str(input.cash),
             "equity": str(input.equity),
             "positions": [p.model_dump(mode="json") for p in input.positions],
+            "intraday_bars": sorted(input.intraday_bars),
+            "options_chains": sorted(input.options_chains),
         }
         meta_tmp = dest / "meta.json.tmp"
         meta_tmp.write_text(json.dumps(meta, default=str))
@@ -143,14 +154,26 @@ class SnapshotReader:
         )
 
         meta = json.loads((snap_dir / "meta.json").read_text())
+        intraday_bars = {
+            key: pd.read_parquet(snap_dir / f"intraday_{_safe_key(key)}.parquet")
+            for key in meta.get("intraday_bars", [])
+            if (snap_dir / f"intraday_{_safe_key(key)}.parquet").exists()
+        }
+        options_chains = {
+            key: pd.read_parquet(snap_dir / f"options_{_safe_key(key)}.parquet")
+            for key in meta.get("options_chains", [])
+            if (snap_dir / f"options_{_safe_key(key)}.parquet").exists()
+        }
 
         return StrategyInput(
             asof=date.fromisoformat(meta["asof"]),
             mode=meta["mode"],
             bars=bars,
+            intraday_bars=intraday_bars,
             earnings=earnings,
             fundamentals=fundamentals,
             news=news,
+            options_chains=options_chains,
             cash=Decimal(meta["cash"]),
             equity=Decimal(meta["equity"]),
             positions=[Position(**p) for p in meta["positions"]],

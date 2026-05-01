@@ -261,6 +261,55 @@ export default function TradePage() {
     }
   }, [setSelectedSymbol]);
 
+  useEffect(() => {
+    function onAddAlert(e: Event) {
+      const detail = (e as CustomEvent<{
+        symbol?: string;
+        price?: number;
+      }>).detail;
+      const sym = normalizeUnderlyingSymbol(detail?.symbol ?? null);
+      const price = detail?.price;
+      if (!sym || !Number.isFinite(price as number)) return;
+      router.push(`/alerts?prefillSymbol=${encodeURIComponent(sym)}&prefillPrice=${(price as number).toFixed(2)}`);
+    }
+
+    function onPlaceLimit(e: Event) {
+      const detail = (e as CustomEvent<{
+        symbol?: string;
+        price?: number;
+        side?: "buy" | "sell";
+      }>).detail;
+      const sym = normalizeUnderlyingSymbol(detail?.symbol ?? null);
+      const price = detail?.price;
+      if (!sym || !Number.isFinite(price as number)) return;
+      const side = detail?.side === "sell" ? "sell" : "buy";
+      setUrlUnderlyingSymbol(sym);
+      setSelectedSymbol(sym);
+      setActiveContract(null);
+      setActiveLegs([]);
+      setComboType(null);
+      setQuoteAtFillTs(null);
+      setPlainEquityPrefill({
+        symbol: sym,
+        side,
+        qty: 1,
+        type: "limit",
+        price: Number((price as number).toFixed(2)),
+      });
+      toast({
+        type: "info",
+        message: `Staged ${side.toUpperCase()} limit for ${sym} @ ${(price as number).toFixed(2)}`,
+      });
+    }
+
+    window.addEventListener("alphadesk:add-price-alert", onAddAlert as EventListener);
+    window.addEventListener("alphadesk:place-limit-from-chart", onPlaceLimit as EventListener);
+    return () => {
+      window.removeEventListener("alphadesk:add-price-alert", onAddAlert as EventListener);
+      window.removeEventListener("alphadesk:place-limit-from-chart", onPlaceLimit as EventListener);
+    };
+  }, [router, setSelectedSymbol, toast]);
+
   const [range, setRange] = useState<ChartRange>("1M");
   const [series, setSeries] = useState<ChartBar[]>([]);
   useEffect(() => {

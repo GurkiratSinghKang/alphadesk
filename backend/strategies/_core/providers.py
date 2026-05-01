@@ -7,21 +7,26 @@ tests can swap in fakes easily.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 import pandas as pd
 
 
+logger = logging.getLogger("alphadesk.strategies.providers")
+
+
 class BarProvider(Protocol):
     def fetch_window(
-        self, symbols: list[str], asof: date, lookback_days: int
+        self, symbols: list[str], asof: date, lookback_days: int, timeframe: str = "1D"
     ) -> pd.DataFrame:
         """Return bars for `symbols` over the `lookback_days` window ending at `asof`.
 
         Returned DataFrame has columns (open, high, low, close, volume) and
-        a multi-index of (date, symbol). Missing symbols are omitted silently;
-        callers handle empty windows.
+        a multi-index of (date, symbol). Intraday frames also preserve a `ts`
+        timestamp column. Missing symbols are omitted silently; callers handle
+        empty windows.
         """
         ...
 
@@ -46,6 +51,14 @@ class FundamentalsProvider(Protocol):
         ...
 
 
+class OptionsChainProvider(Protocol):
+    async def fetch_chains(
+        self, symbols: list[str], asof: date
+    ) -> dict[str, pd.DataFrame]:
+        """Return option chains keyed by underlying symbol."""
+        ...
+
+
 class ProviderBundle:
     """Container for all providers a strategy might need. Not all strategies
     use all providers; missing providers are None and accessed via conditional
@@ -56,10 +69,12 @@ class ProviderBundle:
         bars: BarProvider,
         earnings: EarningsProvider | None = None,
         fundamentals: FundamentalsProvider | None = None,
+        options: OptionsChainProvider | None = None,
     ):
         self.bars = bars
         self.earnings = earnings
         self.fundamentals = fundamentals
+        self.options = options
 
 
 class _AlpacaBarAdapter:
@@ -75,16 +90,17 @@ class _AlpacaBarAdapter:
         self._inner = inner
 
     def fetch_window(
-        self, symbols: list[str], asof: date, lookback_days: int
+        self, symbols: list[str], asof: date, lookback_days: int, timeframe: str = "1D"
     ) -> pd.DataFrame:
         start = asof - timedelta(days=lookback_days)
-        frame = self._inner.bars(symbols, start, asof, tf="1D")
+        frame = self._inner.bars(symbols, start, asof, tf=timeframe)
         if frame is None or getattr(frame, "empty", True):
             return pd.DataFrame(
-                columns=["open", "high", "low", "close", "volume"],
+                columns=["open", "high", "low", "close", "volume", "ts"],
             )
         df = pd.DataFrame(frame)
-        # Normalise ts → date, set multi-index (date, symbol).
+        # Normalise ts → date, set multi-index (date, symbol), while
+        # preserving ts for intraday strategies.
         ts_col = next(
             (c for c in ("ts", "timestamp", "date") if c in df.columns),
             None,
@@ -92,10 +108,16 @@ class _AlpacaBarAdapter:
         if ts_col is None:
             return df
         df = df.copy()
-        df["date"] = pd.to_datetime(df[ts_col], utc=True, errors="coerce") \
-            .dt.tz_convert("UTC").dt.date
+        df["ts"] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
+        df["date"] = df["ts"].dt.tz_convert("UTC").dt.date
         df["symbol"] = df["symbol"].astype(str).str.upper()
-        keep = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
+        keep = [
+            c for c in (
+                "open", "high", "low", "close", "volume",
+                "vwap", "n_trades", "trade_count", "ts",
+            )
+            if c in df.columns
+        ]
         df = df[["date", "symbol", *keep]].dropna(subset=["date", "symbol"])
         return df.set_index(["date", "symbol"]).sort_index()
 
@@ -122,6 +144,37 @@ class _FMPEarningsAdapter:
         return frame if frame is not None else pd.DataFrame()
 
 
+class _OptionsServiceAdapter:
+    """Bridge services.options.fetch_chain() to strategy-shell DataFrames."""
+
+    async def fetch_chains(
+        self, symbols: list[str], asof: date
+    ) -> dict[str, pd.DataFrame]:
+        from services.options import fetch_chain
+
+        _ = asof
+        out: dict[str, pd.DataFrame] = {}
+        for symbol in list(dict.fromkeys(str(s).upper() for s in symbols)):
+            try:
+                chain = await fetch_chain(symbol)
+            except Exception:
+                logger.warning(
+                    "options chain fetch failed for %s", symbol, exc_info=True
+                )
+                continue
+
+            rows: list[dict[str, Any]] = []
+            for contract in chain.contracts:
+                row = contract.model_dump(mode="json")
+                row["chain_underlying"] = chain.underlying
+                row["spot_price"] = chain.spot_price
+                row["fetched_at"] = chain.fetched_at.isoformat()
+                row["is_demo"] = bool(chain.is_demo)
+                rows.append(row)
+            out[symbol] = pd.DataFrame(rows)
+        return out
+
+
 def default_provider_bundle() -> ProviderBundle:
     """Return a ProviderBundle wired to the current AlphaDesk backend providers.
 
@@ -140,4 +193,5 @@ def default_provider_bundle() -> ProviderBundle:
         bars=_AlpacaBarAdapter(AlpacaBarProvider()),
         earnings=_FMPEarningsAdapter(FMPEarningsProvider()),
         fundamentals=None,
+        options=_OptionsServiceAdapter(),
     )

@@ -203,7 +203,7 @@ def _handle_analyze_day(strategy_cls, args) -> int:
         providers=default_provider_bundle(),
         state_store=StateStore(),
     )
-    result = asyncio.run(runner.run_today(params, asof=args.asof))
+    result = asyncio.run(runner.run_today(params, asof=args.asof, mode="paper"))
     json.dump(result.model_dump(mode="json"), sys.stdout, indent=2, default=str)
     return 0
 

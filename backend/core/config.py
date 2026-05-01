@@ -253,9 +253,7 @@ settings = Settings()
 #   Round-6 / I-2: this set is auto-derived from the strategy registry — any
 #   strategy registered with ``StrategyMeta.kind == "research"`` is structurally
 #   unfit for live capital (research stubs emit no executable signals or are
-#   pending intraday-data integration). Hardcoded ``orb`` is kept in the seed
-#   so the gate still catches the value when the registry hasn't yet been
-#   imported (e.g. config-only test contexts).
+#   pending data/execution integration).
 #
 # STRATEGY_PAPER_ONLY — strategy is implementation-complete but statistically
 #   thin. Route to Alpaca paper only. ``create_order`` rejects with 422 when
@@ -270,8 +268,8 @@ def _derive_live_disabled_from_registry() -> set[str]:
 
     Imports the strategy package lazily and tolerates an empty registry
     (e.g. partial test fixtures that haven't called ``load_all``). The
-    seed below ensures ``orb`` stays denied even when registration has
-    not happened.
+    seed below ensures research-only entries stay denied even when
+    registration has not happened.
 
     The trading-gate keys ``STRATEGY_LIVE_DISABLED`` membership on the
     canonical underscore form; some strategies (currently
@@ -279,7 +277,7 @@ def _derive_live_disabled_from_registry() -> set[str]:
     so we normalise both forms into the set so a lookup with either
     spelling hits.
     """
-    seeds: set[str] = {"orb"}
+    seeds: set[str] = {"earnings-options-play", "earnings_options_play"}
     try:
         # Lazy import — ``core.config`` is loaded very early, before
         # ``strategies`` is on the import path in some shells.
@@ -306,7 +304,12 @@ def _derive_live_disabled_from_registry() -> set[str]:
 
 
 STRATEGY_LIVE_DISABLED: set[str] = _derive_live_disabled_from_registry()
-STRATEGY_PAPER_ONLY: set[str] = {"kama_breakout", "earnings_options_play"}
+STRATEGY_PAPER_ONLY: set[str] = {
+    "kama_breakout",
+    "orb",
+    "vwap",
+    "earnings_options_play",
+}
 
 
 def is_live_alpaca_base_url(url: str | None = None) -> bool:

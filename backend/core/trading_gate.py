@@ -316,7 +316,7 @@ def _format_reject_detail(canonical: str | None, reason: str | None) -> str:
         )
     if reason == "paper_only":
         return (
-            f"Strategy '{canonical}' is paper-only until a longer OOS "
+            f"Strategy '{canonical}' is on the paper-only denylist until a longer OOS "
             "window confirms statistical significance (see "
             "audit-reports/00-strategy-experts-consolidation.md §4). "
             "Route this order to the Alpaca paper endpoint instead."

@@ -22,8 +22,27 @@ def _make_input(asof: date, seed: int = 42) -> StrategyInput:
         [(date(2024, 1, 1), "NVDA"), (date(2024, 1, 2), "NVDA")],
         names=["date", "symbol"],
     ))
+    intraday = pd.DataFrame({
+        "open": [101.0], "high": [101.5], "low": [100.8],
+        "close": [101.2], "volume": [10_000],
+        "ts": [pd.Timestamp("2024-01-02 14:30:00Z")],
+    }, index=pd.MultiIndex.from_tuples(
+        [(date(2024, 1, 2), "NVDA")],
+        names=["date", "symbol"],
+    ))
+    chain = pd.DataFrame({
+        "symbol": ["NVDA240119C00500000"],
+        "underlying": ["NVDA"],
+        "expiry": [date(2024, 1, 19)],
+        "strike": [500.0],
+        "option_type": ["call"],
+        "bid": [1.0],
+        "ask": [1.1],
+    })
     return StrategyInput(
         asof=asof, mode="backtest", bars=bars,
+        intraday_bars={"1min": intraday},
+        options_chains={"NVDA": chain},
         cash=Decimal("100000"), equity=Decimal("100000"),
         positions=[], state={"tracked": "value"},
         seed=seed, rng=np.random.default_rng(seed),
@@ -53,6 +72,8 @@ def test_snapshot_roundtrip_preserves_data(tmp_path: Path):
     assert restored.mode == inp.mode
     assert restored.seed == inp.seed
     pd.testing.assert_frame_equal(restored.bars, inp.bars)
+    pd.testing.assert_frame_equal(restored.intraday_bars["1min"], inp.intraday_bars["1min"])
+    pd.testing.assert_frame_equal(restored.options_chains["NVDA"], inp.options_chains["NVDA"])
     assert restored.state == inp.state
     assert restored.cash == inp.cash
 

@@ -244,9 +244,10 @@ class StrategyInput(BaseModel):
     wall-clock. All randomness flows through `rng`, which the runner seeds
     deterministically from `seed`.
 
-    Lookback windows (`bars`, `earnings`, `fundamentals`, `news`) are
-    pre-sliced by the runner to the strategy's declared META.lookback_days
-    (or META-declared requirement for each provider).
+    Lookback windows (`bars`, `intraday_bars`, `earnings`, `fundamentals`,
+    `news`, `options_chains`) are pre-sliced by the runner to the strategy's
+    declared META.lookback_days (or META-declared requirement for each
+    provider).
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -255,9 +256,11 @@ class StrategyInput(BaseModel):
     mode: Literal["backtest", "paper", "live"]
 
     bars: pd.DataFrame
+    intraday_bars: dict[str, pd.DataFrame] = Field(default_factory=dict)
     earnings: pd.DataFrame | None = None
     fundamentals: pd.DataFrame | None = None
     news: pd.DataFrame | None = None
+    options_chains: dict[str, pd.DataFrame] = Field(default_factory=dict)
 
     cash: Decimal
     equity: Decimal
@@ -280,10 +283,20 @@ class StrategyInput(BaseModel):
         h = hashlib.sha256()
         h.update(inst.asof.isoformat().encode())
         h.update(inst.mode.encode())
-        h.update(pd.util.hash_pandas_object(inst.bars, index=True).values.tobytes())
+        def _hash_frame(label: str, df: pd.DataFrame) -> None:
+            h.update(label.encode())
+            h.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
+
+        _hash_frame("bars", inst.bars)
+        for key, df in sorted(inst.intraday_bars.items()):
+            if df is not None:
+                _hash_frame(f"intraday:{key}", df)
         for df in (inst.earnings, inst.fundamentals, inst.news):
             if df is not None:
                 h.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
+        for key, df in sorted(inst.options_chains.items()):
+            if df is not None:
+                _hash_frame(f"options:{key}", df)
         return h.hexdigest()[:16]
 
 
