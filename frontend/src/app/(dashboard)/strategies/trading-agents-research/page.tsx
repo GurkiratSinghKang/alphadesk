@@ -251,10 +251,10 @@ function levelLabel(context: string, value: string, before = "", after = "") {
   const beforeLower = before.toLowerCase();
   const afterLower = after.toLowerCase();
   if (lower.includes("current price")) return "Current price reference";
-  if (afterLower.includes("stop") || beforeLower.includes("stop")) return "Risk stop";
-  if (afterLower.includes("target") || beforeLower.includes("target")) return "Target zone";
   if (afterLower.includes("support") || afterLower.includes("entry")) return "Support / entry window";
   if (afterLower.includes("resistance") || afterLower.includes("trim")) return "Resistance / trim zone";
+  if (afterLower.includes("stop") || beforeLower.includes("stop")) return "Risk stop";
+  if (afterLower.includes("target") || beforeLower.includes("target")) return "Target zone";
   if (beforeLower.includes("support") || beforeLower.includes("entry")) return "Support / entry window";
   if (beforeLower.includes("resistance") || beforeLower.includes("trim")) return "Resistance / trim zone";
   return truncate(clean || `Referenced level ${value}`, 86);
