@@ -5,6 +5,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import Mono from "@/components/typography/Mono";
 import ChartPane from "@/components/charts/ChartPane";
+import { useMarketDepth } from "@/hooks/useMarketDepth";
 import type {
   ChartBar,
   ChartPoint,
@@ -229,6 +230,7 @@ export default function PriceChartPanel({
   const change = numberOrNull(quote.change);
   const changePct = numberOrNull(quote.changePct);
   const regimeFit = numberOrNull(meta.regimeFit);
+  const marketDepth = useMarketDepth(symbol.ticker, quote);
 
   const deltaSign = (change ?? 0) >= 0 ? "+" : "\u2212";
   const deltaTone = (change ?? 0) >= 0 ? "text-up-500" : "text-down-500";
@@ -392,7 +394,7 @@ export default function PriceChartPanel({
           // chart-type toggle + drawing-tools rail + indicator menu).
           // ChartCanvas remains exported below for any caller that still
           // wants the minimal line-only version; the dashboard does not.
-          <ChartPane data={chartData} />
+          <ChartPane data={chartData} topOfBook={quote} marketDepth={marketDepth} />
         )}
       </div>
     </section>

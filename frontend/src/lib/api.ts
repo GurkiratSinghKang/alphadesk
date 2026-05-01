@@ -2,6 +2,8 @@ import { env } from "@/env";
 import type {
   Quote,
   OHLCVBar,
+  MarketDepthCapabilities,
+  MarketDepthSnapshot,
   OptionsChain,
   Position,
   Order,
@@ -562,6 +564,19 @@ export async function searchSymbols(query: string, limit = 10) {
 
 // ─── Market Data ─────────────────────────────────────────────
 
+function parseTimestampMs(rawTs: unknown): number {
+  return typeof rawTs === "number"
+    ? rawTs
+    : typeof rawTs === "string"
+      ? Date.parse(rawTs) || 0
+      : 0;
+}
+
+function normalizeQuotePayloadTimestamp<T extends Quote>(quote: T): T {
+  const rawTs: unknown = (quote as unknown as { timestamp?: unknown })?.timestamp;
+  return { ...quote, timestamp: parseTimestampMs(rawTs) };
+}
+
 export async function getQuote(symbol: string): Promise<Quote> {
   const resp = await apiFetch<Quote & { is_demo?: boolean; source?: string }>(
     `/api/v1/market/quotes/${symbol}`,
@@ -577,14 +592,7 @@ export async function getQuote(symbol: string): Promise<Quote> {
   // Any consumer doing ``Date.now() - quote.timestamp`` math gets
   // ``NaN`` and ``formatDistanceToNow(quote.timestamp)`` shows
   // "Invalid Date". Normalise here so every consumer sees a number.
-  const rawTs: unknown = (resp as unknown as { timestamp?: unknown })?.timestamp;
-  const ts =
-    typeof rawTs === "number"
-      ? rawTs
-      : typeof rawTs === "string"
-        ? Date.parse(rawTs) || 0
-        : 0;
-  return { ...resp, timestamp: ts };
+  return normalizeQuotePayloadTimestamp(resp);
 }
 
 export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit = 500): Promise<OHLCVBar[]> {
@@ -638,7 +646,7 @@ export async function getSnapshot(symbols: string[]): Promise<Record<string, Quo
         `/api/v1/market/quotes/${s}`,
       );
       if (quote?.is_demo === true || quote?.source === "demo") sawDemo = true;
-      results[s] = quote;
+      results[s] = normalizeQuotePayloadTimestamp(quote);
     } catch {
       // skip symbols that fail
     }
@@ -679,10 +687,10 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
       if (snap?.is_demo === true || snap?.source === "demo") sawDemo = true;
       // New `{symbol: Snapshot}` shape — unwrap the nested quote.
       if (snap && typeof snap === "object" && "quote" in snap && snap.quote) {
-        out[sym] = snap.quote;
+        out[sym] = normalizeQuotePayloadTimestamp(snap.quote);
       } else if (snap && typeof snap === "object" && "last" in snap) {
         // Defensive fallback: older backend shape returns flat Quote objects.
-        out[sym] = snap as Quote;
+        out[sym] = normalizeQuotePayloadTimestamp(snap as Quote);
       }
     }
     if (sawDemo) {
@@ -695,6 +703,79 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
     // watchlist during a Caddy hiccup).
     return getSnapshot(symbols);
   }
+}
+
+interface BackendDepthLevel {
+  price?: number;
+  size?: number;
+  venue?: string | null;
+}
+
+interface BackendDepthSnapshot {
+  symbol?: string;
+  kind?: "top_of_book" | "level_2";
+  provider?: string;
+  bids?: BackendDepthLevel[];
+  asks?: BackendDepthLevel[];
+  timestamp?: string | number;
+  is_l2?: boolean;
+  isL2?: boolean;
+  is_demo?: boolean;
+  isDemo?: boolean;
+  notes?: string[];
+}
+
+function normalizeMarketDepth(raw: BackendDepthSnapshot): MarketDepthSnapshot {
+  return {
+    symbol: String(raw.symbol ?? "").toUpperCase(),
+    kind: raw.kind === "level_2" ? "level_2" : "top_of_book",
+    provider: raw.provider ?? "unknown",
+    bids: (raw.bids ?? []).map((level) => ({
+      price: Number(level.price ?? 0),
+      size: Number(level.size ?? 0),
+      venue: level.venue ?? null,
+    })).filter((level) => Number.isFinite(level.price) && level.price > 0),
+    asks: (raw.asks ?? []).map((level) => ({
+      price: Number(level.price ?? 0),
+      size: Number(level.size ?? 0),
+      venue: level.venue ?? null,
+    })).filter((level) => Number.isFinite(level.price) && level.price > 0),
+    timestamp: parseTimestampMs(raw.timestamp),
+    isL2: Boolean(raw.is_l2 ?? raw.isL2),
+    isDemo: Boolean(raw.is_demo ?? raw.isDemo),
+    notes: Array.isArray(raw.notes) ? raw.notes : [],
+  };
+}
+
+export async function getMarketDepth(symbol: string, levels = 10): Promise<MarketDepthSnapshot> {
+  const qs = new URLSearchParams({ levels: String(levels) }).toString();
+  const raw = await apiFetch<BackendDepthSnapshot>(
+    `/api/v1/market/depth/${encodeURIComponent(symbol.toUpperCase())}?${qs}`,
+  );
+  maybeDispatchBrokerDegraded(
+    `/api/v1/market/depth/${symbol}`,
+    raw?.is_demo === true || raw?.isDemo === true,
+  );
+  return normalizeMarketDepth(raw);
+}
+
+interface BackendDepthCapabilities {
+  active_kind?: "top_of_book" | "level_2";
+  activeKind?: "top_of_book" | "level_2";
+  true_l2_available?: boolean;
+  trueL2Available?: boolean;
+  providers?: MarketDepthCapabilities["providers"];
+  notes?: string[];
+}
+
+export async function getMarketDepthCapabilities(): Promise<MarketDepthCapabilities> {
+  const raw = await apiFetch<BackendDepthCapabilities>("/api/v1/market/depth/capabilities");
+  return {
+    activeKind: raw.active_kind ?? raw.activeKind ?? "top_of_book",
+    trueL2Available: Boolean(raw.true_l2_available ?? raw.trueL2Available),
+    providers: Array.isArray(raw.providers) ? raw.providers : [],
+    notes: Array.isArray(raw.notes) ? raw.notes : [],
+  };
 }
 
 // ─── Auth token refresh scheduler (long-session-audit-r4 P0 #1) ─

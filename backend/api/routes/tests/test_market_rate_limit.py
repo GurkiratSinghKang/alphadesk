@@ -262,3 +262,68 @@ async def test_batched_snapshots_route_invokes_rate_limiter(
 
     assert calls == ["10.0.0.55"]
     assert sorted(result) == ["AAPL", "MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_depth_route_invokes_limiter_and_returns_depth_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The /depth route should be rate-limited and expose the stable contract."""
+    from api.routes import market as market_module
+
+    calls: list[str] = []
+
+    async def _fake_limiter(request: Any, response: Any) -> None:
+        calls.append(request.client.host)
+
+    async def _fake_depth(symbol: str, *, levels: int, client_host: str | None) -> dict[str, Any]:
+        return {
+            "symbol": symbol,
+            "levels": levels,
+            "client_host": client_host,
+            "kind": "top_of_book",
+            "is_l2": False,
+        }
+
+    monkeypatch.setattr(market_module, "_market_rate_limit_or_429", _fake_limiter)
+    monkeypatch.setattr(market_module, "fetch_market_depth", _fake_depth)
+
+    req = _FakeRequest(ip="10.0.0.77")
+    resp = _FakeResponse()
+
+    result = await market_module.get_market_depth("AAPL", req, resp, levels=5)
+
+    assert calls == ["10.0.0.77"]
+    assert result["symbol"] == "AAPL"
+    assert result["levels"] == 5
+    assert result["client_host"] == "10.0.0.77"
+    assert result["is_l2"] is False
+
+
+@pytest.mark.asyncio
+async def test_depth_capabilities_route_invokes_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Capabilities are also a market-data route and should share limits."""
+    from api.routes import market as market_module
+
+    calls: list[str] = []
+
+    async def _fake_limiter(request: Any, response: Any) -> None:
+        calls.append(request.client.host)
+
+    monkeypatch.setattr(market_module, "_market_rate_limit_or_429", _fake_limiter)
+    monkeypatch.setattr(
+        market_module,
+        "market_depth_capabilities",
+        lambda: {"active_kind": "top_of_book", "true_l2_available": False},
+    )
+
+    req = _FakeRequest(ip="10.0.0.88")
+    resp = _FakeResponse()
+
+    result = await market_module.get_depth_capabilities(req, resp)
+
+    assert calls == ["10.0.0.88"]
+    assert result["active_kind"] == "top_of_book"
+    assert result["true_l2_available"] is False

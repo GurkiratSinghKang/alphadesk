@@ -36,9 +36,9 @@ interface MarketState {
   watchlist: string[];
   selectedSymbol: string;
   /**
-   * Freshest quote timestamp seen, in whatever unit `Quote.timestamp`
-   * carries (epoch-seconds today). Tracked on write so the heartbeat
-   * consumer can read it in O(1) — see long-session-audit-r4 P2 #14.
+   * Freshest quote timestamp seen, normalized to epoch milliseconds.
+   * Tracked on write so the heartbeat consumer can read it in O(1) —
+   * see long-session-audit-r4 P2 #14.
    */
   freshestTs: number;
 
@@ -66,6 +66,10 @@ interface MarketState {
 
 /** Safely coerce a quote timestamp to a number, returning 0 on invalid input. */
 function tsNum(ts: unknown): number {
+  if (typeof ts === "string") {
+    const parsed = Date.parse(ts);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   const n = Number(ts);
   return Number.isFinite(n) ? n : 0;
 }
@@ -116,11 +120,12 @@ export const useMarketStore = create<MarketState>()(
         set((state) => {
           const existing = state.quotes[quote.symbol];
           const quoteTs = tsNum(quote.timestamp);
+          const incoming = quoteTs > 0 ? { ...quote, timestamp: quoteTs } : quote;
           const nextFreshestTs = quoteTs > state.freshestTs ? quoteTs : state.freshestTs;
           if (!existing) {
             // First time seeing this symbol — store as-is
             return {
-              quotes: { ...state.quotes, [quote.symbol]: { ...quote } },
+              quotes: { ...state.quotes, [quote.symbol]: { ...incoming } },
               freshestTs: nextFreshestTs,
             };
           }
@@ -129,11 +134,11 @@ export const useMarketStore = create<MarketState>()(
           // Snapshot provides: close, open, high, low, change, changePct.
           const merged = {
             ...existing,
-            ...quote,
-            close: existing.close || quote.close,
-            open: existing.open || quote.open,
-            high: Math.max(existing.high || 0, quote.high || 0) || existing.high,
-            low: (existing.low && quote.low) ? Math.min(existing.low, quote.low) : existing.low || quote.low,
+            ...incoming,
+            close: existing.close || incoming.close,
+            open: existing.open || incoming.open,
+            high: Math.max(existing.high || 0, incoming.high || 0) || existing.high,
+            low: (existing.low && incoming.low) ? Math.min(existing.low, incoming.low) : existing.low || incoming.low,
           };
           // Recompute change/changePct from prev close when a real-time price arrives
           if (merged.last && merged.close && merged.close > 0) {
@@ -152,6 +157,8 @@ export const useMarketStore = create<MarketState>()(
           let maxTs = state.freshestTs;
           for (const q of quotes) {
             const existing = next[q.symbol];
+            const qts = tsNum(q.timestamp);
+            const incoming = qts > 0 ? { ...q, timestamp: qts } : q;
             // Mirror updateQuote: PRESERVE snapshot-only fields
             // (close/open/high/low) across WS updates. A raw spread
             // (`{...existing, ...q}`) would let a WS-only payload blow
@@ -160,20 +167,19 @@ export const useMarketStore = create<MarketState>()(
             const merged = existing
               ? {
                   ...existing,
-                  ...q,
-                  close: existing.close || q.close,
-                  open: existing.open || q.open,
-                  high: Math.max(existing.high || 0, q.high || 0) || existing.high,
-                  low: (existing.low && q.low) ? Math.min(existing.low, q.low) : existing.low || q.low,
+                  ...incoming,
+                  close: existing.close || incoming.close,
+                  open: existing.open || incoming.open,
+                  high: Math.max(existing.high || 0, incoming.high || 0) || existing.high,
+                  low: (existing.low && incoming.low) ? Math.min(existing.low, incoming.low) : existing.low || incoming.low,
                 }
-              : { ...q };
+              : { ...incoming };
             // Always recompute change/changePct from prev close
             if (merged.last && merged.close && merged.close > 0) {
               merged.change = +(merged.last - merged.close).toFixed(4);
               merged.changePct = +((merged.change / merged.close) * 100).toFixed(4);
             }
             next[q.symbol] = merged;
-            const qts = tsNum(q.timestamp);
             if (qts > maxTs) maxTs = qts;
           }
           return { quotes: next, freshestTs: maxTs };

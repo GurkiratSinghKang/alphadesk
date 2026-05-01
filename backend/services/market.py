@@ -16,6 +16,7 @@ import logging
 import random
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +31,10 @@ class Quote(BaseModel):
     symbol: str
     bid: float
     ask: float
+    bidSize: int = 0
+    askSize: int = 0
+    bidExchange: str | None = None
+    askExchange: str | None = None
     last: float
     volume: int
     timestamp: datetime
@@ -61,6 +66,38 @@ class Snapshot(BaseModel):
     min_bar: Bar
     change_pct: float
     is_demo: bool = False
+
+
+class MarketDepthLevel(BaseModel):
+    price: float
+    size: int = 0
+    venue: str | None = None
+
+
+class MarketDepthSnapshot(BaseModel):
+    symbol: str
+    kind: Literal["top_of_book", "level_2"] = "top_of_book"
+    provider: str
+    bids: list[MarketDepthLevel] = Field(default_factory=list)
+    asks: list[MarketDepthLevel] = Field(default_factory=list)
+    timestamp: datetime
+    is_l2: bool = False
+    is_demo: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
+class MarketDepthProviderCapability(BaseModel):
+    provider: str
+    configured: bool
+    equities: Literal["none", "top_of_book", "level_2"]
+    notes: str
+
+
+class MarketDepthCapabilities(BaseModel):
+    active_kind: Literal["top_of_book", "level_2"]
+    true_l2_available: bool
+    providers: list[MarketDepthProviderCapability]
+    notes: list[str] = Field(default_factory=list)
 
 
 class MarketStatus(BaseModel):
@@ -164,6 +201,8 @@ def _demo_quote(symbol: str) -> Quote:
     spread = round(rng.uniform(0.01, 0.05), 2)
     bid = round(last - spread / 2, 2)
     ask = round(last + spread / 2, 2)
+    bid_size = rng.randint(1, 20)
+    ask_size = rng.randint(1, 20)
     volume = rng.randint(5_000_000, 50_000_000)
     # Compute realistic change data from base price
     prev_close = round(base * (1 + rng.uniform(-0.01, 0.005)), 2)
@@ -173,7 +212,10 @@ def _demo_quote(symbol: str) -> Quote:
     day_high = round(max(last, day_open) * (1 + abs(rng.gauss(0, 0.005))), 2)
     day_low = round(min(last, day_open) * (1 - abs(rng.gauss(0, 0.005))), 2)
     return Quote(
-        symbol=s, bid=bid, ask=ask, last=last,
+        symbol=s, bid=bid, ask=ask,
+        bidSize=bid_size, askSize=ask_size,
+        bidExchange="DEMO", askExchange="DEMO",
+        last=last,
         volume=volume, timestamp=datetime.now(timezone.utc),
         change=change, changePct=change_pct,
         high=day_high, low=day_low, open=day_open, close=prev_close,
@@ -370,6 +412,10 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         symbol=symbol.upper(),
                         bid=lq.get("p", 0),
                         ask=lq.get("P", 0),
+                        bidSize=int(lq.get("s") or lq.get("bid_size") or 0),
+                        askSize=int(lq.get("S") or lq.get("ask_size") or 0),
+                        bidExchange=str(lq.get("x") or lq.get("bid_exchange") or "") or None,
+                        askExchange=str(lq.get("X") or lq.get("ask_exchange") or "") or None,
                         last=lt.get("p", 0),
                         volume=day.get("v", 0),
                         timestamp=ts,
@@ -418,6 +464,10 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         symbol=symbol.upper(),
                         bid=lq.get("bp", 0),
                         ask=lq.get("ap", 0),
+                        bidSize=int(lq.get("bs") or 0),
+                        askSize=int(lq.get("as") or 0),
+                        bidExchange=lq.get("bx"),
+                        askExchange=lq.get("ax"),
                         last=last_price,
                         volume=int(daily.get("v", 0)),
                         timestamp=ts,
@@ -457,3 +507,89 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
         extra={"event": "provider_outage", "provider": "alpaca+polygon", "symbol": symbol.upper()},
     )
     return _demo_quote(symbol)
+
+
+async def fetch_market_depth(
+    symbol: str,
+    *,
+    levels: int = 10,
+    client_host: str | None = None,
+) -> MarketDepthSnapshot:
+    """Return market depth for ``symbol`` behind a stable app contract.
+
+    Current provider reality: the app has equities NBBO/top-of-book from
+    Alpaca/Polygon, but no true Level II/depth feed. This endpoint therefore
+    returns a one-level depth snapshot derived from ``fetch_quote`` and marks
+    ``is_l2=False``. When a true depth provider is added later, the frontend can
+    keep consuming this shape and receive multiple bid/ask levels.
+    """
+    quote = await fetch_quote(symbol, client_host=client_host)
+    bids = [
+        MarketDepthLevel(
+            price=quote.bid,
+            size=quote.bidSize,
+            venue=quote.bidExchange,
+        )
+    ] if quote.bid > 0 else []
+    asks = [
+        MarketDepthLevel(
+            price=quote.ask,
+            size=quote.askSize,
+            venue=quote.askExchange,
+        )
+    ] if quote.ask > 0 else []
+
+    requested = max(1, min(int(levels or 1), 50))
+    notes = [
+        "Top-of-book quote fallback; not full Level II depth.",
+        "Support/resistance and order blocks remain chart-derived liquidity proxies.",
+    ]
+    if requested > 1:
+        notes.append("Requested multiple levels, but current providers expose only one equity quote level.")
+
+    provider = "demo_quote" if quote.is_demo else "quote_fallback"
+    return MarketDepthSnapshot(
+        symbol=quote.symbol,
+        kind="top_of_book",
+        provider=provider,
+        bids=bids[:1],
+        asks=asks[:1],
+        timestamp=quote.timestamp,
+        is_l2=False,
+        is_demo=quote.is_demo,
+        notes=notes,
+    )
+
+
+def market_depth_capabilities() -> MarketDepthCapabilities:
+    """Describe configured depth capability without exposing credentials."""
+    alpaca_configured = _alpaca_keys_available()
+    polygon_configured = not _polygon_key_empty()
+    return MarketDepthCapabilities(
+        active_kind="top_of_book",
+        true_l2_available=False,
+        providers=[
+            MarketDepthProviderCapability(
+                provider="alpaca",
+                configured=alpaca_configured,
+                equities="top_of_book" if alpaca_configured else "none",
+                notes="Configured Alpaca stock data supplies quotes/trades/bars, not full equity Level II depth.",
+            ),
+            MarketDepthProviderCapability(
+                provider="polygon",
+                configured=polygon_configured,
+                equities="top_of_book" if polygon_configured else "none",
+                notes="Configured Polygon stock data is used for snapshots/bars where available; no true order book is wired.",
+            ),
+            MarketDepthProviderCapability(
+                provider="databento_or_totalview",
+                configured=False,
+                equities="none",
+                notes="Recommended future adapter slot for true equity depth/order-book levels.",
+            ),
+        ],
+        notes=[
+            "The current UI can render depth through this contract, but production data is one-level NBBO.",
+            "Use Databento, Nasdaq TotalView, dxFeed, or a broker/vendor Level II feed to populate kind='level_2'.",
+        ],
+    )

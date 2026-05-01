@@ -88,6 +88,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getPipelinePositions: vi.fn().mockResolvedValue({ positions: [], performance: {} }),
     getPortfolioSummary: vi.fn().mockResolvedValue({ equity: 100000, cash: 95000, buying_power: 200000, total_market_value: 5000, unrealized_pnl: 0, unrealized_pnl_pct: 0, realized_pnl_today: 0, positions_count: 0 }),
     getQuote: vi.fn().mockResolvedValue({ symbol: 'SPY', last: 679, bid: 678.9, ask: 679.1, volume: 1000000, high: 680, low: 678, open: 679, close: 679, change: 0, changePct: 0, timestamp: Date.now() }),
+    getMarketDepth: vi.fn().mockResolvedValue({ symbol: 'SPY', kind: 'top_of_book', provider: 'test', bids: [{ price: 678.9, size: 100 }], asks: [{ price: 679.1, size: 100 }], timestamp: Date.now(), isL2: false, isDemo: false, notes: [] }),
+    getMarketDepthCapabilities: vi.fn().mockResolvedValue({ activeKind: 'top_of_book', trueL2Available: false, providers: [], notes: [] }),
     getBars: vi.fn().mockResolvedValue([]),
     getMarketRegime: vi.fn().mockResolvedValue({ regime: { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16.5, description: 'test' } }),
     getMarketIndices: vi.fn().mockResolvedValue({ indices: [] }),

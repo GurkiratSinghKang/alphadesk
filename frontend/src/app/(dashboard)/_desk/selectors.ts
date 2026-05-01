@@ -324,6 +324,13 @@ export function toQuote(q: MarketQuote | undefined): Quote {
     last: q.last ?? q.close ?? 0,
     change: q.change ?? 0,
     changePct: q.changePct ?? 0,
+    bid: q.bid,
+    ask: q.ask,
+    bidSize: q.bidSize,
+    askSize: q.askSize,
+    bidExchange: q.bidExchange,
+    askExchange: q.askExchange,
+    timestamp: q.timestamp,
   };
 }
 

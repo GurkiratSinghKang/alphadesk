@@ -44,6 +44,21 @@ vi.mock("lightweight-charts", () => ({
   CrosshairMode: { Normal: 0, Magnet: 1 },
 }));
 
+vi.mock("@/lib/api", () => ({
+  getBars: vi.fn().mockResolvedValue([]),
+  getMarketDepth: vi.fn().mockResolvedValue({
+    symbol: "NVDA",
+    kind: "top_of_book",
+    provider: "test",
+    bids: [{ price: 134.8, size: 100 }],
+    asks: [{ price: 134.85, size: 100 }],
+    timestamp: Date.now(),
+    isL2: false,
+    isDemo: false,
+    notes: [],
+  }),
+}));
+
 function expectZeroInlineTracking(container: HTMLElement) {
   const tracked = Array.from(container.querySelectorAll<HTMLElement>("[style*='letter-spacing']"));
   expect(tracked.length).toBeGreaterThan(0);

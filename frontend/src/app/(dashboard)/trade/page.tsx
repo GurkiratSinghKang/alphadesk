@@ -39,6 +39,7 @@ import {
   type StagedOrder,
 } from "@/components/composites";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
+import { barsRequestForRange } from "@/lib/chartRange";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import type { Order } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
@@ -143,19 +144,6 @@ interface PlainEquityPrefill {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-function rangeToLimit(r: ChartRange): number {
-  switch (r) {
-    case "1D": return 2;
-    case "5D": return 5;
-    case "1M": return 22;
-    case "3M": return 66;
-    case "6M": return 132;
-    case "YTD": return 260;
-    case "1Y": return 260;
-    case "ALL": return 1000;
-  }
-}
 
 export default function TradePage() {
   const router = useRouter();
@@ -279,7 +267,8 @@ export default function TradePage() {
     let cancelled = false;
     (async () => {
       try {
-        const bars = await getBars(tradeContextSymbol, "D", rangeToLimit(range));
+        const { timeframe, limit } = barsRequestForRange(range);
+        const bars = await getBars(tradeContextSymbol, timeframe, limit);
         if (!cancelled) setSeries(bars);
       } catch {
         if (!cancelled) setSeries([]);

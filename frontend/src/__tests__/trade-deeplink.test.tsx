@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import TradePage from "@/app/(dashboard)/trade/page";
+import { barsRequestForRange } from "@/lib/chartRange";
 
 function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -126,5 +127,14 @@ describe("Trade page deep-link pre-fill", () => {
         expect(getByLabelText("Order type")).toBeDisabled();
       });
     });
+  });
+});
+
+describe("Trade page chart range data requests", () => {
+  it("uses intraday bars for short ranges so structure overlays have enough data", () => {
+    expect(barsRequestForRange("1D")).toEqual({ timeframe: "5m", limit: 100 });
+    expect(barsRequestForRange("5D")).toEqual({ timeframe: "15m", limit: 160 });
+    expect(barsRequestForRange("1M")).toEqual({ timeframe: "1H", limit: 180 });
+    expect(barsRequestForRange("ALL")).toEqual({ timeframe: "W", limit: 520 });
   });
 });

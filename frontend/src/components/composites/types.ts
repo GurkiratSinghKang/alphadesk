@@ -64,6 +64,13 @@ export interface Quote {
   last: number;
   change: number;
   changePct: number;
+  bid?: number;
+  ask?: number;
+  bidSize?: number;
+  askSize?: number;
+  bidExchange?: string | null;
+  askExchange?: string | null;
+  timestamp?: number;
 }
 
 export interface MetaCells {

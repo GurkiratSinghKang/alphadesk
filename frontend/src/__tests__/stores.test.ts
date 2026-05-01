@@ -4,6 +4,7 @@ import { usePortfolioStore } from '@/stores/portfolio';
 import { useAlertsStore } from '@/stores/alerts';
 import { useUIStore } from '@/stores/ui';
 import { useOptionsStore, type SelectedStrike } from '@/stores/options';
+import type { Quote } from '@/types';
 
 // ─── Market Store ─────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ describe('Market Store', () => {
       last: 150,
       bid: 149.9,
       ask: 150.1,
+      bidSize: 400,
+      askSize: 550,
       change: 1,
       changePct: 0.67,
       volume: 1000000,
@@ -90,6 +93,8 @@ describe('Market Store', () => {
       last: 150,
       bid: 149.9,
       ask: 150.1,
+      bidSize: 400,
+      askSize: 550,
       change: 1,
       changePct: 0.67,
       volume: 1000000,
@@ -104,6 +109,28 @@ describe('Market Store', () => {
     const stored = useMarketStore.getState().quotes['AAPL'];
     expect(stored?.last).toBe(155);
     expect(stored?.bid).toBe(149.9);
+    expect(stored?.bidSize).toBe(400);
+    expect(stored?.askSize).toBe(550);
+  });
+
+  it('updateQuote normalizes ISO timestamps from streaming quotes', () => {
+    useMarketStore.getState().updateQuote({
+      symbol: 'AAPL',
+      last: 150,
+      bid: 149.9,
+      ask: 150.1,
+      change: 0,
+      changePct: 0,
+      volume: 1000000,
+      high: 151,
+      low: 149,
+      open: 149.5,
+      close: 150,
+      timestamp: '2026-04-30T14:30:00Z',
+    } as unknown as Quote);
+    expect(useMarketStore.getState().quotes['AAPL']?.timestamp).toBe(
+      Date.parse('2026-04-30T14:30:00Z'),
+    );
   });
 
   it('updateQuotes stores multiple quotes', () => {

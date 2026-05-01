@@ -17,6 +17,8 @@ from services.market import (  # noqa: F401 — re-exported for tests/back-compa
     ALPACA_TF_MAP,
     ALPACA_TRADING_URL,
     Bar,
+    MarketDepthCapabilities,
+    MarketDepthSnapshot,
     MarketStatus,
     Quote,
     Snapshot,
@@ -29,7 +31,9 @@ from services.market import (  # noqa: F401 — re-exported for tests/back-compa
     _demo_snapshot,
     _is_valid_demo_symbol,
     _polygon_key_empty,
+    fetch_market_depth,
     fetch_quote,
+    market_depth_capabilities,
 )
 
 logger = logging.getLogger(__name__)
@@ -180,6 +184,38 @@ async def get_quote(symbol: str, request: Request, response: Response) -> Quote:
     await _market_rate_limit_or_429(request, response)
 
     return await fetch_quote(symbol, client_host=_client_ip(request))
+
+
+@router.get("/depth/capabilities", response_model=MarketDepthCapabilities)
+async def get_depth_capabilities(
+    request: Request,
+    response: Response,
+) -> MarketDepthCapabilities:
+    """Return depth-provider capability without leaking credential values."""
+    await _market_rate_limit_or_429(request, response)
+    return market_depth_capabilities()
+
+
+@router.get("/depth/{symbol}", response_model=MarketDepthSnapshot)
+async def get_market_depth(
+    symbol: str,
+    request: Request,
+    response: Response,
+    levels: int = Query(10, ge=1, le=50),
+) -> MarketDepthSnapshot:
+    """Fetch depth behind a stable contract.
+
+    Today this returns top-of-book bid/ask from the quote waterfall. The
+    response explicitly marks ``is_l2=False`` until a real depth provider is
+    wired, so chart consumers can render useful context without overstating
+    the data.
+    """
+    await _market_rate_limit_or_429(request, response)
+    return await fetch_market_depth(
+        symbol,
+        levels=levels,
+        client_host=_client_ip(request),
+    )
 
 
 @router.get("/bars/{symbol}", response_model=list[Bar])
@@ -399,6 +435,10 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                         quote=Quote(
                             symbol=symbol.upper(),
                             bid=lq.get("p", 0), ask=lq.get("P", 0),
+                            bidSize=int(lq.get("s") or lq.get("bid_size") or 0),
+                            askSize=int(lq.get("S") or lq.get("ask_size") or 0),
+                            bidExchange=str(lq.get("x") or lq.get("bid_exchange") or "") or None,
+                            askExchange=str(lq.get("X") or lq.get("ask_exchange") or "") or None,
                             last=data.get("lastTrade", {}).get("p", 0),
                             volume=day.get("v", 0),
                             timestamp=datetime.now(timezone.utc),
@@ -450,6 +490,10 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                             symbol=symbol.upper(),
                             bid=lq.get("bp", 0),
                             ask=lq.get("ap", 0),
+                            bidSize=int(lq.get("bs") or 0),
+                            askSize=int(lq.get("as") or 0),
+                            bidExchange=lq.get("bx"),
+                            askExchange=lq.get("ax"),
                             last=lt.get("p", 0),
                             volume=int(daily.get("v", 0)),
                             timestamp=now,
@@ -621,6 +665,10 @@ def _alpaca_snapshot_to_model(symbol: str, data: dict) -> Snapshot | None:
             symbol=symbol,
             bid=lq.get("bp", 0) or 0,
             ask=lq.get("ap", 0) or 0,
+            bidSize=int(lq.get("bs") or 0),
+            askSize=int(lq.get("as") or 0),
+            bidExchange=lq.get("bx"),
+            askExchange=lq.get("ax"),
             last=lt.get("p", 0) or 0,
             volume=int(daily.get("v", 0) or 0),
             timestamp=now,

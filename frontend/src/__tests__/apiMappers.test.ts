@@ -18,6 +18,8 @@ import {
   getMarketIndices,
   searchSymbols,
   getQuote,
+  getMarketDepth,
+  getMarketDepthCapabilities,
   getBars,
   getSnapshot,
   screenStocks,
@@ -654,13 +656,31 @@ describe('searchSymbols', () => {
 // ─── getQuote ─────────────────────────────────────────────────────────────────
 
 describe('getQuote', () => {
-  it('returns quote data unchanged', async () => {
-    const payload = { symbol: 'AAPL', last: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
+  it('preserves top-of-book fields and normalizes timestamp', async () => {
+    const payload = {
+      symbol: 'AAPL',
+      last: 175,
+      bid: 174.9,
+      ask: 175.1,
+      bidSize: 700,
+      askSize: 500,
+      bidExchange: 'V',
+      askExchange: 'Q',
+      volume: 80000000,
+      change: 2,
+      changePct: 1.15,
+      timestamp: '2026-04-30T14:30:00Z',
+    };
     mockFetch.mockReturnValueOnce(ok(payload));
 
     const result = await getQuote('AAPL');
     expect(result.symbol).toBe('AAPL');
     expect(result.last).toBe(175);
+    expect(result.bidSize).toBe(700);
+    expect(result.askSize).toBe(500);
+    expect(result.bidExchange).toBe('V');
+    expect(result.askExchange).toBe('Q');
+    expect(result.timestamp).toBe(Date.parse('2026-04-30T14:30:00Z'));
   });
 });
 
@@ -745,13 +765,26 @@ describe('getBars', () => {
 
 describe('getSnapshot', () => {
   it('returns a map of symbol to quote', async () => {
-    const aaplQuote = { symbol: 'AAPL', last: 175, bid: 174.9, ask: 175.1, volume: 80000000, change: 2, changePct: 1.15 };
+    const aaplQuote = {
+      symbol: 'AAPL',
+      last: 175,
+      bid: 174.9,
+      ask: 175.1,
+      bidSize: 600,
+      askSize: 900,
+      volume: 80000000,
+      change: 2,
+      changePct: 1.15,
+      timestamp: '2026-04-30T14:31:00Z',
+    };
     const msftQuote = { symbol: 'MSFT', last: 380, bid: 379.5, ask: 380.5, volume: 30000000, change: 1, changePct: 0.26 };
     mockFetch.mockReturnValueOnce(ok(aaplQuote));
     mockFetch.mockReturnValueOnce(ok(msftQuote));
 
     const result = await getSnapshot(['AAPL', 'MSFT']);
     expect(result['AAPL'].last).toBe(175);
+    expect(result['AAPL'].bidSize).toBe(600);
+    expect(result['AAPL'].timestamp).toBe(Date.parse('2026-04-30T14:31:00Z'));
     expect(result['MSFT'].last).toBe(380);
   });
 
@@ -768,6 +801,48 @@ describe('getSnapshot', () => {
     const result = await getSnapshot([]);
     expect(result).toEqual({});
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── getMarketDepth ──────────────────────────────────────────────────────────
+
+describe('getMarketDepth', () => {
+  it('maps snake_case backend depth payload into frontend shape', async () => {
+    mockFetch.mockReturnValueOnce(ok({
+      symbol: 'AAPL',
+      kind: 'top_of_book',
+      provider: 'quote_fallback',
+      bids: [{ price: 174.9, size: 700, venue: 'V' }],
+      asks: [{ price: 175.1, size: 500, venue: 'Q' }],
+      timestamp: '2026-04-30T14:32:00Z',
+      is_l2: false,
+      is_demo: false,
+      notes: ['Top-of-book quote fallback; not full Level II depth.'],
+    }));
+
+    const result = await getMarketDepth('aapl', 5);
+    expect(result.symbol).toBe('AAPL');
+    expect(result.provider).toBe('quote_fallback');
+    expect(result.bids[0]).toEqual({ price: 174.9, size: 700, venue: 'V' });
+    expect(result.asks[0]).toEqual({ price: 175.1, size: 500, venue: 'Q' });
+    expect(result.timestamp).toBe(Date.parse('2026-04-30T14:32:00Z'));
+    expect(result.isL2).toBe(false);
+  });
+});
+
+describe('getMarketDepthCapabilities', () => {
+  it('maps backend capability flags into frontend shape', async () => {
+    mockFetch.mockReturnValueOnce(ok({
+      active_kind: 'top_of_book',
+      true_l2_available: false,
+      providers: [{ provider: 'alpaca', configured: true, equities: 'top_of_book', notes: 'quotes only' }],
+      notes: ['adapter ready'],
+    }));
+
+    const result = await getMarketDepthCapabilities();
+    expect(result.activeKind).toBe('top_of_book');
+    expect(result.trueL2Available).toBe(false);
+    expect(result.providers[0].provider).toBe('alpaca');
   });
 });
 

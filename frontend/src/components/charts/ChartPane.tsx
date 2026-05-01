@@ -4,13 +4,14 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { TradingChart } from "@/components/charts/TradingChart";
-import type { ChartType, Indicator, OHLCVBar } from "@/types";
+import type { ChartType, Indicator, MarketDepthSnapshot, OHLCVBar } from "@/types";
 import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
 import { useChartDrawings } from "@/hooks/useChartDrawings";
 import { useMarketStore } from "@/stores/market";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
 import VolumeProfile from "@/components/primitives/VolumeProfile";
+import { deriveMarketStructure } from "@/lib/marketStructure";
 
 /**
  * ChartPane — dashboard chart surface (2026-04-20 redesign)
@@ -42,12 +43,28 @@ import VolumeProfile from "@/components/primitives/VolumeProfile";
 
 export interface ChartPaneProps {
   data: OHLCVBar[];
+  topOfBook?: TopOfBookQuote | null;
+  marketDepth?: MarketDepthSnapshot | null;
   /** Empty-state + error-state are handled by the parent so ChartPane
    *  stays focused on the live-data path. */
   isLoading?: boolean;
   error?: boolean;
   onRetry?: () => void;
   className?: string;
+}
+
+export interface TopOfBookQuote {
+  bid?: number | null;
+  ask?: number | null;
+  bidSize?: number | null;
+  askSize?: number | null;
+  bidExchange?: string | null;
+  askExchange?: string | null;
+  timestamp?: number | string | null;
+  source?: string | null;
+  isL2?: boolean;
+  kind?: "top_of_book" | "level_2";
+  depthLevels?: number;
 }
 
 const TYPES: { id: ChartType; label: string; icon: React.ReactNode }[] = [
@@ -178,8 +195,108 @@ function readDrawingColor(): string {
   return (v && v.trim()) || "#e0c070";
 }
 
+function formatStructurePrice(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  if (Math.abs(v) >= 1000) return v.toFixed(0);
+  if (Math.abs(v) >= 100) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function formatBookPrice(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  return v.toFixed(2);
+}
+
+function formatBookSize(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v) || v <= 0) return "—";
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
+function toFiniteNumber(v: unknown): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+interface NormalizedTopOfBook {
+  bid: number;
+  ask: number;
+  bidSize: number;
+  askSize: number;
+  bidExchange?: string | null;
+  askExchange?: string | null;
+  spread: number;
+  spreadBps: number;
+  imbalancePct: number | null;
+  source: string;
+  isL2: boolean;
+  kind: "top_of_book" | "level_2";
+  depthLevels: number;
+}
+
+function depthToTopOfBook(depth: MarketDepthSnapshot | null | undefined): TopOfBookQuote | null {
+  const bid = depth?.bids?.[0];
+  const ask = depth?.asks?.[0];
+  if (!depth || !bid || !ask) return null;
+  return {
+    bid: bid.price,
+    ask: ask.price,
+    bidSize: bid.size,
+    askSize: ask.size,
+    bidExchange: bid.venue,
+    askExchange: ask.venue,
+    timestamp: depth.timestamp,
+    source: depth.provider,
+    isL2: depth.isL2,
+    kind: depth.kind,
+    depthLevels: Math.min(depth.bids.length, depth.asks.length),
+  };
+}
+
+function normalizeTopOfBook(q: TopOfBookQuote | null | undefined): NormalizedTopOfBook | null {
+  const bid = toFiniteNumber(q?.bid);
+  const ask = toFiniteNumber(q?.ask);
+  if (bid == null || ask == null || bid <= 0 || ask <= 0 || ask < bid) return null;
+  const bidSize = Math.max(0, Math.round(toFiniteNumber(q?.bidSize) ?? 0));
+  const askSize = Math.max(0, Math.round(toFiniteNumber(q?.askSize) ?? 0));
+  const spread = ask - bid;
+  const mid = (ask + bid) / 2;
+  const totalSize = bidSize + askSize;
+  return {
+    bid,
+    ask,
+    bidSize,
+    askSize,
+    bidExchange: q?.bidExchange,
+    askExchange: q?.askExchange,
+    spread,
+    spreadBps: mid > 0 ? (spread / mid) * 10_000 : 0,
+    imbalancePct: totalSize > 0 ? (bidSize / totalSize) * 100 : null,
+    source: q?.source ?? "quote",
+    isL2: Boolean(q?.isL2),
+    kind: q?.kind === "level_2" ? "level_2" : "top_of_book",
+    depthLevels: Math.max(1, Math.round(toFiniteNumber(q?.depthLevels) ?? 1)),
+  };
+}
+
+const STRUCTURE_COLORS = {
+  support: "rgba(46, 169, 143, 0.72)",
+  resistance: "rgba(200, 92, 92, 0.72)",
+  demand: "rgba(45, 126, 115, 0.78)",
+  supply: "rgba(142, 70, 93, 0.78)",
+  poc: "#c9a66b",
+};
+
+const BOOK_COLORS = {
+  bid: "rgba(46, 169, 143, 0.86)",
+  ask: "rgba(210, 110, 82, 0.86)",
+};
+
 export default function ChartPane({
   data,
+  topOfBook,
+  marketDepth,
   isLoading,
   error,
   onRetry,
@@ -226,10 +343,14 @@ export default function ChartPane({
     );
   }, [chartType, indicators]);
 
-  // Slice-17 / VPF-1 (2026 design brief, Quantower / GoCharting): volume
-  // profile toggle. Off by default; renders a translucent vertical
-  // histogram on the right edge of the chart canvas when on.
-  const [volumeProfileOn, setVolumeProfileOn] = React.useState(false);
+  // Market-structure layer: truthful liquidity context with the data we
+  // actually have. There is no L2/depth endpoint in the app today, so this
+  // ships as a volume-at-price liquidity proxy plus inferred S/R ranges and
+  // high-volume supply/demand blocks from OHLCV bars.
+  const [topOfBookOn, setTopOfBookOn] = React.useState(true);
+  const [liquidityProfileOn, setLiquidityProfileOn] = React.useState(true);
+  const [structureZonesOn, setStructureZonesOn] = React.useState(true);
+  const [orderBlocksOn, setOrderBlocksOn] = React.useState(true);
 
   // Slice-14 / AVWAP-1 (2026 design brief, Quantower / TradingView power-tool):
   // anchored VWAP. ``avwapAnchor`` is the bar index from which the
@@ -344,6 +465,46 @@ export default function ChartPane({
         ? data.slice(0, Math.min(Math.max(replayCursor, 1), data.length))
         : data,
     [data, replayEnabled, replayCursor],
+  );
+
+  const marketStructure = React.useMemo(
+    () => deriveMarketStructure(visibleData, { maxZones: 6, maxBlocks: 3, binCount: 32 }),
+    [visibleData],
+  );
+
+  const effectiveTopOfBook = React.useMemo(
+    () => depthToTopOfBook(marketDepth) ?? topOfBook,
+    [
+      marketDepth?.provider,
+      marketDepth?.kind,
+      marketDepth?.isL2,
+      marketDepth?.timestamp,
+      marketDepth?.bids?.[0]?.price,
+      marketDepth?.bids?.[0]?.size,
+      marketDepth?.bids?.[0]?.venue,
+      marketDepth?.asks?.[0]?.price,
+      marketDepth?.asks?.[0]?.size,
+      marketDepth?.asks?.[0]?.venue,
+      marketDepth?.bids?.length,
+      marketDepth?.asks?.length,
+      topOfBook,
+    ],
+  );
+
+  const topBook = React.useMemo(
+    () => normalizeTopOfBook(effectiveTopOfBook),
+    [
+      effectiveTopOfBook?.bid,
+      effectiveTopOfBook?.ask,
+      effectiveTopOfBook?.bidSize,
+      effectiveTopOfBook?.askSize,
+      effectiveTopOfBook?.bidExchange,
+      effectiveTopOfBook?.askExchange,
+      effectiveTopOfBook?.source,
+      effectiveTopOfBook?.isL2,
+      effectiveTopOfBook?.kind,
+      effectiveTopOfBook?.depthLevels,
+    ],
   );
 
   // Drawing state machine: `firstPoint` is set on the first click of a
@@ -526,6 +687,138 @@ export default function ChartPane({
     return drawings;
   }, [drawings, activeTool, firstPoint, hoverPoint]);
 
+  const marketStructureDrawings = React.useMemo<Drawing[]>(() => {
+    if (visibleData.length < 2) return [];
+    const firstTime = visibleData[0].time;
+    const lastTime = visibleData[visibleData.length - 1].time;
+    const zoneDrawings: Drawing[] = [];
+
+    if (structureZonesOn) {
+      for (const zone of marketStructure.zones) {
+        const color = zone.kind === "support"
+          ? STRUCTURE_COLORS.support
+          : STRUCTURE_COLORS.resistance;
+        zoneDrawings.push({
+          id: `market-structure:${zone.id}`,
+          kind: "rect",
+          points: zone.kind === "support"
+            ? [
+                { time: firstTime, price: zone.lower },
+                { time: lastTime, price: zone.upper },
+              ]
+            : [
+                { time: firstTime, price: zone.upper },
+                { time: lastTime, price: zone.lower },
+              ],
+          color,
+          createdAt: 0,
+        });
+      }
+    }
+
+    if (orderBlocksOn) {
+      for (const block of marketStructure.orderBlocks) {
+        const color = block.kind === "demand"
+          ? STRUCTURE_COLORS.demand
+          : STRUCTURE_COLORS.supply;
+        zoneDrawings.push({
+          id: `market-block:${block.id}`,
+          kind: "rect",
+          points: block.kind === "demand"
+            ? [
+                { time: block.originTime, price: block.lower },
+                { time: block.endTime, price: block.upper },
+              ]
+            : [
+                { time: block.originTime, price: block.upper },
+                { time: block.endTime, price: block.lower },
+              ],
+          color,
+          createdAt: 0,
+        });
+      }
+    }
+
+    return zoneDrawings;
+  }, [marketStructure.orderBlocks, marketStructure.zones, orderBlocksOn, structureZonesOn, visibleData]);
+
+  const bookPriceLines = React.useMemo(() => {
+    if (!topOfBookOn || !topBook) return [];
+    return [
+      {
+        price: topBook.bid,
+        color: BOOK_COLORS.bid,
+        label: `Bid ${formatBookPrice(topBook.bid)} x${formatBookSize(topBook.bidSize)}`,
+      },
+      {
+        price: topBook.ask,
+        color: BOOK_COLORS.ask,
+        label: `Ask ${formatBookPrice(topBook.ask)} x${formatBookSize(topBook.askSize)}`,
+      },
+    ];
+  }, [topBook, topOfBookOn]);
+
+  const structurePriceLines = React.useMemo(() => {
+    const lines: Array<{ price: number; color: string; label?: string }> = [];
+
+    if (liquidityProfileOn) {
+      const poc = marketStructure.profile.find((bin) => bin.isPoc);
+      if (poc) {
+        lines.push({
+          price: poc.mid,
+          color: STRUCTURE_COLORS.poc,
+          label: `POC ${formatStructurePrice(poc.mid)}`,
+        });
+      }
+    }
+
+    if (structureZonesOn) {
+      for (const zone of marketStructure.zones) {
+        const label = zone.kind === "support" ? "Support" : "Resistance";
+        lines.push({
+          price: zone.mid,
+          color: zone.kind === "support"
+            ? STRUCTURE_COLORS.support
+            : STRUCTURE_COLORS.resistance,
+          label: `${label} ${formatStructurePrice(zone.lower)}-${formatStructurePrice(zone.upper)}`,
+        });
+      }
+    }
+
+    if (orderBlocksOn) {
+      for (const block of marketStructure.orderBlocks) {
+        const mid = (block.lower + block.upper) / 2;
+        const label = block.kind === "demand" ? "Demand block" : "Supply block";
+        lines.push({
+          price: mid,
+          color: block.kind === "demand"
+            ? STRUCTURE_COLORS.demand
+            : STRUCTURE_COLORS.supply,
+          label: `${label} ${block.relativeVolume.toFixed(1)}x vol`,
+        });
+      }
+    }
+
+    return lines;
+  }, [
+    liquidityProfileOn,
+    marketStructure.orderBlocks,
+    marketStructure.profile,
+    marketStructure.zones,
+    orderBlocksOn,
+    structureZonesOn,
+  ]);
+
+  const chartPriceLines = React.useMemo(
+    () => [...bookPriceLines, ...structurePriceLines],
+    [bookPriceLines, structurePriceLines],
+  );
+
+  const chartDrawings = React.useMemo<Drawing[]>(
+    () => [...marketStructureDrawings, ...drawingsWithPreview],
+    [drawingsWithPreview, marketStructureDrawings],
+  );
+
   const drawMode = activeTool !== "cursor";
 
   const toggleIndicator = (i: Indicator) => {
@@ -652,18 +945,43 @@ export default function ChartPane({
             )}
           </div>
 
-          {/* Slice-17 / VPF-1: Volume Profile toggle. Renders a vertical
-              histogram of volume-at-price on the right edge of the
-              canvas with Point of Control + Value Area highlighted. */}
           <button
             type="button"
-            onClick={() => setVolumeProfileOn((v) => !v)}
-            aria-pressed={volumeProfileOn}
-            title={volumeProfileOn ? "Hide volume profile" : "Show volume profile (POC + Value Area)"}
+            onClick={() => setTopOfBookOn((v) => !v)}
+            aria-pressed={topOfBookOn}
+            title={
+              topBook
+                ? topBook.isL2
+                  ? "Show order-book best bid/ask and depth context"
+                  : "Show top-of-book bid/ask lines and spread (not full Level II depth)"
+                : "Top-of-book bid/ask unavailable for this symbol"
+            }
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
               "font-sans text-xs font-medium uppercase tracking-[0.08em]",
-              volumeProfileOn
+              topOfBookOn && topBook
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 3h5M2 6h8M2 9h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M8.7 2.4v2.2M8.7 7.4v2.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" opacity="0.65" />
+            </svg>
+            <span>Book</span>
+          </button>
+
+          {/* Market structure controls. Profile is a volume-at-price
+              liquidity proxy; S/R and Blocks are inferred from OHLCV. */}
+          <button
+            type="button"
+            onClick={() => setLiquidityProfileOn((v) => !v)}
+            aria-pressed={liquidityProfileOn}
+            title={liquidityProfileOn ? "Hide volume-at-price estimate" : "Show volume-at-price estimate (POC + Value Area, not live depth)"}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              liquidityProfileOn
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
             )}
@@ -674,6 +992,52 @@ export default function ChartPane({
               <rect x="2" y="7" width="4" height="1.4" fill="currentColor" />
             </svg>
             <span>Profile</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStructureZonesOn((v) => !v)}
+            aria-pressed={structureZonesOn}
+            title={structureZonesOn ? "Hide support/resistance ranges" : "Show support/resistance ranges"}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              structureZonesOn
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M1.5 3.5h9M1.5 8.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M2.5 3.5c1.4-1.2 2.6-1.2 4 0s2.6 1.2 3.5 0M2.5 8.5c1.4 1.2 2.6 1.2 4 0s2.6-1.2 3.5 0" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
+            </svg>
+            <span>S/R</span>
+            <span className="font-mono tabular-nums text-fg-muted">
+              {marketStructure.zones.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOrderBlocksOn((v) => !v)}
+            aria-pressed={orderBlocksOn}
+            title={orderBlocksOn ? "Hide inferred high-volume supply/demand zones" : "Show inferred high-volume supply/demand zones"}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
+              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              orderBlocksOn
+                ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
+                : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+            )}
+          >
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="2" y="2.5" width="8" height="2.4" rx="0.4" fill="currentColor" opacity="0.55" />
+              <rect x="3" y="6.8" width="6" height="2.7" rx="0.4" fill="currentColor" />
+            </svg>
+            <span>Blocks</span>
+            <span className="font-mono tabular-nums text-fg-muted">
+              {marketStructure.orderBlocks.length}
+            </span>
           </button>
 
           {/* Slice-14 / AVWAP-1: anchored-VWAP toolbar button.
@@ -902,7 +1266,10 @@ export default function ChartPane({
               {compareSymbols.length > 0 && (
                 <div
                   data-slot="chart-compare-chips"
-                  className="absolute right-3 top-3 z-10 flex flex-col items-end gap-1"
+                  className={cn(
+                    "absolute right-3 z-10 flex flex-col items-end gap-1",
+                    topOfBookOn && topBook ? "top-20" : "top-3",
+                  )}
                 >
                   {compareSymbols.map((sym, idx) => {
                     const palette = ["#5b8def", "#a07550", "#e07856", "#a8d04d"];
@@ -929,17 +1296,30 @@ export default function ChartPane({
                   })}
                 </div>
               )}
+              {topOfBookOn && topBook && (
+                <div
+                  data-slot="chart-top-book-overlay"
+                  className="pointer-events-none absolute right-3 top-3 z-10 w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md"
+                >
+                  <TopOfBookReadout book={topBook} />
+                </div>
+              )}
               {/* Slice-17 / VPF-1: volume profile overlay. Sits to the
                   right of the price axis at low opacity so it doesn't
                   fight the candles for visual weight. POC bin is
                   brand-gold; Value Area bins are lighter; rest are
                   muted border-color. */}
-              {volumeProfileOn && (
+              {liquidityProfileOn && (
                 <div
                   data-slot="chart-volume-profile-overlay"
                   className="pointer-events-none absolute right-12 top-3 bottom-12 z-10 opacity-70"
                 >
-                  <VolumeProfile bars={visibleData} height={300} width={70} />
+                  <VolumeProfile
+                    bars={visibleData}
+                    height={300}
+                    width={70}
+                    label="Volume-at-price estimate"
+                  />
                 </div>
               )}
               <TradingChart
@@ -949,7 +1329,8 @@ export default function ChartPane({
                 anchoredVwapIndex={avwapAnchor}
                 indicators={indicators}
                 drawMode={drawMode}
-                drawings={drawingsWithPreview}
+                drawings={chartDrawings}
+                drawingPriceLines={chartPriceLines}
                 onChartClick={handleChartClick}
                 onDrawCrosshair={setHoverPoint}
                 // Round-12 / CH-2 (P1): wire OHLC hover to the overlay below.
@@ -980,6 +1361,36 @@ export default function ChartPane({
                   indicators={indicators}
                 />
               </div>
+              {((topOfBookOn && topBook) || liquidityProfileOn || structureZonesOn || orderBlocksOn) && (
+                <div
+                  data-slot="market-structure-summary"
+                  className="pointer-events-none absolute left-3 bottom-3 z-10 max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[10.5px] text-[color:var(--fg-muted)] backdrop-blur-md"
+                >
+                  <span className="text-[color:var(--fg)]">Structure map</span>
+                  {topOfBookOn && topBook && (
+                    <>
+                      <span className="mx-1.5 text-[color:var(--border-strong)]">·</span>
+                      <span>top book spread {formatBookPrice(topBook.spread)}</span>
+                    </>
+                  )}
+                  <span className="mx-1.5 text-[color:var(--border-strong)]">·</span>
+                  <span>{marketStructure.hasVolume ? "volume proxy" : "price-only"}</span>
+                  {structureZonesOn && (
+                    <>
+                      <span className="mx-1.5 text-[color:var(--border-strong)]">·</span>
+                      <span>{marketStructure.zones.length} S/R ranges</span>
+                    </>
+                  )}
+                  {orderBlocksOn && (
+                    <>
+                      <span className="mx-1.5 text-[color:var(--border-strong)]">·</span>
+                      <span>{marketStructure.orderBlocks.length} blocks</span>
+                    </>
+                  )}
+                  <span className="mx-1.5 text-[color:var(--border-strong)]">·</span>
+                  <span>{topBook?.isL2 ? "live L2 depth" : "not live L2 depth"}</span>
+                </div>
+              )}
               {/* Slice-8 / CH-3D: Bar Replay control strip — appears at
                   the bottom-right of the canvas when replay mode is on.
                   Mirrors TradingView's playback controls: ⏮ rewind 10
@@ -1135,6 +1546,60 @@ export default function ChartPane({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Top-of-book overlay ─────────────────────────────────────────────────────
+
+function TopOfBookReadout({ book }: { book: NormalizedTopOfBook }) {
+  const imbalanceLabel =
+    book.imbalancePct == null
+      ? "size unknown"
+      : book.imbalancePct >= 56
+        ? `bid heavy ${book.imbalancePct.toFixed(0)}%`
+        : book.imbalancePct <= 44
+          ? `ask heavy ${(100 - book.imbalancePct).toFixed(0)}%`
+          : "balanced";
+  return (
+    <div className="flex flex-col gap-1 leading-tight">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--fg)]">
+          {book.isL2 ? `Depth ${book.depthLevels}` : "Top book"}
+        </span>
+        <span className="text-[color:var(--fg-hint)]">
+          {book.isL2 ? book.source : "NBBO quote only"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 tabular-nums">
+        <div className="rounded border border-[color:var(--profit)]/30 bg-[color:var(--profit)]/10 px-1.5 py-1">
+          <div className="text-[color:var(--profit)]">Bid</div>
+          <div className="text-[color:var(--fg)]">{formatBookPrice(book.bid)}</div>
+          <div className="text-[color:var(--fg-hint)]">
+            x{formatBookSize(book.bidSize)}
+            {book.bidExchange ? ` · ${book.bidExchange}` : ""}
+          </div>
+        </div>
+        <div className="rounded border border-[color:var(--loss)]/30 bg-[color:var(--loss)]/10 px-1.5 py-1">
+          <div className="text-[color:var(--loss)]">Ask</div>
+          <div className="text-[color:var(--fg)]">{formatBookPrice(book.ask)}</div>
+          <div className="text-[color:var(--fg-hint)]">
+            x{formatBookSize(book.askSize)}
+            {book.askExchange ? ` · ${book.askExchange}` : ""}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 text-[color:var(--fg-hint)] tabular-nums">
+        <span>
+          spread {formatBookPrice(book.spread)} · {book.spreadBps.toFixed(1)} bp
+        </span>
+        <span>{imbalanceLabel}</span>
+      </div>
+      {!book.isL2 && book.source !== "quote" && (
+        <div className="text-[color:var(--fg-hint)]">
+          source {book.source} · depth adapter ready
+        </div>
+      )}
     </div>
   );
 }

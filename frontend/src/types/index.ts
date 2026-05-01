@@ -5,6 +5,10 @@ export interface Quote {
   last: number;
   bid: number;
   ask: number;
+  bidSize?: number;
+  askSize?: number;
+  bidExchange?: string | null;
+  askExchange?: string | null;
   change: number;
   changePct: number;
   volume: number;
@@ -22,6 +26,38 @@ export interface OHLCVBar {
   low: number;
   close: number;
   volume: number;
+}
+
+export interface MarketDepthLevel {
+  price: number;
+  size: number;
+  venue?: string | null;
+}
+
+export interface MarketDepthSnapshot {
+  symbol: string;
+  kind: "top_of_book" | "level_2";
+  provider: string;
+  bids: MarketDepthLevel[];
+  asks: MarketDepthLevel[];
+  timestamp: number;
+  isL2: boolean;
+  isDemo?: boolean;
+  notes: string[];
+}
+
+export interface MarketDepthProviderCapability {
+  provider: string;
+  configured: boolean;
+  equities: "none" | "top_of_book" | "level_2";
+  notes: string;
+}
+
+export interface MarketDepthCapabilities {
+  activeKind: "top_of_book" | "level_2";
+  trueL2Available: boolean;
+  providers: MarketDepthProviderCapability[];
+  notes: string[];
 }
 
 // ─── Portfolio ────────────────────────────────────────────────

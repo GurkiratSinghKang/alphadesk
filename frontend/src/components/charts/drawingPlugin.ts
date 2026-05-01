@@ -177,11 +177,12 @@ function drawRect(
   priceDelta: number,
   hPx: number,
 ): void {
-  // Directional tint: upward selection uses up-500, downward uses down-500.
-  // The rectangle is a zone of interest so the sign carries meaning.
+  // Honor supplied colors so system zones can carry distinct semantics.
+  // If a caller ever omits color, fall back to the historical directional
+  // up/down tint.
   const up = readToken("--up-500", "#a8d04d");
   const down = readToken("--down-500", "#e07856");
-  const stroke = priceDelta >= 0 ? up : down;
+  const stroke = fallbackColor || (priceDelta >= 0 ? up : down);
   const x = Math.min(x1, x2);
   const y = Math.min(y1, y2);
   const w = Math.abs(x2 - x1);

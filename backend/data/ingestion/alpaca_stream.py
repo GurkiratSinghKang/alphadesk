@@ -393,18 +393,33 @@ async def _run_stream() -> None:
                             sym = msg["S"]
                             bid = msg.get("bp", 0)
                             ask = msg.get("ap", 0)
-                            _last_quotes[sym] = {"bid": bid, "ask": ask}
+                            bid_size = int(msg.get("bs", 0) or 0)
+                            ask_size = int(msg.get("as", 0) or 0)
+                            prev = _last_quotes.get(sym, {})
+                            prev.update({
+                                "bid": bid,
+                                "ask": ask,
+                                "bidSize": bid_size,
+                                "askSize": ask_size,
+                                "bidExchange": msg.get("bx"),
+                                "askExchange": msg.get("ax"),
+                            })
+                            _last_quotes[sym] = prev
                             _last_quote_seen_at[sym] = time.monotonic()
                             # Only publish bid/ask updates if we have a last trade price
                             # The "last" price is only updated by trade messages below
-                            last_trade = _last_quotes.get(sym, {}).get("last_trade", 0)
+                            last_trade = prev.get("last_trade", 0)
                             if last_trade > 0:
                                 await _maybe_publish("quotes", sym, last_trade, {
                                     "symbol": sym,
                                     "bid": bid,
                                     "ask": ask,
+                                    "bidSize": prev.get("bidSize", 0),
+                                    "askSize": prev.get("askSize", 0),
+                                    "bidExchange": prev.get("bidExchange"),
+                                    "askExchange": prev.get("askExchange"),
                                     "last": last_trade,
-                                    "volume": (msg.get("bs", 0) + msg.get("as", 0)),
+                                    "volume": bid_size + ask_size,
                                     "timestamp": msg.get("t", ""),
                                 })
 
@@ -420,6 +435,10 @@ async def _run_stream() -> None:
                                 "symbol": sym,
                                 "bid": prev.get("bid", 0),
                                 "ask": prev.get("ask", 0),
+                                "bidSize": prev.get("bidSize", 0),
+                                "askSize": prev.get("askSize", 0),
+                                "bidExchange": prev.get("bidExchange"),
+                                "askExchange": prev.get("askExchange"),
                                 "last": trade_price,
                                 "volume": msg.get("s", 0),
                                 "timestamp": msg.get("t", ""),

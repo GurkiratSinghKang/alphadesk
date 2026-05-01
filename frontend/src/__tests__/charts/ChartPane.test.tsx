@@ -35,4 +35,71 @@ describe("ChartPane — drawing tools rail", () => {
     const textBtn = screen.getByRole("button", { name: /text/i });
     expect((textBtn as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("exposes truthful market-structure layer toggles", () => {
+    renderWithQuery(<ChartPane data={bars} />);
+    const profile = screen.getByRole("button", { name: /profile/i });
+    const zones = screen.getByRole("button", { name: /s\/r/i });
+    const blocks = screen.getByRole("button", { name: /blocks/i });
+
+    expect(profile.getAttribute("aria-pressed")).toBe("true");
+    expect(zones.getAttribute("aria-pressed")).toBe("true");
+    expect(blocks.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(zones);
+    expect(zones.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("renders a top-of-book layer without presenting it as full depth", () => {
+    renderWithQuery(
+      <ChartPane
+        data={bars}
+        topOfBook={{
+          bid: 100.1,
+          ask: 100.25,
+          bidSize: 800,
+          askSize: 1200,
+          bidExchange: "V",
+          askExchange: "Q",
+        }}
+      />,
+    );
+
+    const book = screen.getByRole("button", { name: /book/i });
+    expect(book.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryAllByText(/top book/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/NBBO quote only/i)).not.toBeNull();
+
+    fireEvent.click(book);
+    expect(book.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByText(/NBBO quote only/i)).toBeNull();
+  });
+
+  it("can consume the market-depth contract when a provider supplies it", () => {
+    renderWithQuery(
+      <ChartPane
+        data={bars}
+        marketDepth={{
+          symbol: "AAPL",
+          kind: "level_2",
+          provider: "databento",
+          bids: [
+            { price: 100.1, size: 800, venue: "XNAS" },
+            { price: 100.05, size: 400, venue: "EDGX" },
+          ],
+          asks: [
+            { price: 100.25, size: 1200, venue: "XNAS" },
+            { price: 100.3, size: 300, venue: "EDGX" },
+          ],
+          timestamp: Date.now(),
+          isL2: true,
+          notes: [],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText(/Depth 2/i)).not.toBeNull();
+    expect(screen.queryByText(/databento/i)).not.toBeNull();
+    expect(screen.queryByText(/NBBO quote only/i)).toBeNull();
+  });
 });
