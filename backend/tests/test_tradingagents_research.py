@@ -90,7 +90,35 @@ def test_normalize_public_record_backfills_new_fields(monkeypatch: pytest.Monkey
     assert normalized is not None
     assert normalized["analysts"] == ["market", "social", "news", "fundamentals"]
     assert normalized["progress_message"] is None
-    assert normalized["timeout_s"] == 600
+    assert normalized["timeout_s"] == 1800
+
+
+def test_effective_timeout_expands_for_full_anthropic_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_TIMEOUT_S", 600)
+
+    timeout_s = svc._effective_timeout_s(
+        {
+            "provider": "anthropic",
+            "analysts": ["market", "social", "news", "fundamentals"],
+            "research_depth": 1,
+        }
+    )
+
+    assert timeout_s == 1800
+
+
+def test_effective_timeout_respects_higher_operator_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_TIMEOUT_S", 2400)
+
+    timeout_s = svc._effective_timeout_s(
+        {
+            "provider": "anthropic",
+            "analysts": ["market"],
+            "research_depth": 1,
+        }
+    )
+
+    assert timeout_s == 2400
 
 
 @pytest.mark.asyncio
@@ -129,6 +157,7 @@ async def test_start_run_queues_and_deduplicates(monkeypatch: pytest.MonkeyPatch
     )
 
     assert first["status"] == "queued"
+    assert first["timeout_s"] >= 600
     assert second["run_id"] == first["run_id"]
     assert len(scheduled) == 1
 

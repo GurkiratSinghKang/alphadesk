@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import signal
 import sys
 import time
 from datetime import date, datetime, timezone
@@ -53,6 +54,9 @@ _RUN_TTL_SECONDS = 7 * 24 * 60 * 60
 _INMEM_RUNS: dict[str, dict[str, Any]] = {}
 _INMEM_USER_RUNS: dict[str, list[str]] = {}
 _DEFAULT_SKILL_HOME = Path("~/.cache/tradingagents-skill").expanduser()
+_MIN_SUBPROCESS_TIMEOUT_S = 30
+_FULL_GRAPH_TIMEOUT_FLOOR_S = 1_800
+_MAX_RUN_TIMEOUT_S = 7_200
 
 
 class TradingAgentsRunError(RuntimeError):
@@ -227,7 +231,13 @@ def get_tradingagents_runtime_status() -> dict[str, Any]:
         "quick_model": default_quick,
         "supported_analysts": list(SUPPORTED_ANALYSTS),
         "output_language": settings.TRADINGAGENTS_OUTPUT_LANGUAGE or "English",
-        "timeout_s": settings.TRADINGAGENTS_TIMEOUT_S,
+        "timeout_s": _effective_timeout_s(
+            {
+                "provider": provider,
+                "analysts": list(SUPPORTED_ANALYSTS),
+                "research_depth": 1,
+            }
+        ),
         "runs_per_hour": settings.TRADINGAGENTS_RUNS_PER_HOUR,
         "history_limit": settings.TRADINGAGENTS_HISTORY_LIMIT,
         "warnings": warnings,
@@ -336,6 +346,26 @@ def build_command(record: dict[str, Any]) -> list[str]:
     ]
 
 
+def _effective_timeout_s(record: dict[str, Any] | None = None) -> int:
+    configured = max(int(settings.TRADINGAGENTS_TIMEOUT_S or 0), _MIN_SUBPROCESS_TIMEOUT_S)
+    if record is None:
+        return configured
+
+    analysts = record.get("analysts") or SUPPORTED_ANALYSTS
+    analyst_count = len(analysts) if isinstance(analysts, list) else len(SUPPORTED_ANALYSTS)
+    research_depth = int(record.get("research_depth") or 1)
+
+    estimated = 600
+    estimated += max(analyst_count - 1, 0) * 240
+    estimated += max(research_depth - 1, 0) * 600
+    if record.get("provider") == "anthropic":
+        estimated += 300
+    if analyst_count >= len(SUPPORTED_ANALYSTS):
+        estimated = max(estimated, _FULL_GRAPH_TIMEOUT_FLOOR_S)
+
+    return min(max(configured, estimated), _MAX_RUN_TIMEOUT_S)
+
+
 def _public_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "run_id": record["run_id"],
@@ -348,7 +378,7 @@ def _public_record(record: dict[str, Any]) -> dict[str, Any]:
         "analysts": record.get("analysts", list(SUPPORTED_ANALYSTS)),
         "research_depth": record["research_depth"],
         "progress_message": record.get("progress_message"),
-        "timeout_s": settings.TRADINGAGENTS_TIMEOUT_S,
+        "timeout_s": int(record.get("timeout_s") or _effective_timeout_s(record)),
         "summary_lines": record.get("summary_lines", []),
         "decision_text": record.get("decision_text"),
         "artifact_files": record.get("artifact_files", []),
@@ -367,7 +397,7 @@ def _normalize_public_record(record: dict[str, Any] | None) -> dict[str, Any] | 
     normalized = {**record}
     normalized.setdefault("analysts", list(SUPPORTED_ANALYSTS))
     normalized.setdefault("progress_message", None)
-    normalized.setdefault("timeout_s", settings.TRADINGAGENTS_TIMEOUT_S)
+    normalized.setdefault("timeout_s", _effective_timeout_s(normalized))
     normalized.setdefault("advisory_disclaimer", ADVISORY_DISCLAIMER)
     return normalized
 
@@ -461,6 +491,7 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
     record = {
         **base,
         "status": "queued",
+        "timeout_s": _effective_timeout_s(base),
         "progress_message": "Queued for TradingAgents research.",
         "summary_lines": [],
         "decision_text": None,
@@ -590,24 +621,33 @@ async def _run_subprocess(record: dict[str, Any]) -> dict[str, Any]:
     env.setdefault("TRADINGAGENTS_BOOTSTRAP_PYTHON", sys.executable)
 
     command = build_command(record)
+    timeout_s = int(record.get("timeout_s") or _effective_timeout_s(record))
     started = time.monotonic()
     proc = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
+        start_new_session=True,
     )
     try:
         stdout_b, stderr_b = await asyncio.wait_for(
             proc.communicate(),
-            timeout=max(settings.TRADINGAGENTS_TIMEOUT_S, 30),
+            timeout=max(timeout_s, _MIN_SUBPROCESS_TIMEOUT_S),
         )
     except asyncio.TimeoutError as exc:
-        proc.kill()
-        await proc.communicate()
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            await asyncio.wait_for(proc.communicate(), timeout=10)
+        except Exception:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            await proc.communicate()
         raise TradingAgentsRunError(
             "timeout",
-            f"TradingAgents exceeded {settings.TRADINGAGENTS_TIMEOUT_S}s timeout",
+            f"TradingAgents exceeded {timeout_s}s timeout",
         ) from exc
 
     stdout = _redact(stdout_b.decode("utf-8", errors="replace"))

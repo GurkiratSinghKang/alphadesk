@@ -97,7 +97,9 @@ class Settings(BaseSettings):
     TRADINGAGENTS_DEEP_MODEL: str = "claude-sonnet-4-6"
     TRADINGAGENTS_QUICK_MODEL: str = "claude-haiku-4-5"
     TRADINGAGENTS_OUTPUT_LANGUAGE: str = "English"
-    TRADINGAGENTS_TIMEOUT_S: int = 600
+    # Minimum subprocess timeout. The TradingAgents service raises the
+    # effective run budget for full analyst/deeper graphs.
+    TRADINGAGENTS_TIMEOUT_S: int = 900
     TRADINGAGENTS_HISTORY_LIMIT: int = 20
     TRADINGAGENTS_MAX_DECISION_CHARS: int = 16_000
     TRADINGAGENTS_RUNS_PER_HOUR: int = 12
