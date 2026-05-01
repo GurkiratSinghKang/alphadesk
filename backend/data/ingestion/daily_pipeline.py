@@ -2067,6 +2067,30 @@ async def _run_pipeline_inner(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
+        if only_strategies:
+            requested = set(only_strategies)
+            runnable_names = {cls.name for cls in ALL_STRATEGIES}
+            if requested.isdisjoint(runnable_names):
+                missing = sorted(requested)
+                logger.warning(
+                    "Pipeline skipped - requested strategies have no runnable "
+                    "autonomous backend today: %s",
+                    ", ".join(missing),
+                )
+                _pipeline_status["last_result"] = "skipped_no_runnable_strategies"
+                return {
+                    "skipped": True,
+                    "no_retry": True,
+                    "reason": "no_runnable_strategies",
+                    "message": (
+                        "Requested strategies are research-only, planned, or "
+                        "unknown, so there is no autonomous strategy to run."
+                    ),
+                    "requested_strategies": sorted(requested),
+                    "runnable_strategies": sorted(runnable_names),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
         # Persona-65 P65: reconcile any bracket outbox rows left over from
         # a previous crashed run BEFORE we start a new one. Any row whose
         # entry filled but stop was never placed gets the missing stop

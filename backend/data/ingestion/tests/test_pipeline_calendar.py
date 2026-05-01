@@ -184,6 +184,39 @@ async def test_run_window_does_not_mark_skipped_pipeline_complete(
     assert writes[-1]["last_open_skipped_reason"] == "market not open for MOO execution"
 
 
+@pytest.mark.asyncio
+async def test_run_window_marks_terminal_strategy_skip_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Research-only windows should not retry every scheduler tick all day."""
+    import data.ingestion.pipeline_runner as pr
+
+    async def _terminal_skip(*, only_strategies: list[str]) -> dict:
+        return {
+            "skipped": True,
+            "no_retry": True,
+            "reason": "no_runnable_strategies",
+            "approved": [],
+            "rejected": [],
+        }
+
+    writes: list[dict] = []
+
+    async def _cache_set(key: str, value: dict, ttl_seconds: int) -> None:
+        writes.append(dict(value))
+
+    monkeypatch.setattr(pr, "run_daily_pipeline", _terminal_skip)
+
+    state: dict = {}
+    await pr._run_window("post_or", ["orb", "vwap"], state, _cache_set)
+
+    today = datetime.now(ET).strftime("%Y-%m-%d")
+    assert state["last_post_or"] == today
+    assert state["last_post_or_skipped_reason"] == "no_runnable_strategies"
+    assert "last_post_or_in_progress" not in state
+    assert writes[-1]["last_post_or"] == today
+
+
 # ---------------------------------------------------------------------------
 # Fix 2 — calendar module wrappers
 # ---------------------------------------------------------------------------
