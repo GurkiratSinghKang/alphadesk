@@ -1568,7 +1568,11 @@ function TopOfBookReadout({ book }: { book: NormalizedTopOfBook }) {
           {book.isL2 ? `Depth ${book.depthLevels}` : "Top book"}
         </span>
         <span className="text-[color:var(--fg-hint)]">
-          {book.isL2 ? book.source : "NBBO quote only"}
+          {book.isL2
+            ? book.source
+            : book.source === "quote_fallback"
+              ? "quote fallback"
+              : "NBBO quote only"}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-1.5 tabular-nums">
@@ -1595,11 +1599,15 @@ function TopOfBookReadout({ book }: { book: NormalizedTopOfBook }) {
         </span>
         <span>{imbalanceLabel}</span>
       </div>
-      {!book.isL2 && book.source !== "quote" && (
+      {!book.isL2 && book.source === "quote_fallback" ? (
+        <div className="text-[color:var(--fg-hint)]">
+          depth unavailable · showing quote fallback
+        </div>
+      ) : !book.isL2 && book.source !== "quote" ? (
         <div className="text-[color:var(--fg-hint)]">
           source {book.source} · depth adapter ready
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

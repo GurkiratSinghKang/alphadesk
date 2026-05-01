@@ -39,12 +39,12 @@ _REQUIRED_LOOKBACK_DAYS = 900  # ~3 years for historical-moves lookback
     StrategyMeta(
         name="earnings_vol",
         category="options",
-        kind="research",  # options chain not yet in StrategyInput
+        kind="research",  # multi-leg signal/execution bridge not yet graduated
         description=(
             "Short iron butterfly before earnings; exit at post-event IV "
             "crush. Research shell emits diagnostics (candidate symbols, "
-            "historical-move proxy); full options-chain integration "
-            "deferred."
+            "historical-move proxy, chain quality); multi-leg signal "
+            "emission is deferred pending paper validation."
         ),
         lookback_days=_REQUIRED_LOOKBACK_DAYS,
         required_bars=("daily",),

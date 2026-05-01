@@ -24,13 +24,13 @@ function quoteToDepth(symbol: string, quote: QuoteLike | null | undefined): Mark
   return {
     symbol: symbol.toUpperCase(),
     kind: "top_of_book",
-    provider: "live_quote_store",
+    provider: "quote_fallback",
     bids: [{ price: bid, size: quote?.bidSize ?? 0, venue: quote?.bidExchange ?? null }],
     asks: [{ price: ask, size: quote?.askSize ?? 0, venue: quote?.askExchange ?? null }],
     timestamp: quote?.timestamp ?? 0,
     isL2: false,
     isDemo: false,
-    notes: ["Local quote-store fallback; not full Level II depth."],
+    notes: ["Quote fallback; depth endpoint unavailable or not yet populated. Not full Level II depth."],
   };
 }
 

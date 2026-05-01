@@ -100,7 +100,6 @@ from core.auth import (
     decode_token,
     get_password_version,
     get_session_epoch,
-    hash_password,
     is_token_revoked,
     require_auth,
     verify_password,
@@ -884,11 +883,8 @@ async def change_password(
             detail="New password must differ from old password",
         )
 
-    new_hash = hash_password(request.new_password)
-
-    # Bump password_version — this is the session-invalidation mechanism. It
-    # runs BEFORE we return the new hash to the caller so, even in the
-    # env-rotation-deferred mode, every live token is immediately dead.
+    # Bump password_version — this is the session-invalidation mechanism.
+    # The hash itself is rotated out-of-band through ADMIN_PASSWORD_HASH.
     new_pv = await bump_password_version(username)
 
     await _audit(
@@ -900,16 +896,12 @@ async def change_password(
         req=req,
     )
 
-    # Round-16 / persona-7 P0: do NOT return the bcrypt hash in the
-    # JSON body. Pre-fix this leaked the cost-14 hash into browser
-    # memory + access logs + X-Request-ID telemetry / fetch caches —
-    # an attacker who captured the response could run an offline
-    # crack against it. Log the hash server-side at INFO so the
-    # operator can fish it out of the journal during the rotation
-    # window, but never put it on the wire.
+    # Do not return or log the bcrypt hash. Logging it still creates a
+    # durable offline-cracking artifact in journald / log drains; rotate
+    # ADMIN_PASSWORD_HASH through the normal secret-store workflow.
     logger.info(
-        "change_password: new hash minted for %s (paste into env / secret store): %s",
-        username, new_hash,
+        "change_password: password accepted for %s; rotate ADMIN_PASSWORD_HASH via secret store",
+        username,
     )
     return {
         "ok": True,
@@ -917,9 +909,9 @@ async def change_password(
         "message": (
             "Password change acknowledged. All existing sessions have been "
             "invalidated. NOTE: ADMIN_PASSWORD_HASH is env-var-managed and "
-            "was NOT rotated server-side — the new hash has been written to "
-            "the server log; ops should rotate the env var and redeploy "
-            "before the new password takes effect on future logins."
+            "was NOT rotated server-side. Generate and rotate the new hash "
+            "through the secret store before the new password takes effect "
+            "on future logins."
         ),
     }
 

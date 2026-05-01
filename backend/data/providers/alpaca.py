@@ -127,7 +127,7 @@ class AlpacaBarProvider:
     # Internal cached layer: we split this out so the cache key is the
     # already-normalised tuple, not the caller-supplied types. The decorator
     # reads the TTL from the call, defaulting to TTL_DAILY.
-    @cached(ttl_seconds=TTL_DAILY)
+    @cached(ttl_seconds=TTL_DAILY, ttl_arg="ttl")
     def _bars_cached(
         self,
         symbols: list[str],

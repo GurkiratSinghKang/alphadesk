@@ -1,7 +1,8 @@
-"""VWAP session-pullback — params and universe (SOTA shell).
+"""VWAP session-pullback — params and universe.
 
-Currently registered as ``kind="research"`` pending 5-min intraday
-integration with the daily-first BacktestRunner.
+Registered as autonomous ``paper_only``. The strategy consumes 5-minute
+intraday bars in paper/backtest modes but remains blocked from live capital
+until the paper evidence graduates.
 """
 
 from __future__ import annotations

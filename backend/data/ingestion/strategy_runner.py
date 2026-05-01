@@ -326,7 +326,12 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             positions_provider=_live_positions_for,
         )
         try:
-            result = await runner.run_today(params, mode=_broker_mode())
+            result = await runner.run_today(
+                params,
+                mode=_broker_mode(),
+                cash=getattr(master, "cash", None),
+                equity=getattr(master, "equity", None),
+            )
         except Exception:
             logger.exception("strategy_runner: %s run_today() failed", self.name)
             return empty

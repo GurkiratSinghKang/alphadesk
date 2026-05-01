@@ -1,7 +1,8 @@
-"""Opening Range Breakout — params (SOTA shell).
+"""Opening Range Breakout — params.
 
-Registered as ``kind="research"`` pending 1-min intraday integration with
-the daily-first BacktestRunner.
+Registered as autonomous ``paper_only``. The strategy consumes 1-minute
+intraday bars in paper/backtest modes but remains blocked from live capital
+until the paper evidence graduates.
 """
 
 from __future__ import annotations

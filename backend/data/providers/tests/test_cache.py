@@ -54,6 +54,25 @@ def test_decorator_sync(tmp_path):
     assert out3.iloc[0, 0] == 6
 
 
+def test_decorator_can_read_ttl_from_call_argument(tmp_path):
+    c = ParquetCache(tmp_path)
+    calls = {"n": 0}
+
+    class P:
+        @cached(ttl_seconds=60, cache=c, ttl_arg="ttl")
+        def foo(self, x: int, ttl: int) -> pd.DataFrame:
+            calls["n"] += 1
+            return pd.DataFrame({"x": [x], "call": [calls["n"]]})
+
+    p = P()
+    p.foo(5, ttl=0)
+    time.sleep(0.001)
+    out = p.foo(5, ttl=0)
+
+    assert calls["n"] == 2
+    assert out.iloc[0]["call"] == 2
+
+
 def test_decorator_rejects_non_dataframe(tmp_path):
     c = ParquetCache(tmp_path)
 

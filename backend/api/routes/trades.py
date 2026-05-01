@@ -2997,6 +2997,7 @@ def _combo_spread_width(
     strikes. A strangle (call + put) or a calendar (different expiry)
     is now rejected with 400 instead of being treated as a vertical.
     """
+    combo = (combo or request.combo_type or "").strip().lower()
     strikes_by_side: dict[str, list[float]] = {"C": [], "P": []}
     parsed_legs: list[tuple[Any, dict[str, Any]]] = []
     all_strikes: list[float] = []
@@ -3015,6 +3016,36 @@ def _combo_spread_width(
         strikes_by_side[side_letter].append(strike)
         all_strikes.append(strike)
         parsed_legs.append((leg, parsed))
+
+    if parsed_legs:
+        underlyings = {parsed["underlying"] for _, parsed in parsed_legs}
+        expiries = {
+            (parsed["expiry_yy"], parsed["expiry_mm"], parsed["expiry_dd"])
+            for _, parsed in parsed_legs
+        }
+        if len(underlyings) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Defined-risk option spreads require all legs on the "
+                    f"same underlying; got {sorted(underlyings)}."
+                ),
+            )
+        if len(expiries) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Defined-risk option spreads require all legs at the same expiry.",
+            )
+        qtys = {float(leg.qty) for leg, _ in parsed_legs}
+        if len(qtys) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Defined-risk spread legs must use the same contract "
+                    "quantity; ratio spreads require a separate margin-aware "
+                    "risk model."
+                ),
+            )
 
     # Vertical: 2 legs, one BUY + one SELL, same option type, same expiry.
     if len(request.legs) == 2 and len(all_strikes) == 2:
@@ -3088,6 +3119,46 @@ def _combo_spread_width(
                 )
         call_width = abs(strikes_by_side["C"][0] - strikes_by_side["C"][1])
         put_width = abs(strikes_by_side["P"][0] - strikes_by_side["P"][1])
+        by_kind_side: dict[tuple[str, str], list[float]] = {
+            ("call", "buy"): [],
+            ("call", "sell"): [],
+            ("put", "buy"): [],
+            ("put", "sell"): [],
+        }
+        for leg, parsed in parsed_legs:
+            side = getattr(getattr(leg, "side", None), "value", getattr(leg, "side", None))
+            by_kind_side[(parsed["call_put"], side)].append(float(parsed["strike"]))
+        if not all(len(values) == 1 for values in by_kind_side.values()):
+            raise HTTPException(
+                status_code=400,
+                detail="iron_condor / iron_butterfly requires exactly one buy and one sell on each side.",
+            )
+        long_put = by_kind_side[("put", "buy")][0]
+        short_put = by_kind_side[("put", "sell")][0]
+        short_call = by_kind_side[("call", "sell")][0]
+        long_call = by_kind_side[("call", "buy")][0]
+
+        if not long_put < short_put:
+            raise HTTPException(
+                status_code=400,
+                detail="Put wing must be below the short put for a defined-risk spread.",
+            )
+        if not short_call < long_call:
+            raise HTTPException(
+                status_code=400,
+                detail="Call wing must be above the short call for a defined-risk spread.",
+            )
+        if combo == "iron_butterfly":
+            if short_put != short_call:
+                raise HTTPException(
+                    status_code=400,
+                    detail="iron_butterfly requires the short put and short call at the same body strike.",
+                )
+        elif not short_put < short_call:
+            raise HTTPException(
+                status_code=400,
+                detail="iron_condor requires short put strike below short call strike.",
+            )
         # Iron butterfly: bodies share the center strike, wings differ.
         # Both call_width and put_width are wing-distance from center.
         # Same envelope formula as iron_condor (max wing).

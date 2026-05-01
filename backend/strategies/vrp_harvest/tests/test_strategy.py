@@ -1,7 +1,7 @@
 """Smoke tests for the VRP Harvest strategy — research shell.
 
-Currently registered as ``kind="research"`` pending options-chain
-integration in ``StrategyInput``. Verifies:
+Currently registered as ``kind="research"`` pending paper validation of
+multi-leg options execution. Verifies:
   - Registration + meta.
   - Params defaults + safety invariants (tail_hedge_ratio >= 5).
   - run() returns diagnostics-only (no signals).

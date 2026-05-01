@@ -70,6 +70,40 @@ def test_combo_vertical_spread_notional() -> None:
     assert width == 10.0
 
 
+def test_defined_risk_spreads_reject_ratio_quantities() -> None:
+    legs = [
+        _occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 3.0),
+        _occ_leg("AAPL260424C00210000", OrderSide.BUY, 100, 1.5),
+    ]
+    req = CreateOrderRequest(legs=legs, combo_type="vertical_spread")
+    with pytest.raises(Exception, match="same contract quantity"):
+        trades_mod._combo_spread_width(req)
+
+
+def test_iron_condor_rejects_mixed_underlyings() -> None:
+    legs = [
+        _occ_leg("SPY260424P00500000", OrderSide.SELL, 1, 1.50),
+        _occ_leg("SPY260424P00495000", OrderSide.BUY, 1, 0.50),
+        _occ_leg("QQQ260424C00540000", OrderSide.SELL, 1, 1.50),
+        _occ_leg("QQQ260424C00550000", OrderSide.BUY, 1, 0.50),
+    ]
+    req = CreateOrderRequest(legs=legs, combo_type="iron_condor")
+    with pytest.raises(Exception, match="same underlying"):
+        trades_mod._combo_spread_width(req)
+
+
+def test_iron_condor_rejects_inverted_wings() -> None:
+    legs = [
+        _occ_leg("SPY260424P00495000", OrderSide.SELL, 1, 1.50),
+        _occ_leg("SPY260424P00500000", OrderSide.BUY, 1, 0.50),
+        _occ_leg("SPY260424C00540000", OrderSide.SELL, 1, 1.50),
+        _occ_leg("SPY260424C00550000", OrderSide.BUY, 1, 0.50),
+    ]
+    req = CreateOrderRequest(legs=legs, combo_type="iron_condor")
+    with pytest.raises(Exception, match="Put wing"):
+        trades_mod._combo_spread_width(req)
+
+
 def test_combo_strangle_rejected_as_undefined_risk() -> None:
     """Round-12 / DR-1: ``combo_type="strangle"`` is no longer accepted —
     naked strangles are UNDEFINED-risk and AlphaDesk now refuses them at

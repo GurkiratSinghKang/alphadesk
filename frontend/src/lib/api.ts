@@ -102,8 +102,8 @@ export class ApiError extends Error {
   readonly detail: string | undefined;
   readonly path: string;
   readonly body: string;
-  constructor(path: string, status: number, body: string, detail?: string) {
-    super(detail ?? `API ${status}: ${body || "Request failed"}`);
+  constructor(path: string, status: number, body: string, detail?: string, message?: string) {
+    super(message ?? detail ?? `API ${status}: Request failed`);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
@@ -344,7 +344,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
         detail: { status: res.status, message: friendly, path },
       }));
     }
-    throw new ApiError(path, res.status, body, parsedDetail);
+    throw new ApiError(path, res.status, body, parsedDetail, friendly);
   }
 
   // 204 No Content (e.g. DELETE /orders/:id) and any other empty-bodied

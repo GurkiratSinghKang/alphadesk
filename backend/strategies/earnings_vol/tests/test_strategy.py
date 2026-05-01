@@ -1,8 +1,8 @@
 """Smoke tests for the Earnings Volatility strategy — research shell.
 
-Registered as ``kind="research"`` pending options-chain integration in
-``StrategyInput``. Verifies registration, params, and the diagnostics
-pipeline (upcoming-event detection, historical-move proxy).
+Registered as ``kind="research"`` pending paper validation of multi-leg
+options execution. Verifies registration, params, and the diagnostics
+pipeline (upcoming-event detection, historical-move proxy, chain summary).
 """
 
 from __future__ import annotations

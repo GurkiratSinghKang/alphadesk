@@ -57,6 +57,19 @@ def _merge_bars(*frames: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(frames).sort_index()
 
 
+class _MemoryStateStore:
+    """Redis-free state store so CI Redis does not leak state across tests."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, dict] = {}
+
+    async def load(self, strategy_name: str) -> dict:
+        return dict(self._data.get(strategy_name, {}))
+
+    async def save(self, strategy_name: str, state: dict) -> None:
+        self._data[strategy_name] = dict(state)
+
+
 def _build_input(
     bars: pd.DataFrame,
     asof: date,
@@ -265,7 +278,6 @@ class TestPipelineGate:
 
         from strategies._core.runners.pipeline_runner import (
             DailyPipelineRunner,
-            StateStore,
         )
 
         class _NullProviders:
@@ -275,7 +287,7 @@ class TestPipelineGate:
             options = None
 
         strat = KamaBreakoutStrategy()
-        runner = DailyPipelineRunner(strat, _NullProviders(), StateStore())
+        runner = DailyPipelineRunner(strat, _NullProviders(), _MemoryStateStore())
 
         result = asyncio.run(
             runner.run_today(KamaBreakoutParams(), asof=date(2024, 4, 30))
@@ -289,11 +301,15 @@ class TestPipelineGate:
 
         from strategies._core.runners.pipeline_runner import (
             DailyPipelineRunner,
-            StateStore,
         )
 
         asof = date(2024, 4, 30)
-        bars = _build_uptrend_bars("SPY", asof)
+        bars = _merge_bars(
+            *(
+                _build_uptrend_bars(sym, asof, seed=1 + i)
+                for i, sym in enumerate(DEFAULT_UNIVERSE)
+            )
+        )
 
         class _Bars:
             def fetch_window(self, symbols, asof, lookback_days, timeframe="1D"):
@@ -306,9 +322,58 @@ class TestPipelineGate:
             options = None
 
         strat = KamaBreakoutStrategy()
-        runner = DailyPipelineRunner(strat, _Providers(), StateStore())
+        runner = DailyPipelineRunner(strat, _Providers(), _MemoryStateStore())
 
         result = asyncio.run(
             runner.run_today(KamaBreakoutParams(), asof=asof, mode="paper")
         )
         assert result.diagnostics.get("paper_only_blocked") is not True
+        assert any(s.tag.startswith("kama-entry") for s in result.signals)
+
+    def test_daily_runner_paper_uses_explicit_account_equity(self):
+        """Paper-mode runner should not silently size entries against zero equity."""
+        import asyncio
+
+        from strategies._core.runners.pipeline_runner import (
+            DailyPipelineRunner,
+        )
+
+        asof = date(2024, 4, 30)
+        bars = _merge_bars(
+            *(
+                _build_uptrend_bars(sym, asof, seed=1 + i)
+                for i, sym in enumerate(DEFAULT_UNIVERSE)
+            )
+        )
+
+        class _Bars:
+            def fetch_window(self, symbols, asof, lookback_days, timeframe="1D"):
+                return bars
+
+        class _Providers:
+            bars = _Bars()
+            earnings = None
+            fundamentals = None
+            options = None
+
+        tiny_runner = DailyPipelineRunner(
+            KamaBreakoutStrategy(), _Providers(), _MemoryStateStore(),
+        )
+        funded_runner = DailyPipelineRunner(
+            KamaBreakoutStrategy(), _Providers(), _MemoryStateStore(),
+        )
+        tiny = asyncio.run(
+            tiny_runner.run_today(
+                KamaBreakoutParams(), asof=asof, mode="paper",
+                cash=Decimal("1"), equity=Decimal("1"),
+            )
+        )
+        funded = asyncio.run(
+            funded_runner.run_today(
+                KamaBreakoutParams(), asof=asof, mode="paper",
+                cash=Decimal("100000"), equity=Decimal("100000"),
+            )
+        )
+
+        assert not any(s.tag.startswith("kama-entry") for s in tiny.signals)
+        assert any(s.tag.startswith("kama-entry") for s in funded.signals)

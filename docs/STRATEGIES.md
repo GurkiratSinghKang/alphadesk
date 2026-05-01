@@ -68,8 +68,8 @@ post-mortem replay.
 
 - **`kind`**: `"autonomous"` (run by the daily pipeline) or `"research"`
   (UI-only decision support; the pipeline skips it). Use `research` when
-  runtime infrastructure isn't yet wired (e.g. options chains, intraday
-  bars).
+  the strategy still has no executable signal bridge, even if its data
+  inputs are available.
 - **`paper_only`**: default `False`. When `True`, `DailyPipelineRunner`
   returns an empty result with a diagnostic flag in live mode; the
   strategy still runs in `backtest` / `paper` modes. Use for strategies
@@ -87,18 +87,18 @@ post-mortem replay.
 | `pairs_trading` | pairs | autonomous | – |
 | `regime_adaptive` | macro | autonomous | – |
 | `kama_breakout` | equity | autonomous | **✓** |
+| `vwap` | intraday | autonomous | **✓** |
+| `orb` | intraday | autonomous | **✓** |
 | `vrp_harvest` | options | research | – |
 | `earnings_vol` | options | research | – |
-| `vwap` | intraday | research | – |
-| `orb` | intraday | research | – |
 | `earnings-options-play` | options | research | – |
 
 Research-kind strategies currently emit no trade signals pending:
 
-- `vrp_harvest`, `earnings_vol`, `earnings-options-play`: options-chain
-  data in `StrategyInput`.
-- `vwap`, `orb`: 5-min / 1-min intraday bars in the daily-first
-  `BacktestRunner`.
+- `vrp_harvest`, `earnings_vol`: multi-leg options signal emission and
+  paper execution validation.
+- `earnings-options-play`: product research screener; order placement stays
+  human-triggered from the UI.
 
-When the missing plumbing lands, each stub flips to `kind="autonomous"`
-and restores its pre-SOTA alpha logic from git history.
+Paper-only autonomous strategies run in backtests/paper mode but are blocked
+from live capital until their OOS evidence and execution telemetry graduate.

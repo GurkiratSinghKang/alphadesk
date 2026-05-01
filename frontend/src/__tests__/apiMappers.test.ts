@@ -1810,6 +1810,24 @@ describe('apiFetch error handling', () => {
     await expect(getStrategies()).rejects.toThrow('API 500');
   });
 
+  it('does not expose raw HTML bodies in thrown API error messages', async () => {
+    mockFetch.mockReturnValueOnce(Promise.resolve({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      text: async () => '<!DOCTYPE html><html><body>Next 404</body></html>',
+    }));
+
+    try {
+      await getStrategies();
+      throw new Error('expected getStrategies to reject');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).toBe('API 404: Not Found');
+      expect(message).not.toContain('<!DOCTYPE');
+    }
+  });
+
   it('throws on 401 with "Session expired" when not on /login', async () => {
     // First call: the actual API request → 401
     mockFetch.mockReturnValueOnce(Promise.resolve({

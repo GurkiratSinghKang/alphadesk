@@ -2129,11 +2129,16 @@ async def _run_pipeline_inner(
                     account.get("last_equity", account.get("equity", 0))
                 )
             except Exception as e:
-                logger.error("Cannot reach Alpaca account", exc_info=True)
-                equity = 100_000
-                cash = 100_000
-                day_pnl = 0
-                errors.append(f"Alpaca account unreachable: {e}")
+                logger.error("Cannot reach Alpaca account; aborting pipeline", exc_info=True)
+                errors.append(f"Alpaca account unavailable: {type(e).__name__}")
+                log["aborted"] = True
+                log["reason"] = "account_unavailable"
+                log["portfolio_snapshot"] = {
+                    "account_available": False,
+                    "account_error": type(e).__name__,
+                }
+                _pipeline_status["last_result"] = "account_unavailable"
+                return log
 
             # ---- Circuit breaker ----
             if equity > 0 and (day_pnl / equity) < CIRCUIT_BREAKER_PCT:

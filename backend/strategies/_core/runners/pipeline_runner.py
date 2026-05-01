@@ -130,6 +130,8 @@ class DailyPipelineRunner:
         params: StrategyParams,
         asof: date | None = None,
         mode: Literal["paper", "live"] = "live",
+        cash: Decimal | float | int | str | None = None,
+        equity: Decimal | float | int | str | None = None,
     ) -> StrategyResult:
         if asof is None:
             # For production, use a market calendar. Phase 1 uses today.
@@ -277,12 +279,16 @@ class DailyPipelineRunner:
         seed_bytes = hashlib.sha256(f"{self._strategy.META.name}:{asof.isoformat()}".encode()).digest()[:4]
         seed = int.from_bytes(seed_bytes, "big")
 
+        cash_value, equity_value = _account_values_for_mode(
+            mode, cash=cash, equity=equity,
+        )
+
         input = StrategyInput(
             asof=asof, mode=mode, bars=bars, intraday_bars=intraday_bars,
             earnings=earnings, fundamentals=fundamentals,
             options_chains=options_chains,
-            cash=Decimal("0"),  # live-mode cash comes from broker; strategy shouldn't depend on it
-            equity=Decimal("0"),
+            cash=cash_value,
+            equity=equity_value,
             positions=positions,
             state=state,
             seed=seed,
@@ -298,3 +304,38 @@ class DailyPipelineRunner:
             {**state, **result.state_update},
         )
         return result
+
+
+def _account_values_for_mode(
+    mode: Literal["paper", "live"],
+    *,
+    cash: Decimal | float | int | str | None,
+    equity: Decimal | float | int | str | None,
+) -> tuple[Decimal, Decimal]:
+    """Return account values for StrategyInput.
+
+    Paper runs need realistic capital so sizing-aware strategies can exercise
+    their entry logic. Live runs should receive broker/MasterAgent account
+    values from the caller; missing values stay zero to avoid fabricating
+    capital in real-money mode.
+    """
+    fallback = Decimal("100000") if mode == "paper" else Decimal("0")
+    cash_value = _to_decimal_account_value(cash, fallback=fallback)
+    equity_value = _to_decimal_account_value(equity, fallback=fallback)
+    return cash_value, equity_value
+
+
+def _to_decimal_account_value(
+    value: Decimal | float | int | str | None,
+    *,
+    fallback: Decimal,
+) -> Decimal:
+    if value is None:
+        return fallback
+    try:
+        parsed = Decimal(str(value))
+    except Exception:
+        return fallback
+    if parsed < 0:
+        return fallback
+    return parsed

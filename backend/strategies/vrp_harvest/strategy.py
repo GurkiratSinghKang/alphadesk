@@ -44,11 +44,11 @@ _MIN_TRADING_BARS = 30
     StrategyMeta(
         name="vrp_harvest",
         category="options",
-        kind="research",  # options chain not yet in StrategyInput
+        kind="research",  # multi-leg signal/execution bridge not yet graduated
         description=(
             "Short SPY strangle + long far-OTM put tail hedge. Research "
             "shell emits diagnostics only; full multi-leg signal emission "
-            "awaits options-chain integration in StrategyInput."
+            "awaits paper validation of the execution bridge."
         ),
         lookback_days=_REQUIRED_LOOKBACK_DAYS,
         required_bars=("daily",),

@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -176,6 +177,7 @@ def cached(
     ttl_seconds: int = TTL_DAILY,
     *,
     cache: ParquetCache | None = None,
+    ttl_arg: str | None = None,
 ) -> Callable:
     """Decorator that memoises a provider method to parquet.
 
@@ -188,6 +190,10 @@ def cached(
             ``TTL_*`` constants at module top.
         cache: Override the default ``~/.alphadesk/cache`` location
             (mainly for tests).
+        ttl_arg: Optional function argument name whose runtime value should
+            override ``ttl_seconds``. This lets one cached method use a
+            shorter intraday TTL and longer daily TTL without splitting the
+            provider API.
     """
     store = cache or _DEFAULT_CACHE
 
@@ -200,7 +206,8 @@ def cached(
             @functools.wraps(fn)
             async def async_wrapper(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
                 key = _make_key(provider_name, method_name, args, kwargs)
-                hit = store.get(key, ttl_seconds)
+                effective_ttl = _effective_ttl(fn, ttl_seconds, ttl_arg, self, args, kwargs)
+                hit = store.get(key, effective_ttl)
                 if hit is not None:
                     return hit
                 # Async branch: use asyncio.Lock so we don't block the event
@@ -208,7 +215,7 @@ def cached(
                 # call. concurrency-audit-r4 P0 #5.
                 lock = _async_lock_for(key)
                 async with lock:
-                    hit = store.get(key, ttl_seconds)
+                    hit = store.get(key, effective_ttl)
                     if hit is not None:
                         return hit
                     result: pd.DataFrame = await fn(self, *args, **kwargs)
@@ -224,12 +231,13 @@ def cached(
         @functools.wraps(fn)
         def sync_wrapper(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
             key = _make_key(provider_name, method_name, args, kwargs)
-            hit = store.get(key, ttl_seconds)
+            effective_ttl = _effective_ttl(fn, ttl_seconds, ttl_arg, self, args, kwargs)
+            hit = store.get(key, effective_ttl)
             if hit is not None:
                 return hit
             lock = _lock_for(key)
             with lock:
-                hit = store.get(key, ttl_seconds)
+                hit = store.get(key, effective_ttl)
                 if hit is not None:
                     return hit
                 result = fn(self, *args, **kwargs)
@@ -243,6 +251,26 @@ def cached(
         return sync_wrapper
 
     return decorate
+
+
+def _effective_ttl(
+    fn: Callable,
+    default_ttl: int,
+    ttl_arg: str | None,
+    self_obj: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> int:
+    if not ttl_arg:
+        return default_ttl
+    try:
+        bound = inspect.signature(fn).bind_partial(self_obj, *args, **kwargs)
+        raw = bound.arguments.get(ttl_arg)
+        if raw is None:
+            return default_ttl
+        return int(raw)
+    except Exception:
+        return default_ttl
 
 
 if __name__ == "__main__":
