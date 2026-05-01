@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from services import tradingagents_research as svc
@@ -160,6 +162,89 @@ async def test_start_run_queues_and_deduplicates(monkeypatch: pytest.MonkeyPatch
     assert first["timeout_s"] >= 600
     assert second["run_id"] == first["run_id"]
     assert len(scheduled) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_run_repairs_thin_success_record_from_final_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    svc._INMEM_RUNS.clear()
+    svc._INMEM_USER_RUNS.clear()
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_SKILL_HOME", str(tmp_path / "skill-home"))
+
+    async def fake_load(username: str, loaded_run_id: str):
+        return svc._INMEM_RUNS.get(svc._run_key(username, loaded_run_id))
+
+    async def fake_store(username: str, stored_record: dict):
+        svc._INMEM_RUNS[svc._run_key(username, stored_record["run_id"])] = svc._public_record(stored_record)
+
+    monkeypatch.setattr(svc, "_load_record", fake_load)
+    monkeypatch.setattr(svc, "_store_record", fake_store)
+
+    run_id = "abc123abc123abc123abc123"
+    run_dir = tmp_path / "skill-home" / "results" / "AAPL" / "2026-05-01"
+    run_dir.mkdir(parents=True)
+    (run_dir / "final_state.json").write_text(
+        json.dumps(
+            {
+                "final_trade_decision": (
+                    "## 1. RATING: **Underweight**\n\n"
+                    "**Current Price Reference:** ~$271.35\n"
+                    "- Currently long AAPL: trim 20-25% near $274-$276 resistance.\n"
+                    "- Currently flat: wait for $255-$262 support.\n"
+                ),
+                "trader_investment_plan": "Trader prefers patience until price revisits support.",
+                "market_report": "Market setup has nearby supply and resistance.",
+                "sentiment_report": "Social sentiment is mixed after earnings.",
+                "news_report": "Earnings coverage is mixed with demand concerns.",
+                "fundamentals_report": "Valuation remains elevated versus growth.",
+                "investment_debate_state": {
+                    "bull_history": "Bull case sees services margin strength.",
+                    "bear_history": "Bear case sees hardware demand pressure.",
+                    "judge_decision": "Stay underweight until a better entry appears.",
+                },
+                "risk_debate_state": {"judge_decision": "Keep sizing conservative."},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record = {
+        "run_id": run_id,
+        "symbol": "AAPL",
+        "trade_date": "2026-05-01",
+        "status": "succeeded",
+        "provider": "anthropic",
+        "deep_model": "claude-sonnet-4-6",
+        "quick_model": "claude-haiku-4-5",
+        "analysts": ["market", "social", "news", "fundamentals"],
+        "research_depth": 1,
+        "progress_message": "TradingAgents report complete.",
+        "timeout_s": 1800,
+        "summary_lines": ["UNDERWEIGHT"],
+        "decision_text": "UNDERWEIGHT",
+        "artifact_files": ["final_state.json"],
+        "error": None,
+        "created_at": "2026-05-01T17:00:00+00:00",
+        "updated_at": "2026-05-01T17:09:00+00:00",
+        "started_at": "2026-05-01T17:00:00+00:00",
+        "completed_at": "2026-05-01T17:09:00+00:00",
+    }
+    svc._INMEM_RUNS[svc._run_key("admin", run_id)] = record
+
+    result = await svc.get_tradingagents_run("admin", run_id)
+
+    assert result is not None
+    assert result["summary_lines"][0] == "Rating: UNDERWEIGHT"
+    assert "Portfolio Manager Decision" in result["decision_text"]
+    assert "Analyst Evidence" in result["decision_text"]
+    assert "$274-$276 resistance" in result["decision_text"]
+    assert "summary.md" in result["artifact_files"]
+    assert (run_dir / "summary.md").exists()
+    assert (run_dir / "decision.txt").exists()
+    stored = svc._INMEM_RUNS[svc._run_key("admin", run_id)]
+    assert "Portfolio Manager Decision" in stored["decision_text"]
 
 
 @pytest.mark.asyncio

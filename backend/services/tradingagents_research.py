@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib.util
 import json
 import logging
 import os
@@ -57,6 +58,8 @@ _DEFAULT_SKILL_HOME = Path("~/.cache/tradingagents-skill").expanduser()
 _MIN_SUBPROCESS_TIMEOUT_S = 30
 _FULL_GRAPH_TIMEOUT_FLOOR_S = 1_800
 _MAX_RUN_TIMEOUT_S = 7_200
+_SIGNAL_WORDS = ("OVERWEIGHT", "UNDERWEIGHT", "NEUTRAL", "HOLD", "BUY", "SELL", "REDUCE", "ACCUMULATE")
+_WRAPPER_HELPERS: Any | None = None
 
 
 class TradingAgentsRunError(RuntimeError):
@@ -266,6 +269,168 @@ def _safe_read_text(path_value: Any, *, max_chars: int) -> str:
     return text
 
 
+def _safe_write_text(path: Path, content: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content.rstrip() + "\n", encoding="utf-8")
+    except OSError:
+        logger.debug("TradingAgents artifact repair write failed for %s", path, exc_info=True)
+
+
+def _artifact_run_dir(record: dict[str, Any]) -> Path:
+    return _skill_home_path() / "results" / str(record.get("symbol") or "").strip() / str(record.get("trade_date") or "").strip()
+
+
+def _artifact_path(record: dict[str, Any], filename: str) -> Path:
+    return _artifact_run_dir(record) / filename
+
+
+def _load_wrapper_helpers() -> Any | None:
+    global _WRAPPER_HELPERS
+    if _WRAPPER_HELPERS is not None:
+        return _WRAPPER_HELPERS
+
+    path = Path(__file__).resolve().parents[1] / "tools" / "tradingagents" / "scripts" / "run_tradingagents.py"
+    try:
+        spec = importlib.util.spec_from_file_location("alphadesk_tradingagents_wrapper", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception:
+        logger.debug("TradingAgents wrapper helper import failed from %s", path, exc_info=True)
+        return None
+
+    required = ("build_research_memo", "summarize_research_state", "build_summary_markdown")
+    if not all(hasattr(module, name) for name in required):
+        logger.debug("TradingAgents wrapper helper missing expected functions at %s", path)
+        return None
+    _WRAPPER_HELPERS = module
+    return module
+
+
+def _strip_markdown_line(value: str) -> str:
+    line = value.strip().strip("-").strip()
+    line = line.replace("**", "").replace("__", "").replace("`", "")
+    line = line.lstrip("#").strip()
+    while "  " in line:
+        line = line.replace("  ", " ")
+    return line
+
+
+def _extract_processed_signal(record: dict[str, Any]) -> str:
+    candidates: list[str] = []
+    decision_text = record.get("decision_text")
+    if isinstance(decision_text, str):
+        candidates.append(decision_text)
+    summary_lines = record.get("summary_lines")
+    if isinstance(summary_lines, list):
+        candidates.extend(str(item) for item in summary_lines)
+
+    signal_pattern = "|".join(re.escape(word) for word in _SIGNAL_WORDS)
+    for candidate in candidates:
+        clean = _strip_markdown_line(candidate)
+        match = re.search(rf"\b({signal_pattern})\b", clean, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+    return "NEUTRAL"
+
+
+def _is_thin_decision_text(record: dict[str, Any]) -> bool:
+    decision_text = str(record.get("decision_text") or "").strip()
+    summary_lines = record.get("summary_lines")
+    summary_count = len(summary_lines) if isinstance(summary_lines, list) else 0
+    clean = _strip_markdown_line(decision_text).lower()
+    if not clean:
+        return True
+    signal_words = {word.lower() for word in _SIGNAL_WORDS}
+    if clean in signal_words or clean.replace("rating:", "").strip() in signal_words:
+        return True
+    return len(clean) <= 80 and summary_count <= 1
+
+
+def _read_final_state_for_record(record: dict[str, Any]) -> dict[str, Any] | None:
+    final_state_path = _artifact_path(record, "final_state.json")
+    try:
+        if not final_state_path.exists() or not final_state_path.is_file():
+            return None
+        payload = json.loads(final_state_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        logger.debug("TradingAgents final_state repair read failed for %s", final_state_path, exc_info=True)
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _repair_record_from_artifacts(record: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    if record.get("status") != "succeeded" or not _is_thin_decision_text(record):
+        return record, False
+
+    final_state = _read_final_state_for_record(record)
+    if not final_state:
+        return record, False
+
+    helpers = _load_wrapper_helpers()
+    if helpers is None:
+        return record, False
+
+    processed_signal = _extract_processed_signal(record)
+    try:
+        decision_text = helpers.build_research_memo(
+            ticker=str(record.get("symbol") or ""),
+            trade_date=str(record.get("trade_date") or ""),
+            final_state=final_state,
+            processed_signal=processed_signal,
+        )
+        summary_lines = helpers.summarize_research_state(final_state, processed_signal, 8)
+    except Exception:
+        logger.debug("TradingAgents artifact repair memo build failed", exc_info=True)
+        return record, False
+
+    if not decision_text or _strip_markdown_line(decision_text).lower() == processed_signal.lower():
+        return record, False
+
+    artifact_files = record.get("artifact_files")
+    artifact_file_names = set(artifact_files if isinstance(artifact_files, list) else [])
+    artifact_file_names.update({"summary.md", "decision.txt", "final_state.json"})
+    repaired = {
+        **record,
+        "decision_text": decision_text,
+        "summary_lines": summary_lines,
+        "artifact_files": [
+            name
+            for name in ("summary.md", "decision.txt", "run_config.json", "final_state.json")
+            if _artifact_path(record, name).exists() or name in artifact_file_names
+        ],
+    }
+
+    decision_path = _artifact_path(repaired, "decision.txt")
+    summary_path = _artifact_path(repaired, "summary.md")
+    _safe_write_text(decision_path, decision_text)
+    try:
+        summary_text = helpers.build_summary_markdown(
+            ticker=str(repaired.get("symbol") or ""),
+            trade_date=str(repaired.get("trade_date") or ""),
+            provider=str(repaired.get("provider") or ""),
+            deep_model=str(repaired.get("deep_model") or ""),
+            quick_model=str(repaired.get("quick_model") or ""),
+            output_language=settings.TRADINGAGENTS_OUTPUT_LANGUAGE or "English",
+            summary_lines=summary_lines,
+        )
+        _safe_write_text(summary_path, summary_text)
+    except Exception:
+        logger.debug("TradingAgents artifact repair summary write failed", exc_info=True)
+
+    logger.info(
+        "TradingAgents thin run repaired from final_state artifact",
+        extra={
+            "run_id": repaired.get("run_id"),
+            "symbol": repaired.get("symbol"),
+            "trade_date": repaired.get("trade_date"),
+        },
+    )
+    return repaired, True
+
+
 def extract_json_payload(stdout: str) -> dict[str, Any]:
     """Parse wrapper JSON even when bootstrap text is printed first."""
     start = stdout.find("{")
@@ -454,6 +619,22 @@ async def _load_record(username: str, run_id: str) -> dict[str, Any] | None:
     return _normalize_public_record(_INMEM_RUNS.get(_run_key(username, run_id)))
 
 
+async def _repair_loaded_record(
+    username: str,
+    record: dict[str, Any] | None,
+    *,
+    store: bool,
+) -> dict[str, Any] | None:
+    normalized = _normalize_public_record(record)
+    if normalized is None:
+        return None
+
+    repaired, changed = _repair_record_from_artifacts(normalized)
+    if changed and store:
+        await _store_record(username, repaired)
+    return repaired
+
+
 async def _list_records(username: str, limit: int) -> list[dict[str, Any]]:
     limit = max(min(limit, settings.TRADINGAGENTS_HISTORY_LIMIT), 1)
     try:
@@ -483,7 +664,7 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
         raise TradingAgentsRunError("disabled", "TradingAgents research is disabled")
 
     base = _request_record(username, request)
-    existing = await _load_record(username, base["run_id"])
+    existing = await _repair_loaded_record(username, await _load_record(username, base["run_id"]), store=True)
     if existing and existing.get("status") in {"queued", "running", "succeeded"}:
         return existing
 
@@ -509,11 +690,17 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
 
 
 async def get_tradingagents_run(username: str, run_id: str) -> dict[str, Any] | None:
-    return await _load_record(username, run_id)
+    return await _repair_loaded_record(username, await _load_record(username, run_id), store=True)
 
 
 async def list_tradingagents_runs(username: str, limit: int | None = None) -> list[dict[str, Any]]:
-    return await _list_records(username, limit or settings.TRADINGAGENTS_HISTORY_LIMIT)
+    records = await _list_records(username, limit or settings.TRADINGAGENTS_HISTORY_LIMIT)
+    repaired: list[dict[str, Any]] = []
+    for record in records:
+        item = await _repair_loaded_record(username, record, store=False)
+        if item is not None:
+            repaired.append(item)
+    return repaired
 
 
 async def _execute_tradingagents_run(username: str, run_id: str) -> None:
