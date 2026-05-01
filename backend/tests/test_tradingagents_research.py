@@ -11,6 +11,13 @@ def test_normalize_symbol_blocks_shell_payloads() -> None:
         svc.normalize_symbol("AAPL;rm -rf /")
 
 
+def test_normalize_analysts_deduplicates_and_validates() -> None:
+    assert svc.normalize_analysts(["market", "news", "market"]) == ["market", "news"]
+    assert svc.normalize_analysts("social,fundamentals") == ["social", "fundamentals"]
+    with pytest.raises(ValueError):
+        svc.normalize_analysts(["market", "macro"])
+
+
 def test_extract_json_payload_tolerates_bootstrap_prefix() -> None:
     payload = svc.extract_json_payload(
         "bootstrapping TradingAgents...\n"
@@ -34,11 +41,13 @@ def test_build_command_uses_wrapper_and_json_mode(monkeypatch: pytest.MonkeyPatc
             "provider": "openai",
             "deep_model": "gpt-5.4",
             "quick_model": "gpt-5.4-mini",
+            "analysts": ["market", "news"],
             "research_depth": 2,
         }
     )
     assert cmd[:4] == ["/bin/bash", "/tmp/run_tradingagents.sh", "MSFT", "2026-05-01"]
     assert "--json" in cmd
+    assert cmd[cmd.index("--analysts") + 1] == "market,news"
     assert cmd[cmd.index("--output-language") + 1] == "English"
     assert cmd[cmd.index("--research-depth") + 1] == "2"
 
@@ -66,6 +75,22 @@ def test_runtime_status_reports_bootstrap_and_key_state(
     assert status["bootstrap_required"] is True
     assert status["ready"] is False
     assert any("ANTHROPIC_API_KEY" in warning for warning in status["warnings"])
+
+
+def test_normalize_public_record_backfills_new_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_TIMEOUT_S", 600)
+    normalized = svc._normalize_public_record(
+        {
+            "run_id": "abc123abc123abc123abc123",
+            "symbol": "AAPL",
+            "trade_date": "2026-05-01",
+        }
+    )
+
+    assert normalized is not None
+    assert normalized["analysts"] == ["market", "social", "news", "fundamentals"]
+    assert normalized["progress_message"] is None
+    assert normalized["timeout_s"] == 600
 
 
 @pytest.mark.asyncio
@@ -123,6 +148,7 @@ async def test_missing_wrapper_fails_before_provider_call(monkeypatch: pytest.Mo
                 "provider": "openai",
                 "deep_model": "gpt-5.4",
                 "quick_model": "gpt-5.4-mini",
+                "analysts": ["market"],
                 "research_depth": 1,
             }
         )

@@ -13,6 +13,7 @@ from services.tradingagents_research import (
     ADVISORY_DISCLAIMER,
     TradingAgentsRunError,
     list_tradingagents_runs,
+    normalize_analysts,
     normalize_provider,
     normalize_symbol,
     normalize_trade_date,
@@ -42,6 +43,10 @@ class TradingAgentsRunRequest(BaseModel):
     )
     deep_model: str | None = Field(None, max_length=80)
     quick_model: str | None = Field(None, max_length=80)
+    analysts: list[str] | None = Field(
+        None,
+        description="Subset of TradingAgents analysts: market, social, news, fundamentals.",
+    )
     research_depth: int = Field(1, ge=1, le=3)
     reason: str | None = Field(None, max_length=500)
 
@@ -64,6 +69,13 @@ class TradingAgentsRunRequest(BaseModel):
             return None
         return normalize_provider(value)
 
+    @field_validator("analysts")
+    @classmethod
+    def _validate_analysts(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        return normalize_analysts(value)
+
 
 class TradingAgentsRunErrorPayload(BaseModel):
     code: str
@@ -78,7 +90,10 @@ class TradingAgentsRunResponse(BaseModel):
     provider: str
     deep_model: str
     quick_model: str
+    analysts: list[str]
     research_depth: int
+    progress_message: str | None = None
+    timeout_s: int
     summary_lines: list[str] = Field(default_factory=list)
     decision_text: str | None = None
     artifact_files: list[str] = Field(default_factory=list)
@@ -106,6 +121,7 @@ class TradingAgentsRuntimeStatus(BaseModel):
     provider_key_configured: bool
     deep_model: str
     quick_model: str
+    supported_analysts: list[str]
     output_language: str
     timeout_s: int
     runs_per_hour: int

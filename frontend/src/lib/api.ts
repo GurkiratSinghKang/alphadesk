@@ -545,7 +545,10 @@ export interface TradingAgentsRun {
   provider: string;
   deep_model: string;
   quick_model: string;
+  analysts: string[];
   research_depth: number;
+  progress_message: string | null;
+  timeout_s: number;
   summary_lines: string[];
   decision_text: string | null;
   artifact_files: string[];
@@ -573,6 +576,7 @@ export interface TradingAgentsRuntimeStatus {
   provider_key_configured: boolean;
   deep_model: string;
   quick_model: string;
+  supported_analysts: string[];
   output_language: string;
   timeout_s: number;
   runs_per_hour: number;
@@ -586,6 +590,7 @@ export interface TradingAgentsRunRequest {
   provider?: string | null;
   deep_model?: string | null;
   quick_model?: string | null;
+  analysts?: string[] | null;
   research_depth?: number;
   reason?: string | null;
 }

@@ -34,6 +34,7 @@ SUPPORTED_PROVIDERS = {
     "glm": "ZHIPU_API_KEY",
     "azure": "AZURE_OPENAI_API_KEY",
 }
+SUPPORTED_ANALYSTS = ("market", "social", "news", "fundamentals")
 _PROVIDER_SETTINGS = {
     "openai": "OPENAI_API_KEY",
     "google": "GOOGLE_API_KEY",
@@ -89,6 +90,26 @@ def normalize_provider(value: str | None) -> str:
         allowed = ", ".join(sorted(SUPPORTED_PROVIDERS))
         raise ValueError(f"provider must be one of: {allowed}")
     return provider
+
+
+def normalize_analysts(value: Any) -> list[str]:
+    if value is None or value == "":
+        return list(SUPPORTED_ANALYSTS)
+    if isinstance(value, str):
+        raw_items = value.split(",")
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raise ValueError("analysts must be a list or comma-separated string")
+
+    analysts = [str(item).strip().lower() for item in raw_items if str(item).strip()]
+    if not analysts:
+        raise ValueError("analysts must include at least one analyst")
+    unknown = sorted(set(analysts) - set(SUPPORTED_ANALYSTS))
+    if unknown:
+        allowed = ", ".join(SUPPORTED_ANALYSTS)
+        raise ValueError(f"analysts must be a subset of: {allowed}")
+    return list(dict.fromkeys(analysts))
 
 
 def _secret_value(value: Any) -> str:
@@ -204,6 +225,7 @@ def get_tradingagents_runtime_status() -> dict[str, Any]:
         "provider_key_configured": provider_key_configured,
         "deep_model": default_deep,
         "quick_model": default_quick,
+        "supported_analysts": list(SUPPORTED_ANALYSTS),
         "output_language": settings.TRADINGAGENTS_OUTPUT_LANGUAGE or "English",
         "timeout_s": settings.TRADINGAGENTS_TIMEOUT_S,
         "runs_per_hour": settings.TRADINGAGENTS_RUNS_PER_HOUR,
@@ -279,6 +301,7 @@ def _request_record(username: str, request: dict[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "deep_model": str(request.get("deep_model") or default_deep).strip(),
         "quick_model": str(request.get("quick_model") or default_quick).strip(),
+        "analysts": normalize_analysts(request.get("analysts")),
         "research_depth": research_depth,
         "reason": str(request.get("reason") or "").strip()[:500],
         "requested_by": username,
@@ -301,6 +324,8 @@ def build_command(record: dict[str, Any]) -> list[str]:
         record["deep_model"],
         "--quick-model",
         record["quick_model"],
+        "--analysts",
+        ",".join(record.get("analysts") or SUPPORTED_ANALYSTS),
         "--output-language",
         settings.TRADINGAGENTS_OUTPUT_LANGUAGE or "English",
         "--research-depth",
@@ -320,7 +345,10 @@ def _public_record(record: dict[str, Any]) -> dict[str, Any]:
         "provider": record["provider"],
         "deep_model": record["deep_model"],
         "quick_model": record["quick_model"],
+        "analysts": record.get("analysts", list(SUPPORTED_ANALYSTS)),
         "research_depth": record["research_depth"],
+        "progress_message": record.get("progress_message"),
+        "timeout_s": settings.TRADINGAGENTS_TIMEOUT_S,
         "summary_lines": record.get("summary_lines", []),
         "decision_text": record.get("decision_text"),
         "artifact_files": record.get("artifact_files", []),
@@ -331,6 +359,17 @@ def _public_record(record: dict[str, Any]) -> dict[str, Any]:
         "completed_at": record.get("completed_at"),
         "advisory_disclaimer": ADVISORY_DISCLAIMER,
     }
+
+
+def _normalize_public_record(record: dict[str, Any] | None) -> dict[str, Any] | None:
+    if record is None:
+        return None
+    normalized = {**record}
+    normalized.setdefault("analysts", list(SUPPORTED_ANALYSTS))
+    normalized.setdefault("progress_message", None)
+    normalized.setdefault("timeout_s", settings.TRADINGAGENTS_TIMEOUT_S)
+    normalized.setdefault("advisory_disclaimer", ADVISORY_DISCLAIMER)
+    return normalized
 
 
 def _run_key(username: str, run_id: str) -> str:
@@ -379,10 +418,10 @@ async def _load_record(username: str, run_id: str) -> dict[str, Any] | None:
         raw = await redis.get(_run_key(username, run_id))
         if raw:
             payload = json.loads(raw)
-            return payload if isinstance(payload, dict) else None
+            return _normalize_public_record(payload) if isinstance(payload, dict) else None
     except Exception:
         logger.debug("TradingAgents Redis load failed; using in-memory cache", exc_info=True)
-    return _INMEM_RUNS.get(_run_key(username, run_id))
+    return _normalize_public_record(_INMEM_RUNS.get(_run_key(username, run_id)))
 
 
 async def _list_records(username: str, limit: int) -> list[dict[str, Any]]:
@@ -422,6 +461,7 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
     record = {
         **base,
         "status": "queued",
+        "progress_message": "Queued for TradingAgents research.",
         "summary_lines": [],
         "decision_text": None,
         "artifact_files": [],
@@ -450,15 +490,29 @@ async def _execute_tradingagents_run(username: str, run_id: str) -> None:
     if record is None:
         return
     started = utc_now_iso()
-    record.update({"status": "running", "started_at": started, "updated_at": started})
+    record.update(
+        {
+            "status": "running",
+            "started_at": started,
+            "updated_at": started,
+            "progress_message": (
+                "TradingAgents graph is running. Upstream emits report output only after completion."
+            ),
+        }
+    )
     await _store_record(username, record)
 
+    heartbeat_stop = asyncio.Event()
+    heartbeat_task = asyncio.create_task(_heartbeat_tradingagents_run(username, run_id, heartbeat_stop))
     try:
         result = await _run_subprocess(record)
+        heartbeat_stop.set()
+        await heartbeat_task
         completed = utc_now_iso()
         record.update(
             {
                 "status": "succeeded",
+                "progress_message": "TradingAgents report complete.",
                 "summary_lines": result["summary_lines"],
                 "decision_text": result["decision_text"],
                 "artifact_files": result["artifact_files"],
@@ -468,27 +522,53 @@ async def _execute_tradingagents_run(username: str, run_id: str) -> None:
             }
         )
     except TradingAgentsRunError as exc:
+        heartbeat_stop.set()
+        await heartbeat_task
         completed = utc_now_iso()
         record.update(
             {
                 "status": "failed",
+                "progress_message": "TradingAgents report failed.",
                 "completed_at": completed,
                 "updated_at": completed,
                 "error": {"code": exc.status, "message": exc.message},
             }
         )
     except Exception as exc:  # pragma: no cover - defensive guard
+        heartbeat_stop.set()
+        await heartbeat_task
         completed = utc_now_iso()
         logger.exception("TradingAgents run failed unexpectedly")
         record.update(
             {
                 "status": "failed",
+                "progress_message": "TradingAgents report failed unexpectedly.",
                 "completed_at": completed,
                 "updated_at": completed,
                 "error": {"code": "internal_error", "message": str(exc)},
             }
         )
     await _store_record(username, record)
+
+
+async def _heartbeat_tradingagents_run(username: str, run_id: str, stop: asyncio.Event) -> None:
+    while True:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=30)
+            return
+        except asyncio.TimeoutError:
+            record = await _load_record(username, run_id)
+            if record is None or record.get("status") != "running":
+                return
+            record.update(
+                {
+                    "updated_at": utc_now_iso(),
+                    "progress_message": (
+                        "Still running TradingAgents. The wrapper will store the memo when upstream completes."
+                    ),
+                }
+            )
+            await _store_record(username, record)
 
 
 async def _run_subprocess(record: dict[str, Any]) -> dict[str, Any]:

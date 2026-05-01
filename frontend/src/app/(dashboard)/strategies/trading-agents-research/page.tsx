@@ -31,6 +31,7 @@ const PROVIDERS = [
   { value: "google", label: "Google" },
   { value: "openrouter", label: "OpenRouter" },
 ];
+const DEFAULT_ANALYSTS = ["market", "social", "news", "fundamentals"];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -67,6 +68,7 @@ export default function TradingAgentsResearchPage() {
   const [tradeDate, setTradeDate] = useState(todayIso);
   const [provider, setProvider] = useState("");
   const [researchDepth, setResearchDepth] = useState(1);
+  const [analysts, setAnalysts] = useState<string[]>(DEFAULT_ANALYSTS);
   const [deepModel, setDeepModel] = useState("");
   const [quickModel, setQuickModel] = useState("");
   const [reason, setReason] = useState("");
@@ -183,6 +185,7 @@ export default function TradingAgentsResearchPage() {
         provider: provider || null,
         deep_model: deepModel || null,
         quick_model: quickModel || null,
+        analysts,
         research_depth: researchDepth,
         reason: reason || null,
       });
@@ -202,7 +205,7 @@ export default function TradingAgentsResearchPage() {
 
   const runSubtitle = useMemo(() => {
     if (!selectedRun) return "No report selected";
-    return `${selectedRun.provider} - ${selectedRun.deep_model} / ${selectedRun.quick_model}`;
+    return `${selectedRun.provider} - ${selectedRun.analysts.join(", ")}`;
   }, [selectedRun]);
 
   const actions = (
@@ -293,6 +296,44 @@ export default function TradingAgentsResearchPage() {
                   <option value={3}>3 rounds</option>
                 </select>
               </label>
+            </div>
+
+            <div className="mt-3 rounded-sm border border-border-hair bg-bg-elev-1 p-3">
+              <p className="mb-2 t-label text-fg-muted">Analysts</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(runtime?.supported_analysts ?? DEFAULT_ANALYSTS).map((item) => {
+                  const checked = analysts.includes(item);
+                  return (
+                    <label
+                      key={item}
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-sm border px-3 font-sans text-[13px]",
+                        checked
+                          ? "border-brand bg-brand/10 text-fg"
+                          : "border-border-hair bg-bg-card text-fg-muted",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          setAnalysts((prev) => {
+                            if (event.target.checked) {
+                              return [...prev, item].filter(
+                                (value, index, all) => all.indexOf(value) === index,
+                              );
+                            }
+                            const next = prev.filter((value) => value !== item);
+                            return next.length ? next : prev;
+                          });
+                        }}
+                        className="h-3.5 w-3.5 accent-current"
+                      />
+                      <span className="capitalize">{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <details className="mt-3 rounded-sm border border-border-hair bg-bg-elev-1 px-3 py-2">
@@ -499,15 +540,26 @@ export default function TradingAgentsResearchPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                 <Fact label="Started" value={formatStamp(selectedRun.started_at)} />
                 <Fact label="Updated" value={formatStamp(selectedRun.updated_at)} />
                 <Fact
                   label="Depth"
                   value={`${selectedRun.research_depth} round${selectedRun.research_depth === 1 ? "" : "s"}`}
                 />
+                <Fact label="Analysts" value={String(selectedRun.analysts.length)} />
+                <Fact label="Timeout" value={`${selectedRun.timeout_s}s`} />
                 <Fact label="Artifacts" value={String(selectedRun.artifact_files.length)} />
               </div>
+
+              {selectedRun.progress_message && (
+                <div className="rounded-sm border border-border-hair bg-bg-elev-1 px-4 py-3">
+                  <p className="t-label text-fg-muted">Progress</p>
+                  <p className="mt-1 font-sans text-[13px] leading-relaxed text-fg">
+                    {selectedRun.progress_message}
+                  </p>
+                </div>
+              )}
 
               {selectedRun.error && (
                 <div className="rounded-sm border border-loss/50 bg-loss/10 px-4 py-3">
@@ -536,7 +588,9 @@ export default function TradingAgentsResearchPage() {
                   </ul>
                 ) : (
                   <p className="rounded-sm border border-dashed border-border-hair px-3 py-5 text-center t-meta text-fg-muted">
-                    {isActiveRun ? "Research is running." : "No summary extracted."}
+                    {isActiveRun
+                      ? selectedRun.progress_message ?? "Research is running."
+                      : "No summary extracted."}
                   </p>
                 )}
               </section>
