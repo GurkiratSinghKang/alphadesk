@@ -43,6 +43,31 @@ def test_build_command_uses_wrapper_and_json_mode(monkeypatch: pytest.MonkeyPatc
     assert cmd[cmd.index("--research-depth") + 1] == "2"
 
 
+def test_runtime_status_reports_bootstrap_and_key_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    script = tmp_path / "run_tradingagents.sh"
+    script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    skill_home = tmp_path / "skill-home"
+
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_ENABLED", True)
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_SCRIPT_PATH", str(script))
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_SKILL_HOME", str(skill_home))
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_PROVIDER", "anthropic")
+    monkeypatch.setattr(svc.settings, "ANTHROPIC_API_KEY", "")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    status = svc.get_tradingagents_runtime_status()
+
+    assert status["script_exists"] is True
+    assert status["script_runnable"] is True
+    assert status["provider_key_configured"] is False
+    assert status["bootstrap_required"] is True
+    assert status["ready"] is False
+    assert any("ANTHROPIC_API_KEY" in warning for warning in status["warnings"])
+
+
 @pytest.mark.asyncio
 async def test_start_run_queues_and_deduplicates(monkeypatch: pytest.MonkeyPatch) -> None:
     svc._INMEM_RUNS.clear()

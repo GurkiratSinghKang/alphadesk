@@ -90,3 +90,40 @@ def test_get_run_404(monkeypatch: pytest.MonkeyPatch, authed_client) -> None:
     monkeypatch.setattr(route, "get_tradingagents_run", fake_get)
     resp = authed_client.get("/api/v1/tradingagents/runs/abc123abc123abc123abc123")
     assert resp.status_code == 404
+
+
+def test_runtime_status_does_not_expose_secret(monkeypatch: pytest.MonkeyPatch, authed_client) -> None:
+    monkeypatch.setattr(
+        route,
+        "get_tradingagents_runtime_status",
+        lambda: {
+            "enabled": True,
+            "ready": True,
+            "script_path": "/app/tools/tradingagents/scripts/run_tradingagents.sh",
+            "script_exists": True,
+            "script_runnable": True,
+            "skill_home": "/app/data/tradingagents-skill",
+            "runtime_python_exists": True,
+            "upstream_checkout_exists": True,
+            "installed_ref": "v0.2.3",
+            "bootstrap_required": False,
+            "provider": "anthropic",
+            "provider_env": "ANTHROPIC_API_KEY",
+            "provider_key_configured": True,
+            "deep_model": "claude-sonnet-4-6",
+            "quick_model": "claude-haiku-4-5",
+            "output_language": "English",
+            "timeout_s": 600,
+            "runs_per_hour": 12,
+            "history_limit": 20,
+            "warnings": [],
+        },
+    )
+
+    resp = authed_client.get("/api/v1/tradingagents/runtime")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ready"] is True
+    assert payload["provider_env"] == "ANTHROPIC_API_KEY"
+    assert "api_key" not in payload

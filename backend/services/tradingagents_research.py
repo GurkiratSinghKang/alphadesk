@@ -51,6 +51,7 @@ _RUN_ID_RE = re.compile(r"^[a-f0-9]{24}$")
 _RUN_TTL_SECONDS = 7 * 24 * 60 * 60
 _INMEM_RUNS: dict[str, dict[str, Any]] = {}
 _INMEM_USER_RUNS: dict[str, list[str]] = {}
+_DEFAULT_SKILL_HOME = Path("~/.cache/tradingagents-skill").expanduser()
 
 
 class TradingAgentsRunError(RuntimeError):
@@ -142,6 +143,73 @@ def _script_path() -> Path:
         if candidate is not None and candidate.exists():
             return candidate
     return next(candidate for candidate in candidates if candidate is not None)
+
+
+def _skill_home_path() -> Path:
+    configured = (settings.TRADINGAGENTS_SKILL_HOME or os.environ.get("TRADINGAGENTS_SKILL_HOME") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return _DEFAULT_SKILL_HOME
+
+
+def get_tradingagents_runtime_status() -> dict[str, Any]:
+    provider = normalize_provider(None)
+    default_deep, default_quick = _model_defaults(provider)
+    script = _script_path()
+    script_exists = script.exists() and script.is_file()
+    script_runnable = script_exists and (script.suffix == ".sh" or os.access(script, os.X_OK))
+
+    skill_home = _skill_home_path()
+    runtime_python = skill_home / "venv" / "bin" / "python"
+    upstream_checkout = skill_home / "upstream" / "TradingAgents" / ".git"
+    installed_ref_path = skill_home / ".installed-ref"
+    installed_ref: str | None = None
+    if installed_ref_path.exists() and installed_ref_path.is_file():
+        try:
+            installed_ref = installed_ref_path.read_text(encoding="utf-8", errors="replace").strip() or None
+        except OSError:
+            installed_ref = None
+
+    env_name, key_value = _provider_key(provider)
+    provider_key_configured = bool(key_value or not env_name)
+    runtime_python_exists = runtime_python.exists() and runtime_python.is_file()
+    upstream_checkout_exists = upstream_checkout.exists()
+    bootstrap_required = not (runtime_python_exists and upstream_checkout_exists and installed_ref)
+
+    warnings: list[str] = []
+    if not settings.TRADINGAGENTS_ENABLED:
+        warnings.append("TradingAgents research is disabled.")
+    if not script_exists:
+        warnings.append(f"TradingAgents wrapper was not found at {script}.")
+    elif not script_runnable:
+        warnings.append(f"TradingAgents wrapper is not runnable at {script}.")
+    if env_name and not provider_key_configured:
+        warnings.append(f"{env_name} is required for the {provider} provider.")
+    if bootstrap_required:
+        warnings.append("TradingAgents runtime is not fully bootstrapped; the first run will install or refresh it.")
+
+    return {
+        "enabled": bool(settings.TRADINGAGENTS_ENABLED),
+        "ready": bool(settings.TRADINGAGENTS_ENABLED and script_runnable and provider_key_configured),
+        "script_path": str(script),
+        "script_exists": script_exists,
+        "script_runnable": script_runnable,
+        "skill_home": str(skill_home),
+        "runtime_python_exists": runtime_python_exists,
+        "upstream_checkout_exists": upstream_checkout_exists,
+        "installed_ref": installed_ref,
+        "bootstrap_required": bootstrap_required,
+        "provider": provider,
+        "provider_env": env_name or None,
+        "provider_key_configured": provider_key_configured,
+        "deep_model": default_deep,
+        "quick_model": default_quick,
+        "output_language": settings.TRADINGAGENTS_OUTPUT_LANGUAGE or "English",
+        "timeout_s": settings.TRADINGAGENTS_TIMEOUT_S,
+        "runs_per_hour": settings.TRADINGAGENTS_RUNS_PER_HOUR,
+        "history_limit": settings.TRADINGAGENTS_HISTORY_LIMIT,
+        "warnings": warnings,
+    }
 
 
 def _safe_filename(path_value: Any) -> str | None:

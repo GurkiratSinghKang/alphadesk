@@ -557,6 +557,29 @@ export interface TradingAgentsRun {
   advisory_disclaimer: string;
 }
 
+export interface TradingAgentsRuntimeStatus {
+  enabled: boolean;
+  ready: boolean;
+  script_path: string;
+  script_exists: boolean;
+  script_runnable: boolean;
+  skill_home: string;
+  runtime_python_exists: boolean;
+  upstream_checkout_exists: boolean;
+  installed_ref: string | null;
+  bootstrap_required: boolean;
+  provider: string;
+  provider_env: string | null;
+  provider_key_configured: boolean;
+  deep_model: string;
+  quick_model: string;
+  output_language: string;
+  timeout_s: number;
+  runs_per_hour: number;
+  history_limit: number;
+  warnings: string[];
+}
+
 export interface TradingAgentsRunRequest {
   symbol: string;
   trade_date?: string | null;
@@ -565,6 +588,10 @@ export interface TradingAgentsRunRequest {
   quick_model?: string | null;
   research_depth?: number;
   reason?: string | null;
+}
+
+export function getTradingAgentsRuntimeStatus() {
+  return apiFetch<TradingAgentsRuntimeStatus>(`/api/v1/tradingagents/runtime`);
 }
 
 export function startTradingAgentsRun(input: TradingAgentsRunRequest) {
@@ -1996,21 +2023,26 @@ export interface PipelineRun {
   timestamp: string;
   screened: PipelineScreenedStock[];
   analyzed: PipelineAnalysis[];
-  signals: any[];
+  signals: Record<string, unknown>[];
   ordersPlaced: PipelineOrder[];
   ordersClosed: PipelineOrder[];
   portfolioSnapshot: { equity: number; cash: number; positions: number };
   errors: string[];
   /** Raw per-strategy breakdown from the pipeline log */
-  strategies?: Record<string, any>;
+  strategies?: Record<string, unknown>;
   /** Master agent decisions/rejections */
-  master_agent?: Record<string, any>;
+  master_agent?: Record<string, unknown>;
   /**
    * Numeric counts surfaced when the backend returns aggregate totals
    * without per-row detail. The UI renders these in an editorial empty
    * state rather than synthesizing `stock-0`/`${stratName}-${i}` rows.
    */
   counts?: { screened: number; analyzed: number };
+}
+
+export interface PipelineHistoryEntry extends Record<string, unknown> {
+  date?: string;
+  signals?: number | Record<string, unknown>[];
 }
 
 export interface PipelinePosition {
@@ -2049,8 +2081,8 @@ export async function triggerPipeline(): Promise<{ run_id: string; status: "star
   );
 }
 
-export async function getPipelineHistory(): Promise<Record<string, any>[]> {
-  return apiFetch<Record<string, any>[]>('/api/v1/pipeline/history');
+export async function getPipelineHistory(): Promise<PipelineHistoryEntry[]> {
+  return apiFetch<PipelineHistoryEntry[]>('/api/v1/pipeline/history');
 }
 
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
@@ -2058,8 +2090,74 @@ export async function getPipelineRun(date: string): Promise<PipelineRun> {
   return mapPipelineRun(raw);
 }
 
+type PipelineStrategyDetail = {
+  screened?: number;
+  analyzed?: number;
+  analyses?: unknown[];
+};
+
+function asPipelineRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function asPipelineRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(asPipelineRecord) : [];
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function mapPipelineAnalysis(value: unknown, fallbackSymbol = ""): PipelineAnalysis {
+  const item = asPipelineRecord(value);
+  return {
+    symbol: asString(item.symbol, fallbackSymbol),
+    signal: asString(item.signal, "hold"),
+    conviction: asNumber(item.conviction),
+    entryPrice: asNumberOrNull(item.entry_price ?? item.entryPrice),
+    stopLoss: asNumberOrNull(item.stop_loss ?? item.stopLoss),
+    takeProfit: asNumberOrNull(item.take_profit ?? item.takeProfit),
+    rationale: asString(item.rationale),
+  };
+}
+
+function mapPipelineOrder(item: Record<string, unknown>): PipelineOrder {
+  return {
+    symbol: asString(item.symbol),
+    side: asString(item.side),
+    qty: asNumber(item.qty),
+    price: asNumber(item.price),
+    orderId: asString(item.order_id ?? item.orderId),
+    status: asString(item.status),
+    timestamp: asString(item.timestamp),
+  };
+}
+
+function asNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asPipelineStrategyMap(value: unknown): Record<string, PipelineStrategyDetail> {
+  const source = asPipelineRecord(value);
+  const mapped: Record<string, PipelineStrategyDetail> = {};
+  for (const [name, rawValue] of Object.entries(source)) {
+    const raw = asPipelineRecord(rawValue);
+    mapped[name] = {
+      screened: typeof raw.screened === "number" ? raw.screened : undefined,
+      analyzed: typeof raw.analyzed === "number" ? raw.analyzed : undefined,
+      analyses: Array.isArray(raw.analyses) ? raw.analyses : undefined,
+    };
+  }
+  return mapped;
+}
+
 export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
-  const r = raw as Record<string, any>;
+  const r = raw;
 
   // Build screened/analyzed arrays — top-level arrays if available, otherwise
   // aggregate from per-strategy data inside r.strategies
@@ -2067,79 +2165,60 @@ export function mapPipelineRun(raw: Record<string, unknown>): PipelineRun {
   let analyzed: PipelineAnalysis[] = [];
 
   if (Array.isArray(r.screened) && r.screened.length > 0) {
-    screened = r.screened.map((s: any) => ({
-      symbol: s.symbol, name: s.name, price: s.price,
-      compositeScore: s.composite_score ?? s.compositeScore ?? 0,
-      sector: s.sector ?? "", changePct: s.change_pct ?? s.changePct ?? 0,
-    }));
+    screened = r.screened.map((item) => {
+      const s = asPipelineRecord(item);
+      return {
+        symbol: asString(s.symbol), name: asString(s.name), price: asNumber(s.price),
+        compositeScore: asNumber(s.composite_score ?? s.compositeScore),
+        sector: asString(s.sector), changePct: asNumber(s.change_pct ?? s.changePct),
+      };
+    });
   }
   if (Array.isArray(r.analyzed) && r.analyzed.length > 0) {
-    analyzed = r.analyzed.map((a: any) => ({
-      symbol: a.symbol, signal: a.signal ?? "hold", conviction: a.conviction ?? 0,
-      entryPrice: a.entry_price ?? a.entryPrice ?? null,
-      stopLoss: a.stop_loss ?? a.stopLoss ?? null,
-      takeProfit: a.take_profit ?? a.takeProfit ?? null,
-      rationale: a.rationale ?? "",
-    }));
+    analyzed = r.analyzed.map((item) => mapPipelineAnalysis(item));
   }
 
   // Aggregate from per-strategy data when top-level arrays are absent.
   // We NEVER synthesize rows to pad a count — if the backend only gave us a
   // number, the UI renders the count in an editorial empty state instead of
   // fake `stock-0` / `${stratName}-${i}` placeholders.
-  const strategies = r.strategies ?? {};
-  const screenedCounts = typeof strategies === "object"
-    ? Object.values(strategies as Record<string, { screened?: number }>)
-        .reduce((acc, s) => acc + (typeof s?.screened === "number" ? s.screened : 0), 0)
-    : 0;
-  const analyzedCounts = typeof strategies === "object"
-    ? Object.values(strategies as Record<string, { analyzed?: number }>)
-        .reduce((acc, s) => acc + (typeof s?.analyzed === "number" ? s.analyzed : 0), 0)
-    : 0;
-  if (analyzed.length === 0 && typeof strategies === "object") {
+  const strategies = asPipelineStrategyMap(r.strategies);
+  const screenedCounts = Object.values(strategies)
+    .reduce((acc, s) => acc + (typeof s.screened === "number" ? s.screened : 0), 0);
+  const analyzedCounts = Object.values(strategies)
+    .reduce((acc, s) => acc + (typeof s.analyzed === "number" ? s.analyzed : 0), 0);
+  if (analyzed.length === 0) {
     // Collect analyses from each strategy's analyses array. A numeric-only
     // `analyzed` count does NOT fabricate rows — it survives as part of
     // `counts` below for the UI's empty state to display.
-    for (const [stratName, strat] of Object.entries(strategies) as [string, any][]) {
-      if (Array.isArray(strat?.analyses)) {
-        for (const a of strat.analyses) {
-          analyzed.push({
-            symbol: a.symbol ?? stratName, signal: a.signal ?? "hold",
-            conviction: a.conviction ?? 0,
-            entryPrice: a.entry_price ?? a.entryPrice ?? null,
-            stopLoss: a.stop_loss ?? a.stopLoss ?? null,
-            takeProfit: a.take_profit ?? a.takeProfit ?? null,
-            rationale: a.rationale ?? "",
-          });
+    for (const [stratName, strat] of Object.entries(strategies)) {
+      if (Array.isArray(strat.analyses)) {
+        for (const item of strat.analyses) {
+          analyzed.push(mapPipelineAnalysis(item, stratName));
         }
       }
     }
   }
 
+  const portfolio = asPipelineRecord(r.portfolio_snapshot ?? r.portfolioSnapshot);
+  const masterAgent = asPipelineRecord(r.master_agent);
+
   return {
-    date: r.date ?? "",
-    timestamp: r.timestamp ?? "",
+    date: asString(r.date),
+    timestamp: asString(r.timestamp),
     screened,
     analyzed,
-    signals: r.signals ?? [],
-    ordersPlaced: (r.orders_placed ?? r.ordersPlaced ?? []).map((o: any) => ({
-      symbol: o.symbol, side: o.side, qty: o.qty ?? 0, price: o.price ?? 0,
-      orderId: o.order_id ?? o.orderId ?? "", status: o.status ?? "",
-      timestamp: o.timestamp ?? "",
-    })),
-    ordersClosed: (r.orders_closed ?? r.ordersClosed ?? []).map((o: any) => ({
-      symbol: o.symbol, side: o.side, qty: o.qty ?? 0, price: o.price ?? 0,
-      orderId: o.order_id ?? o.orderId ?? "", status: o.status ?? "",
-      timestamp: o.timestamp ?? "",
-    })),
+    signals: asPipelineRecords(r.signals),
+    ordersPlaced: asPipelineRecords(r.orders_placed ?? r.ordersPlaced).map(mapPipelineOrder),
+    ordersClosed: asPipelineRecords(r.orders_closed ?? r.ordersClosed).map(mapPipelineOrder),
     portfolioSnapshot: {
-      equity: r.portfolio_snapshot?.equity ?? r.portfolioSnapshot?.equity ?? 0,
-      cash: r.portfolio_snapshot?.cash ?? r.portfolioSnapshot?.cash ?? 0,
-      positions: r.portfolio_snapshot?.positions ?? r.portfolioSnapshot?.positions ?? 0,
+      equity: asNumber(portfolio.equity),
+      cash: asNumber(portfolio.cash),
+      positions: asNumber(portfolio.positions),
     },
-    errors: r.errors ?? [],
-    strategies: typeof strategies === "object" && strategies ? strategies : undefined,
-    master_agent: r.master_agent ?? undefined,
+    errors: Array.isArray(r.errors) ? r.errors.map((item) => asString(item)).filter(Boolean) : [],
+    strategies: Object.keys(strategies).length ? strategies : undefined,
+    master_agent: Object.keys(masterAgent).length ? masterAgent : undefined,
     counts: {
       screened: screened.length > 0 ? screened.length : screenedCounts,
       analyzed: analyzed.length > 0 ? analyzed.length : analyzedCounts,
@@ -2794,6 +2873,8 @@ export async function postEarningsBacktest(
 export async function getPipelinePositions(): Promise<{ positions: PipelinePosition[]; performance: PipelinePerformance }> {
   const resp = await apiFetch<{ open_positions: Record<string, unknown>[]; performance: Record<string, unknown> }>('/api/v1/pipeline/positions');
   const perf = resp.performance ?? {};
+  const bestTrade = asPipelineRecord(perf.best_trade);
+  const worstTrade = asPipelineRecord(perf.worst_trade);
   return {
     positions: (resp.open_positions ?? []).map((p: Record<string, unknown>) => ({
       symbol: (p.symbol as string) ?? "",
@@ -2814,8 +2895,12 @@ export async function getPipelinePositions(): Promise<{ positions: PipelinePosit
       totalPnl: (perf.total_pnl as number) ?? 0,
       winRate: (perf.win_rate as number) ?? 0,
       avgPnlPct: (perf.avg_pnl_pct as number) ?? 0,
-      bestTrade: perf.best_trade ? { symbol: (perf.best_trade as any).symbol, pnl: (perf.best_trade as any).pnl } : null,
-      worstTrade: perf.worst_trade ? { symbol: (perf.worst_trade as any).symbol, pnl: (perf.worst_trade as any).pnl } : null,
+      bestTrade: Object.keys(bestTrade).length
+        ? { symbol: asString(bestTrade.symbol), pnl: asNumber(bestTrade.pnl) }
+        : null,
+      worstTrade: Object.keys(worstTrade).length
+        ? { symbol: asString(worstTrade.symbol), pnl: asNumber(worstTrade.pnl) }
+        : null,
     },
   };
 }

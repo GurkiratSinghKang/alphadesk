@@ -16,8 +16,10 @@ import Mono from "@/components/typography/Mono";
 import {
   getTradingAgentsRun,
   getTradingAgentsRuns,
+  getTradingAgentsRuntimeStatus,
   startTradingAgentsRun,
   type TradingAgentsRun,
+  type TradingAgentsRuntimeStatus,
   type TradingAgentsRunStatus,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -71,12 +73,15 @@ export default function TradingAgentsResearchPage() {
   const [runs, setRuns] = useState<TradingAgentsRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<TradingAgentsRun | null>(null);
+  const [runtime, setRuntime] = useState<TradingAgentsRuntimeStatus | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedStatus = selectedRun?.status ?? null;
   const isActiveRun = selectedStatus === "queued" || selectedStatus === "running";
+  const canStartRun = runtime?.ready !== false;
 
   const refreshRuns = useCallback(async () => {
     setLoading(true);
@@ -95,9 +100,25 @@ export default function TradingAgentsResearchPage() {
     }
   }, [selectedRunId]);
 
+  const refreshRuntime = useCallback(async () => {
+    setRuntimeLoading(true);
+    try {
+      setRuntime(await getTradingAgentsRuntimeStatus());
+    } catch (err) {
+      setRuntime(null);
+      setError(err instanceof Error ? err.message : "Failed to load TradingAgents runtime");
+    } finally {
+      setRuntimeLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshRuns();
   }, [refreshRuns]);
+
+  useEffect(() => {
+    refreshRuntime();
+  }, [refreshRuntime]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -213,15 +234,15 @@ export default function TradingAgentsResearchPage() {
               </div>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !canStartRun}
                 className={cn(
                   "inline-flex h-10 items-center gap-2 rounded-sm border border-brand bg-brand px-4",
                   "font-sans text-[13px] font-semibold text-bg transition-opacity",
-                  "disabled:cursor-wait disabled:opacity-60",
+                  "disabled:cursor-not-allowed disabled:opacity-60",
                 )}
               >
                 <Play className="h-4 w-4" />
-                {submitting ? "Starting" : "Run"}
+                {submitting ? "Starting" : canStartRun ? "Run" : "Not ready"}
               </button>
             </div>
 
@@ -312,6 +333,80 @@ export default function TradingAgentsResearchPage() {
               />
             </label>
           </form>
+
+          <section className="rounded-lg border border-border bg-bg-card p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <Display size="md" as="h2" className="text-[20px]">
+                  Runtime
+                </Display>
+                <p className="t-meta text-fg-muted">
+                  {runtime
+                    ? runtime.ready
+                      ? runtime.bootstrap_required
+                        ? "Ready - first run will finish bootstrap"
+                        : "Ready to run"
+                      : "Action needed before runs can start"
+                    : "Checking integration"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={refreshRuntime}
+                disabled={runtimeLoading}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border text-fg-muted hover:text-fg disabled:opacity-60"
+                aria-label="Refresh TradingAgents runtime"
+              >
+                <RefreshCw className={cn("h-4 w-4", runtimeLoading && "animate-spin")} />
+              </button>
+            </div>
+
+            {runtime ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <RuntimeFact
+                    label="Provider"
+                    value={runtime.provider}
+                    good={runtime.provider_key_configured}
+                  />
+                  <RuntimeFact
+                    label="Wrapper"
+                    value={runtime.script_runnable ? "found" : "missing"}
+                    good={runtime.script_runnable}
+                  />
+                  <RuntimeFact
+                    label="Runtime"
+                    value={runtime.bootstrap_required ? "bootstrap" : runtime.installed_ref ?? "ready"}
+                    good
+                  />
+                  <RuntimeFact
+                    label="Limit"
+                    value={`${runtime.runs_per_hour}/hr`}
+                    good={runtime.enabled}
+                  />
+                </div>
+                <p className="mt-3 truncate font-mono text-[11px] text-fg-hint" title={runtime.skill_home}>
+                  {runtime.deep_model} / {runtime.quick_model}
+                </p>
+                {runtime.warnings.length > 0 && (
+                  <ul className="mt-3 flex flex-col gap-2">
+                    {runtime.warnings.map((warning) => (
+                      <li
+                        key={warning}
+                        className="rounded-sm border border-brand/40 bg-brand/10 px-3 py-2 font-sans text-[12px] leading-relaxed text-fg"
+                      >
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="rounded-sm border border-dashed border-border-hair px-3 py-5 text-center t-meta text-fg-muted">
+                Runtime status unavailable.
+              </p>
+            )}
+          </section>
 
           <section className="rounded-lg border border-border bg-bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -481,6 +576,17 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div className="rounded-sm border border-border-hair bg-bg-elev-1 px-3 py-2">
       <p className="t-label text-fg-muted">{label}</p>
       <p className="mt-1 font-mono text-[13px] text-fg">{value}</p>
+    </div>
+  );
+}
+
+function RuntimeFact({ label, value, good }: { label: string; value: string; good: boolean }) {
+  return (
+    <div className="rounded-sm border border-border-hair bg-bg-elev-1 px-3 py-2">
+      <p className="t-label text-fg-muted">{label}</p>
+      <p className={cn("mt-1 font-mono text-[13px]", good ? "text-profit" : "text-loss")}>
+        {value}
+      </p>
     </div>
   );
 }

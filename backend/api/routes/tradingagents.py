@@ -16,6 +16,7 @@ from services.tradingagents_research import (
     normalize_provider,
     normalize_symbol,
     normalize_trade_date,
+    get_tradingagents_runtime_status,
     start_tradingagents_run,
     get_tradingagents_run,
 )
@@ -89,6 +90,29 @@ class TradingAgentsRunResponse(BaseModel):
     advisory_disclaimer: str = ADVISORY_DISCLAIMER
 
 
+class TradingAgentsRuntimeStatus(BaseModel):
+    enabled: bool
+    ready: bool
+    script_path: str
+    script_exists: bool
+    script_runnable: bool
+    skill_home: str
+    runtime_python_exists: bool
+    upstream_checkout_exists: bool
+    installed_ref: str | None = None
+    bootstrap_required: bool
+    provider: str
+    provider_env: str | None = None
+    provider_key_configured: bool
+    deep_model: str
+    quick_model: str
+    output_language: str
+    timeout_s: int
+    runs_per_hour: int
+    history_limit: int
+    warnings: list[str] = Field(default_factory=list)
+
+
 def _inmem_incr(key: str) -> int:
     now = time.time()
     window_start = now - _RATE_LIMIT_WINDOW_SECONDS
@@ -129,6 +153,14 @@ async def _enforce_run_rate_limit(username: str) -> None:
             ),
             headers={"Retry-After": str(_RATE_LIMIT_WINDOW_SECONDS)},
         )
+
+
+@router.get("/runtime", response_model=TradingAgentsRuntimeStatus)
+async def get_runtime_status(
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    _ = username
+    return get_tradingagents_runtime_status()
 
 
 @router.post("/runs", response_model=TradingAgentsRunResponse, status_code=202)
