@@ -5672,40 +5672,26 @@ async def reconcile_positions_on_boot() -> dict[str, Any]:
         )
         return result
 
-    # Local side — sum open Trade rows per symbol.
+    # Local side — sum open positions from TradeLedger, the canonical
+    # strategy/risk ledger. The ORM ``trades`` table is order history; using
+    # it here produced false boot drift alarms after the ledger sync was
+    # already aligned with Alpaca.
     local_positions: dict[str, float] = {}
     if not _s.SKIP_DB_INIT:
         try:
-            from sqlalchemy import select
-            from core.database import _get_session_factory
-            from data.storage.models import Trade
+            from data.ingestion.trade_ledger import TradeLedger
 
-            factory = _get_session_factory()
-            async with factory() as db:
-                q = select(Trade).where(
-                    Trade.status.in_(["submitted", "open", "filled", "partial"])
-                )
-                rows = (await db.execute(q)).scalars().all()
-                for t in rows:
-                    if not t.symbol:
-                        continue
-                    try:
-                        # Prefer filled_qty when populated (J-17),
-                        # else fall back to leg qty.
-                        if getattr(t, "filled_qty", None) is not None:
-                            qty = float(t.filled_qty)
-                        else:
-                            leg = (t.legs or [{}])[0]
-                            qty = float(leg.get("qty", 0) or 0) if isinstance(leg, dict) else 0.0
-                        # Sign by trade_kind / side
-                        if (
-                            getattr(t, "trade_kind", None) == "short_open"
-                            or t.side == "short"
-                        ):
-                            qty = -qty
-                        local_positions[t.symbol] = local_positions.get(t.symbol, 0.0) + qty
-                    except Exception:
-                        continue
+            for t in TradeLedger().get_open_positions():
+                sym = t.get("symbol")
+                if not sym:
+                    continue
+                try:
+                    qty = float(t.get("shares", t.get("qty", 0)) or 0)
+                except (TypeError, ValueError):
+                    continue
+                side = str(t.get("side") or "long").lower()
+                signed_qty = -abs(qty) if side in {"short", "sell"} else abs(qty)
+                local_positions[str(sym)] = local_positions.get(str(sym), 0.0) + signed_qty
         except Exception:
             logger.warning(
                 "reconcile_positions_on_boot: ledger fetch failed (non-fatal)",

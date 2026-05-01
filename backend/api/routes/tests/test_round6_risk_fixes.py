@@ -551,6 +551,83 @@ async def test_reconcile_positions_on_boot_keys_missing_returns_zero_counts() ->
     }
 
 
+class _BootReconcileResponse:
+    status_code = 200
+
+    def __init__(self, payload: list[dict[str, Any]]) -> None:
+        self._payload = payload
+
+    def json(self) -> list[dict[str, Any]]:
+        return self._payload
+
+
+class _BootReconcileClient:
+    payload: list[dict[str, Any]] = []
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    async def __aenter__(self) -> "_BootReconcileClient":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+    async def get(self, _url: str, *, headers: dict[str, str]) -> _BootReconcileResponse:
+        assert headers["APCA-API-KEY-ID"] == "TEST_KEY"
+        assert headers["APCA-API-SECRET-KEY"] == "TEST_SECRET"
+        return _BootReconcileResponse(self.__class__.payload)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_positions_on_boot_uses_trade_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Boot drift should compare broker positions with the canonical ledger.
+
+    The ORM ``trades`` table stores order history, not net strategy
+    positions. Reading it here produced false drift alerts even after
+    ``TradeLedger.sync_with_alpaca`` had aligned the actual ledger.
+    """
+    from core import config as core_config
+    from data.ingestion import trade_ledger as ledger_mod
+
+    class _Ledger:
+        def get_open_positions(self) -> list[dict[str, Any]]:
+            return [
+                {"symbol": "AAPL", "shares": 10, "side": "long"},
+                {"symbol": "TSLA", "shares": 3, "side": "short"},
+            ]
+
+    monkeypatch.setattr(trades_mod, "_alpaca_keys_empty", lambda: False)
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_API_KEY,
+        "get_secret_value",
+        lambda: "TEST_KEY",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_SECRET_KEY,
+        "get_secret_value",
+        lambda: "TEST_SECRET",
+        raising=False,
+    )
+    monkeypatch.setattr(core_config.settings, "SKIP_DB_INIT", False, raising=False)
+    monkeypatch.setattr(trades_mod.httpx, "AsyncClient", _BootReconcileClient)
+    monkeypatch.setattr(ledger_mod, "TradeLedger", _Ledger)
+    _BootReconcileClient.payload = [
+        {"symbol": "AAPL", "qty": "10"},
+        {"symbol": "TSLA", "qty": "-3"},
+    ]
+
+    result = await trades_mod.reconcile_positions_on_boot()
+
+    assert result == {
+        "matched": 2,
+        "drift_qty": 0,
+        "drift_orphan_local": 0,
+        "drift_orphan_broker": 0,
+    }
+
+
 def test_broker_open_order_notional_uses_option_multiplier() -> None:
     order = {
         "symbol": "AAPL260501C00270000",
