@@ -165,6 +165,57 @@ async def test_start_run_queues_and_deduplicates(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_start_run_requeues_thin_succeeded_record_without_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    svc._INMEM_RUNS.clear()
+    svc._INMEM_USER_RUNS.clear()
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_SKILL_HOME", str(tmp_path / "skill-home"))
+    scheduled: list[str] = []
+
+    def fake_supervised_task(coro, *, name: str):
+        scheduled.append(name)
+        coro.close()
+        return None
+
+    async def fake_load(username: str, run_id: str):
+        return svc._INMEM_RUNS.get(svc._run_key(username, run_id))
+
+    async def fake_store(username: str, record: dict):
+        svc._INMEM_RUNS[svc._run_key(username, record["run_id"])] = svc._public_record(record)
+
+    monkeypatch.setattr(svc, "create_supervised_task", fake_supervised_task)
+    monkeypatch.setattr(svc, "_load_record", fake_load)
+    monkeypatch.setattr(svc, "_store_record", fake_store)
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_ENABLED", True)
+    monkeypatch.setattr(svc.settings, "TRADINGAGENTS_PROVIDER", "anthropic")
+
+    request = {"symbol": "AAPL", "trade_date": "2026-05-01", "research_depth": 1}
+    base = svc._request_record("admin", request)
+    svc._INMEM_RUNS[svc._run_key("admin", base["run_id"])] = {
+        **base,
+        "status": "succeeded",
+        "progress_message": "TradingAgents report complete.",
+        "timeout_s": 1800,
+        "summary_lines": ["UNDERWEIGHT"],
+        "decision_text": "UNDERWEIGHT",
+        "artifact_files": ["final_state.json"],
+        "error": None,
+        "created_at": "2026-05-01T17:00:00+00:00",
+        "updated_at": "2026-05-01T17:09:00+00:00",
+        "started_at": "2026-05-01T17:00:00+00:00",
+        "completed_at": "2026-05-01T17:09:00+00:00",
+    }
+
+    result = await svc.start_tradingagents_run("admin", request)
+
+    assert result["status"] == "queued"
+    assert result["decision_text"] is None
+    assert len(scheduled) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_run_repairs_thin_success_record_from_final_state(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

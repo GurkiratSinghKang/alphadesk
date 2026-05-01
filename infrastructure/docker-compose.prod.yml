@@ -82,6 +82,11 @@ services:
       # See audit-reports/security-audit-r3.md P0 #2.
       DATABASE_URL: postgresql+asyncpg://alphadesk:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@timescaledb:5432/alphadesk
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+      # Persist TradingAgents bootstrap, venv, upstream checkout, and generated
+      # research artifacts across image swaps. Without this explicit env, the
+      # wrapper falls back to the container user's ephemeral ~/.cache path and
+      # saved reports degrade to signal-only records after deploys.
+      TRADINGAGENTS_SKILL_HOME: ${TRADINGAGENTS_SKILL_HOME:-/app/data/tradingagents-skill}
       # Wave 6β Fix 4 (from Round-5 deferred + persona 106): surface the
       # live-trading kill-switch as a first-class compose env so an
       # operator staring at this file can immediately tell whether the

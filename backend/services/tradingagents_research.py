@@ -54,7 +54,8 @@ _RUN_ID_RE = re.compile(r"^[a-f0-9]{24}$")
 _RUN_TTL_SECONDS = 7 * 24 * 60 * 60
 _INMEM_RUNS: dict[str, dict[str, Any]] = {}
 _INMEM_USER_RUNS: dict[str, list[str]] = {}
-_DEFAULT_SKILL_HOME = Path("~/.cache/tradingagents-skill").expanduser()
+_LOCAL_SKILL_HOME = Path("~/.cache/tradingagents-skill").expanduser()
+_CONTAINER_SKILL_HOME = Path("/app/data/tradingagents-skill")
 _MIN_SUBPROCESS_TIMEOUT_S = 30
 _FULL_GRAPH_TIMEOUT_FLOOR_S = 1_800
 _MAX_RUN_TIMEOUT_S = 7_200
@@ -173,11 +174,17 @@ def _script_path() -> Path:
     return next(candidate for candidate in candidates if candidate is not None)
 
 
+def _default_skill_home_path() -> Path:
+    if _CONTAINER_SKILL_HOME.parent.exists():
+        return _CONTAINER_SKILL_HOME
+    return _LOCAL_SKILL_HOME
+
+
 def _skill_home_path() -> Path:
     configured = (settings.TRADINGAGENTS_SKILL_HOME or os.environ.get("TRADINGAGENTS_SKILL_HOME") or "").strip()
     if configured:
         return Path(configured).expanduser()
-    return _DEFAULT_SKILL_HOME
+    return _default_skill_home_path()
 
 
 def get_tradingagents_runtime_status() -> dict[str, Any]:
@@ -665,7 +672,9 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
 
     base = _request_record(username, request)
     existing = await _repair_loaded_record(username, await _load_record(username, base["run_id"]), store=True)
-    if existing and existing.get("status") in {"queued", "running", "succeeded"}:
+    if existing and existing.get("status") in {"queued", "running"}:
+        return existing
+    if existing and existing.get("status") == "succeeded" and not _is_thin_decision_text(existing):
         return existing
 
     now = utc_now_iso()
@@ -803,8 +812,7 @@ async def _run_subprocess(record: dict[str, Any]) -> dict[str, Any]:
     env = os.environ.copy()
     if env_name and key_value:
         env[env_name] = key_value
-    if settings.TRADINGAGENTS_SKILL_HOME:
-        env["TRADINGAGENTS_SKILL_HOME"] = settings.TRADINGAGENTS_SKILL_HOME
+    env["TRADINGAGENTS_SKILL_HOME"] = str(_skill_home_path())
     env.setdefault("TRADINGAGENTS_BOOTSTRAP_PYTHON", sys.executable)
 
     command = build_command(record)
