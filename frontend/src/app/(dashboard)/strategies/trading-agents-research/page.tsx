@@ -3,17 +3,13 @@
 import { type CSSProperties, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowClockwise,
-  Buildings,
   CaretRight,
-  ChartLineUp,
   CheckCircle,
   Clock,
   FileText,
   Files,
   Gauge,
-  Newspaper,
   Play,
-  Pulse,
   Scales,
   ShieldCheck,
   Target,
@@ -150,19 +146,6 @@ function memoLineCount(text: string) {
 
 function memoSectionLineCount(body: string) {
   return body.split(/\n+/).filter((line) => cleanLine(line).length > 0).length;
-}
-
-function findMemoSection(sections: MemoSection[], needles: string[]) {
-  return sections.find((section) =>
-    needles.some((needle) => section.title.toLowerCase().includes(needle.toLowerCase())),
-  );
-}
-
-function extractSubsection(text: string, heading: string) {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`(?:^|\\n)###\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n###\\s+|\\n##\\s+|$)`, "i");
-  const match = text.match(regex);
-  return match?.[1]?.trim() ?? "";
 }
 
 function extractSignal(decisionText: string, summary: string[]) {
@@ -479,7 +462,7 @@ export default function TradingAgentsResearchPage() {
       eyebrow="RESEARCH"
       title="TradingAgents Research"
       actions={actions}
-      className="[&_header_h1]:overflow-visible [&_header_h1]:whitespace-normal"
+      className="[&_header_h1]:overflow-visible [&_header_h1]:whitespace-normal [&_header_h1]:[text-overflow:clip]"
       pageLabel="TradingAgents research"
     >
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -726,6 +709,8 @@ function RunForm({
 function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRun: boolean }) {
   const decisionText = run.decision_text?.trim() ?? "";
   const summary = run.summary_lines ?? [];
+  const runAnalysts = Array.isArray(run.analysts) ? run.analysts : [];
+  const artifactFiles = Array.isArray(run.artifact_files) ? run.artifact_files : [];
   const sections = useMemo(() => splitMemoSections(decisionText), [decisionText]);
   const signal = extractSignal(decisionText, summary);
   const tone = signalTone(signal);
@@ -733,9 +718,6 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
   const highlights = extractHighlights(summary, decisionText, signal);
   const levels = extractDollarLevels(decisionText);
   const memoLines = memoLineCount(decisionText);
-  const portfolioSection = findMemoSection(sections, ["portfolio manager", "final decision", "rating", "decision memo"]);
-  const traderSection = findMemoSection(sections, ["trader plan"]);
-  const committeeSection = findMemoSection(sections, ["investment committee"]);
 
   return (
     <div className="rounded-lg border border-border bg-bg-card p-4 shadow-[0_20px_80px_-56px_rgba(0,0,0,0.9)] md:p-5">
@@ -754,11 +736,11 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
                 {run.symbol}
               </h2>
               <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-[16px]">
-                {run.trade_date}
+                {run.trade_date ?? "No trade date"}
               </span>
             </div>
             <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-fg-muted">
-              {run.provider} research with {run.analysts.map(analystLabel).join(", ")} analysts.
+              {run.provider ?? "unknown"} research with {runAnalysts.length ? runAnalysts.map(analystLabel).join(", ") : "no selected"} analysts.
             </p>
           </div>
 
@@ -778,9 +760,9 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
         <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-6">
           <Fact icon={Clock} label="Runtime" value={formatDuration(run.started_at, run.completed_at, run.updated_at)} />
           <Fact icon={Gauge} label="Depth" value={`${run.research_depth} round${run.research_depth === 1 ? "" : "s"}`} />
-          <Fact icon={UsersThree} label="Analysts" value={String(run.analysts.length)} />
+          <Fact icon={UsersThree} label="Analysts" value={String(runAnalysts.length)} />
           <Fact icon={Target} label="Budget" value={formatTimeout(run.timeout_s)} />
-          <Fact icon={Files} label="Artifacts" value={String(run.artifact_files.length)} />
+          <Fact icon={Files} label="Artifacts" value={String(artifactFiles.length)} />
           <Fact icon={ShieldCheck} label="Mode" value="Read-only" />
         </div>
       </header>
@@ -805,17 +787,6 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
           ) : (
             <>
               <DecisionHighlights highlights={highlights} />
-              <MemoSectionPreview
-                icon={Scales}
-                title="Portfolio manager"
-                body={portfolioSection?.body || decisionText}
-                emphasis
-              />
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <MemoSectionPreview icon={ChartLineUp} title="Trader plan" body={traderSection?.body ?? ""} />
-                <MemoSectionPreview icon={UsersThree} title="Committee read" body={committeeSection?.body ?? ""} />
-              </div>
-              <AnalystMosaic decisionText={decisionText} />
               <MemoSectionList sections={sections} lineCount={memoLines} decisionChars={decisionText.length} />
             </>
           )}
@@ -824,10 +795,12 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
         <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
           {!thinMemo && !isActiveRun && <MemoNavigator sections={sections} />}
           <KeyLevels levels={levels} />
-          <ArtifactPanel files={run.artifact_files} />
+          <ArtifactPanel files={artifactFiles} />
           <div className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
             <p className="t-label text-fg-muted">Research guardrail</p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-fg-muted">{run.advisory_disclaimer}</p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-fg-muted">
+              {run.advisory_disclaimer || "Research is informational and requires human review before trading."}
+            </p>
           </div>
         </aside>
       </div>
@@ -856,71 +829,6 @@ function DecisionHighlights({ highlights }: { highlights: string[] }) {
               <p className="min-w-0 break-words text-[13px] leading-relaxed text-fg">{line}</p>
             </div>
           </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AnalystMosaic({ decisionText }: { decisionText: string }) {
-  const analysts = [
-    { title: "Market", icon: ChartLineUp, body: extractSubsection(decisionText, "Market Analyst") },
-    { title: "Social", icon: Pulse, body: extractSubsection(decisionText, "Social Analyst") },
-    { title: "News", icon: Newspaper, body: extractSubsection(decisionText, "News Analyst") },
-    { title: "Fundamentals", icon: Buildings, body: extractSubsection(decisionText, "Fundamentals Analyst") },
-  ].filter((item) => item.body);
-
-  if (!analysts.length) return null;
-
-  return (
-    <section>
-      <div className="mb-3 flex items-center gap-2">
-        <FileText className="h-4 w-4 text-brand" weight="bold" />
-        <p className="t-label text-fg-muted">Analyst mosaic</p>
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {analysts.map((item) => (
-          <MemoSectionPreview key={item.title} icon={item.icon} title={item.title} body={item.body} compact />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MemoSectionPreview({
-  body,
-  compact,
-  emphasis,
-  icon: Icon,
-  title,
-}: {
-  body: string;
-  compact?: boolean;
-  emphasis?: boolean;
-  icon: IconType;
-  title: string;
-}) {
-  if (!body.trim()) return null;
-  const lines = body
-    .split(/\n+/)
-    .map(cleanLine)
-    .filter((line) => line.length > 0)
-    .filter((line) => !line.startsWith("|---"))
-    .filter((line) => !isDividerLine(line))
-    .filter((line) => !isBareLabelLine(line))
-    .slice(0, compact ? 3 : 4);
-
-  return (
-    <section className={cn("rounded-lg border p-4", emphasis ? "border-brand/30 bg-brand/5" : "border-border-hair bg-bg-elev-1")}>
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-brand" weight="bold" />
-        <p className="t-label text-fg-muted">{title}</p>
-      </div>
-      <div className="space-y-2">
-        {lines.map((line, index) => (
-          <p key={`${title}-${index}-${line}`} className="break-words text-[13px] leading-relaxed text-fg">
-            {line}
-          </p>
         ))}
       </div>
     </section>
