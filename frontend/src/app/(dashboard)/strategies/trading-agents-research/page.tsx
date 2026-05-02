@@ -51,7 +51,14 @@ type LevelItem = { label: string; value: string };
 type LevelTone = "current" | "resistance" | "support" | "stop" | "target" | "reference";
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 function formatStamp(value: string | null | undefined) {
@@ -97,10 +104,13 @@ function cleanLine(value: string) {
   return stripMarkdown(value.replace(/^\s*[-*]\s*/, "").replace(/^\|/, "").replace(/\|$/, ""));
 }
 
-function truncate(value: string, max = 460) {
-  const clean = value.trim();
-  if (clean.length <= max) return clean;
-  return `${clean.slice(0, max).trim()}...`;
+function memoSectionId(title: string, index: number) {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+  return `memo-${slug || "section"}-${index}`;
 }
 
 function splitMemoSections(text: string): MemoSection[] {
@@ -111,6 +121,10 @@ function splitMemoSections(text: string): MemoSection[] {
   if (!matches.length) {
     return [{ title: "Decision memo", body: trimmed }];
   }
+  const preamble = trimmed.slice(0, matches[0].index ?? 0).trim();
+  if (preamble) {
+    sections.push({ title: "Run context", body: preamble });
+  }
   matches.forEach((match, index) => {
     const start = (match.index ?? 0) + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1].index ?? trimmed.length : trimmed.length;
@@ -119,6 +133,14 @@ function splitMemoSections(text: string): MemoSection[] {
     if (title && body) sections.push({ title, body });
   });
   return sections;
+}
+
+function memoLineCount(text: string) {
+  return text.split(/\n+/).filter((line) => cleanLine(line).length > 0).length;
+}
+
+function memoSectionLineCount(body: string) {
+  return body.split(/\n+/).filter((line) => cleanLine(line).length > 0).length;
 }
 
 function findMemoSection(sections: MemoSection[], needles: string[]) {
@@ -257,7 +279,7 @@ function levelLabel(context: string, value: string, before = "", after = "") {
   if (afterLower.includes("target") || beforeLower.includes("target")) return "Target zone";
   if (beforeLower.includes("support") || beforeLower.includes("entry")) return "Support / entry window";
   if (beforeLower.includes("resistance") || beforeLower.includes("trim")) return "Resistance / trim zone";
-  return truncate(clean || `Referenced level ${value}`, 86);
+  return clean || `Referenced level ${value}`;
 }
 
 function levelToneClass(tone: LevelTone) {
@@ -310,7 +332,7 @@ export default function TradingAgentsResearchPage() {
 
   const selectedStatus = selectedRun?.status ?? null;
   const isActiveRun = selectedStatus === "queued" || selectedStatus === "running";
-  const canStartRun = runtime?.ready !== false;
+  const canStartRun = runtime?.ready === true;
 
   const refreshRuns = useCallback(async () => {
     setLoading(true);
@@ -403,6 +425,10 @@ export default function TradingAgentsResearchPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canStartRun) {
+      setError("TradingAgents runtime is not ready. Refresh runtime status or complete bootstrap before starting a run.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -690,6 +716,7 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
   const thinMemo = isThinMemo(decisionText, summary);
   const highlights = extractHighlights(summary, decisionText, signal);
   const levels = extractDollarLevels(decisionText);
+  const memoLines = memoLineCount(decisionText);
   const portfolioSection = findMemoSection(sections, ["portfolio manager", "final decision", "rating", "decision memo"]);
   const traderSection = findMemoSection(sections, ["trader plan"]);
   const committeeSection = findMemoSection(sections, ["investment committee"]);
@@ -706,10 +733,14 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
                 {run.status}
               </span>
             </div>
-            <h2 className="mt-3 break-words font-sans text-[34px] font-semibold leading-none tracking-tight text-fg md:text-[48px]">
-              {run.symbol}
-              <span className="text-fg-muted"> / {run.trade_date}</span>
-            </h2>
+            <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
+              <h2 className="min-w-0 font-sans text-[36px] font-semibold leading-none tracking-tight text-fg md:text-[54px]">
+                {run.symbol}
+              </h2>
+              <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-[16px]">
+                {run.trade_date}
+              </span>
+            </div>
             <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-fg-muted">
               {run.provider} research with {run.analysts.map(analystLabel).join(", ")} analysts.
             </p>
@@ -769,12 +800,13 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
                 <MemoSectionPreview icon={UsersThree} title="Committee read" body={committeeSection?.body ?? ""} />
               </div>
               <AnalystMosaic decisionText={decisionText} />
-              <MemoSectionList sections={sections} />
+              <MemoSectionList sections={sections} lineCount={memoLines} decisionChars={decisionText.length} />
             </>
           )}
         </div>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+          {!thinMemo && !isActiveRun && <MemoNavigator sections={sections} />}
           <KeyLevels levels={levels} />
           <ArtifactPanel files={run.artifact_files} />
           <div className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
@@ -805,7 +837,7 @@ function DecisionHighlights({ highlights }: { highlights: string[] }) {
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-brand/35 bg-brand/10 font-mono text-[10px] text-brand">
                 {index + 1}
               </span>
-              <p className="text-[13px] leading-relaxed text-fg">{line}</p>
+              <p className="min-w-0 break-words text-[13px] leading-relaxed text-fg">{line}</p>
             </div>
           </div>
         ))}
@@ -868,8 +900,8 @@ function MemoSectionPreview({
       </div>
       <div className="space-y-2">
         {lines.map((line, index) => (
-          <p key={`${title}-${index}-${line}`} className="text-[13px] leading-relaxed text-fg">
-            {truncate(line, compact ? 210 : 320)}
+          <p key={`${title}-${index}-${line}`} className="break-words text-[13px] leading-relaxed text-fg">
+            {line}
           </p>
         ))}
       </div>
@@ -877,22 +909,73 @@ function MemoSectionPreview({
   );
 }
 
-function MemoSectionList({ sections }: { sections: MemoSection[] }) {
-  const displaySections = sections.filter((section) => section.body.trim()).slice(0, 7);
+function MemoNavigator({ sections }: { sections: MemoSection[] }) {
+  const displaySections = sections.filter((section) => section.body.trim());
+  if (!displaySections.length) return null;
+  return (
+    <section className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <FileText className="h-4 w-4 text-brand" weight="bold" />
+        <p className="t-label text-fg-muted">Memo source map</p>
+      </div>
+      <nav className="space-y-1" aria-label="TradingAgents memo sections">
+        {displaySections.map((section, index) => (
+          <a
+            key={`${section.title}-${index}`}
+            href={`#${memoSectionId(section.title, index)}`}
+            className="group flex items-start justify-between gap-3 rounded-md border border-transparent px-2 py-2 transition duration-200 hover:border-border-hair hover:bg-bg-card"
+          >
+            <span className="break-words text-[12.5px] leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
+            <span className="shrink-0 font-mono text-[11px] text-fg-hint">
+              {memoSectionLineCount(section.body)} lines
+            </span>
+          </a>
+        ))}
+      </nav>
+    </section>
+  );
+}
+
+function MemoSectionList({
+  decisionChars,
+  lineCount,
+  sections,
+}: {
+  decisionChars: number;
+  lineCount: number;
+  sections: MemoSection[];
+}) {
+  const displaySections = sections.filter((section) => section.body.trim());
   if (!displaySections.length) return null;
   return (
     <section className="rounded-lg border border-border-hair bg-bg-elev-1">
-      <div className="border-b border-border-hair px-4 py-3">
-        <p className="t-label text-fg-muted">Full memo digest</p>
+      <div className="flex flex-col gap-2 border-b border-border-hair px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="t-label text-fg-muted">Complete research memo</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
+            Saved committee memo with source sections preserved.
+          </p>
+        </div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-fg-hint">
+          {displaySections.length} sections / {lineCount} lines / {decisionChars.toLocaleString()} chars
+        </p>
       </div>
       <div className="divide-y divide-border-hair">
-        {displaySections.map((section) => (
-          <details key={section.title} className="group px-4 py-3" open={section.title.toLowerCase().includes("portfolio")}>
+        {displaySections.map((section, index) => (
+          <details
+            key={`${section.title}-${index}`}
+            id={memoSectionId(section.title, index)}
+            className="group scroll-mt-24 px-4 py-4"
+            open
+          >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-              <span className="font-sans text-[14px] font-semibold text-fg">{section.title}</span>
-              <CaretRight className="h-4 w-4 text-fg-muted transition group-open:rotate-90" weight="bold" />
+              <span className="break-words font-sans text-[15px] font-semibold text-fg">{section.title}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="font-mono text-[11px] text-fg-hint">{memoSectionLineCount(section.body)} lines</span>
+                <CaretRight className="h-4 w-4 text-fg-muted transition group-open:rotate-90" weight="bold" />
+              </span>
             </summary>
-            <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-border-hair bg-bg-card p-3">
+            <div className="mt-4 rounded-md border border-border-hair bg-bg-card p-4 md:p-5">
               <ReadableMemo body={section.body} />
             </div>
           </details>
@@ -903,29 +986,52 @@ function MemoSectionList({ sections }: { sections: MemoSection[] }) {
 }
 
 function ReadableMemo({ body }: { body: string }) {
-  const rows = body.split(/\n+/).map((line) => line.trim()).filter(Boolean).slice(0, 80);
+  const rows = body.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {rows.map((line, index) => {
         const clean = cleanLine(line);
         if (!clean) return null;
-        if (line.startsWith("###")) {
+        if (/^\|?\s*:?-{2,}/.test(clean)) return null;
+        if (/^#{3,6}\s+/.test(line)) {
           return (
-            <p key={`${index}-${line}`} className="pt-2 t-label text-brand">
+            <p key={`${index}-${line}`} className="pt-3 t-label text-brand">
               {clean}
             </p>
           );
         }
+        const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+        if (bullet) {
+          return (
+            <div key={`${index}-${line}`} className="flex gap-3">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" />
+              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+                {stripMarkdown(bullet[1])}
+              </p>
+            </div>
+          );
+        }
+        const numbered = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+        if (numbered) {
+          return (
+            <div key={`${index}-${line}`} className="flex gap-3">
+              <span className="mt-0.5 w-6 shrink-0 font-mono text-[12px] text-brand">{numbered[1]}.</span>
+              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+                {stripMarkdown(numbered[2])}
+              </p>
+            </div>
+          );
+        }
         if (line.startsWith("|")) {
           return (
-            <p key={`${index}-${line}`} className="font-mono text-[12px] leading-relaxed text-fg-muted">
+            <p key={`${index}-${line}`} className="break-words font-mono text-[12px] leading-relaxed text-fg-muted">
               {clean}
             </p>
           );
         }
         return (
-          <p key={`${index}-${line}`} className="text-[13px] leading-relaxed text-fg">
-            {truncate(clean, 420)}
+          <p key={`${index}-${line}`} className="break-words text-[13.5px] leading-7 text-fg">
+            {clean}
           </p>
         );
       })}
@@ -947,7 +1053,7 @@ function KeyLevels({ levels }: { levels: LevelItem[] }) {
             return (
               <div key={`${level.value}-${level.label}`} className={cn("rounded-md border px-3 py-2", levelToneClass(tone))}>
                 <p className="font-mono text-[17px] font-semibold text-fg">{level.value}</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">{level.label || "Referenced level"}</p>
+                <p className="mt-1 break-words text-[12px] leading-relaxed text-fg-muted">{level.label || "Referenced level"}</p>
               </div>
             );
           })}
