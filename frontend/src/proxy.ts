@@ -50,67 +50,8 @@ function forwardRequest(): NextResponse {
   return NextResponse.next();
 }
 
-function base64UrlToBytes(value: string): Uint8Array | null {
-  try {
-    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const decoded = atob(padded);
-    const bytes = new Uint8Array(decoded.length);
-    for (let i = 0; i < decoded.length; i += 1) {
-      bytes[i] = decoded.charCodeAt(i);
-    }
-    return bytes;
-  } catch {
-    return null;
-  }
-}
-
-function bytesToBase64Url(bytes: ArrayBuffer): string {
-  let binary = "";
-  const view = new Uint8Array(bytes);
-  for (let i = 0; i < view.length; i += 1) {
-    binary += String.fromCharCode(view[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-async function hasValidAccessToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
-  const secret = process.env.JWT_SECRET;
-  if (!secret) return false;
-
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-
-  try {
-    const headerBytes = base64UrlToBytes(parts[0]);
-    const payloadBytes = base64UrlToBytes(parts[1]);
-    if (!headerBytes || !payloadBytes) return false;
-
-    const header = JSON.parse(new TextDecoder().decode(headerBytes));
-    const payload = JSON.parse(new TextDecoder().decode(payloadBytes));
-    if (header?.alg !== "HS256") return false;
-    if (payload?.type !== "access") return false;
-    if (payload?.iss !== "alphadesk" || payload?.aud !== "alphadesk-api") return false;
-    if (typeof payload?.exp !== "number" || payload.exp * 1000 <= Date.now()) return false;
-    if (typeof payload?.nbf === "number" && payload.nbf * 1000 > Date.now() + 60_000) return false;
-
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
-    return bytesToBase64Url(digest) === parts[2];
-  } catch {
-    return false;
-  }
-}
-
 async function hasActiveBackendSession(request: NextRequest, token: string | undefined): Promise<boolean> {
-  if (!(await hasValidAccessToken(token))) return false;
+  if (!token) return false;
   try {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || request.nextUrl.origin;
     const sessionUrl = new URL("/api/v1/auth/session", apiBase);
