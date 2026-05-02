@@ -1430,6 +1430,7 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     }));
   return {
     symbol: (raw.underlying as string) ?? symbol,
+    spotPrice: pickNullableNumber(raw.spot_price),
     expirations: (raw.expirations as string[]) ?? [],
     calls,
     puts,

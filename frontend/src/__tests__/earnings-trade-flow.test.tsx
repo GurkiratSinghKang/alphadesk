@@ -204,11 +204,12 @@ describe("Trade page parses Round-5 deep-link contract", () => {
       expect(limitEls[0].textContent).toContain("1.45");
       expect(limitEls[1].textContent).toContain("1.32");
 
-      // Unsupported naked combo_type is stripped before it can be submitted.
+      // Undefined-risk combo types are now preserved so broker/account
+      // margin validation can make the final execution decision.
       const stratChip = container.querySelector("[data-slot='trade-strategy-tag']");
       expect(stratChip).not.toBeNull();
       expect(stratChip!.textContent).toContain("earnings-options-play");
-      expect(stratChip!.textContent).not.toContain("strangle");
+      expect(stratChip!.textContent).toContain("strangle");
     });
   });
 

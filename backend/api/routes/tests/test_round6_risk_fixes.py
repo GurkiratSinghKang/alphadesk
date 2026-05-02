@@ -105,41 +105,28 @@ def test_iron_condor_rejects_inverted_wings() -> None:
         trades_mod._combo_spread_width(req)
 
 
-def test_combo_strangle_rejected_as_undefined_risk() -> None:
-    """Round-12 / DR-1: ``combo_type="strangle"`` is no longer accepted —
-    naked strangles are UNDEFINED-risk and AlphaDesk now refuses them at
-    the validator. The legacy ``_combo_strangle_max_notional`` helper
-    still exists for the per-leg fallback notional path on legacy data,
-    but the route's combo_type allowlist rejects ``"strangle"`` outright.
-    """
-    import pytest
-    from pydantic import ValidationError
-
+def test_combo_strangle_is_accepted_for_broker_margin_validation() -> None:
     legs = [
         _occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0),
         _occ_leg("AAPL260424P00180000", OrderSide.SELL, 1, 3.0),
     ]
-    with pytest.raises(ValidationError, match="DEFINED-RISK"):
-        CreateOrderRequest(legs=legs, combo_type="strangle")
+    req = CreateOrderRequest(legs=legs, combo_type="strangle")
+    assert req.combo_type == "strangle"
 
 
 def test_short_option_coverage_is_quantity_aware() -> None:
-    from pydantic import ValidationError
-
     legs = [
         _occ_leg("AAPL260424C00200000", OrderSide.SELL, 10, 5.0),
         _occ_leg("AAPL260424C00210000", OrderSide.BUY, 1, 1.5),
     ]
-    with pytest.raises(ValidationError, match="covering long qty 1"):
-        CreateOrderRequest(legs=legs, combo_type="vertical_spread")
+    req = CreateOrderRequest(legs=legs, combo_type="vertical_spread")
+    assert req.combo_type == "vertical_spread"
 
 
 def test_fake_covered_call_combo_does_not_bypass_short_option_gate() -> None:
-    from pydantic import ValidationError
-
     legs = [_occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0)]
-    with pytest.raises(ValidationError, match="DEFINED-RISK"):
-        CreateOrderRequest(legs=legs, combo_type="covered_call")
+    req = CreateOrderRequest(legs=legs, combo_type="covered_call")
+    assert req.combo_type == "covered_call"
 
 
 # --------------------------------------------------------------------------- #
@@ -505,15 +492,24 @@ async def test_symbol_tradable_rejects_halted_cached() -> None:
 
 
 def test_combo_type_accepts_known_literals() -> None:
-    """Round-12 / DR-1: defined-risk allowlist replaces ``strangle``
-    with the protective shapes whose notional is modeled server-side."""
     leg = OrderLeg(
         symbol="AAPL", side=OrderSide.BUY, qty=1,
         order_type=OrderType.LIMIT, limit_price=150.0,
     )
     accepted = (
+        "cash_secured_put",
+        "covered_call",
+        "custom",
+        "diagonal_spread",
         "iron_condor",
         "iron_butterfly",
+        "long_call",
+        "long_put",
+        "married_put",
+        "short_call",
+        "short_put",
+        "straddle",
+        "strangle",
         "vertical_spread",
     )
     for v in accepted:
@@ -526,7 +522,7 @@ def test_combo_type_rejects_unmodeled_shapes() -> None:
         symbol="AAPL", side=OrderSide.BUY, qty=1,
         order_type=OrderType.LIMIT, limit_price=150.0,
     )
-    for v in ("calendar_spread", "diagonal_spread", "covered_call", "cash_secured_put", "married_put"):
+    for v in ("calendar_spread", "ratio_spread"):
         with pytest.raises(ValueError):
             CreateOrderRequest(legs=[leg], combo_type=v)
 

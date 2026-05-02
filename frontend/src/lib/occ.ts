@@ -5,6 +5,27 @@ export type ParsedOccSymbol = {
   strike: number;
 };
 
+export function formatOccSymbol({
+  symbol,
+  expiry,
+  side,
+  strike,
+}: {
+  symbol: string;
+  expiry: string;
+  side: "call" | "put";
+  strike: number;
+}): string | null {
+  const root = symbol.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!root || root.length > 6) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return null;
+  if (!Number.isFinite(strike) || strike <= 0) return null;
+  const yymmdd = expiry.slice(2, 4) + expiry.slice(5, 7) + expiry.slice(8, 10);
+  const sideChar = side === "call" ? "C" : "P";
+  const strikePadded = String(Math.round(strike * 1000)).padStart(8, "0");
+  return `${root}${yymmdd}${sideChar}${strikePadded}`;
+}
+
 /**
  * Parse an OCC option symbol into its constituent parts.
  *

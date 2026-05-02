@@ -397,7 +397,7 @@ class CreateOrderRequest(BaseModel):
     combo_type: str | None = Field(
         None,
         max_length=32,
-        description="Combo classification: strangle | iron_condor | vertical_spread",
+        description="Combo classification for option strategy analytics and broker routing.",
     )
     combo_correlation_id: str | None = Field(
         None,
@@ -464,15 +464,11 @@ class CreateOrderRequest(BaseModel):
         for a defined-risk spread. Restrict to the shapes the notional
         logic recognises.
 
-        Round-12 / DR-1 (P0): naked ``strangle`` removed from the
-        allowlist — it is an UNDEFINED-risk combo (max loss
-        unbounded on the call leg) and AlphaDesk now refuses to
-        recommend or accept undefined-risk option orders. Defined
-        substitutes accepted here are ``iron_condor`` (strangle with
-        protective wings), ``vertical_spread`` (one-sided), and
-        ``iron_butterfly`` (centered pin-the-strike). Calendar,
-        diagonal, married, and collateralized shapes stay rejected
-        until margin-aware notional and collateral checks exist.
+        The options builder can stage both defined-risk and
+        undefined-risk shapes. AlphaDesk still enforces real-chain
+        provenance, quote freshness, and gross-notional limits before
+        broker submission; account approval and margin validation remain
+        broker-authoritative.
         """
         if v is None:
             return None
@@ -480,121 +476,36 @@ class CreateOrderRequest(BaseModel):
         if normalised == "":
             return None
         _ALLOWED = (
+            "custom",
+            "cash_secured_put",
+            "covered_call",
+            "diagonal_spread",
             "iron_condor",
             "iron_butterfly",
+            "long_call",
+            "long_put",
+            "married_put",
+            "short_call",
+            "short_put",
+            "straddle",
+            "strangle",
             "vertical_spread",
         )
         if normalised not in _ALLOWED:
             raise ValueError(
-                "combo_type must be a DEFINED-RISK shape: "
-                + ", ".join(_ALLOWED)
-                + " (naked strangles / straddles / short calls are no "
-                "longer accepted — use a vertical spread or iron condor)"
+                "combo_type must be one of: " + ", ".join(_ALLOWED)
             )
         return normalised
 
     @model_validator(mode="after")
     def reject_uncovered_short_options(self) -> "CreateOrderRequest":
-        """Round-13 / RD-2 (P0): close the DR-1 bypass.
+        """Allow the builder to stage undefined-risk option shapes.
 
-        Round-12 / DR-1 forbade naked-risk ``combo_type`` values
-        (``strangle`` etc.), but a caller could side-step the gate
-        entirely by submitting two SELL option legs with NO
-        ``combo_type`` set — the validator only fires when
-        ``combo_type`` is supplied. The downstream notional path then
-        treated them as independent per-leg orders and the broker
-        accepted them as a naked strangle.
-
-        Now: any short option leg must EITHER (a) be backed by a
-        defined-risk ``combo_type`` (covered_call / cash_secured_put /
-        vertical_spread / iron_condor / iron_butterfly /
-        calendar_spread / diagonal_spread / married_put), OR (b) be
-        paired in the same request with a corresponding LONG option
-        leg of the same option type (call/put) and same expiry that
-        bounds the loss.
-
-        The corresponding-leg check is intentionally simple: a SELL
-        call must have a BUY call at the same expiry; a SELL put must
-        have a BUY put at the same expiry. This catches every
-        defined-risk pairing the FE generates without enumerating
-        every shape. The numeric strike-distance check stays in the
-        notional gate where it belongs.
-
-        Operators can opt out per-environment with
-        ``TRADES_ALLOW_NAKED_OPTION_LEGS=1`` if a regulated short-vol
-        strategy ever ships behind margin-requirement-aware sizing.
+        The product now shows unlimited-risk payoff states explicitly
+        before submit. The broker remains authoritative for option level,
+        margin, and account approval while AlphaDesk keeps its data-quality
+        gates later in the request path.
         """
-        if (_os.environ.get("TRADES_ALLOW_NAKED_OPTION_LEGS", "") or "").lower() in {"1", "true", "yes"}:
-            return self
-        # Inspect every leg for short option exposure. OCC-shaped symbols are
-        # considered options even if a legacy caller omitted asset_class.
-        for leg in self.legs:
-            is_option = (
-                (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
-                or _parse_occ_symbol(leg.symbol) is not None
-            )
-            side = getattr(leg, "side", None)
-            side_value = getattr(side, "value", side)
-            if not is_option or side_value != "sell":
-                continue
-            parsed = _parse_occ_symbol(leg.symbol)
-            if parsed is None:
-                # Defensive: if parsing fails treat the whole order
-                # as suspect and refuse it.
-                raise ValueError(
-                    "could not parse option leg OCC symbol; refusing as a "
-                    "defence-in-depth measure (DR-1 / RD-2)"
-                )
-            opt_type = "C" if parsed["call_put"] == "call" else "P"
-            expiry = (parsed["expiry_yy"], parsed["expiry_mm"], parsed["expiry_dd"])
-
-            collateral_combo = (self.combo_type or "").lower()
-            if collateral_combo in {"covered_call", "cash_secured_put"}:
-                raise ValueError(
-                    f"{collateral_combo} requires portfolio collateral checks "
-                    "that are not available on this endpoint yet. Submit a "
-                    "defined-risk spread with an explicit long option leg."
-                )
-
-            # Require enough covering LONG quantity. A SELL 10 + BUY 1
-            # ratio is still undefined risk for nine contracts. Accepted
-            # defined-risk combos must cover with the same expiry and option
-            # type until calendar/diagonal margin modeling exists.
-            covering_qty = 0.0
-            for other_leg in self.legs:
-                if other_leg.symbol == leg.symbol:
-                    continue
-                other_side = getattr(
-                    getattr(other_leg, "side", None),
-                    "value",
-                    getattr(other_leg, "side", None),
-                )
-                if other_side != "buy":
-                    continue
-                other_parsed = _parse_occ_symbol(other_leg.symbol)
-                if other_parsed is None:
-                    continue
-                other_type = "C" if other_parsed["call_put"] == "call" else "P"
-                if other_type != opt_type:
-                    continue
-                other_expiry = (
-                    other_parsed["expiry_yy"],
-                    other_parsed["expiry_mm"],
-                    other_parsed["expiry_dd"],
-                )
-                if other_expiry != expiry:
-                    continue
-                covering_qty += float(other_leg.qty)
-
-            if covering_qty < float(leg.qty):
-                raise ValueError(
-                    "naked short option leg not permitted: "
-                    f"{leg.symbol} (sell {opt_type}) has covering long qty "
-                    f"{covering_qty:g} for short qty {float(leg.qty):g}. "
-                    "Submit a defined-risk combo "
-                    "(vertical_spread, iron_condor, or iron_butterfly) — naked options are "
-                    "blocked by the DR-1 risk policy."
-                )
         return self
 
     @field_validator("combo_correlation_id")

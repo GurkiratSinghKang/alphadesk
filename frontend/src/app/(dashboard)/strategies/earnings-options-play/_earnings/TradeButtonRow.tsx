@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { EarningsReportState, EarningsTopSetup, StrikeLadder, LadderRow } from "@/types";
 import { fmtNumber } from "@/lib/intl";
 import { cn } from "@/lib/utils";
+import type { OptionStrategyDraft } from "@/lib/optionsPayoff";
+import { buildEarningsStrategyDraft } from "./payoffDraft";
 
 /**
  * TradeButtonRow — earnings → /trade deep-link builder.
@@ -37,6 +39,8 @@ export interface TradeButtonRowProps {
    * 1σ band. ``null`` clears the overlay (mouse-leave).
    */
   onHoverStrategy?: (zone: [number, number] | null) => void;
+  /** Emits the exact hovered trade shape for the shared payoff panel. */
+  onHoverPayoffDraft?: (draft: OptionStrategyDraft | null) => void;
   /** Claude's recommended setup, used to visually prioritize one button. */
   recommendedSetup?: EarningsTopSetup | null;
   /** Earnings report state; reported/past events should not expose event-entry links. */
@@ -51,6 +55,7 @@ export default function TradeButtonRow({
   symbol,
   ladder,
   onHoverStrategy,
+  onHoverPayoffDraft,
   recommendedSetup = null,
   reportState = "upcoming",
   syntheticChain = false,
@@ -119,6 +124,14 @@ export default function TradeButtonRow({
   // Long straddle = buy ATM call + buy ATM put — direction-agnostic vol
   const longStraddle = atmCall && atmPut ? { call: atmCall, put: atmPut } : null;
   const quoteTs = ladder.fetchedAt ?? undefined;
+  const previewEnter = (setup: EarningsTopSetup, zone: [number, number] | null = null) => {
+    onHoverStrategy?.(zone);
+    onHoverPayoffDraft?.(buildEarningsStrategyDraft(symbol, ladder, setup));
+  };
+  const previewLeave = () => {
+    onHoverStrategy?.(null);
+    onHoverPayoffDraft?.(null);
+  };
 
   // Round-13 / RD-7 (P1): a narrow chain (only ATM rows; no 30Δ/15Δ
   // wing strikes) leaves every defined-risk button null. Pre-fix the
@@ -167,10 +180,8 @@ export default function TradeButtonRow({
           // stays AT OR ABOVE the short put strike. Profit zone =
           // [short_put, +∞]. We cap at 2× short_put as a sensible
           // strip-extent so the green band has a visible right edge.
-          onHoverEnter={() =>
-            onHoverStrategy?.([bullPutSpread.short.strike, bullPutSpread.short.strike * 2])
-          }
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverEnter={() => previewEnter("bull put spread", [bullPutSpread.short.strike, bullPutSpread.short.strike * 2])}
+          onHoverLeave={previewLeave}
         />
       )}
       {bearCallSpread && (
@@ -191,10 +202,8 @@ export default function TradeButtonRow({
           // stays AT OR BELOW the short call strike. Profit zone =
           // [0, short_call]. Lower bound clamped to 0 (price can't go
           // negative).
-          onHoverEnter={() =>
-            onHoverStrategy?.([0, bearCallSpread.short.strike])
-          }
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverEnter={() => previewEnter("bear call spread", [0, bearCallSpread.short.strike])}
+          onHoverLeave={previewLeave}
         />
       )}
       {bullCallSpread && (
@@ -216,9 +225,9 @@ export default function TradeButtonRow({
           recommended={recommendedSetup === "bull call spread"}
           onHoverEnter={() => {
             const breakeven = bullCallSpread.long.strike + Math.max(0, bullCallSpread.long.mid - bullCallSpread.short.mid);
-            onHoverStrategy?.([breakeven, breakeven * 2]);
+            previewEnter("bull call spread", [breakeven, breakeven * 2]);
           }}
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverLeave={previewLeave}
         />
       )}
       {bearPutSpread && (
@@ -240,9 +249,9 @@ export default function TradeButtonRow({
           recommended={recommendedSetup === "bear put spread"}
           onHoverEnter={() => {
             const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
-            onHoverStrategy?.([0, breakeven]);
+            previewEnter("bear put spread", [0, breakeven]);
           }}
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverLeave={previewLeave}
         />
       )}
       {longCall && (
@@ -260,9 +269,9 @@ export default function TradeButtonRow({
           recommended={recommendedSetup === "long call"}
           onHoverEnter={() => {
             const breakeven = longCall.strike + Math.max(0, longCall.mid);
-            onHoverStrategy?.([breakeven, breakeven * 2]);
+            previewEnter("long call", [breakeven, breakeven * 2]);
           }}
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverLeave={previewLeave}
         />
       )}
       {longPut && (
@@ -278,10 +287,8 @@ export default function TradeButtonRow({
           label={`Long put ${fmtNumber(Math.round(longPut.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossLongOption(longPut.mid, "Long put")}
           recommended={recommendedSetup === "long put"}
-          onHoverEnter={() =>
-            onHoverStrategy?.([0, longPut.strike - Math.max(0, longPut.mid)])
-          }
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverEnter={() => previewEnter("long put", [0, longPut.strike - Math.max(0, longPut.mid)])}
+          onHoverLeave={previewLeave}
         />
       )}
       {ironCondor && (
@@ -310,13 +317,11 @@ export default function TradeButtonRow({
           // stays BETWEEN the short put and short call strikes. The
           // green zone is [short_put, short_call] — the canonical
           // "narrow expected move = profit" visual.
-          onHoverEnter={() =>
-            onHoverStrategy?.([
-              ironCondor.shortPut.strike,
-              ironCondor.shortCall.strike,
-            ])
-          }
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverEnter={() => previewEnter("iron condor", [
+            ironCondor.shortPut.strike,
+            ironCondor.shortCall.strike,
+          ])}
+          onHoverLeave={previewLeave}
         />
       )}
       {longStraddle && (
@@ -340,8 +345,8 @@ export default function TradeButtonRow({
           // handles this OK. Caption explains. Pass null so the strip
           // surfaces only the brown expected-move band, which is the
           // most-honest visualization of "profitable iff move > 1σ".
-          onHoverEnter={() => onHoverStrategy?.(null)}
-          onHoverLeave={() => onHoverStrategy?.(null)}
+          onHoverEnter={() => previewEnter("long straddle", null)}
+          onHoverLeave={previewLeave}
         />
       )}
     </div>

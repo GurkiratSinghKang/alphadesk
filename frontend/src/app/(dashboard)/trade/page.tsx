@@ -59,11 +59,14 @@ import {
   type ChartRange,
   type StagedOrder,
 } from "@/components/composites";
+import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
+import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isWorkingOrderStatus } from "@/lib/orders";
+import type { OptionStrategyDraft, OptionStrategyLeg } from "@/lib/optionsPayoff";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
@@ -135,7 +138,14 @@ interface PlainEquityPrefill {
   stop?: string;
 }
 
-const ALLOWED_COMBO_TYPES = new Set(["iron_condor", "iron_butterfly", "vertical_spread"]);
+const ALLOWED_COMBO_TYPES = new Set([
+  "custom",
+  "iron_condor",
+  "iron_butterfly",
+  "straddle",
+  "strangle",
+  "vertical_spread",
+]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -173,6 +183,7 @@ export default function TradePage() {
   const [quoteAtFillTs, setQuoteAtFillTs] = useState<number | null>(null);
   const [plainEquityPrefill, setPlainEquityPrefill] =
     useState<PlainEquityPrefill | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(searchKey);
@@ -436,7 +447,7 @@ export default function TradePage() {
         return false;
       }
       if (comboType && !ALLOWED_COMBO_TYPES.has(comboType)) {
-        fail("Unsupported combo type. Use vertical_spread, iron_condor, or iron_butterfly.");
+        fail("Unsupported combo type. Rebuild the strategy from the options builder.");
         return false;
       }
     }
@@ -612,6 +623,27 @@ export default function TradePage() {
     setTicketDraft(null);
   }, [orderBarDefaults]);
   const executionQuote = buildExecutionQuote(quote);
+  const payoffDraft = useMemo(
+    () =>
+      buildOptionPayoffDraft({
+        activeContract,
+        activeLegs,
+        comboType,
+        quoteAtFillTs,
+        spotPrice: executionQuote.last > 0 ? executionQuote.last : null,
+        tradeContextSymbol,
+        urlStrategy,
+      }),
+    [
+      activeContract,
+      activeLegs,
+      comboType,
+      quoteAtFillTs,
+      executionQuote.last,
+      tradeContextSymbol,
+      urlStrategy,
+    ],
+  );
   const previewDefaults = ticketDraft ?? orderBarDefaults;
   const tradePreview = useMemo(
     () =>
@@ -675,6 +707,58 @@ export default function TradePage() {
     toast({
       type: "info",
       message: `Loaded ${side.toUpperCase()} ${tradeContextSymbol} limit @ ${price.toFixed(2)}`,
+    });
+  }
+
+  function stageOptionDraft(draft: OptionStrategyDraft) {
+    if (draft.legs.length === 0) {
+      toast({ type: "error", message: "Add at least one option leg before staging." });
+      return;
+    }
+    const nextComboType = draft.comboType && ALLOWED_COMBO_TYPES.has(draft.comboType)
+      ? draft.comboType
+      : draft.legs.length > 1
+        ? "custom"
+        : null;
+    const quoteTs = parseQuoteSnapshotTs(
+      draft.quoteTimestamp == null ? null : String(draft.quoteTimestamp),
+    );
+    setPlainEquityPrefill(null);
+    setQuoteAtFillTs(quoteTs);
+    setComboType(nextComboType);
+    if (draft.legs.length === 1) {
+      const leg = draft.legs[0];
+      setActiveLegs([]);
+      setActiveContract({
+        occ: leg.occSymbol,
+        symbol: leg.underlying,
+        expiry: leg.expiry,
+        side: leg.kind,
+        strike: leg.strike,
+        orderSide: leg.side,
+        qty: leg.qty,
+        limitPrice: leg.entryPrice ?? undefined,
+      });
+    } else {
+      setActiveContract(null);
+      setActiveLegs(draft.legs.map((leg) => ({
+        occ: leg.occSymbol,
+        symbol: leg.underlying,
+        expiry: leg.expiry,
+        side: leg.kind,
+        strike: leg.strike,
+        orderSide: leg.side,
+        qty: leg.qty,
+        limitPrice: leg.entryPrice ?? undefined,
+      })));
+    }
+    setUrlUnderlyingSymbol(draft.underlying);
+    setBuilderOpen(false);
+    setResetTick((tick) => tick + 1);
+    router.push(buildTradeUrlFromDraft(draft, nextComboType));
+    toast({
+      type: "success",
+      message: `${draft.legs.length}-leg option strategy staged.`,
     });
   }
   const primaryQuoteLabel = executionQuote.hasTwoSided ? (quote.last > 0 ? "Last" : "Mid") : "Quote";
@@ -861,6 +945,13 @@ export default function TradePage() {
                 ticketLocked={activeLegs.length > 0}
                 className="border-t-0 bg-transparent"
               />
+              <div className="border-t border-border-hair p-4">
+                <OptionsPayoffPanel
+                  draft={payoffDraft}
+                  compact
+                  onOpenBuilder={() => setBuilderOpen(true)}
+                />
+              </div>
               <PreTradeImpactPanel
                 preview={tradePreview}
               />
@@ -880,6 +971,13 @@ export default function TradePage() {
           activeFilter={orderFilter}
           onFilterChange={setOrderFilter}
         />
+        <OptionsStrategyBuilder
+          key={tradeContextSymbol}
+          open={builderOpen}
+          underlying={tradeContextSymbol}
+          onClose={() => setBuilderOpen(false)}
+          onStage={stageOptionDraft}
+        />
       </div>
     </div>
   );
@@ -888,6 +986,82 @@ export default function TradePage() {
 type ExecutionQuote = ReturnType<typeof buildExecutionQuote>;
 type PreTradePreview = ReturnType<typeof buildPreTradePreview>;
 type ReadinessTone = "profit" | "loss" | "amber" | "muted";
+
+function buildOptionPayoffDraft({
+  activeContract,
+  activeLegs,
+  comboType,
+  quoteAtFillTs,
+  spotPrice,
+  tradeContextSymbol,
+  urlStrategy,
+}: {
+  activeContract: ActiveContract | null;
+  activeLegs: ActiveLeg[];
+  comboType: string | null;
+  quoteAtFillTs: number | null;
+  spotPrice: number | null;
+  tradeContextSymbol: string;
+  urlStrategy: string | null;
+}): OptionStrategyDraft | null {
+  const legs: OptionStrategyLeg[] = [];
+  if (activeContract) {
+    legs.push(activeToPayoffLeg(activeContract));
+  } else {
+    for (const leg of activeLegs) legs.push(activeToPayoffLeg(leg));
+  }
+  if (legs.length === 0) return null;
+  const underlying = legs[0]?.underlying ?? tradeContextSymbol;
+  return {
+    underlying,
+    spotPrice,
+    label: comboType
+      ? comboType.replace(/_/g, " ")
+      : activeContract
+        ? `${activeContract.orderSide} ${activeContract.side} ${activeContract.strike}`
+        : `${legs.length}-leg options strategy`,
+    source: urlStrategy === "earnings-options-play" ? "earnings-options-play" : "trade",
+    quoteTimestamp: quoteAtFillTs,
+    comboType,
+    legs,
+  };
+}
+
+function activeToPayoffLeg(leg: ActiveContract | ActiveLeg): OptionStrategyLeg {
+  return {
+    id: `${leg.occ}:${leg.orderSide}`,
+    occSymbol: leg.occ,
+    underlying: leg.symbol,
+    expiry: leg.expiry,
+    kind: leg.side,
+    strike: leg.strike,
+    side: leg.orderSide,
+    qty: leg.qty,
+    entryPrice: leg.limitPrice ?? null,
+  };
+}
+
+function buildTradeUrlFromDraft(draft: OptionStrategyDraft, comboType: string | null): string {
+  const params = new URLSearchParams({
+    symbol: draft.underlying,
+  });
+  if (draft.legs.length === 1) {
+    const leg = draft.legs[0];
+    params.set("contract", leg.occSymbol);
+    params.set("side", leg.side);
+    params.set("qty", String(leg.qty));
+    if (leg.entryPrice != null) params.set("limit", leg.entryPrice.toFixed(2));
+  } else {
+    params.set("legs", draft.legs.map((leg) => {
+      const base = `${leg.occSymbol}:${leg.side}:${leg.qty}`;
+      return leg.entryPrice != null ? `${base}:${leg.entryPrice.toFixed(2)}` : base;
+    }).join(","));
+    if (comboType) params.set("combo_type", comboType);
+  }
+  if (draft.source === "earnings-options-play") params.set("strategy", draft.source);
+  if (draft.quoteTimestamp != null) params.set("quote_ts", String(draft.quoteTimestamp));
+  return `/trade?${params.toString()}`;
+}
 
 interface ExecutionReadiness {
   label: string;

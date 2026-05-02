@@ -151,7 +151,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getPipelineStatus: vi.fn().mockResolvedValue({ running: false, lastRun: null, lastResult: null }),
     getPipelineHistory: vi.fn().mockResolvedValue([]),
     getPnlCalendar: vi.fn().mockResolvedValue({ days: [], monthTotal: 0, month: 4, year: 2026, tradingDays: 0, winningDays: 0, losingDays: 0, bestDay: null, worstDay: null }),
-    getOptionsChain: vi.fn().mockResolvedValue({ symbol: 'SPY', expirations: [], calls: [], puts: [] }),
+    getOptionsChain: vi.fn().mockResolvedValue({ symbol: 'SPY', spotPrice: 679, expirations: [], calls: [], puts: [] }),
     getIVData: vi.fn().mockResolvedValue({ ivRank: 50, ivPctl: 55, currentIV: 0.2, hvRatio: 1 }),
     analyzeSymbol: vi.fn().mockResolvedValue({ symbol: 'SPY', technicalScore: 50, fundamentalScore: 50, sentimentScore: 0, composite: 50, summary: 'Test', signals: [] }),
     getAnalysis: vi.fn().mockResolvedValue(null),

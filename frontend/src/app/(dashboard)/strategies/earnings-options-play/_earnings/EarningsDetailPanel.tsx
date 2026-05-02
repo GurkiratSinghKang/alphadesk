@@ -3,6 +3,7 @@
 import {
   forwardRef,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent,
@@ -24,6 +25,9 @@ import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
 import TradeButtonRow from "./TradeButtonRow";
 import PnLZones from "@/components/primitives/PnLZones";
+import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
+import type { OptionStrategyDraft } from "@/lib/optionsPayoff";
+import { buildEarningsStrategyDraft } from "./payoffDraft";
 
 export interface EarningsDetailPanelProps {
   detail: EarningsDetail | null;
@@ -113,6 +117,19 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
   const [hoveredStrategyZone, setHoveredStrategyZone] = useState<
     [number, number] | null
   >(null);
+  const [hoveredPayoffDraft, setHoveredPayoffDraft] =
+    useState<OptionStrategyDraft | null>(null);
+  const defaultPayoffDraft = useMemo(
+    () =>
+      detail
+        ? buildEarningsStrategyDraft(
+            detail.symbol,
+            detail.strikeLadder,
+            detail.claudeStructured?.suggestedPlay ?? null,
+          )
+        : null,
+    [detail],
+  );
 
   // Escape clears the selection — dispatches a custom event the parent
   // page listens for. Ignored while focus is inside a text input so
@@ -341,9 +358,16 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         symbol={detail.symbol}
         ladder={detail.strikeLadder}
         onHoverStrategy={setHoveredStrategyZone}
+        onHoverPayoffDraft={setHoveredPayoffDraft}
         recommendedSetup={detail.claudeStructured?.suggestedPlay ?? null}
         reportState={detail.reportState}
         syntheticChain={detail.errorCodes?.includes("chain_demo") ?? false}
+      />
+
+      <OptionsPayoffPanel
+        draft={hoveredPayoffDraft ?? defaultPayoffDraft}
+        title="Earnings payoff"
+        className="mt-4"
       />
 
       <p

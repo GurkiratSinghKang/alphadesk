@@ -228,6 +228,7 @@ export interface OptionsContract {
 
 export interface OptionsChain {
   symbol: string;
+  spotPrice?: number | null;
   expirations: string[];
   calls: OptionsContract[];
   puts: OptionsContract[];
