@@ -93,6 +93,7 @@ function formatTimeout(seconds: number) {
 function stripMarkdown(value: string) {
   return value
     .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
     .replace(/__/g, "")
     .replace(/`/g, "")
     .replace(/^#+\s*/gm, "")
@@ -102,6 +103,14 @@ function stripMarkdown(value: string) {
 
 function cleanLine(value: string) {
   return stripMarkdown(value.replace(/^\s*[-*]\s*/, "").replace(/^\|/, "").replace(/\|$/, ""));
+}
+
+function isDividerLine(value: string) {
+  return /^[-_\u2013\u2014]{2,}$/.test(value.trim());
+}
+
+function isBareLabelLine(value: string) {
+  return /^[A-Za-z][A-Za-z /&-]{2,}:$/.test(value.trim());
 }
 
 function memoSectionId(title: string, index: number) {
@@ -204,7 +213,8 @@ function isThinMemo(text: string, summary: string[]) {
 function extractHighlights(summary: string[], decisionText: string, signal: string) {
   const useful = summary
     .map(cleanLine)
-    .filter((line) => line && line.toLowerCase() !== signal.toLowerCase());
+    .filter((line) => line && line.toLowerCase() !== signal.toLowerCase())
+    .filter((line) => !isBareLabelLine(line));
   if (useful.length >= 3) return useful.slice(0, 6);
 
   const markers = [
@@ -224,7 +234,12 @@ function extractHighlights(summary: string[], decisionText: string, signal: stri
   const lines = decisionText
     .split(/\n+/)
     .map(cleanLine)
-    .filter((line) => line.length > 16 && markers.some((marker) => line.toLowerCase().includes(marker)));
+    .filter(
+      (line) =>
+        line.length > 16 &&
+        !isBareLabelLine(line) &&
+        markers.some((marker) => line.toLowerCase().includes(marker)),
+    );
   return Array.from(new Set([...useful, ...lines])).slice(0, 6);
 }
 
@@ -464,6 +479,7 @@ export default function TradingAgentsResearchPage() {
       eyebrow="RESEARCH"
       title="TradingAgents Research"
       actions={actions}
+      className="[&_header_h1]:overflow-visible [&_header_h1]:whitespace-normal"
       pageLabel="TradingAgents research"
     >
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -890,6 +906,8 @@ function MemoSectionPreview({
     .map(cleanLine)
     .filter((line) => line.length > 0)
     .filter((line) => !line.startsWith("|---"))
+    .filter((line) => !isDividerLine(line))
+    .filter((line) => !isBareLabelLine(line))
     .slice(0, compact ? 5 : 8);
 
   return (
@@ -992,10 +1010,17 @@ function ReadableMemo({ body }: { body: string }) {
       {rows.map((line, index) => {
         const clean = cleanLine(line);
         if (!clean) return null;
-        if (/^\|?\s*:?-{2,}/.test(clean)) return null;
+        if (/^\|?\s*:?-{2,}/.test(clean) || isDividerLine(clean)) return null;
         if (/^#{3,6}\s+/.test(line)) {
           return (
             <p key={`${index}-${line}`} className="pt-3 t-label text-brand">
+              {clean}
+            </p>
+          );
+        }
+        if (isBareLabelLine(clean)) {
+          return (
+            <p key={`${index}-${line}`} className="pt-2 t-label text-fg-muted">
               {clean}
             </p>
           );
@@ -1189,7 +1214,7 @@ function RuntimePanel({
             <RuntimeFact label="Runtime" value={runtime.bootstrap_required ? "bootstrap" : runtime.installed_ref ?? "ready"} good />
             <RuntimeFact label="Limit" value={`${runtime.runs_per_hour}/hr`} good={runtime.enabled} />
           </div>
-          <p className="mt-3 truncate font-mono text-[11px] text-fg-hint" title={runtime.skill_home}>
+          <p className="mt-3 break-words font-mono text-[11px] leading-relaxed text-fg-hint" title={runtime.skill_home}>
             {runtime.deep_model} / {runtime.quick_model}
           </p>
           {runtime.warnings.length > 0 && (
@@ -1261,7 +1286,7 @@ function RunHistory({
                   <span className="block font-mono text-[14px] font-semibold text-fg">
                     {run.symbol} / {run.trade_date}
                   </span>
-                  <span className="block truncate text-[12px] text-fg-muted">
+                  <span className="block break-words text-[12px] leading-relaxed text-fg-muted">
                     {signal} - {formatStamp(run.created_at)}
                   </span>
                 </span>
