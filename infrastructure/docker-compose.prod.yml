@@ -52,6 +52,10 @@ services:
     restart: unless-stopped
     environment:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Server-side Next proxy auth checks must talk to the backend over the
+      # compose network. Falling back to the public domain can fail from inside
+      # the container and causes successful logins to be bounced back to /login.
+      API_URL: http://backend:8000
     volumes: []
     networks:
       - alphadesk

@@ -50,10 +50,17 @@ function forwardRequest(): NextResponse {
   return NextResponse.next();
 }
 
+export function resolveBackendSessionApiBase(request: NextRequest): string {
+  if (process.env.API_URL) return process.env.API_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (process.env.NODE_ENV === "production") return "http://backend:8000";
+  return request.nextUrl.origin;
+}
+
 async function hasActiveBackendSession(request: NextRequest, token: string | undefined): Promise<boolean> {
   if (!token) return false;
   try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || request.nextUrl.origin;
+    const apiBase = resolveBackendSessionApiBase(request);
     const sessionUrl = new URL("/api/v1/auth/session", apiBase);
     const response = await fetch(sessionUrl, {
       method: "GET",
