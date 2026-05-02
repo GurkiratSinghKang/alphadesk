@@ -44,6 +44,8 @@ def _install_stubs() -> None:
 
 _install_stubs()
 
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
+
 
 def _run_one(
     strategy_cls, params: dict, bar_provider, label: str
@@ -87,6 +89,7 @@ def _run_one(
         },
         "regime_timeline": regime_timeline,
     }
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(result.equity_curve))
     print(f"=== {label} ===")
     for k in (
         "sharpe",

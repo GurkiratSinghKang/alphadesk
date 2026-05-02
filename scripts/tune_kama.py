@@ -49,6 +49,7 @@ import backend.strategies.kama_breakout  # noqa: F401,E402 - registers strategy
 
 from backend.data.providers.alpaca import AlpacaBarProvider  # noqa: E402
 from backend.strategies.kama_breakout.config import DEFAULT_UNIVERSE  # noqa: E402
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 
 log = logging.getLogger("kama_tune")
 
@@ -219,6 +220,10 @@ def _final_oos_run(best_params: dict, bar_provider) -> dict:
             metrics["oos_total_return"] = (
                 float(curve.iloc[-1]) / float(curve.iloc[0]) - 1.0
             )
+        attach_bootstrap_ci(
+            metrics,
+            bootstrap_ci_from_equity_frame(wf.out_of_sample_result.equity_curve),
+        )
     return metrics
 
 
@@ -291,7 +296,7 @@ def main() -> int:
     print(f"\n=== Tuning complete in {dt:.1f}s ===")
     print(f"Study            : {study_name}")
     print(f"Trials           : {len(study.trials)}")
-    print(f"Best OOS Sharpe  : {best_value:.4f}")
+    print(f"Best TRAIN Sharpe: {best_value:.4f}")
     print("Best params:")
     width = max((len(k) for k in best_params), default=1)
     for k, v in sorted(best_params.items()):
@@ -305,7 +310,7 @@ def main() -> int:
         "tuner": {
             "study_name": study_name,
             "best_params": best_params,
-            "best_value": best_value,
+            "best_train_sharpe": best_value,
             "n_trials": len(study.trials),
             "wall_clock_sec": dt,
         }

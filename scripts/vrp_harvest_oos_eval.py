@@ -60,6 +60,7 @@ from backend.strategies.vrp_harvest.strategy import (  # noqa: E402
     summary_from_equity,
     synthetic_equity_curve,
 )
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 
 
 def _monthly_pnl(curve: pd.DataFrame) -> list[dict[str, float]]:
@@ -206,6 +207,7 @@ def main() -> int:
         "drawdown_events": dd_events,
         "n_synth_trades": len(_synth_trades(ctx.state)),
     }
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(curve))
 
     out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)

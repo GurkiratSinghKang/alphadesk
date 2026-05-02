@@ -37,6 +37,7 @@ import backend.strategies.orb  # noqa: F401
 from backend.data.providers.alpaca import AlpacaBarProvider
 from backend.strategies.orb.strategy import ORBStrategy
 from backend.strategies.orb.config import UNIVERSE_PROFILES
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
 from scripts.smoke_orb import InMemoryIntradayProvider, run_orb_backtest
 
 
@@ -136,6 +137,10 @@ def main() -> int:
         "exit_reason_counts": reason_counts,
         "by_year": by_year.to_dict(orient="records"),
     }
+    attach_bootstrap_ci(
+        payload,
+        bootstrap_ci_from_equity_frame(eq, return_col="day_return"),
+    )
     out = _ROOT / "audit-reports" / "phase1-orb-oos.json"
     with out.open("w") as f:
         json.dump(payload, f, indent=2, default=str)

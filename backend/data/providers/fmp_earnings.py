@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import csv
+import json
+import logging
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
 
+from core.config import settings
 from data.providers._fmp_http import FMPHTTP
 from data.providers.cache import TTL_DAILY, cached
+
+log = logging.getLogger(__name__)
 
 _CALENDAR_COLS = [
     "symbol", "date", "eps_actual", "eps_estimated",
@@ -70,7 +77,11 @@ class FMPEarningsProvider:
         end: date | datetime | str,
         symbols: Iterable[str] | None = None,
     ) -> pd.DataFrame:
-        df = self._calendar_cached(_to_date_str(start), _to_date_str(end))
+        df = self._calendar_cached(
+            _to_date_str(start),
+            _to_date_str(end),
+            settings.EARNINGS_TIME_SOURCE_PATH or "",
+        )
         if symbols is not None:
             df = df[df["symbol"].isin({s.upper() for s in symbols})].reset_index(drop=True)
         return df
@@ -84,7 +95,12 @@ class FMPEarningsProvider:
     # state went stale. 1 hour matches typical broker-side latency on
     # FMP's calendar refresh and survives the BMO/AMC same-day cutover.
     @cached(ttl_seconds=60 * 60)
-    def _calendar_cached(self, start: str, end: str) -> pd.DataFrame:
+    def _calendar_cached(
+        self,
+        start: str,
+        end: str,
+        announcement_time_source_path: str = "",
+    ) -> pd.DataFrame:
         data = self._http.get("/earnings-calendar", {"from": start, "to": end})
         if not data:
             return pd.DataFrame({c: pd.Series(dtype=_CALENDAR_DTYPES[c]) for c in _CALENDAR_COLS})
@@ -102,6 +118,7 @@ class FMPEarningsProvider:
             for item in data
         ]
         df = pd.DataFrame(rows, columns=_CALENDAR_COLS)
+        df = _apply_announcement_time_source(df, announcement_time_source_path)
         df.sort_values(["date", "symbol"], inplace=True, ignore_index=True)
         return df
 
@@ -216,3 +233,106 @@ def _normalise_when(v: Any) -> str:
     if s in ("amc", "bmo"):
         return s
     return "unknown"
+
+
+def _apply_announcement_time_source(df: pd.DataFrame, source_path: str) -> pd.DataFrame:
+    """Overlay operator-supplied AMC/BMO timing onto the FMP calendar.
+
+    FMP's stable calendar keeps the ``time`` field in its schema but often
+    sends ``null`` for every row. A local CSV/JSON source gives ops a clean
+    place to ingest a paid vendor export without PEAD or the earnings UI
+    learning vendor-specific formats.
+    """
+
+    if not source_path or df.empty:
+        return df
+    overrides = _load_announcement_time_source(source_path)
+    if not overrides:
+        return df
+
+    out = df.copy()
+    applied = 0
+    values: list[str] = []
+    for row in out[["symbol", "date", "announcement_when"]].itertuples(index=False):
+        key = (str(row.symbol).upper(), row.date)
+        override = overrides.get(key)
+        if override in {"amc", "bmo"}:
+            values.append(override)
+            applied += 1
+        else:
+            values.append(row.announcement_when)
+    out["announcement_when"] = values
+    if applied:
+        log.info(
+            "applied %d earnings announcement-time overrides from %s",
+            applied,
+            source_path,
+        )
+    return out
+
+
+def _load_announcement_time_source(source_path: str) -> dict[tuple[str, date], str]:
+    path = Path(source_path).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if not path.exists():
+        log.warning("earnings announcement-time source missing: %s", path)
+        return {}
+
+    try:
+        if path.suffix.lower() == ".json":
+            raw = json.loads(path.read_text())
+            rows = list(_iter_json_time_rows(raw))
+        else:
+            with path.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+    except (OSError, json.JSONDecodeError, csv.Error) as exc:
+        log.warning("earnings announcement-time source unreadable: %s", exc)
+        return {}
+
+    out: dict[tuple[str, date], str] = {}
+    for row in rows:
+        symbol = str(
+            row.get("symbol")
+            or row.get("ticker")
+            or row.get("Symbol")
+            or row.get("Ticker")
+            or ""
+        ).strip().upper()
+        dt = _to_date(
+            row.get("date")
+            or row.get("report_date")
+            or row.get("earnings_date")
+            or row.get("Date")
+        )
+        when = _normalise_when(
+            row.get("announcement_when")
+            or row.get("report_time")
+            or row.get("time")
+            or row.get("timing")
+            or row.get("when")
+        )
+        if symbol and dt is not None and when in {"amc", "bmo"}:
+            out[(symbol, dt)] = when
+    return out
+
+
+def _iter_json_time_rows(raw: Any) -> Iterable[dict[str, Any]]:
+    if isinstance(raw, list):
+        for row in raw:
+            if isinstance(row, dict):
+                yield row
+        return
+    if not isinstance(raw, dict):
+        return
+    for key, value in raw.items():
+        if isinstance(value, dict):
+            row = dict(value)
+        else:
+            row = {"announcement_when": value}
+        if "symbol" not in row or "date" not in row:
+            parts = str(key).replace(":", "|").split("|")
+            if len(parts) >= 2:
+                row.setdefault("symbol", parts[0])
+                row.setdefault("date", parts[1])
+        yield row

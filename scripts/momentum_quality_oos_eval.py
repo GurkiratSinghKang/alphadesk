@@ -46,6 +46,7 @@ from backend.data.providers.fmp import (  # noqa: E402
 )
 from backend.strategies.momentum_quality.config import UNIVERSE_SEED  # noqa: E402
 from backend.strategies.registry import get_strategy  # noqa: E402
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 from scripts.tune_momentum_quality import InMemoryBarProvider  # noqa: E402
 
 
@@ -132,6 +133,7 @@ def main() -> int:
             / float(result.equity_curve["equity"].iloc[0])
             - 1.0
         )
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(result.equity_curve))
     out_path = _ROOT / "audit-reports" / "phase1-momentum_quality-oos.json"
     with out_path.open("w") as f:
         json.dump(out, f, indent=2, default=str)

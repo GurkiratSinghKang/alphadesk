@@ -68,6 +68,7 @@ import backend.strategies.dual_momentum  # noqa: F401,E402 - registers the strat
 
 from backend.strategies.dual_momentum.config import DEFAULT_PARAMS  # noqa: E402
 from backend.strategies.dual_momentum.strategy import DualMomentumStrategy  # noqa: E402
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 
 
 # Same two-year OOS window as the other Phase-1 strategies.
@@ -198,6 +199,7 @@ def main() -> int:
         out["equity_start"] = eq_start
         out["equity_end"] = eq_end
         out["total_return"] = (eq_end / eq_start) - 1.0 if eq_start else 0.0
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(eq))
 
     # ----- Console summary --------------------------------------------- #
     print("=" * 70)

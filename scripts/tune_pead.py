@@ -208,9 +208,9 @@ def main() -> int:
         strategy_cls=PEADStrategy,
         bar_provider=bar_provider,
         earnings_provider=earnings,
-        start=date(2023, 1, 2),  # OOS-only: the IS leg is skipped (see monkey-patch)
+        start=date(2019, 1, 1),
         end=date(2024, 12, 31),
-        train_end=date(2023, 1, 1),
+        train_end=date(2022, 12, 31),
         scoring="sharpe",
         starting_cash=Decimal("100000"),
         on_result=_on_result,
@@ -249,7 +249,7 @@ def main() -> int:
 
     print("\n" + "=" * 70)
     print(f"Trials completed:   {len(study.trials)} in {elapsed:.0f}s")
-    print(f"Best OOS Sharpe:    {best_value:.4f}")
+    print(f"Best TRAIN Sharpe:  {best_value:.4f}")
     print("Best parameters:")
     for k, v in sorted(best_params.items()):
         print(f"  {k} = {v!r}")
@@ -272,6 +272,7 @@ def main() -> int:
     )
     oos = engine.run()
     m = oos.metrics or {}
+    oos_sharpe = float(m.get("sharpe", float("nan")))
     print(f"OOS bars:           {len(oos.equity_curve)}")
     print(f"OOS fills:          {len(oos.fills)}")
     long_fills = sum(1 for f in oos.fills if f.side.value == "buy")
@@ -295,7 +296,8 @@ def main() -> int:
         "end": "2024-12-31",
         "train_end": "2022-12-31",
         "n_trials": len(study.trials),
-        "best_oos_sharpe": best_value,
+        "best_train_sharpe": best_value,
+        "best_oos_sharpe": oos_sharpe,
         "best_params": best_params,
         "oos_metrics": {
             k: float(v) for k, v in m.items() if isinstance(v, (int, float))
@@ -315,11 +317,17 @@ def main() -> int:
     print(f"\nDumped summary to {out_path}")
 
     target = 0.50
-    if best_value >= target:
-        print(f"\nSUCCESS: OOS Sharpe {best_value:.3f} >= target {target:.2f}")
+    if oos_sharpe >= target:
+        print(
+            f"\nSUCCESS: OOS Sharpe {oos_sharpe:.3f} >= target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 0
     else:
-        print(f"\nBELOW TARGET: OOS Sharpe {best_value:.3f} < target {target:.2f}")
+        print(
+            f"\nBELOW TARGET: OOS Sharpe {oos_sharpe:.3f} < target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 2
 
 

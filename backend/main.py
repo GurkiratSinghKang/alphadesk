@@ -35,6 +35,7 @@ from api.routes import market, screener, analysis, options, trades, portfolio, a
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news
 from api.routes import tradingagents
 from api.routes import earnings
+from api.routes import access_requests as access_requests_routes
 from api.routes import metrics as metrics_routes
 from api.routes import user as user_routes
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
@@ -423,6 +424,7 @@ app.include_router(tradingagents.router, prefix="/api/v1/tradingagents", tags=["
 # every landing-page sample). Validated payload shape + per-IP
 # rate-limit at the route layer keeps abuse bounded.
 app.include_router(metrics_routes.router, prefix="/api/v1/metrics", tags=["Metrics"])
+app.include_router(access_requests_routes.router, prefix="/api/v1/access-requests", tags=["Access Requests"])
 # Round-23 / persona-A P0: CSP violation report ingest. Public endpoint
 # (browsers POST without credentials when violation fires); validated +
 # per-IP rate-limited at the route layer. Used by the Report-Only CSP

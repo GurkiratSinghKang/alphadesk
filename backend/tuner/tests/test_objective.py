@@ -137,6 +137,66 @@ class TestParamsValidation:
 
 
 # --------------------------------------------------------------------------- #
+# Train/test window selection                                                 #
+# --------------------------------------------------------------------------- #
+class TestObjectiveWindowSelection:
+    def test_train_end_scopes_default_objective_to_train_window(self, monkeypatch):
+        import tuner.objective as objective_module
+
+        seen = {}
+
+        class _FakeRunner:
+            def __init__(self, strategy, config, **kwargs):
+                seen["start"] = config.start
+                seen["end"] = config.end
+
+            def run(self, params):
+                return _FakeResult(metrics={"sharpe": 1.0, "max_drawdown": 0.0})
+
+        monkeypatch.setattr(objective_module, "BacktestRunner", _FakeRunner)
+        obj = _obj(
+            start=date(2020, 1, 1),
+            end=date(2020, 12, 31),
+            train_end=date(2020, 9, 30),
+        )
+
+        assert obj({}) == pytest.approx(1.0)
+        assert seen == {"start": date(2020, 1, 1), "end": date(2020, 9, 30)}
+
+    def test_tune_on_test_scopes_objective_to_heldout_window(self, monkeypatch):
+        import tuner.objective as objective_module
+
+        seen = {}
+
+        class _FakeRunner:
+            def __init__(self, strategy, config, **kwargs):
+                seen["start"] = config.start
+                seen["end"] = config.end
+
+            def run(self, params):
+                return _FakeResult(metrics={"sharpe": 2.0, "max_drawdown": 0.0})
+
+        monkeypatch.setattr(objective_module, "BacktestRunner", _FakeRunner)
+        obj = _obj(
+            start=date(2020, 1, 1),
+            end=date(2020, 12, 31),
+            train_end=date(2020, 9, 30),
+            tune_on="test",
+        )
+
+        assert obj({}) == pytest.approx(2.0)
+        assert seen == {"start": date(2020, 10, 1), "end": date(2020, 12, 31)}
+
+    def test_invalid_train_end_raises(self):
+        with pytest.raises(ValueError, match="before end"):
+            _obj(
+                start=date(2020, 1, 1),
+                end=date(2020, 12, 31),
+                train_end=date(2020, 12, 31),
+            )
+
+
+# --------------------------------------------------------------------------- #
 # search_space_from_params_model                                              #
 # --------------------------------------------------------------------------- #
 class TestSearchSpaceTranslation:

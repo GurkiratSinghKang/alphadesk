@@ -39,6 +39,7 @@ from backend.backtest.engine import BacktestEngine, EngineConfig
 from backend.data.providers.alpaca import AlpacaBarProvider
 from backend.strategies.registry import get_strategy
 from backend.strategies.rsi2_reversal.config import CORE_ETFS, LARGE_CAP_SEED
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
 
 # Import the in-memory provider from the tuner script.
 from scripts.rsi2_tune import InMemoryBarProvider
@@ -117,6 +118,7 @@ def main() -> int:
     if not result.equity_curve.empty:
         payload["equity_start"] = float(result.equity_curve["equity"].iloc[0])
         payload["equity_end"] = float(result.equity_curve["equity"].iloc[-1])
+    attach_bootstrap_ci(payload, bootstrap_ci_from_equity_frame(result.equity_curve))
     with out_path.open("w") as f:
         json.dump(payload, f, indent=2, default=str)
     print(f"\nWrote {out_path}")

@@ -25,16 +25,15 @@ The objective never raises; a failed backtest (provider error, strategy
 crash, invalid parameter combo caught by Pydantic) returns ``-math.inf``
 so Optuna can move on.
 
-Walk-forward is the caller's concern
-------------------------------------
+Walk-forward split
+------------------
 
-The legacy F1 harness invoked :class:`WalkForwardRunner` inside the
-objective and exposed a ``tune_on`` flag to select IS vs OOS metrics.
-Under the new runner contract, walk-forward splitting is explicit — the
-caller runs the objective over a training window, picks the best params,
-then (and only then) evaluates on a held-out window. This objective does
-NOT introspect train/test legs; the ``tune_on`` kwarg is kept for API
-back-compat but is inert.
+The objective still runs exactly one :class:`BacktestRunner` per trial. When
+``train_end`` is supplied, that trial is scoped to the selected side of the
+split: ``tune_on="train"`` runs ``start`` through ``train_end`` and
+``tune_on="test"`` runs ``train_end + 1 day`` through ``end``. Production
+tuning should use the default ``"train"`` and reserve the test window for one
+final OOS evaluation.
 """
 
 from __future__ import annotations
@@ -42,7 +41,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Callable, Literal, Mapping, Optional
 
@@ -76,9 +75,9 @@ class WalkForwardObjective:
     bar_provider:
         Concrete :class:`~strategies._core.providers.BarProvider`. Required.
     start, end:
-        Backtest window. The same window is used for every trial; the
-        caller is responsible for later evaluating the winner on a
-        held-out OOS window.
+        Full backtest window. When ``train_end`` is provided, each trial
+        is scoped by ``tune_on`` so the optimiser can fit on train while
+        the caller holds the test window for final OOS evaluation.
     scoring:
         ``"penalised"`` (default) or ``"sharpe"``.
     turnover_threshold_annual, turnover_penalty_coef,
@@ -99,9 +98,9 @@ class WalkForwardObjective:
         Optional callback ``(params, result, score)`` invoked after each
         trial. Used by the runner CLI to log progress.
     tune_on:
-        Back-compat kwarg (legacy API accepted ``"train"``/``"test"``).
-        Inert under the new runner — the objective only sees a single
-        window. Validation is kept so typos fail loudly.
+        Selects the side of ``train_end`` used for the per-trial objective.
+        Defaults to ``"train"`` so Optuna does not select on the held-out
+        OOS period.
     """
 
     strategy_cls: type
@@ -117,7 +116,8 @@ class WalkForwardObjective:
     earnings_provider: Any = None
     fundamentals_provider: Any = None
     # Legacy WF-harness knobs — retained for API compatibility with the
-    # existing tuner/runner CLI but inert under the new runner path.
+    # existing tuner/runner CLI. ``train_end``/``tune_on`` select the trial
+    # window; folded CV is still not implemented here.
     train_end: Optional[date] = None
     k_folds: int = 5
     purge_days: int = 60
@@ -139,25 +139,18 @@ class WalkForwardObjective:
             raise ValueError(
                 f"tune_on={self.tune_on!r}; expected 'train' or 'test'."
             )
-        # Round-27 / persona-C P0: honesty about walk-forward. Pre-fix
-        # ``train_end``/``k_folds``/``purge_days`` accepted at line 121-123
-        # but never read in ``__call__`` or ``_run_backtest`` — every
-        # trial ran a single in-sample backtest over [start, end] and
-        # the reported "best Sharpe" was pure overfitting. The CLI
-        # exposed these flags too, silently doing nothing. We can't
-        # implement walk-forward in this commit (would need a real
-        # train/test split + folded scoring), but we CAN refuse to
-        # silently lie. Warn loudly when the inert knobs are set.
-        import logging as _logging
-        if self.train_end is not None or self.k_folds != 5 or self.purge_days != 60:
-            _logging.getLogger(__name__).warning(
-                "tuner: walk-forward parameters (train_end=%s, k_folds=%d, "
-                "purge_days=%d) are CURRENTLY INERT — every trial runs a "
-                "single in-sample backtest. Best-Sharpe report is biased "
-                "upward by O(sigma * sqrt(2 * log N)) per Bailey/Lopez de "
-                "Prado. Wrap this objective in your own train/test split "
-                "until upstream walk-forward lands.",
-                self.train_end, self.k_folds, self.purge_days,
+        if self.train_end is not None:
+            if self.train_end < self.start:
+                raise ValueError("train_end must be on or after start")
+            if self.train_end >= self.end:
+                raise ValueError("train_end must be before end")
+        if self.k_folds != 5 or self.purge_days != 60:
+            log.warning(
+                "tuner: k_folds=%d/purge_days=%d are retained for legacy "
+                "API compatibility; this objective uses the train/test "
+                "window selected by train_end+tune_on.",
+                self.k_folds,
+                self.purge_days,
             )
         if self.params_model is None:
             pm = getattr(self.strategy_cls, "PARAMS_MODEL", None)
@@ -213,9 +206,10 @@ class WalkForwardObjective:
         """Drive the unified-shell :class:`BacktestRunner` for one trial."""
 
         strategy = self.strategy_cls()
+        run_start, run_end = self._objective_window()
         cfg = BacktestConfig(
-            start=self.start,
-            end=self.end,
+            start=run_start,
+            end=run_end,
             starting_cash=self.starting_cash,
         )
         runner = BacktestRunner(
@@ -224,8 +218,18 @@ class WalkForwardObjective:
             bar_provider=self.bar_provider,
             earnings_provider=self.earnings_provider,
             fundamentals_provider=self.fundamentals_provider,
+            options_provider=self.options_provider,
         )
         return runner.run(params)
+
+    def _objective_window(self) -> tuple[date, date]:
+        """Return the concrete backtest window for this objective trial."""
+
+        if self.train_end is None:
+            return self.start, self.end
+        if self.tune_on == "train":
+            return self.start, self.train_end
+        return self.train_end + timedelta(days=1), self.end
 
     def _score_from_result(self, result: BacktestResult) -> float:
         """Pull metrics from a :class:`BacktestResult` and apply the score formula.

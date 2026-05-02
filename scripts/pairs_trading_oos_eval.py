@@ -47,6 +47,7 @@ from backend.backtest.engine import BacktestEngine, EngineConfig
 from backend.data.providers.alpaca import AlpacaBarProvider
 from backend.strategies.pairs_trading.config import UNIVERSE
 from backend.strategies.registry import get_strategy
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
 
 log = logging.getLogger("pairs_oos_eval")
 
@@ -215,6 +216,7 @@ def main() -> int:
             "end": float(curve.iloc[-1]),
             "total_return": float(curve.iloc[-1]) / float(curve.iloc[0]) - 1.0,
         }
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(result.equity_curve))
 
     report_dir = _ROOT / "audit-reports"
     report_dir.mkdir(exist_ok=True)

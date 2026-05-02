@@ -432,6 +432,49 @@ def _define_models() -> dict[str, Any]:
             ),
         )
 
+    class AccessRequest(Base):
+        """Public invite-request intake for AlphaDesk onboarding.
+
+        This is intentionally separate from ``compliance_tickets``. Access
+        requests are sales/onboarding work items, while compliance tickets
+        are statutory privacy-rights records with a different retention and
+        verification workflow.
+        """
+
+        __tablename__ = "access_requests"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        public_id = Column(String(32), nullable=False, unique=True, index=True)
+        created_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        )
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+        status = Column(String(32), nullable=False, server_default="received", default="received")
+        name = Column(String(120), nullable=False)
+        email = Column(String(255), nullable=False)
+        firm = Column(String(160), nullable=True)
+        role = Column(String(120), nullable=True)
+        jurisdiction = Column(String(80), nullable=False)
+        capital_band = Column(String(32), nullable=False)
+        trading_mode = Column(String(32), nullable=False)
+        instruments = Column(JSONB, nullable=False)
+        note = Column(Text, nullable=False)
+        referral = Column(Text, nullable=True)
+        client_ip = Column(String(64), nullable=True)
+        user_agent = Column(String(256), nullable=True)
+
+        __table_args__ = (
+            Index("ix_access_requests_status_created", "status", "created_at"),
+            Index("ix_access_requests_email", "email"),
+        )
+
     class HaltState(Base):
         """Singleton table holding the emergency kill-switch state.
 
@@ -489,6 +532,7 @@ def _define_models() -> dict[str, Any]:
         "Alert": Alert,
         "AuditLog": AuditLog,
         "ComplianceTicket": ComplianceTicket,
+        "AccessRequest": AccessRequest,
         "HaltState": HaltState,
     })
     return _models_cache

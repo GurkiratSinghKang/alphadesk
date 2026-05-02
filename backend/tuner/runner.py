@@ -291,23 +291,38 @@ def run(
         best_params = {}
         best_value = float("-inf")
 
-    _print_best(study_name, best_params, best_value, len(study.trials))
+    selection_window = "train" if train_end is not None else "full"
+    _print_best(
+        study_name,
+        best_params,
+        best_value,
+        len(study.trials),
+        selection_window=selection_window,
+    )
     return {
         "study_name": study_name,
         "best_params": best_params,
         "best_value": best_value,
+        "best_train_score": best_value if train_end is not None else None,
+        "selection_window": selection_window,
         "n_trials": len(study.trials),
     }
 
 
 def _print_best(
-    study_name: str, params: dict[str, Any], value: float, n_trials: int
+    study_name: str,
+    params: dict[str, Any],
+    value: float,
+    n_trials: int,
+    *,
+    selection_window: str = "full",
 ) -> None:
     """Pretty-print the winning parameters to stdout."""
 
     print(f"\n=== Tuner results: {study_name} ===")
     print(f"Trials completed: {n_trials}")
-    print(f"Best OOS score:   {value:.4f}")
+    label = "Best TRAIN score" if selection_window == "train" else "Best score"
+    print(f"{label}: {value:.4f}")
     if not params:
         print("(no successful trial)")
         return

@@ -51,6 +51,7 @@ from backend.data.providers.fmp import FMPEarningsProvider  # noqa: E402
 from backend.strategies.pead import config as _pead_cfg  # noqa: E402
 from backend.strategies.pead.config import UNIVERSE_SEED  # noqa: E402
 from backend.strategies.pead.strategy import PEADStrategy  # noqa: E402
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -365,6 +366,7 @@ def main() -> int:
             getattr(_pead_cfg, "UNIVERSE_HAS_SURVIVORSHIP_BIAS", False)
         ),
     }
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(res.equity_curve))
     out_path = _ROOT / "audit-reports" / "phase1-pead-oos.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))

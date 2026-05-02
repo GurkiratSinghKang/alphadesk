@@ -43,6 +43,8 @@ def _install_stubs() -> None:
 
 _install_stubs()
 
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
+
 
 def main() -> int:
     from backend.data.providers.alpaca import AlpacaBarProvider
@@ -113,7 +115,7 @@ def main() -> int:
         print("FAIL: no completed trials. Check provider / window.")
         return 1
 
-    print(f"\nBest OOS Sharpe   : {best_value:.4f}")
+    print(f"\nBest TRAIN Sharpe : {best_value:.4f}")
     print("Best parameters   :")
     for k, v in sorted(best_params.items()):
         print(f"  {k} = {v!r}")
@@ -141,6 +143,7 @@ def main() -> int:
     )
     oos = engine.run()
     m = oos.metrics or {}
+    oos_sharpe = float(m.get("sharpe", float("nan")))
     print(f"OOS bars          : {len(oos.equity_curve)}")
     print(f"OOS fills         : {len(oos.fills)}")
     print(f"OOS Sharpe        : {m.get('sharpe', float('nan')):.3f}")
@@ -156,24 +159,32 @@ def main() -> int:
         "end": str(end),
         "train_end": str(train_end),
         "n_trials": len(study.trials),
-        "best_oos_sharpe": best_value,
+        "best_train_sharpe": best_value,
+        "best_oos_sharpe": oos_sharpe,
         "best_params": best_params,
         "oos_metrics": {
             k: float(v) for k, v in m.items() if isinstance(v, (int, float))
         },
         "elapsed_seconds": int(elapsed),
     }
+    attach_bootstrap_ci(out, bootstrap_ci_from_equity_frame(oos.equity_curve))
     out_path = Path("audit-reports") / "phase1-ts_momentum-oos.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2))
     print(f"\nDumped summary to {out_path}")
 
     target = 0.80
-    if best_value >= target:
-        print(f"\nSUCCESS: OOS Sharpe {best_value:.3f} >= target {target:.2f}")
+    if oos_sharpe >= target:
+        print(
+            f"\nSUCCESS: OOS Sharpe {oos_sharpe:.3f} >= target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 0
     else:
-        print(f"\nBELOW TARGET: OOS Sharpe {best_value:.3f} < target {target:.2f}")
+        print(
+            f"\nBELOW TARGET: OOS Sharpe {oos_sharpe:.3f} < target {target:.2f} "
+            f"(train fitness {best_value:.3f})"
+        )
         return 2
 
 

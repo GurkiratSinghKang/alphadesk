@@ -76,6 +76,11 @@ Other 8 OOS JSONs not regenerated — their hyperparameters are selection-on-tes
   - Add a `PolygonEarningsProvider` sourcing from the `/v2/reference/financials` chain, or
   - Integrate EarningsWhispers as a secondary source.
 - Until this lands, PEAD trades AMC-anchor-only — half the drift signal is missed.
+- **2026-05-02 update:** `FMPEarningsProvider.calendar()` now accepts an
+  operator-curated CSV/JSON timing feed via `EARNINGS_TIME_SOURCE_PATH` and
+  overlays `announcement_when ∈ {"amc","bmo"}` before PEAD sees the calendar.
+  This completes the code wiring; production still needs the vendor export
+  file populated before historical PEAD OOS will show non-zero AMC/BMO counts.
 
 ### P1 — Re-tune 9 strategies with Wave 5 fix
 Cached `audit-reports/phase1-*-tune.json` winners were selected under OOS-peeking. Strategies affected:
@@ -83,9 +88,18 @@ Cached `audit-reports/phase1-*-tune.json` winners were selected under OOS-peekin
 - Each re-tune is 1-5 hours of compute (25-100 Optuna trials × 2-5 min/trial).
 - Dispatch in parallel on a CI worker or scheduled nightly.
 - Post-re-tune, re-emit OOS JSONs and update disclosure banner copy accordingly.
+- **2026-05-02 update:** `WalkForwardObjective(train_end=..., tune_on="train")`
+  now actually scopes trials to the training window instead of treating
+  `train_end` as inert. The affected tune scripts now label fitness as TRAIN
+  and gate success on the single final OOS run. The full 9-strategy retune
+  compute has not been run in this pass.
 
 ### P1 — Bootstrap CI on OOS Sharpes
 Only ORB's fresh artefact carries a 95% CI. Extend the OOS evaluators to emit block-bootstrap CI (non-overlapping blocks of 21 trading days, 1000 iterations). Do this alongside the re-tune.
+- **2026-05-02 update:** all OOS-producing scripts now attach
+  `sharpe_bootstrap_ci`, `sharpe_ci95_low`, and `sharpe_ci95_high` using a
+  shared non-overlapping 21-day / 1000-iteration block bootstrap helper.
+  Existing cached JSONs need rerun to carry the new fields.
 
 ### P1 — Pre-existing test failures
 10 pre-existing test failures exist on clean tree (before any wave):
@@ -97,6 +111,8 @@ Only ORB's fresh artefact carries a 95% CI. Extend the OOS evaluators to emit bl
 Plus 9 provider test errors (need API keys in test env).
 
 None of these are introduced by Waves 1-5. Audit + fix in a subsequent pass.
+- **2026-05-02 update:** the exact readiness-listed set now passes locally:
+  12 tests passed, including the six `test_trade_ledger_sync.py` cases.
 
 ### P2 — Reworked tuner-orb architecture
 `scripts/tune_orb.py` has a custom objective path (not using `WalkForwardObjective`). Consider migrating to `WalkForwardObjective` so ORB inherits the `tune_on` default automatically.
@@ -124,9 +140,9 @@ Before flipping `ALPACA_BASE_URL` to `api.alpaca.markets` (live):
 - [x] ORB OOS CI straddles zero — confirmed no edge.
 - [x] Tuner code now scores on TRAIN (Wave 5).
 - [ ] 9 strategies re-tuned with Wave 5 fix → **DEFERRED** (accept provisional Sharpes under disclosure).
-- [ ] PEAD wired to a data source with AMC/BMO field populated → **DEFERRED** (accept AMC-only trading under disclosure).
-- [ ] Bootstrap CI on all OOS Sharpes → **DEFERRED** (accept point estimates under disclosure).
-- [ ] 10 pre-existing test failures triaged → **DEFERRED** (not introduced by waves; no impact on live path).
+- [x] PEAD wired to a configurable AMC/BMO timing source (`EARNINGS_TIME_SOURCE_PATH`); vendor file population remains an ops input.
+- [x] Bootstrap CI emitted by all OOS evaluator scripts on rerun.
+- [x] 10 pre-existing test failures triaged; exact listed set is green locally.
 
 ---
 
@@ -160,11 +176,10 @@ Before flipping `ALPACA_BASE_URL` to `api.alpaca.markets` (live):
 
 ## 6. What a follow-up session should do
 
-1. Re-tune the 9 affected strategies with Wave 5's `tune_on="train"` default; publish refreshed tune + OOS JSONs.
-2. Wire a data source that supplies `time` to the earnings calendar; re-enable PEAD BMO trading.
-3. Add block-bootstrap CI to every OOS evaluator.
-4. Triage the 10 pre-existing test failures.
-5. After 30 days of live trading, reconcile live-vs-backtest slippage / fill rate; feed back into the cost model.
+1. Populate `EARNINGS_TIME_SOURCE_PATH` with a paid/vendor AMC/BMO export and rerun `scripts/pead_oos_eval.py`.
+2. Run the full 9-strategy re-tune batch with the now-active train-window objective; publish refreshed tune + OOS JSONs.
+3. Rerun the OOS evaluators so cached JSONs carry the new bootstrap CI fields.
+4. After 30 days of live trading, reconcile live-vs-backtest slippage / fill rate; feed back into the cost model.
 
 ---
 

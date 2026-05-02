@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowRight, CircleNotch, Eye, EyeClosed, WarningCircle } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import Eyebrow from "@/components/typography/Eyebrow";
 
 /**
  * LoginForm (private to /login)
@@ -29,6 +27,10 @@ import Eyebrow from "@/components/typography/Eyebrow";
 const LOCKOUT_STORAGE_KEY = "alphadesk.login_failures";
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min rolling window
 const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
+const authInputClass =
+  "h-12 rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-[15px] text-[#12281f] placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+const authLabelClass = "font-sans text-[13px] font-medium text-[#203c31]";
+const authMutedClass = "font-sans text-[13px] leading-[1.55] text-[#5d7268]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -64,7 +66,6 @@ function formatRemaining(ms: number): string {
 }
 
 export default function LoginForm() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -201,14 +202,14 @@ export default function LoginForm() {
               : {},
           })
         );
-        router.push("/");
+        window.location.assign("/");
       } catch {
         setError("Failed to connect to server");
       } finally {
         setLoading(false);
       }
     },
-    [failures, locked, password, router, totpCode, totpRequired, username]
+    [failures, locked, password, totpCode, totpRequired, username]
   );
 
   const failCount = pruneFailures(failures, now).length;
@@ -230,25 +231,37 @@ export default function LoginForm() {
         explicit before they try.
       */}
       <noscript>
-        <p className="font-display italic text-[13px] text-fg-muted">
+        <p className="font-sans text-[13px] text-[#5d7268]">
           JavaScript is required to sign in to AlphaDesk.
         </p>
       </noscript>
+
+      <div className="border-b border-[#d7e4d9] pb-5">
+        <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+          Welcome back
+        </p>
+        <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
+          Open your workspace
+        </h2>
+        <p className={`mt-2 ${authMutedClass}`}>
+          Pick up your research, AI reviews, trade plans, and operating history where you left them.
+        </p>
+      </div>
 
       {sessionExpired && (
         <div
           role="status"
           aria-live="polite"
-          className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 font-mono text-[12px] text-amber"
+          className="rounded-[8px] border border-[#0f7a5d]/[0.24] bg-[#e8f5ea] px-3 py-2 font-sans text-[13px] text-[#0d654d]"
         >
           Your session expired. Please sign in again.
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <Eyebrow as="div">
-          <label htmlFor="login-username">Username</label>
-        </Eyebrow>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="login-username" className={authLabelClass}>
+          Username
+        </label>
         <Input
           id="login-username"
           value={username}
@@ -257,22 +270,21 @@ export default function LoginForm() {
             setTotpRequired(false);
             setTotpCode("");
           }}
-          placeholder="your handle"
+          placeholder="email or desk handle"
           autoComplete="username"
           autoFocus
-          className="h-11"
+          className={authInputClass}
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <Eyebrow as="div">
-            <label htmlFor="login-password">Password</label>
-          </Eyebrow>
+          <label htmlFor="login-password" className={authLabelClass}>
+            Password
+          </label>
           <Link
             href="/login/reset"
-            className="inline-flex min-h-11 items-center px-1 font-sans text-[12px] text-fg-hint transition-colors hover:text-fg"
-            style={{ letterSpacing: "0.01em" }}
+            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-[12px] text-[#5d7268] transition-colors hover:text-[#0f7a5d]"
           >
             Forgot password?
           </Link>
@@ -289,15 +301,13 @@ export default function LoginForm() {
             }}
             onKeyDown={handlePasswordKey}
             onKeyUp={handlePasswordKey}
-            placeholder="at least 12 characters"
+            placeholder="your password"
             autoComplete="current-password"
-            className="h-11 pr-12"
+            className={`${authInputClass} pr-12`}
             aria-invalid={error ? true : undefined}
           />
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={() => setShowPassword((v) => !v)}
             // a11y audit r3 — WCAG 2.1.1/2.4.3: previously had tabIndex={-1}
             // which excluded keyboard-only users from revealing their password.
@@ -305,27 +315,28 @@ export default function LoginForm() {
             // there's no need to remove it from tab order.
             aria-label={showPassword ? "Hide password" : "Show password"}
             aria-pressed={showPassword}
-            className="absolute right-0 top-1/2 h-11 min-h-11 w-11 min-w-11 -translate-y-1/2 p-0"
+            className="absolute grid h-10 w-10 place-items-center rounded-[8px] p-0 text-[#5d7268] transition-colors hover:bg-[#ecf4ed] hover:text-[#0f7a5d] active:scale-[0.98]"
+            style={{ right: 4, top: 4 }}
           >
             {showPassword ? (
-              <EyeOff className="h-3.5 w-3.5" aria-hidden />
+              <EyeClosed className="h-4 w-4" aria-hidden weight="regular" />
             ) : (
-              <Eye className="h-3.5 w-3.5" aria-hidden />
+              <Eye className="h-4 w-4" aria-hidden weight="regular" />
             )}
-          </Button>
+          </button>
         </div>
         {capsLock && (
-          <p className="font-display italic text-[12px] text-amber">
+          <p className="font-sans text-[12px] text-[#8a5c18]">
             Caps lock is on.
           </p>
         )}
       </div>
 
       {totpRequired && (
-        <div className="flex flex-col gap-1.5">
-          <Eyebrow as="div">
-            <label htmlFor="login-totp">Authenticator code</label>
-          </Eyebrow>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="login-totp" className={authLabelClass}>
+            Authenticator code
+          </label>
           <Input
             id="login-totp"
             value={totpCode}
@@ -334,35 +345,36 @@ export default function LoginForm() {
             inputMode="numeric"
             autoComplete="one-time-code"
             autoFocus
+            className={`${authInputClass} font-mono`}
           />
         </div>
       )}
 
       {error && (
-        <p
+        <div
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="font-mono text-[12px] text-down-500"
+          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-[13px] leading-[1.45] text-[#8f321f]"
         >
+          <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}
-        </p>
+        </div>
       )}
 
       {locked && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           <p
             role="alert"
             aria-live="assertive"
-            className="font-mono text-[12px] text-down-500"
+            className="font-sans text-[13px] text-[#8f321f]"
           >
             Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
           </p>
           <button
             type="button"
             onClick={handleResetLockout}
-            className="self-start font-sans text-[12px] text-fg-hint underline decoration-fg-hint underline-offset-4 transition-colors hover:text-fg"
-            style={{ letterSpacing: "0.02em" }}
+            className="self-start rounded-[6px] font-sans text-[12px] text-[#5d7268] underline decoration-[#b4c4b9] underline-offset-4 transition-colors hover:text-[#0f7a5d]"
           >
             Reset lockout
           </button>
@@ -370,7 +382,7 @@ export default function LoginForm() {
       )}
 
       {!locked && failCount >= 3 && (
-        <p className="font-mono text-[12px] text-amber">
+        <p className="font-sans text-[12px] text-[#8a5c18]">
           {LOCKOUT_THRESHOLD - failCount} attempt{LOCKOUT_THRESHOLD - failCount === 1 ? "" : "s"} left before lockout.
         </p>
       )}
@@ -379,22 +391,22 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 w-full"
+        className="mt-1 h-12 w-full rounded-[8px] bg-[#0f7a5d] font-sans text-[15px] font-semibold text-white shadow-[0_18px_38px_-28px_rgba(15,122,93,0.85)] hover:bg-[#0c654d]"
         disabled={disabled}
       >
         {loading ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />
         ) : (
-          <ArrowRight className="mr-2 h-4 w-4" />
+          <ArrowRight className="mr-2 h-4 w-4" aria-hidden weight="regular" />
         )}
         {totpRequired ? "Verify code" : "Sign in"}
       </Button>
 
-      <p className="mt-1 text-center font-display italic text-[13px] text-fg-muted">
+      <p className="mt-1 text-center font-sans text-[13px] text-[#5d7268]">
         No account?{" "}
         <Link
           href="/request-access"
-          className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+          className="font-medium text-[#0f7a5d] underline decoration-[#93cdb8] underline-offset-4 transition-colors hover:text-[#0c654d]"
         >
           Request access
         </Link>

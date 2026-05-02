@@ -41,6 +41,7 @@ from backend.backtest.engine import BacktestEngine, EngineConfig  # noqa: E402
 from backend.data.providers.alpaca import AlpacaBarProvider  # noqa: E402
 from backend.strategies.kama_breakout.config import DEFAULT_UNIVERSE  # noqa: E402
 from backend.strategies.registry import get_strategy  # noqa: E402
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame  # noqa: E402
 
 # Reuse the in-memory bar provider from the tuner script.
 from scripts.tune_kama import InMemoryBarProvider  # noqa: E402
@@ -140,6 +141,7 @@ def main() -> int:
         payload["total_return"] = (
             payload["equity_end"] / payload["equity_start"] - 1.0
         )
+    attach_bootstrap_ci(payload, bootstrap_ci_from_equity_frame(result.equity_curve))
     with out_path.open("w") as f:
         json.dump(payload, f, indent=2, default=str)
     print(f"\nWrote {out_path}")

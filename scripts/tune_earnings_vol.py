@@ -66,6 +66,7 @@ from backend.strategies.earnings_vol.polygon_helpers import (
     clear_synthetic_ledger,
 )
 from backend.tuner.runner import run
+from scripts.oos_bootstrap import attach_bootstrap_ci, bootstrap_ci_from_equity_frame
 
 
 # --------------------------------------------------------------------------- #
@@ -344,6 +345,7 @@ def _final_oos_run(best_params: dict, bar_provider, options_provider, earnings_p
             metrics["oos_total_return"] = (
                 float(curve.iloc[-1]) / float(curve.iloc[0]) - 1.0
             )
+        attach_bootstrap_ci(metrics, bootstrap_ci_from_equity_frame(oos.equity_curve))
     return metrics
 
 

@@ -181,6 +181,12 @@ class Settings(BaseSettings):
     # Below 5s FMP returns 504s during earnings-heavy windows; above 5s
     # the /earnings/calendar p95 degrades visibly on the UI side.
     EARNINGS_FMP_TIMEOUT_S: float = 5.0
+    # Optional operator-curated earnings timing feed. The FMP stable
+    # calendar often returns ``time=null``; PEAD needs AMC/BMO to place
+    # next-session vs same-session entries correctly. Point this at a CSV
+    # or JSON file with symbol,date,announcement_when/report_time/time fields
+    # from a vendor such as EarningsWhispers/Polygon/Benzinga.
+    EARNINGS_TIME_SOURCE_PATH: str = ""
 
     # --- Round-5 Cluster A G-15: earnings watchlist filter ---
     # Comma-separated list of tickers that the earnings calendar
