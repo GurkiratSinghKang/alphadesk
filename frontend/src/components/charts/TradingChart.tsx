@@ -506,7 +506,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         layout: {
           background: { type: ColorType.Solid, color: bg },
           textColor,
-          fontSize: 11,
+          fontSize: 12,
           fontFamily: getTokenVar("--font-ui", "Inter, sans-serif"),
           attributionLogo: false,
         },
@@ -1238,8 +1238,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         <div
           ref={containerRef}
           className="w-full h-full"
-          role="img"
-          aria-label="Interactive price chart with candlestick, line, and area views. Use mouse wheel to zoom and click-drag to pan."
+          role="application"
+          tabIndex={0}
+          aria-label="Interactive price chart. Use the chart toolbar controls for chart type, indicators, replay, alerts, and orders. Pointer users can zoom with the wheel and drag to pan."
         />
       </>
     );

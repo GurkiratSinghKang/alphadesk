@@ -72,6 +72,8 @@ export default function LoginForm() {
   const [failures, setFailures] = useState<number[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
   const [now, setNow] = useState<number>(() => Date.now());
   // persona-10 #5 — when api.ts hits a 401 it stashes a flag in
   // sessionStorage before redirecting here. We read + clear it on mount so
@@ -143,12 +145,21 @@ export default function LoginForm() {
         const res = await fetch(`${apiBase}/api/v1/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({
+            username,
+            password,
+            ...(totpRequired ? { totp_code: totpCode.trim() } : {}),
+          }),
           credentials: "include",
         });
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
+          if (body.detail === "totp_required") {
+            setTotpRequired(true);
+            setError("Enter your authenticator code to complete sign-in.");
+            return;
+          }
           setError(body.detail ?? "Invalid username or password");
           const nextList = pruneFailures([...failures, Date.now()], Date.now());
           setFailures(nextList);
@@ -159,6 +170,8 @@ export default function LoginForm() {
         // Success — clear the failure log
         writeFailures([]);
         setFailures([]);
+        setTotpRequired(false);
+        setTotpCode("");
         // Also clear any stale session-expired flag — even if the user
         // landed here via expiry, they're now signed back in and the
         // banner shouldn't follow them around.
@@ -195,11 +208,11 @@ export default function LoginForm() {
         setLoading(false);
       }
     },
-    [failures, locked, password, router, username]
+    [failures, locked, password, router, totpCode, totpRequired, username]
   );
 
   const failCount = pruneFailures(failures, now).length;
-  const disabled = loading || !username || !password || locked;
+  const disabled = loading || !username || !password || (totpRequired && !totpCode.trim()) || locked;
 
   return (
     <form
@@ -239,10 +252,15 @@ export default function LoginForm() {
         <Input
           id="login-username"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => {
+            setUsername(e.target.value);
+            setTotpRequired(false);
+            setTotpCode("");
+          }}
           placeholder="your handle"
           autoComplete="username"
           autoFocus
+          className="h-11"
         />
       </div>
 
@@ -253,7 +271,7 @@ export default function LoginForm() {
           </Eyebrow>
           <Link
             href="/login/reset"
-            className="font-sans text-[12px] text-fg-hint transition-colors hover:text-fg"
+            className="inline-flex min-h-11 items-center px-1 font-sans text-[12px] text-fg-hint transition-colors hover:text-fg"
             style={{ letterSpacing: "0.01em" }}
           >
             Forgot password?
@@ -264,12 +282,16 @@ export default function LoginForm() {
             id="login-password"
             type={showPassword ? "text" : "password"}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setTotpRequired(false);
+              setTotpCode("");
+            }}
             onKeyDown={handlePasswordKey}
             onKeyUp={handlePasswordKey}
             placeholder="at least 12 characters"
             autoComplete="current-password"
-            className="pr-10"
+            className="h-11 pr-12"
             aria-invalid={error ? true : undefined}
           />
           <Button
@@ -283,7 +305,7 @@ export default function LoginForm() {
             // there's no need to remove it from tab order.
             aria-label={showPassword ? "Hide password" : "Show password"}
             aria-pressed={showPassword}
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+            className="absolute right-0 top-1/2 h-11 min-h-11 w-11 min-w-11 -translate-y-1/2 p-0"
           >
             {showPassword ? (
               <EyeOff className="h-3.5 w-3.5" aria-hidden />
@@ -298,6 +320,23 @@ export default function LoginForm() {
           </p>
         )}
       </div>
+
+      {totpRequired && (
+        <div className="flex flex-col gap-1.5">
+          <Eyebrow as="div">
+            <label htmlFor="login-totp">Authenticator code</label>
+          </Eyebrow>
+          <Input
+            id="login-totp"
+            value={totpCode}
+            onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            placeholder="6-digit code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+        </div>
+      )}
 
       {error && (
         <p
@@ -348,7 +387,7 @@ export default function LoginForm() {
         ) : (
           <ArrowRight className="mr-2 h-4 w-4" />
         )}
-        Sign in
+        {totpRequired ? "Verify code" : "Sign in"}
       </Button>
 
       <p className="mt-1 text-center font-display italic text-[13px] text-fg-muted">

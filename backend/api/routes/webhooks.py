@@ -402,7 +402,6 @@ async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
     webhook boundary. Previously a TradingView alert that bypassed the
     manual-order endpoint also bypassed every one of those gates.
     """
-    from agents import get_agent
     from core.trading_gate import reject_if_live_forbidden
 
     # Live-trading strategy gate — refuse before invoking the agent. We
@@ -462,23 +461,25 @@ async def _handle_trade_signal(alert: TradingViewAlert) -> dict[str, Any]:
             "detail": f"Aggregate risk gate unavailable: {exc}",
         }
 
-    execution_agent = get_agent("execution")
-    if execution_agent is None:
-        # Fall back to direct notification
-        await _send_notification(
-            f"Trade signal: {alert.action.upper()} {alert.ticker} @ {alert.price}"
-        )
-        return {"action": "notified", "detail": "Execution agent unavailable, sent notification"}
-
-    result = await execution_agent.run(
-        f"Execute {alert.action} signal for {alert.ticker} at {alert.price}. "
-        f"Strategy: {alert.strategy or 'tradingview'}. "
-        f"Context: {alert.message or 'TradingView alert'}"
+    first_leg = risk_request.legs[0] if risk_request.legs else None
+    await _send_notification(
+        "Risk-approved TradingView signal requires manual execution review: "
+        f"{alert.action.upper()} {alert.ticker} @ {alert.price}"
     )
-
     return {
-        "action": "order_submitted" if result.get("success") else "order_failed",
-        "detail": result,
+        "action": "approved_not_submitted",
+        "detail": (
+            "Aggregate risk gate passed, but webhook auto-execution is disabled "
+            "until the approved payload is bound to the shared order path."
+        ),
+        "order": {
+            "symbol": first_leg.symbol if first_leg else alert.ticker,
+            "side": first_leg.side.value if first_leg else alert.action,
+            "qty": first_leg.qty if first_leg else synthetic_qty,
+            "type": first_leg.order_type.value if first_leg else "market",
+            "limit_price": first_leg.limit_price if first_leg else alert.price,
+            "strategy": risk_request.strategy,
+        },
     }
 
 

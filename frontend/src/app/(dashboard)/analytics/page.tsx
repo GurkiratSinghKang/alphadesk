@@ -875,7 +875,13 @@ export default function AnalyticsPage() {
         ]);
         if (cancelled) return;
         if (perfRes.status === "fulfilled" && Array.isArray(perfRes.value.equity_curve)) {
-          setEquityCurve(perfRes.value.equity_curve);
+          setEquityCurve(
+            perfRes.value.equity_curve.filter((point) => (
+              typeof point?.date === "string" &&
+              Number.isFinite(Number(point.cumulative_pnl)) &&
+              (point.value === undefined || Number.isFinite(Number(point.value)))
+            )),
+          );
         }
         if (tradesRes.status === "fulfilled") {
           const raw = tradesRes.value;

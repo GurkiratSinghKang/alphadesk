@@ -77,7 +77,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
       className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-foreground cursor-pointer data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary"
     >
       <span className="text-muted-foreground">{icon}</span>
-      <span className="flex-1">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       {shortcut && (
         <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[12px] font-mono text-muted-foreground">
           {shortcut}

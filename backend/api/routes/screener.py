@@ -9,7 +9,7 @@ from typing import Any, TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.database import get_db
 
@@ -88,18 +88,78 @@ class FilterOp(str, Enum):
     IN = "in"
 
 
+_FILTERABLE_FIELDS = {
+    "sector",
+    "market_cap",
+    "price",
+    "change_pct",
+    "volume",
+    "composite_score",
+    "rs_score",
+    "f_score",
+    "iv_rank",
+    "iv_percentile",
+    "ml_score",
+    "pe_ratio",
+    "short_interest",
+}
+
+
 class ScreenerFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     field: str = Field(..., description="Metric field name, e.g. 'market_cap', 'pe_ratio', 'iv_rank'")
     op: FilterOp
     value: float | list[float] | list[str] = Field(..., description="Comparison value(s)")
 
+    @model_validator(mode="after")
+    def validate_filter_shape(self) -> "ScreenerFilter":
+        if self.field not in _FILTERABLE_FIELDS:
+            raise ValueError(f"field must be one of: {', '.join(sorted(_FILTERABLE_FIELDS))}")
+
+        if self.field == "sector":
+            if (
+                self.op != FilterOp.IN
+                or not isinstance(self.value, list)
+                or not self.value
+                or not all(isinstance(v, str) and v.strip() for v in self.value)
+            ):
+                raise ValueError("sector filters must use op='in' with a non-empty list of sector names")
+            return self
+
+        if self.op == FilterOp.BETWEEN:
+            if (
+                not isinstance(self.value, list)
+                or len(self.value) != 2
+                or not all(isinstance(v, (int, float)) for v in self.value)
+            ):
+                raise ValueError("between filters require exactly two numeric values")
+            return self
+
+        if self.op == FilterOp.IN:
+            if (
+                not isinstance(self.value, list)
+                or not self.value
+                or not all(isinstance(v, (int, float)) for v in self.value)
+            ):
+                raise ValueError("numeric in filters require a non-empty list of numbers")
+            return self
+
+        if isinstance(self.value, list) or not isinstance(self.value, (int, float)):
+            raise ValueError(f"{self.op.value} filters require one numeric value")
+        return self
+
 
 class SortSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     field: str = "composite_score"
     descending: bool = True
 
 
 class ScreenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     filters: list[ScreenerFilter] = Field(default_factory=list)
     sort: SortSpec = Field(default_factory=SortSpec)
     limit: int = Field(50, ge=1, le=500)

@@ -50,9 +50,8 @@ export function useWs(): WsContextValue {
 // K-4 (round-6): dynamic-import both the WS provider and the data-pipeline
 // bridge. SSR is disabled (ssr: false) because both depend on browser-only
 // APIs (WebSocket, navigator) and on Zustand stores that hydrate from
-// localStorage. The /login route's `isLogin` early-return below means
-// these chunks don't load at all on the auth screen, recovering the
-// ~120 KB the K-4 audit measured.
+// localStorage. Only authenticated dashboard routes mount these chunks; public
+// marketing/legal/help routes must not hydrate protected API polling.
 const WebSocketProvider = dynamic(
   () => import("./providers/WebSocketProvider").then((m) => m.WebSocketProvider),
   { ssr: false },
@@ -65,23 +64,42 @@ const DataPipelineBridge = dynamic(
 
 // ─── Combined Provider ───────────────────────────────────────
 
+const DASHBOARD_ROUTE_PREFIXES = [
+  "/",
+  "/analytics",
+  "/alerts",
+  "/pipeline",
+  "/reports",
+  "/settings",
+  "/strategies",
+  "/trade",
+] as const;
+
+function isDashboardRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (DASHBOARD_ROUTE_PREFIXES.includes(pathname as (typeof DASHBOARD_ROUTE_PREFIXES)[number])) return true;
+  if (pathname === "/strategies/trading-agents-research") return true;
+  if (pathname === "/strategies/earnings-options-play") return true;
+  return /^\/strategies\/[^/]+$/.test(pathname);
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
   const pathname = usePathname();
-  const isLogin = pathname === "/login";
+  const authOnlyProviders = isDashboardRoute(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeController />
       <ToastProvider>
-        {isLogin ? (
-          <TooltipProvider delay={200}>{children}</TooltipProvider>
-        ) : (
+        {authOnlyProviders ? (
           <WebSocketProvider>
             <DataPipelineBridge>
               <TooltipProvider delay={200}>{children}</TooltipProvider>
             </DataPipelineBridge>
           </WebSocketProvider>
+        ) : (
+          <TooltipProvider delay={200}>{children}</TooltipProvider>
         )}
       </ToastProvider>
     </QueryClientProvider>

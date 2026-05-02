@@ -262,12 +262,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             so users don't place trades on stale cached quotes. Only renders
             when wsStatus !== "open". Thin enough (py-1.5) to avoid shifting
             the desk grid noticeably. */}
-        <WsStatusBanner />
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex flex-col [&>*]:pointer-events-auto">
+          <WsStatusBanner />
+          <SessionExpiryBanner />
+          <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
+        </div>
         {/* Round 7 Fix 4 (P128): warn the user *before* a silent redirect
             so they can save unsaved order tickets / strategy drafts.
             Render only after refresh failure — null on the happy path. */}
-        <SessionExpiryBanner />
-        <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
         {children}
         <CommandPalette />
         <AICopilot />
@@ -293,10 +295,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </a>
 
       {/* edge-cases-audit-r3 P0 #6 — see desk branch comment above. */}
-      <WsStatusBanner />
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex flex-col [&>*]:pointer-events-auto">
+        <WsStatusBanner />
+        <SessionExpiryBanner />
+        <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
+      </div>
       {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
-      <SessionExpiryBanner />
-      <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
       <TopBar />
       <StatusStrip />
       {/* Non-desk routes use natural document body scroll (simplest, matches

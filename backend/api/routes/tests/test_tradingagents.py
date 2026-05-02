@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -59,6 +60,8 @@ def test_create_run_validates_and_starts(monkeypatch: pytest.MonkeyPatch, authed
         assert request["symbol"] == "AAPL"
         return _run_payload(symbol=request["symbol"])
 
+    monkeypatch.setattr(route, "get_tradingagents_runtime_status", lambda _provider=None: {"ready": True})
+    monkeypatch.setattr(route, "get_active_tradingagents_run_for_request", AsyncMock(return_value=None))
     monkeypatch.setattr(route, "_enforce_run_rate_limit", no_rate_limit)
     monkeypatch.setattr(route, "start_tradingagents_run", fake_start)
 

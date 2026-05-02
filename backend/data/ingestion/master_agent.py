@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import shutil
+import time
 from typing import Any
 
 from data.volatility_map import VOL_MAP_PRE_SP500
@@ -165,6 +166,20 @@ class MasterAgent:
 
     # Risk monitor toggle — when False, all P1-P4 checks are bypassed
     RISK_MONITOR_ENABLED: bool = True
+    _RISK_MONITOR_LAST_SYNC_MONO: float = 0.0
+    _RISK_MONITOR_SYNC_INTERVAL_S: float = 1.0
+
+    @classmethod
+    def risk_monitor_enabled(cls) -> bool:
+        now = time.monotonic()
+        if now - cls._RISK_MONITOR_LAST_SYNC_MONO >= cls._RISK_MONITOR_SYNC_INTERVAL_S:
+            try:
+                from core.risk_monitor_state import read_risk_monitor_enabled_sync
+
+                cls.RISK_MONITOR_ENABLED = read_risk_monitor_enabled_sync(cls.RISK_MONITOR_ENABLED)
+            finally:
+                cls._RISK_MONITOR_LAST_SYNC_MONO = now
+        return cls.RISK_MONITOR_ENABLED
 
     # P1: Per-strategy drawdown limits
     STRATEGY_DRAWDOWN_LIMIT = -0.05  # -5% from peak
@@ -845,7 +860,7 @@ class MasterAgent:
         Returns ``{"approved": bool, "reason": str}``.
         """
         # -- Risk Monitor bypass: when disabled, approve all buys --
-        if not self.RISK_MONITOR_ENABLED:
+        if not self.risk_monitor_enabled():
             # Only enforce duplicate symbol check (safety)
             if side == "buy" and symbol in self.existing_positions:
                 holding = self.existing_positions[symbol].get("strategy", "unknown")

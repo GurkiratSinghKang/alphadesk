@@ -50,6 +50,8 @@ services:
     # 2026-04-20 when the /pairs-stat-arb duplicate fix did not land.
     pull_policy: always
     restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
     volumes: []
     networks:
       - alphadesk
@@ -144,6 +146,10 @@ services:
     cpus: 2.0
 
   timescaledb:
+    environment:
+      POSTGRES_USER: alphadesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: alphadesk
     volumes:
       - /var/lib/alphadesk/timescaledb:/var/lib/postgresql/data
     command:

@@ -1860,6 +1860,11 @@ async def toggle_strategy(
         )
 
     canonical = _canonical_id(strategy_id)
+    if canonical == "trading-agents-research":
+        raise HTTPException(
+            status_code=422,
+            detail="TradingAgents Research is a read-only research tool and cannot be toggled.",
+        )
     redis_key = f"strategy_status:{canonical}"
 
     redis_client = await get_redis()
@@ -2005,8 +2010,13 @@ async def toggle_risk_monitor(
     a durable Postgres trail of operator-initiated risk-control changes.
     """
     from data.ingestion.master_agent import MasterAgent
+    from core.risk_monitor_state import read_risk_monitor_enabled, write_risk_monitor_enabled
 
-    previous = MasterAgent.RISK_MONITOR_ENABLED
+    previous = await read_risk_monitor_enabled(MasterAgent.RISK_MONITOR_ENABLED)
+    try:
+        await write_risk_monitor_enabled(enabled)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Risk monitor state store unavailable") from exc
     MasterAgent.RISK_MONITOR_ENABLED = enabled
     logger.warning(
         "Risk monitor toggled: %s -> %s by %s",
@@ -2043,10 +2053,13 @@ async def get_risk_monitor_state(
 ) -> RiskMonitorState:
     """Get current risk monitor state. Admin-only (security-audit-r3 P0 #1)."""
     from data.ingestion.master_agent import MasterAgent
+    from core.risk_monitor_state import read_risk_monitor_enabled
 
+    enabled = await read_risk_monitor_enabled(MasterAgent.RISK_MONITOR_ENABLED)
+    MasterAgent.RISK_MONITOR_ENABLED = enabled
     return RiskMonitorState(
-        enabled=MasterAgent.RISK_MONITOR_ENABLED,
-        message=f"Risk monitor is {'enabled' if MasterAgent.RISK_MONITOR_ENABLED else 'disabled'}.",
+        enabled=enabled,
+        message=f"Risk monitor is {'enabled' if enabled else 'disabled'}.",
     )
 
 

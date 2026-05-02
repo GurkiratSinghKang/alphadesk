@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Zap, LayoutDashboard, BarChart3, Bot, Search, Bell, Menu, LineChart, FileText, Target } from "lucide-react";
+import { LayoutDashboard, BarChart3, Bot, Search, Bell, Menu, LineChart, FileText, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useUIStore } from "@/stores/ui";
@@ -69,7 +69,7 @@ export function TopBar() {
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-[44px] min-w-[44px] xl:hidden"
+              className="min-h-[44px] min-w-[44px] md:hidden"
               aria-label="Open menu"
             >
               <Menu className="h-4 w-4 text-muted-foreground" />
@@ -77,9 +77,9 @@ export function TopBar() {
           } />
           <SheetContent side="left" className="w-64 bg-[var(--surface)] border-border p-0">
             <SheetHeader className="border-b border-border px-4 py-3">
-              <SheetTitle className="flex items-center gap-2 text-sm">
-                <Zap className="h-4 w-4 text-primary" />
-                AlphaDesk
+              <SheetTitle className="flex items-baseline gap-1.5 text-[20px]">
+                <span className="font-display italic text-brand">α</span>
+                <span>AlphaDesk</span>
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1 p-3">
@@ -105,14 +105,14 @@ export function TopBar() {
         <button
           type="button"
           aria-label="AlphaDesk home"
-          className="flex min-h-11 min-w-0 items-center gap-2 rounded-md px-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8"
+          className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-md px-1 font-display italic text-[20px] text-ink-1000 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"
           onClick={() => router.push("/")}
         >
-          <Zap className="h-5 w-5 text-primary" />
-          <span className="truncate text-base font-semibold tracking-tight text-foreground">AlphaDesk</span>
+          <span className="text-brand">α</span>
+          <span className="truncate">AlphaDesk</span>
         </button>
         {/* Desktop navigation -- hidden on mobile */}
-        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 xl:flex">
+        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 md:flex">
           {navItems.map(({ path, label, icon: Icon, active }) => (
             <button
               key={path}

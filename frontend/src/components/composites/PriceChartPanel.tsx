@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import Mono from "@/components/typography/Mono";
 import ChartPane from "@/components/charts/ChartPane";
 import { useMarketDepth } from "@/hooks/useMarketDepth";
+import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import type {
   ChartBar,
   ChartPoint,
@@ -119,6 +120,13 @@ export default function PriceChartPanel({
   const changePct = numberOrNull(quote.changePct);
   const regimeFit = numberOrNull(meta.regimeFit);
   const marketDepth = useMarketDepth(symbol.ticker, quote);
+  const handleRangeShortcut = React.useCallback((action: string) => {
+    const range = action.slice("chart:set-range:".length) as ChartRange;
+    if (RANGES.includes(range)) {
+      onRangeChange(range);
+    }
+  }, [onRangeChange]);
+  useShortcutHandler("chart:set-range", handleRangeShortcut);
 
   const deltaSign = (change ?? 0) >= 0 ? "+" : "\u2212";
   const deltaTone = (change ?? 0) >= 0 ? "text-up-500" : "text-down-500";

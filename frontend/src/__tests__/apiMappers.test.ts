@@ -860,6 +860,7 @@ describe('screenStocks', () => {
           sector: 'Technology',
           price: 820,
           change_pct: 3.5,
+          volume: 1234567,
           composite_score: 0.92,
           metrics: { rs_score: 95, f_score: 7, iv_rank: 40, iv_percentile: 55, ml_score: 0.88 },
         },
@@ -879,6 +880,7 @@ describe('screenStocks', () => {
     expect(result[0].mlScore).toBe(0.88);
     expect(result[0].composite).toBe(0.92);
     expect(result[0].sector).toBe('Technology');
+    expect(result[0].volume).toBe(1234567);
     // Round-11 / Y-4: ``change`` field removed from ScreenerResult — backend
     // only emits ``change_pct``; the old hard-coded 0 was a placebo.
   });
@@ -900,15 +902,20 @@ describe('screenStocks', () => {
     expect(result[0].rsScore).toBe(0);
   });
 
-  it('calls POST method with strategy body', async () => {
-    mockFetch.mockReturnValueOnce(ok({ count: 0, results: [], screened_at: '' }));
-    await screenStocks('vcp', { minPrice: 10 });
-    const [, init] = mockFetch.mock.calls[0];
-    expect(init.method).toBe('POST');
-    const body = JSON.parse(init.body);
-    expect(body.strategy).toBe('vcp');
-    expect(body.minPrice).toBe(10);
-  });
+	  it('calls POST method with strategy body', async () => {
+	    mockFetch.mockReturnValueOnce(ok({ count: 0, results: [], screened_at: '' }));
+	    await screenStocks('vcp', { minPrice: 10, minVolume: 1000000, marketCap: 'Large', sector: 'Financials' });
+	    const [, init] = mockFetch.mock.calls[0];
+	    expect(init.method).toBe('POST');
+	    const body = JSON.parse(init.body);
+	    expect(body.strategy).toBe('vcp');
+	    expect(body.filters).toEqual([
+	      { field: 'price', op: 'gte', value: 10 },
+	      { field: 'volume', op: 'gte', value: 1000000 },
+	      { field: 'market_cap', op: 'between', value: [10000000000, 200000000000] },
+	      { field: 'sector', op: 'in', value: ['Financial Services'] },
+	    ]);
+	  });
 });
 
 // ─── getScreenerPresets ───────────────────────────────────────────────────────
@@ -1186,7 +1193,7 @@ describe('placeOrder', () => {
     expect(body.legs[1].limit_price).toBe(0.95);
   });
 
-  it('does not fabricate quote freshness timestamps for option orders', async () => {
+	  it('does not fabricate quote freshness timestamps for option orders', async () => {
     const order = { id: 'ord-7', symbol: 'AAPL260417C00200000', side: 'buy' as const, type: 'limit' as const, quantity: 1, status: 'pending' as const, createdAt: '2026-04-10T09:30:00Z', legs: [] };
     mockFetch.mockReturnValueOnce(ok(order));
 
@@ -1200,9 +1207,30 @@ describe('placeOrder', () => {
     const [, init] = mockFetch.mock.calls[0];
     const body = JSON.parse(init.body);
     expect(body.legs[0].asset_class).toBe('option');
-    expect(body.quote_at_fill_ts).toBeUndefined();
-  });
-});
+	    expect(body.quote_at_fill_ts).toBeUndefined();
+	  });
+
+	  it('forwards advanced order controls when provided', async () => {
+	    const order = { id: 'ord-8', symbol: 'SPY', side: 'buy' as const, type: 'limit' as const, quantity: 10, status: 'pending' as const, createdAt: '2026-04-10T09:30:00Z', legs: [] };
+	    mockFetch.mockReturnValueOnce(ok(order));
+
+	    await placeOrder({
+	      symbol: 'SPY',
+	      side: 'buy',
+	      type: 'limit',
+	      quantity: 10,
+	      price: 500,
+	      time_in_force: 'gtc',
+	      extended_hours: true,
+	      bracket: { stop_loss: 485, take_profit: 525 },
+	    });
+	    const [, init] = mockFetch.mock.calls[0];
+	    const body = JSON.parse(init.body);
+	    expect(body.time_in_force).toBe('gtc');
+	    expect(body.extended_hours).toBe(true);
+	    expect(body.bracket).toEqual({ stop_loss: 485, take_profit: 525 });
+	  });
+	});
 
 // ─── cancelOrder ─────────────────────────────────────────────────────────────
 

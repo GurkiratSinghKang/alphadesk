@@ -8,7 +8,8 @@
  * semantics (LCP keeps reporting later candidates; CLS reports the
  * cumulative session-windowed value at page hide).
  *
- * Each metric is delivered to `/api/v1/metrics/vitals` via
+ * Each metric is delivered to `${NEXT_PUBLIC_API_URL}/api/v1/metrics/vitals`
+ * (or same-origin when no API URL is configured) via
  * `navigator.sendBeacon` so the request isn't cancelled when the page
  * is unloading. The backend route lands the beacon, validates the
  * payload shape, logs the sample as a structured INFO line, and
@@ -30,7 +31,13 @@ import {
   type Metric,
 } from "web-vitals";
 
-const ENDPOINT = "/api/v1/metrics/vitals";
+import { env } from "@/env";
+
+const ENDPOINT_PATH = "/api/v1/metrics/vitals";
+
+function getEndpoint(): string {
+  return `${env.API_URL || ""}${ENDPOINT_PATH}`;
+}
 
 function reportMetric(metric: Metric): void {
   if (typeof navigator === "undefined") return;
@@ -61,16 +68,17 @@ function reportMetric(metric: Metric): void {
   // Wrapped in try/catch so a same-origin / CSP failure doesn't take
   // the rest of the listeners down with it.
   try {
+    const endpoint = getEndpoint();
     if (typeof navigator.sendBeacon === "function") {
       const blob = new Blob([body], { type: "application/json" });
-      const ok = navigator.sendBeacon(ENDPOINT, blob);
+      const ok = navigator.sendBeacon(endpoint, blob);
       if (ok) return;
     }
     // Fallback for non-sendBeacon environments (older Safari, jsdom in
     // tests). Use keepalive so the fetch survives the unload, mirroring
     // sendBeacon's semantics.
     if (typeof fetch === "function") {
-      void fetch(ENDPOINT, {
+      void fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,

@@ -59,7 +59,7 @@ export default function TopBar({
   }, []);
   const hasReportsRoute = routes.some((route) => route.href === "/reports");
   return (
-    <div
+    <header
       data-slot="top-bar"
       className={cn(
         "flex items-center h-12 px-3 md:px-5 gap-2 md:gap-6",
@@ -104,6 +104,7 @@ export default function TopBar({
                   key={r.href}
                   href={r.href}
                   data-active={active || undefined}
+                  aria-current={active ? "page" : undefined}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
                     "flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline transition-colors min-h-[44px]",
@@ -169,6 +170,7 @@ export default function TopBar({
               key={r.href}
               href={r.href}
               data-active={active || undefined}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 // BUG-024 — WCAG 2.5.5: desktop tabs were 29px tall,
                 // fine at desk resolutions but the top-nav is visible at
@@ -233,6 +235,6 @@ export default function TopBar({
 
       <NotificationCenter />
       <ProfileMenu />
-    </div>
+    </header>
   );
 }

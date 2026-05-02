@@ -9,7 +9,7 @@ services:
       - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: alphadesk
-      POSTGRES_PASSWORD: alphadesk_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alphadesk_dev}
       POSTGRES_DB: alphadesk
     volumes:
       - timescaledb_data:/var/lib/postgresql/data

@@ -842,20 +842,19 @@ export default function ChartPane({
           appear half-hidden. With the chrome above and the rail below,
           every drawing button is fully visible and unambiguously
           clickable. */}
-      <div className="flex items-center justify-between gap-2 h-10 px-3 border-b border-border-hair bg-bg-elev-1/30 shrink-0">
-          <div role="radiogroup" aria-label="Chart type" className="flex gap-0.5">
+      <div className="flex min-h-10 flex-wrap items-center gap-1.5 overflow-visible border-b border-border-hair bg-bg-elev-1/30 px-3 py-1.5 shrink-0">
+          <div aria-label="Chart type" className="flex gap-0.5">
             {TYPES.map((t) => {
               const active = chartType === t.id;
               return (
                 <button
                   key={t.id}
                   type="button"
-                  role="radio"
-                  aria-checked={active}
+                  aria-pressed={active}
                   onClick={() => setChartType(t.id)}
                   title={t.label}
                   className={cn(
-                    "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors",
+                    "inline-flex min-h-10 items-center gap-1.5 px-2.5 rounded-xs transition-colors",
                     "font-sans text-xs font-medium uppercase tracking-[0.08em]",
                     active
                       ? "text-ink-1000 bg-bg-elev-2"
@@ -1112,7 +1111,6 @@ export default function ChartPane({
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-haspopup="menu"
               aria-expanded={menuOpen}
               className={cn(
                 "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors",
@@ -1135,7 +1133,6 @@ export default function ChartPane({
 
             {menuOpen ? (
               <div
-                role="menu"
                 className={cn(
                   "absolute right-0 top-full mt-1 z-20",
                   "min-w-[180px] bg-bg-elev-2 border border-border rounded-sm shadow-lg",
@@ -1148,8 +1145,7 @@ export default function ChartPane({
                     <button
                       key={i}
                       type="button"
-                      role="menuitemcheckbox"
-                      aria-checked={on}
+                      aria-pressed={on}
                       onClick={() => toggleIndicator(i)}
                       className={cn(
                         "w-full flex items-center gap-2 h-9 px-3 text-sm text-left transition-colors",
@@ -1412,7 +1408,7 @@ export default function ChartPane({
                     aria-label="Rewind 10 bars"
                     title="Rewind 10 bars"
                     onClick={() => setReplayCursor((c) => Math.max(1, c - 10))}
-                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
                   >
                     ⏮
                   </button>
@@ -1421,7 +1417,7 @@ export default function ChartPane({
                     aria-label={replayPlaying ? "Pause replay" : "Play replay"}
                     title={replayPlaying ? "Pause" : "Play"}
                     onClick={() => setReplayPlaying((p) => !p)}
-                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] transition-colors"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded text-[color:var(--brand)] hover:bg-[color:var(--brand)] hover:text-[color:var(--bg-base)] transition-colors"
                   >
                     {replayPlaying ? "⏸" : "▶"}
                   </button>
@@ -1432,7 +1428,7 @@ export default function ChartPane({
                     onClick={() =>
                       setReplayCursor((c) => Math.min(data.length, c + 1))
                     }
-                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded hover:bg-[color:var(--bg-elev-1)] transition-colors"
                   >
                     ⏭
                   </button>
@@ -1443,7 +1439,7 @@ export default function ChartPane({
                     onChange={(e) =>
                       setReplaySpeed(Number(e.target.value) as 1 | 2 | 5 | 10)
                     }
-                    className="bg-transparent border-none outline-none px-1 py-0.5 text-[color:var(--fg)] cursor-pointer"
+                    className="min-h-10 bg-transparent border-none outline-none px-1 text-[color:var(--fg)] cursor-pointer"
                   >
                     <option value={1}>1×</option>
                     <option value={2}>2×</option>
@@ -1462,7 +1458,7 @@ export default function ChartPane({
                       setReplayPlaying(false);
                       setReplayCursor(0);
                     }}
-                    className="inline-flex items-center justify-center min-w-6 min-h-6 px-1.5 py-0.5 rounded hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)] transition-colors"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded hover:bg-[color:var(--loss)] hover:text-[color:var(--bg-base)] transition-colors"
                   >
                     ×
                   </button>
@@ -1536,7 +1532,7 @@ export default function ChartPane({
                       }
                     }}
                     className={cn(
-                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-11 w-11 md:h-5 md:w-5 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
+                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-11 w-11 md:h-8 md:w-8 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
                       tone,
                     )}
                     style={{ top: alertHover.y }}

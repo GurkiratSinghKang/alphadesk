@@ -113,6 +113,12 @@ export interface StrategyOption {
 
 export type OrderSide = "buy" | "sell";
 export type OrderTypeOption = "market" | "limit" | "stop" | "stop_limit";
+export type TimeInForceOption = "day" | "gtc" | "ioc" | "fok" | "opg" | "cls";
+
+export interface OrderBracket {
+  stopLoss: number;
+  takeProfit: number;
+}
 
 export interface StagedOrder {
   strategyId: string;
@@ -122,6 +128,9 @@ export interface StagedOrder {
   type: OrderTypeOption;
   price?: number;
   stop?: string;
+  timeInForce?: TimeInForceOption;
+  bracket?: OrderBracket;
+  extendedHours?: boolean;
 }
 
 /* ─── Positions list ───────────────────────────────────────── */

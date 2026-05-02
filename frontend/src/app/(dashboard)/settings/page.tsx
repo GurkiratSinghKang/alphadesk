@@ -38,13 +38,13 @@ function Toggle({
   description?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-1.5">
-      <div className="min-w-0">
+    <div className="flex items-start justify-between gap-3 py-2 sm:items-center sm:gap-4">
+      <div className="min-w-0 pr-1">
         <p className="text-xs font-medium text-foreground">{label}</p>
         {description && (
           // Per-toggle hint — `t-meta` (13px mono fg-muted) matches the
           // dashboard's "field caption" voice used on settings rows.
-          <p className="t-meta mt-0.5">{description}</p>
+          <p className="t-meta mt-0.5 whitespace-normal leading-snug">{description}</p>
         )}
       </div>
       {/* Wave 29 persona-5 #3: Apple HIG + WCAG 2.5.5 require a 44x44 tap
@@ -58,7 +58,7 @@ function Toggle({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 p-2.5 -mr-2.5"
+          "relative -mr-2.5 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center p-2.5"
         )}
       >
         <span
@@ -314,8 +314,8 @@ export default function SettingsPage() {
             <Monitor className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-display-section text-foreground">Trading mode</h2>
           </div>
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">
                 Switch between paper and live trading environments.
               </p>
@@ -332,7 +332,7 @@ export default function SettingsPage() {
                 wears the gold brand accent (`bg-brand/20 text-brand`). A
                 sibling `aria-labelledby="trading-mode-label"` radiogroup
                 exposes the same semantics for AT. */}
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
               <span
                 id="trading-mode-label"
                 className="t-label"
@@ -342,7 +342,7 @@ export default function SettingsPage() {
               <div
                 role="radiogroup"
                 aria-labelledby="trading-mode-label"
-                className="flex rounded-md border border-border overflow-hidden"
+                className="flex max-w-full overflow-hidden rounded-md border border-border"
               >
                 {(["paper", "live"] as const).map((opt) => {
                   const active = tradingMode === opt;
@@ -449,8 +449,8 @@ export default function SettingsPage() {
                 lightweight-charts, the marquee, the pulse dots, etc. The
                 rest of the app honours `prefers-reduced-motion` instead.
                 Honest move: don't ship a setting we can't back. */}
-            <div className="flex items-center justify-between gap-4 py-1.5">
-              <div>
+            <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground">Theme</p>
                 <p className="t-meta mt-0.5">
                   Choose dark, light, or follow your OS preference.
@@ -459,7 +459,7 @@ export default function SettingsPage() {
               <div
                 role="radiogroup"
                 aria-label="Theme preference"
-                className="flex rounded-md border border-border overflow-hidden"
+                className="flex max-w-full overflow-hidden rounded-md border border-border"
               >
                 {(["system", "dark", "light"] as const).map((opt) => (
                   <button

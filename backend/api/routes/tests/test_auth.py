@@ -131,6 +131,7 @@ def fake_redis(monkeypatch):
     # In-memory rate-limit counters are process-local; wipe them too.
     import api.routes.auth as auth_routes_mod
     auth_routes_mod._INMEM_ATTEMPTS.clear()
+    auth_routes_mod._RUNTIME_ADMIN_HASH = None
 
     yield fake
 
@@ -461,3 +462,21 @@ def test_access_token_embeds_pv_and_epoch(fake_redis, test_jwt_env):
     assert payload["pv"] == 7
     assert payload["epoch"] == 13
     assert payload["sub"] == _TEST_USERNAME
+
+
+@pytest.mark.asyncio
+async def test_revoke_token_accepts_current_audience_claims(fake_redis, test_jwt_env):
+    import jwt as jwt_lib
+    from core.auth import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, create_refresh_token, revoke_token
+    from core.config import settings
+
+    token = create_refresh_token(_TEST_USERNAME, password_version=7, session_epoch=13)
+    payload = jwt_lib.decode(
+        token,
+        settings.jwt_secret_value,
+        algorithms=[ALGORITHM],
+        audience=JWT_AUDIENCE,
+        issuer=JWT_ISSUER,
+    )
+    await revoke_token(token)
+    assert fake_redis.store.get(f"revoked:{payload['jti']}") == "revoked"

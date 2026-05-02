@@ -28,8 +28,8 @@
  *     legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32   (NEW — limits)
  *     legs=NVDA260424P00200000:sell:1,NVDA260424C00220000:sell:1             (OLD — still works)
  */
-import { useEffect, useMemo, useState, type ElementType } from "react";
-import { useRouter } from "next/navigation";
+	import { useEffect, useMemo, useState, type ElementType } from "react";
+	import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   ArrowsLeftRight,
@@ -61,6 +61,7 @@ import {
 } from "@/components/composites";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
+import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isWorkingOrderStatus } from "@/lib/orders";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -77,38 +78,6 @@ import {
   toRailItems,
   toStrategyOptions,
 } from "../_desk/selectors";
-
-// ─── OCC symbol helpers ────────────────────────────────────────────────────────
-
-/**
- * Parse an OCC option symbol into its constituent parts.
- *
- * Format: SSSSSS YYMMDD C|P NNNNNNNN  (strike is 8 digits, price × 1000)
- * Example: NVDA260425C00205000 → { symbol:"NVDA", expiry:"2026-04-25", side:"call", strike:205 }
- */
-export function parseOccSymbol(occ: string): {
-  symbol: string;
-  expiry: string;
-  side: "call" | "put";
-  strike: number;
-} | null {
-  const m = /^([A-Z]+)(\d{6})([CP])(\d{8})$/.exec(occ);
-  if (!m) return null;
-  const [, sym, yymmdd, sideChar, strikeStr] = m;
-  const expiry =
-    "20" +
-    yymmdd.slice(0, 2) +
-    "-" +
-    yymmdd.slice(2, 4) +
-    "-" +
-    yymmdd.slice(4, 6);
-  return {
-    symbol: sym,
-    expiry,
-    side: sideChar === "C" ? "call" : "put",
-    strike: parseInt(strikeStr, 10) / 1000,
-  };
-}
 
 function normalizeUnderlyingSymbol(raw: string | null): string | null {
   const sym = (raw ?? "").trim().toUpperCase();
@@ -166,10 +135,14 @@ interface PlainEquityPrefill {
   stop?: string;
 }
 
+const ALLOWED_COMBO_TYPES = new Set(["iron_condor", "iron_butterfly", "vertical_spread"]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TradePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
   const { toast } = useToast();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
@@ -177,9 +150,7 @@ export default function TradePage() {
   const portfolioSummary = usePortfolioStore((s) => s.summary);
   const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const [urlUnderlyingSymbol, setUrlUnderlyingSymbol] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return normalizeUnderlyingSymbol(params.get("symbol"));
+    return normalizeUnderlyingSymbol(searchParams.get("symbol"));
   });
   const tradeContextSymbol = urlUnderlyingSymbol ?? selectedSymbol;
   // Wave 14 perf-audit-r3 P0 #3: scoped to selected symbol only.
@@ -204,7 +175,7 @@ export default function TradePage() {
     useState<PlainEquityPrefill | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchKey);
     const contractOcc = params.get("contract");
     const legsParam = params.get("legs");
     const strategyParam = params.get("strategy");
@@ -214,7 +185,8 @@ export default function TradePage() {
     let firstParsedUnderlying: string | null = null;
 
     setUrlStrategy(strategyParam || null);
-    setComboType(comboParam || null);
+    const normalizedCombo = (comboParam ?? "").trim().toLowerCase();
+    setComboType(ALLOWED_COMBO_TYPES.has(normalizedCombo) ? normalizedCombo : null);
     setQuoteAtFillTs(quoteTsParam);
     setActiveContract(null);
     setActiveLegs([]);
@@ -285,7 +257,7 @@ export default function TradePage() {
       setUrlUnderlyingSymbol(nextUnderlying);
       setSelectedSymbol(nextUnderlying);
     }
-  }, [setSelectedSymbol]);
+  }, [searchKey, setSelectedSymbol]);
 
   useEffect(() => {
     function onAddAlert(e: Event) {
@@ -398,23 +370,28 @@ export default function TradePage() {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("working");
   useEffect(() => {
     let cancelled = false;
-    async function fetchRecent() {
-      try {
-        const orders = await getOrders();
-        if (!cancelled) setRecentOrders(orders.slice(0, 10));
-      } catch {
+	    async function fetchRecent() {
+	      try {
+	        const status = orderFilter === "working" ? "open" : orderFilter === "all" ? undefined : orderFilter;
+	        const orders = await getOrders(status);
+	        if (!cancelled) setRecentOrders(orders.slice(0, 50));
+	      } catch {
         /* keep last-known orders on transient fetch failures */
       }
     }
     fetchRecent();
     const id = setInterval(fetchRecent, 20_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
-  const filteredRecentOrders = useMemo(() => {
-    if (orderFilter === "all") return recentOrders;
-    if (orderFilter === "working") return recentOrders.filter((o) => isWorkingOrderStatus(o.status));
-    return recentOrders.filter((o) => o.status === orderFilter);
-  }, [orderFilter, recentOrders]);
+  }, [orderFilter]);
+	  const filteredRecentOrders = useMemo(() => {
+	    const filtered =
+	      orderFilter === "all"
+	        ? recentOrders
+	        : orderFilter === "working"
+	          ? recentOrders.filter((o) => isWorkingOrderStatus(o.status))
+	          : recentOrders.filter((o) => o.status === orderFilter);
+	    return filtered.slice(0, 10);
+	  }, [orderFilter, recentOrders]);
 
   /* ─── Submit handler ───────────────────────────────────── */
   const [submitting, setSubmitting] = useState(false);
@@ -422,8 +399,8 @@ export default function TradePage() {
   // BUG-002 — inline-error mirror of the toast. See desk `page.tsx`.
   const [orderError, setOrderError] = useState<string | null>(null);
 
-  async function handleSubmit(order: StagedOrder) {
-    if (submitting) return;
+	  async function handleSubmit(order: StagedOrder): Promise<boolean> {
+	    if (submitting) return false;
     setOrderError(null);
     const sym = (order.symbol || "").trim().toUpperCase();
     const qty = Number(order.quantity);
@@ -435,29 +412,73 @@ export default function TradePage() {
     // (1-6 letters + 6 digits + C/P + 8 digits). The previous regex
     // capped at 10 chars and rejected the 21-char OCC form, which broke
     // single-leg option deep-links from the earnings page.
-    if (!sym || !(/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym) || /^[A-Z]{1,6}\d{6}[CP]\d{8}$/.test(sym))) {
-      fail("Enter a valid symbol (1–10 letters/digits or full OCC contract)");
-      return;
+	    if (!sym || !(/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym) || /^[A-Z]{1,6}\d{6}[CP]\d{8}$/.test(sym))) {
+	      fail("Enter a valid symbol (1–10 letters/digits or full OCC contract)");
+	      return false;
+	    }
+	    if (!isValidOrderQty(qty)) {
+	      fail("Quantity must be a whole number between 1 and 999,999,999");
+	      return false;
+	    }
+	    if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
+	      fail("Limit orders require a price");
+	      return false;
+	    }
+	    const stopNum = order.stop ? Number(order.stop) : undefined;
+	    if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
+	      fail("Stop orders require a stop price");
+	      return false;
+	    }
+    if (activeLegs.length > 0) {
+      const pricedLegs = activeLegs.filter((leg) => leg.limitPrice != null);
+      if (pricedLegs.length > 0 && pricedLegs.length < activeLegs.length) {
+        fail("Multi-leg option orders need either every leg priced or no leg prices.");
+        return false;
+      }
+      if (comboType && !ALLOWED_COMBO_TYPES.has(comboType)) {
+        fail("Unsupported combo type. Use vertical_spread, iron_condor, or iron_butterfly.");
+        return false;
+      }
     }
-    if (!isValidOrderQty(qty)) {
-      fail("Quantity must be a whole number between 1 and 999,999,999");
-      return;
-    }
-    if ((order.type === "limit" || order.type === "stop_limit") && (order.price == null || !Number.isFinite(order.price))) {
-      fail("Limit orders require a price");
-      return;
-    }
-    const stopNum = order.stop ? Number(order.stop) : undefined;
-    if ((order.type === "stop" || order.type === "stop_limit") && (stopNum == null || !Number.isFinite(stopNum))) {
-      fail("Stop orders require a stop price");
-      return;
-    }
-    if (!executionReadiness.canSubmit) {
-      fail(executionReadiness.blocker ?? "Resolve the execution gate before submitting.");
-      return;
-    }
-    setSubmitting(true);
-    try {
+    const submittedPreview = buildPreTradePreview({
+      defaults: {
+        ...ORDER_BAR_DEFAULTS,
+        strategyId: order.strategyId,
+        symbol: sym,
+        side: order.side,
+        quantity: qty,
+        type: order.type,
+        price: order.price,
+        stop: order.stop,
+      },
+      quote: executionQuote,
+      activeContract,
+      activeLegs,
+      comboType,
+      quoteAtFillTs,
+      recentOrders,
+      positions: portfolioPositions,
+      buyingPower: portfolioSummary.buyingPower,
+      brokerDegraded,
+      tradeContextSymbol,
+    });
+    const submittedReadiness = buildExecutionReadiness({
+      preview: submittedPreview,
+      quote: executionQuote,
+      chartLimited: seriesError != null,
+      chartLoading: seriesLoading,
+      brokerDegraded,
+    });
+	    if (!submittedReadiness.canSubmit) {
+	      fail(submittedReadiness.blocker ?? "Resolve the execution gate before submitting.");
+	      return false;
+	    }
+	    if (activeLegs.length > 0 && order.bracket) {
+	      fail("Bracket exits are not supported for multi-leg option orders yet.");
+	      return false;
+	    }
+	    setSubmitting(true);
+	    try {
       // Round-5 F-14: when multi-leg legs are pre-staged from a deep-link,
       // submit them as one combo order with `legs[]` populated rather
       // than dropping them on the floor. The OrderBar's symbol/qty
@@ -468,10 +489,18 @@ export default function TradePage() {
         symbol: sym,
         side: order.side,
         type: order.type,
-        quantity: qty,
-        price: order.price,
-        stop_price: stopNum,
-        quote_at_fill_ts: quoteAtFillTs ?? undefined,
+	        quantity: qty,
+	        price: order.price,
+	        stop_price: stopNum,
+	        time_in_force: order.timeInForce,
+	        extended_hours: order.extendedHours,
+	        bracket: order.bracket
+	          ? {
+	              stop_loss: order.bracket.stopLoss,
+	              take_profit: order.bracket.takeProfit,
+	            }
+	          : undefined,
+	        quote_at_fill_ts: quoteAtFillTs ?? undefined,
         // Round-5 F-1: thread the URL's strategy tag through to the
         // backend `CreateOrderRequest.strategy` field. When the user
         // changes the Strategy select on /trade, the current ticket
@@ -510,18 +539,20 @@ export default function TradePage() {
         setResetTick((t) => t + 1);
       }
       // Refresh recent orders strip immediately.
-      try {
-        const orders = await getOrders();
-        setRecentOrders(orders.slice(0, 10));
-      } catch { /* no-op */ }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Order submission failed";
-      toast({ type: "error", message });
-      setOrderError(message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
+	      try {
+	        const orders = await getOrders();
+	        setRecentOrders(orders.slice(0, 50));
+	      } catch { /* no-op */ }
+	      return true;
+	    } catch (err) {
+	      const message = err instanceof Error ? err.message : "Order submission failed";
+	      toast({ type: "error", message });
+	      setOrderError(message);
+	      return false;
+	    } finally {
+	      setSubmitting(false);
+	    }
+	  }
 
   // Round-5 F-2: when a single contract is pre-staged from a deep-link,
   // hand its OCC symbol + side + qty + limit through to the OrderBar as
@@ -547,17 +578,16 @@ export default function TradePage() {
     }
     if (activeLegs.length > 0) {
       const first = activeLegs[0];
+      const pricedLegs = activeLegs.filter((leg) => leg.limitPrice != null);
+      const allPriced = pricedLegs.length === activeLegs.length;
       return {
         ...ORDER_BAR_DEFAULTS,
         strategyId: urlStrategy ?? rail[0]?.id ?? "",
         symbol: first.occ,
         side: first.orderSide,
         quantity: first.qty,
-        type:
-          first.limitPrice != null
-            ? ("limit" as const)
-            : ORDER_BAR_DEFAULTS.type,
-        price: first.limitPrice,
+        type: allPriced ? ("limit" as const) : ORDER_BAR_DEFAULTS.type,
+        price: allPriced ? first.limitPrice : undefined,
       };
     }
     if (plainEquityPrefill) {
@@ -577,11 +607,16 @@ export default function TradePage() {
       strategyId: urlStrategy ?? rail[0]?.id ?? "",
     };
   }, [activeContract, activeLegs, plainEquityPrefill, rail, urlStrategy]);
+  const [ticketDraft, setTicketDraft] = useState<StagedOrder | null>(null);
+  useEffect(() => {
+    setTicketDraft(null);
+  }, [orderBarDefaults]);
   const executionQuote = buildExecutionQuote(quote);
+  const previewDefaults = ticketDraft ?? orderBarDefaults;
   const tradePreview = useMemo(
     () =>
       buildPreTradePreview({
-        defaults: orderBarDefaults,
+        defaults: previewDefaults,
         quote: executionQuote,
         activeContract,
         activeLegs,
@@ -594,7 +629,7 @@ export default function TradePage() {
         tradeContextSymbol,
       }),
     [
-      orderBarDefaults,
+      previewDefaults,
       executionQuote,
       activeContract,
       activeLegs,
@@ -809,6 +844,7 @@ export default function TradePage() {
                 symbol={tradeContextSymbol}
                 strategies={strategyOptions}
                 onSubmit={handleSubmit}
+                onDraftChange={setTicketDraft}
                 submitting={submitting}
                 errorMessage={orderError}
                 defaults={orderBarDefaults}
@@ -2015,8 +2051,8 @@ function RecentOrdersPanel({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto border-t border-border-hair">
-          <table className="w-full text-xs">
+        <div className="max-w-full overflow-x-auto border-t border-border-hair scrollbar-thin">
+          <table className="w-full min-w-[520px] text-xs">
             <caption className="sr-only">Recent orders</caption>
             <thead>
               <tr className="border-b border-border text-left">

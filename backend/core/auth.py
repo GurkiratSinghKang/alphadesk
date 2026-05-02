@@ -23,7 +23,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import bcrypt
 import jwt
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import InvalidTokenError, MissingRequiredClaimError
 
 from core.config import settings
 
@@ -396,13 +396,24 @@ async def revoke_token(token: str) -> None:
     wrap in try/except (auth.py refresh / logout / logout-all) so the
     behaviour change is contained.
     """
-    payload = jwt.decode(
-        token,
-        settings.jwt_secret_value,
-        algorithms=[ALGORITHM],
-        options={"verify_exp": False},
-        leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
-    )
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_value,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False},
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+            leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
+        )
+    except MissingRequiredClaimError:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_value,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False, "verify_aud": False},
+            leeway=JWT_CLOCK_SKEW_LEEWAY_SECONDS,
+        )
     jti = payload.get("jti")
     if not jti:
         return

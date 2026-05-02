@@ -16,6 +16,7 @@ from typing import Any
 
 from core.config import settings
 from core.supervised_task import create_supervised_task
+from core.time import market_today
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ _FULL_GRAPH_TIMEOUT_FLOOR_S = 1_800
 _MAX_RUN_TIMEOUT_S = 7_200
 _SIGNAL_WORDS = ("OVERWEIGHT", "UNDERWEIGHT", "NEUTRAL", "HOLD", "BUY", "SELL", "REDUCE", "ACCUMULATE")
 _WRAPPER_HELPERS: Any | None = None
+_RUN_START_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 class TradingAgentsRunError(RuntimeError):
@@ -83,7 +85,7 @@ def normalize_symbol(value: str) -> str:
 
 def normalize_trade_date(value: str | date | None) -> str:
     if value is None or value == "":
-        return date.today().isoformat()
+        return market_today().isoformat()
     if isinstance(value, date):
         return value.isoformat()
     try:
@@ -187,8 +189,8 @@ def _skill_home_path() -> Path:
     return _default_skill_home_path()
 
 
-def get_tradingagents_runtime_status() -> dict[str, Any]:
-    provider = normalize_provider(None)
+def get_tradingagents_runtime_status(provider_override: str | None = None) -> dict[str, Any]:
+    provider = normalize_provider(provider_override)
     default_deep, default_quick = _model_defaults(provider)
     script = _script_path()
     script_exists = script.exists() and script.is_file()
@@ -582,6 +584,24 @@ def _user_runs_key(username: str) -> str:
     return f"tradingagents:user_runs:{username}"
 
 
+def _start_lock_key(username: str, run_id: str) -> str:
+    return f"{username}:{run_id}"
+
+
+def _get_start_lock(username: str, run_id: str) -> asyncio.Lock:
+    key = _start_lock_key(username, run_id)
+    lock = _RUN_START_LOCKS.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _RUN_START_LOCKS[key] = lock
+    return lock
+
+
+def _rerun_id(base_run_id: str) -> str:
+    payload = f"{base_run_id}:{time.time_ns()}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
 async def _store_record(username: str, record: dict[str, Any]) -> None:
     public = _public_record(record)
     try:
@@ -608,6 +628,40 @@ async def _store_record(username: str, record: dict[str, Any]) -> None:
         ids.remove(record["run_id"])
     ids.insert(0, record["run_id"])
     del ids[max(settings.TRADINGAGENTS_HISTORY_LIMIT, 1) :]
+
+
+async def _reserve_record(username: str, record: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Store a newly queued run only if no worker reserved that run id first."""
+    public = _public_record(record)
+    key = _run_key(username, record["run_id"])
+    try:
+        from core.redis import get_redis
+
+        redis = await get_redis()
+        created = await redis.set(key, json.dumps(public), ex=_RUN_TTL_SECONDS, nx=True)
+        if created:
+            list_key = _user_runs_key(username)
+            pipe = redis.pipeline()
+            pipe.lrem(list_key, 0, record["run_id"])
+            pipe.lpush(list_key, record["run_id"])
+            pipe.ltrim(list_key, 0, max(settings.TRADINGAGENTS_HISTORY_LIMIT, 1) - 1)
+            pipe.expire(list_key, _RUN_TTL_SECONDS)
+            await pipe.execute()
+            return public, True
+        existing = await _load_record(username, record["run_id"])
+        return existing or public, False
+    except Exception:
+        logger.debug("TradingAgents Redis reserve failed; using in-memory cache", exc_info=True)
+
+    if key in _INMEM_RUNS:
+        return _INMEM_RUNS[key], False
+    _INMEM_RUNS[key] = public
+    ids = _INMEM_USER_RUNS.setdefault(username, [])
+    if record["run_id"] in ids:
+        ids.remove(record["run_id"])
+    ids.insert(0, record["run_id"])
+    del ids[max(settings.TRADINGAGENTS_HISTORY_LIMIT, 1) :]
+    return public, True
 
 
 async def _load_record(username: str, run_id: str) -> dict[str, Any] | None:
@@ -644,26 +698,50 @@ async def _repair_loaded_record(
 
 async def _list_records(username: str, limit: int) -> list[dict[str, Any]]:
     limit = max(min(limit, settings.TRADINGAGENTS_HISTORY_LIMIT), 1)
+    redis_records: list[dict[str, Any]] = []
     try:
         from core.redis import get_redis
 
         redis = await get_redis()
         run_ids = await redis.lrange(_user_runs_key(username), 0, limit - 1)
-        records: list[dict[str, Any]] = []
         for run_id in run_ids:
             record = await _load_record(username, str(run_id))
             if record is not None:
-                records.append(record)
-        return records
+                redis_records.append(record)
     except Exception:
         logger.debug("TradingAgents Redis list failed; using in-memory cache", exc_info=True)
 
-    ids = _INMEM_USER_RUNS.get(username, [])[:limit]
-    return [
+    inmem_records = [
         _INMEM_RUNS[_run_key(username, run_id)]
-        for run_id in ids
+        for run_id in _INMEM_USER_RUNS.get(username, [])[:limit]
         if _run_key(username, run_id) in _INMEM_RUNS
     ]
+    combined: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for record in [*inmem_records, *redis_records]:
+        run_id = str(record.get("run_id") or "")
+        if run_id and run_id not in seen:
+            seen.add(run_id)
+            combined.append(record)
+    combined.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    return combined[:limit]
+
+
+async def _active_rerun_for_base(username: str, base_run_id: str) -> dict[str, Any] | None:
+    for record in await _list_records(username, settings.TRADINGAGENTS_HISTORY_LIMIT):
+        if record.get("rerun_of") == base_run_id and record.get("status") in {"queued", "running"}:
+            return record
+    return None
+
+
+async def get_active_tradingagents_run_for_request(username: str, request: dict[str, Any]) -> dict[str, Any] | None:
+    base = _request_record(username, request)
+    existing = await _repair_loaded_record(username, await _load_record(username, base["run_id"]), store=True)
+    if existing and existing.get("status") in {"queued", "running"}:
+        return existing
+    if existing and existing.get("status") in {"succeeded", "failed"}:
+        return await _active_rerun_for_base(username, str(existing.get("run_id")))
+    return None
 
 
 async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dict[str, Any]:
@@ -671,31 +749,42 @@ async def start_tradingagents_run(username: str, request: dict[str, Any]) -> dic
         raise TradingAgentsRunError("disabled", "TradingAgents research is disabled")
 
     base = _request_record(username, request)
-    existing = await _repair_loaded_record(username, await _load_record(username, base["run_id"]), store=True)
-    if existing and existing.get("status") in {"queued", "running"}:
-        return existing
-    if existing and existing.get("status") == "succeeded" and not _is_thin_decision_text(existing):
-        return existing
+    async with _get_start_lock(username, base["run_id"]):
+        existing = await _repair_loaded_record(username, await _load_record(username, base["run_id"]), store=True)
+        if existing and existing.get("status") in {"queued", "running"}:
+            return existing
+        if existing and existing.get("status") in {"succeeded", "failed"}:
+            active_rerun = await _active_rerun_for_base(username, str(existing.get("run_id")))
+            if active_rerun is not None:
+                return active_rerun
+            base = {
+                **base,
+                "run_id": _rerun_id(base["run_id"]),
+                "rerun_of": existing.get("run_id"),
+            }
 
-    now = utc_now_iso()
-    record = {
-        **base,
-        "status": "queued",
-        "timeout_s": _effective_timeout_s(base),
-        "progress_message": "Queued for TradingAgents research.",
-        "summary_lines": [],
-        "decision_text": None,
-        "artifact_files": [],
-        "error": None,
-        "created_at": now,
-        "updated_at": now,
-    }
-    await _store_record(username, record)
-    create_supervised_task(
-        _execute_tradingagents_run(username, record["run_id"]),
-        name=f"tradingagents:{record['run_id']}",
-    )
-    return _public_record(record)
+        now = utc_now_iso()
+        record = {
+            **base,
+            "status": "queued",
+            "timeout_s": _effective_timeout_s(base),
+            "progress_message": "Queued for TradingAgents research.",
+            "summary_lines": [],
+            "decision_text": None,
+            "artifact_files": [],
+            "error": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        public, created = await _reserve_record(username, record)
+        if not created:
+            repaired = await _repair_loaded_record(username, public, store=True)
+            return repaired or public
+        create_supervised_task(
+            _execute_tradingagents_run(username, record["run_id"]),
+            name=f"tradingagents:{record['run_id']}",
+        )
+        return public
 
 
 async def get_tradingagents_run(username: str, run_id: str) -> dict[str, Any] | None:

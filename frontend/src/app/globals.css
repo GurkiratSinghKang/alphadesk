@@ -222,11 +222,10 @@ html, body {
   font-family: var(--font-ui);
 }
 
-/* Top bar glass effect + safe-area. Sticky/fixed chrome (TopBar, StatusStrip,
-   AICopilot drawer, DeskLayout) must paint under the notch but pad their
-   content so it's readable. Applied via element selectors so components
-   opt-in without extra classes. */
-header {
+/* Top bar glass effect + safe-area. Sticky/fixed chrome opts in by slot so
+   semantic content headers do not inherit blur or notch padding. */
+[data-slot="app-top-bar"],
+[data-slot="top-bar"] {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   /* Let top nav bleed into the notch area but push inner content down. */

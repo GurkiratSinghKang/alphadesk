@@ -124,12 +124,13 @@ async def test_webhook_allows_manual_none_strategy(
     trap_agent: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A TV alert with no ``strategy`` field (manual) bypasses the gate.
+    """A TV alert with no ``strategy`` field may pass gates but not auto-execute.
 
     Rationale: the ``strategy`` parameter is optional in the TV alert
-    schema — an operator pushing a one-off alert from TradingView
-    without a strategy tag is the manual/discretionary case. The gate
-    passes those through to the execution agent.
+    schema. The live gate treats it as discretionary, but the webhook still
+    must not hand free-form text to the execution agent; risk approval is
+    returned as a manual-review notification until the approved payload is
+    bound to the shared order path.
     """
     from api.routes import _risk_pipeline as risk_pipeline
     from api.routes.webhooks import TradingViewAlert, _handle_trade_signal
@@ -143,9 +144,8 @@ async def test_webhook_allows_manual_none_strategy(
         ticker="AAPL", action="buy", price=150.0, message="manual alert",
     )
     result = await _handle_trade_signal(alert)
-    # Execution agent was invoked (though returns success in the stub).
-    assert trap_agent["agent_called_with"] is not None
-    assert "order_submitted" in result["action"] or "order_failed" in result["action"]
+    assert result["action"] == "approved_not_submitted"
+    assert trap_agent["agent_called_with"] is None
 
 
 @pytest.mark.asyncio

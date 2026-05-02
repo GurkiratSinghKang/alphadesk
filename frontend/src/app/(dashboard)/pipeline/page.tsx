@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import {
   // Round-8 killer-move 3: BarChart3 + Brain icons retired with the
   // StrategyBuilder + BacktestPanel sections that owned them.
@@ -51,6 +52,8 @@ import {
   getPipelineRun,
   getPipelinePositions,
   getPositions,
+  getRiskMonitorState,
+  setRiskMonitorState,
   type PipelineRun,
   type PipelinePosition,
 } from "@/lib/api";
@@ -185,25 +188,34 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
 // ─── Risk Monitor Toggle ───────────────────────────────────
 
 function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null }) {
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/strategies/admin/risk-monitor")
-      .then((r) => r.json())
-      .then((d) => { setEnabled(d.enabled ?? true); setLoading(false); })
-      .catch(() => setLoading(false));
+    getRiskMonitorState()
+      .then((d) => {
+        setEnabled(d.enabled ?? null);
+        setError(null);
+      })
+      .catch((err) => {
+        setEnabled(null);
+        setError(err instanceof Error ? err.message : "Risk monitor status unavailable");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const toggle = async () => {
+    if (enabled == null) return;
     const next = !enabled;
     setEnabled(next);
+    setError(null);
     try {
-      await fetch(`/api/v1/strategies/admin/risk-monitor?enabled=${next}`, {
-        method: "POST",
-      });
-    } catch {
+      const state = await setRiskMonitorState(next);
+      setEnabled(state.enabled ?? next);
+    } catch (err) {
       setEnabled(!next); // revert on error
+      setError(err instanceof Error ? err.message : "Risk monitor update failed");
     }
   };
 
@@ -213,44 +225,63 @@ function RiskMonitorToggle({ lastHeartbeat }: { lastHeartbeat?: string | null })
   // actually fired at least once. No heartbeat means the monitor is either
   // cold (pre-first-run today) or the scheduler is asleep — either way we
   // surface "Idle" with the next-run label instead of a green confident ON.
+  const unavailable = enabled == null;
   const hasHeartbeat = !!lastHeartbeat;
   const showIdle = enabled && !hasHeartbeat;
-  const label = !enabled
+  const label = unavailable
+    ? "Risk Monitor: unavailable"
+    : !enabled
     ? "Risk Monitor: OFF"
     : showIdle
     ? `Idle — next run ${nextTradingSessionLabel()}`
     : "Risk Monitor: ON";
-  const tone = !enabled
+  const tone = unavailable
+    ? "border-amber/30 bg-amber/10 text-amber"
+    : !enabled
     ? "border-loss/30 bg-loss-tint text-loss hover:bg-loss/15"
     : showIdle
     ? "border-amber/30 bg-amber/10 text-amber hover:bg-amber/15"
     : "border-profit/30 bg-profit-tint text-profit hover:bg-profit/15";
-  const dot = !enabled ? "bg-loss" : showIdle ? "bg-amber" : "bg-profit";
+  const dot = unavailable ? "bg-amber" : !enabled ? "bg-loss" : showIdle ? "bg-amber" : "bg-profit";
 
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      aria-pressed={enabled}
-      aria-label={`Risk Monitor ${enabled ? "enabled" : "disabled"} — click to toggle`}
-      className={cn(
-        // WCAG 2.5.5 / Apple HIG: a toggle that controls a backend feature
-        // needs a ≥44px tap target. Keep the visible pill compact (px-3)
-        // but guarantee the hit box via `min-h-11`.
-        "flex min-h-11 items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[12px] font-semibold transition-colors",
-        tone,
-      )}
-      title={
-        !enabled
-          ? "Risk monitor is OFF — click to enable"
-          : showIdle
-          ? "Risk monitor enabled but no heartbeat yet — click to disable"
-          : "Risk monitor is ON — click to disable"
-      }
-    >
-      <span className={cn("h-2 w-2 rounded-full", dot)} aria-hidden />
-      {label}
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={unavailable}
+        aria-pressed={enabled ?? undefined}
+        aria-label={
+          unavailable
+            ? "Risk Monitor status unavailable"
+            : `Risk Monitor ${enabled ? "enabled" : "disabled"} — click to toggle`
+        }
+        className={cn(
+          // WCAG 2.5.5 / Apple HIG: a toggle that controls a backend feature
+          // needs a ≥44px tap target. Keep the visible pill compact (px-3)
+          // but guarantee the hit box via `min-h-11`.
+          "flex min-h-11 items-center gap-2 rounded-md border px-3 py-1.5 font-sans text-[12px] font-semibold transition-colors",
+          tone,
+        )}
+        title={
+          unavailable
+            ? "Risk monitor status is unavailable"
+            : !enabled
+            ? "Risk monitor is OFF — click to enable"
+            : showIdle
+            ? "Risk monitor enabled but no heartbeat yet — click to disable"
+            : "Risk monitor is ON — click to disable"
+        }
+      >
+        <span className={cn("h-2 w-2 rounded-full", dot)} aria-hidden />
+        {label}
+      </button>
+      {error ? (
+        <p className="max-w-[220px] text-right text-[12px] leading-snug text-down-500">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -669,7 +700,7 @@ export default function PipelinePage() {
         size="sm"
         variant="outline"
         onClick={() => setTemplatesOpen(true)}
-        className="h-7 text-[12px] gap-1.5"
+        className="min-h-11 text-[12px] gap-1.5"
       >
         <Sparkles className="h-3 w-3" />
         Templates
@@ -679,7 +710,7 @@ export default function PipelinePage() {
         size="sm"
         onClick={handleRunNow}
         disabled={runDisabled}
-        className="h-7 text-[12px] gap-1.5"
+        className="min-h-11 text-[12px] gap-1.5"
       >
         {submitting || isRunning ? (
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -1053,12 +1084,12 @@ export default function PipelinePage() {
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-                    <a
+                    <Link
                       href="/strategies"
                       className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-bg-elev-1 px-4 font-mono text-[12px] u-brand transition-colors hover:bg-bg-card hover:border-[color:var(--brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     >
                       ▸ Open Strategies
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -1100,7 +1131,7 @@ export default function PipelinePage() {
                     onCellClick={(date) => handleExpandHistory(date)}
                   />
                   <Card className="border-border bg-[var(--surface)] overflow-hidden mt-3">
-                  <Table>
+                  <Table className="min-w-[420px]">
                     <TableHeader>
                       <TableRow className="border-border">
                         <TableHead className="t-label w-8" />
@@ -1109,25 +1140,26 @@ export default function PipelinePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {history.map((h) => {
-                        const run = historyRuns[h.date];
-                        const isExpanded = expandedDate === h.date;
+                      {history.map((h, index) => {
+                        const rowDate = h.date ?? `run-${index + 1}`;
+                        const run = historyRuns[rowDate];
+                        const isExpanded = expandedDate === rowDate;
                         return (
                           <TableRow
-                            key={h.date}
+                            key={rowDate}
                             role="button"
                             tabIndex={0}
                             aria-expanded={isExpanded}
-                            aria-label={`Pipeline run for ${h.date}. ${isExpanded ? "Expanded" : "Collapsed"} — press Enter or Space to toggle.`}
+                            aria-label={`Pipeline run for ${rowDate}. ${isExpanded ? "Expanded" : "Collapsed"} — press Enter or Space to toggle.`}
                             className={cn(
                               "border-border cursor-pointer",
                               isExpanded && "bg-muted/30"
                             )}
-                            onClick={() => handleExpandHistory(h.date)}
+                            onClick={() => handleExpandHistory(rowDate)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
-                                handleExpandHistory(h.date);
+                                handleExpandHistory(rowDate);
                               }
                             }}
                           >
@@ -1142,7 +1174,7 @@ export default function PipelinePage() {
                               {/* Date column — mono-tabular so vertically-
                                   stacked YYYY-MM-DDs align. */}
                               <Mono className="t-num-md text-foreground">
-                                {h.date}
+                                {rowDate}
                               </Mono>
                             </TableCell>
                             <TableCell className="t-meta text-muted-foreground">

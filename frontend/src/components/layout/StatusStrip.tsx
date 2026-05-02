@@ -91,7 +91,7 @@ export function StatusStrip() {
       <span role="status" aria-live="polite" className="flex items-center gap-1.5 px-3 border-r border-border/50 sm:px-4">
         {isConnected ? (
           <>
-            <span className="relative flex h-1.5 w-1.5" aria-label="Streaming data connected">
+            <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--profit)] opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
             </span>
@@ -99,7 +99,7 @@ export function StatusStrip() {
           </>
         ) : (
           <>
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" aria-label="Streaming data disconnected" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--loss)]" aria-hidden="true" />
             <span className="text-[var(--loss)] font-medium">OFFLINE</span>
           </>
         )}

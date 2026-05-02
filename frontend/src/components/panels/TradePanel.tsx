@@ -529,9 +529,9 @@ function TradeBuilderTab() {
           disabled={submitting || legs.length === 0}
           className={cn(
             "w-full font-medium",
-            tradingMode === "paper"
-              ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
-              : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+	            tradingMode === "paper"
+	              ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
+	              : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-loss-foreground"
           )}
         >
           {submitting ? (
@@ -919,7 +919,7 @@ function PositionsTab() {
                 parseFloat(stopLossPrice) <= 0 ||
                 !Number.isFinite(parseFloat(stopLossPrice))
               }
-              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+	              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-loss-foreground"
             >
               {stopLossSubmitting ? "Setting…" : "Set Stop Loss"}
             </Button>

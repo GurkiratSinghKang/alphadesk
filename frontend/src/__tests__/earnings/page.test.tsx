@@ -3,9 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 import { render, waitFor, act, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import EarningsOptionsPlayPage, {
-  countVisibleCandidateDecisions,
-} from "@/app/(dashboard)/strategies/earnings-options-play/page";
+import EarningsOptionsPlayPage from "@/app/(dashboard)/strategies/earnings-options-play/page";
+import { countVisibleCandidateDecisions } from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/candidateDecisions";
 import * as api from "@/lib/api";
 import { useMarketStore } from "@/stores/market";
 

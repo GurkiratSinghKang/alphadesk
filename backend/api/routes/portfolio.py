@@ -4,6 +4,7 @@ import calendar as _calendar
 import logging
 from datetime import datetime, date, timezone, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -11,6 +12,18 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _et_day_key(value: Any) -> str:
+    if not value:
+        return date.today().isoformat()
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except Exception:
+        return str(value)[:10]
 
 
 # ---------------------------------------------------------------------------
@@ -591,11 +604,11 @@ async def get_portfolio_summary() -> PortfolioSummary:
                             """
                             SELECT COALESCE(SUM(pnl), 0) AS total
                               FROM trade_ledger
-                             WHERE status = 'closed'
-                               AND exit_time >= date_trunc(
-                                     'day', NOW() AT TIME ZONE 'America/New_York'
-                                   )
-                            """
+	                             WHERE status = 'closed'
+	                               AND exit_time >= date_trunc(
+	                                     'day', NOW() AT TIME ZONE 'America/New_York'
+	                                   ) AT TIME ZONE 'America/New_York'
+	                            """
                         )
                     )
                     total = result.scalar()
@@ -612,7 +625,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
             equity=equity,
             cash=float(data.get("cash", 0)),
             buying_power=float(data.get("buying_power", 0)),
-            total_market_value=long_mv + short_mv,
+            total_market_value=total_mv,
             unrealized_pnl=unrealized_pnl,
             unrealized_pnl_pct=unrealized_pnl_pct,
             realized_pnl_today=realized_pnl_today,
@@ -673,7 +686,7 @@ async def get_performance(
             for t in closed:
                 pnl = t.get("pnl") or 0
                 exit_time = t.get("exit_time", "")
-                day_key = exit_time[:10] if exit_time else date.today().isoformat()
+                day_key = _et_day_key(exit_time)
                 daily_pnl_map[day_key] += pnl
                 all_pnls.append(pnl)
 
@@ -1094,7 +1107,7 @@ async def get_pnl_calendar(
             exit_time = t.get("exit_time", "")
             if not exit_time:
                 continue
-            day_str = exit_time[:10]
+            day_str = _et_day_key(exit_time)
             pnl = t.get("pnl") or 0
             daily_pnl[day_str] += pnl
             daily_trades[day_str] += 1
@@ -1128,8 +1141,11 @@ async def get_pnl_calendar(
                                     headers=headers,
                                 )
                                 if resp.status_code == 200:
-                                    cur = resp.json().get("trade", {}).get("p", 0)
-                                    total_unrealized += (cur - entry) * shares
+	                                    cur = resp.json().get("trade", {}).get("p", 0)
+	                                    side = str(pos.get("side") or pos.get("trade_kind") or "").lower()
+	                                    qty = abs(float(shares))
+	                                    is_short = side.startswith("short") or float(shares) < 0
+	                                    total_unrealized += ((entry - cur) if is_short else (cur - entry)) * qty
                             except Exception:
                                 logger.debug(
                                     "calendar: latest-trade fetch failed for %s",

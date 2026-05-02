@@ -1,7 +1,7 @@
 import "./setup-mocks";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { StrategyPanel } from "@/app/(dashboard)/page";
+import { StrategyPanel } from "@/app/(dashboard)/_desk/StrategyPanel";
 
 describe("Dashboard StrategyPanel", () => {
   it("renders a true empty state after strategy data loads empty", () => {

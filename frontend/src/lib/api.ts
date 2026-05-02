@@ -60,6 +60,8 @@ export interface ApiFetchOptions extends RequestInit {
   timeoutMs?: number;
   /** Caller renders its own error state; do not emit global error toasts. */
   suppressGlobalError?: boolean;
+  /** Caller handles 401 locally; do not revoke cookies or redirect. */
+  suppressAuthRedirect?: boolean;
 }
 
 /**
@@ -217,6 +219,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     timeoutMs,
     signal: callerSignal,
     suppressGlobalError = false,
+    suppressAuthRedirect = false,
     ...rest
   } = init ?? {};
   const effectiveTimeout = typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS;
@@ -262,7 +265,7 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
     throw err;
   }
 
-  if (res.status === 401 && typeof window !== "undefined") {
+  if (res.status === 401 && typeof window !== "undefined" && !suppressAuthRedirect) {
     if (window.location.pathname !== "/login") {
       // Single-flight guard: a dashboard page typically has 5-10 React
       // Query widgets polling in parallel. On access-token expiry they
@@ -1110,6 +1113,8 @@ export async function refreshAccessToken(): Promise<boolean> {
           ? JSON.stringify({ refresh_token: legacyToken })
           : JSON.stringify({}),
         // Don't redirect on 401 — the scheduler manages that UX itself.
+        suppressAuthRedirect: true,
+        suppressGlobalError: true,
       });
       if (resp && typeof resp.refresh_token === "string" && resp.refresh_token.length > 0) {
         // Backend is still in CLI mode (shouldn't happen for browsers post
@@ -1195,13 +1200,63 @@ export function ensureTokenRefreshScheduled(): void {
 
 // ─── Screener ────────────────────────────────────────────────
 
-export async function screenStocks(preset?: string, filters?: Record<string, unknown>): Promise<ScreenerResult[]> {
+type ScreenerFilterOp = "gt" | "gte" | "lt" | "lte" | "eq" | "between" | "in";
+
+interface ScreenerRequestFilter {
+  field: string;
+  op: ScreenerFilterOp;
+  value: number | number[] | string[];
+}
+
+type ScreenerFilterInput = object | ScreenerRequestFilter[];
+
+function numericFilter(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeScreenerFilters(filters?: ScreenerFilterInput): ScreenerRequestFilter[] {
+  if (!filters) return [];
+  if (Array.isArray(filters)) return filters;
+  const values = filters as Record<string, unknown>;
+  const normalized: ScreenerRequestFilter[] = [];
+  const minPrice = numericFilter(values.minPrice);
+  const maxPrice = numericFilter(values.maxPrice);
+  const minChange = numericFilter(values.minChange);
+  const maxChange = numericFilter(values.maxChange);
+  const minVolume = numericFilter(values.minVolume);
+  const sector = typeof values.sector === "string" ? values.sector.trim() : "";
+  const marketCap = typeof values.marketCap === "string" ? values.marketCap.trim() : "";
+  const sectorAliases: Record<string, string> = {
+    Financials: "Financial Services",
+    "Consumer Discretionary": "Consumer Cyclical",
+    "Consumer Staples": "Consumer Defensive",
+  };
+
+  if (minPrice != null) normalized.push({ field: "price", op: "gte", value: minPrice });
+  if (maxPrice != null) normalized.push({ field: "price", op: "lte", value: maxPrice });
+  if (minChange != null) normalized.push({ field: "change_pct", op: "gte", value: minChange });
+  if (maxChange != null) normalized.push({ field: "change_pct", op: "lte", value: maxChange });
+  if (minVolume != null) normalized.push({ field: "volume", op: "gte", value: minVolume });
+  if (marketCap === "Mega") normalized.push({ field: "market_cap", op: "gte", value: 200_000_000_000 });
+  if (marketCap === "Large") normalized.push({ field: "market_cap", op: "between", value: [10_000_000_000, 200_000_000_000] });
+  if (marketCap === "Mid") normalized.push({ field: "market_cap", op: "between", value: [2_000_000_000, 10_000_000_000] });
+  if (marketCap === "Small") normalized.push({ field: "market_cap", op: "between", value: [300_000_000, 2_000_000_000] });
+  if (marketCap === "Micro") normalized.push({ field: "market_cap", op: "lt", value: 300_000_000 });
+  if (sector) normalized.push({ field: "sector", op: "in", value: [sectorAliases[sector] ?? sector] });
+
+  return normalized;
+}
+
+export async function screenStocks(preset?: string, filters?: ScreenerFilterInput): Promise<ScreenerResult[]> {
   interface BackendResult {
     symbol: string;
     name: string;
     sector: string | null;
     price: number | null;
     change_pct: number | null;
+    volume: number | null;
     composite_score: number;
     metrics: Record<string, number>;
   }
@@ -1209,7 +1264,7 @@ export async function screenStocks(preset?: string, filters?: Record<string, unk
     `/api/v1/screener/screen`,
     {
       method: "POST",
-      body: JSON.stringify({ strategy: preset, ...filters }),
+      body: JSON.stringify({ strategy: preset, filters: normalizeScreenerFilters(filters) }),
     },
   );
   return resp.results.map((r) => ({
@@ -1225,6 +1280,7 @@ export async function screenStocks(preset?: string, filters?: Record<string, unk
     mlScore: r.metrics?.ml_score ?? 0,
     composite: r.composite_score ?? 0,
     sector: r.sector ?? "Unknown",
+    volume: r.volume ?? 0,
   }));
 }
 
@@ -1235,6 +1291,22 @@ export function getScreenerPresets() {
   // not silently surface ``undefined`` as an em-dash.
   return apiFetch<{ id: number; name: string; filters: unknown[]; created_at: string }[]>(
     `/api/v1/screener/presets`,
+  );
+}
+
+export interface RiskMonitorState {
+  enabled: boolean;
+  message: string;
+}
+
+export function getRiskMonitorState() {
+  return apiFetch<RiskMonitorState>(`/api/v1/strategies/admin/risk-monitor`);
+}
+
+export function setRiskMonitorState(enabled: boolean) {
+  return apiFetch<RiskMonitorState>(
+    `/api/v1/strategies/admin/risk-monitor?enabled=${encodeURIComponent(String(enabled))}`,
+    { method: "POST" },
   );
 }
 
@@ -1397,6 +1469,9 @@ export interface PlaceOrderPayload {
   quantity: number;
   price?: number;
   stop_price?: number;
+  time_in_force?: "day" | "gtc" | "ioc" | "fok" | "opg" | "cls";
+  extended_hours?: boolean;
+  bracket?: { stop_loss: number; take_profit: number };
   legs?: { symbol: string; side: "buy" | "sell"; quantity: number; price?: number }[];
   /** Unix timestamp for the quote snapshot used to price this order. */
   quote_at_fill_ts?: number;
@@ -1438,6 +1513,12 @@ export interface PlaceOrderOptions {
 export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
   // Transform frontend payload to backend CreateOrderRequest format.
   const explicitLegs = payload.legs != null;
+  if (explicitLegs && payload.legs && payload.legs.length > 1) {
+    const pricedCount = payload.legs.filter((leg) => leg.price != null).length;
+    if (pricedCount > 0 && pricedCount < payload.legs.length) {
+      throw new Error("Multi-leg option orders need either every leg priced or no leg prices.");
+    }
+  }
   const legs = (payload.legs ?? [{ symbol: payload.symbol, side: payload.side, quantity: payload.quantity, price: payload.price }]).map((leg) => {
     const symbol = leg.symbol.trim().toUpperCase();
     const limitSource = explicitLegs ? leg.price : (leg.price ?? payload.price);
@@ -1478,10 +1559,12 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
   // ledger row carries the originating strategy + combo type. We omit
   // these keys when undefined to keep existing single-leg equity flows
   // wire-byte-identical (no backend schema churn).
-  const reqBody: Record<string, unknown> = { legs, time_in_force: "day" };
+  const reqBody: Record<string, unknown> = { legs, time_in_force: payload.time_in_force ?? "day" };
   if (payload.strategy) reqBody.strategy = payload.strategy;
   if (payload.combo_type) reqBody.combo_type = payload.combo_type;
   if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
+  if (payload.extended_hours) reqBody.extended_hours = true;
+  if (payload.bracket) reqBody.bracket = payload.bracket;
   const hasOptionLeg = legs.some((leg) => leg.asset_class === "option");
   const requiresFreshQuote = payload.type !== "market" || hasOptionLeg;
   if (payload.quote_at_fill_ts != null) {

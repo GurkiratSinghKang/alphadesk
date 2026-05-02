@@ -82,7 +82,7 @@ export default function DashboardPageLayout({
             </h1>
           </div>
           {actions ? (
-            <div className="flex items-center gap-2">{actions}</div>
+            <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
           ) : null}
         </div>
       </header>

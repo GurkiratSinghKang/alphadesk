@@ -25,7 +25,6 @@ import {
   Siren,
   Sparkle,
   Stack,
-  Target,
   WarningCircle,
 } from "@phosphor-icons/react";
 
@@ -68,6 +67,7 @@ import { useUIStore } from "@/stores/ui";
 import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { useToast } from "@/hooks/useToast";
 import type { Position, Order, PortfolioGreeks, PortfolioSummary } from "@/types";
+import { StrategyPanel } from "./_desk/StrategyPanel";
 
 import {
   toContextCells,
@@ -777,11 +777,12 @@ function DashboardCommandCenter({
         openOrders,
         positions,
         orders,
-        activeStrategyCount,
-        totalStrategyCount,
-        pipelineStatus,
-      }),
-    [openOrders, positions, orders, activeStrategyCount, totalStrategyCount, pipelineStatus],
+	        activeStrategyCount,
+	        totalStrategyCount,
+	        strategiesLoading,
+	        pipelineStatus,
+	      }),
+	    [openOrders, positions, orders, activeStrategyCount, totalStrategyCount, strategiesLoading, pipelineStatus],
   );
   const quoteTone =
     selectedQuote.change > 0
@@ -911,7 +912,7 @@ function DashboardCommandCenter({
               </div>
             </div>
 
-            <div className="hidden gap-px bg-border-hair sm:grid-cols-2 lg:grid xl:grid-cols-4">
+            <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-2 xl:grid-cols-4">
               <CommandMetric
                 label="Book equity"
                 value={account.ready ? formatCurrency(account.equity, true) : "Awaiting"}
@@ -1159,12 +1160,12 @@ function CommandMetric({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-md border border-border-hair bg-bg px-4 py-3 shadow-[0_14px_34px_-28px_rgba(16,22,17,0.36)]">
+    <div className="min-w-0 rounded-md border border-border-hair bg-bg px-4 py-3 shadow-[0_14px_34px_-28px_rgba(16,22,17,0.36)]">
       <p className="t-label text-fg-hint">{label}</p>
-      <p className={cn("mt-2 whitespace-nowrap font-mono text-[clamp(16px,1.45vw,20px)] leading-tight text-ink-1000", valueClassName)}>
+      <p className={cn("mt-2 font-mono text-[clamp(14px,1.2vw,18px)] leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+      <p className="mt-2 text-[13px] leading-snug text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1632,15 +1633,15 @@ function SessionSnapshot({
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]">
-      <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="flex items-start justify-between gap-3 border-b border-border-hair px-4 py-3">
+        <div className="flex min-w-0 items-start gap-2">
           <Pulse className="size-4 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
             <h3 className="truncate text-[15px] font-semibold text-ink-1000">Session telemetry</h3>
-            <p className="mt-0.5 truncate text-[12px] text-fg-muted">Ticker, strategy, and pipeline context</p>
+            <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">Ticker, strategy, and pipeline context</p>
           </div>
         </div>
-        <span className={cn("rounded-sm px-2 py-1 font-mono text-[12px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
+        <span className={cn("shrink-0 rounded-sm px-2 py-1 font-mono text-[12px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
           {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
         </span>
       </header>
@@ -1739,87 +1740,6 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
   );
 }
 
-export function StrategyPanel({
-  strategies,
-  activeStrategyCount,
-  totalStrategyCount,
-  loading = false,
-  error = false,
-  onStrategyClick,
-  onStrategies,
-}: {
-  strategies: StrategyCardData[];
-  activeStrategyCount: number;
-  totalStrategyCount: number;
-  loading?: boolean;
-  error?: boolean;
-  onStrategyClick: (id: string) => void;
-  onStrategies: () => void;
-}) {
-  const emptyCopy = error
-    ? "Strategy data unavailable. Open Strategies for the full status page."
-    : loading
-    ? "Strategy data is loading."
-    : "No strategy exceptions. Active systems are quiet.";
-
-  return (
-    <section
-      aria-labelledby="strategy-ops-title"
-      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
-    >
-      <PanelHeader
-        id="strategy-ops-title"
-        icon={Target}
-        title="Strategy fault line"
-        detail={`${activeStrategyCount}/${totalStrategyCount || 0} active · showing blockers only`}
-        actionLabel="Strategies"
-        onAction={onStrategies}
-      />
-      <div className="grid gap-px bg-border-hair md:grid-cols-2">
-        {strategies.length > 0 ? (
-          strategies.map((strategy, index) => (
-            <button
-              key={strategy.id}
-              type="button"
-              onClick={() => onStrategyClick(strategy.id)}
-              className="card-stagger group bg-bg-elev-1 px-4 py-4 text-left transition-colors hover:bg-brand/5"
-              style={{ animationDelay: `${index * 40}ms` }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[15px] font-medium text-ink-1000">{strategy.name}</p>
-                  <p className="mt-1 truncate text-[13px] text-fg-muted">
-                    {strategy.positions} positions · {formatCurrency(strategy.invested, true)} invested
-                  </p>
-                </div>
-                <span className={cn("font-mono text-[13px]", strategy.returnPct > 0 ? "text-profit" : strategy.returnPct < 0 ? "text-loss" : "text-fg-muted")}>
-                  {strategy.returnPct === 0 ? "—" : formatPercent(strategy.returnPct)}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <StatusChip tone={strategy.readinessTone} label={strategy.readinessLabel} />
-                <span className="min-w-0 truncate text-[12px] text-fg-muted">{strategy.readinessDetail}</span>
-              </div>
-            </button>
-          ))
-        ) : (
-          <div className="col-span-full bg-bg-elev-1 px-5 py-8">
-            <div className="mx-auto flex max-w-md flex-col items-center text-center">
-              <div className="flex size-10 items-center justify-center rounded-sm bg-profit/10 text-profit">
-                <ShieldCheck className="size-5" aria-hidden />
-              </div>
-              <p className="mt-4 text-[15px] font-semibold text-ink-1000">{emptyCopy}</p>
-              <p className="mt-2 text-[13px] leading-snug text-fg-muted">
-                Only blocked systems appear here; healthy strategies stay out of the way.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function PanelHeader({
   id,
   icon: Icon,
@@ -1836,14 +1756,14 @@ function PanelHeader({
   onAction?: () => void;
 }) {
   return (
-    <header className="flex items-center justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="flex items-start justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3 sm:items-center">
+      <div className="flex min-w-0 items-start gap-2 sm:items-center">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">
           <h3 id={id} className="truncate text-[15px] font-semibold text-ink-1000">{title}</h3>
-          <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">{detail}</p>
         </div>
       </div>
       {actionLabel && onAction ? (
@@ -1944,7 +1864,6 @@ function StatusChip({ label, tone }: { label: string; tone: StatusTone }) {
 }
 
 type AccountSnapshot = ReturnType<typeof buildAccountSnapshot>;
-type StrategyCardData = ReturnType<typeof buildStrategyCards>[number];
 type ActionItem = ReturnType<typeof buildActionItems>[number];
 type RiskEscalation = ReturnType<typeof buildRiskEscalations>[number];
 type AuditItem = ReturnType<typeof buildAuditItems>[number];
@@ -2377,16 +2296,18 @@ function buildActionItems({
   positions,
   orders,
   activeStrategyCount,
-  totalStrategyCount,
-  pipelineStatus,
-}: {
+	  totalStrategyCount,
+	  strategiesLoading,
+	  pipelineStatus,
+	}: {
   openOrders: number;
   positions: Position[];
   orders: Order[];
-  activeStrategyCount: number;
-  totalStrategyCount: number;
-  pipelineStatus?: PipelineStatus;
-}) {
+	  activeStrategyCount: number;
+	  totalStrategyCount: number;
+	  strategiesLoading: boolean;
+	  pipelineStatus?: PipelineStatus;
+	}) {
   const rejected = orders.filter((o) => o.status === "rejected").length;
   const activeRatio = totalStrategyCount > 0 ? activeStrategyCount / totalStrategyCount : 0;
   let largest = positions.reduce<Position | null>((best, pos) => {
@@ -2440,7 +2361,7 @@ function buildActionItems({
       action: "pipeline",
     });
   }
-  if (!pipelineStatus?.running && totalStrategyCount > 0 && activeRatio < 0.5) {
+	  if (!strategiesLoading && !pipelineStatus?.running && totalStrategyCount > 0 && activeRatio < 0.5) {
     items.push({
       title: "Strategies mostly paused",
       detail: `${activeStrategyCount}/${totalStrategyCount} strategies are enabled. Review intentional pauses before market open.`,
@@ -2546,15 +2467,20 @@ function LastTickStatusBar({
     // Pipeline pill — overwrite with live count from the leaf-owned
     // useQuery. Match ``Pipeline N/M`` prefix so insertion order can
     // change without breaking us.
-    const pipeIdx = next.findIndex((p) => p.label.startsWith("Pipeline"));
-    if (pipeIdx !== -1) {
-      next[pipeIdx] = {
-        ...next[pipeIdx],
-        label: `Pipeline ${pipelineRunningCount}/${pipelineTotal}`,
-      };
-    }
-    return next;
-  }, [base, lastTickSec, marketOpen, pipelineRunningCount, pipelineTotal]);
+	    const pipeIdx = next.findIndex((p) => p.label.startsWith("Pipeline"));
+	    if (pipeIdx !== -1) {
+	      const isRunning = pipelineStatus?.running === true;
+	      next[pipeIdx] = {
+	        ...next[pipeIdx],
+	        label: `Pipeline ${pipelineRunningCount}/${pipelineTotal}`,
+	        tone: isRunning ? "profit" : "muted",
+	        title: isRunning
+	          ? pipelineStatus?.stage ?? pipelineStatus?.current_strategy ?? "Pipeline is running"
+	          : pipelineStatus?.last_result ?? "Pipeline idle",
+	      };
+	    }
+	    return next;
+	  }, [base, lastTickSec, marketOpen, pipelineRunningCount, pipelineStatus, pipelineTotal]);
 
   return <StatusBar pills={pills} buildVersion={buildVersion} />;
 }

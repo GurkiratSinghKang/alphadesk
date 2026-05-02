@@ -100,6 +100,7 @@ from core.auth import (
     decode_token,
     get_password_version,
     get_session_epoch,
+    hash_password,
     is_token_revoked,
     require_auth,
     verify_password,
@@ -107,6 +108,8 @@ from core.auth import (
 from core.config import settings
 
 router = APIRouter()
+
+_RUNTIME_ADMIN_HASH: str | None = None
 
 # Precomputed bcrypt hash used as the constant-time comparison target when
 # the submitted username does NOT match ADMIN_USERNAME. Prevents a username-
@@ -126,6 +129,11 @@ router = APIRouter()
 _DUMMY_PASSWORD_HASH = (
     "$2b$14$z4t5/lWyhLyKZd2QmJSdE.39Hqtyc.RzbgdFxBGrJwC38RGNmahoG"
 )
+
+
+@router.get("/session")
+async def session_status(username: str = Depends(require_auth)) -> dict[str, object]:
+    return {"ok": True, "username": username}
 
 # Minimum password length when accepting new credentials (signup, password
 # change, password reset). Existing bcrypt hashes with shorter passwords are
@@ -527,9 +535,10 @@ async def login(request: LoginRequest, req: Request):
         submitted_username.encode("utf-8"),
         settings.ADMIN_USERNAME.encode("utf-8"),
     )
+    active_admin_hash = _RUNTIME_ADMIN_HASH or settings.ADMIN_PASSWORD_HASH
     target_hash = (
-        settings.ADMIN_PASSWORD_HASH
-        if username_matches and settings.ADMIN_PASSWORD_HASH
+        active_admin_hash
+        if username_matches and active_admin_hash
         else _DUMMY_PASSWORD_HASH
     )
     # verify_password can raise on a malformed hash string — guard so a
@@ -547,7 +556,7 @@ async def login(request: LoginRequest, req: Request):
     # the explicit ``username_matches`` gate blocks it.
     if not (
         username_matches
-        and settings.ADMIN_PASSWORD_HASH
+        and active_admin_hash
         and password_ok
     ):
         # Audit the failed attempt. ``user`` records the *submitted* username
@@ -883,8 +892,11 @@ async def change_password(
             detail="New password must differ from old password",
         )
 
-    # Bump password_version — this is the session-invalidation mechanism.
-    # The hash itself is rotated out-of-band through ADMIN_PASSWORD_HASH.
+    global _RUNTIME_ADMIN_HASH
+    _RUNTIME_ADMIN_HASH = hash_password(request.new_password)
+
+    # Bump password_version — this invalidates outstanding tokens after the
+    # runtime hash has been rotated for this process.
     new_pv = await bump_password_version(username)
 
     await _audit(
@@ -896,11 +908,11 @@ async def change_password(
         req=req,
     )
 
-    # Do not return or log the bcrypt hash. Logging it still creates a
-    # durable offline-cracking artifact in journald / log drains; rotate
-    # ADMIN_PASSWORD_HASH through the normal secret-store workflow.
+    # Do not return or log the bcrypt hash. Operators should still persist the
+    # new secret-store value before restart so the runtime rotation survives
+    # process replacement.
     logger.info(
-        "change_password: password accepted for %s; rotate ADMIN_PASSWORD_HASH via secret store",
+        "change_password: runtime password rotated for %s; persist ADMIN_PASSWORD_HASH via secret store before restart",
         username,
     )
     return {
@@ -908,10 +920,8 @@ async def change_password(
         "password_version": new_pv,
         "message": (
             "Password change acknowledged. All existing sessions have been "
-            "invalidated. NOTE: ADMIN_PASSWORD_HASH is env-var-managed and "
-            "was NOT rotated server-side. Generate and rotate the new hash "
-            "through the secret store before the new password takes effect "
-            "on future logins."
+            "invalidated. The new password is active for this running process; "
+            "persist the generated hash through the secret store before restart."
         ),
     }
 

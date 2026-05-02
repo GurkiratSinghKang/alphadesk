@@ -4,6 +4,7 @@ import logging
 import math
 from datetime import datetime, date, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -11,6 +12,18 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _et_day_key(value: Any) -> str:
+    if not value:
+        return date.today().isoformat()
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except Exception:
+        return str(value)[:10]
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +421,7 @@ async def _generate_var() -> VaRResponse:
                 return _empty_var("Insufficient price history to estimate volatility.")
 
             # Parametric VaR: assume normal, weight by position size
-            # Portfolio vol (simplified — assumes zero correlation as conservative estimate)
+            # Portfolio vol (simplified — assumes independent position returns).
             weighted_var_sq = 0.0
             for sym, vol in position_vols.items():
                 mv = abs(market_values.get(sym, 0))
@@ -453,7 +466,7 @@ async def _generate_var() -> VaRResponse:
                 cvar_95_1d=cvar_95_1d,
                 cvar_99_1d=cvar_99_1d,
                 method="parametric",
-                confidence_note=f"Parametric VaR computed from {len(position_vols)} positions using 30-day daily volatility. Assumes normal returns and zero correlation (conservative).",
+                confidence_note=f"Parametric VaR computed from {len(position_vols)} positions using 30-day daily volatility. Assumes normal returns and independent positions; positively correlated equity shocks can make realized drawdowns larger than this estimate.",
                 factor_exposures=sorted(factor_exposures, key=lambda f: -f.contribution_pct)[:10],
                 estimated=False,
             )
@@ -542,7 +555,7 @@ async def _generate_drawdown() -> DrawdownResponse:
             cumulative_pnl += pnl
             equity_i = base_equity + cumulative_pnl
             exit_time = trade.get("exit_time", "")
-            trade_date = exit_time[:10] if exit_time else date.today().isoformat()
+            trade_date = _et_day_key(exit_time)
 
             if equity_i > peak_equity:
                 peak_equity = equity_i

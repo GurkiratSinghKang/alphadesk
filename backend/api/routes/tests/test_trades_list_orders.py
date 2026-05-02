@@ -235,3 +235,55 @@ async def test_submit_to_broker_uses_native_alpaca_mleg_shape(monkeypatch: pytes
         "limit_price": "0.85",
         "client_order_id": "idem-mleg-1",
     }
+
+
+@pytest.mark.asyncio
+async def test_submit_to_broker_preserves_credit_mleg_limit_sign(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.routes import trades as trades_mod
+    from api.routes.trades import CreateOrderRequest, OrderLeg, OrderSide, OrderType
+    from core import config as core_config
+
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_API_KEY,
+        "get_secret_value",
+        lambda: "TEST_KEY",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_config.settings.ALPACA_SECRET_KEY,
+        "get_secret_value",
+        lambda: "TEST_SECRET",
+        raising=False,
+    )
+    monkeypatch.setattr(core_config.settings, "ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
+    monkeypatch.setattr("httpx.AsyncClient", _FakePostAsyncClient)
+
+    request = CreateOrderRequest(
+        combo_type="vertical_spread",
+        legs=[
+            OrderLeg(
+                symbol="AAPL260501C00270000",
+                side=OrderSide.SELL,
+                qty=1,
+                order_type=OrderType.LIMIT,
+                limit_price=1.10,
+            ),
+            OrderLeg(
+                symbol="AAPL260501C00275000",
+                side=OrderSide.BUY,
+                qty=1,
+                order_type=OrderType.LIMIT,
+                limit_price=0.55,
+            ),
+        ],
+    )
+
+    broker_id = await trades_mod._submit_to_broker(
+        request,
+        core_config.settings,
+        client_order_id="idem-mleg-credit-1",
+    )
+
+    assert broker_id == "broker-new-mleg"
+    assert _FakePostAsyncClient.captured_json is not None
+    assert _FakePostAsyncClient.captured_json["limit_price"] == "-0.55"

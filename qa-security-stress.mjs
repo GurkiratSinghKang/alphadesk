@@ -274,7 +274,7 @@ async function haltResumeTests() {
 
   // 13. POST /trades/halt
   {
-    const r = await req("POST", "/trades/halt", { token: accessToken });
+    const r = await req("POST", "/trades/halt?flatten=false", { token: accessToken });
     const pass = r.status === 200;
     record("SEC-13: POST /trades/halt", pass,
       `Status ${r.status}, body: ${JSON.stringify(r.data)}`, r.elapsed);

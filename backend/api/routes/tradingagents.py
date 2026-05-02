@@ -18,6 +18,7 @@ from services.tradingagents_research import (
     normalize_symbol,
     normalize_trade_date,
     get_tradingagents_runtime_status,
+    get_active_tradingagents_run_for_request,
     start_tradingagents_run,
     get_tradingagents_run,
 )
@@ -184,9 +185,19 @@ async def create_tradingagents_run(
     request: TradingAgentsRunRequest,
     username: str = Depends(require_auth),
 ) -> dict[str, Any]:
+    request_payload = request.model_dump()
+    runtime = get_tradingagents_runtime_status(request.provider)
+    if not runtime.get("ready"):
+        raise HTTPException(
+            status_code=503,
+            detail="TradingAgents runtime is not ready. Complete bootstrap and provider configuration before starting a run.",
+        )
+    existing = await get_active_tradingagents_run_for_request(username, request_payload)
+    if existing is not None:
+        return existing
     await _enforce_run_rate_limit(username)
     try:
-        return await start_tradingagents_run(username, request.model_dump())
+        return await start_tradingagents_run(username, request_payload)
     except TradingAgentsRunError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
     except ValueError as exc:

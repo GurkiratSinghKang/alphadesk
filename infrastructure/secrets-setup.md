@@ -25,7 +25,7 @@ Plan rotations for low-traffic windows.
 ## 2. Generate `REDIS_PASSWORD`
 
 ```sh
-openssl rand -base64 32
+openssl rand -hex 32
 ```
 
 Add to `.env.prod`:
@@ -40,7 +40,7 @@ via `${REDIS_PASSWORD}` substitution in `docker-compose.yml`).
 ## 3. Generate `POSTGRES_PASSWORD`
 
 ```sh
-openssl rand -base64 24
+openssl rand -hex 32
 ```
 
 Add to `.env.prod`:
@@ -63,7 +63,7 @@ python3 -c 'import bcrypt, getpass; pw = getpass.getpass("admin password: "); pr
 Paste the resulting `$2b$...` string into `.env.prod`:
 
 ```
-ADMIN_PASSWORD_HASH=$2b$12$...
+ADMIN_PASSWORD_HASH='$2b$12$...'
 ```
 
 ## 5. Generate `STATUS_PASS_HASH` (Caddy basic auth for /status)
@@ -76,7 +76,7 @@ Add to `.env.prod`:
 
 ```
 STATUS_USER=admin
-STATUS_PASS_HASH=$2a$14$...
+STATUS_PASS_HASH='$2a$14$...'
 ```
 
 ## 6. Lock down `.env.prod`

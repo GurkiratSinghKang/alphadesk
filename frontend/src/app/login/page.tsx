@@ -120,7 +120,7 @@ export default function LoginPage() {
   // which drifts a day ahead of the desk header after 20:00 ET.
   const todayIso = formatDate(new Date(), "iso");
   return (
-    <div className="mx-auto grid min-h-screen max-w-[1440px] grid-cols-1 gap-8 sm:gap-12 lg:gap-16 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+    <main className="mx-auto grid min-h-screen max-w-[1440px] grid-cols-1 gap-8 sm:gap-12 lg:gap-16 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
       <section className="flex flex-col gap-6 sm:gap-8 lg:gap-10">
         <EditorialNameplate
           volume="01"
@@ -272,6 +272,6 @@ export default function LoginPage() {
           <LoginForm />
         </div>
       </section>
-    </div>
+    </main>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
-import { safeSetItem } from "@/lib/storage";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 
 // ─── Workspace Types ────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ export function useWorkspace() {
   const [workspace, setWorkspaceState] = useState<WorkspaceId>("default");
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = safeGetItem(STORAGE_KEY);
     if (stored && stored in WORKSPACE_CONFIGS) {
       setWorkspaceState(stored as WorkspaceId);
     }

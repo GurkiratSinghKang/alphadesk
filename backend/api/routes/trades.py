@@ -468,13 +468,11 @@ class CreateOrderRequest(BaseModel):
         allowlist — it is an UNDEFINED-risk combo (max loss
         unbounded on the call leg) and AlphaDesk now refuses to
         recommend or accept undefined-risk option orders. Defined
-        substitutes: ``iron_condor`` (strangle with protective
-        wings), ``vertical_spread`` (one-sided), ``iron_butterfly``
-        (centered pin-the-strike), ``calendar_spread`` /
-        ``diagonal_spread`` (long-leg covers short).
-        ``cash_secured_put`` and ``covered_call`` are the only
-        permitted single-leg short positions because the cash
-        collateral / underlying shares cap the downside.
+        substitutes accepted here are ``iron_condor`` (strangle with
+        protective wings), ``vertical_spread`` (one-sided), and
+        ``iron_butterfly`` (centered pin-the-strike). Calendar,
+        diagonal, married, and collateralized shapes stay rejected
+        until margin-aware notional and collateral checks exist.
         """
         if v is None:
             return None
@@ -485,11 +483,6 @@ class CreateOrderRequest(BaseModel):
             "iron_condor",
             "iron_butterfly",
             "vertical_spread",
-            "calendar_spread",
-            "diagonal_spread",
-            "covered_call",
-            "cash_secured_put",
-            "married_put",
         )
         if normalised not in _ALLOWED:
             raise ValueError(
@@ -564,9 +557,9 @@ class CreateOrderRequest(BaseModel):
                 )
 
             # Require enough covering LONG quantity. A SELL 10 + BUY 1
-            # ratio is still undefined risk for nine contracts. Calendar /
-            # diagonal spreads can cover with a different expiry; same-expiry
-            # combos must cover with the same expiry and option type.
+            # ratio is still undefined risk for nine contracts. Accepted
+            # defined-risk combos must cover with the same expiry and option
+            # type until calendar/diagonal margin modeling exists.
             covering_qty = 0.0
             for other_leg in self.legs:
                 if other_leg.symbol == leg.symbol:
@@ -589,7 +582,7 @@ class CreateOrderRequest(BaseModel):
                     other_parsed["expiry_mm"],
                     other_parsed["expiry_dd"],
                 )
-                if collateral_combo not in {"calendar_spread", "diagonal_spread"} and other_expiry != expiry:
+                if other_expiry != expiry:
                     continue
                 covering_qty += float(other_leg.qty)
 
@@ -599,8 +592,7 @@ class CreateOrderRequest(BaseModel):
                     f"{leg.symbol} (sell {opt_type}) has covering long qty "
                     f"{covering_qty:g} for short qty {float(leg.qty):g}. "
                     "Submit a defined-risk combo "
-                    "(vertical_spread, iron_condor, iron_butterfly, "
-                    "calendar_spread, or diagonal_spread) — naked options are "
+                    "(vertical_spread, iron_condor, or iron_butterfly) — naked options are "
                     "blocked by the DR-1 risk policy."
                 )
         return self
@@ -774,8 +766,8 @@ def _alpaca_mleg_order_type(legs: list[OrderLeg], ratios: list[int]) -> tuple[st
             )
         sign = 1.0 if leg.side == OrderSide.BUY else -1.0
         net_limit += sign * float(leg.limit_price) * float(ratio_qty)
-    limit_price = round(abs(net_limit), 2)
-    if limit_price <= 0:
+    limit_price = round(net_limit, 2)
+    if limit_price == 0:
         raise HTTPException(
             status_code=422,
             detail="Limit multi-leg option orders require a non-zero net limit price",
@@ -1277,6 +1269,32 @@ async def create_order(
     # weekend then evaluate against Monday's open at the configured
     # GTC. Limit orders that DO want to rest in extended hours can opt
     # in by setting ``extended_hours=True`` on the request.
+    if payload.extended_hours:
+        first_leg = payload.legs[0] if payload.legs else None
+        single_leg_equity_extended = (
+            len(payload.legs) == 1
+            and first_leg is not None
+            and first_leg.asset_class == "equity"
+            and first_leg.order_type == OrderType.LIMIT
+            and payload.time_in_force == TimeInForce.DAY
+            and payload.bracket is None
+        )
+        option_combo_queue = (
+            len(payload.legs) > 1
+            and payload.bracket is None
+            and all((leg.asset_class or "").lower() == "option" for leg in payload.legs)
+        )
+        extended_supported = single_leg_equity_extended or option_combo_queue
+        if not extended_supported:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "extended_hours is only supported for single-leg equity "
+                    "LIMIT orders with time_in_force=day and no bracket, or "
+                    "multi-leg option combos queued for the next session."
+                ),
+            )
+
     if not payload.extended_hours:
         et_now = datetime.now(ZoneInfo("America/New_York"))
         try:
@@ -2133,7 +2151,7 @@ async def list_positions() -> list[PositionResponse]:
         symbol_to_strategy: dict[str, str | None] = {}
         try:
             if not settings.SKIP_DB_INIT:
-                from sqlalchemy import select, desc
+                from sqlalchemy import select, desc, or_
                 from core.database import _get_session_factory
                 from data.storage.models import Trade
 
@@ -2146,7 +2164,8 @@ async def list_positions() -> list[PositionResponse]:
                     # is indexed so this is bounded by N open trades.
                     q = (
                         select(Trade)
-                        .where(Trade.status.in_(["submitted", "open", "filled"]))
+                        .where(Trade.status.in_(["open", "filled"]))
+                        .where(or_(Trade.trade_kind.is_(None), Trade.trade_kind.in_(["long_open", "short_open"])))
                         .order_by(desc(Trade.entry_time))
                         .limit(500)
                     )
@@ -2308,7 +2327,16 @@ async def get_trade_history(
             # Top-level ``Trade.side`` (new column) is authoritative when set.
             leg_side = leg.get("side") if isinstance(leg, dict) else None
             top_side = getattr(t, "side", None)
-            if top_side in {"long", "short"}:
+            trade_kind = getattr(t, "trade_kind", None)
+            if trade_kind == "short_close":
+                leg_side = "buy"
+            elif trade_kind == "long_close":
+                leg_side = "sell"
+            elif trade_kind == "short_open":
+                leg_side = "sell"
+            elif trade_kind == "long_open":
+                leg_side = "buy"
+            elif top_side in {"long", "short"}:
                 leg_side = "sell" if top_side == "short" else "buy"
             elif leg_side not in {"buy", "sell", "short", "cover"}:
                 # Synthesize a record for _derive_side using strategy + qty
@@ -4071,15 +4099,17 @@ async def _is_market_open_now() -> bool:
         return True
 
 
+class BrokerPositionsUnavailable(RuntimeError):
+    """Raised when the halt/flatten path cannot prove broker exposure."""
+
+
 async def _fetch_broker_positions(settings) -> list[dict[str, Any]]:
-    """Return the live broker position list.  [] on any failure.
+    """Return the live broker position list.
 
     The flatten / halt flows call this twice (pre-close + residual snapshot)
-    and neither caller is wrapped in try/except — a transient network blip
-    or Alpaca 502 would previously propagate as a 500 out of ``/halt``,
-    which is the worst possible time for the endpoint to fall over. Swallow
-    httpx + JSONDecode errors and log so the caller sees an empty list and
-    can proceed with whatever other cleanup it has queued.
+    and must not treat broker uncertainty as "flat". A transient Alpaca 502
+    is materially different from "no open positions", so failures raise a
+    typed exception and the caller surfaces positions_unknown/manual review.
     """
     if _alpaca_keys_empty():
         return []
@@ -4093,15 +4123,19 @@ async def _fetch_broker_positions(settings) -> list[dict[str, Any]]:
                 f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers,
             )
             if resp.status_code != 200:
-                return []
+                raise BrokerPositionsUnavailable(
+                    f"broker positions fetch failed with HTTP {resp.status_code}"
+                )
             try:
                 return list(resp.json() or [])
-            except Exception:
+            except Exception as exc:
                 logger.warning("flatten: /v2/positions returned non-JSON body", exc_info=True)
-                return []
-    except Exception:
+                raise BrokerPositionsUnavailable("broker positions response was not JSON") from exc
+    except BrokerPositionsUnavailable:
+        raise
+    except Exception as exc:
         logger.warning("flatten: /v2/positions fetch failed", exc_info=True)
-        return []
+        raise BrokerPositionsUnavailable("broker positions fetch failed") from exc
 
 
 async def _submit_close_order(
@@ -4207,6 +4241,8 @@ async def _flatten_all_positions() -> dict[str, Any]:
         "flatten_attempts": 0,
         "flatten_successes": 0,
         "flatten_failures": 0,
+        "positions_unknown": False,
+        "positions_error": None,
         "residual_positions": [],
         "details": [],
     }
@@ -4231,7 +4267,17 @@ async def _flatten_all_positions() -> dict[str, Any]:
         logger.error("flatten: failed to cancel open orders", exc_info=True)
 
     # 2. Pull current positions.
-    positions = await _fetch_broker_positions(settings)
+    try:
+        positions = await _fetch_broker_positions(settings)
+    except BrokerPositionsUnavailable as exc:
+        summary["positions_unknown"] = True
+        summary["positions_error"] = str(exc)
+        summary["flatten_failures"] += 1
+        summary["details"].append({
+            "status": "positions_unknown",
+            "message": "Broker exposure could not be verified; manual broker check required.",
+        })
+        return summary
 
     # 3. Submit a market-order close for each.  Kick them off in
     #    parallel and collect their order ids, then poll each one
@@ -4309,8 +4355,13 @@ async def _flatten_all_positions() -> dict[str, Any]:
             for p in residual
             if float(p.get("qty") or 0) != 0
         ]
-    except Exception:
-        logger.debug("flatten: residual-positions snapshot failed", exc_info=True)
+    except BrokerPositionsUnavailable as exc:
+        summary["positions_unknown"] = True
+        summary["positions_error"] = str(exc)
+        summary["details"].append({
+            "status": "residual_positions_unknown",
+            "message": "Residual broker exposure could not be verified; manual broker check required.",
+        })
 
     return summary
 
@@ -4415,6 +4466,19 @@ async def halt_trading(
             cancel_err = repr(exc)
             logger.error("Failed to cancel orders during halt", exc_info=True)
 
+    flatten_indeterminate = bool(flatten_summary and flatten_summary.get("positions_unknown"))
+    if flatten_indeterminate:
+        try:
+            await _set_trading_halted(
+                True,
+                username=username,
+                reason=reason,
+                pending_flatten=True,
+            )
+            queued_for_next_open = True
+        except Exception:
+            logger.error("halt: failed to preserve pending flatten after unknown exposure", exc_info=True)
+
     # 3. Durable audit trail.
     await write_audit(
         "halt_trading",
@@ -4422,7 +4486,7 @@ async def halt_trading(
         ip=client_ip,
         request_id=request_id,
         details={
-            "result": "success",
+            "result": "indeterminate" if flatten_indeterminate else "success",
             "cancel_open_orders_ok": cancel_ok,
             "cancel_error": cancel_err,
             "flatten_requested": flatten,
@@ -4450,6 +4514,12 @@ async def halt_trading(
     }
     if flatten_summary is not None:
         resp["flatten"] = flatten_summary
+    if flatten_indeterminate:
+        resp["flatten_indeterminate"] = True
+        resp["message"] += (
+            " Broker positions could not be verified; manual broker review "
+            "is required and flatten remains queued."
+        )
     return resp
 
 
@@ -5362,8 +5432,10 @@ async def _submit_to_broker(
             body["limit_price"] = f"{net_limit_price:.2f}"
         if client_order_id:
             body["client_order_id"] = client_order_id
-        if request.extended_hours:
-            body["extended_hours"] = True
+        # Alpaca's extended_hours flag is equity-only. For option combos the
+        # API accepts the order outside RTH as a queued next-session order, so
+        # do not forward an unsupported flag even when the caller used it to
+        # bypass AlphaDesk's local RTH gate.
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(

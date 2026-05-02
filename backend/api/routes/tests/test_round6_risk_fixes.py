@@ -138,7 +138,7 @@ def test_fake_covered_call_combo_does_not_bypass_short_option_gate() -> None:
     from pydantic import ValidationError
 
     legs = [_occ_leg("AAPL260424C00200000", OrderSide.SELL, 1, 5.0)]
-    with pytest.raises(ValidationError, match="portfolio collateral checks"):
+    with pytest.raises(ValidationError, match="DEFINED-RISK"):
         CreateOrderRequest(legs=legs, combo_type="covered_call")
 
 
@@ -506,8 +506,7 @@ async def test_symbol_tradable_rejects_halted_cached() -> None:
 
 def test_combo_type_accepts_known_literals() -> None:
     """Round-12 / DR-1: defined-risk allowlist replaces ``strangle``
-    with the protective shapes ``iron_butterfly``, ``calendar_spread``,
-    ``diagonal_spread``, ``cash_secured_put``, ``married_put``."""
+    with the protective shapes whose notional is modeled server-side."""
     leg = OrderLeg(
         symbol="AAPL", side=OrderSide.BUY, qty=1,
         order_type=OrderType.LIMIT, limit_price=150.0,
@@ -516,15 +515,20 @@ def test_combo_type_accepts_known_literals() -> None:
         "iron_condor",
         "iron_butterfly",
         "vertical_spread",
-        "calendar_spread",
-        "diagonal_spread",
-        "covered_call",
-        "cash_secured_put",
-        "married_put",
     )
     for v in accepted:
         req = CreateOrderRequest(legs=[leg], combo_type=v)
         assert req.combo_type == v
+
+
+def test_combo_type_rejects_unmodeled_shapes() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=1,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    for v in ("calendar_spread", "diagonal_spread", "covered_call", "cash_secured_put", "married_put"):
+        with pytest.raises(ValueError):
+            CreateOrderRequest(legs=[leg], combo_type=v)
 
 
 def test_combo_type_rejects_unknown() -> None:

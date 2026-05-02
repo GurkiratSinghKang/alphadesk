@@ -125,9 +125,10 @@ export default function RootLayout({
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>
         {/* K-1 + K-14 (round-6): WebVitalsReporter mounts web-vitals@4
             listeners (LCP/CLS/INP/FCP/TTFB) and beacons each metric to
-            /api/v1/metrics/vitals via sendBeacon. The backend endpoint
-            is wired (api/routes/metrics.py) and rate-limited per IP
-            (Round-17 / persona-C). */}
+            `${NEXT_PUBLIC_API_URL}/api/v1/metrics/vitals` via sendBeacon,
+            falling back to same-origin only when no API URL is configured.
+            The backend endpoint is wired (api/routes/metrics.py) and
+            rate-limited per IP (Round-17 / persona-C). */}
         <WebVitalsReporter />
         <ServiceWorkerRegistrar />
         <Providers>{children}</Providers>

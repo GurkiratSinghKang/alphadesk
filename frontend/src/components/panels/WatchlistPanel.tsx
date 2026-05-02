@@ -403,15 +403,15 @@ const SECTOR_OPTIONS = [
   "",
   "Technology",
   "Healthcare",
-  "Financials",
-  "Consumer Discretionary",
-  "Consumer Staples",
+  "Financial Services",
+  "Consumer Cyclical",
+  "Consumer Defensive",
   "Energy",
   "Industrials",
+  "Communication Services",
   "Materials",
   "Utilities",
   "Real Estate",
-  "Communication Services",
 ];
 
 interface SavedPreset {
@@ -467,7 +467,7 @@ function ScreenerTab() {
   const runScreener = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await screenStocks(apiPreset);
+      const data = await screenStocks(apiPreset, filters);
       const mapped = data.slice(0, 50).map((r) => ({
         symbol: r.symbol,
         name: r.symbol,
@@ -475,7 +475,7 @@ function ScreenerTab() {
         changePct: r.changePct ?? 0,
         compositeScore: r.composite ?? 0,
         sector: r.sector ?? "Unknown",
-        volume: 0, // backend doesn't return volume, client-side filter only
+        volume: r.volume ?? 0,
       }));
       setResults(mapped);
     } catch (err) {
@@ -483,7 +483,7 @@ function ScreenerTab() {
     } finally {
       setLoading(false);
     }
-  }, [apiPreset]);
+  }, [apiPreset, filters]);
 
   useEffect(() => { runScreener(); }, [runScreener]);
 
@@ -583,23 +583,28 @@ function ScreenerTab() {
         {/* Quick preset chips */}
         <div className="flex gap-1 flex-wrap">
           {[...BUILTIN_PRESETS, ...userPresets].map((p) => (
-            <button
+            <span
               key={p.name}
-              onClick={() => applyPreset(p)}
-              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[12px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              className="inline-flex items-center rounded-full border border-border text-[12px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
             >
-              {p.name}
+              <button
+                type="button"
+                onClick={() => applyPreset(p)}
+                className="px-2 py-0.5"
+              >
+                {p.name}
+              </button>
               {userPresets.some((u) => u.name === p.name) && (
-                <span
-                  role="button"
-                  onClick={(e) => { e.stopPropagation(); deletePreset(p.name); }}
-                  className="text-[var(--loss)] hover:text-[var(--loss)]/80 ml-0.5"
+                <button
+                  type="button"
+                  onClick={() => deletePreset(p.name)}
+                  className="border-l border-border px-1.5 py-0.5 text-[var(--loss)] hover:text-[var(--loss)]/80"
                   aria-label={`Delete ${p.name} preset`}
                 >
                   x
-                </span>
+                </button>
               )}
-            </button>
+            </span>
           ))}
         </div>
 

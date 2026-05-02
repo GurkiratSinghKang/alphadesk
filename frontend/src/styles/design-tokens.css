@@ -278,8 +278,8 @@
   --ink-1000: #101611;
 
   --gold-100: #f3e6c8;
-  --gold-300: #b98a3a;
-  --gold-500: #9b7330;
+  --gold-300: #8b641f;
+  --gold-500: #765319;
   --gold-600: #805c21;
   --gold-700: #5f4218;
 
@@ -288,7 +288,7 @@
   --up-700:   #0b5d45;
 
   --down-100: #f7d7cc;
-  --down-500: #c95231;
+  --down-500: #b14225;
   --down-700: #8f351f;
 
   --ice-500:  #436f86;
@@ -474,7 +474,7 @@ html, body {
 }
 .t-ladder-row--head {
   color: var(--fg-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--border);

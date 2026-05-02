@@ -313,6 +313,7 @@ export interface ScreenerResult {
   mlScore: number;
   composite: number;
   sector: string;
+  volume: number;
 }
 
 // ─── Agent / Chat ─────────────────────────────────────────────

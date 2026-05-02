@@ -10,6 +10,7 @@ import type {
   OrderTypeOption,
   StagedOrder,
   StrategyOption,
+  TimeInForceOption,
 } from "./types";
 
 /**
@@ -30,7 +31,7 @@ import type {
 export interface OrderBarProps {
   symbol: string;
   strategies: StrategyOption[];
-  onSubmit: (order: StagedOrder) => void;
+  onSubmit: (order: StagedOrder) => void | boolean | Promise<void | boolean>;
   defaults?: Partial<StagedOrder>;
   /** Review copy on the right. Defaults to "Review before submit · regime check · risk policy". */
   reviewCopy?: string;
@@ -60,6 +61,8 @@ export interface OrderBarProps {
   strategyId?: string;
   /** Fires when the Strategy select changes in controlled or uncontrolled mode. */
   onStrategyChange?: (strategyId: string) => void;
+  /** Fires whenever the editable ticket draft changes so parent gates stay live. */
+  onDraftChange?: (order: StagedOrder) => void;
   className?: string;
 }
 
@@ -85,6 +88,7 @@ export default function OrderBar({
   ticketLocked = false,
   strategyId: controlledStrategyId,
   onStrategyChange,
+  onDraftChange,
   className,
 }: OrderBarProps) {
   const noStrategies = strategies.length === 0;
@@ -180,10 +184,11 @@ export default function OrderBar({
   );
   const [stop, setStop] = React.useState<string>(defaults?.stop ?? "");
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
-  const [timeInForce, setTimeInForce] = React.useState("day");
+  const [timeInForce, setTimeInForce] = React.useState<TimeInForceOption>("day");
   const [bracketEnabled, setBracketEnabled] = React.useState(false);
   const [takeProfit, setTakeProfit] = React.useState("");
   const [bracketStop, setBracketStop] = React.useState("");
+  const [extendedHours, setExtendedHours] = React.useState(false);
   const [trailingStop, setTrailingStop] = React.useState("");
   const [riskPct, setRiskPct] = React.useState("");
   const [routeVenue, setRouteVenue] = React.useState("smart");
@@ -327,7 +332,63 @@ export default function OrderBar({
     stopRequired && stop !== "" && stopInvalid
       ? "Stop must be a positive number"
       : null;
+  const takeProfitNum = bracketEnabled && takeProfit !== "" ? Number(takeProfit) : undefined;
+  const bracketStopNum = bracketEnabled && bracketStop !== "" ? Number(bracketStop) : undefined;
+  const bracketInvalid =
+    bracketEnabled &&
+    (
+      takeProfitNum === undefined ||
+      bracketStopNum === undefined ||
+      !Number.isFinite(takeProfitNum) ||
+      !Number.isFinite(bracketStopNum) ||
+      takeProfitNum <= 0 ||
+      bracketStopNum <= 0
+    );
+  const bracketLocalError =
+    bracketEnabled && bracketInvalid
+      ? "Bracket orders require positive take-profit and stop-loss prices"
+      : null;
   const symInvalid = !(symbolValue || symbol).trim();
+  const isOptionSymbol = /^[A-Z0-9]{1,6}\d{6}[CP]\d{8}$/.test((symbolValue || symbol).trim().toUpperCase());
+  const extendedHoursSupported = type === "limit" && timeInForce === "day" && !isOptionSymbol && !bracketEnabled;
+
+  React.useEffect(() => {
+    if (extendedHours && !extendedHoursSupported) setExtendedHours(false);
+  }, [extendedHours, extendedHoursSupported]);
+
+  const currentDraft = React.useMemo<StagedOrder>(() => ({
+    strategyId,
+    symbol: (symbolValue || symbol).trim().toUpperCase(),
+    side,
+    quantity: qtyNum,
+    type,
+    price: priceNum,
+    stop: stopNum != null ? String(stopNum) : undefined,
+    timeInForce,
+    extendedHours: extendedHours && extendedHoursSupported,
+    bracket: bracketEnabled && takeProfitNum != null && bracketStopNum != null
+      ? { takeProfit: takeProfitNum, stopLoss: bracketStopNum }
+      : undefined,
+  }), [
+    bracketEnabled,
+    bracketStopNum,
+    extendedHours,
+    extendedHoursSupported,
+    priceNum,
+    qtyNum,
+    side,
+    stopNum,
+    strategyId,
+    symbol,
+    symbolValue,
+    takeProfitNum,
+    timeInForce,
+    type,
+  ]);
+
+  React.useEffect(() => {
+    onDraftChange?.(currentDraft);
+  }, [currentDraft, onDraftChange]);
 
   // Round-28 / persona-B P0: in-flight idempotency guard. Pre-fix the
   // ``disabled={submitting}`` relied on the parent flipping
@@ -346,17 +407,16 @@ export default function OrderBar({
   const stage = () => {
     if (submitting || submittingRef.current) return;
     if (submitDisabled) return;
-    if (qtyInvalid || priceInvalid || stopInvalid || symInvalid) return;
+    if (qtyInvalid || priceInvalid || stopInvalid || bracketInvalid || symInvalid) return;
     submittingRef.current = true;
-    onSubmit({
-      strategyId,
-      symbol: (symbolValue || symbol).trim().toUpperCase(),
-      side,
-      quantity: qtyNum,
-      type,
-      price: priceNum,
-      stop: stopNum != null ? String(stopNum) : undefined,
-    });
+    const result = onSubmit(currentDraft);
+    Promise.resolve(result)
+      .then((accepted) => {
+        if (accepted === false) submittingRef.current = false;
+      })
+      .catch(() => {
+        submittingRef.current = false;
+      });
   };
 
   const strategyPlaceholder = noStrategies ? "No strategies registered" : undefined;
@@ -588,13 +648,15 @@ export default function OrderBar({
               <span className="t-label text-fg-hint">Time in force</span>
               <select
                 value={timeInForce}
-                onChange={(e) => setTimeInForce(e.target.value)}
+                onChange={(e) => setTimeInForce(e.target.value as TimeInForceOption)}
                 className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-[13px]"
               >
                 <option value="day">DAY</option>
                 <option value="gtc">GTC</option>
                 <option value="ioc">IOC</option>
+                <option value="fok">FOK</option>
                 <option value="opg">OPG</option>
+                <option value="cls">CLS</option>
               </select>
             </label>
             <label className="grid gap-1.5">
@@ -636,6 +698,21 @@ export default function OrderBar({
                 <span className="block text-[12px] text-fg-muted">Plan attached target and stop before send.</span>
               </span>
             </label>
+            <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3">
+              <input
+                type="checkbox"
+                checked={extendedHours}
+                disabled={!extendedHoursSupported}
+                onChange={(e) => setExtendedHours(e.target.checked && extendedHoursSupported)}
+                className="size-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[13px] font-semibold text-fg">Extended hours</span>
+                <span className="block text-[12px] text-fg-muted">
+                  {extendedHoursSupported ? "Allow supported limit orders outside RTH." : "Requires a DAY equity limit order without brackets."}
+                </span>
+              </span>
+            </label>
             <label className="grid gap-1.5">
               <span className="t-label text-fg-hint">Trailing stop</span>
               <Input
@@ -671,7 +748,7 @@ export default function OrderBar({
               </>
             ) : null}
             <p className="md:col-span-2 text-[12px] leading-relaxed text-fg-muted">
-              Advanced fields are captured for review today. Backend order placement still sends the base ticket until advanced routing is enabled.
+              TIF, extended-hours intent, and complete brackets are sent with the ticket. Route, risk size, and trailing stop remain planning notes.
             </p>
           </div>
         ) : null}
@@ -698,7 +775,7 @@ export default function OrderBar({
           // strategy, and when client-side qty / price / stop / symbol
           // validation fails. Backend 422 is the belt; this is suspenders.
           data-state={submitDisabled ? "stale" : undefined}
-          disabled={submitting || submitDisabled || noStrategies || qtyInvalid || priceInvalid || stopInvalid || symInvalid}
+          disabled={submitting || submitDisabled || noStrategies || qtyInvalid || priceInvalid || stopInvalid || bracketInvalid || symInvalid}
           aria-busy={submitting || undefined}
           data-testid="order-bar-submit"
         >
@@ -723,14 +800,14 @@ export default function OrderBar({
             local validation message (e.g. negative qty) or the parent's
             `errorMessage` prop (e.g. the backend 422 detail). Rendered
             with role="alert" so screen readers announce on change. */}
-        {(qtyLocalError || priceLocalError || stopLocalError || errorMessage) && (
+        {(qtyLocalError || priceLocalError || stopLocalError || bracketLocalError || errorMessage) && (
           <p
             id={qtyLocalError ? "order-bar-qty-error" : undefined}
             role="alert"
             data-testid="order-bar-error"
             className="font-sans text-[13px] text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
           >
-            {qtyLocalError ?? priceLocalError ?? stopLocalError ?? errorMessage}
+            {qtyLocalError ?? priceLocalError ?? stopLocalError ?? bracketLocalError ?? errorMessage}
           </p>
         )}
       </div>

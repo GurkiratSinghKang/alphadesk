@@ -115,7 +115,13 @@ export default function PositionsSection({
         </thead>
         <tbody>
           {positions.map((p) => {
-            const side = p.shares >= 0 ? "Long" : "Short";
+            const shares = Number.isFinite(Number(p.shares)) ? Number(p.shares) : 0;
+            const entryPrice = Number.isFinite(Number(p.entry_price)) ? Number(p.entry_price) : 0;
+            const unrealizedPnl = Number.isFinite(Number(p.unrealized_pnl)) ? Number(p.unrealized_pnl) : 0;
+            const unrealizedPnlPct = Number.isFinite(Number(p.unrealized_pnl_pct)) ? Number(p.unrealized_pnl_pct) : 0;
+            const stopLoss = Number.isFinite(Number(p.stop_loss)) ? Number(p.stop_loss) : null;
+            const takeProfit = Number.isFinite(Number(p.take_profit)) ? Number(p.take_profit) : null;
+            const side = shares >= 0 ? "Long" : "Short";
             return (
               <tr key={p.symbol} className="border-b border-border-hair last:border-0">
                 <td className="px-4 py-3">
@@ -156,22 +162,22 @@ export default function PositionsSection({
                     digits column-align at the decimal point. Secondary
                     lines (P&L %, stop/take) use 12px for hierarchy. */}
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[15px] text-fg tabular-nums">{Math.abs(p.shares)}</Mono>
+                  <Mono className="text-[15px] text-fg tabular-nums">{Math.abs(shares)}</Mono>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Mono className="text-[15px] text-fg tabular-nums">
-                    {p.entry_price.toFixed(2)}
+                    {entryPrice.toFixed(2)}
                   </Mono>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-col items-end gap-0.5">
                     <PnLNumber
-                      value={p.unrealized_pnl}
+                      value={unrealizedPnl}
                       format="currency"
                       className="text-[15px]"
                     />
                     <PnLNumber
-                      value={p.unrealized_pnl_pct}
+                      value={unrealizedPnlPct}
                       format="percent"
                       className="text-[12px]"
                     />
@@ -180,10 +186,10 @@ export default function PositionsSection({
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-col items-end gap-0.5 font-mono text-[12px] tabular-nums">
                     <span className="text-loss">
-                      Stop {p.stop_loss != null ? p.stop_loss.toFixed(2) : "\u2014"}
+                      Stop {stopLoss != null ? stopLoss.toFixed(2) : "\u2014"}
                     </span>
                     <span className="text-profit">
-                      Take {p.take_profit != null ? p.take_profit.toFixed(2) : "\u2014"}
+                      Take {takeProfit != null ? takeProfit.toFixed(2) : "\u2014"}
                     </span>
                   </div>
                 </td>

@@ -228,7 +228,7 @@ async function testTradingSafety() {
 
   // 11. Halt trading
   {
-    const resp = await safeFetch(`${BASE}/trades/halt`, {
+    const resp = await safeFetch(`${BASE}/trades/halt?flatten=false`, {
       method: "POST",
       headers: authHeaders(token),
     });

@@ -68,15 +68,15 @@ const FEED_ICONS: Record<FeedItem["type"], typeof Activity> = {
 const SEVERITY_COLORS: Record<FeedItem["severity"], string> = {
   success: "text-[var(--profit)]",
   danger: "text-[var(--loss)]",
-  info: "text-blue-400",
-  warning: "text-amber-400",
+  info: "text-ice",
+  warning: "text-amber",
 };
 
 const SEVERITY_BORDER: Record<FeedItem["severity"], string> = {
-  success: "border-l-emerald-500/40",
-  danger: "border-l-red-500/60",
-  info: "border-l-blue-500/30",
-  warning: "border-l-amber-500/50",
+  success: "border-l-[var(--profit)]/40",
+  danger: "border-l-[var(--loss)]/60",
+  info: "border-l-ice/35",
+  warning: "border-l-amber/50",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────

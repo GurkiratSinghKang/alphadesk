@@ -26,7 +26,7 @@ section first; the rest is context.
 
 4. **Check container state.**
    ```
-   docker compose ps
+   docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml ps
    ```
 
 ## Halt trading
@@ -41,7 +41,7 @@ LIVE_TRADING_ENABLED=false
 ```
 Then:
 ```
-docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --force-recreate backend
+docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml up -d --force-recreate backend
 ```
 The backend rejects any non-paper broker call at the route layer when
 this flag is false.
@@ -190,12 +190,12 @@ it into the live TimescaleDB container.
 
 1. Run pending migrations if the dump predates the current code:
    ```
-   docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
+   docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
    ```
 2. Restart the backend so any stale connection pool picks up the
    rebuilt DB:
    ```
-   docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml restart backend
+   docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml restart backend
    ```
 3. Verify: `curl -s http://localhost:8000/readyz | jq` — body should
    show `postgres: ok`.
@@ -226,16 +226,16 @@ ssh -i ~/.ssh/alphadesk root@178.156.145.213
 cd /opt/alphadesk
 
 # Full compose command with the prod overlay
-docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml <cmd>
+docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml <cmd>
 
 # Trigger an on-demand backup from the host
 /opt/alphadesk/infrastructure/backup.sh
 
 # Apply pending migrations manually (normally the deploy workflow does this)
-docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
+docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml exec -T backend alembic upgrade head
 
 # Follow backend logs live
-docker compose logs -f backend
+docker compose --env-file .env.prod -f docker-compose.yml -f infrastructure/docker-compose.prod.yml logs -f backend
 ```
 
 ## TLS certificate expiry
