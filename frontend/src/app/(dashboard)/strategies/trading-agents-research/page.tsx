@@ -908,7 +908,7 @@ function MemoSectionPreview({
     .filter((line) => !line.startsWith("|---"))
     .filter((line) => !isDividerLine(line))
     .filter((line) => !isBareLabelLine(line))
-    .slice(0, compact ? 5 : 8);
+    .slice(0, compact ? 3 : 4);
 
   return (
     <section className={cn("rounded-lg border p-4", emphasis ? "border-brand/30 bg-brand/5" : "border-border-hair bg-bg-elev-1")}>
@@ -971,7 +971,7 @@ function MemoSectionList({
         <div>
           <p className="t-label text-fg-muted">Complete research memo</p>
           <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
-            Saved committee memo with source sections preserved.
+            Source sections stay collapsed until you need the supporting text.
           </p>
         </div>
         <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-fg-hint">
@@ -984,7 +984,6 @@ function MemoSectionList({
             key={`${section.title}-${index}`}
             id={memoSectionId(section.title, index)}
             className="group scroll-mt-24 px-4 py-4"
-            open
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <span className="break-words font-sans text-[15px] font-semibold text-fg">{section.title}</span>
@@ -1180,6 +1179,8 @@ function RuntimePanel({
   runtime: TradingAgentsRuntimeStatus | null;
   runtimeLoading: boolean;
 }) {
+  const warnings = runtime?.warnings ?? [];
+
   return (
     <section className="rounded-lg border border-border bg-bg-card p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -1217,9 +1218,9 @@ function RuntimePanel({
           <p className="mt-3 break-words font-mono text-[11px] leading-relaxed text-fg-hint" title={runtime.skill_home}>
             {runtime.deep_model} / {runtime.quick_model}
           </p>
-          {runtime.warnings.length > 0 && (
+          {warnings.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2">
-              {runtime.warnings.map((warning) => (
+              {warnings.map((warning) => (
                 <li key={warning} className="rounded-md border border-brand/40 bg-brand/10 px-3 py-2 text-[12px] leading-relaxed text-fg">
                   {warning}
                 </li>
